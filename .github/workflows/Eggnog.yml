@@ -1,0 +1,191 @@
+name: eggnog
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - main
+    - develop
+  pull_request:
+    branches:
+    - main
+    - develop
+  release:
+    types:
+    - created
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 8.0.x
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v4
+      with:
+        versionSpec: 6.x
+    - name: Execute GitVersion
+      uses: gittools/actions/gitversion/execute@v4
+    - name: NuGet Restore
+      run: dotnet restore Eggnog.sln
+    - name: Build
+      run: |
+        dotnet msbuild /m /bl \
+          /p:Configuration="Release" \
+          /p:Platform="Any CPU" \
+          /p:PreReleaseLabel=${GitVersion_PreReleaseLabel} \
+          /p:PreReleaseNumber=${GitVersion_WeightedPreReleaseNumber} \
+          /p:Version=${GitVersion_FullSemVer} \
+          /p:AssemblyVersion=${GitVersion_AssemblySemVer} \
+          /p:InformationalVersion=${GitVersion_InformationalVersion} \
+          /p:FileVersion=${GitVersion_AssemblySemFileVer} \
+          /p:PackageVersion=${GitVersion_FullSemVer} \
+          /p:RepositoryUrl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
+          /p:PackageProjectUrl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+          /p:BuildInParallel=true \
+          /p:ContinuousIntegrationBuild=true \
+          Eggnog.dist.msbuildproj
+    - name: Upload MSBuild Log
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v5
+      with:
+        name: msbuild.binlog
+        path: msbuild.binlog
+    - name: Upload NuGet Packages
+      uses: actions/upload-artifact@v5
+      with:
+        name: nuget
+        path: dist/nuget
+    - name: Package Tests
+      run: tar czvf tests.tar.gz tests
+      working-directory: dist
+    - name: Upload Tests
+      uses: actions/upload-artifact@v5
+      with:
+        name: tests
+        path: dist/tests.tar.gz
+  test:
+    strategy:
+      matrix:
+        run:
+        - Eggnog.Tests
+        sys:
+        - win-x64
+        - linux-x64
+        tfm:
+        - net8.0
+    name: Test (${{ matrix.run }}:${{ matrix.tfm }}:${{ matrix.sys }})
+    needs:
+    - build
+    runs-on: ${{ fromJSON('{"win-x64":["windows-2022"],"linux-x64":["ubuntu-24.04"],"linux-arm64":["ubuntu-24.04-arm"]}')[matrix.sys] }}
+    steps:
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 8.0.x
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+    - name: Download Tests
+      uses: actions/download-artifact@v5
+      with:
+        name: tests
+    - name: Restore Tests
+      run: tar xzvf tests.tar.gz
+    - name: Execute Tests
+      timeout-minutes: 60
+      shell: pwsh
+      run: |
+        $run = "${{ matrix.run }}"
+        $tfm = "${{ matrix.tfm }}"
+        $sys = "${{ matrix.sys }}"
+
+        $tests = $(gi .\tests\$run\$tfm\*.Tests.dll)
+        if ($tests) {
+            $argl = @(
+                "-f", $tfm,
+                "--results-directory", "TestResults",
+                "--logger:trx"
+            )
+            Add-Content $env:GITHUB_ENV "`nRET=TestResults--$run--$tfm--$sys"
+            dotnet test @argl $tests[0].FullName
+        }
+    - name: Archive Test Results
+      if: always() && startsWith(env.RET, 'TestResults--')
+      run: tar czvf TestResults.tar.gz TestResults
+    - name: Upload Test Results
+      if: always() && startsWith(env.RET, 'TestResults--')
+      uses: actions/upload-artifact@v5
+      with:
+        name: ${{ env.RET }}
+        path: TestResults.tar.gz
+  release:
+    name: Release
+    if: github.event_name != 'pull_request'
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write   # required for NuGet.org Trusted Publishing (OIDC)
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v4
+      with:
+        versionSpec: 6.x
+    - name: Execute GitVersion
+      id: GitVersion
+      uses: gittools/actions/gitversion/execute@v4
+    - name: Download NuGet Packages
+      uses: actions/download-artifact@v5
+      with:
+        name: nuget
+        path: dist/nuget
+    - name: Create Release
+      if: github.ref_type == 'tag'
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ steps.GitVersion.outputs.semVer }}
+        allowUpdates: true
+        omitBodyDuringUpdate: true
+        artifacts: dist/nuget/*.nupkg,dist/nuget/*.snupkg
+        makeLatest: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: NuGet Login (Trusted Publishing)
+      if: github.ref_type == 'tag'
+      id: nuget-login
+      uses: NuGet/login@v1
+      with:
+        user: jhaltom
+    - name: Push NuGet
+      if: github.ref_type == 'tag'
+      shell: pwsh
+      run: dotnet nuget push dist/nuget/*.nupkg --source $env:NUGET_REPOS --api-key $env:NUGET_API_KEY --skip-duplicate
+      env:
+        NUGET_REPOS: https://api.nuget.org/v3/index.json
+        NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
