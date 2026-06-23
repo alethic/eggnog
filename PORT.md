@@ -7,6 +7,17 @@ This file tracks the progress of porting egg to C#. The upstream source is
 vendored as a git submodule at [`ext/egg`](ext/egg) and pinned to a specific
 commit; see `git submodule status` for the exact revision being ported.
 
+## Reference projects
+
+- [`ext/egg`](ext/egg) — the library being ported (MIT, Copyright 2019 Max
+  Willsey).
+- [`ext/egglog`](ext/egglog) — sibling project (MIT, Copyright 2025
+  egraphs-good) that combines equality saturation with Datalog. Not a port
+  target, but vendored for design reference: its runtime `(datatype ...)` DSL
+  represents a fundamentally different approach to "how a user defines a
+  language" than egg's compile-time `define_language!` macro, which informs the
+  language-representation design decision.
+
 ## Status legend
 
 - ⬜ **Not started** — no C# code yet
