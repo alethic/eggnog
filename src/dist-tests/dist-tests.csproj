@@ -9,6 +9,8 @@
     <ItemGroup>
         <TestTarget Include="Eggnog.Tests|net8.0" ProjectName="Eggnog.Tests" TargetFramework="net8.0" />
         <TestTarget Include="Eggnog.Tests|net10.0" ProjectName="Eggnog.Tests" TargetFramework="net10.0" />
+        <TestTarget Include="Eggnog.Relations.Tests|net8.0" ProjectName="Eggnog.Relations.Tests" TargetFramework="net8.0" />
+        <TestTarget Include="Eggnog.Relations.Tests|net10.0" ProjectName="Eggnog.Relations.Tests" TargetFramework="net10.0" />
         <TestTarget Include="Eggnog.Storage.Tests|net8.0" ProjectName="Eggnog.Storage.Tests" TargetFramework="net8.0" />
         <TestTarget Include="Eggnog.Storage.Tests|net10.0" ProjectName="Eggnog.Storage.Tests" TargetFramework="net10.0" />
     </ItemGroup>

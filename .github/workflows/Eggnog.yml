@@ -83,6 +83,7 @@ jobs:
     strategy:
       matrix:
         run:
+        - Eggnog.Relations.Tests
         - Eggnog.Storage.Tests
         sys:
         - win-x64
