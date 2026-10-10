@@ -42,7 +42,7 @@ jobs:
     - name: Execute GitVersion
       uses: gittools/actions/gitversion/execute@v4
     - name: NuGet Restore
-      run: dotnet restore Eggnog.sln
+      run: dotnet restore Eggnog.slnx
     - name: Build
       run: |
         dotnet msbuild /m /bl \
@@ -83,12 +83,13 @@ jobs:
     strategy:
       matrix:
         run:
-        - Eggnog.Tests
+        - Eggnog.Storage.Tests
         sys:
         - win-x64
         - linux-x64
         tfm:
         - net8.0
+        - net10.0
     name: Test (${{ matrix.run }}:${{ matrix.tfm }}:${{ matrix.sys }})
     needs:
     - build
@@ -118,13 +119,18 @@ jobs:
 
         $tests = $(gi .\tests\$run\$tfm\*.Tests.dll)
         if ($tests) {
+            New-Item -ItemType Directory -Force TestResults | Out-Null
+
+            # The assembly is its own runner under xunit.v3, so it is executed rather than handed to
+            # `dotnet test`, which on the .NET 10 SDK no longer drives it. `dotnet exec` needs only the
+            # managed assembly, which is platform-neutral, so the artifact built on Linux runs anywhere.
             $argl = @(
-                "-f", $tfm,
-                "--results-directory", "TestResults",
-                "--logger:trx"
+                "exec", "--roll-forward", "Major", $tests[0].FullName,
+                "-result-trx", "TestResults/$run--$tfm--$sys.trx"
             )
             Add-Content $env:GITHUB_ENV "`nRET=TestResults--$run--$tfm--$sys"
-            dotnet test @argl $tests[0].FullName
+            dotnet @argl
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
     - name: Archive Test Results
       if: always() && startsWith(env.RET, 'TestResults--')

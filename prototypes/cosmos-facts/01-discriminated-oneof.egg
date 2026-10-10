@@ -1,0 +1,37 @@
+; Parity: the case the adapter already handles.
+;
+; CosmosDeclaredFactPlanningTests.Schema:
+;   { "oneOf": [
+;       { "properties": { "kind": { "const": "A" } } },
+;       { "properties": { "kind": { "const": "B" },
+;                         "ref": { "type": "string", "pattern": "<canonical lowercase uuid>" } } } ] }
+;
+; Every branch pins "kind" to a different const, so it is discriminated: the "B" branch's facts
+; hold under the guard kind = "B".
+
+(include "prelude.egg")
+
+(rule ((present c "kind") (= (dom c "kind") (set-of "B")))
+      ((form c "ref" "uuid-lower"))
+      :ruleset horn)
+
+; ADeclaredStoredFormPutsTheComparisonInTheStatement:
+;   WHERE kind = 'B' AND CAST(ref AS UUID) = UUID'123e...'
+(push)
+(let $q (And (StrEq "kind" "B") (UuidEq "ref" "123e4567-e89b-12d3-a456-426614174000")))
+(where $q)
+(run-schedule (saturate horn rewrite))
+(check (form (Query) "ref" "uuid-lower"))
+(check (= $q (And (StrEq "kind" "B") (StrEq "ref" "123e4567-e89b-12d3-a456-426614174000"))))
+(extract $q)
+(pop)
+
+; WithoutTheDiscriminatorNothingIsProvenAndNothingLowers:
+;   WHERE CAST(ref AS UUID) = UUID'123e...'
+(push)
+(let $q (UuidEq "ref" "123e4567-e89b-12d3-a456-426614174000"))
+(where $q)
+(run-schedule (saturate horn lattice split rewrite))
+(fail (check (form (Query) "ref" "uuid-lower")))
+(extract $q)
+(pop)

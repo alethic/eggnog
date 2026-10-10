@@ -1,0 +1,44 @@
+; Gap 1: the query's own disjunction.
+;
+; A container of three kinds, discriminated on "kind". Two of them carry a UUID reference:
+;   { "type": "object", "required": ["kind"],
+;     "oneOf": [
+;       { "properties": { "kind": { "const": "order" },   "ref": { <canonical lowercase uuid> } } },
+;       { "properties": { "kind": { "const": "invoice" }, "ref": { <canonical lowercase uuid> } } },
+;       { "properties": { "kind": { "const": "note" } } } ] }
+;
+;   WHERE kind IN ('order', 'invoice') AND CAST(ref AS UUID) = UUID'123e...'
+;
+; The adapter compiles this to guards EqualTo(kind, order) and EqualTo(kind, invoice). The query
+; establishes OneOf(kind, {order, invoice}), which entails neither, so neither rule fires and the
+; comparison stays in process. Both cases prove the lowering safe; seeing that takes a case split.
+
+(include "prelude.egg")
+
+(present (Schema) "kind")
+(set (dom (Schema) "kind") (set-of "order" "invoice" "note"))
+(discriminator "kind" "order")
+(discriminator "kind" "invoice")
+(discriminator "kind" "note")
+
+(rule ((present c "kind") (= (dom c "kind") (set-of "order"))) ((form c "ref" "uuid-lower")) :ruleset horn)
+(rule ((present c "kind") (= (dom c "kind") (set-of "invoice"))) ((form c "ref" "uuid-lower")) :ruleset horn)
+
+(let $q (And (Or (StrEq "kind" "order") (StrEq "kind" "invoice"))
+             (UuidEq "ref" "123e4567-e89b-12d3-a456-426614174000")))
+(where $q)
+
+; Horn and lattices alone: nothing fires.
+(run-schedule (saturate horn lattice rewrite))
+(fail (check (form (Query) "ref" "uuid-lower")))
+
+; With the split: each case proves the form, and together they cover the query.
+(run-schedule (saturate horn lattice split rewrite))
+(check (form (Query) "ref" "uuid-lower"))
+(check (= $q (And (Or (StrEq "kind" "order") (StrEq "kind" "invoice"))
+                  (StrEq "ref" "123e4567-e89b-12d3-a456-426614174000"))))
+
+; And the schema alone still proves nothing about ref -- a note carries none.
+(fail (check (form (Schema) "ref" "uuid-lower")))
+
+(extract $q)
