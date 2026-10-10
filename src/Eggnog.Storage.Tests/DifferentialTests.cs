@@ -20,30 +20,6 @@ namespace Eggnog.Storage.Tests
     public class DifferentialTests
     {
 
-        sealed class Schema
-        {
-
-            public Schema(Store store)
-            {
-                Pair = store.DefineTable(TableSchema.Constructor("pair", ColumnKind.Id, ColumnKind.Id));
-                Wrap = store.DefineTable(TableSchema.Constructor("wrap", ColumnKind.Id));
-                Low = store.DefineTable(TableSchema.Lattice("low", Math.Min, ColumnKind.Id));
-                Tag = store.DefineTable(TableSchema.Relation("tag", ColumnKind.Id, ColumnKind.Value));
-                Named = store.DefineTable(TableSchema.Constructor("named", ColumnKind.Value));
-            }
-
-            public Table Pair { get; }
-
-            public Table Wrap { get; }
-
-            public Table Low { get; }
-
-            public Table Tag { get; }
-
-            public Table Named { get; }
-
-        }
-
         /// <summary>
         /// The seeds to run: 400 by default, or as many as <c>EGGNOG_STORAGE_SEEDS</c> says, for a longer soak.
         /// </summary>
@@ -100,7 +76,7 @@ namespace Eggnog.Storage.Tests
         {
             var random = new Random(seed);
             var store = new Store();
-            var schema = new Schema(store);
+            var schema = new TestSchema(store);
             var root = Pair.Root(store);
             var live = new List<Pair> { root };
 
@@ -135,7 +111,7 @@ namespace Eggnog.Storage.Tests
         {
             var random = new Random(seed);
             var store = new Store();
-            var schema = new Schema(store);
+            var schema = new TestSchema(store);
             var root = Pair.Root(store);
             var live = new List<Pair> { root };
 
@@ -152,7 +128,7 @@ namespace Eggnog.Storage.Tests
         public void ChildrenOfAFrozenRootAgreeWhenDrivenConcurrently()
         {
             var store = new Store();
-            var schema = new Schema(store);
+            var schema = new TestSchema(store);
             var root = Pair.Root(store);
             var setup = new Random(7);
             var scratch = new List<Pair> { root };
@@ -177,7 +153,7 @@ namespace Eggnog.Storage.Tests
                 child.Check();
         }
 
-        static void Step(Random random, Schema schema, Pair pair, List<Pair> live, bool allowChildren = true)
+        static void Step(Random random, TestSchema schema, Pair pair, List<Pair> live, bool allowChildren = true)
         {
             var ids = pair.VisibleIds();
             ulong Pick() => ids[random.Next(ids.Count)];

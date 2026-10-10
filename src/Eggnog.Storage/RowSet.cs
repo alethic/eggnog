@@ -49,7 +49,7 @@ namespace Eggnog.Storage
             arity = table.Arity;
             keyCount = table.KeyCount;
             isId = table.IsId;
-            keys = new HashSet<int>(new KeyComparer(this));
+            keys = new HashSet<int>(new RowKeyComparer(this));
             uses = table.IdColumns.Length > 0 ? new Dictionary<ulong, List<int>>() : null;
 
             const int capacity = 8;
@@ -255,7 +255,15 @@ namespace Eggnog.Storage
             Array.Resize(ref alive, capacity);
         }
 
-        static int Hash(ReadOnlySpan<ulong> key)
+        /// <summary>
+        /// Gets a slot's key. Slot -1 stands for the thread's probe buffer, which is how a key that is not in the
+        /// buffer is looked up without allocating.
+        /// </summary>
+        internal ReadOnlySpan<ulong> KeyOf(int slot) => slot < 0
+            ? new ReadOnlySpan<ulong>(probe!, 0, keyCount)
+            : new ReadOnlySpan<ulong>(data, slot * arity, keyCount);
+
+        internal static int Hash(ReadOnlySpan<ulong> key)
         {
             var h = 0x9E3779B97F4A7C15UL;
             foreach (var value in key)
@@ -265,27 +273,6 @@ namespace Eggnog.Storage
             }
 
             return (int)(h ^ (h >> 32));
-        }
-
-        /// <summary>
-        /// Compares slots by their keys. Slot -1 stands for the thread's probe buffer, which is how a key that is
-        /// not in the buffer is looked up without allocating.
-        /// </summary>
-        sealed class KeyComparer : IEqualityComparer<int>
-        {
-
-            readonly RowSet set;
-
-            public KeyComparer(RowSet set) => this.set = set;
-
-            ReadOnlySpan<ulong> KeyOf(int slot) => slot < 0
-                ? new ReadOnlySpan<ulong>(probe!, 0, set.keyCount)
-                : new ReadOnlySpan<ulong>(set.data, slot * set.arity, set.keyCount);
-
-            public bool Equals(int x, int y) => KeyOf(x).SequenceEqual(KeyOf(y));
-
-            public int GetHashCode(int slot) => Hash(KeyOf(slot));
-
         }
 
     }

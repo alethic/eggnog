@@ -4,7 +4,6 @@
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
         <IsPackable>false</IsPackable>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
-        <!-- xunit.v3 builds the assembly as its own runner, and writes the entry point itself. -->
         <OutputType>Exe</OutputType>
         <GenerateProgramFile>false</GenerateProgramFile>
     </PropertyGroup>
