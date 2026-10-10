@@ -5,10 +5,12 @@
         <Description>Colored e-graph storage: union-find, tables with functional dependencies and merges, and congruence closure under nested assumption contexts.</Description>
         <PackageTags>egraph;e-graph;equality-saturation;union-find;congruence-closure</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>icon.png</PackageIcon>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="\" />
+        <None Include="..\..\icon.png" Pack="true" PackagePath="\" Visible="false" />
     </ItemGroup>
 
     <ItemGroup>
