@@ -2,6 +2,11 @@ name: eggnog
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish this build to nuget.org, creating the GitHub release if one does not exist.
+        type: boolean
+        default: false
   push:
     branches:
     - main
@@ -24,15 +29,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Source
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - name: Setup .NET 8.0
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 8.0.x
     - name: Setup .NET 10.0
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.0.x
     - name: Install GitVersion
@@ -62,12 +67,12 @@ jobs:
           Eggnog.dist.msbuildproj
     - name: Upload MSBuild Log
       if: ${{ always() }}
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: msbuild.binlog
         path: msbuild.binlog
     - name: Upload NuGet Packages
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: nuget
         path: dist/nuget
@@ -75,12 +80,14 @@ jobs:
       run: tar czvf tests.tar.gz tests
       working-directory: dist
     - name: Upload Tests
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: tests
         path: dist/tests.tar.gz
   test:
     strategy:
+      # Let every suite finish when one fails.
+      fail-fast: false
       matrix:
         run:
         - Eggnog.Relations.Tests
@@ -88,57 +95,75 @@ jobs:
         sys:
         - win-x64
         - linux-x64
+        - linux-arm64
+        - osx-x64
+        - osx-arm64
         tfm:
-        - net8.0
         - net10.0
     name: Test (${{ matrix.run }}:${{ matrix.tfm }}:${{ matrix.sys }})
     needs:
     - build
-    runs-on: ${{ fromJSON('{"win-x64":["windows-2022"],"linux-x64":["ubuntu-24.04"],"linux-arm64":["ubuntu-24.04-arm"]}')[matrix.sys] }}
+    runs-on: ${{ fromJSON('{"win-x86":["windows-2022"],"win-x64":["windows-2022"],"linux-x64":["ubuntu-24.04"],"linux-arm64":["ubuntu-24.04-arm"],"osx-x64":["macos-15-intel"],"osx-arm64":["macos-15"]}')[matrix.sys] }}
     steps:
-    - name: Setup .NET 8.0
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 8.0.x
     - name: Setup .NET 10.0
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.0.x
     - name: Download Tests
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: tests
     - name: Restore Tests
       run: tar xzvf tests.tar.gz
+    # Run with `dotnet exec`: the artifact was built on linux-x64, so its app host runs nowhere else.
+    # A filter after `?` in a suite name uses xunit's query filter language.
     - name: Execute Tests
       timeout-minutes: 60
       shell: pwsh
       run: |
+        # assign powershell variables
         $run = "${{ matrix.run }}"
         $tfm = "${{ matrix.tfm }}"
         $sys = "${{ matrix.sys }}"
 
-        $tests = $(gi .\tests\$run\$tfm\*.Tests.dll)
+        # suite name can contain filter expression after ?
+        $split = $run.IndexOf("?")
+        if ($split -gt -1) {
+            $tst = $run.Substring(0, $split)
+            $qry = $run.Substring($split + 1)
+        } else {
+            $tst = $run
+        }
+
+        # scan and process test assemblies
+        $tests = $(gi .\tests\$tst\$tfm\*.Tests.dll)
         if ($tests) {
+            if ($qry -ne "" -and $qry -ne $null) {
+                Add-Content $env:GITHUB_ENV "`nRET=TestResults--$tst-$qry--$tfm--$sys"
+            } else {
+                Add-Content $env:GITHUB_ENV "`nRET=TestResults--$tst--$tfm--$sys"
+            }
+
+            # the archive step runs on failure too, and a run that cannot start writes no report
             New-Item -ItemType Directory -Force TestResults | Out-Null
 
-            # The assembly is its own runner under xunit.v3, so it is executed rather than handed to
-            # `dotnet test`, which on the .NET 10 SDK no longer drives it. `dotnet exec` needs only the
-            # managed assembly, which is platform-neutral, so the artifact built on Linux runs anywhere.
             $argl = @(
-                "exec", "--roll-forward", "Major", $tests[0].FullName,
-                "-result-trx", "TestResults/$run--$tfm--$sys.trx"
+                "-reporter", "verbose",
+                "-result-trx", "TestResults/$tst--$tfm--$sys.trx"
             )
-            Add-Content $env:GITHUB_ENV "`nRET=TestResults--$run--$tfm--$sys"
-            dotnet @argl
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            if ($qry -ne "" -and $qry -ne $null) {
+                $argl += @("-filter", $qry)
+            }
+
+            dotnet exec $tests[0].FullName @argl
         }
     - name: Archive Test Results
       if: always() && startsWith(env.RET, 'TestResults--')
       run: tar czvf TestResults.tar.gz TestResults
     - name: Upload Test Results
       if: always() && startsWith(env.RET, 'TestResults--')
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ env.RET }}
         path: TestResults.tar.gz
@@ -152,13 +177,17 @@ jobs:
       contents: write
       packages: write
       id-token: write   # required for NuGet.org Trusted Publishing (OIDC)
+    env:
+      # Gates both the GitHub release and the nuget.org push: true for a tag build or a manual run that
+      # asks to publish. The GitHub Packages push is not gated and runs on every non-PR build.
+      PUBLISH: ${{ github.ref_type == 'tag' || inputs.publish == true }}
     steps:
     - name: Checkout Source
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
     - name: Setup .NET 10.0
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.0.x
     - name: Install GitVersion
@@ -169,28 +198,41 @@ jobs:
       id: GitVersion
       uses: gittools/actions/gitversion/execute@v4
     - name: Download NuGet Packages
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: nuget
         path: dist/nuget
+    # `commit` lets the action create the tag when it does not exist. When the release already exists
+    # (a tag build or a re-run) it is updated in place, keeping hand-written notes and replacing the
+    # packages.
     - name: Create Release
-      if: github.ref_type == 'tag'
+      if: env.PUBLISH == 'true'
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ steps.GitVersion.outputs.semVer }}
+        commit: ${{ github.sha }}
         allowUpdates: true
         omitBodyDuringUpdate: true
+        replacesArtifacts: true
         artifacts: dist/nuget/*.nupkg,dist/nuget/*.snupkg
-        makeLatest: true
+        prerelease: ${{ contains(steps.GitVersion.outputs.semVer, '-') }}
+        makeLatest: ${{ !contains(steps.GitVersion.outputs.semVer, '-') }}
         token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Push NuGet (GitHub)
+      shell: pwsh
+      run: dotnet nuget push dist/nuget/*.nupkg --source $env:GITHUB_REPOS --api-key $env:GITHUB_TOKEN --skip-duplicate
+      env:
+        GITHUB_REPOS: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: NuGet Login (Trusted Publishing)
-      if: github.ref_type == 'tag'
+      if: env.PUBLISH == 'true'
       id: nuget-login
       uses: NuGet/login@v1
       with:
         user: jhaltom
+    # --skip-duplicate makes pushing a version nuget.org already has a no-op.
     - name: Push NuGet
-      if: github.ref_type == 'tag'
+      if: env.PUBLISH == 'true'
       shell: pwsh
       run: dotnet nuget push dist/nuget/*.nupkg --source $env:NUGET_REPOS --api-key $env:NUGET_API_KEY --skip-duplicate
       env:
