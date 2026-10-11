@@ -48,6 +48,14 @@ namespace Eggnog.Relations
     /// concurrently with reads. Parallelism follows <see cref="Parallelism"/>: database-level operations go parallel
     /// above <see cref="ParallelHeuristics.DbLevelThreshold"/> rows in total.
     /// </para>
+    /// <para>
+    /// Colored contexts (Contexts/Database.Contexts.cs, colored-contexts spec §3.4): a <see cref="Store"/>'s root
+    /// database is this egglog database, attached to the root <see cref="Context"/> and to the store's clock, which
+    /// execution states pin to their timestamp (C1). Each child context owns a database of its own that shares the
+    /// root's counters, external functions, strata and containers; its definitions go through the store, its schema
+    /// questions are answered from the store's schema, and it rebuilds through its context. A bare database belongs to
+    /// no store and behaves exactly as egglog's.
+    /// </para>
     /// </remarks>
     internal sealed partial class Database
     {
@@ -99,6 +107,9 @@ namespace Eggnog.Relations
             externalFunctions = source.externalFunctions.Clone();
             deps = source.deps.Clone();
             totalSizeEstimate = source.totalSizeEstimate;
+
+            // The copy keeps the counter layout, so the clock it pins is the same counter; it belongs to no context.
+            clockRep = source.clockRep;
             view = new DatabaseView(this);
 
             // The container environments (declared in Containers/Database.Containers.cs): egglog's derived Clone copies
@@ -158,12 +169,22 @@ namespace Eggnog.Relations
         /// Gets the id the next <see cref="AddTable"/> returns, for tables whose merge functions refer to their own id
         /// ("knot tying"). egglog's <c>next_table_id</c>.
         /// </summary>
-        public TableId NextTableId => tables.NextId;
+        /// <exception cref="InvalidOperationException">This is a child context's database: definitions go through the
+        /// store.</exception>
+        public TableId NextTableId
+        {
+            get
+            {
+                ThrowIfChildDefinition();
+                return tables.NextId;
+            }
+        }
 
         /// <summary>
-        /// Gets the number of tables.
+        /// Gets the number of table ids. In a child context's database, the store schema's count (§3.4): the child's
+        /// table map holds only its own layers.
         /// </summary>
-        public int TableCount => tables.IdCount;
+        public int TableCount => IsChild ? owner!.Store.Schema.TableCount : tables.IdCount;
 
         /// <summary>
         /// Gets the first failure a merge function reported while the database merged or rebuilt since the last
@@ -182,9 +203,31 @@ namespace Eggnog.Relations
         /// <param name="name">The table's human-readable name, or <c>null</c>.</param>
         /// <returns>The table's id, <see cref="NextTableId"/>.</returns>
         /// <exception cref="ArgumentException">The table is already in the database, or a read dependency is not.</exception>
+        /// <exception cref="InvalidOperationException">This is a store's database, the root's or a child's: definitions go
+        /// through the store (<see cref="Store.AddTable"/>), which registers every table with the schema children read
+        /// (colored-contexts spec §3.4, §4.3).</exception>
         public TableId AddTable(Table table, ReadOnlySpan<TableId> readDependencies = default, ReadOnlySpan<TableId> writeDependencies = default, string? name = null)
         {
             ArgumentNullException.ThrowIfNull(table);
+            ThrowIfStoreDefinition();
+            return AddTableCore(table, readDependencies, writeDependencies, name);
+        }
+
+        /// <summary>
+        /// <see cref="AddTable"/> without the store check: for <see cref="Store"/>, which adds its union-find and every
+        /// function table to its root database this way, under its definition lock (§4.3).
+        /// </summary>
+        /// <param name="table">The table; not already part of this database.</param>
+        /// <param name="readDependencies">The tables its merge function reads; already added.</param>
+        /// <param name="writeDependencies">The tables its merge function only writes.</param>
+        /// <param name="name">The table's human-readable name, or <c>null</c>.</param>
+        /// <returns>The table's id.</returns>
+        /// <exception cref="ArgumentException">The table is already in the database, or a read dependency is not.</exception>
+        /// <exception cref="InvalidOperationException">This is a child context's database.</exception>
+        internal TableId AddTableCore(Table table, ReadOnlySpan<TableId> readDependencies = default, ReadOnlySpan<TableId> writeDependencies = default, string? name = null)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+            ThrowIfChildDefinition();
             foreach (var (_, existing) in tables)
                 if (ReferenceEquals(existing.Table, table))
                     throw new ArgumentException("The table is already part of this database.", nameof(table));
@@ -202,17 +245,27 @@ namespace Eggnog.Relations
         /// Gets the table with id <paramref name="table"/>. egglog's <c>get_table</c> and <c>get_table_mut</c>.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// Staging into a buffer from <see cref="Table.NewBuffer"/> does not notify the database, so the next
         /// <see cref="MergeAll"/> will not merge it; use <see cref="NewBuffer"/>, an execution state, or
         /// <see cref="MergeTable"/> (egglog's warning, mod.rs:676-689).
+        /// </para>
+        /// <para>
+        /// In a child context's database this is the child's own layer of the table (§3.4), for the database's own merge,
+        /// rebuild and index work: what the child itself stored, not what it sees, which is read through the context.
+        /// The union-find's entry is the child's own union-find (in M9.1 a placeholder that holds no displacement,
+        /// since a child cannot union before M9.2). The query members refuse it (<see cref="GetQueryTableInfo"/>, X23).
+        /// </para>
         /// </remarks>
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
-        /// <exception cref="KeyNotFoundException">No such table, or it is taken out by a merge or rebuild in progress.</exception>
+        /// <exception cref="KeyNotFoundException">No such table, or it is taken out by a merge or rebuild in progress, or
+        /// (in a child) it has no layer there.</exception>
         public Table GetTable(TableId table) => GetTableInfo(table).Table;
 
         /// <summary>
-        /// Gets the table with id <paramref name="table"/> and its metadata. egglog's <c>get_table_info</c>.
+        /// Gets the table with id <paramref name="table"/> and its metadata. egglog's <c>get_table_info</c>. In a child
+        /// context's database, the child's own layer and its own union-find only (see <see cref="GetTable"/>).
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The entry.</returns>
@@ -241,11 +294,14 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <returns>The buffer.</returns>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database, which cannot be written before
+        /// its layers exist (M9.1 interim).</exception>
         public MutationBuffer NewBuffer(TableId table)
         {
             // egglog notifies before looking the table up; looking it up first keeps a bad id from leaving a
-            // notification that the next merge could not resolve.
-            var buffer = GetTable(table).NewBuffer();
+            // notification that the next merge could not resolve. The table is resolved as staging resolves it
+            // (colored-contexts spec §3.4, §6.2): in a child, the catalog's resolver supplies the context's layer.
+            var buffer = catalog.GetForStaging(table).NewBuffer();
             catalog.Notifications.Notify(table);
             return buffer;
         }
@@ -254,15 +310,29 @@ namespace Eggnog.Relations
         /// Adds a counter starting at zero. egglog's <c>add_counter</c>. Requires exclusive access.
         /// </summary>
         /// <returns>The counter's id.</returns>
-        public CounterId AddCounter() => counters.Add();
+        /// <exception cref="InvalidOperationException">This is a child context's database, or the store's root after a
+        /// child was created: child threads increment the counters concurrently, and adding one may move their storage
+        /// (X16).</exception>
+        public CounterId AddCounter()
+        {
+            ThrowIfChildDefinition();
+            if (owner is { } root && root.Store.HasHadChildren)
+                throw new InvalidOperationException("Counters cannot be added once the store has had a child context.");
+
+            return counters.Add();
+        }
 
         /// <summary>
         /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>.
         /// Thread-safe.
         /// </summary>
+        /// <remarks>
+        /// In a child context's database the store's id counter is redirected to the child's id blocks, so the id minted
+        /// is local to the child (<see cref="IncrementCounterInView"/>, colored-contexts spec §4.2).
+        /// </remarks>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
-        public long IncrementCounter(CounterId counter) => counters.Increment(counter);
+        public long IncrementCounter(CounterId counter) => IncrementCounterInView(counter);
 
         /// <summary>
         /// Gets the current value of <paramref name="counter"/>. egglog's <c>read_counter</c>. Thread-safe.
@@ -277,14 +347,26 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="function">The function.</param>
         /// <returns>Its id.</returns>
-        public ExternalFunctionId AddExternalFunction(ExternalFunction function) => externalFunctions.Add(function);
+        /// <exception cref="InvalidOperationException">This is a child context's database: definitions go through the
+        /// store's root.</exception>
+        public ExternalFunctionId AddExternalFunction(ExternalFunction function)
+        {
+            ThrowIfChildDefinition();
+            return externalFunctions.Add(function);
+        }
 
         /// <summary>
         /// Unregisters an external function; its id may be handed out again, so it must not be used afterwards.
         /// egglog's <c>free_external_function</c>. Requires exclusive access.
         /// </summary>
         /// <param name="function">The function's id.</param>
-        public void FreeExternalFunction(ExternalFunctionId function) => externalFunctions.Remove(function, out _);
+        /// <exception cref="InvalidOperationException">This is a child context's database: definitions go through the
+        /// store's root.</exception>
+        public void FreeExternalFunction(ExternalFunctionId function)
+        {
+            ThrowIfChildDefinition();
+            externalFunctions.Remove(function, out _);
+        }
 
         /// <summary>
         /// Gets the external function with id <paramref name="function"/>.
@@ -303,9 +385,13 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate.</returns>
+        /// <exception cref="KeyNotFoundException">No such table, or (in a child context's database) the table has no
+        /// layer there; a child estimates through its view from M10.2 (§3.4).</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database and the table is the union-find
+        /// (X23, <see cref="GetQueryTableInfo"/>).</exception>
         public int EstimateSize(TableId table, Constraint? constraint = null)
         {
-            var t = GetTable(table);
+            var t = GetQueryTableInfo(table).Table;
             if (constraint is not { } c)
                 return t.Count;
 
@@ -329,22 +415,32 @@ namespace Eggnog.Relations
         /// access.
         /// </summary>
         /// <param name="table">The table id.</param>
+        /// <exception cref="NotSupportedException">This is a child context's database: a child clears through its
+        /// context (§6.7), which arrives with its layers (M9.3).</exception>
         public void ClearTable(TableId table)
         {
+            if (IsChild)
+                throw new NotSupportedException("Clearing a table in a child context arrives in M9.3.");
+
             var info = GetTableInfo(table);
             var previous = info.Table.Count;
             info.Table.Clear();
             info.ResetIndexes();
             totalSizeEstimate -= previous;
+
+            // An effective clear (one that removed rows) changes what every reader sees (X30).
+            if (previous > 0)
+                BumpChangeStamp();
         }
 
         /// <summary>
         /// Creates an execution state over <see cref="ReadOnlyView"/> with no staged writes, for writing to the
         /// database outside rules. The caller flushes it (<see cref="ExecutionState.Flush"/>) before merging.
         /// </summary>
-        /// <param name="timestamp">The timestamp the state carries.</param>
+        /// <param name="timestamp">The timestamp the state carries; <c>null</c> for the store clock's current value, or
+        /// 0 without a store (colored-contexts spec §4.1).</param>
         /// <returns>The state.</returns>
-        public ExecutionState CreateExecutionState(uint timestamp = 0) => new(view, timestamp);
+        public ExecutionState CreateExecutionState(uint? timestamp = null) => new(view, ResolveTimestamp(timestamp));
 
         /// <summary>
         /// Runs <paramref name="action"/> with a fresh execution state over the database, then flushes the state.
@@ -353,13 +449,14 @@ namespace Eggnog.Relations
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="action">The action.</param>
-        /// <param name="timestamp">The timestamp the state carries.</param>
+        /// <param name="timestamp">The timestamp the state carries; <c>null</c> for the store clock's current value, or
+        /// 0 without a store.</param>
         /// <returns>The action's result.</returns>
-        public TResult WithExecutionState<TResult>(Func<ExecutionState, TResult> action, uint timestamp = 0)
+        public TResult WithExecutionState<TResult>(Func<ExecutionState, TResult> action, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(action);
 
-            var state = new ExecutionState(view, timestamp);
+            var state = new ExecutionState(view, ResolveTimestamp(timestamp));
             var result = action(state);
             state.Flush();
             RecordFailure(state);
@@ -379,8 +476,21 @@ namespace Eggnog.Relations
         /// the same tables notified. egglog's <c>Clone for Database</c>, whose copy
         /// shares the notification list with the original instead. Requires exclusive access. O(database size).
         /// </summary>
+        /// <remarks>
+        /// egglog's push/pop clone stays a root operation (colored-contexts spec §4.3): a child's database shares the
+        /// root's counters and reads its parent's rows, and a root with live descendants has rows those descendants
+        /// read, so neither can be copied on its own. The copy belongs to no context.
+        /// </remarks>
         /// <returns>The copy.</returns>
-        public Database Clone() => new(this);
+        /// <exception cref="InvalidOperationException">This is a child context's database, or a root whose context has
+        /// live descendants.</exception>
+        public Database Clone()
+        {
+            if (owner is { } context && (context.IsRoot == false || context.Gate.HasLiveDescendants))
+                throw new InvalidOperationException("Only a root database without live child contexts can be cloned.");
+
+            return new(this);
+        }
 
         /// <summary>
         /// Records the first failure reported through <paramref name="state"/>. Thread-safe.
@@ -394,9 +504,22 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Enumerates the ids of the tables in the table map, in ascending order.
+        /// Enumerates the ids of the tables in the table map, in ascending order. In a child context's database, every
+        /// table of the store schema (the union-find and every registered table, §3.4): the child's own map holds only
+        /// its layers.
         /// </summary>
         internal IEnumerable<TableId> VisibleTableIds()
+        {
+            if (IsChild)
+                return owner!.Store.Schema.Ids;
+
+            return MappedTableIds();
+        }
+
+        /// <summary>
+        /// Enumerates the ids of the tables in the table map, in ascending order.
+        /// </summary>
+        IEnumerable<TableId> MappedTableIds()
         {
             for (var i = 0; i < tables.IdCount; i++)
             {
@@ -433,6 +556,10 @@ namespace Eggnog.Relations
         /// </summary>
         KeyNotFoundException MissingTable(TableId table)
         {
+            // A child's map holds only its union-find and its own layers (§3.4).
+            if (IsChild && owner!.Store.Schema[table] is not null)
+                return new KeyNotFoundException($"Table {table} has no layer in this context; read it through Context.GetView.");
+
             return catalog.TryGetTable(table, out _)
                 ? new KeyNotFoundException($"Table {table} is taken out of the database by a merge or rebuild in progress.")
                 : new KeyNotFoundException($"Table {table} has not been declared in this database.");

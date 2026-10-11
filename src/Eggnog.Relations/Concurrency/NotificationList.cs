@@ -102,6 +102,20 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets whether nothing was notified since the last reset: a child context is clean only without pending
+        /// notifications (colored-contexts spec §7.5). Takes the list's lock; a notify racing the read may or may not be
+        /// seen, as with <see cref="Reset()"/>.
+        /// </summary>
+        public bool IsEmpty
+        {
+            get
+            {
+                lock (notified)
+                    return notified.Count == 0;
+            }
+        }
+
+        /// <summary>
         /// Clears every notification and returns the identifiers notified since the last reset, in the order they were
         /// first notified.
         /// </summary>

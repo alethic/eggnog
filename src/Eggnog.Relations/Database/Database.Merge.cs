@@ -70,9 +70,18 @@ namespace Eggnog.Relations
         /// </para>
         /// </remarks>
         /// <param name="timestamp">The epoch captured for the run or rebuild pass being merged, which every merge state
-        /// carries; zero for writes made outside any run (loading data).</param>
+        /// carries; <c>null</c> for the store clock's current value, or zero for a database without a store (writes made
+        /// outside any run, loading data).</param>
         /// <returns><c>true</c> if any merge added rows or staged writes.</returns>
-        public bool MergeAll(uint timestamp = 0)
+        public bool MergeAll(uint? timestamp = null)
+        {
+            return MergeAllCore(ResolveTimestamp(timestamp));
+        }
+
+        /// <summary>
+        /// <see cref="MergeAll"/> with the timestamp resolved.
+        /// </summary>
+        bool MergeAllCore(uint timestamp)
         {
             var everChanged = false;
             var parallel = parallelism.ParallelizeDbLevelOp(totalSizeEstimate);
@@ -121,18 +130,22 @@ namespace Eggnog.Relations
         /// </remarks>
         /// <param name="table">The table id.</param>
         /// <param name="timestamp">The epoch captured for the run or pass being merged, which the merge state carries
-        /// (see <see cref="MergeAll"/>).</param>
+        /// (see <see cref="MergeAll"/>); <c>null</c> for the store clock's current value, or zero without a store.</param>
         /// <returns><c>true</c> if the merge added rows.</returns>
-        public bool MergeTable(TableId table, uint timestamp = 0)
+        public bool MergeTable(TableId table, uint? timestamp = null)
         {
+            var resolved = ResolveTimestamp(timestamp);
             var info = TakeOut(table);
             var before = info.Table.Count;
             try
             {
-                var state = new ExecutionState(view, timestamp);
+                var state = new ExecutionState(view, resolved);
                 var change = info.Table.Merge(state);
                 state.Flush();
                 RecordFailure(state);
+                if (change.Added || change.Removed)
+                    BumpChangeStamp();
+
                 return change.Added;
             }
             finally
@@ -257,6 +270,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Merges one table in a fresh execution state carrying <paramref name="timestamp"/> and flushes the state: the
         /// body of egglog's merge closures (mod.rs:554-555, 563-564, 598-599). Thread-safe across distinct tables.
+        /// A merge that added or removed rows moves <see cref="ChangeStamp"/> (X30): one test per table merge.
         /// </summary>
         /// <returns>Whether the merge added rows or its merge function staged writes.</returns>
         bool MergeOne(TableInfo info, uint timestamp)
@@ -265,6 +279,9 @@ namespace Eggnog.Relations
             var change = info.Table.Merge(state);
             state.Flush();
             RecordFailure(state);
+            if (change.Added || change.Removed)
+                BumpChangeStamp();
+
             return change.Added || state.Changed;
         }
 

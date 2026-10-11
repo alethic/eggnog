@@ -44,12 +44,19 @@ namespace Eggnog.Relations
         readonly Database database;
 
         /// <summary>
+        /// Whether the database is a child context's, fixed at construction (the child's owner is set before its view
+        /// is created), so the root's table reads pay one field test.
+        /// </summary>
+        readonly bool isChild;
+
+        /// <summary>
         /// Initializes the view of <paramref name="database"/> and registers it under the database's catalog.
         /// </summary>
         /// <param name="database">The database.</param>
         internal DatabaseView(Database database)
         {
             this.database = database;
+            isChild = database.IsChild;
             byCatalog.Add(database.Catalog, this);
         }
 
@@ -78,7 +85,15 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
         /// <exception cref="KeyNotFoundException">No such table, or the database has taken it out.</exception>
-        public Table GetTable(TableId table) => database.GetTableInfo(table).Table;
+        /// <exception cref="InvalidOperationException">The view is a child context's: a child's tables are layered, and
+        /// read through its views (colored-contexts spec §3.4, §6.5).</exception>
+        public Table GetTable(TableId table)
+        {
+            if (isChild)
+                ThrowLayered(table);
+
+            return database.GetTableInfo(table).Table;
+        }
 
         /// <summary>
         /// Gets the table with id <paramref name="table"/> and its metadata.
@@ -101,22 +116,37 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The name, or <c>null</c>.</returns>
-        public string? GetTableName(TableId table) => database.GetTableInfo(table).Name;
+        public string? GetTableName(TableId table) => database.GetTableName(table);
 
         /// <summary>
-        /// Gets the ids of every table the view sees, in ascending order. egglog's <c>table_ids</c>. Allocates an
-        /// enumerator; cold path.
+        /// Gets the ids of every table the view sees, in ascending order. egglog's <c>table_ids</c>. In a child
+        /// context's view, every table of the store's schema. Allocates an enumerator; cold path.
         /// </summary>
         public IEnumerable<TableId> TableIds => database.VisibleTableIds();
 
         /// <summary>
+        /// Gets the representation of the store's clock counter, which execution states over this view pin to their
+        /// timestamp (C1), or −1 when the database has no clock.
+        /// </summary>
+        public int ClockCounterRep => database.ClockCounterRep;
+
+        /// <summary>
         /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>.
-        /// Thread-safe.
+        /// Thread-safe. In a child context's view, the store's id counter is redirected to the child's id blocks
+        /// (<see cref="Database.IncrementCounterInView"/>, colored-contexts spec §4.2): one null test at the root.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long IncrementCounter(CounterId counter) => database.Counters.Increment(counter);
+        public long IncrementCounter(CounterId counter) => database.IncrementCounterInView(counter);
+
+        /// <summary>
+        /// Increments <paramref name="counter"/> on the shared counters, never redirected to a child's id blocks: for
+        /// ids that must not be local to any context, such as interned container ids (§4.2). Thread-safe.
+        /// </summary>
+        /// <param name="counter">The counter.</param>
+        /// <returns>The value before the increment.</returns>
+        public long IncrementSharedCounter(CounterId counter) => database.IncrementSharedCounter(counter);
 
         /// <summary>
         /// Gets the current value of <paramref name="counter"/>. egglog's <c>read_counter</c>. Thread-safe.
@@ -145,6 +175,13 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(catalog);
             return byCatalog.TryGetValue(catalog, out view);
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowLayered(TableId table)
+        {
+            throw new InvalidOperationException($"Table {table} is layered in a child context and cannot be read as one table; read it through the context's view.");
         }
 
     }

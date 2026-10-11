@@ -125,7 +125,7 @@ namespace Eggnog.Relations
         public AtomId AddAtom(TableId table, ReadOnlySpan<QueryEntry> entries, ReadOnlySpan<Constraint> constraints = default)
         {
             owner.ThrowIfNotOpen(this);
-            var arity = owner.Database.GetTableInfo(table).Spec.Arity;
+            var arity = owner.Database.GetTableSpec(table).Arity;
             if (entries.Length != arity)
                 throw QueryException.BadArity(table, arity, entries.Length);
 

@@ -56,15 +56,33 @@ namespace Eggnog.Relations
         /// <param name="ruleSet">The rules.</param>
         /// <param name="reportLevel">How much to report per rule.</param>
         /// <param name="timestamp">The timestamp the run's execution states and its merge carry
-        /// (<see cref="ExecutionState.Timestamp"/>, <see cref="MergeAll"/>).</param>
+        /// (<see cref="ExecutionState.Timestamp"/>, <see cref="MergeAll"/>); <c>null</c> for the store clock's current
+        /// value, or zero without a store (colored-contexts spec §4.1). Reading the store clock from an action
+        /// (<see cref="ReadCounterInstr"/>) returns it, however far other contexts advance the clock meanwhile (C1).</param>
         /// <returns>What the run did. An empty rule set returns <see cref="RuleSetReport.Empty"/> without merging, as
         /// egglog does.</returns>
-        public RuleSetReport RunRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint timestamp = 0)
+        /// <exception cref="NotSupportedException">This is a child context's database (colored-contexts spec §17, M9.1
+        /// interim): a child's rules run against its views, which arrive with layered execution (M10.2). Until then the
+        /// executor would read the child's own layers (its union-find placeholder) as if they were what the child sees,
+        /// or a foreign rule set's header subsets against them; the run is refused instead. One owner test per run at
+        /// the root.</exception>
+        public RuleSetReport RunRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
+            if (IsChild)
+                throw new NotSupportedException("Rules in a child context arrive in M10.2.");
+
             if (ruleSet.IsEmpty)
                 return RuleSetReport.Empty;
 
+            return RunRuleSetCore(ruleSet, reportLevel, ResolveTimestamp(timestamp));
+        }
+
+        /// <summary>
+        /// <see cref="RunRuleSet"/> on a nonempty rule set with the timestamp resolved.
+        /// </summary>
+        RuleSetReport RunRuleSetCore(RuleSet ruleSet, ReportLevel reportLevel, uint timestamp)
+        {
             var rules = ruleSet.Rules;
             var actions = new ActionInfo[ruleSet.Count];
             for (var i = 0; i < actions.Length; i++)
@@ -95,7 +113,7 @@ namespace Eggnog.Relations
 
             var searchAndApplyTime = Stopwatch.GetElapsedTime(start);
             var mergeStart = Stopwatch.GetTimestamp();
-            var changed = MergeAll(timestamp);
+            var changed = MergeAllCore(timestamp);
             return new RuleSetReport(changed, byDescription, searchAndApplyTime, Stopwatch.GetElapsedTime(mergeStart));
         }
 

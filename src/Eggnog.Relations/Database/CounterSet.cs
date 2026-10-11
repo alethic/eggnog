@@ -20,9 +20,10 @@ namespace Eggnog.Relations
     /// and the read a volatile load.
     /// </para>
     /// <para>
-    /// Threading: <see cref="Increment"/> and <see cref="Read"/> may run on any number of threads at once.
-    /// <see cref="Add"/> and <see cref="Clone"/> need exclusive access (egglog's <c>&amp;mut Database</c> and
-    /// <c>Clone</c>), because adding may move the storage.
+    /// Threading: <see cref="Increment"/>, <see cref="IncrementBy"/> and <see cref="Read"/> may run on any number of
+    /// threads at once. <see cref="Add"/> and <see cref="Clone"/> need exclusive access (egglog's
+    /// <c>&amp;mut Database</c> and <c>Clone</c>), because adding may move the storage; a <see cref="Store"/> therefore
+    /// refuses new counters once it has had a child context (X16), whose threads may increment concurrently.
     /// </para>
     /// </remarks>
     internal sealed class CounterSet
@@ -80,6 +81,26 @@ namespace Eggnog.Relations
                 ThrowUnknown(counter);
 
             return Interlocked.Increment(ref values[index]) - 1;
+        }
+
+        /// <summary>
+        /// Advances <paramref name="counter"/> by <paramref name="amount"/> and returns its previous value: reserves the
+        /// <paramref name="amount"/> consecutive values starting there in one atomic step. Child contexts reserve their
+        /// id blocks this way (<see cref="IdBlockAllocator"/>, colored-contexts spec §4.2). Thread-safe, O(1).
+        /// </summary>
+        /// <param name="counter">The counter.</param>
+        /// <param name="amount">How many values to reserve; not negative.</param>
+        /// <returns>The value before the advance: the first reserved value.</returns>
+        /// <exception cref="KeyNotFoundException">No such counter.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is negative.</exception>
+        public long IncrementBy(CounterId counter, long amount)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(amount);
+            var index = counter.Index;
+            if ((uint)index >= (uint)count)
+                ThrowUnknown(counter);
+
+            return Interlocked.Add(ref values[index], amount) - amount;
         }
 
         /// <summary>

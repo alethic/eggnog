@@ -194,10 +194,15 @@ namespace Eggnog.Relations
         /// <param name="message">What went wrong.</param>
         public void ReportFailure(string message) => signals.ReportFailure(message);
 
+        /// <summary>
+        /// Creates and records this state's buffer for <paramref name="table"/>, resolving the table through
+        /// <see cref="TableCatalog.GetForStaging"/>: the catalog's table, or in a child context the layer its resolver
+        /// supplies (colored-contexts spec §6.2). One volatile load more than a plain lookup, per (state, table).
+        /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
         MutationBuffer CreateBuffer(TableId table)
         {
-            var buffer = catalog[table].NewBuffer();
+            var buffer = catalog.GetForStaging(table).NewBuffer();
             buffers.Insert(table, buffer);
             return buffer;
         }

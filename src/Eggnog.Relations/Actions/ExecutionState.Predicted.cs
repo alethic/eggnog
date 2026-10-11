@@ -178,12 +178,18 @@ namespace Eggnog.Relations
         /// Converts a counter value to a cell value: egglog's <c>Value::from_usize</c>, which panics when the value does
         /// not fit in 32 bits.
         /// </summary>
+        /// <remarks>
+        /// Defect fixed (numeric-id/src/lib.rs:528-531, called from core-relations/src/action/mod.rs:547, 700, 877;
+        /// colored-contexts spec §4.2): egglog's <c>from_usize</c> accepts <see cref="uint.MaxValue"/>, which is
+        /// <see cref="Value.StaleRep"/>, the marker of a deleted row when it lands in a row's first cell. A minted id or
+        /// read counter at or past it is rejected.
+        /// </remarks>
         /// <param name="value">The counter value.</param>
         /// <returns>The cell value.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static uint ValueFromCounter(long value)
         {
-            if ((ulong)value > uint.MaxValue)
+            if ((ulong)value >= Value.StaleRep)
                 ThrowCounterOverflow(value);
 
             return (uint)value;
@@ -193,7 +199,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowCounterOverflow(long value)
         {
-            throw new OverflowException($"The counter value {value} does not fit in a 32-bit value.");
+            throw new OverflowException($"The counter value {value} does not fit in a 32-bit value below the stale-row marker.");
         }
 
     }

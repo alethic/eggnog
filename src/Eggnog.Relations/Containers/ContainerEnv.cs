@@ -404,11 +404,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Mints a fresh id from the counter: egglog's <c>Value::from_usize(exec_state.inc_counter(counter))</c>.
+        /// Mints a fresh id from the counter: egglog's <c>Value::from_usize(exec_state.inc_counter(counter))</c>. On the
+        /// store's shared counter, never a child context's id blocks (colored-contexts spec §4.2): a container is
+        /// interned globally, so its id must not be local to the context that first interned it (L3, C13).
         /// </summary>
         uint MintId(ExecutionState state)
         {
-            var raw = state.IncrementCounter(counter);
+            var raw = state.IncrementSharedCounter(counter);
             if ((ulong)raw >= Value.StaleRep)
                 ThrowExhausted();
 

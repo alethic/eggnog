@@ -35,7 +35,12 @@ namespace Eggnog.Relations
     internal sealed class DisplacedTable : Table
     {
 
-        static readonly TableSpec DisplacedSpec = new(1, 2, false, [new ColumnId(1)]);
+        /// <summary>
+        /// The spec every union-find table shares: one key (the displaced id), two values (its canonical id, never
+        /// cacheable, and the timestamp), no deletes. Child contexts answer the union-find's spec from it without a
+        /// table (colored-contexts spec §3.4, X39).
+        /// </summary>
+        internal static readonly TableSpec DisplacedSpec = new(1, 2, false, [new ColumnId(1)]);
 
         readonly DisplacedUnionFind uf;
         readonly PendingState pending;

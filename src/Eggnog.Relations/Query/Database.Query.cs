@@ -37,21 +37,31 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the columns of <paramref name="table"/> that hold e-class ids: the columns its rebuild canonicalizes
         /// (<see cref="SortedWritesTable.RebuildColumns"/>). The union-find table has none: its rows record displaced
-        /// ids. Used to recognize constant ids in rules (<see cref="IdConstant"/>).
+        /// ids. Used to recognize constant ids in rules (<see cref="IdConstant"/>). In a child context's database, from
+        /// the store's schema (colored-contexts spec §3.4, X39).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The columns; empty when the table rebuilds nothing.</returns>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
         internal ReadOnlySpan<ColumnId> GetIdColumns(TableId table)
         {
+            if (IsChild)
+            {
+                var schema = owner!.Store.Schema;
+                if (table == schema.UnionFind)
+                    return ReadOnlySpan<ColumnId>.Empty;
+
+                return (schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.")).RebuildColumns;
+            }
+
             return GetTable(table) is SortedWritesTable sorted ? sorted.RebuildColumns : ReadOnlySpan<ColumnId>.Empty;
         }
 
         /// <inheritdoc />
-        int IQuerySchema.GetArity(TableId table) => GetTableInfo(table).Spec.Arity;
+        int IQuerySchema.GetArity(TableId table) => GetTableSpec(table).Arity;
 
         /// <inheritdoc />
-        int IQuerySchema.GetKeyCount(TableId table) => GetTableInfo(table).Spec.KeyCount;
+        int IQuerySchema.GetKeyCount(TableId table) => GetTableSpec(table).KeyCount;
 
         /// <summary>
         /// Splits an atom's constraints exactly as
@@ -60,10 +70,17 @@ namespace Eggnog.Relations
         /// through a column index; everything else slow, in order) and drops the subset: egglog's <c>add_atom</c>
         /// calls <c>process_constraints</c> and keeps its split (core-relations/src/query.rs:407).
         /// </summary>
+        /// <remarks>
+        /// In a child context's database the union-find is refused (colored-contexts spec §3.4, X23): a rule in a child
+        /// never reads the union-find as an atom. Other tables split against the root's entry from M10.2; until then a
+        /// table with no layer in the child throws (<see cref="GetQueryTableInfo"/>).
+        /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="constraints">The constraints.</param>
         /// <param name="fast">Receives the fast constraints.</param>
         /// <param name="slow">Receives the slow constraints.</param>
+        /// <exception cref="NotSupportedException">This is a child context's database and the table is the
+        /// union-find.</exception>
         void IQuerySchema.SplitConstraints(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
             ProcessConstraints(table, constraints, fast, slow).Dispose();
@@ -103,13 +120,22 @@ namespace Eggnog.Relations
         /// <see cref="ProcessConstraints(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>,
         /// egglog's <c>reprocess_constraints</c> core (core-relations/src/query.rs:133-154).
         /// </summary>
+        /// <remarks>
+        /// A child context's database throws (colored-contexts spec §3.4): a child's rows lie in several layers, so a
+        /// single-layer subset cannot describe them; every caller instantiates through the child's view instead (§9.4,
+        /// M10.2). One owner test at the root, per header.
+        /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="constraints">The constraints.</param>
         /// <param name="fast">Receives the fast constraints.</param>
         /// <param name="slow">Receives the slow constraints.</param>
         /// <returns>The rows matching every fast constraint, which the caller owns.</returns>
+        /// <exception cref="InvalidOperationException">This is a child context's database.</exception>
         Subset IHeaderEvaluator.Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
+            if (IsChild)
+                throw new InvalidOperationException("A child context's database cannot evaluate a header as a single table; headers in a child are evaluated through its view.");
+
             return ProcessConstraints(table, constraints, fast, slow);
         }
 

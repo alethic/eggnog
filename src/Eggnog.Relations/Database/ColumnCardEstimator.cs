@@ -42,9 +42,13 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="column">The column.</param>
         /// <returns>The estimate.</returns>
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or (in a child context's
+        /// database) the table has no layer there.</exception>
+        /// <exception cref="NotSupportedException">The database is a child context's and the table is the union-find
+        /// (colored-contexts spec X23, <see cref="Database.GetQueryTableInfo"/>).</exception>
         public ColumnUniqueness GetColumnUniqueness(TableId table, ColumnId column)
         {
-            var info = database.GetTableInfo(table);
+            var info = database.GetQueryTableInfo(table);
             var index = info.GetColumnIndex(column);
             return new ColumnUniqueness((ulong)info.Table.Count, (ulong)index.Count);
         }

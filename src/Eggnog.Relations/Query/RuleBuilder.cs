@@ -386,7 +386,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the schema of <paramref name="table"/>. egglog's <c>table_info</c>.
         /// </summary>
-        TableSpec GetSpec(TableId table) => owner.Database.GetTableInfo(table).Spec;
+        TableSpec GetSpec(TableId table) => owner.Database.GetTableSpec(table);
 
         /// <summary>
         /// Gets the variable the next definition creates, without creating it, so the instruction can be built (and

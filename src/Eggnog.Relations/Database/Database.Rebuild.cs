@@ -37,11 +37,14 @@ namespace Eggnog.Relations
         /// <returns>The result of the <see cref="MergeAll"/>: whether anything changed.</returns>
         /// <exception cref="ArgumentException">A table is listed twice, or the rebuilder is listed.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">A table does not exist.</exception>
+        /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
+        /// context (colored-contexts spec §3.4).</exception>
         public bool ApplyRebuild(TableId rebuilder, ReadOnlySpan<TableId> tablesToRebuild, uint nextTimestamp)
         {
+            ThrowIfChildRebuild(nameof(ApplyRebuild));
             var operation = new RebuildTableOperation(rebuilder, GetTable(rebuilder), nextTimestamp);
             RunWithTakenOut(rebuilder, tablesToRebuild, operation);
-            return MergeAll(nextTimestamp);
+            return MergeAllCore(nextTimestamp);
         }
 
         /// <summary>
@@ -57,15 +60,18 @@ namespace Eggnog.Relations
         /// <returns><c>false</c> without dirty ids; otherwise the result of the <see cref="MergeAll"/>.</returns>
         /// <exception cref="ArgumentException">A table is listed twice.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">A table does not exist.</exception>
+        /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
+        /// context (colored-contexts spec §3.4).</exception>
         public bool RefreshRowsForValues(ReadOnlySpan<TableId> tablesToRefresh, ReadOnlySpan<uint> dirtyIds, uint nextTimestamp)
         {
+            ThrowIfChildRebuild(nameof(RefreshRowsForValues));
             if (dirtyIds.IsEmpty)
                 return false;
 
             CheckTableList(tablesToRefresh, null, nameof(tablesToRefresh));
             var operation = new RefreshTableOperation(dirtyIds.ToArray(), nextTimestamp);
             RunOnTablesCore(tablesToRefresh, operation);
-            return MergeAll(nextTimestamp);
+            return MergeAllCore(nextTimestamp);
         }
 
         /// <summary>

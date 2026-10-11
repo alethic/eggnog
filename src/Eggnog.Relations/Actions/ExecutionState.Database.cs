@@ -55,7 +55,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>.
+        /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>. In a child
+        /// context, the store's id counter mints from the child's id blocks (colored-contexts spec §4.2).
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
@@ -63,12 +64,25 @@ namespace Eggnog.Relations
         public long IncrementCounter(CounterId counter) => RequireView().IncrementCounter(counter);
 
         /// <summary>
-        /// Gets the current value of <paramref name="counter"/>. egglog's <c>read_counter</c>.
+        /// Gets the current value of <paramref name="counter"/>. egglog's <c>read_counter</c>, except for the store's
+        /// clock, which reads as this state's <see cref="Timestamp"/> (C1, colored-contexts spec §4.1).
         /// </summary>
+        /// <remarks>
+        /// The pin is what stamps every write of a run, pass or batch with the epoch its context captured, even while a
+        /// sibling context on another thread advances the clock: <see cref="ReadCounterInstr"/> (egglog's
+        /// <c>next_ts</c>), <see cref="UnionContainerMerge"/>'s timestamp counter and the bridge's actions all read the
+        /// clock through here. At a root that runs alone the pinned value equals the live one, so its numbering is
+        /// egglog's. A database without a store has no clock (its <see cref="DatabaseView.ClockCounterRep"/> is −1),
+        /// and every counter reads live. One integer compare per call.
+        /// </remarks>
         /// <param name="counter">The counter.</param>
         /// <returns>The value.</returns>
         /// <exception cref="InvalidOperationException">The state is not attached to a database.</exception>
-        public long ReadCounter(CounterId counter) => RequireView().ReadCounter(counter);
+        public long ReadCounter(CounterId counter)
+        {
+            var database = RequireView();
+            return counter.Rep == database.ClockCounterRep ? Timestamp : database.ReadCounter(counter);
+        }
 
         /// <summary>
         /// Calls the external function <paramref name="function"/> with this state. egglog's <c>call_external_func</c>.

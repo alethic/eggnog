@@ -18,6 +18,23 @@ namespace Eggnog.Relations.Tests
         static TableId[] Ids(params int[] indexes) => indexes.Select(i => new TableId(i)).ToArray();
 
         [Fact]
+        public void IsEmptyTracksNotificationsUntilReset()
+        {
+            var list = new NotificationList<TableId>();
+            Assert.True(list.IsEmpty);
+            list.Notify(new TableId(300));
+            Assert.False(list.IsEmpty);
+            list.Notify(new TableId(300));
+            Assert.False(list.IsEmpty);
+            Assert.Equal(Ids(300), list.Reset());
+            Assert.True(list.IsEmpty);
+            var into = new List<TableId>();
+            list.Notify(new TableId(1));
+            Assert.Equal(1, list.Reset(into));
+            Assert.True(list.IsEmpty);
+        }
+
+        [Fact]
         public void SingleThreaded()
         {
             var list = new NotificationList<TableId>();

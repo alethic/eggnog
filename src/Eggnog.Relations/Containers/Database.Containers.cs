@@ -56,14 +56,23 @@ namespace Eggnog.Relations
         /// union (0 if it has none), never an older one; a fixed default of 0 would stage a union the next
         /// <see cref="MergeAll"/> rejects as soon as any union carried a later timestamp.
         /// </para>
+        /// <para>
+        /// A store's root has a designated clock, which execution states pin to their timestamp (C1). There an omitted
+        /// timestamp is the clock's current value: the value egglog's merge reads from the counter, so a
+        /// <see cref="UnionContainerMerge"/> reading the clock through the pinned state stamps what egglog stamps.
+        /// </para>
         /// </remarks>
         /// <param name="unionFind">The union-find table, which provides the rebuilder.</param>
         /// <param name="timestamp">The timestamp the merge state carries (the pass's timestamp in the rebuild loop), or
-        /// <c>null</c> for the timestamp of the union-find's newest union.</param>
+        /// <c>null</c> for the store clock's current value, or without a store the timestamp of the union-find's newest
+        /// union.</param>
         /// <returns>What changed; nothing when no container type was ever registered.</returns>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or it is taken out.</exception>
+        /// <exception cref="InvalidOperationException">This is a child context's database: children never rebuild
+        /// containers (colored-contexts spec §7.4).</exception>
         public ContainerRebuildSummary RebuildContainers(TableId unionFind, uint? timestamp = null)
         {
+            ThrowIfChildRebuild(nameof(RebuildContainers));
             var table = GetTable(unionFind);
             if (containers is not { } values)
                 return new ContainerRebuildSummary();
@@ -71,7 +80,7 @@ namespace Eggnog.Relations
             containersTakenOut = true;
             try
             {
-                var state = new ExecutionState(view, timestamp ?? NewestUnionTimestamp(table));
+                var state = new ExecutionState(view, timestamp ?? (clockRep >= 0 ? CurrentClock() : NewestUnionTimestamp(table)));
                 var summary = values.RebuildAll(unionFind, table, state);
 
                 // egglog drops the state here, which flushes the unions the merges staged.
@@ -99,13 +108,18 @@ namespace Eggnog.Relations
         /// </remarks>
         /// <param name="unionFind">The union-find table.</param>
         /// <param name="tables">The function tables to rebuild and refresh; distinct, and not the union-find.</param>
-        /// <param name="nextTimestamp">The pass's timestamp.</param>
+        /// <param name="nextTimestamp">The pass's timestamp; <c>null</c> for the store clock's current value, or zero
+        /// without a store (colored-contexts spec §4.1).</param>
         /// <returns>Whether the pass changed anything: a table rebuild, a refresh or a container change.</returns>
-        public bool RebuildPass(TableId unionFind, ReadOnlySpan<TableId> tables, uint nextTimestamp)
+        /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
+        /// context (§3.4).</exception>
+        public bool RebuildPass(TableId unionFind, ReadOnlySpan<TableId> tables, uint? nextTimestamp = null)
         {
-            var containerRebuild = RebuildContainers(unionFind, nextTimestamp);
-            var tableRebuild = ApplyRebuild(unionFind, tables, nextTimestamp);
-            var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, nextTimestamp);
+            ThrowIfChildRebuild(nameof(RebuildPass));
+            var next = ResolveTimestamp(nextTimestamp);
+            var containerRebuild = RebuildContainers(unionFind, next);
+            var tableRebuild = ApplyRebuild(unionFind, tables, next);
+            var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, next);
             return tableRebuild || refreshed || containerRebuild.Changed;
         }
 
@@ -119,8 +133,11 @@ namespace Eggnog.Relations
         /// <param name="tables">The function tables; distinct, and not the union-find.</param>
         /// <param name="timestampCounter">The bridge's timestamp counter.</param>
         /// <returns>The number of passes run, at least one.</returns>
+        /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
+        /// context (colored-contexts spec §3.4).</exception>
         public int Rebuild(TableId unionFind, ReadOnlySpan<TableId> tables, CounterId timestampCounter)
         {
+            ThrowIfChildRebuild(nameof(Rebuild));
             var passes = 0;
             while (true)
             {

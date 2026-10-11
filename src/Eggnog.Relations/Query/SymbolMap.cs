@@ -55,7 +55,7 @@ namespace Eggnog.Relations
 
             var atoms = new DenseIdMap<AtomId, string>(query.Atoms.IdCount);
             foreach (var (atom, info) in query.Atoms)
-                if (database.GetTableInfo(info.Table).Name is { } name)
+                if (database.GetTableName(info.Table) is { } name)
                     atoms.Insert(atom, name);
 
             var variables = new DenseIdMap<Variable, string>(query.Variables.IdCount);

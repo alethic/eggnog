@@ -48,13 +48,16 @@ namespace Eggnog.Relations
         /// <param name="fast">Receives the fast constraints.</param>
         /// <param name="slow">Receives the slow constraints.</param>
         /// <returns>The rows matching every fast constraint, which the caller owns.</returns>
-        /// <exception cref="KeyNotFoundException">No such table.</exception>
+        /// <exception cref="KeyNotFoundException">No such table, or (in a child context's database) the table has no
+        /// layer there.</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database and the table is the union-find
+        /// (X23, <see cref="GetQueryTableInfo"/>).</exception>
         public Subset ProcessConstraints(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
             ArgumentNullException.ThrowIfNull(fast);
             ArgumentNullException.ThrowIfNull(slow);
 
-            var info = GetTableInfo(table);
+            var info = GetQueryTableInfo(table);
             var firstSlow = slow.Count;
             var subset = info.Table.SplitFastSlow(constraints, fast, slow);
 
