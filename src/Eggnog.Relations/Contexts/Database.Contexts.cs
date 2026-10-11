@@ -40,15 +40,22 @@ namespace Eggnog.Relations
         long changeStamp;
 
         /// <summary>
+        /// A child's union-find table, which its catalog's resolver hands out for the union-find id even while a merge
+        /// has it taken out of the table map; <c>null</c> at the root and in a bare database.
+        /// </summary>
+        Table? childUnionFind;
+
+        /// <summary>
         /// Initializes a child context's database (§3.4): its own catalog, notification list, table map and size
         /// estimate, sharing the root's counters, external functions, dependency graph and container environments by
         /// reference.
         /// </summary>
         /// <remarks>
-        /// The table map holds the child's union-find at the store's union-find id (and, from M9.3, the child's own
-        /// layers as they are created). Writes are staged through the catalog's resolver, which in this milestone (M9.1)
-        /// refuses every table: a child has no layers until M9.3 and no union-find writes until M9.2 (§17 interim). The
-        /// root's container environments are created here if they did not exist, so both share one instance.
+        /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>, §5.5) at the store's
+        /// union-find id (and, from M9.3, the child's own layers as they are created). Writes are staged through the
+        /// catalog's resolver, which maps the union-find id to the child's union-find and, in this milestone (M9.2),
+        /// refuses every other table: a child has no layers until M9.3 (§17 interim). The root's container environments
+        /// are created here if they did not exist, so both share one instance.
         /// </remarks>
         /// <param name="root">The store's root database.</param>
         /// <param name="owner">The child context.</param>
@@ -66,6 +73,7 @@ namespace Eggnog.Relations
             this.parallelism = parallelism;
             this.owner = owner;
             idBlocks = ids;
+            childUnionFind = unionFind;
             clockRep = root.clockRep;
             catalog = new TableCatalog { Resolver = ResolveForStagingInterim };
             tables = new DenseIdMap<TableId, TableInfo>();
@@ -232,15 +240,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The staging resolver of a child's catalog in M9.1 (§17 interim): a child has no layers and no union-find
-        /// writes yet, so staging into any table, the union-find included, is not supported. The union-find's
-        /// placeholder is in the child's table map but not in its catalog, so it is refused here too and never written.
+        /// The staging resolver of a child's catalog in M9.2 (§17 interim): the union-find id resolves to the child's
+        /// union-find table, which merges the unions into the child's overlay (§5.5); a child has no layers yet, so
+        /// staging into any other table is not supported. From M9.3 the resolver creates the child's layer of the table
+        /// (§6.2, X37).
         /// </summary>
         /// <param name="table">The table staged into.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="NotSupportedException">Always.</exception>
+        /// <returns>The child's union-find table.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="table"/> is not the union-find.</exception>
         Table ResolveForStagingInterim(TableId table)
         {
+            if (childUnionFind is { } unionFind && table == owner!.Store.UnionFindTable)
+                return unionFind;
+
             throw new NotSupportedException("Layers arrive in M9.3.");
         }
 

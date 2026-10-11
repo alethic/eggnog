@@ -16,8 +16,10 @@ namespace Eggnog.Relations
     /// many threads may rebuild at once while the union-find does not change.
     /// </para>
     /// <para>
-    /// <see cref="RebuildBuffer"/> is specialized for one, two and three columns, as egglog's is, and skips tombstones
-    /// (egglog rewrites them and its caller drops them).
+    /// The loops live in <see cref="CanonicalizeLoops"/>, shared with a child context's <see cref="OverlayCanonicalizer"/>
+    /// (colored-contexts spec §5.5); this class runs them with <see cref="RootIdFinder"/>, a struct the JIT specializes,
+    /// so the machine code is the code these loops had here before. <see cref="RebuildBuffer"/> is specialized for one,
+    /// two and three columns, as egglog's is, and skips tombstones (egglog rewrites them and its caller drops them).
     /// </para>
     /// </remarks>
     internal sealed class Canonicalizer : Rebuilder
@@ -36,12 +38,7 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(uf);
 
             this.uf = uf;
-            this.columns = new int[columns.Length];
-            for (var i = 0; i < columns.Length; i++)
-            {
-                ArgumentOutOfRangeException.ThrowIfNegative(columns[i].Rep, nameof(columns));
-                this.columns[i] = columns[i].Rep;
-            }
+            this.columns = CanonicalizeLoops.Columns(columns);
         }
 
         /// <inheritdoc />
@@ -55,35 +52,7 @@ namespace Eggnog.Relations
         /// <remarks>egglog's <c>rebuild_buf</c> (core-relations/src/uf/mod.rs:74-161). O(rows × columns × find).</remarks>
         public override void RebuildBuffer(RowBuffer buffer, int start, int end, TaggedRowBuffer output, ExecutionState state)
         {
-            ArgumentNullException.ThrowIfNull(buffer);
-            ArgumentNullException.ThrowIfNull(output);
-            if (start >= end)
-                return;
-
-            if (start < 0 || end > buffer.Count)
-                throw new ArgumentOutOfRangeException(nameof(end), end, $"The rows [{start}, {end}) are not all in the buffer of {buffer.Count} rows.");
-
-            foreach (var column in columns)
-                if (column >= buffer.Arity)
-                    throw new ArgumentOutOfRangeException(nameof(buffer), column, "A column to canonicalize is not part of the rows.");
-
-            switch (columns.Length)
-            {
-                case 0:
-                    return;
-                case 1:
-                    RebuildOne(buffer, start, end, output);
-                    return;
-                case 2:
-                    RebuildTwo(buffer, start, end, output);
-                    return;
-                case 3:
-                    RebuildThree(buffer, start, end, output);
-                    return;
-                default:
-                    RebuildMany(buffer, start, end, output);
-                    return;
-            }
+            CanonicalizeLoops.RebuildBuffer(new RootIdFinder(uf), columns, buffer, start, end, output);
         }
 
         /// <inheritdoc />
@@ -93,20 +62,7 @@ namespace Eggnog.Relations
         /// </remarks>
         public override void RebuildSubset(Table table, SubsetRef subset, TaggedRowBuffer output, ExecutionState state)
         {
-            ArgumentNullException.ThrowIfNull(table);
-            ArgumentNullException.ThrowIfNull(output);
-
-            var first = output.Count;
-            var next = table.ScanBounded(subset, 0, int.MaxValue, output);
-            if (next >= 0)
-                throw new InvalidOperationException("A scan of the whole subset stopped early.");
-
-            for (var i = first; i < output.Count; i++)
-            {
-                var row = output.GetMutableRow(i, out _);
-                if (RebuildRow(row) == false)
-                    output.SetStale(i);
-            }
+            CanonicalizeLoops.RebuildSubset(new RootIdFinder(uf), columns, table, subset, output);
         }
 
         /// <summary>
@@ -114,132 +70,14 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="values">The row's cells.</param>
         /// <returns><c>true</c> if any column changed.</returns>
-        public bool RebuildRow(Span<uint> values)
-        {
-            var changed = false;
-            foreach (var column in columns)
-            {
-                var value = values[column];
-                var canonical = uf.FindNaive(value);
-                values[column] = canonical;
-                changed |= canonical != value;
-            }
-
-            return changed;
-        }
+        public bool RebuildRow(Span<uint> values) => CanonicalizeLoops.RebuildRow(new RootIdFinder(uf), columns, values);
 
         /// <inheritdoc />
         /// <remarks>
         /// egglog's <c>rebuild_slice</c> (core-relations/src/uf/mod.rs:187-195): canonicalizes every value of the slice,
         /// whatever the configured columns (container contents are all ids).
         /// </remarks>
-        public override bool RebuildSlice(Span<uint> values)
-        {
-            var changed = false;
-            for (var i = 0; i < values.Length; i++)
-            {
-                var value = values[i];
-                var canonical = uf.FindNaive(value);
-                values[i] = canonical;
-                changed |= canonical != value;
-            }
-
-            return changed;
-        }
-
-        void RebuildOne(RowBuffer buffer, int start, int end, TaggedRowBuffer output)
-        {
-            var arity = buffer.Arity;
-            var cells = buffer.Data;
-            var c = columns[0];
-            for (var row = start; row < end; row++)
-            {
-                var offset = row * arity;
-                if (cells[offset] == Value.StaleRep)
-                    continue;
-
-                var value = cells[offset + c];
-                var canonical = uf.FindNaive(value);
-                if (canonical == value)
-                    continue;
-
-                var added = output.AddRow(row, new ReadOnlySpan<uint>(cells, offset, arity));
-                output.GetMutableRow(added, out _)[c] = canonical;
-            }
-        }
-
-        void RebuildTwo(RowBuffer buffer, int start, int end, TaggedRowBuffer output)
-        {
-            var arity = buffer.Arity;
-            var cells = buffer.Data;
-            var c1 = columns[0];
-            var c2 = columns[1];
-            for (var row = start; row < end; row++)
-            {
-                var offset = row * arity;
-                if (cells[offset] == Value.StaleRep)
-                    continue;
-
-                var v1 = cells[offset + c1];
-                var v2 = cells[offset + c2];
-                var ca1 = uf.FindNaive(v1);
-                var ca2 = uf.FindNaive(v2);
-                if (ca1 == v1 && ca2 == v2)
-                    continue;
-
-                var added = output.AddRow(row, new ReadOnlySpan<uint>(cells, offset, arity));
-                var copy = output.GetMutableRow(added, out _);
-                copy[c1] = ca1;
-                copy[c2] = ca2;
-            }
-        }
-
-        void RebuildThree(RowBuffer buffer, int start, int end, TaggedRowBuffer output)
-        {
-            var arity = buffer.Arity;
-            var cells = buffer.Data;
-            var c1 = columns[0];
-            var c2 = columns[1];
-            var c3 = columns[2];
-            for (var row = start; row < end; row++)
-            {
-                var offset = row * arity;
-                if (cells[offset] == Value.StaleRep)
-                    continue;
-
-                var v1 = cells[offset + c1];
-                var v2 = cells[offset + c2];
-                var v3 = cells[offset + c3];
-                var ca1 = uf.FindNaive(v1);
-                var ca2 = uf.FindNaive(v2);
-                var ca3 = uf.FindNaive(v3);
-                if (ca1 == v1 && ca2 == v2 && ca3 == v3)
-                    continue;
-
-                var added = output.AddRow(row, new ReadOnlySpan<uint>(cells, offset, arity));
-                var copy = output.GetMutableRow(added, out _);
-                copy[c1] = ca1;
-                copy[c2] = ca2;
-                copy[c3] = ca3;
-            }
-        }
-
-        void RebuildMany(RowBuffer buffer, int start, int end, TaggedRowBuffer output)
-        {
-            var arity = buffer.Arity;
-            var cells = buffer.Data;
-            Span<uint> scratch = arity <= 64 ? stackalloc uint[arity] : new uint[arity];
-            for (var row = start; row < end; row++)
-            {
-                var offset = row * arity;
-                if (cells[offset] == Value.StaleRep)
-                    continue;
-
-                new ReadOnlySpan<uint>(cells, offset, arity).CopyTo(scratch);
-                if (RebuildRow(scratch))
-                    output.AddRow(row, scratch);
-            }
-        }
+        public override bool RebuildSlice(Span<uint> values) => CanonicalizeLoops.RebuildSlice(new RootIdFinder(uf), values);
 
     }
 

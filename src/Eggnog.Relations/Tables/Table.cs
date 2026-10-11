@@ -243,6 +243,23 @@ namespace Eggnog.Relations
         public virtual bool ApplyRebuild(TableId rebuilderTableId, Table rebuilderTable, uint nextTimestamp, ExecutionState state) => false;
 
         /// <summary>
+        /// Makes the table read-only for good, because its context is freezing (colored-contexts spec §8.1, X13): the
+        /// one freeze hook of every table kind. Implementations finish the work a frozen reader must not pay for (the
+        /// union-find compresses every path) and seal their pending state, so that staging into the table throws and it
+        /// never merges again. Requires exclusive access; the table must have no staged writes.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="DisplacedTable"/> and <see cref="OverlayDisplacedTable"/> freeze from M9.2 on. Freezing a
+        /// sorted-writes table (compaction, the shared rebuild index, sealing) is part of the storage freeze of M9.3
+        /// (§17); until then the base implementation refuses rather than leave a table writable under a frozen context.
+        /// </remarks>
+        /// <exception cref="NotSupportedException">The table kind cannot be frozen yet (sorted-writes tables, M9.3).</exception>
+        public virtual void Freeze()
+        {
+            throw new NotSupportedException("Freezing a sorted-writes table arrives in M9.3.");
+        }
+
+        /// <summary>
         /// Stages a re-insertion, with a fresh timestamp, of every live row whose rebuildable columns mention one of
         /// <paramref name="dirtyIds"/>, so seminaive sees them as new. egglog's <c>refresh_rows_for_values</c>.
         /// </summary>
@@ -272,6 +289,8 @@ namespace Eggnog.Relations
                     return Unsafe.As<SortedWritesTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
                 case TableKind.Displaced:
                     return Unsafe.As<DisplacedTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
+                case TableKind.OverlayDisplaced:
+                    return Unsafe.As<OverlayDisplacedTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
                 default:
                     throw UnknownKind();
             }
@@ -294,6 +313,9 @@ namespace Eggnog.Relations
                     return;
                 case TableKind.Displaced:
                     Unsafe.As<DisplacedTable>(this).ScanGeneric(subset, ref sink);
+                    return;
+                case TableKind.OverlayDisplaced:
+                    Unsafe.As<OverlayDisplacedTable>(this).ScanGeneric(subset, ref sink);
                     return;
                 default:
                     throw UnknownKind();

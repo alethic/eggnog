@@ -229,7 +229,12 @@ namespace Eggnog.Relations.Tests
 
             Assert.Equal((bareUf, bareIds, bareClock, bareNum, bareAdd), (store.UnionFindTable, store.IdCounter, store.ClockCounter, num, add));
 
+            // Each run starts from empty table pools on this thread: a pooled hash table keeps the slots it last grew to,
+            // and its iteration order with them, so tables left in the pool by whatever ran on this thread before would
+            // change the order in which the rules match, and so the ids they mint (not what the programs compute).
+            DrainTablePools();
             var bareLog = RunAcProgram(bare, bareUf, bareIds, bareClock, bareNum, bareAdd, storeRoot: false);
+            DrainTablePools();
             var storeLog = RunAcProgram(db, store.UnionFindTable, store.IdCounter, store.ClockCounter, num, add, storeRoot: true);
 
             Assert.Equal(bareLog.Count, storeLog.Count);
@@ -320,6 +325,28 @@ namespace Eggnog.Relations.Tests
             }
 
             return log;
+        }
+
+        /// <summary>
+        /// Empties the calling thread's pools of index and staging hash tables, so the next program builds every such
+        /// table from scratch.
+        /// </summary>
+        static void DrainTablePools()
+        {
+            Drain(SharedPool<RawHashTable<ColumnIndexEntry>, ColumnIndexHashPolicy>.Instance);
+            Drain(SharedPool<RawHashTable<TupleIndexEntry>, TupleIndexHashPolicy>.Instance);
+            Drain(SharedPool<RawHashTable<TableEntry>, StagedOutputsHashPolicy>.Instance);
+        }
+
+        /// <summary>
+        /// Takes, and drops, every object the calling thread's state of <paramref name="pool"/> holds.
+        /// </summary>
+        static void Drain<T, TPolicy>(ObjectPool<T, TPolicy> pool)
+            where T : class
+            where TPolicy : struct, IPoolPolicy<T>
+        {
+            while (pool.CountOnCurrentThread > 0)
+                pool.Rent();
         }
 
         /// <summary>

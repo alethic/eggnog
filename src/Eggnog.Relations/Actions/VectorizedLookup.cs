@@ -15,7 +15,8 @@ namespace Eggnog.Relations
     /// egglog downcasts the table once per batch and runs a loop monomorphized for its type. Here the lookup switches on
     /// <see cref="Table.Kind"/> once, picks a probe specialized for the table class and the key width
     /// (<see cref="SortedKey1Lookup"/> to <see cref="SortedKey3Lookup"/> with the key in registers,
-    /// <see cref="SortedKeyNLookup"/> otherwise, <see cref="DisplacedLookup"/> for the union-find), and runs
+    /// <see cref="SortedKeyNLookup"/> otherwise, <see cref="DisplacedLookup"/> for the union-find,
+    /// <see cref="OverlayDisplacedLookup"/> for a child context's union-find), and runs
     /// <see cref="Mask.Fill{TProducer}"/> specialized for that probe: no virtual call per lane.
     /// </para>
     /// <para>
@@ -85,9 +86,17 @@ namespace Eggnog.Relations
                     RunSorted(Unsafe.As<SortedWritesTable>(table), ref mask, bindings, args, column.Rep, output, hasDefault, fallback);
                     return;
                 case TableKind.Displaced:
+                {
                     var lookup = new DisplacedLookup(Unsafe.As<DisplacedTable>(table), ArgSource.Of(args[0], bindings), column.Rep);
                     Apply(ref mask, ref lookup, bindings, output, hasDefault, fallback);
                     return;
+                }
+                case TableKind.OverlayDisplaced:
+                {
+                    var lookup = new OverlayDisplacedLookup(Unsafe.As<OverlayDisplacedTable>(table), ArgSource.Of(args[0], bindings), column.Rep);
+                    Apply(ref mask, ref lookup, bindings, output, hasDefault, fallback);
+                    return;
+                }
                 default:
                     throw new InvalidOperationException($"Unknown table kind {table.Kind}.");
             }

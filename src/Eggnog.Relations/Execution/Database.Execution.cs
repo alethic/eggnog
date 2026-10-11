@@ -63,7 +63,7 @@ namespace Eggnog.Relations
         /// egglog does.</returns>
         /// <exception cref="NotSupportedException">This is a child context's database (colored-contexts spec §17, M9.1
         /// interim): a child's rules run against its views, which arrive with layered execution (M10.2). Until then the
-        /// executor would read the child's own layers (its union-find placeholder) as if they were what the child sees,
+        /// executor would read the child's own layers (its own union-find rows) as if they were what the child sees,
         /// or a foreign rule set's header subsets against them; the run is refused instead. One owner test per run at
         /// the root.</exception>
         public RuleSetReport RunRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint? timestamp = null)

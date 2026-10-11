@@ -91,7 +91,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// §1 (context = copy), §3.4 / X39 / X23: a child that asserts nothing sees what its parent sees. A rule over the
         /// union-find run in a child must either see the root's unions or be refused (X23: a <c>$uf</c> atom in a child
-        /// is unsupported). It must not silently read the child's never-written placeholder.
+        /// is unsupported). It must not silently read the child's own union-find rows as if they were its view.
         /// </summary>
         [Fact]
         public void AChildRuleOverTheUnionFindDoesNotSilentlyReadThePlaceholder()

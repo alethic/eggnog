@@ -253,8 +253,9 @@ namespace Eggnog.Relations
         /// <para>
         /// In a child context's database this is the child's own layer of the table (§3.4), for the database's own merge,
         /// rebuild and index work: what the child itself stored, not what it sees, which is read through the context.
-        /// The union-find's entry is the child's own union-find (in M9.1 a placeholder that holds no displacement,
-        /// since a child cannot union before M9.2). The query members refuse it (<see cref="GetQueryTableInfo"/>, X23).
+        /// The union-find's entry is the child's own union-find, its <see cref="OverlayDisplacedTable"/> (§5.5), whose
+        /// rows are only the child's own displacements. The query members refuse it (<see cref="GetQueryTableInfo"/>,
+        /// X23).
         /// </para>
         /// </remarks>
         /// <param name="table">The table id.</param>
@@ -294,8 +295,8 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <returns>The buffer.</returns>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
-        /// <exception cref="NotSupportedException">This is a child context's database, which cannot be written before
-        /// its layers exist (M9.1 interim).</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database and the table is not its
+        /// union-find: a child cannot write its other tables before its layers exist (M9.2 interim).</exception>
         public MutationBuffer NewBuffer(TableId table)
         {
             // egglog notifies before looking the table up; looking it up first keeps a bad id from leaving a
@@ -414,13 +415,24 @@ namespace Eggnog.Relations
         /// are reset so the next use rebuilds them. Other tables' staged writes are not merged first. Requires exclusive
         /// access.
         /// </summary>
+        /// <remarks>
+        /// At the root of a <see cref="Store"/> the union-find cannot be cleared while the root has live descendants
+        /// (§6.7, I9): each child's catch-up cursor indexes the root's displaced ids, which must only grow while it lives.
+        /// Interim (M9.2): this is the union-find row of the retraction guard; the guard's other rows (decision 1, R1) arrive
+        /// with the layers that read the root's rows (M9.3).
+        /// </remarks>
         /// <param name="table">The table id.</param>
         /// <exception cref="NotSupportedException">This is a child context's database: a child clears through its
         /// context (§6.7), which arrives with its layers (M9.3).</exception>
+        /// <exception cref="InvalidOperationException">The table is the store's union-find and the root has live
+        /// descendants.</exception>
         public void ClearTable(TableId table)
         {
             if (IsChild)
                 throw new NotSupportedException("Clearing a table in a child context arrives in M9.3.");
+
+            if (owner is { } root && table == root.Store.UnionFindTable && root.Gate.HasLiveDescendants)
+                throw new InvalidOperationException($"The union-find ({Store.UnionFindName}) cannot be cleared while the root has live descendants: their catch-up cursors index its displaced ids (decision 1, I9).");
 
             var info = GetTableInfo(table);
             var previous = info.Table.Count;

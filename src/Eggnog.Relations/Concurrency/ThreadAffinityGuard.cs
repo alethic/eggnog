@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -41,6 +42,12 @@ namespace Eggnog.Relations
         int depth;
 
         /// <summary>
+        /// How many callbacks (a caller's code run inside an operation of the domain) the holder is inside; only the
+        /// holder reads or writes it, and it is zero whenever the guard is free.
+        /// </summary>
+        int callbacks;
+
+        /// <summary>
         /// Gets how deeply the calling thread holds the guard: zero when it does not hold it (whether the guard is free
         /// or held by another thread). Structural context operations refuse to run when this is positive, because they
         /// would then run inside another operation of the same domain (§8.3).
@@ -55,6 +62,17 @@ namespace Eggnog.Relations
         /// Gets whether any thread holds the guard. A snapshot: another thread may claim or release it right after.
         /// </summary>
         public bool IsHeld => Volatile.Read(ref owner) != 0;
+
+        /// <summary>
+        /// Gets whether the calling thread holds the guard and is running a caller's code inside one of the domain's
+        /// operations (a write batch's action, a <c>ScanMerges</c> visitor). Operations that change a context of the
+        /// domain refuse to run while this is true (§8.3). <c>false</c> on a thread that does not hold the guard.
+        /// </summary>
+        public bool InCallback
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Volatile.Read(ref owner) == Environment.CurrentManagedThreadId && callbacks > 0;
+        }
 
         /// <summary>
         /// Enters the guard on the calling thread: re-entrantly if the thread holds it already, otherwise by claiming
@@ -88,7 +106,40 @@ namespace Eggnog.Relations
                 ThrowNotHeld();
 
             if (--depth == 0)
+            {
+                Debug.Assert(callbacks == 0, "a thread domain was released inside a callback");
                 Volatile.Write(ref owner, 0);
+            }
+        }
+
+        /// <summary>
+        /// Marks the start of a caller's code run inside an operation of the domain: until the matching
+        /// <see cref="ExitCallback"/>, <see cref="InCallback"/> is true on the holding thread. Nests.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The calling thread does not hold the guard.</exception>
+        public void EnterCallback()
+        {
+            if (Volatile.Read(ref owner) != Environment.CurrentManagedThreadId)
+                ThrowNotHeld();
+
+            callbacks++;
+        }
+
+        /// <summary>
+        /// Marks the end of a caller's code run that <see cref="EnterCallback"/> started. Call it in a <c>finally</c>, on
+        /// the thread that entered, before the enclosing hold is exited.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The calling thread does not hold the guard, or is not inside a
+        /// callback.</exception>
+        public void ExitCallback()
+        {
+            if (Volatile.Read(ref owner) != Environment.CurrentManagedThreadId)
+                ThrowNotHeld();
+
+            if (callbacks == 0)
+                throw new InvalidOperationException("The calling thread is not inside a callback of this thread domain.");
+
+            callbacks--;
         }
 
         [DoesNotReturn]

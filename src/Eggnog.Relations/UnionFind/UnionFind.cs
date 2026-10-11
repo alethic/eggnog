@@ -28,8 +28,8 @@ namespace Eggnog.Relations
     /// <para>
     /// Threading: <see cref="FindNaive"/> and the read-only members never write and may run on many threads at once,
     /// as long as no thread calls a mutating member (<see cref="Find"/>, <see cref="Union"/>,
-    /// <see cref="Reserve"/>, <see cref="Reset"/>) at the same time. This is egglog's <c>&amp;self</c> /
-    /// <c>&amp;mut self</c> split.
+    /// <see cref="Reserve"/>, <see cref="Reset"/>, <see cref="CompressPath"/>, <see cref="CompressAll"/>) at the same
+    /// time. This is egglog's <c>&amp;self</c> / <c>&amp;mut self</c> split.
     /// </para>
     /// </remarks>
     internal sealed class UnionFind
@@ -179,6 +179,60 @@ namespace Eggnog.Relations
                 id = parent;
 
             return id;
+        }
+
+        /// <summary>
+        /// Points every identifier on the path from <paramref name="id"/> to its root straight at the root: a read-only
+        /// walk to find the root, then a second walk that rewrites each parent (colored-contexts spec §5.1). O(path).
+        /// </summary>
+        /// <remarks>
+        /// A parent is only ever replaced by an ancestor, which is smaller, so <c>parents[i] &lt;= i</c> still holds and
+        /// every class keeps its root: no find, at any time, returns anything different. An identifier that was never
+        /// reserved is its own root and is left alone. Needs exclusive access, like every mutating member.
+        /// </remarks>
+        /// <param name="id">The identifier whose path is compressed.</param>
+        public void CompressPath(uint id)
+        {
+            var p = parents;
+            if (id >= (uint)idCount)
+                return;
+
+            // In bounds: id < idCount <= p.Length, and every parent is at most its index (see the class remarks).
+            ref var p0 = ref MemoryMarshal.GetArrayDataReference(p);
+            var root = id;
+            uint parent;
+            while ((parent = Unsafe.Add(ref p0, (nuint)root)) != root)
+                root = parent;
+
+            while ((parent = Unsafe.Add(ref p0, (nuint)id)) != root)
+            {
+                Unsafe.Add(ref p0, (nuint)id) = root;
+                id = parent;
+            }
+        }
+
+        /// <summary>
+        /// Points every reserved identifier straight at its root, so that every later find is one hop (colored-contexts
+        /// spec §5.1, used when a context freezes). One ascending pass, <c>p[i] = p[p[i]]</c>. O(<see cref="IdCount"/>).
+        /// </summary>
+        /// <remarks>
+        /// Correct because <c>p[i] &lt;= i</c>: when <c>i</c> is processed, <c>p[i]</c> is either <c>i</c> itself (a root)
+        /// or a smaller identifier already processed, which therefore points at its root, the root of <c>i</c>. Roots are
+        /// unchanged. Needs exclusive access.
+        /// </remarks>
+        public void CompressAll()
+        {
+            var n = idCount;
+            if (n == 0)
+                return;
+
+            // In bounds: i < idCount <= parents.Length, and parents[i] <= i.
+            ref var p0 = ref MemoryMarshal.GetArrayDataReference(parents);
+            for (nuint i = 0; i < (nuint)n; i++)
+            {
+                var parent = Unsafe.Add(ref p0, i);
+                Unsafe.Add(ref p0, i) = Unsafe.Add(ref p0, (nuint)parent);
+            }
         }
 
         /// <summary>

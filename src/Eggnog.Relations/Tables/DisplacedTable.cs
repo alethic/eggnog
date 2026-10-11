@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
@@ -31,6 +32,13 @@ namespace Eggnog.Relations
     /// Threading: reads run concurrently while no merge runs; <see cref="Merge"/> and <see cref="Clear"/> are
     /// exclusive.
     /// </para>
+    /// <para>
+    /// Colored contexts (colored-contexts spec §5.1). Each merge compresses the paths of the ids it displaced
+    /// (<see cref="DisplacedUnionFind.CompressRows"/>), which no result can observe: roots and the
+    /// <c>parents[i] &lt;= i</c> invariant are unchanged, so every find returns what it returned before, and children's
+    /// finds, which walk the root's array, stay short. <see cref="Freeze"/> compresses every path and seals the table:
+    /// a frozen union-find is read from many threads (children of a frozen root) and never written again.
+    /// </para>
     /// </remarks>
     internal sealed class DisplacedTable : Table
     {
@@ -45,6 +53,7 @@ namespace Eggnog.Relations
         readonly DisplacedUnionFind uf;
         readonly PendingState pending;
         int generation;
+        volatile bool frozen;
 
         /// <summary>
         /// Initializes an empty union-find table. egglog's <c>DisplacedTable::default</c>.
@@ -71,6 +80,17 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         public override TableSpec Spec => DisplacedSpec;
+
+        /// <summary>
+        /// Gets whether unions are staged and not merged yet. Exact for this single-shard table; for the owning context,
+        /// which may freeze only without them.
+        /// </summary>
+        public bool HasPendingUnions => pending.RowQueue(0).IsEmpty == false;
+
+        /// <summary>
+        /// Gets whether the table is frozen (<see cref="Freeze"/>): read-only, fully compressed, and sealed.
+        /// </summary>
+        public bool IsFrozen => frozen;
 
         /// <inheritdoc />
         public override int Count => uf.Count;
@@ -324,10 +344,16 @@ namespace Eggnog.Relations
         /// <remarks>
         /// egglog's <c>merge</c> (core-relations/src/uf/mod.rs:446-459): applies each staged <c>[a, b, ts]</c> in queue
         /// and staging order with <see cref="DisplacedUnionFind.Union"/>. A row counts as both added and removed, since
-        /// unions change rows in place.
+        /// unions change rows in place. Afterwards the paths of the ids this merge displaced are compressed
+        /// (colored-contexts spec §5.1, C2): one cheap pass no result can observe.
         /// </remarks>
+        /// <exception cref="InvalidOperationException">The table is frozen.</exception>
         public override TableChange Merge(ExecutionState state)
         {
+            if (frozen)
+                ThrowFrozen();
+
+            var first = uf.Count;
             pending.TakeTotalRows();
             pending.TakeTotalRemovals();
             var queue = pending.RowQueue(0);
@@ -345,6 +371,9 @@ namespace Eggnog.Relations
                 buffer.Dispose();
             }
 
+            if (changed)
+                uf.CompressRows(first);
+
             return new TableChange(changed, changed);
         }
 
@@ -354,8 +383,12 @@ namespace Eggnog.Relations
         /// egglog keeps the lookup and the version (core-relations/src/uf/mod.rs:286-289; map §8.1 row 12) and leaves
         /// staged unions queued.
         /// </remarks>
+        /// <exception cref="InvalidOperationException">The table is frozen.</exception>
         public override void Clear()
         {
+            if (frozen)
+                ThrowFrozen();
+
             pending.Clear();
             var hadRows = uf.Count > 0;
             uf.Clear();
@@ -374,6 +407,27 @@ namespace Eggnog.Relations
         /// <remarks>egglog's <c>rebuilder</c> (core-relations/src/uf/mod.rs:279-284).</remarks>
         public override Rebuilder? GetRebuilder(ReadOnlySpan<ColumnId> columns) => new Canonicalizer(uf, columns);
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Colored-contexts spec §5.1, §8.1 (X13): compresses every path (<see cref="DisplacedUnionFind.CompressAll"/>),
+        /// so a find by any reader of the frozen root is one hop, and seals the pending state, so staging a union
+        /// throws. Afterwards <see cref="Merge"/> and <see cref="Clear"/> throw. A second call does nothing.
+        /// O(ids).
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Unions are staged and not merged.</exception>
+        public override void Freeze()
+        {
+            if (frozen)
+                return;
+
+            if (HasPendingUnions)
+                throw new InvalidOperationException("The union-find has staged unions that are not merged; merge them before freezing.");
+
+            uf.CompressAll();
+            pending.Seal();
+            frozen = true;
+        }
+
         /// <summary>
         /// Expands row <paramref name="row"/> into <paramref name="cells"/> and emits it if it satisfies the
         /// constraints.
@@ -387,6 +441,13 @@ namespace Eggnog.Relations
                 return;
 
             sink.AddRow(row, cells);
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowFrozen()
+        {
+            throw new InvalidOperationException("The union-find of a frozen context cannot be written.");
         }
 
         static void CheckKey(ReadOnlySpan<uint> key)

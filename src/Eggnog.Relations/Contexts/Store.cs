@@ -153,7 +153,8 @@ namespace Eggnog.Relations
                 Schema.Register(id, contextPrivate);
 
                 // M9.3: a table added to a frozen root is frozen at once (Table.Freeze, TableInfo.FreezeIndexes) and its
-                // root view published (§4.3 step 4). No context can be frozen before M9.2.
+                // root view published (§4.3 step 4). Until then a frozen root freezes only its union-find (M9.2 interim),
+                // so the new table is left as it is: a context's writes to it are refused while the context is frozen.
                 return id;
             }
         }

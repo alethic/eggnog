@@ -12,7 +12,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Tests for a child context's database as far as it exists without layers (colored-contexts spec §3.4, §4.2,
     /// §17 M9.1): definitions go through the store, schema questions come from the store's schema, ids come from the
-    /// child's blocks while container ids stay shared, and staging is refused until the layers arrive (interim).
+    /// child's blocks while container ids stay shared, and staging reaches only the union-find until the layers arrive
+    /// (interim).
     /// </summary>
     public class ChildDatabaseTests
     {
@@ -82,20 +83,27 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void StagingIntoAChildIsNotSupportedBeforeItsLayersExist()
+        public void StagingIntoAChildReachesOnlyItsUnionFindBeforeItsLayersExist()
         {
             var (store, f, child) = Setup();
             var db = child.Database;
 
             Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => db.NewBuffer(f)).Message);
-            Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => db.NewBuffer(store.UnionFindTable)).Message);
             var state = db.CreateExecutionState();
             Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => state.StageInsert(f, [1, 2, 3])).Message);
-            Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => state.StageInsert(store.UnionFindTable, [1, 2, 3])).Message);
             Assert.Throws<NotSupportedException>(() => db.ClearTable(f));
             Assert.True(db.Catalog.Notifications.IsEmpty);
             Assert.False(db.MergeAll());
             Assert.Equal(0, child.Version);
+
+            // M9.2: the union-find id resolves to the child's own union-find through the resolver (the child's catalog
+            // holds no table), so it is found even while a merge has it taken out of the table map.
+            Assert.False(db.Catalog.TryGetTable(store.UnionFindTable, out _));
+            Assert.Same(child.UnionFindTable, db.Catalog.GetForStaging(store.UnionFindTable));
+            Assert.IsType<OverlayDisplacedTable>(db.GetTable(store.UnionFindTable));
+            db.NewBuffer(store.UnionFindTable).Flush();
+            Assert.False(db.Catalog.Notifications.IsEmpty);
+            Assert.False(db.MergeAll(1));
 
             // The root stages as before, and its catalog has no resolver.
             Assert.Null(store.Root.Database.Catalog.Resolver);
@@ -104,8 +112,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Context = copy (§1, §3.4, X23): the child's entry for the union-find is its own union-find layer (a
-        /// never-written placeholder in M9.1), not the union-find it sees, so no query member answers from it. The
+        /// Context = copy (§1, §3.4, X23): the child's entry for the union-find is its own union-find layer (its own
+        /// displacements only, from M9.2), not the union-find it sees, so no query member answers from it. The
         /// union-find is never a query atom in a child; headers are never evaluated as one table there; and rules do not
         /// run in a child before its views exist (M10.2). The root's query members are unchanged.
         /// </summary>

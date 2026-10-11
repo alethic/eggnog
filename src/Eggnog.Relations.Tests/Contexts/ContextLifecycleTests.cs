@@ -10,7 +10,7 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Tests for the lifecycle of contexts in non-frozen chains (colored-contexts spec §8.2, §8.3, X15, X36): creation,
     /// disposal rules, descendant gates, the depth limit, the shared thread domain, and the refusal of a second thread
-    /// and of re-entrant structural calls. Domains under frozen parents arrive with freezing (M9.2).
+    /// and of re-entrant structural calls; and the domains of children under frozen parents (M9.2).
     /// </summary>
     public class ContextLifecycleTests
     {
@@ -226,6 +226,77 @@ namespace Eggnog.Relations.Tests
             // Once the domain is free, the same calls succeed on this thread.
             grandchild.Dispose();
             child.CreateChild().Dispose();
+        }
+
+        /// <summary>
+        /// §8.3 (M9.2): children of a frozen context get domains of their own, so siblings run on different threads at
+        /// once; freezing gives each live child subtree a new domain; a frozen context is read without its domain.
+        /// </summary>
+        [Fact]
+        public void FrozenParentDomains()
+        {
+            var store = new Store();
+            var root = store.Root;
+            var ids = new[] { root.NewId(), root.NewId(), root.NewId(), root.NewId() };
+            var early = root.CreateChild();
+            var earlyChild = early.CreateChild();
+            var rootDomain = root.Domain;
+            Assert.Same(rootDomain, early.Domain);
+            Assert.Same(rootDomain, earlyChild.Domain);
+
+            // Freezing gives each live child subtree a domain of its own, shared within the subtree.
+            root.Freeze();
+            Assert.Same(rootDomain, root.Domain);
+            Assert.NotSame(rootDomain, early.Domain);
+            Assert.Same(early.Domain, earlyChild.Domain);
+
+            // Children of a frozen context each get their own domain; a grandchild of one that is not frozen shares it.
+            var a = root.CreateChild();
+            var b = root.CreateChild();
+            Assert.NotSame(a.Domain, b.Domain);
+            Assert.NotSame(rootDomain, a.Domain);
+            Assert.NotSame(early.Domain, a.Domain);
+            var a1 = a.CreateChild();
+            Assert.Same(a.Domain, a1.Domain);
+            var aDomain = a.Domain;
+            a.Freeze();
+            Assert.Same(aDomain, a.Domain);
+            Assert.NotSame(aDomain, a1.Domain);
+
+            // Siblings under a frozen parent run concurrently: while one thread holds b's domain, this thread works in
+            // early's subtree and in a1, and reads the frozen root, but b itself is refused.
+            using var held = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var owner = ConcurrencyTestThread.Start(() =>
+            {
+                using (b.Domain.Enter())
+                {
+                    held.Set();
+                    release.Wait();
+                }
+            });
+
+            held.Wait();
+            try
+            {
+                Assert.True(earlyChild.Union(ids[1], ids[0]));
+                earlyChild.Rebuild();
+                Assert.Equal(ids[0], earlyChild.Find(ids[1]));
+                Assert.True(a1.Union(ids[3], ids[2]));
+                a1.Rebuild();
+                Assert.Equal(ids[2], a1.Find(ids[3]));
+                Assert.Equal(ids[1], root.Find(ids[1]));
+                Assert.Throws<InvalidOperationException>(() => b.Union(ids[0], ids[2]));
+                Assert.Throws<InvalidOperationException>(() => b.CreateChild());
+            }
+            finally
+            {
+                release.Set();
+                owner.Join();
+            }
+
+            Assert.True(b.Union(ids[0], ids[2]));
+            Assert.False(b.IsFaulted);
         }
 
         [Fact]

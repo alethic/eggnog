@@ -203,6 +203,37 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets the timestamp of the last row, or 0 when there is none. Constant time.
+        /// </summary>
+        public uint LastTimestamp => count == 0 ? 0u : timestamps[count - 1];
+
+        /// <summary>
+        /// Compresses the path of every identifier displaced by rows <c>[firstRow, Count)</c>, so a chain of
+        /// displacements built by one merge collapses to one hop (colored-contexts spec §5.1, C2: "compress at the end of
+        /// each merge"). O(rows × path). Invisible to every result: roots are unchanged
+        /// (<see cref="Relations.UnionFind.CompressPath"/>). Needs exclusive access.
+        /// </summary>
+        /// <param name="firstRow">The first row whose displaced identifier is compressed.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="firstRow"/> is negative or beyond
+        /// <see cref="Count"/>.</exception>
+        public void CompressRows(int firstRow)
+        {
+            if ((uint)firstRow > (uint)count)
+                throw new ArgumentOutOfRangeException(nameof(firstRow), firstRow, $"The union-find has {count} rows.");
+
+            var rows = children;
+            for (var row = firstRow; row < count; row++)
+                uf.CompressPath(rows[row]);
+        }
+
+        /// <summary>
+        /// Points every identifier straight at its root (<see cref="Relations.UnionFind.CompressAll"/>), so that every
+        /// later find is one hop: done when the owning context freezes (colored-contexts spec §5.1, §8.1). O(identifiers).
+        /// Needs exclusive access.
+        /// </summary>
+        public void CompressAll() => uf.CompressAll();
+
+        /// <summary>
         /// Gets the row that displaced <paramref name="id"/>, if any. Roots and identifiers never seen have none.
         /// Constant time.
         /// </summary>
@@ -405,7 +436,8 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The timestamp sought.</param>
         /// <param name="strict">Whether to skip timestamps equal to <paramref name="timestamp"/>.</param>
         /// <returns>The index.</returns>
-        static int Search(uint[] ts, int from, int to, uint timestamp, bool strict)
+        /// <remarks>Shared with <see cref="DisplacedJournal.TimestampBounds"/>, whose rows are ordered the same way.</remarks>
+        internal static int Search(uint[] ts, int from, int to, uint timestamp, bool strict)
         {
             var lo = from;
             var n = to - from;

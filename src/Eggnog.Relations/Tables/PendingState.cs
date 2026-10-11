@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -24,6 +27,11 @@ namespace Eggnog.Relations
     /// Buffers in the queues are owned by the state: whoever dequeues one disposes it, returning its storage to the
     /// array pool.
     /// </para>
+    /// <para>
+    /// Sealing (colored-contexts spec §8.1): once the table's context freezes, <see cref="Seal"/> makes every later
+    /// publication throw, so nothing can be staged into a frozen table. The check is one volatile read per published
+    /// buffer.
+    /// </para>
     /// </remarks>
     internal sealed class PendingState
     {
@@ -33,6 +41,7 @@ namespace Eggnog.Relations
         readonly ConcurrentQueue<ArbitraryRowBuffer>[] removals;
         long totalRows;
         long totalRemovals;
+        volatile bool isSealed;
 
         /// <summary>
         /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>.
@@ -71,6 +80,18 @@ namespace Eggnog.Relations
         public long TotalRemovals => Interlocked.Read(ref totalRemovals);
 
         /// <summary>
+        /// Gets whether the state is sealed: its table belongs to a frozen context and accepts no staged writes.
+        /// </summary>
+        public bool IsSealed => isSealed;
+
+        /// <summary>
+        /// Seals the state (colored-contexts spec §8.1): every later <see cref="EnqueueRows"/> and
+        /// <see cref="EnqueueRemovals"/> throws. Called when the table's context freezes, after its pending writes were
+        /// merged. Irreversible.
+        /// </summary>
+        public void Seal() => isSealed = true;
+
+        /// <summary>
         /// Gets the queue of row buffers staged for shard <paramref name="shard"/>.
         /// </summary>
         /// <param name="shard">The shard index.</param>
@@ -89,8 +110,16 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="shard">The shard index.</param>
         /// <param name="buffer">The rows.</param>
+        /// <exception cref="InvalidOperationException">The state is sealed: its context is frozen. The buffer is
+        /// disposed.</exception>
         public void EnqueueRows(int shard, RowBuffer buffer)
         {
+            if (isSealed)
+            {
+                buffer.Dispose();
+                ThrowSealed();
+            }
+
             var count = buffer.Count;
             rows[shard].Enqueue(buffer);
             Interlocked.Add(ref totalRows, count);
@@ -101,8 +130,16 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="shard">The shard index.</param>
         /// <param name="buffer">The keys.</param>
+        /// <exception cref="InvalidOperationException">The state is sealed: its context is frozen. The buffer is
+        /// disposed.</exception>
         public void EnqueueRemovals(int shard, ArbitraryRowBuffer buffer)
         {
+            if (isSealed)
+            {
+                buffer.Dispose();
+                ThrowSealed();
+            }
+
             var count = buffer.Count;
             removals[shard].Enqueue(buffer);
             Interlocked.Add(ref totalRemovals, count);
@@ -162,6 +199,13 @@ namespace Eggnog.Relations
             copy.totalRows = TotalRows;
             copy.totalRemovals = TotalRemovals;
             return copy;
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowSealed()
+        {
+            throw new InvalidOperationException("The context is frozen.");
         }
 
     }
