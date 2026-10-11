@@ -101,6 +101,11 @@ namespace Eggnog.Relations
             totalSizeEstimate = source.totalSizeEstimate;
             view = new DatabaseView(this);
 
+            // The container environments (declared in Containers/Database.Containers.cs): egglog's derived Clone copies
+            // container_values (core-relations/src/free_join/mod.rs:289-300). Table and counter ids carry over, so the
+            // copied merge functions and the rebuild tracker stay valid for the copy.
+            containers = source.containers?.Clone();
+
             // The cloned tables carry their staged writes (a sorted-writes table copies them), so the copy must merge
             // the same tables. egglog's clone shares the notification list instead.
             foreach (var table in source.catalog.Notifications.Reset())
@@ -370,7 +375,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Creates an independent copy: tables (with their staged writes, as each table's clone keeps them) and cached
         /// indexes deep-copied, counters snapshotted, strata copied, external functions shared (see
-        /// <see cref="ExternalFunction"/>), and the same tables notified. egglog's <c>Clone for Database</c>, whose copy
+        /// <see cref="ExternalFunction"/>), container environments copied (see <see cref="ContainerValues.Clone"/>), and
+        /// the same tables notified. egglog's <c>Clone for Database</c>, whose copy
         /// shares the notification list with the original instead. Requires exclusive access. O(database size).
         /// </summary>
         /// <returns>The copy.</returns>
