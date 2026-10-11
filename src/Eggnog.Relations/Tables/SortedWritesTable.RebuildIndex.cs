@@ -61,11 +61,24 @@ namespace Eggnog.Relations
         /// <summary>
         /// Implements the incremental-rebuild hook of <see cref="ApplyRebuild"/>: egglog's <c>rebuild_incremental</c>
         /// (core-relations/src/table/rebuild.rs:120-195). Refreshes the rebuild index, reads the ids the providing table
-        /// displaced since this table's last rebuild (its <paramref name="hintColumn"/> over <paramref name="toScan"/>),
-        /// gathers the rows the index lists under them, and has the rebuilder rewrite those rows
-        /// (<see cref="RebuildRows"/>).
+        /// displaced since this table's last rebuild against it (its <paramref name="hintColumn"/> over
+        /// <paramref name="toScan"/>), gathers the rows the index lists under them and the rows appended since that
+        /// rebuild, and has the rebuilder rewrite those rows (<see cref="RebuildRows"/>).
         /// </summary>
         /// <remarks>
+        /// <para>
+        /// Fix (rebuild.rs:52-66, 120-195): egglog gathers only the rows that mention an id displaced since this table's
+        /// last rebuild. A row written after that rebuild that mentions an id displaced before it is never rewritten,
+        /// while the full path, taken for tables of at most 10000 rows, rewrites it: the result depended on the table's
+        /// size (found by the differential suite, soak seed 108799). egglog-bridge happens to write only ids canonical
+        /// as of the last rebuild; this table does not rely on it. The rows appended since the last rebuild against the
+        /// same rebuilder (<see cref="FirstRowSinceRebuild"/>; all of them after a new generation) are gathered too,
+        /// which costs O(rows written since), at most what the full path costs; rows older than that were canonical as
+        /// of that rebuild, so only ids the rebuilder displaced since can make them stale. The mark is kept per
+        /// rebuilder, like the <see cref="SubsetTracker"/> position that names those ids: a rebuild against another
+        /// union-find moves neither. The rewrite goes parallel by the number of rows gathered, the work it does, where
+        /// egglog uses the number of displaced ids.
+        /// </para>
         /// <para>
         /// egglog rewrites each displaced id's rows separately, so a row mentioning two displaced ids (or one id in two
         /// columns, which its multi-column index lists twice) is rewritten and staged twice. A second staged insert of
@@ -79,13 +92,14 @@ namespace Eggnog.Relations
         /// nonempty (rebuild.rs:182; map §8.1 row 17).
         /// </para>
         /// </remarks>
-        partial void RebuildIncremental(Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed)
+        partial void RebuildIncremental(TableId rebuilderTableId, Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed)
         {
             var index = RefreshRebuildIndex().Data;
             var gather = new ColumnIndexGatherSink(index);
             rebuilderTable.ForEachColumn(toScan, hintColumn, ref gather);
+            gather.AppendRange(FirstRowSinceRebuild(rebuilderTableId), data.Count);
             var count = gather.SortUnique();
-            changed = count > 0 && RebuildRows(rebuilder, gather.Rows, count, nextTimestamp, state, parallelism.ParallelizeRebuild(toScan.Size));
+            changed = count > 0 && RebuildRows(rebuilder, gather.Rows, count, nextTimestamp, state, parallelism.ParallelizeRebuild(count));
             gather.Release();
             handled = true;
         }

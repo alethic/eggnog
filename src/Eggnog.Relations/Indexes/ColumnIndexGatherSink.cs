@@ -51,6 +51,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Appends the rows <c>[start, end)</c> themselves, whatever they hold. O(end - start).
+        /// </summary>
+        /// <param name="start">The first row.</param>
+        /// <param name="end">The row after the last.</param>
+        public void AppendRange(int start, int end)
+        {
+            if (start < end)
+                Append(SubsetRef.Dense(new OffsetRange(start, end)));
+        }
+
+        /// <summary>
         /// Sorts the collected rows and removes duplicates. O(n log n).
         /// </summary>
         /// <returns>The number of distinct rows, now at positions <c>[0, Count)</c> in ascending order.</returns>

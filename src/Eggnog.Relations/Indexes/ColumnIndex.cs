@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -42,6 +43,16 @@ namespace Eggnog.Relations
         /// <c>SORT_BULK_THRESHOLD</c> (core-relations/src/hash_index/mod.rs:521).
         /// </summary>
         internal const int SortBulkThreshold = 512;
+
+        /// <summary>
+        /// The number of columns whose one-element projection <see cref="CheckColumns"/> shares.
+        /// </summary>
+        const int SharedProjectionCount = 64;
+
+        /// <summary>
+        /// The shared one-element projections, by column, created on first use.
+        /// </summary>
+        static readonly int[]?[] SharedProjections = new int[]?[SharedProjectionCount];
 
         readonly ParallelHeuristics parallelism;
         readonly ShardData shardData;
@@ -280,18 +291,36 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(table);
 
             var index = new ColumnIndex(ParallelHeuristics.Serial);
+            index.RebuildForSubset(table, subset, column);
+            return index;
+        }
+
+        /// <summary>
+        /// Empties this index and refills it with the live rows of <paramref name="subset"/> of <paramref name="table"/>
+        /// grouped by <paramref name="column"/>: <see cref="BuildForSubset"/> into an existing index, typically one from
+        /// <see cref="BuildForSubset"/> that was disposed. The join's trie nodes keep their per-column indexes across
+        /// reuse this way (egglog allocates an <c>Arc&lt;ColumnIndex&gt;</c> and its shard vector per build), so a
+        /// recycled node's build takes its hash table and arena from the pools and allocates nothing once they are
+        /// warm.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="subset">The rows to group.</param>
+        /// <param name="column">The column to group by.</param>
+        public void RebuildForSubset(Table table, SubsetRef subset, ColumnId column)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+
+            Clear();
             ReadOnlySpan<ColumnId> columns = [column];
             if (subset.Size >= SortBulkThreshold)
             {
-                index.RebuildFull(table, columns, subset);
+                RebuildFull(table, columns, subset);
             }
             else
             {
-                index.ReserveForRows(subset.Size);
-                index.MergeSubset(table, columns, subset);
+                ReserveForRows(subset.Size);
+                MergeSubset(table, columns, subset);
             }
-
-            return index;
         }
 
         /// <inheritdoc />
@@ -340,29 +369,61 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Checks that <paramref name="columns"/> is a nonempty list of columns of <paramref name="table"/> and copies
-        /// it.
+        /// Checks that <paramref name="columns"/> is a nonempty list of columns of <paramref name="table"/> and returns
+        /// it as column indices. A single column below <see cref="SharedProjectionCount"/>, the per-subset builds of the
+        /// join, gets a shared array, so the check allocates nothing; callers only read the result.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="columns">The columns.</param>
-        /// <returns>The column indices.</returns>
+        /// <returns>The column indices; shared for a single column, so never written.</returns>
         internal static int[] CheckColumns(Table table, ReadOnlySpan<ColumnId> columns)
         {
             ArgumentNullException.ThrowIfNull(table);
             if (columns.IsEmpty)
                 throw new ArgumentException("An index needs at least one column.", nameof(columns));
 
+            if (columns.Length == 1)
+                return SingleColumnProjection(CheckColumn(table, columns[0]));
+
             var projection = new int[columns.Length];
             for (var i = 0; i < columns.Length; i++)
-            {
-                var column = columns[i].Rep;
-                if ((uint)column >= (uint)table.Arity)
-                    throw new ArgumentOutOfRangeException(nameof(columns), column, $"The table has {table.Arity} columns.");
-
-                projection[i] = column;
-            }
+                projection[i] = CheckColumn(table, columns[i]);
 
             return projection;
+        }
+
+        /// <summary>
+        /// Checks that <paramref name="column"/> is a column of <paramref name="table"/>.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="column">The column.</param>
+        /// <returns>The column's index.</returns>
+        static int CheckColumn(Table table, ColumnId column)
+        {
+            var index = column.Rep;
+            if ((uint)index >= (uint)table.Arity)
+                throw new ArgumentOutOfRangeException("columns", index, $"The table has {table.Arity} columns.");
+
+            return index;
+        }
+
+        /// <summary>
+        /// Gets the one-element projection of <paramref name="column"/>: a shared array, created on first use, for
+        /// columns below <see cref="SharedProjectionCount"/>, and a new one otherwise.
+        /// </summary>
+        /// <param name="column">The column's index; not negative.</param>
+        /// <returns>The projection; never written.</returns>
+        static int[] SingleColumnProjection(int column)
+        {
+            if (column >= SharedProjectionCount)
+                return [column];
+
+            var projection = Volatile.Read(ref SharedProjections[column]);
+            if (projection is not null)
+                return projection;
+
+            int[] created = [column];
+            return Interlocked.CompareExchange(ref SharedProjections[column], created, null) ?? created;
         }
 
     }

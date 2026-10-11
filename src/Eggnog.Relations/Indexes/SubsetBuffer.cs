@@ -251,14 +251,24 @@ namespace Eggnog.Relations
         /// Hands the storage back to the pool of <see cref="SubsetArenaPolicy"/> (egglog's drop of the pooled
         /// <c>buf</c>) and empties the arena, which stays usable. Subsets taken from it must not be used afterwards.
         /// </summary>
+        /// <remarks>
+        /// Two things stay with the arena, so that an index disposed and rebuilt in place
+        /// (<see cref="ColumnIndex.RebuildForSubset"/>, the join's recycled trie nodes) allocates nothing: the free-list
+        /// heads, emptied in place, and an array too short for the pool to keep (at most
+        /// <see cref="PooledArray.MaxUnpooledLength"/> slots), which the pool would drop and the next build would
+        /// allocate again. The next growth of the empty arena still tries the pool first (<see cref="Grow"/>). What
+        /// stays is bounded by about a kilobyte per arena.
+        /// </remarks>
         public void Release()
         {
             var old = rows;
-            rows = Array.Empty<int>();
             length = 0;
-            freeHeads = null;
-            if (old is not null)
-                SharedPool<int[], SubsetArenaPolicy>.Return(old);
+            freeHeads?.AsSpan().Fill(-1);
+            if (old is null || SubsetArenaPolicy.ShouldReuse(old) == false)
+                return;
+
+            rows = Array.Empty<int>();
+            SharedPool<int[], SubsetArenaPolicy>.Return(old);
         }
 
         /// <summary>
@@ -286,9 +296,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Grows the storage to at least <paramref name="required"/> slots. An arena without storage first takes a
-        /// recycled array from the pool of <see cref="SubsetArenaPolicy"/>, as egglog's <c>SubsetBuffer::default</c>
-        /// takes a pooled vector; only if that is too short does it grow, from the recycled length. Growth follows
+        /// Grows the storage to at least <paramref name="required"/> slots. An empty arena without storage, or with only
+        /// an array too short for the pool (one <see cref="Release"/> kept), first takes a recycled array from the pool
+        /// of <see cref="SubsetArenaPolicy"/>, as egglog's <c>SubsetBuffer::default</c> takes a pooled vector; only if
+        /// that is too short does it grow, from the recycled length. Growth follows
         /// <see cref="PooledArray.Grow{T}"/>'s amortization (at least double, at least
         /// <see cref="PooledArray.MinGrowLength"/> slots) but allocates directly, since the array will go back to the
         /// arena pool rather than the shared array pool.
@@ -299,10 +310,15 @@ namespace Eggnog.Relations
             if (required > Array.MaxLength)
                 throw new InvalidOperationException($"An index shard cannot hold more than {Array.MaxLength} row ids.");
 
-            if (rows.Length == 0)
+            if (length == 0 && SubsetArenaPolicy.ShouldReuse(rows) == false)
             {
-                Debug.Assert(length == 0);
-                rows = SharedPool<int[], SubsetArenaPolicy>.Rent();
+                // Every pooled array is longer than any array the pool refuses, so a recycled one replaces the short
+                // array (dropped, as the pool would have dropped it) unless the pool is empty.
+                var recycled = SharedPool<int[], SubsetArenaPolicy>.Rent();
+                Debug.Assert(recycled.Length == 0 || recycled.Length > rows.Length);
+                if (recycled.Length > rows.Length)
+                    rows = recycled;
+
                 if (required <= rows.Length)
                     return;
             }

@@ -33,8 +33,13 @@ namespace Eggnog.Relations
         /// When the rebuilder names a hint column, the table first advances its <see cref="SubsetTracker"/> over the
         /// providing table (before choosing a mode, as egglog does) and chooses the incremental path when the table has
         /// more than 10000 physical rows and the provider's new rows are few (at most an eighth, or 1/8192 when
-        /// parallel). The incremental path needs the rebuild index, which comes with the indexes milestone: until it
-        /// implements <see cref="RebuildIncremental"/>, the full path runs instead, which gives the same result.
+        /// parallel). Both paths stage the same writes (see <see cref="RebuildIncremental"/>).
+        /// </para>
+        /// <para>
+        /// Either way the table then records its version against <paramref name="rebuilderTableId"/>
+        /// (<see cref="MarkRebuilt"/>), so that the next incremental rebuild against the same rebuilder also rewrites the
+        /// rows written after this one. The mark is kept per rebuilder, as the <see cref="SubsetTracker"/> positions it
+        /// pairs with are: a rebuild against another rebuilder canonicalizes nothing with respect to this one.
         /// </para>
         /// </remarks>
         public override bool ApplyRebuild(TableId rebuilderTableId, Table rebuilderTable, uint nextTimestamp, ExecutionState state)
@@ -49,6 +54,17 @@ namespace Eggnog.Relations
             if (rebuilder is null)
                 return false;
 
+            var changed = RebuildWith(rebuilder, rebuilderTableId, rebuilderTable, nextTimestamp, state);
+            MarkRebuilt(rebuilderTableId);
+            return changed;
+        }
+
+        /// <summary>
+        /// The body of <see cref="ApplyRebuild"/>: picks the incremental or the full path and stages the rewrites.
+        /// </summary>
+        /// <returns>Whether anything was staged.</returns>
+        bool RebuildWith(Rebuilder rebuilder, TableId rebuilderTableId, Table rebuilderTable, uint nextTimestamp, ExecutionState state)
+        {
             if (rebuilder.HintColumn is { } hintColumn)
             {
                 var toScan = subsetTracker.RecentUpdates(rebuilderTableId, rebuilderTable);
@@ -57,7 +73,7 @@ namespace Eggnog.Relations
                 {
                     var handled = false;
                     var changed = false;
-                    RebuildIncremental(rebuilderTable, rebuilder, hintColumn, toScan.AsRef(), nextTimestamp, state, ref handled, ref changed);
+                    RebuildIncremental(rebuilderTableId, rebuilderTable, rebuilder, hintColumn, toScan.AsRef(), nextTimestamp, state, ref handled, ref changed);
                     if (handled)
                     {
                         toScan.Dispose();
@@ -137,6 +153,7 @@ namespace Eggnog.Relations
         /// serial path reports any non-empty subset, rebuild.rs:182; map §8.1 row 17). Set <paramref name="handled"/>
         /// to true when it ran. Without an implementation the call is compiled away and the full path runs.
         /// </summary>
+        /// <param name="rebuilderTableId">The providing table's id, which keys its rebuild mark (<see cref="MarkRebuilt"/>).</param>
         /// <param name="rebuilderTable">The providing table.</param>
         /// <param name="rebuilder">The rebuilder.</param>
         /// <param name="hintColumn">The providing table's column naming changed values.</param>
@@ -145,7 +162,7 @@ namespace Eggnog.Relations
         /// <param name="state">The execution state.</param>
         /// <param name="handled">Set to true if the incremental rebuild ran.</param>
         /// <param name="changed">Set to whether it staged anything.</param>
-        partial void RebuildIncremental(Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed);
+        partial void RebuildIncremental(TableId rebuilderTableId, Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed);
 
         /// <summary>
         /// REBUILD INDEX HOOK. The indexes milestone implements this partial method to add to

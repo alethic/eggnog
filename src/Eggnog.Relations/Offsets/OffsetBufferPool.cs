@@ -8,16 +8,32 @@ namespace Eggnog.Relations
     /// <summary>
     /// Rents and returns the <see cref="int"/> buffers that back sparse subsets and sorted offset vectors. It stands
     /// in for egglog's thread-local <c>Pool&lt;SortedOffsetVector&gt;</c> (core-relations/src/pool/mod.rs:431) and is
-    /// backed by <see cref="ArrayPool{T}.Shared"/>.
+    /// backed by <see cref="ArrayPool{T}.Shared"/>, with a thread-static <see cref="OffsetBufferCache"/> in front for
+    /// buffers of at most <see cref="OffsetBufferCache.MaxLength"/> row ids.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Ownership is explicit: whoever rents a buffer returns it exactly once, through <see cref="Return"/>.
     /// A request for zero elements gets <see cref="Array.Empty{T}"/>, which is never handed to the pool, so an empty
     /// sparse subset costs nothing. Rented buffers are not cleared and are usually longer than requested; callers
     /// track their own element count. All members are thread-safe.
+    /// </para>
+    /// <para>
+    /// The cache bounds what each thread keeps by bytes (<see cref="PoolLimits.OffsetVec"/> per length), as egglog
+    /// bounds its pool, rather than by count, as the shared array pool does: with the shared pool alone, a join holding
+    /// a few hundred small refined subsets at once allocated on every rent past the pool's capacity, which is a few
+    /// dozen buffers of a length per core. Every buffer, cached or not, has a length the shared pool hands out, so
+    /// either side takes the other's buffers.
+    /// </para>
     /// </remarks>
     internal static class OffsetBufferPool
     {
+
+        /// <summary>
+        /// The calling thread's cache of small buffers, created on its first return.
+        /// </summary>
+        [ThreadStatic]
+        static OffsetBufferCache? cache;
 
         /// <summary>
         /// Rents a buffer with room for at least <paramref name="minimumLength"/> row ids. Its contents are
@@ -26,7 +42,17 @@ namespace Eggnog.Relations
         /// <param name="minimumLength">The minimum length; zero returns the shared empty array.</param>
         /// <returns>The buffer.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int[] Rent(int minimumLength) => minimumLength == 0 ? Array.Empty<int>() : ArrayPool<int>.Shared.Rent(minimumLength);
+        internal static int[] Rent(int minimumLength)
+        {
+            if (minimumLength == 0)
+                return Array.Empty<int>();
+
+            // A negative length skips the cache and makes the shared pool throw, as before.
+            if ((uint)minimumLength <= OffsetBufferCache.MaxLength && cache?.TryRent(minimumLength) is { } cached)
+                return cached;
+
+            return ArrayPool<int>.Shared.Rent(minimumLength);
+        }
 
         /// <summary>
         /// Returns a buffer obtained from <see cref="Rent"/>, <see cref="RentCopy"/> or <see cref="GrowForAppend"/>.
@@ -36,8 +62,13 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void Return(int[] buffer)
         {
-            if (buffer.Length != 0)
-                ArrayPool<int>.Shared.Return(buffer);
+            if (buffer.Length == 0)
+                return;
+
+            if (buffer.Length <= OffsetBufferCache.MaxLength && (cache ??= new OffsetBufferCache()).TryReturn(buffer))
+                return;
+
+            ArrayPool<int>.Shared.Return(buffer);
         }
 
         /// <summary>

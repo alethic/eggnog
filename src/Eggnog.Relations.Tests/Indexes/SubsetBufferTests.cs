@@ -166,9 +166,10 @@ namespace Eggnog.Relations.Tests
             var fresh = buffer.NewRun([2, 3]);
             Assert.Equal(0, fresh.Start);
 
+            // Release hands a poolable array back and keeps one too short for the pool.
             buffer.Release();
             Assert.Equal(0, buffer.Length);
-            Assert.Empty(buffer.Rows);
+            Assert.True(buffer.Rows.Length <= PooledArray.MaxUnpooledLength);
             copy.Release();
         }
 
