@@ -6,6 +6,10 @@
         <IsPackable>false</IsPackable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <!-- The engine's parallel paths allocate from every worker; the workstation GC stops all of them per collection
+             and costs up to 2x at eight threads. Server GC is what a parallel host would run. -->
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     </PropertyGroup>
 
     <ItemGroup>

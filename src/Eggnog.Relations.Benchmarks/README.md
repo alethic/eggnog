@@ -32,6 +32,11 @@ Because the benchmarks share one process, the runtime, garbage collector and JIT
 the project file); options that need a separate process, such as another runtime or another GC mode, are rejected. One
 case's heap and JIT state carry over to the next, which BenchmarkDotNet's warmup absorbs for these workloads.
 
+The app runs the server garbage collector. The engine's parallel paths allocate from every worker, and the workstation
+collector stops them all for each collection: on a 4-core/8-thread i7-7700K, `WritesBenchmarks` at 8 threads took 263 ms
+under the workstation collector and 205 ms under the server collector (egglog: 177 ms on the same machine). To measure
+the workstation collector, set the environment variable `DOTNET_gcServer=0` before running.
+
 Results are only meaningful on an otherwise idle machine. The configuration keeps the machine's current power plan
 (BenchmarkDotNet would otherwise switch Windows to High performance for the run); select that plan yourself before
 measuring if you want it.
