@@ -34,12 +34,19 @@ namespace Eggnog.Relations.Benchmarks
 
         /// <summary>
         /// Runs the benchmarks the command line selects, for example <c>--filter *WritesBenchmarks*</c>; with no
-        /// arguments, runs every benchmark.
+        /// arguments, runs every benchmark. <c>--bridge-example math</c> or <c>--bridge-example ac</c> instead runs an
+        /// egglog-bridge example program the way its Rust <c>main</c> does, without BenchmarkDotNet
+        /// (<see cref="BridgeExampleRunner"/>).
         /// </summary>
-        /// <param name="args">BenchmarkDotNet's command-line arguments.</param>
-        /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid.</returns>
+        /// <param name="args">BenchmarkDotNet's command-line arguments, or <see cref="BridgeExampleRunner.Option"/> and a
+        /// program name.</param>
+        /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid. In the
+        /// example mode, <see cref="BridgeExampleRunner.Run"/>'s exit code.</returns>
         static int Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == BridgeExampleRunner.Option)
+                return BridgeExampleRunner.Run(args.AsSpan(1));
+
             if (args.Length == 0)
                 args = ["--filter", "*"];
 

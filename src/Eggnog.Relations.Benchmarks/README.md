@@ -1,8 +1,10 @@
 # Eggnog.Relations.Benchmarks
 
 BenchmarkDotNet ports of egglog's divan benchmarks for the relational engine, so the C# engine can be measured against
-the Rust it reimplements on the same workloads; and the root benchmark set (`Root/`), which records the root engine's
-performance before colored contexts change it (see [The root benchmark set](#the-root-benchmark-set)).
+the Rust it reimplements on the same workloads; ports of egglog-bridge's example programs `math` and `ac` (`Bridge/`),
+which the app can also run the way their Rust `main`s do (see [The egglog-bridge examples](#the-egglog-bridge-examples));
+and the root benchmark set (`Root/`), which records the root engine's performance before colored contexts change it (see
+[The root benchmark set](#the-root-benchmark-set)).
 
 ## Running
 
@@ -90,6 +92,110 @@ benches in `ext/egglog`.
 - `find_only` folds each task's results into one value kept alive, in place of a `black_box` per find.
 - Not ported: egglog's lock baselines `Arc<Mutex<UnionFind>>` (in the `random` and `local` groups) and
   `Arc<RwLock<UnionFind>>` (in `find_only`), which measure standard-library locks rather than the engine.
+
+## The egglog-bridge examples
+
+The classes in `Bridge/` port egglog-bridge's two example programs, `egglog-bridge/examples/math.rs` and
+`egglog-bridge/examples/ac.rs`: whole programs written against the bridge API (`EGraph`, `FunctionConfig`,
+`define_rule!`, `add_expressions!`, `run_rules`), each measured over exactly what its Rust `main` times. The console app
+can also run either program the way its Rust `main` does, printing the same lines, so the two can be compared side by
+side.
+
+| Class | Program | Rust example |
+| --- | --- | --- |
+| `BridgeMathBenchmarks.Math` | `BridgeMathProgram` | `egglog-bridge/examples/math.rs`, the bridge form of `examples/math.egg` |
+| `BridgeAcBenchmarks.Ac` | `BridgeAcProgram` | `egglog-bridge/examples/ac.rs`, the bridge form of the program `examples/make-ac-bench.py` prints |
+
+- `math`: the 13 constructors of `math.rs` with its schemas (`diff`, `integral`, `add`, `sub`, `mul`, `div` and `pow`
+  over two ids; `ln`, `sqrt`, `sin` and `cos` over one; `rat` over a `Rational64`; `var` over a string), each with the
+  fresh-id default, the union-id merge and no subsumption; its 24 rules and its seven seed expressions, in its order;
+  then at most `N = 12` iterations, stopping at the first that changes nothing (none does). Rust's `Rational64` is
+  `Rational`, interned (`InternedCodec<Rational>`) as egglog interns it; `&'static str` is `StringCodec`.
+- `ac`: the constructors `num(i64)` and `add(id, id)`, the commutativity and associativity rules, a run on the empty
+  database that must change nothing, the numbers `0 .. 12` under fresh ids, then `(0 + ... + 12)` associated to the left
+  and `(12 + ... + 0)` associated to the right, each group loaded with one `add_values`; then iterations until one
+  changes nothing, after which the two sums must be in one class (`N = 13`).
+
+Both e-graphs are `new EGraph()`, which uses every logical processor, as `EGraph::default()` uses rayon's global pool.
+
+### What is measured
+
+One invocation is one repetition of the Rust `main`'s loop body, timed from before the e-graph is created to where the
+Rust prints its total (`Total time`, `Time elapsed`): creating the e-graph, registering the base types, declaring the
+tables, building the rules, loading the seed data, the iterations, and then reading the table sizes (`math`, which prints
+them inside its timer) or the equality assertion (`ac`, inside its timer). The benchmarks print nothing, where the Rust
+prints a line per iteration. The Rust leaves dropping the e-graph out of its time ("We don't include dropping the egraph
+in the time"); here the e-graph stays referenced until `[IterationCleanup]`, and BenchmarkDotNet's forced collection
+before the next iteration collects it. One invocation per iteration (`[InvocationCount(1)]`): an invocation takes
+seconds; `math` builds about 16 million rows and allocates about 10 GB, `ac` builds about 1.6 million `add` rows and
+allocates about 15 GB.
+
+Each invocation checks its result, so a broken engine fails the run instead of producing a number:
+
+- `math`: 12 iterations without saturating, and every table at the size `math.exe` prints: `diff` 100,395, `integral`
+  224,150, `add` 11,396,002, `sub` 78,586, `mul` 4,188,378, `div` 3, `pow` 2, `ln`, `sqrt`, `sin` and `cos` 1, `rat` 5,
+  `var` 3.
+- `ac`: the two sums in one class (`ac.rs`'s `assert_eq!`), 10 iterations (see the differences below), 13 `num` rows,
+  and 1,577,940 `add` rows: the saturated e-graph has one `add` row per ordered split of each subset of at least two of
+  the 13 numbers into two non-empty parts, `3^13 - 2^14 + 1`. egglog does not print that count; it follows from the
+  program.
+
+With the default job each benchmark runs many iterations of seconds each; `--job short` or `--iterationCount 5` keeps a
+run short, and `--job dry` runs each once.
+
+### Running both sides
+
+Build the app in Release (see [Running](#running)), then, from the repository root, run the BenchmarkDotNet classes:
+
+```
+src/Eggnog.Relations.Benchmarks/bin/Release/net10.0/Eggnog.Relations.Benchmarks.exe --filter *Bridge*
+```
+
+or the example mode, which runs a program twice, as both Rust `main`s do (`for _ in 0..2`), without BenchmarkDotNet:
+
+```
+src/Eggnog.Relations.Benchmarks/bin/Release/net10.0/Eggnog.Relations.Benchmarks.exe --bridge-example math
+src/Eggnog.Relations.Benchmarks/bin/Release/net10.0/Eggnog.Relations.Benchmarks.exe --bridge-example ac
+```
+
+The example mode prints the Rust's lines: `math` prints `Iteration {i} finished, duration={:?} (saturated={})` per
+iteration, `Function {name} has size {n}` per table and `Total time: {:?}`; `ac` prints
+`Finished iteration {i} after {:?}` per iteration and `Time elapsed: {:?}`. Durations are formatted as Rust's `{:?}`
+formats a `Duration` (`9.0456298s`, `279.7217ms`, `908.1µs`), and the lines are written to standard output as UTF-8
+with `\n` line ends, as `println!` writes them. A repetition that fails a check (the checks above, or, for `ac`, the
+run on the empty database changing something) is reported on standard error and ends the run with exit code 1 (`math`
+is checked after its `Total time` line, outside the time; `ac` before its `Time elapsed` line, inside the time, where
+`ac.rs` asserts both). Between repetitions the e-graph is released and the heap collected, outside the time.
+
+The Rust examples, from `ext/egglog` (the workspace pins toolchain 1.91.0):
+
+```
+cargo +1.91.0 build --release -p egglog-bridge --examples
+target/release/examples/math.exe
+target/release/examples/ac.exe
+```
+
+`cargo +1.91.0 run --release -p egglog-bridge --example math` (or `--example ac`) builds and runs in one step. From the
+repository root the binaries are `ext/egglog/target/release/examples/math.exe` and
+`ext/egglog/target/release/examples/ac.exe`. `RAYON_NUM_THREADS` sets the Rust's thread count; the C# side always uses
+every logical processor.
+
+### Differences from the Rust examples
+
+- `ac` runs 10 iterations here (0 to 9) and 11 in egglog (0 to 10). Its iteration 9 re-derives the saturated e-graph:
+  about 5.2 million matches, no new row and no new union, so the engine reports no change and the loop stops. In egglog
+  the more than 20,000 rows that iteration stages into `add` are merged by `parallel_insert`, which reports a change for
+  every staged row before deciding whether its merge changes anything (`core-relations/src/table/mod.rs:871`), so egglog
+  runs an iteration 10, which finds no new row and takes microseconds. The engine reports real changes only, fixing that
+  defect (`docs/design/egglog-engine-map.md` §8.1, row 4); with one rayon thread egglog would take its serial insert,
+  which reports real changes, and stop after 10 iterations too. The results agree otherwise: the sums are equal on both
+  sides, and every table size `math` prints is the same.
+- The example mode's first repetition includes JIT compilation, which the Rust does not have.
+- egglog allocates with mimalloc. Here the server garbage collector runs (see [Running](#running)), and the collections
+  during a run are part of its time.
+- Fresh ids, and so the number of redundant unions the parallel paths stage, can vary from run to run; the table sizes,
+  the iteration counts and the checked results do not.
+- `env_logger::init()` has no counterpart.
 
 ## The root benchmark set
 
