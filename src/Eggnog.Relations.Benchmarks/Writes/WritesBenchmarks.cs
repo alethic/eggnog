@@ -27,8 +27,8 @@ namespace Eggnog.Relations.Benchmarks
     /// pool instead.
     /// </para>
     /// <para>
-    /// The workload is generated once per parameter set from a fixed seed (the global setups run once per benchmark
-    /// process); a fresh database and table are built before every invocation (<see cref="IterationSetup"/>, one
+    /// The workload is generated once per parameter set from a fixed seed (the global setup runs once per benchmark
+    /// case); a fresh database and table are built before every invocation (<see cref="IterationSetup"/>, one
     /// invocation per iteration), as divan's <c>with_inputs</c> does. After each iteration the table's live row count
     /// is checked against a reference model.
     /// </para>

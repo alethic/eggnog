@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Benchmarks
     /// <see cref="ThroughputColumn"/> reads it to report items per second.
     /// </summary>
     /// <remarks>
-    /// The column runs in the host process, which never ran the benchmark: it creates a fresh instance, sets the
-    /// benchmark case's parameters on it and calls <see cref="ItemsPerInvocation"/>. Implementations must therefore
+    /// The column does not see the instance that ran the benchmark: it creates a fresh instance, sets the benchmark
+    /// case's parameters on it and calls <see cref="ItemsPerInvocation"/>. Implementations must therefore
     /// derive the count from the parameters alone (regenerating a seeded workload where they must), never from state a
     /// setup method left behind.
     /// </remarks>

@@ -16,8 +16,8 @@ namespace Eggnog.Relations.Benchmarks
     /// line up with <c>cargo bench</c> output for the egglog counterparts.
     /// </summary>
     /// <remarks>
-    /// The item count is computed once per benchmark case in the host process by instantiating the benchmark class and
-    /// setting the case's parameters on it (see <see cref="IItemsPerInvocation"/>), then cached.
+    /// The item count is computed once per benchmark case, apart from the measured run, by instantiating the benchmark
+    /// class and setting the case's parameters on it (see <see cref="IItemsPerInvocation"/>), then cached.
     /// </remarks>
     internal sealed class ThroughputColumn : IColumn
     {

@@ -5,11 +5,19 @@ the Rust it reimplements on the same workloads.
 
 ## Running
 
-Always run in Release, from the repository root:
+This is a plain console app. BenchmarkDotNet is used as a library with its in-process toolchain: every benchmark runs
+inside this process, against the engine assembly the app was built with. Nothing generates, builds or launches a
+separate project per benchmark, so MSBuild is involved only when you build the app itself.
+
+Build in Release and run the executable, from the repository root:
 
 ```
-dotnet run -c Release --project src/Eggnog.Relations.Benchmarks -- --filter *
+dotnet build -c Release src/Eggnog.Relations.Benchmarks
+src/Eggnog.Relations.Benchmarks/bin/Release/net10.0/Eggnog.Relations.Benchmarks.exe --filter *WritesBenchmarks*
 ```
+
+With no arguments it runs every benchmark. `dotnet run -c Release --project src/Eggnog.Relations.Benchmarks -- <args>`
+does the same build and run in one step.
 
 Narrow the run with a filter on `Namespace.Class.Method`, for example `--filter *WritesBenchmarks*` or
 `--filter *UnionFindConcurrentBenchmarks.Concurrent`. Other useful BenchmarkDotNet options:
@@ -18,7 +26,11 @@ Narrow the run with a filter on `Namespace.Class.Method`, for example `--filter 
 - `--job short` runs fewer iterations; `--job dry` runs each case once, which only proves that it works.
 - `--iterationCount 25` matches divan's `sample_count = 25` of the `writes` benches (divan's default is 100 and the
   union-find groups use 50).
-- `--artifacts <dir>` puts the reports somewhere other than `BenchmarkDotNet.Artifacts`.
+- `--artifacts <dir>` puts the reports somewhere other than `BenchmarkDotNet.Artifacts` in the current directory.
+
+Because the benchmarks share one process, the runtime, garbage collector and JIT settings are the app's own (set them in
+the project file); options that need a separate process, such as another runtime or another GC mode, are rejected. One
+case's heap and JIT state carry over to the next, which BenchmarkDotNet's warmup absorbs for these workloads.
 
 Results are only meaningful on an otherwise idle machine. The configuration keeps the machine's current power plan
 (BenchmarkDotNet would otherwise switch Windows to High performance for the run); select that plan yourself before
