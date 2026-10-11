@@ -117,6 +117,10 @@ namespace Eggnog.Relations
             // copied merge functions and the rebuild tracker stay valid for the copy.
             containers = source.containers?.Clone();
 
+            // The base values (declared in Bridge/Database.BaseValues.cs): egglog's derived Clone copies base_values, whose
+            // intern tables are shared through Arcs (core-relations/src/free_join/mod.rs:289-306).
+            baseValues = source.baseValues?.Clone();
+
             // The cloned tables carry their staged writes (a sorted-writes table copies them), so the copy must merge
             // the same tables. egglog's clone shares the notification list instead.
             foreach (var table in source.catalog.Notifications.Reset())

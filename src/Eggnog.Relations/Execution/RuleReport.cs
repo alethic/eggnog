@@ -9,9 +9,9 @@ namespace Eggnog.Relations
     /// <remarks>
     /// egglog reports the plan as a structured value and has no report for decomposed plans (its
     /// <c>Plan::to_report</c> is a <c>todo!()</c> for them); here the plan is the template's text, for both kinds.
-    /// Immutable.
+    /// Immutable. Public because <see cref="RuleSetReport"/> holds it; only the engine creates one.
     /// </remarks>
-    internal sealed class RuleReport
+    public sealed class RuleReport
     {
 
         /// <summary>
@@ -20,7 +20,7 @@ namespace Eggnog.Relations
         /// <param name="plan">The plan's text, or <c>null</c> at <see cref="ReportLevel.TimeOnly"/>.</param>
         /// <param name="searchAndApplyTime">The time the rule's join and actions took.</param>
         /// <param name="numMatches">The number of matches that survived the rule's action program.</param>
-        public RuleReport(string? plan, TimeSpan searchAndApplyTime, long numMatches)
+        internal RuleReport(string? plan, TimeSpan searchAndApplyTime, long numMatches)
         {
             Plan = plan;
             SearchAndApplyTime = searchAndApplyTime;

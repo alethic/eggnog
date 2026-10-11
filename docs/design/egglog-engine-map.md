@@ -1876,6 +1876,10 @@ raw speed, since Rust is already monomorphized, but Eggnog's rule layer could no
 | 19 | Subsuming an absent key halts the lane | `eb/rule.rs:477-519` | Code reading | Decide; probably make the inserted row visible to the next instruction |
 | 20 | `check` ignores `--no-decomp` and includes subsumed rows | `fe/lib.rs:1478-1510` | Experiment | Frontend concern; note it |
 | 21 | `FixedBitSet` pooling is a no-op | `cr/pool/mod.rs` | Code reading | Do not pool bitsets |
+| 22 | `run_rules` returns a panic before advancing the timestamp or rebuilding | `eb/lib.rs:597-599` | Code reading: `fail` (`fe/lib.rs:1696-1702`) continues on tables left non-canonical, and the next run reuses the timestamp | Advance the timestamp or rebuild, then throw the first panic; a panic the rebuild records is dropped |
+| 23 | Container unions reach the union-find only after the table rebuild has canonicalized rows | `eb/lib.rs:666-668`, `cr/free_join/mod.rs:357-388` | Test: the `:no-merge` scenario in egglog's own comment (`eb/lib.rs:634-665`) still reports an illegal merge | Merge the container unions into the union-find before the table rebuild |
+| 24 | `free_external_func` leaves a freed panic in `panic_funcs` | `eb/lib.rs:293-295`, `1482-1491` | Code reading: freed ids are reused, so `new_panic` can return an unrelated function's id | Forget the message when the function is freed |
+| 25 | Cached plans bake Id constants: after a constant loses a union, the rule silently stops matching | `eb/lib.rs:1397-1420`, `cr/query.rs` constant entries | Code reading (colored-contexts spec X19) | Canonicalize every Id constant per run in the context that runs it (colors M10.2) |
 
 ### 8.2 Design risks
 

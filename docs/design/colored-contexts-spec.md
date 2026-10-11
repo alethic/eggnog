@@ -2501,7 +2501,7 @@ B6 is in the split driver; B7 in the overlay.
 3. **Rule-layer D18 guidance for child scopes:** a child that throws is faulted and must be disposed (X12). Re-running after `Rebuild()` remains valid at the root.
 4. **The root deviates from egglog** only:
    - on the panic path (X18): progress is not committed after a recorded failure;
-   - for Id constants that have lost a union (X19): a Store-backed root matches and writes the class's canonical id. Proposed addition to map §8.1 as row 22: "Cached plans bake Id constants; after a constant loses a union the rule silently stops matching (`eb/lib.rs:1397-1420`, `cr/query.rs` constant entries). Eggnog: canonicalize every Id constant per run in the running context."
+   - for Id constants that have lost a union (X19): a Store-backed root matches and writes the class's canonical id. Added to map §8.1 as row 25: "Cached plans bake Id constants; after a constant loses a union the rule silently stops matching (`eb/lib.rs:1397-1420`, `cr/query.rs` constant entries). Eggnog: canonicalize every Id constant per run in the running context."
    - in operations egglog lacks: `CreateChild` and `Freeze` settle the rows written since the last rebuild (§7.6).
 5. **Inheritance is narrower than egglog's push** (X41): rules whose actions read tables never inherit a watermark, whereas egglog's push copies `last_run_at` for every rule. egglog push/pop is therefore an oracle only for programs whose rules all inherit.
 6. **Host writes at the root** (X38): the egglog-compatible `EGraph` API writes as given; the `EGraphContext` API canonicalizes Id cells at every level, which is what the rule layer's invariant C assumes.

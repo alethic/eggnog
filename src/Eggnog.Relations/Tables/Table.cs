@@ -211,6 +211,13 @@ namespace Eggnog.Relations
         public abstract MutationBuffer NewBuffer();
 
         /// <summary>
+        /// Gets the writes staged for this table and not merged yet: the queues its <see cref="MutationBuffer"/>s flush
+        /// into. Not in egglog's trait; exposed so that a run that throws can discard what it staged
+        /// (<see cref="PendingState.Mark"/>, <see cref="PendingState.DiscardSince"/>).
+        /// </summary>
+        public abstract PendingState Pending { get; }
+
+        /// <summary>
         /// Removes every row and every staged write. A nonempty table moves to a new major generation. egglog's
         /// <c>clear</c>.
         /// </summary>

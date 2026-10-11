@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -175,6 +176,106 @@ namespace Eggnog.Relations
 
             Interlocked.Exchange(ref totalRows, 0);
             Interlocked.Exchange(ref totalRemovals, 0);
+        }
+
+        /// <summary>
+        /// Gets whether nothing is staged: every queue is empty. O(shards). Must not race a flush.
+        /// </summary>
+        public bool IsEmpty
+        {
+            get
+            {
+                for (var i = 0; i < rows.Length; i++)
+                    if (rows[i].IsEmpty == false || removals[i].IsEmpty == false)
+                        return false;
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Records how many buffers each queue holds, so that <see cref="DiscardSince"/> can later drop everything
+        /// staged after this point. Not in egglog, whose staged writes cannot be rolled back: the database uses it to
+        /// make the execution of a rule set all or nothing when an action throws (<see cref="Database.ExecuteRuleSet"/>).
+        /// O(shards); the mark of an empty state is <c>null</c> and allocates nothing. Must not race a flush or a merge.
+        /// </summary>
+        /// <returns>The row and removal queue lengths of each shard, interleaved, or <c>null</c> when nothing is
+        /// staged.</returns>
+        public int[]? Mark()
+        {
+            if (IsEmpty)
+                return null;
+
+            var mark = new int[2 * rows.Length];
+            for (var i = 0; i < rows.Length; i++)
+            {
+                mark[2 * i] = rows[i].Count;
+                mark[2 * i + 1] = removals[i].Count;
+            }
+
+            return mark;
+        }
+
+        /// <summary>
+        /// Discards every buffer staged since <paramref name="mark"/> was taken, returning its storage to the pool, and
+        /// recomputes the totals from the buffers that remain, which keep their order: rolls back the writes of an
+        /// operation that failed halfway. O(staged buffers). Must not race a flush or a merge, and no merge may have run
+        /// since the mark was taken.
+        /// </summary>
+        /// <param name="mark">A mark from <see cref="Mark"/>; <c>null</c> discards everything, as <see cref="Clear"/>
+        /// does.</param>
+        /// <exception cref="ArgumentException">The mark does not fit this state's shards.</exception>
+        public void DiscardSince(int[]? mark)
+        {
+            if (mark is null)
+            {
+                Clear();
+                return;
+            }
+
+            if (mark.Length != 2 * rows.Length)
+                throw new ArgumentException($"The mark covers {mark.Length / 2} shards, not {rows.Length}.", nameof(mark));
+
+            long keptRows = 0;
+            long keptRemovals = 0;
+            for (var i = 0; i < rows.Length; i++)
+            {
+                keptRows += Truncate(rows[i], mark[2 * i], static buffer => buffer.Count);
+                keptRemovals += Truncate(removals[i], mark[2 * i + 1], static buffer => buffer.Count);
+            }
+
+            Interlocked.Exchange(ref totalRows, keptRows);
+            Interlocked.Exchange(ref totalRemovals, keptRemovals);
+        }
+
+        /// <summary>
+        /// Keeps the first <paramref name="keep"/> buffers of <paramref name="queue"/>, in order, and disposes the rest.
+        /// Cold path.
+        /// </summary>
+        /// <param name="queue">The queue.</param>
+        /// <param name="keep">How many buffers to keep.</param>
+        /// <param name="count">Gets the number of rows a buffer holds.</param>
+        /// <returns>The number of rows the kept buffers hold.</returns>
+        static long Truncate<TBuffer>(ConcurrentQueue<TBuffer> queue, int keep, Func<TBuffer, int> count)
+            where TBuffer : IDisposable
+        {
+            var kept = new List<TBuffer>(Math.Min(keep, queue.Count));
+            while (queue.TryDequeue(out var buffer))
+            {
+                if (kept.Count < keep)
+                    kept.Add(buffer);
+                else
+                    buffer.Dispose();
+            }
+
+            long total = 0;
+            foreach (var buffer in kept)
+            {
+                queue.Enqueue(buffer);
+                total += count(buffer);
+            }
+
+            return total;
         }
 
         /// <summary>

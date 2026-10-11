@@ -223,6 +223,9 @@ namespace Eggnog.Relations
         public override MutationBuffer NewBuffer() => new(pending, Arity, keyCount, true);
 
         /// <inheritdoc />
+        public override PendingState Pending => pending;
+
+        /// <inheritdoc />
         /// <remarks>
         /// egglog's <c>merge</c> (core-relations/src/table/mod.rs:530-535): every staged removal, then every staged
         /// insert, then a compaction if tombstones dominate. <see cref="TableChange.Added"/> is true only if a key was

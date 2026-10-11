@@ -384,6 +384,9 @@ namespace Eggnog.Relations
         public override MutationBuffer NewBuffer() => new(pending, 3, 1, false);
 
         /// <inheritdoc />
+        public override PendingState Pending => pending;
+
+        /// <inheritdoc />
         /// <remarks>
         /// §5.5: for each staged <c>[l, r, ts]</c>, in queue and staging order, maps both ids through the parent's find,
         /// merges their overlay classes, and journals the loser at <c>ts</c>. A union between distinct classes whose

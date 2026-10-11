@@ -95,16 +95,27 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Runs one pass of the bridge's native rebuild loop at <paramref name="nextTimestamp"/>: rebuild the containers,
-        /// then rebuild <paramref name="tables"/> against the union-find (which merges, applying the unions the container
-        /// merges staged), then re-stamp the rows of <paramref name="tables"/> that mention a container whose meaning
+        /// Runs one pass of the bridge's native rebuild loop at <paramref name="nextTimestamp"/>: rebuild the containers
+        /// and merge the unions their merges staged into the union-find, then rebuild <paramref name="tables"/> against
+        /// the union-find, then re-stamp the rows of <paramref name="tables"/> that mention a container whose meaning
         /// changed in place. The body of egglog-bridge's loop (egglog-bridge/src/lib.rs:666-681). Requires exclusive
         /// access.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// Containers go first so that containers that became equal are merged before the table rows mentioning them
         /// collapse; the other order can violate a function declared without a merge (the bridge's comment,
         /// lib.rs:633-665).
+        /// </para>
+        /// <para>
+        /// Defect fixed (egglog-bridge/src/lib.rs:666-668; core-relations/src/free_join/mod.rs:357-388; map §8.1 row 23):
+        /// egglog stages the container unions and lets the table rebuild's merge apply them, but the table rebuild
+        /// canonicalizes rows against the union-find as it was before those unions. So in the comment's own scenario a
+        /// function without a merge mapping <c>x2</c> and <c>x3</c> to <c>vec[x2]</c> and <c>vec[x3]</c> collapses to
+        /// two rows for <c>x2</c> with the still-distinct vector ids, and reports a merge conflict. Here the container
+        /// unions are merged into the union-find first (only when the containers changed), so the table rebuild sees
+        /// them.
+        /// </para>
         /// </remarks>
         /// <param name="unionFind">The union-find table.</param>
         /// <param name="tables">The function tables to rebuild and refresh; distinct, and not the union-find.</param>
@@ -118,6 +129,9 @@ namespace Eggnog.Relations
             ThrowIfChildRebuild(nameof(RebuildPass));
             var next = ResolveTimestamp(nextTimestamp);
             var containerRebuild = RebuildContainers(unionFind, next);
+            if (containerRebuild.Changed)
+                MergeAll(next);
+
             var tableRebuild = ApplyRebuild(unionFind, tables, next);
             var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, next);
             return tableRebuild || refreshed || containerRebuild.Changed;
