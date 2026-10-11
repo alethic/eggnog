@@ -18,6 +18,21 @@ cross-cutting decisions C1–C14 (§4.2) are adopted as written unless a line be
 | 11 | `IterationReport.changed` | Report whether the rule application changed anything; rebuild changes are reported separately. The scheduler decides saturation from both. |
 | 12 | Primitives and capability contexts | Decided in the bridge milestone (M8). |
 
+## Requirements from the literature review
+
+From `docs/design/colored-egraph-literature.md` (including its review corrections). These bind the colors milestones
+(M9, M10) and the lift.
+
+| # | Requirement | Why |
+|---|---|---|
+| L1 | The lift must find facts that hold in a case only through an ancestor row mentioning a class's **winner**. With losers-only marking such rows are never copied into the case, so the lift must also look up ancestor rows by each merged class's winner. | Review finding G1(b): under decision 3 the lift as written misses facts (verified example). |
+| L2 | Each child keeps the member list of every class it merged (the parent-canonical ids in it), and `ScanMerges` is implemented from those lists, reporting a merged class's own canonical id paired with itself when it is a parent id. | G1(a) and B7; the spike iterated the marked set, which losers-only marking breaks. |
+| L3 | A debug invariant checker for contexts, run in tests after every rebuild: overlay keys canonical in the parent once catch-up is done; a child's equalities include its parent's; every hidden row has a reason; child-local ids never appear in an ancestor; cursors valid. | B2, modelled on Easter Egg's checks. |
+| L4 | Inserting a contradiction fact in a case sets the case's stop flag; the rebuild loop checks it; the case answers only `IsContradictory`, is skipped by the lift, and is disposed. | G4: vacuous cases still copy rows on every merge. |
+| L5 | Split helpers support demand-driven splitting (split only when it unblocks a rule) and lifting before deepening (lift after each split depth saturates, before nested splits). | Missed ideas from TheSy/Easter Egg; the main defence against case counts growing exponentially. |
+| L6 | Benchmarks: per-child cost stays flat as the root grows (20k to 2M rows); memory in bytes against full clones on a case-split workload; copy volume per union. | B4, B5, G3. |
+| L7 | Measure the cost of smaller-id-wins when a parent that is not frozen lifts terms after cases created them (G2) before deciding whether parent-visible ids should win. | G2. |
+
 ## Engine-wide rules that follow
 
 - Visibility (tombstones, and hidden sets once contexts exist) is checked on **every** path that yields rows to a

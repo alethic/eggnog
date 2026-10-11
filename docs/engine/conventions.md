@@ -61,7 +61,7 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 
 ## Building and testing in isolation
 
-Agents work in a private sandbox so parallel work never breaks each other's build:
+Work done in parallel happens in private sandboxes, so one module's half-finished state never breaks another's build:
 
 1. Copy the repository's build files and both engine projects into your sandbox (see the workflow prompt for the
    exact command).
