@@ -10,9 +10,10 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// Reports are keyed by rule description. Several rules may share one (the semi-naive variants of a rule do), so
-    /// each description maps to the reports of its rules in rule order. Immutable once returned.
+    /// each description maps to the reports of its rules in rule order. Immutable once returned. Public because
+    /// <see cref="EGraph.RunRules"/> returns it inside its <see cref="IterationReport"/>; only the engine creates one.
     /// </remarks>
-    internal sealed class RuleSetReport
+    public sealed class RuleSetReport
     {
 
         /// <summary>
@@ -29,7 +30,7 @@ namespace Eggnog.Relations
         /// <param name="ruleReports">The reports by rule description; owned by the new instance.</param>
         /// <param name="searchAndApplyTime">The time the joins and actions of every rule took.</param>
         /// <param name="mergeTime">The time merging the staged writes took.</param>
-        public RuleSetReport(bool changed, Dictionary<string, List<RuleReport>> ruleReports, TimeSpan searchAndApplyTime, TimeSpan mergeTime)
+        internal RuleSetReport(bool changed, Dictionary<string, List<RuleReport>> ruleReports, TimeSpan searchAndApplyTime, TimeSpan mergeTime)
         {
             ArgumentNullException.ThrowIfNull(ruleReports);
             Changed = changed;
@@ -96,6 +97,16 @@ namespace Eggnog.Relations
 
             return total;
         }
+
+        /// <summary>
+        /// Creates the report of the same run completed with the outcome of its merge: <see cref="Database.ExecuteRuleSet"/>
+        /// reports before merging and <see cref="Database.MergeRuleSet"/> completes the report. The two share the rule
+        /// reports, which neither changes.
+        /// </summary>
+        /// <param name="changed">Whether merging the staged writes changed the database.</param>
+        /// <param name="mergeTime">The time merging the staged writes took.</param>
+        /// <returns>The completed report.</returns>
+        internal RuleSetReport WithMerge(bool changed, TimeSpan mergeTime) => new(changed, ruleReports, SearchAndApplyTime, mergeTime);
 
         /// <inheritdoc />
         public override string ToString() => $"changed {Changed}, {ruleReports.Count} rules, search {SearchAndApplyTime.TotalMilliseconds:0.###} ms, merge {MergeTime.TotalMilliseconds:0.###} ms";

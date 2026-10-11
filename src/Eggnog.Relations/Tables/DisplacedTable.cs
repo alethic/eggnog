@@ -316,6 +316,9 @@ namespace Eggnog.Relations
         public override MutationBuffer NewBuffer() => new(pending, 3, 1, false);
 
         /// <inheritdoc />
+        public override PendingState Pending => pending;
+
+        /// <inheritdoc />
         /// <remarks>
         /// egglog's <c>merge</c> (core-relations/src/uf/mod.rs:446-459): applies each staged <c>[a, b, ts]</c> in queue
         /// and staging order with <see cref="DisplacedUnionFind.Union"/>. A row counts as both added and removed, since

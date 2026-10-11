@@ -16,7 +16,7 @@ cross-cutting decisions C1–C14 (§4.2) are adopted as written unless a line be
 | 9 | Containers in children | Eq-sort containers in children come after M10. Until then, interning an eq container from a child throws. |
 | 10 | Rule-based rebuild | Dropped. Rebuild is the native incremental/full path only. |
 | 11 | `IterationReport.changed` | Report whether the rule application changed anything; rebuild changes are reported separately. The scheduler decides saturation from both. |
-| 12 | Primitives and capability contexts | Decided in the bridge milestone (M8). |
+| 12 | Primitives and capability contexts | As egglog: the engine has no capability contexts. External functions receive the raw `ExecutionState`, a trust boundary (`EGraph.RegisterExternalFunction`). The capability contexts (pure, read, write, full) belong to the layer above, which registers a primitive once per context it is valid in and picks the id per call site: a semi-naive rule uses pure on the left-hand side and write on the right, a naive rule read and full, merge functions write, one-shot commands full, `check` read (map §3.7). The bridge guarantees the discipline those contexts rely on: a left-hand-side primitive (`EGraphRuleBuilder.QueryPrim`) runs after the join on every match of every semi-naive variant and a result of nothing drops the match; a right-hand-side call (`CallExternalFunc`) that produces nothing panics; writes are staged and visible only after the run. With colors, the `ExecutionState` a primitive receives is bound to its context, which is what makes `TableAction`/`UnionAction` context-correct. |
 
 ## Requirements from the literature review
 
