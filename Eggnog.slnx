@@ -18,6 +18,7 @@
     <Project Path="src/Eggnog/Eggnog.csproj" />
     <Project Path="src/Eggnog.Tests/Eggnog.Tests.csproj" />
     <Project Path="src/Eggnog.Relations/Eggnog.Relations.csproj" />
+    <Project Path="src/Eggnog.Relations.Benchmarks/Eggnog.Relations.Benchmarks.csproj" />
     <Project Path="src/Eggnog.Relations.Tests/Eggnog.Relations.Tests.csproj" />
     <Project Path="src/Eggnog.Storage/Eggnog.Storage.csproj" />
     <Project Path="src/Eggnog.Storage.Tests/Eggnog.Storage.Tests.csproj" />
