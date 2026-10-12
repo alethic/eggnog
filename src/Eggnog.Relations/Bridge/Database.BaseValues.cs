@@ -16,7 +16,10 @@ namespace Eggnog.Relations
         /// (core-relations/src/free_join/mod.rs:306, 341-347), through which rules, merge functions and external
         /// functions box and unbox base values (<see cref="ExecutionState.BaseValues"/>). Registering types and boxing
         /// values are thread-safe (see <see cref="Relations.BaseValues"/>). A clone of the database gets a registry with
-        /// the same types that shares the intern tables, as egglog's derived clone does.
+        /// the same types that shares the intern tables, as egglog's derived clone does. A child context's database
+        /// shares its root's registry by reference, as it shares the counters, external functions and containers
+        /// (colored-contexts spec §3.4; rule-layer spec §13 item 3), so base values mean the same in every context of a
+        /// store.
         /// </summary>
         public BaseValues BaseValues => baseValues ?? CreateBaseValues();
 

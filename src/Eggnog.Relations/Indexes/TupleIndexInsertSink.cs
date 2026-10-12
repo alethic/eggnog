@@ -5,10 +5,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// An <see cref="IRowSink"/> that adds each scanned key to a <see cref="TupleIndex"/>: the <c>merge_rows</c> half of
-    /// egglog's refresh and the body of <c>group_by_key</c>, without the intermediate buffer. Fed by
-    /// <see cref="Table.ScanProject{TSink}"/>, whose projection hands it the key's cells contiguously (a one-cell key as a
-    /// slice of the row, with no copy).
+    /// An <see cref="IRowSink"/> that adds each scanned key to a <see cref="TupleIndex"/>: the <c>merge_rows</c> half
+    /// of egglog's refresh and the body of <c>group_by_key</c>, without the intermediate buffer. Fed by
+    /// <see cref="Table.ScanProject{TSink}(SubsetRef, ReadOnlySpan{ColumnId}, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>,
+    /// whose projection hands it the key's cells contiguously (a one-cell key as a slice of the row, with no copy).
     /// </summary>
     internal readonly struct TupleIndexInsertSink : IRowSink
     {

@@ -27,7 +27,30 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException("A frozen context cannot begin an epoch: it cannot be written.");
 
             ThrowIfFaulted();
-            return store.ReadClock();
+            var epoch = store.ReadClock();
+            if (epoch > lastEpoch)
+                lastEpoch = epoch;
+
+            return epoch;
+        }
+
+        /// <summary>
+        /// Checks that a rule run or merge of this child at <paramref name="epoch"/>, a timestamp its caller chose, keeps
+        /// the context's epochs nondecreasing and its rows at or above its floor, then records it as the context's latest
+        /// epoch. The floor is the larger of <see cref="SemiNaiveFloor"/> (its creation and its last noted run: I19, and
+        /// I21, which the watermarks of I31 rely on) and the latest epoch it captured or ran at (I3: every layer's sort
+        /// column stays nondecreasing, which a layer's merge would otherwise enforce by throwing and faulting the child).
+        /// </summary>
+        /// <param name="epoch">The timestamp the run's states and its merge carry.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="epoch"/> is below the floor; nothing is
+        /// recorded.</exception>
+        internal void UseEpoch(uint epoch)
+        {
+            var floor = Math.Max(semiNaiveFloor, lastEpoch);
+            if (epoch < floor)
+                throw new ArgumentOutOfRangeException(nameof(epoch), epoch, $"A rule run of a child context must carry a timestamp of at least {floor}: its creation ({createdAt}), its last noted rule run and its latest epoch (I3, I19, I21).");
+
+            lastEpoch = epoch;
         }
 
         /// <summary>

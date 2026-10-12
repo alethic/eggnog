@@ -41,6 +41,16 @@ namespace Eggnog.Relations
         /// <param name="slow">Receives the slow constraints.</param>
         void SplitConstraints(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow);
 
+        /// <summary>
+        /// Gets whether the database may keep a cached index over <paramref name="column"/> of <paramref name="table"/>
+        /// (<see cref="TableSpec.IsUncacheable"/>): what <see cref="PlanIndexKeys.Collect"/> lists for a frozen context to
+        /// prebuild (colored-contexts spec §9.10). Every column, unless the schema says otherwise.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="column">The column.</param>
+        /// <returns><c>true</c> if a cached index over the column may be built.</returns>
+        bool IsCacheable(TableId table, ColumnId column) => true;
+
     }
 
 }

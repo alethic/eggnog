@@ -16,11 +16,21 @@ namespace Eggnog.Relations
     /// merging, staging, rebuild and cloning; each costs one virtual call, made per batch or per lookup, never per row.
     /// </para>
     /// <para>
-    /// The generic scans (<see cref="ScanGenericBounded{TSink}"/> and the helpers built on it) are where egglog's
-    /// <c>WrapperImpl&lt;T&gt;</c> downcasts once and runs a monomorphized loop. Here the base class switches on
-    /// <see cref="Kind"/> once per call and calls the sealed class's non-virtual generic method, so the per-row loop is
-    /// specialized for the sink and has no virtual call. Code that knows the concrete class (compiled plans, the
-    /// table's own merge) calls the sealed class directly.
+    /// The generic scans (<see cref="ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>
+    /// and the helpers built on it) are where egglog's <c>WrapperImpl&lt;T&gt;</c> downcasts once and runs a
+    /// monomorphized loop. Here the base class switches on <see cref="Kind"/> once per call and calls the sealed class's
+    /// non-virtual generic method, so the per-row loop is specialized for the sink and has no virtual call. Code that
+    /// knows the concrete class (compiled plans, the table's own merge) calls the sealed class directly.
+    /// </para>
+    /// <para>
+    /// Visibility (colored-contexts spec §9.3, the engine-wide rule of decisions.md). A table that is a layer of a child
+    /// context's view has rows the view hides (<see cref="HiddenRows"/>) besides its tombstones. Every scan and
+    /// refinement that yields rows has a hidden-aware overload taking the layer's <see cref="HiddenRows"/>
+    /// (<see cref="ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
+    /// <see cref="ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>, the <c>ScanProject</c> forms,
+    /// <see cref="ForEachColumn{TSink}(SubsetRef, ColumnId, HiddenRows, ref TSink)"/> and <see cref="RefineVisible"/>).
+    /// With <see cref="HiddenRows.None"/> they run the plain path; the plain overloads dispatch straight to it, so code
+    /// that never sees a hidden set (the root, a bare database) pays nothing for them.
     /// </para>
     /// <para>
     /// Threading: every read may run on many threads at once while no thread merges, clears or rebuilds the table;
@@ -125,6 +135,18 @@ namespace Eggnog.Relations
         /// <param name="subset">The subset, consumed.</param>
         /// <returns>The refined subset, which the caller owns.</returns>
         public Subset RefineLive(Subset subset) => RefineOne(subset, Constraint.LtConst(new ColumnId(0), Value.Stale));
+
+        /// <summary>
+        /// Keeps the rows of <paramref name="subset"/> a view sees: live, and not in <paramref name="hidden"/>
+        /// (colored-contexts spec §9.3, the engine-wide visibility rule). With <see cref="HiddenRows.None"/> it is
+        /// <see cref="RefineLive"/>. O(<paramref name="subset"/> size); the hidden test walks the sealed sets with a
+        /// <see cref="HiddenCursor"/>, since <see cref="Subset.Retain{TFilter}(ref TFilter)"/> visits rows in ascending
+        /// order.
+        /// </summary>
+        /// <param name="subset">Row ids of this table, consumed.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <returns>The visible rows, which the caller owns.</returns>
+        public abstract Subset RefineVisible(Subset subset, HiddenRows hidden);
 
         /// <summary>
         /// Turns <paramref name="constraint"/> into a subset quickly when the table can (a range on a sorted column).
@@ -303,6 +325,42 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Visits the rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that a view sees (live
+        /// and not in <paramref name="hidden"/>) and that satisfy every constraint, and returns the position to resume
+        /// from, or -1 when the subset is exhausted: the hidden-aware
+        /// <see cref="ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>
+        /// (colored-contexts spec §9.3). Dispatches once on <see cref="Kind"/>; with <see cref="HiddenRows.None"/> each
+        /// table runs its plain scan, so the only added cost is one test per call.
+        /// </summary>
+        /// <remarks>
+        /// Positions count entries of the subset, as in the plain scan, so a chunked scan resumes exactly where the plain
+        /// one would; hidden rows, like tombstones, are visited and dropped, so a chunk may emit fewer rows.
+        /// </remarks>
+        /// <typeparam name="TSink">The sink type; a struct, so the scan is specialized for it.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="count">The number of positions to visit.</param>
+        /// <param name="constraints">The constraints rows must satisfy.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="sink">Receives each visible row with its row id.</param>
+        /// <returns>The next position, or -1.</returns>
+        public int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            switch (Kind)
+            {
+                case TableKind.SortedWrites:
+                    return Unsafe.As<SortedWritesTable>(this).ScanGenericBounded(subset, start, count, constraints, hidden, ref sink);
+                case TableKind.Displaced:
+                    return Unsafe.As<DisplacedTable>(this).ScanGenericBounded(subset, start, count, constraints, hidden, ref sink);
+                case TableKind.OverlayDisplaced:
+                    return Unsafe.As<OverlayDisplacedTable>(this).ScanGenericBounded(subset, start, count, constraints, hidden, ref sink);
+                default:
+                    throw UnknownKind();
+            }
+        }
+
+        /// <summary>
         /// Visits every live row of <paramref name="subset"/>. egglog's <c>scan_generic</c>. Dispatches once on
         /// <see cref="Kind"/>.
         /// </summary>
@@ -322,6 +380,34 @@ namespace Eggnog.Relations
                     return;
                 case TableKind.OverlayDisplaced:
                     Unsafe.As<OverlayDisplacedTable>(this).ScanGeneric(subset, ref sink);
+                    return;
+                default:
+                    throw UnknownKind();
+            }
+        }
+
+        /// <summary>
+        /// Visits every row of <paramref name="subset"/> a view sees: live and not in <paramref name="hidden"/>. The
+        /// hidden-aware <see cref="ScanGeneric{TSink}(SubsetRef, ref TSink)"/> (colored-contexts spec §9.3), which
+        /// visibility-aware index builds scan with. Dispatches once on <see cref="Kind"/>.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="sink">Receives each visible row with its row id.</param>
+        public void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            switch (Kind)
+            {
+                case TableKind.SortedWrites:
+                    Unsafe.As<SortedWritesTable>(this).ScanGeneric(subset, hidden, ref sink);
+                    return;
+                case TableKind.Displaced:
+                    Unsafe.As<DisplacedTable>(this).ScanGeneric(subset, hidden, ref sink);
+                    return;
+                case TableKind.OverlayDisplaced:
+                    Unsafe.As<OverlayDisplacedTable>(this).ScanGeneric(subset, hidden, ref sink);
                     return;
                 default:
                     throw UnknownKind();
@@ -389,7 +475,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Appends the projection onto <paramref name="columns"/> of the matching live rows to
-        /// <paramref name="output"/>; see <see cref="ScanProject{TSink}"/>.
+        /// <paramref name="output"/>; see
+        /// <see cref="ScanProject{TSink}(SubsetRef, ReadOnlySpan{ColumnId}, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>.
         /// </summary>
         /// <param name="subset">The rows to scan.</param>
         /// <param name="columns">The columns to project onto.</param>
@@ -402,6 +489,56 @@ namespace Eggnog.Relations
         {
             var sink = new TaggedRowSink(output);
             return ScanProject(subset, columns, start, count, constraints, ref sink);
+        }
+
+        /// <summary>
+        /// Visits the projection onto <paramref name="columns"/> of the rows at positions <c>[start, start + count)</c>
+        /// of <paramref name="subset"/> that a view sees (live and not in <paramref name="hidden"/>) and that satisfy
+        /// every constraint: the hidden-aware
+        /// <see cref="ScanProject{TSink}(SubsetRef, ReadOnlySpan{ColumnId}, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>
+        /// (colored-contexts spec §9.3). With no columns it emits nothing and returns -1.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="columns">The columns to project onto, in output order.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="count">The number of positions to visit.</param>
+        /// <param name="constraints">The constraints rows must satisfy.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="sink">Receives each projected visible row with its row id.</param>
+        /// <returns>The next position, or -1.</returns>
+        public int ScanProject<TSink>(SubsetRef subset, ReadOnlySpan<ColumnId> columns, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            if (columns.Length == 0)
+                return -1;
+
+            var projection = MemoryMarshal.Cast<ColumnId, int>(columns);
+            CheckColumns(projection);
+            var projecting = new ProjectingSink<TSink>(sink, projection);
+            var next = ScanGenericBounded(subset, start, count, constraints, hidden, ref projecting);
+            sink = projecting.Inner;
+            projecting.Release();
+            return next;
+        }
+
+        /// <summary>
+        /// Appends the projection onto <paramref name="columns"/> of the matching visible rows to
+        /// <paramref name="output"/>; see
+        /// <see cref="ScanProject{TSink}(SubsetRef, ReadOnlySpan{ColumnId}, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>.
+        /// </summary>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="columns">The columns to project onto.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="count">The number of positions to visit.</param>
+        /// <param name="constraints">The constraints rows must satisfy.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="output">Receives the projected rows; its arity is the number of columns.</param>
+        /// <returns>The next position, or -1.</returns>
+        public int ScanProject(SubsetRef subset, ReadOnlySpan<ColumnId> columns, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, TaggedRowBuffer output)
+        {
+            var sink = new TaggedRowSink(output);
+            return ScanProject(subset, columns, start, count, constraints, hidden, ref sink);
         }
 
         /// <summary>
@@ -419,6 +556,28 @@ namespace Eggnog.Relations
             CheckColumns(projection);
             var projecting = new ProjectingSink<TSink>(sink, projection);
             ScanGeneric(subset, ref projecting);
+            sink = projecting.Inner;
+            projecting.Release();
+        }
+
+        /// <summary>
+        /// Visits <paramref name="column"/> of every row of <paramref name="subset"/> a view sees (live and not in
+        /// <paramref name="hidden"/>), as a one-cell row: the hidden-aware
+        /// <see cref="ForEachColumn{TSink}(SubsetRef, ColumnId, ref TSink)"/> (colored-contexts spec §9.3), which the
+        /// join's small per-subset indexes build with (<see cref="SparseColumnIndex"/>).
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="column">The column.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="sink">Receives each visible row id with a one-cell span holding the column's value.</param>
+        public void ForEachColumn<TSink>(SubsetRef subset, ColumnId column, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            ReadOnlySpan<int> projection = [column.Rep];
+            CheckColumns(projection);
+            var projecting = new ProjectingSink<TSink>(sink, projection);
+            ScanGeneric(subset, hidden, ref projecting);
             sink = projecting.Inner;
             projecting.Release();
         }

@@ -29,12 +29,27 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="instrs">The instruction program.</param>
         /// <param name="usedVariables">The query variables the program reads, ascending.</param>
-        public ActionInfo(Instr[] instrs, Variable[] usedVariables)
+        public ActionInfo(Instr[] instrs, Variable[] usedVariables) :
+            this(instrs, usedVariables, Array.Empty<ActionIdConstant>())
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance with the program's constant ids (colored-contexts spec §9.8). The arrays are owned by
+        /// the new instance.
+        /// </summary>
+        /// <param name="instrs">The instruction program.</param>
+        /// <param name="usedVariables">The query variables the program reads, ascending.</param>
+        /// <param name="idConstants">The constant ids among the program's operands, as written.</param>
+        public ActionInfo(Instr[] instrs, Variable[] usedVariables, ActionIdConstant[] idConstants)
         {
             ArgumentNullException.ThrowIfNull(instrs);
             ArgumentNullException.ThrowIfNull(usedVariables);
+            ArgumentNullException.ThrowIfNull(idConstants);
             Instrs = instrs;
             UsedVariables = usedVariables;
+            IdConstants = idConstants;
         }
 
         /// <summary>
@@ -47,6 +62,13 @@ namespace Eggnog.Relations
         /// Callers must not modify the array.
         /// </summary>
         public Variable[] UsedVariables { get; }
+
+        /// <summary>
+        /// Gets the constant ids among the program's operands, as written (colored-contexts spec §9.8, X19): what a
+        /// store-backed context canonicalizes per run (<see cref="CanonicalConstants"/>). A program that
+        /// <see cref="ActionSubstituter"/> rewrote keeps the written list. Callers must not modify the array.
+        /// </summary>
+        public ActionIdConstant[] IdConstants { get; }
 
         /// <summary>
         /// Formats the used variables and the program, one instruction per line.

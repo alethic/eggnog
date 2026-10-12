@@ -23,6 +23,8 @@
 
 **Revision.** This revision answers two design reviews. §20 maps every finding to the section that fixes it.
 
+**Implementation.** M9.0–M10.2 are implemented. §21 records, per milestone, where the code departs from this text and why, which departures were corrected in the text above, and what is still deferred.
+
 ---
 
 ## 1. The design in brief
@@ -30,7 +32,7 @@
 1. **Each context owns one `Database`.**
    - The root's `Database` is egglog's, unchanged.
    - A child's `Database` has its own catalog, notification list, pending queues, merge, index catalogs and size estimate.
-   - It shares the store-wide `CounterSet`, `ExternalFunctionRegistry`, `DependencyGraph` and `ContainerValues` by reference.
+   - It shares the store-wide `CounterSet`, `ExternalFunctionRegistry`, `DependencyGraph`, `ContainerValues` and base-value registry (`BaseValues`) by reference.
    - Staging, `UnionIdMerge` and `Database.MergeAll` therefore bind to the right context through the catalog. This is C4's "ExecutionState bound to the child", and C9's ownership list.
    - A child's `Database` answers schema questions from the store schema and planning and header questions from its `ContextView`, so rules are built, planned and run in a child exactly as at the root (X39).
 2. **Clock and ids (C1).**
@@ -112,7 +114,7 @@ Abbreviations: UF = unionfind-ids, TB = tables-merge-rebuild, QE = query-executi
 | X18 | **Commit point.** BR: at instantiation (egglog). QE and D18: after success. | Progress is staged at instantiation and committed when `RunRuleSet` returns with no recorded failure (`Database.TakeFailure() == null`). It is not delayed until after the rebuild. | Every row the run writes has `ts ≥ T`, so committing before the rebuild is sound (I31). This differs from egglog only on the panic path, where egglog's results are partial anyway. |
 | X19 | **Id constants** (revised). QE: the bridge passes a canonicalizer. BR and the `Query/IdConstant.cs` remarks: as written at the root. | **One semantics at every level.** A Store-backed context, the root included, runs every Id constant of a rule (query constants, `IdConstant`, and action constants, `ActionIdConstant`) in its canonical form there: K = `Find_V(c)`. A bare `Database` (no `Store`) has no designated union-find and runs them as written, as egglog does. | Context = copy: a child that asserts nothing must see what its parent sees (§20, R1-3). Rule-layer invariant C canonicalizes constants per run. The root differs from egglog only when a constant has lost a union, where egglog's cached plan silently stops matching; this is proposed as a new §8.1 defect row (§19). |
 | X20 | **Two `TableView`s (TB `Layers/`, QE `Execution/`), `HiddenFilter` vs `HiddenRows`, `HiddenSet` location and API, `VisibleRowFilter` vs `VisibleFilter`, `HiddenSkippingSink` vs `HiddenFilterSink`.** | One `Layers/TableView` holding `LayerView?[]` (QE's shape) plus TB's C4 lookup partial. `HiddenRows(Frozen, Live)`: a cleared level makes the layers below it absent (QE), not `HidesAll`. One `Layers/HiddenSet` (TB's representation plus QE's M12 accessors). `VisibleRowFilter` (TB, with merge-walk cursor). `HiddenSkippingSink` (TB). | Removes duplication. Two probes per row at most. A frozen prefix collapses into one set (§6.3). |
-| X21 | **View source and invalidation** (revised). QE: polls `GetViewVersion(d)`. TB: `InvalidateViews`. | Storage builds and caches `TableView`s (`ContextTables.GetView`). Only the `MergeAll` epilogue, `Rebuild`, `ClearTable` and `Freeze` invalidate views and bump `ViewGeneration`; layer creation never does (X37). `RuleSetBuilder.Build` snapshots the views of every table its rules read (`ViewSnapshot`), records `ViewGeneration`, and `RunRuleSet` asserts it unchanged. QE's `ILayerSource` shrinks to `ILayerViewSource` (§9.1). | One owner of view state; the search never reads the cache, and synthetic layers stay testable. |
+| X21 | **View source and invalidation** (revised). QE: polls `GetViewVersion(d)`. TB: `InvalidateViews`. | Storage builds and caches `TableView`s (`ContextTables.GetView`). Only the `MergeAll` epilogue, `Rebuild`, `ClearTable` and `Freeze` invalidate views and bump `ViewGeneration`; layer creation never does (X37). `RuleSetBuilder.Build` snapshots the views of every table its rules read (`ViewSnapshot`); the builder records `ViewGeneration` and the chain's change stamp when its first header is evaluated, and a child's `RunRuleSet` refuses the rule set when either moved (§9.1). QE's `ILayerSource` shrinks to `ILayerViewSource` (§9.1). | One owner of view state; the search never reads the cache, and synthetic layers stay testable. |
 | X22 | **QE's `RunRuleSetCore`** vs a database per context. | `Database.RunRuleSet` keeps its shape. `JoinRun` and `RuleWork` take the rule set's `ViewSnapshot`. The idle `JoinRun` stays per `Database`. | Each context already has its own `Database`. |
 | X23 | **`$uf` as an atom in a child.** QE supports it; UF: never. | Unsupported: `ContextView.GetTableView($uf)` and `IQuerySchema.SplitConstraints($uf)` throw `NotSupportedException` in a child. | Decision 10 drops the rule-based rebuild. Only `lookup_uf` reaches a child's `$uf`. |
 | X24 | **BR's long-lived host buffers** (`database.NewBuffer` notifies before flush; HostEpoch stamped at staging). | `HostWrites` keeps logical rows bridge-side. `FlushUpdates` replays them into a state stamped with the flush epoch, after catch-up. | A `MergeAll` between `NewBuffer` and flush would consume the notification. Stamping at flush gives S3 by construction (I21). At the root the values are equal to egglog's, because `AddValues` and `AddTerm` flush immediately. |
@@ -128,7 +130,7 @@ Abbreviations: UF = unionfind-ids, TB = tables-merge-rebuild, QE = query-executi
 | X34 | **BR's `MarkFrozen`** stops overlay path compression. | Not needed. | The class table never writes on `find`. |
 | X35 | **TB's `ContextTables.ClearTable` / `ScanOwn` etc.** vs BR's `EGraphContext` copies. | Storage exposes them on `Context`; the bridge wraps them by `FunctionId`. | One implementation. |
 | X36 | **Depth.** QE: ≤ 31. Others: unbounded. | `CreateChild` throws `InvalidOperationException` at depth 32. | `LayeredSubset` uses a `uint` layer mask. |
-| X37 | **Layer creation off the domain thread** (R1-2, R2-2). Lazy creation from `ExecutionState.CreateBuffer` ran on rule tasks and action-batch clones (`Execution/ActionBuffer.cs`), mutated `DenseIdMap`s without a lock, and bumped `ViewGeneration` mid-run. Reviewers offered (a) pre-creating every write-set layer before the search, or (b) lock-protected copy-on-write creation that leaves views alone. | (b). `GetOrCreateLayer` double-checks under `ContextTables.layerLock`, publishes the layer to the catalog with `TableCatalog.Publish` (a new map published with `Volatile.Write`) and to the layer slots, and changes no view and no `ViewGeneration`. During a search (`ContextTables.InSearch`) the layer's `TableInfo` waits in a deferred list, and the next `TakeRound` adopts it into `Database.tables` on the domain thread. `RunLookupOrInsertDefault` creates its buffer at the first miss in a child, so a lookup that hits creates nothing. | An empty layer adds no visible row and hides nothing, so a view taken before it exists stays correct for the rest of the run. (a) would allocate an empty layer (about 1–2 KB: hash table, two row buffers, pending queues, `TableInfo`) for every table any rule of a set could write, in every case child, against C14. |
+| X37 | **Layer creation off the domain thread** (R1-2, R2-2). Lazy creation from `ExecutionState.CreateBuffer` ran on rule tasks and action-batch clones (`Execution/ActionBuffer.cs`), mutated `DenseIdMap`s without a lock, and bumped `ViewGeneration` mid-run. Reviewers offered (a) pre-creating every write-set layer before the search, or (b) lock-protected copy-on-write creation that leaves views alone. | (b). `GetOrCreateLayer` double-checks under `ContextTables.layerLock`, publishes the layer to the catalog with `TableCatalog.Publish` (a new map published with `Volatile.Write`) and to the layer slots, and changes no view and no `ViewGeneration`. During a search (`ContextTables.InSearch`) the layer's `TableInfo` waits in a deferred list, and the next `TakeRound` adopts it into `Database.tables` on the domain thread. `RunLookupOrInsertDefault` creates its buffer at the first miss in a child, so a lookup that hits creates nothing. | An empty layer adds no visible row and hides nothing, so a view taken before it exists stays correct for the rest of the run. (a) would allocate an empty layer (estimated at 1–2 KB, measured at about 2.7–3.0 KB in M9.4, §14.2: hash table, two row buffers, pending queues, `TableInfo`) for every table any rule of a set could write, in every case child, against C14. |
 | X38 | **Canonical and stamped writes** (R2-4, R1-6). Incoming rows were not canonicalized, a clean child could hold stale ids, and I19/I21 relied on callers stamping the sort cell. | **Children:** `InsertLayered` canonicalizes every incoming row's rebuild columns through `Owner.UnionFind.Find` and sets its sort cell to `state.Timestamp` before it probes (child-only code; zero root cost). **Root:** egglog's semantics for raw writes (written as given, rewritten by the next rebuild). Before the root is shared, `Context.Settle()` canonicalizes the rows written since its last rebuild (§7.6), and a non-frozen root's later stale appends are copied and hidden by each child's catch-up branch (a). DEBUG builds assert stamps in `Context.Write` at the root. | Children stay canonical whenever clean, at the cost of one `find` per incoming id cell. The root keeps egglog's numbering and contents for every program that creates no child. |
 | X39 | **Schema and planning in a child** (R2-1). Rule building and planning read `Database.tables`, which in a child holds only own layers and `$uf`. | A layered `Database` answers schema questions (`GetTableSpec`, `GetTableName`, `GetIdColumns`, `IQuerySchema`) from `LayeredSchema`, and statistics, header evaluation and size estimates from its `ContextView`. `RuleBuilder.GetSpec`, `RuleQueryBuilder.AddAtom`, `SymbolMap.Create`, `RuleSetBuilder` and `PlanQuery` switch to these members. The full member list is in §3.4. | Rules are then built and planned in any context with that context's statistics (§9.7). |
 | X40 | **Unsealed hides** (R1-1, critical). New hides went into a set's unsorted tail, readers used the sealed state only, and only `Rebuild` sealed. | Every layered `MergeAll` and `MergeTable` seals, in its `finally` epilogue, every set that gained a hide since the last seal (`ContextTables.AfterMerge`). `Rebuild`, `ClearTable` and `Freeze` seal too. A context is never readable with an unsealed set (I18), which `ThrowIfNotReadable` asserts in DEBUG. `HiddenSet.Union` and `HiddenRows` require sealed inputs. | Hides are added only inside `MergeAll` (`InsertLayered`, `DeleteLayered`) or right before the `MergeAll` of the same pass (catch-up, step 4), so the epilogue covers every path. |
@@ -146,7 +148,7 @@ Abbreviations: UF = unionfind-ids, TB = tables-merge-rebuild, QE = query-executi
 |---|---|---|
 | `Store` (`Contexts/Store.cs`) | The root `Context`, `LayeredSchema`, `UnionFindTable` (`TableId 0`), `IdCounter` (`CounterId 0`), `ClockCounter` (`CounterId 1`), `ContainerDirtyLog`, `DefinitionLock`, and the "has had children" flag | — |
 | Root `Context` | The root `Database` (an egglog `Database`; `$uf` is `DisplacedTable`), its `LayeredUnionFind`, `Gate`, `Domain` and children | — |
-| Child `Context` | Its `Database` (catalog, notifications, pending queues, own-layer `TableInfo`s, `ChangeStamp`, idle `JoinRun`, `ContextView`), its `ContextTables`, its `OverlayDisplacedTable` (`UnionFindOverlay` plus `DisplacedJournal`), `IdBlockAllocator`, union-find cursor, semi-naive floor, `Gate`, `Domain`, and, once frozen, a `FlattenedUnionFind` | `CounterSet`, `ExternalFunctionRegistry`, `DependencyGraph` and `ContainerValues` (root's); frozen ancestors' layers, overlays, journals and indexes (read-only); plan templates |
+| Child `Context` | Its `Database` (catalog, notifications, pending queues, own-layer `TableInfo`s, `ChangeStamp`, idle `JoinRun`, `ContextView`), its `ContextTables`, its `OverlayDisplacedTable` (`UnionFindOverlay` plus `DisplacedJournal`), `IdBlockAllocator`, union-find cursor, semi-naive floor, `Gate`, `Domain`, and, once frozen, a `FlattenedUnionFind` | `CounterSet`, `ExternalFunctionRegistry`, `DependencyGraph`, `ContainerValues` and `BaseValues` (root's); frozen ancestors' layers, overlays, journals and indexes (read-only); plan templates |
 | `ContextTables` (`Layers/ContextTables*.cs`) | Lazy `TableLayer`s and their slots, the layer lock and deferred-adoption list, the `TableView` cache and dirty flags, the unsealed-set list, `AncestorCursor`s, `LayerStatistics`, `RetractionGuard` | `LayeredSchema` |
 | `EGraph` (`Bridge/`, M8, modified) | Definitions: functions, `RuleTable`, panic functions, context-local slots, `ParallelismBudget` | The `Store` |
 | `EGraphContext` (`Bridge/EGraphContext*.cs`) | Rule progress, `HostWrites`, locals, split records, member-map cache | Wraps exactly one `Context` (`Context.Host` points back) |
@@ -203,6 +205,8 @@ internal sealed partial class Context : IDisposable
     public long Version => Database.ChangeStamp;          // D16
     public bool IsRoot { get; }  public bool IsFrozen { get; }  public bool IsDisposed { get; }
     public bool IsFaulted { get; }  public bool IsContradicted { get; }  public bool IsClean { get; }   // §7.5
+    internal bool IsViewCurrent { get; }                  // §7.5, §9.1
+    internal long ViewStamp { get; }                      // Σ Database.ChangeStamp over the context and its ancestors (§9.1)
     public object? Host { get; set; }                     // the bridge's EGraphContext; set once
     // Context.Lifecycle.cs (§7, §8)
     public Context CreateChild(ContextOptions? options = null);
@@ -212,7 +216,8 @@ internal sealed partial class Context : IDisposable
     internal void PrepareForWrite();
     internal void Settle();                               // root only, §7.6
     // Context.Epochs.cs (§4.1)
-    internal uint BeginEpoch();  internal void EndEpoch();
+    internal uint BeginEpoch();  internal void EndEpoch();  // BeginEpoch also records the latest epoch
+    internal void UseEpoch(uint epoch);                   // a child's rule run at a caller-chosen T: refuses T < max(SemiNaiveFloor, latest epoch) (§3.4)
     internal void NoteRuleRun(uint epoch);                // raises SemiNaiveFloor
     internal uint SemiNaiveFloor { get; }                 // max(CreatedAt, largest NoteRuleRun epoch), §7.2
     // Context.UnionFind.cs (§5.7)
@@ -260,7 +265,7 @@ internal void AttachLayers(ContextTables layers);
 internal Context? Owner { get; }  internal ContextTables? Layers { get; }
 internal int ClockCounterRep => clockRep;   internal long ChangeStamp { get; }
 internal RetractionGuard? RetractionGuard { get; set; }
-internal RetractionGuard? GuardForNewState();                    // null at a root without live descendants (§6.7)
+internal RetractionGuard? GuardForNewState();                    // the database's guard at every Store-backed database, root included; null for a bare one (§6.7)
 public bool IsFrozen { get; }
 internal void AdoptLayer(TableLayer layer);                      // tables.Insert(layer.Id, layer.Info); domain thread, outside a search (I34)
 internal bool IsTakenOut(TableId table);                         // the layer is adopted and the table map does not hold it
@@ -271,14 +276,14 @@ internal string? GetTableName(TableId table);                    // X39
 ```
 
 **The child constructor:**
-- copies the root's `counters`, `externalFunctions`, `deps` and `containers` (`root.Containers`, which forces creation) by reference;
+- copies the root's `counters`, `externalFunctions`, `deps`, `containers` (`root.Containers`) and `baseValues` (`root.BaseValues`, declared in `Bridge/Database.BaseValues.cs`) by reference; both properties create the root's instance if it has none, so a value the root boxed unboxes in the child and a registration through either is seen by both;
 - builds `catalog = new TableCatalog { Resolver = id => layers!.ResolveForStaging(id) }`;
 - places `TableInfo("$uf", unionFind, ParallelHeuristics.Serial)` at `TableId 0` (the `OverlayDisplacedTable` from M9.2 on; a placeholder `DisplacedTable` that is never written in M9.1, §17);
 - sets `parallelism` to the C9 default (§10.9).
 
 `Database.View` (§9.1) is assigned for children and created lazily at the root.
 
-**Members of a layered (child) `Database` (X39).** Every member of `Database/Database.cs`, `Database/Database.Constraints.cs`, `Database/Database.Rebuild.cs`, `Containers/Database.Containers.cs` and `Query/Database.Query.cs` that reads the table map behaves as follows in a child; the root and a bare `Database` are unchanged.
+**Members of a layered (child) `Database` (X39).** Every member of `Database/Database.cs`, `Database/Database.Constraints.cs`, `Database/Database.Rebuild.cs`, `Containers/Database.Containers.cs` and `Query/Database.Query.cs` that reads the table map behaves as follows in a child; the root and a bare `Database` are unchanged, except for `AddTable` at a Store's root.
 
 | Member | In a child |
 |---|---|
@@ -287,27 +292,30 @@ internal string? GetTableName(TableId table);                    // X39
 | `GetIdColumns(t)` (`Query/Database.Query.cs:45`) | `schema[t]?.RebuildColumns`, empty for `$uf` |
 | `IQuerySchema.GetArity` / `GetKeyCount` | `GetTableSpec(t)` (both levels) |
 | `IQuerySchema.SplitConstraints` | `ConstraintProcessor.Split(schema[t].RootInfo, …)`: the split depends only on the table's kind and cacheable columns, which every layer shares; `$uf` throws `NotSupportedException` (X23) |
+| `IQuerySchema.IsCacheable` (new default member, `true`) | From `GetTableSpec(t)` (both levels); `FreezeWarmup.From` reads it (§9.10) |
 | `IPlanStatistics` | `View` (`ContextView`) |
 | `IHeaderEvaluator.Evaluate` | Throws `InvalidOperationException`; every caller instantiates through `View` (`ILayeredHeaderEvaluator`, §9.4) |
+| `ProcessConstraints(t, …)` and the instance `ColumnCardEstimator` | Throw `NotSupportedException` for every table (`Database.GetQueryTableInfo`): a child's rows lie in several layers, which only `View` evaluates; `$uf` with the X23 message |
 | `PlanQuery(q)` | `QueryPlanner.PlanQuery(q, View)` |
-| `EstimateSize(t, c)` | `View.EstimateSize(t, c)` (sum over present layers) |
+| `EstimateSize(t, c)` | `View.EstimateSize(t, c)` (sum over present layers); `$uf` throws `NotSupportedException` (X23) |
 | `GetTable`, `GetTableInfo`, `TryGetTableInfo` | The own-layer and `$uf` map only, for the database's own merge, rebuild and index work; `MissingTable` says "Table t has no layer in this context; read it through Context.GetView" |
 | `NewBuffer(t)` | `catalog.GetForStaging(t).NewBuffer()`, then notify |
 | `ClearTable(t)` | `Owner.ClearTable(t)` (§6.7) |
-| `AddTable`, `AddCounter`, `AddExternalFunction`, `FreeExternalFunction`, `NextTableId` | Throw `InvalidOperationException("Definitions are added through the Store.")` |
+| `AddTable`, `AddCounter`, `AddExternalFunction`, `FreeExternalFunction`, `NextTableId` | Throw `InvalidOperationException("Definitions are added through the Store.")`. `AddTable` throws at a Store's root database too: a table added there would be unknown to the store's schema, so children would disagree with the root about it and the root's rebuild (`Schema.FunctionTables`) would skip it. The `Store` adds through the internal `AddTableCore`; a bare `Database` and a clone (no owner) keep egglog's `AddTable`. |
 | `TableCount` | `LayeredSchema.TableCount` |
 | `VisibleTableIds` (behind `DatabaseView.TableIds` and `ExecutionState.TableIds`) | `LayeredSchema.Ids` |
 | `ApplyRebuild`, `RefreshRowsForValues`, `RebuildContainers`, `RebuildPass`, `Rebuild` (public) | Throw `InvalidOperationException`; a child rebuilds through `Context.Rebuild`, whose `ContextTables` calls the internal `RunWithTakenOut` and `RunOnTables` |
 | `Clone` | Throws (§4.3) |
-| `NewRuleSet`, `RunRuleSet`, `MergeAll`, `MergeTable`, `CreateExecutionState`, `WithExecutionState` | Unchanged in shape (layered behaviour per X2, X21, X37, X40) |
+| `NewRuleSet`, `MergeAll`, `MergeTable`, `CreateExecutionState`, `WithExecutionState` | Unchanged in shape (layered behaviour per X2, X21, X37, X40); `MergeTable` also adopts deferred layers first (§6.2) |
+| `RunRuleSet`, `ExecuteRuleSet`, `MergeRuleSet` | The run is the context's (§8.3, X12, X37). It enters the context's domain and refuses, with `InvalidOperationException`: a call from inside a callback of the domain (§8.3), views that are not current (§7.5), and a rule set whose view generation or chain stamp moved since its first header was evaluated (§9.1, I29). It refuses a timestamp below `max(SemiNaiveFloor, the context's latest epoch)` with `ArgumentOutOfRangeException` (`Context.UseEpoch`; I3, I19, I21). The search runs as a callback of the domain with `InSearch` set, so a nested `Write` or `Rebuild` from an action or external is refused. An escaping exception faults the context (X12). Every refusal happens before anything runs and does not fault. `MergeRuleSet` applies the domain, the timestamp floor and the fault rule only. |
 
-Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` → `owner.Database.GetTableSpec`), `Query/RuleQueryBuilder.cs:128` (`AddAtom` arity → `GetTableSpec(table).Arity`), `Query/RuleQueryBuilder.cs:190` (`GetIdColumns`, layered as above), `Query/SymbolMap.cs:58` (`GetTableName`), `Query/RuleSetBuilder.cs` (`EstimateSize`; `AddBuiltRule` and `GetRuleWithExtraConstraints` instantiate through `db.View`), and `Database/ColumnCardEstimator.cs` (a static per-`TableInfo` overload used by `ContextView`). `DatabaseView.GetTableName` forwards to `GetTableName`, and `DatabaseView.GetTable` throws in a child.
+Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` → `owner.Database.GetTableSpec`), `Query/RuleQueryBuilder.cs:128` (`AddAtom` arity → `GetTableSpec(table).Arity`), `Query/RuleQueryBuilder.cs:190` (`GetIdColumns`, layered as above), `Query/SymbolMap.cs:58` (`GetTableName`), `Query/RuleSetBuilder.cs` (`EstimateSize`; `AddBuiltRule` and `GetRuleWithExtraConstraints` instantiate through `db.View`), and `Database/ColumnCardEstimator.cs` (a static per-`TableInfo` overload used by `ContextView`). `DatabaseView.GetTableName` forwards to `GetTableName`, and `DatabaseView.GetTable` throws `InvalidOperationException` in a child (a readonly field cached at construction; one field test per call at the root).
 
 ### 3.5 Who calls whom
 
 | Caller | Callee | Contract |
 |---|---|---|
-| Executor (`JoinRun`, `RuleWork`) | The rule set's `ViewSnapshot` → `TableView` / `LayerView` / `HiddenRows` | Taken at `RuleSetBuilder.Build` while the context is clean. Views are immutable for the run; hidden sets are sealed (I18, I29). |
+| Executor (`JoinRun`, `RuleWork`) | The rule set's `ViewSnapshot` → `TableView` / `LayerView` / `HiddenRows` | Taken at `RuleSetBuilder.Build` while the context's views are current (§7.5). Views are immutable for the run; hidden sets are sealed (I18, I29). |
 | Actions (`ExecutionState`) | Search phase: the state's `ViewSnapshot`, else `ContextTables.GetView(t)`; write phase: `ContextTables.TryGetVisibleRow` / `TryGetVisibleColumn` | C4. `layers` is resolved from `view.Owner.Layers`. |
 | Staging (`ExecutionState.CreateBuffer`) | `TableCatalog.GetForStaging` → `ContextTables.ResolveForStaging` | Thread-safe; may create an empty layer (X37, I34). |
 | Tables (`ContextTables`) | `Context.UnionFind.Find`, `Context.IsOwnDisplacement`, `OverlayDisplacedTable` (rebuilder table), journal rows `[journalMark, Count)` | The union-find is current before any row work (§7.1). |
@@ -336,13 +344,13 @@ Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` �
   `DatabaseView.ClockCounterRep` forwards `Database.ClockCounterRep`, which is −1 for a bare database.
 
   So `ReadCounterInstr` (`next_ts`), `UnionContainerMerge` (`TimestampCounter`), `UnionIdMerge` (`state.Timestamp`) and the bridge's `TableAction`/`UnionAction` all stamp with the captured epoch, even when a concurrent sibling advances the clock.
-- **Timestamp parameters.** `Database.MergeAll`, `MergeTable`, `RunRuleSet`, `CreateExecutionState`, `WithExecutionState` and `RebuildPass` change their timestamp parameter to `uint? timestamp = null`. `null` resolves to `ClockCounterRep < 0 ? 0 : checked((uint)ReadCounter(clock))`. This is source-compatible, and a bare `Database` behaves as before.
+- **Timestamp parameters.** `Database.MergeAll`, `MergeTable`, `RunRuleSet`, `CreateExecutionState`, `WithExecutionState` and `RebuildPass` change their timestamp parameter to `uint? timestamp = null`. `null` resolves to `ClockCounterRep < 0 ? 0 : checked((uint)ReadCounter(clock))`. This is source-compatible, and a bare `Database` behaves as before. `RebuildContainers` with a `null` timestamp also resolves to the store clock on a Store-backed database; a bare `Database` keeps egglog's newest-union timestamp there. Under the pin, a clock-reading `UnionContainerMerge` would otherwise stamp the newest union's timestamp instead of the clock value egglog's merge reads.
 - **Per-context order.** Epochs of one context never decrease (I3). After a context's `EndEpoch` the clock is at least e+1, and nothing decreases it.
 - **Root equivalence.** A root that is not frozen runs sequentially with all its descendants, and nothing else increments the clock during its run. The pinned value therefore equals the live value at every read. With X4 and X42, `run → (no advance) → pass(T) → advance` reproduces `run_rules_inner` exactly. The root departs from egglog only (a) when a rule's Id constant has lost a union (X19), and (b) in operations egglog does not have (`CreateChild`, `Freeze`, which settle, §7.6).
 
 ### 4.2 Id blocks and `IsLocalId`
 
-**`IdBlockAllocator`** (`Contexts/IdBlockAllocator.cs`) and **`IdBlock`** (`Contexts/IdBlock.cs`, a sealed class with fields `long Next` and `readonly long End`):
+**`IdBlockAllocator`** (`Contexts/IdBlockAllocator.cs`) and **`IdBlock`** (`Contexts/IdBlock.cs`, a sealed class with fields `long Next`, `readonly long Start`, `readonly long End` and `readonly long ReservedBefore`, so `Minted` is read from the one published block):
 
 ```csharp
 internal sealed class IdBlockAllocator
@@ -359,7 +367,7 @@ internal sealed class IdBlockAllocator
 1. `b = Volatile.Read(ref current)`; `v = Interlocked.Increment(ref b.Next) - 1`.
 2. If `v < b.End`, return it.
 3. Otherwise, under `lock (sync)`, if `current == b`:
-   - choose `size = clamp(2 × Minted, 16, 4096)`;
+   - choose `size = clamp(2 × reserved so far, 16, 4096)`; the total reserved equals `Minted` at refill time, because the current block is spent;
    - compute `start = counters.IncrementBy(Counter, size)` (new: `Interlocked.Add(...) - size`);
    - throw `OverflowException` when `start + size - 1 > UnionFind.MaxId` (`UnionFind/UnionFind.cs:72`, `Array.MaxLength - 1`), the largest id a union-find array can hold;
    - append the block to the copy-on-write arrays;
@@ -381,8 +389,8 @@ internal sealed class IdBlockAllocator
 ### 4.3 Schema changes (X16, X43)
 
 **`Store.AddTable`:**
-1. Takes `lock (DefinitionLock)`. If the root is not frozen, it also enters `Root.Domain`, so it cannot run concurrently with root work.
-2. Calls `root.Database.AddTable(...)`.
+1. Takes `lock (DefinitionLock)`. If the root is not frozen, it also enters `Root.Domain`, so it cannot run concurrently with root work, and then reads the frozen flag again: a root that froze meanwhile takes the frozen path of step 4.
+2. Checks that the table is a `SortedWritesTable` (which `Register` requires), so a rejected table leaves the root unchanged, then calls `root.Database.AddTableCore(...)` (the public `AddTable` throws at a Store's root, §3.4).
 3. Calls `Schema.Register(id, contextPrivate)`.
 4. If the root is frozen, freezes the new (empty) table at once: `Table.Freeze()`, `TableInfo.FreezeIndexes()`, and publishes its `RootView` (§8.1).
 
@@ -397,7 +405,7 @@ It touches no other context. A frozen context answers for the new id functionall
 - `Store.AddCounter`, and `Database.AddCounter` on any database of the store, throw `InvalidOperationException` once `HasHadChildren` is set.
 - `ExternalFunctionRegistry` publishes a `DenseIdMap` snapshot with `Volatile`. `Add` and `Remove` lock, clone and publish. Lookups are lock-free.
 
-**Clone:** `Database.Clone()` throws `InvalidOperationException` when `owner` is a child or `owner.Gate.HasLiveDescendants`. egglog's push/pop clone stays root-only.
+**Clone:** `Database.Clone()` throws `InvalidOperationException` when `owner` is a child or `owner.Gate.HasLiveDescendants`. egglog's push/pop clone stays root-only. A clone keeps the source's clock (the counter layout is the same) and has no owner: it is a bare egglog `Database`.
 
 ---
 
@@ -529,7 +537,7 @@ Keys that the parent displaced break the chase anyway. Example: overlay `9→4`,
 ### 5.5 `OverlayDisplacedTable` and the rebuilders
 
 **`OverlayDisplacedTable : Table`** (`Tables/OverlayDisplacedTable.cs`, `TableKind.OverlayDisplaced`, arity 3):
-- **Constructor:** `(LayeredUnionFind parentFinder, UnionFindOverlay overlay, DisplacedJournal journal, Table parentUnionFind)`.
+- **Constructor:** `(LayeredUnionFind parentFinder, UnionFindOverlay overlay, DisplacedJournal journal, Table parentUnionFind, IdBlockAllocator? localIds = null)`. `localIds` tells `Merge` which ids are local when a union happens, for `ParentIdLosers` (§5.6, G2, L7).
   - `Finder = parentFinder.Extend(overlay)`.
   - `pending = new PendingState(new ShardData(1))`.
 - **Members:**
@@ -555,7 +563,7 @@ Keys that the parent displaced break the chase anyway. Example: overlay `9→4`,
 | `Freeze` | Throws if pending; `overlay.Freeze()`; seals pending |
 
 **`Merge(state)`.** Precondition: uf-current, which `PrepareForWrite` and `Rebuild` guarantee. For each staged `[l, r, ts]`, in queue and staging order:
-1. `a = parentFinder.Find(l)`, `b = parentFinder.Find(r)`.
+1. Throw `ArgumentOutOfRangeException` for an id above `UnionFind.MaxId`, as the root's `Reserve` does. `a = parentFinder.Find(l)`, `b = parentFinder.Find(r)`.
 2. If `journal.Count > 0 && ts < journal.LastTimestamp && overlay.Map(a) != overlay.Map(b)`, throw `InvalidOperationException` before any mutation. This is `DisplacedUnionFind.Union`'s order check; a redundant union may carry an old ts.
 3. If `overlay.Union(a, b, out _, out loser)`, then `journal.Append(loser, ts)` and increment `stats.OwnUnions`.
 4. Return `new TableChange(changed, changed)`.
@@ -572,10 +580,11 @@ Keys that the parent displaced break the chase anyway. Example: overlay `9→4`,
 
 ```text
 int CatchUpUnionFind(uint e):                       // child; returns journal.Count before
-  require parent frozen or clean; throw if overlayTable.HasPendingUnions
-  ("Unions staged in a context must be merged before it catches up with its parent.")
+  require parent frozen or clean
   from = journal.Count; end = parent.DisplacedCount
   if unionFindCursor == end: return from
+  throw if overlayTable.HasPendingUnions                 // only when there is something to catch up with
+  ("Unions staged in a context must be merged before it catches up with its parent.")
   ids = parent.DisplacedIds; Span<uint> lost = stackalloc uint[2]
   for i in [unionFindCursor, end):
       d = ids[i]; Debug.Assert(!localIds.Contains(d))
@@ -608,15 +617,16 @@ return n
 
 ### 5.7 The context's union-find API
 
-- `Find`, `AreEqual`: `ThrowIfNotReadable()`, then `UnionFind.Find`. `Debug.Assert(IsUnionFindCurrent)`.
+- `Find`, `AreEqual`: on a context that is not frozen they enter its domain re-entrantly (I24), as `ScanMerges` and `CheckInvariants` do; a frozen context takes no guard (§8.3). Then `ThrowIfNotReadable()` and `UnionFind.Find`. `Debug.Assert(IsUnionFindCurrent)`.
 - `NewId`: `ThrowIfNotWritable()`. A child uses `idBlocks.Next()`; the root uses `checked((uint)Counters.Increment(IdCounter))`, bounded by `UnionFind.MaxId` (§4.2).
 - `Union(a, b)`: `Write(s => s.StageInsert(uf, [a, b, s.Timestamp]))`. Returns whether `DisplacedCount` grew. Rows are rewritten at the next `Rebuild`.
 - `ScanMerges<TVisitor>(ref visitor)`:
   - throws on the root, and requires `IsClean`;
   - for every slot with count ≥ 2, visits `(m, canonical)` for each member m with `IsLocalId(m) == false`, in slot order then insertion order (deterministic, decision 4);
-  - reads, including `Find`, are allowed inside the visitor.
+  - reads, including `Find`, are allowed inside the visitor; the visitor runs as a callback of the domain, so `Write`, `Union` and a `Rebuild` that would run a pass are refused inside it (§8.3);
+  - it counts as a running scan of the context, which `Dispose` refuses (§8.2), and it throws if the overlay's `Version` moves during a visit (a second safeguard).
 
-  `IMergeVisitor` (`Contexts/IMergeVisitor.cs`) is `void Visit(uint member, uint canonical)`. This is rule-layer §2.1's contract: a merged class's canonical id is reported paired with itself when it is a parent id (L2, G1(a)).
+  `IMergeVisitor` (`Contexts/IMergeVisitor.cs`) is `void Visit(uint member, uint canonical)`. This is rule-layer D8's contract: a merged class's canonical id is reported paired with itself when it is a parent id (L2, G1(a)).
 
 ---
 
@@ -640,11 +650,13 @@ internal sealed class LayeredSchema
     public TableView RootView(TableId id);                  // built once, published with CompareExchange
     internal void FreezeRoot();                             // builds every RootView (§8.1)
 }
-internal sealed class LayeredTableSchema
+internal sealed class LayeredTableSchema                 // immutable: get-only properties
 {
-    public TableId Id; public string? Name; public SortedWritesTable Root; public TableInfo RootInfo;
-    public bool IsContextPrivate; public bool IsContradiction; public int Stratum;
-    public int KeyCount; public int Arity; public int SortColumn; public ReadOnlySpan<ColumnId> RebuildColumns;
+    public TableId Id { get; }  public string? Name { get; }  public TableSpec Spec { get; }
+    public SortedWritesTable Root { get; }  public TableInfo RootInfo { get; }
+    public bool IsContextPrivate { get; }  public bool IsContradiction { get; }   // a volatile flag, set once
+    public int Stratum { get; }  public int KeyCount { get; }  public int Arity { get; }  public int SortColumn { get; }
+    public ReadOnlySpan<ColumnId> RebuildColumns { get; }
     public bool IsLattice => Root.MergeFunction.IsLattice;
     public bool IsConstructor => Root.MergeFunction is UnionIdMerge;   // ActionReadAnalysis (§10.2)
 }
@@ -669,7 +681,7 @@ internal sealed partial class ContextTables : ILayerViewSource
     internal Table ResolveForStaging(TableId t);                    // $uf → OverlayDisplacedTable, else GetOrCreateLayer(t).Own
     internal TableLayer? TryGetLayer(TableId t);  internal TableLayer GetOrCreateLayer(TableId t);
     internal void AdoptDeferred();                                   // Database.TakeRound prologue
-    internal void NoteUnsealed(HiddenSet set);
+    internal void NoteUnsealed(HiddenSet set, SortedWritesTable layer);   // the ancestor table, whose row count seals the set
     internal SortedWritesTable? AncestorLayer(int j, TableId t);    // j == 0: schema[t].Root
     internal TableInfo? AncestorInfo(int j, TableId t);
     internal bool TryFindVisible(TableId t, uint[] key, int offset, ulong keyHash, int top,
@@ -699,7 +711,7 @@ lock (layerLock):
     s = schema[t] ?? throw
     if s.IsLattice == false && s.IsContextPrivate == false:
         throw InvalidOperationException naming the table and decision 2       // copy-on-touch counts as a write
-    L = new TableLayer(this, s, Depth)                                         // Own = s.Root.CreateLayer(L); Info = new TableInfo(s.Name, Own, Serial)
+    L = new TableLayer(this, s)                                                // depth from its owner; Own = s.Root.CreateLayer(L); Info = new TableInfo(s.Name, Own, Serial)
     owner.Database.Catalog.Publish(t, L.Own)                                   // copy-on-write map, Volatile.Write
     publish L in slots[t] (Volatile.Write; a grown array is copied and published whole)
     if InSearch: deferred.Add(L) else owner.Database.AdoptLayer(L)             // tables.Insert(t, L.Info)
@@ -720,7 +732,7 @@ internal void Publish(TableId id, Table table);        // clone the map, insert,
 
 `Add` and `Set` are unchanged (exclusive access at the root). `ExecutionState.CreateBuffer` (`Tables/ExecutionState.cs:198`) calls `catalog.GetForStaging(table).NewBuffer()`. The cost at the root is one volatile load per (state, table) buffer creation.
 
-**Adoption.** `Database.TakeRound` (`Database/Database.Merge.cs`) starts with `layers?.AdoptDeferred()`, which moves deferred layers into `Database.tables` on the domain thread. Every layer is therefore adopted before `MergeAll` takes a round, and `IsTakenOut(t)` (`TryGetLayer(t) is { IsAdopted: true } && tables.ContainsKey(t) == false`) is exact whenever the write phase consults it.
+**Adoption.** `Database.TakeRound` (`Database/Database.Merge.cs`) starts with `layers?.AdoptDeferred()`, which moves deferred layers into `Database.tables` on the domain thread. `Database.MergeTable` and `Database.Freeze` adopt them first as well. Every layer is therefore adopted before `MergeAll` takes a round, and `IsTakenOut(t)` (`TryGetLayer(t) is { IsAdopted: true } && tables.ContainsKey(t) == false`) is exact whenever the write phase consults it.
 
 `SortedWritesTable.CreateLayer(TableLayer layer)` (new, the only signature) returns:
 
@@ -737,7 +749,8 @@ internal sealed class TableLayer
 {
     public ContextTables Owner; public LayeredTableSchema Schema; public TableId Id; public int Depth;
     public SortedWritesTable Own { get; }  public TableInfo Info { get; }  public bool IsAdopted { get; }
-    public bool IsCleared { get; }  public bool HasRetractions { get; }  public int Version { get; }
+    public bool IsCleared { get; }  public int Version { get; }
+    public bool HasRetractions { get; }   // the context retracted rows of this table: the guard allowed a delete or subsume, or DeleteLayered hid an ancestor row
     public HiddenSet? HiddenOver(int layer);
     public bool IsHiddenHere(int layer, int row);                 // any state
     public bool Hide(int layer, int row, HideReason reason);      // false if already hidden at this level
@@ -801,7 +814,8 @@ internal sealed class HiddenSet
 **`LayerView`** (`Layers/LayerView.cs`, sealed, immutable):
 - fields `int Depth`, `TableInfo Info`, `Table Table`, `HiddenRows Hidden`, `bool IsFrozen`;
 - `bool HasInvisible => Table.HasStaleRows || Hidden.IsNone == false`, which replaces `HasStaleRows`;
-- `Subset RefineVisible(Subset s)`: `Hidden.IsNone ? Table.RefineLive(s) : Table.RefineVisible(s, Hidden)`.
+- `Subset RefineVisible(Subset s)`: `Hidden.IsNone ? Table.RefineLive(s) : Table.RefineVisible(s, Hidden)`;
+- `bool AnyVisible(SubsetRef s)`: whether some row of `s` is visible (`TableView.AnyVisible` forwards to it).
 
 **`TableView`** (`Layers/TableView.cs`, `Layers/TableView.Lookup.cs`, sealed, immutable):
 
@@ -809,11 +823,12 @@ internal sealed class HiddenSet
 internal sealed partial class TableView
 {
     internal TableView(TableId id, TableSpec spec, LayerView?[] layers);
+    internal static TableView ForTable(TableId id, TableInfo info, bool isFrozen);   // one layer, HiddenRows.None, any table kind (root and bare-database views, $uf included)
     public TableId Id; public TableSpec Spec; public LayerView?[] Layers; public int LayerCount; public uint PresentMask;
-    public LayeredSubset AllRows(SubsetArrayPool? pool);       // present layers with rows: Dense(0, n_l)
-    public bool AnyVisible(int layer, SubsetRef subset);        // zero-variable atoms (map §8.1 row 2)
-    public long ApproximateCount { get; }  public uint LatestStamp { get; }   // D16
-    public long VisibleCount { get; }                           // exact: Σ live rows − live hidden rows; computed once per view, O(hidden)
+    public LayeredSubset AllRows(SubsetArrayPool? pool);       // Dense(0, n_l) per present layer with rows, n_l its physical row count (tombstones and hidden rows included); a one-layer view gives the table's All()
+    public bool AnyVisible(int layer, SubsetRef subset);        // zero-variable atoms (map §8.1 row 2); false for an absent or out-of-range layer and an empty subset; ArgumentOutOfRangeException for a subset past the layer's rows
+    public long ApproximateCount { get; }  public uint LatestStamp { get; }   // D16; computed on each read
+    public long VisibleCount { get; }                           // exact: Σ live rows − live hidden rows; the hidden part is computed once per view, O(hidden)
     // Lookup partial (C4): FindRow(k0 | k0,k1 | k0,k1,k2 | uint[] key, int offset | ReadOnlySpan<uint> key, out int layer),
     // TryGetColumn (1-, 2-, 3-, N-key forms), TryGetRow(ReadOnlySpan<uint> key, Span<uint> dest, out int layer, out int row)
 }
@@ -828,6 +843,7 @@ internal sealed partial class TableView
   - `Live` = the sets of the non-frozen levels in `(max(j, f), Depth]`: none → null, one → that object, more → `HiddenSet.Union` (`Statistics.FilterMerges++`).
 
   The own layer is present with `HiddenRows.None`.
+- **Layer tables.** Every layer of these views is a `SortedWritesTable`. `LayeredSchema.RootView` serves registered function tables, from an array that grows geometrically; `RootView($uf)` throws `NotSupportedException` (X23).
 - **A frozen context's views** have `Live == null`: everything is folded into `Frozen` at freeze. A frozen context never caches beyond its arrays: for a table id at or beyond them, `GetView` returns the parent's view (or `RootView`) without writing, and `TryGetLayer` returns null (X43).
 
 **Invalidation.** `InvalidateViews(all: false)` (the `MergeAll` epilogue) drops the cached views of tables whose structure changed since the last invalidation (a layer created, a hide added, a clear) and bumps `ViewGeneration` if any did. `InvalidateViews(all: true)` (the end of a `Rebuild` that caught up with an ancestor, `ClearTable`, `Freeze`) drops every cached view. A view references live layer tables, so rows appended to a present layer need no invalidation. A descendant's cached views may point at this context's sets or view instances, but the descendant is not clean until its next catch-up (`ChangeStamp` moved), which invalidates its whole cache.
@@ -892,14 +908,16 @@ return -1
   | `:143` `Lookup` | `LookupRow(ReadTable(t), …)` | `LookupRow(ViewFor(t), …)` |
   | `:208` `LookupOrInsertDefault` | buffer first, then `LookupRow(ReadTable(t), …)` (egglog's order, `:205`) | `LookupRow(ViewFor(t), …)`; the buffer is created at the first miss, so a lookup that hits creates no layer; the arity check uses `layers.Schema` |
   | `:290` `LookupWithFallback` | `LookupRow(ReadTable(t), …)` | `LookupRow(ViewFor(t), …)` |
-  | `Predicted.cs:54`, `:78` `PredictRow` (both forms) | `ReadTable(t).TryGetRow` | `layers.TryGetVisibleRow`; arity and spec from `layers.Schema` |
-  | `Predicted.cs:94`, `:120` `PredictColumn` (both forms) | `ReadTable(t).TryGetRowColumn` | `layers.TryGetVisibleColumn` |
+  | `Predicted.cs:54`, `:78` `PredictRow` (both forms) | `ReadRootTable(t).TryGetRow` | `layers.TryGetVisibleRow`; arity and spec from `layers.Schema` |
+  | `Predicted.cs:94`, `:120` `PredictColumn` (both forms) | `ReadRootTable(t).TryGetRowColumn` | `layers.TryGetVisibleColumn` |
 
-  `ViewFor(t)` is `views?.Get(t) ?? layers.GetView(t)`. For `t == $uf` the lookups use the `OverlayDisplaced` arm. The new `VectorizedLookup` overloads over `TableView` run `LayeredKey1Lookup`, `LayeredKey2Lookup`, `LayeredKey3Lookup` or `LayeredKeyNLookup` (`Actions/`, structs mirroring `SortedKey*Lookup` and calling `TableView.TryGetColumn`).
+  At the root, `PredictRow` and `PredictColumn` test `layers` first and then call `ReadRootTable` (the former `ReadTable` body, aggressively inlined), reading the spec only on a miss; their layered paths are `PredictRowLayered` and `PredictColumnLayered`. This keeps their pre-context root shape. `ReadTable` stays the throwing dispatch point the lookup instructions use.
+
+  `ViewFor(t)` is `views?.Get(t) ?? layers.GetView(t)`. For `t == $uf` the lookups use the `OverlayDisplaced` arm: in a child, lookups, `PredictRow`, `PredictColumn` and `Context.TryGetRow` of `$uf` go through the `OverlayDisplacedTable`'s view-level lookup, and `GetView($uf)` throws `NotSupportedException` (X23). The new `VectorizedLookup` overloads over `TableView` run `LayeredKey1Lookup`, `LayeredKey2Lookup`, `LayeredKey3Lookup` or `LayeredKeyNLookup` (`Actions/`, structs mirroring `SortedKey*Lookup` and calling `TableView.TryGetColumn`).
 - `ExecutionState.GetTable` (`Actions/ExecutionState.Database.cs:116`) throws when `layers` is set (it reads `DatabaseView.GetTable`, which throws in a child).
 - `ExecutionState.TableIds` lists `LayeredSchema.Ids` in a child (§3.4).
 - `ExecutionState.Containers` (`Containers/ExecutionState.Containers.cs:16`) reads `RequireView().Owner.Containers`, which in a child is the root's instance (the child constructor copies the reference).
-- New `ExecutionState.VisibleRowCount(TableId t)`: `ReadTable(t).Count` at the root, `ViewFor(t).VisibleCount` in a child. The bridge's `TableAction.row_count` (`eb/lib.rs:1293-1294`, `state.get_table(t).len()`) uses it.
+- New `ExecutionState.VisibleRowCount(TableId t)`: `ReadTable(t).Count` at the root, `ViewFor(t).VisibleCount` in a child. For `$uf` in a child, where `ViewFor` refuses, it returns `Context.DisplacedInViewCount`: the number of ids not canonical in the child's view (the parent's view count when the child was created plus the journal, by I8), which is what the parent and a copy report. The bridge's `TableAction.row_count` (`eb/lib.rs:1293-1294`, `state.get_table(t).len()`) uses it.
 
 ### 6.6 Inserts, merges and deletes in a child (X38)
 
@@ -958,7 +976,8 @@ Properties:
 **`Context.Write`** (`Contexts/Context.Writes.cs`):
 
 ```text
-using Domain.Enter(); ThrowIfNotWritable(); PrepareForWrite()
+ThrowIfNotWritable(); using Domain.Enter(); ThrowIfNotWritable()   // the first check reports "frozen" rather than a domain conflict
+throw if inside a callback of the domain (§8.3); PrepareForWrite()
 e = BeginEpoch()
 try   { st = Database.CreateExecutionState(e); res = action(st); st.Flush(); Database.RecordFailure(st)
         if IsRoot: Debug-only AssertPendingSortCells(e) on every registered table      // X38
@@ -970,8 +989,8 @@ finally { EndEpoch() }
 It leaves rebuild work pending (spike semantics): a union makes the context not clean until `Rebuild`. In a child, incoming rows are canonical when stored, so a write with a stale id lands on the canonical key and merges with the visible row there. At the root, `Context.Write` is egglog's raw write: rows are stored as given, the sort cell is the caller's contract (asserted in DEBUG by `SortedWritesTable.AssertPendingSortCells`, which walks the pending row queues without dequeuing), and a stale row is rewritten by the next rebuild or settle.
 
 **`PrepareForWrite()`:**
-- if the parent is not frozen, call `Parent.Rebuild()`;
-- if `!IsUnionFindCurrent || Tables!.NeedsCatchUp`, call `Rebuild()`.
+- if the parent is not frozen, call `Parent.Rebuild()`, then apply the stopped-parent rule (§6.9);
+- if `!IsUnionFindCurrent || Tables!.NeedsCatchUp`, or the eq-container version moved since the context's guard last ran (§7.4), call `Rebuild()`.
 
 ### 6.7 Retraction (C10, decision 1, R1)
 
@@ -984,8 +1003,12 @@ It leaves rebuild work pending (spike semantics): a union makes the context not 
 | `CheckSubsume` | ok | throw | ok | ok | throw |
 
 **Enforcement points:**
-- Both `ExecutionState.StageRemove` overloads (`Tables/ExecutionState.cs:131`, `:145`) call `guard?.CheckRemove(table)`. `Database.GuardForNewState()` returns `null` at a root whose gate has no live descendants and the store's guard otherwise; it is snapshotted when the state is created, which is sound because a child cannot be created while a state of the root is in use (structural calls are refused re-entrantly, §8.3). A root with no descendants therefore pays one null test per staged removal call. Rebuild and refresh stage through `MutationBuffer.StageRemove` and are never treated as retractions.
+- Both `ExecutionState.StageRemove` overloads (`Tables/ExecutionState.cs:131`, `:145`) call `guard?.CheckRemove(table)`. `Database.GuardForNewState()` returns the database's guard at every Store-backed database, the root included, and `null` only for a bare `Database`. A snapshot that is `null` at a root without live descendants would be unsound: a state from `CreateExecutionState`, or a buffer from `NewBuffer`, can outlive a later `CreateChild` and then delete the new child's rows. `RetractionGuard.AttachRoot` gives the root's guard the root's gate, and `CheckRemove`, `CheckClear` and `CheckSubsume` return after one inlined volatile read while the root has no live descendants. A Store's root therefore pays one guard load and one gate read per staged removal; a bare `Database` pays one null test. Rebuild and refresh stage through `MutationBuffer.StageRemove` and are never treated as retractions.
+- Buffers from `Database.NewBuffer` carry the database's guard (`MutationBuffer.AttachRetractionGuard`; `FreshHandle` copies it), so I22 holds at that entry point too. The check reuses the buffer's existing `allowsDelete` branch, so unguarded removals pay nothing. Buffers from `Table.NewBuffer` (rebuild, refresh and the internal table API) carry no guard.
+- The rule `Remove` instruction consults the guard once per batch; rule deletes would otherwise bypass decision 1 and R1.
 - `Database.ClearTable` calls `RetractionGuard?.CheckClear(table)`. `$uf` is never private, so clearing it throws while descendants live.
+- `Context.ClearTable` in a child refuses `$uf` and runs the guard and decision 2 checks before it changes anything; only a failure after those checks faults the child.
+- A frozen (shared) `SortedWritesTable` refuses `Clear`.
 - The bridge's subsume action calls `CheckSubsume`.
 
 **`ContextTables.ClearTable(t)`:**
@@ -1009,7 +1032,7 @@ It leaves rebuild work pending (spike semantics): a union makes the context not 
   - root tables that are not private: the root `Context.Gate`;
   - child layers that are not private: the owner's `Gate`;
   - private tables: none.
-- **`DescendantGate`** (`Layers/DescendantGate.cs`): `HasLiveDescendants` (volatile read), `LiveDescendants`, `Enter()`, `Exit()` (interlocked). Every `Context` owns one.
+- **`DescendantGate`** (`Layers/DescendantGate.cs`): `HasLiveDescendants` (volatile read), `LiveDescendants`, `Enter()`, `Exit()` (interlocked). Every `Context` owns one. It also carries change marks (`BeginChange`, `EndChange`, `Changes`, `IsChanging`), which `CreateChild` and `Dispose` set on every gate they change, so the checker compares a gate with the tree only on a consistent reading (§12.7).
 
 ### 6.9 Contradiction stop flag (L4, X11)
 
@@ -1030,15 +1053,17 @@ Once it is set:
 
 `IsContradictory` is `IsContradicted || (Schema.Contradiction is { } c && GetView(c).FindRow([], out _) >= 0)`.
 
+**Children of a stopped parent.** After rebuilding a parent that is not frozen, `Rebuild` and `PrepareForWrite` (so `Write`, `ClearTable` and `CreateChild`) check whether that parent was stopped by a contradiction. A child with `StopOnContradiction` becomes contradicted, which is sound because the contradiction row is visible in its parent (I25). Any other child gets `InvalidOperationException` without being faulted; it can only be disposed.
+
 ### 6.10 Lift support reads (L1)
 
-Both require `IsClean` and throw on the root.
+Both require `IsClean` and throw on the root. Like `ScanMerges` (§5.7), they enter the domain of a context that is not frozen, run the sink as a callback of the domain (§8.3), and count as running scans, which `Dispose` refuses (§8.2).
 
 - **`Context.ScanOwn<TSink>(t, ref sink)`** scans `TryGetLayer(t)?.Own.All()`, skipping tombstones. These rows are canonical here (I13). O(own rows).
 - **`Context.ScanAncestorsMentioning<TSink>(t, id, ref sink)`**:
-  - returns at once for a table without rebuild columns (no id can be mentioned), and for a local id (I10);
+  - returns at once for a table without rebuild columns (no id can be mentioned), for a context-private table, and for a local id (I10);
   - for each `j ∈ [ClearedFloor(t), Depth)`, takes `AncestorLayer(j, t).SharedRebuildIndex()!.Data.TryGetSubset(id, out rows)`;
-  - delivers each live row with `!HiddenBetween(t, j, r)`;
+  - delivers each live row with `!HiddenBetween(t, j, r)`, each row once;
   - id must be canonical here.
 
   Cost: O(uses of id); nothing is scanned.
@@ -1081,6 +1106,13 @@ return changed
 
 At the root this is `Database.Rebuild(uf, tables, clock)` (`Containers/Database.Containers.cs:122`), with identical numbering: read the clock, run the pass, increment, until nothing changes. The root `journalMark` is `RootUnionFind.Count` at the end of the loop. `Database.RebuildPass` merges any pending root writes inside `ApplyRebuild`'s `MergeAll`.
 
+Details the loop above leaves out:
+- Inside a callback of the domain (§8.3), a `Rebuild` that would run a pass throws `InvalidOperationException`; one with nothing to do returns false.
+- After `Parent.Rebuild()`, a child applies the stopped-parent rule (§6.9).
+- When the eq-container version moved since the child's guard last ran, the guard runs over the whole journal before the clean test, taking no epoch when nothing else is to do (§7.4).
+- `Rebuild` returns false when the catch-up only moved cursors and copied nothing. The settled depth advances only when a rebuild runs passes.
+- The DEBUG `CheckInvariants` is skipped when a contradiction stopped the merge with writes still pending.
+
 ### 7.2 Catch-up of ancestor rows (C8 step 2)
 
 `ContextTables.CatchUpRows(uint e)`:
@@ -1111,7 +1143,9 @@ Notes:
 - **`NeedsCatchUp`:** some a in `[settled, Depth)` has `Stamp(a) != cursors[a].Stamp`, where `Stamp(0)` is the root's `Database.ChangeStamp`.
 - **The semi-naive floor of (c′).** `Context.SemiNaiveFloor` is `max(CreatedAt, the largest epoch this context passed to NoteRuleRun)`. `NoteRuleRun(T)` (called by the bridge at the start of each run, §10.3) raises it; nothing else writes it, and only this context's catch-up reads it. Every watermark this context can use is at most its floor: its own watermarks are epochs it noted, and an inherited watermark is at most its `CreatedAt` (§10.2). A descendant checks ancestor appends against its own floor in its own catch-up, because it holds its own cursor into every unsettled ancestor, so no floor needs to travel up or down. Frozen contexts never catch up and never read it.
 - **(c′)** is the C7 safeguard. It never fires when writers stamp with the state's timestamp (I21): every engine and bridge path does, and children enforce it at the merge (X38). Tests assert `RestampedCopies == 0`.
-- Ancestor tombstones need no work: a replaced row reappears as an append.
+- Ancestor tombstones need no work: a replaced row reappears as an append. This relies on an invariant: an ancestor with live descendants tombstones a row without appending one only when its rebuild folds a rewritten row into an existing row after a union. It holds because every retraction entry point is guarded (§6.7) and compaction is gated (§6.8). `ContextTables.AncestorRowsChanged` documents it.
+- Context-private tables are left out of the row cursors and of the generation check (decision 1: descendants never read them).
+- `CatchUpRows` and the generation check skip an ancestor whose `ChangeStamp` did not move since its cursor's `Stamp`; this is equivalent to the loop above and cheaper.
 
 ### 7.3 One rebuild pass in a child (C5)
 
@@ -1142,6 +1176,8 @@ Notes:
 - Step 3 uses `SubsetTracker.RecentUpdates(uf, overlayTable)` over the journal suffix, plus `FirstRowSinceRebuild`. `RebuildTableOperation.Run` creates a state over the child's view, calls `ApplyRebuild`, flushes and records failures (`Database/RebuildTableOperation.cs`), and `RunOnTablesCore` (`Database/Database.Rebuild.cs`) notifies the table when it returns true, so `MergeAll` merges the rewrites. `$uf` is taken out meanwhile, as at the root.
 - **Incremental path for layers.** `SortedWritesTable.RebuildWith` (`Tables/SortedWritesTable.Rebuild.cs`) takes the incremental branch for a layered table whenever `delta ≤ max(rows, 64)`, instead of egglog's `ShouldRebuildIncrementally` (which requires more than 10 000 rows); `RefreshRebuildIndex` on a small own layer is cheap. Otherwise it takes `RebuildFull` over the own rows. The root keeps egglog's rule.
 - Imports are rewritten in own rows by step 3. Their ancestor rows are already invisible at P (I13), so step 4 needs own losers only.
+- Two shortcuts, each equivalent to the loop above: step 3 is skipped when no id was displaced since the last pass (X38), and step 4 leaves out own losers that are local to the child, which no ancestor row mentions (I10).
+- Step 4 reads a writable ancestor's rebuild index, which it refreshes from that ancestor's appends since the child's creation (§8.2, §14.2).
 - **Worked trace.**
   - The root holds `pair(1,2)=5` and `pair(3,2)=6`. C unions 3 with 1, and 3 loses.
   - Step 4 finds `pair(3,2)=6`, hides it (`Mentions`) and stages `pair(1,2)=6`.
@@ -1154,9 +1190,14 @@ Notes:
 
 - **Dirty log.** `Containers/ContainerDirtyLog.cs` lives on `Store`, with `End`, `Append`, `Since(ref int cursor)` and `Clear`.
   - The root's `Database.RebuildPass` appends `containerRebuild.DirtyIds` while `owner.Gate.HasLiveDescendants`.
-  - A child's `RefreshDirtyContainerIds(e)` consumes `Since(ref dirtyCursor)` and, when it is nonempty, calls `Database.RunOnTables(own layers with rebuild columns, new RefreshTableOperation(ids, e))` (`Database/RefreshTableOperation.cs`), which notifies every layer that re-staged rows. Root rows are re-stamped by the root itself and arrive as appends.
+  - A child's `RefreshDirtyContainerIds(e)` consumes `Since(ref dirtyCursor)` and, when it is nonempty, calls `Database.RunOnTables(own layers with rebuild columns, new RefreshTableOperation(ids, e))` (`Database/RefreshTableOperation.cs`), which notifies every layer that re-staged rows and returns whether any did. Root rows are re-stamped by the root itself and arrive as appends.
   - `Context.Dispose` clears the log when the root gate reaches zero.
-- **Eq guard.** `EqContainerGuard.Check(ctx)` (`Contexts/EqContainerGuard.cs`): if `ContainerValues.HasEqContainers`, then for the journal rows of this pass with `IsOwnDisplacement`, it throws `NotSupportedException` when `AnyEqContainerMentions(id)` (G-b). The context is then faulted.
+- **Eq guard (G-b).** `EqContainerGuard.Check(ctx)` (`Contexts/EqContainerGuard.cs`): if `ContainerValues.HasEqContainers`, it throws `NotSupportedException` when an eq-sort container holds one of the context's own displacements (`IsOwnDisplacement`, `AnyEqContainerMentions(id)`). The context is then faulted.
+  - Checking only the journal rows of each pass is not enough: the root can intern an eq-sort container naming a child's loser after the child displaced it, and the root's container rebuild can produce one.
+  - So `ContainerValues.EqVersion`, shared with every environment that holds ids, moves on each new content (an `Interlocked` increment), and a child records the version its guard last checked against. `IsClean` includes `IsEqGuardCurrent`: the journal is empty, or the version has not moved (§7.5).
+  - When the version moved, `Rebuild` runs the guard over the whole journal before its clean test, taking no epoch when nothing else is to do, and so does each pass's guard; `PrepareForWrite` rebuilds in that case.
+  - Own displacements are still the only ids checked: an intermediate ancestor's losers are its own guard's job, because a child is clean only while its parent is.
+- **Frozen databases intern no new eq-sort container** (`InvalidOperationException` in `ContainerEnv`'s insert path). A frozen context never runs its guard again, so a container interned at a frozen root naming a frozen descendant's loser could never be refused. Looking a container up, re-interning an existing one, and interning containers over base values stay allowed.
 - **Child databases never rebuild containers.** `RebuildContainers`, `RebuildPass` and `Rebuild` throw `InvalidOperationException` when `owner` is a child (§3.4).
 
 ### 7.5 `IsClean`
@@ -1165,11 +1206,12 @@ Notes:
 IsClean (root)  = !disposed && !faulted && (frozen || journalMark == DisplacedCount)                       // X42
 IsClean (child) = !disposed && !faulted && (frozen ||
                   (Database.Catalog.Notifications.IsEmpty && journalMark == DisplacedCount &&
-                   IsUnionFindCurrent && !Tables.NeedsCatchUp && Parent.IsClean))
+                   IsUnionFindCurrent && !Tables.NeedsCatchUp && IsEqGuardCurrent && Parent.IsClean))   // IsEqGuardCurrent: §7.4
 ```
 
 - At the root, pending notifications do not make it unclean: staged writes are invisible until merged, as in egglog. A child's view never includes them either; when the root merges them, its `ChangeStamp` moves and the child catches up.
 - The recursion stops at the first frozen ancestor, so the cost is O(unfrozen ancestors), as D16 requires.
+- **`IsViewCurrent`** is `IsClean` without its pending-notifications term, at every level of the chain: writes staged and not merged are invisible, as at the root (X42). Rule building, planning and rule runs in a child require it (§9.1).
 - `NotificationList.IsEmpty` (`Concurrency/NotificationList.cs`) is new: `lock` plus a count of 0.
 - Reads call `ThrowIfNotReadable()`:
   - disposed → `ObjectDisposedException`;
@@ -1186,11 +1228,12 @@ if !IsRoot: return
 if no registered table has SortedWritesTable.HasRowsSinceRebuild(uf): return       // O(tables)
 e = BeginEpoch()
 try:   Database.RunWithTakenOut(uf, Schema.FunctionTables, new SettleTableOperation(uf, RootUnionFind, e)); Database.MergeAll(e)
+       MarkRebuilt(uf) on every function table                                       // past the merged rewrites
 finally: EndEpoch()
 Rebuild()                                                                           // when the merge staged unions
 ```
 
-- **`SortedWritesTable.SettleAppends(TableId uf, Table ufTable, uint e, ExecutionState st)`** (new, `Tables/SortedWritesTable.Rebuild.cs`): returns false for a table without rebuild columns; otherwise gathers the live rows in `[FirstRowSinceRebuild(uf), Rows.Count)`, rewrites the stale ones with `RebuildRows` (the egglog rewrite: `remove` plus canonical `insert` stamped e), and calls `MarkRebuilt(uf)`. `HasRowsSinceRebuild(uf)` is `FirstRowSinceRebuild(uf) < data.Count` (`Tables/SortedWritesTable.RebuildWatermark.cs`).
+- **`SortedWritesTable.SettleAppends(TableId uf, Table ufTable, uint e, ExecutionState st)`** (new, `Tables/SortedWritesTable.Rebuild.cs`): returns false for a table without rebuild columns; otherwise gathers the live rows in `[FirstRowSinceRebuild(uf), Rows.Count)` and rewrites the stale ones with `RebuildRows` (the egglog rewrite: `remove` plus canonical `insert` stamped e). It shares `RebuildRange` with `RebuildFull`. `Settle` moves every function table's rebuild mark only after its `MergeAll`, past the merged rewrites, so the next `CreateChild` does not settle the same rows again. `HasRowsSinceRebuild(uf)` is `FirstRowSinceRebuild(uf) < data.Count` (`Tables/SortedWritesTable.RebuildWatermark.cs`), and false for a table without rebuild columns.
 - **`SettleTableOperation`** (`Database/SettleTableOperation.cs`, `ITableOperation`) mirrors `RebuildTableOperation`, so `RunOnTablesCore` notifies settled tables.
 - **Why it suffices.** Rows before a table's rebuild mark were canonical at the mark and are kept canonical by the journal-driven rebuilds since (egglog's rebuild). Rows after it are exactly the rows a raw write could have left stale. Once settled, a child's view starts canonical (I35); later root appends are checked by the child's catch-up branch (a).
 - **Cost.** O(rows written since the last rebuild) per `CreateChild` of a non-frozen root, and once at the root's freeze. Root programs that never create a child never settle.
@@ -1201,12 +1244,12 @@ Rebuild()                                                                       
 
 ### 8.1 `Context.Freeze(FreezeWarmup? warmup = null)`
 
-1. Return if already frozen. Throw if called re-entrantly (§8.3). Enter `Domain`. Throw if disposed, faulted or contradicted.
+1. Return if already frozen. Throw if called re-entrantly (§8.3). Enter `Domain`. Throw if disposed, faulted or contradicted, or if a failure is recorded and not taken.
 2. If the parent is not frozen, throw `InvalidOperationException("A context can be frozen only once its parent is.")`.
-3. `Rebuild()`, then, at the root, `Settle()` (§7.6). At the root, pending writes merge in the first pass (§7.1). The context is now clean: pending queues are empty and the rebuild is complete (C9 step 1).
+3. `Rebuild()`, then, at the root, `Settle()` (§7.6). At the root, pending writes merge in the first pass (§7.1). The context is now clean: pending queues are empty and the rebuild is complete (C9 step 1). A failure the rebuild or the settle recorded, and a contradiction the rebuild found, are refused here. These refusals, like those of step 1, do not fault: a recorded failure is not an exception (§8.4), and the context stays unfrozen and consistent, so the caller can take the failure and freeze again. An exception from the rebuild or from the database freeze still faults a child (X12).
 4. `Database.Freeze(warmup)` (`Contexts/Database.Freeze.cs`):
-   1. Throw if notifications are pending.
-   2. For each `TableInfo`, call `info.Table.Freeze()` (X13). This is a new virtual on `Table`; the default seals the pending state.
+   1. Adopt deferred layers (§6.2). Throw if notifications are pending, or if any table has pending writes (`Table.HasPendingWrites`); every table is checked before any is frozen.
+   2. For each `TableInfo`, call `info.Table.Freeze()` (X13). This is a new abstract member of `Table`.
       - `SortedWritesTable`: `ForceRehash()` (gated); `RefreshRebuildIndex()` only when `RebuildColumns` is nonempty (`Index<T>`'s constructor rejects an empty key, `Indexes/Index.cs:48`, so the nullary contradiction table and value-only tables have no rebuild index); `IsShared = true`; seal.
       - `DisplacedTable`: `CompressAll()`, seal.
       - `OverlayDisplacedTable`: `overlay.Freeze()`, seal.
@@ -1226,8 +1269,9 @@ Rebuild()                                                                       
 - `PendingState.Seal()` (`Tables/PendingState.cs`): `EnqueueRows` and `EnqueueRemovals` then throw `InvalidOperationException("The context is frozen.")`. That is one volatile read per buffer flush.
 - `Database.ThrowIfFrozen()` guards `MergeAll`, `MergeTable`, `NewBuffer`, `ClearTable`, `RunRuleSet`, `ApplyRebuild`, `RefreshRowsForValues`, `RebuildContainers`, `RebuildPass` and `Rebuild`.
 - `Index<T>.Refresh(Table, bool allowParallel = true)`; `IndexCatalog.GetOrRefresh` passes `!serialRefresh`.
+- `SortedWritesTable.Clear` throws on a frozen (shared) table.
 
-**`FreezeWarmup`** (`Database/FreezeWarmup.cs`) holds a list of `CachedIndexKey(TableId, ColumnId[])` (`Planning/CachedIndexKey.cs`). `FreezeWarmup.From(IEnumerable<PlanTemplate>)` uses `PlanIndexKeys.Collect` (§9.10). The bridge passes every cached plan (§10.8).
+**`FreezeWarmup`** (`Database/FreezeWarmup.cs`) holds a list of `CachedIndexKey(TableId, ColumnId[])` (`Planning/CachedIndexKey.cs`). `FreezeWarmup.From(IEnumerable<PlanTemplate>, IQuerySchema)` uses `PlanIndexKeys.Collect` (§9.10); it takes the schema to know which columns are cacheable (`IQuerySchema.IsCacheable`, §3.4). The bridge passes every cached plan (§10.8).
 
 ### 8.2 `Context.CreateChild(ContextOptions? options = null)` and `Dispose()`
 
@@ -1235,6 +1279,7 @@ Rebuild()                                                                       
 ```text
 ThrowIfDisposed; throw if faulted or contradicted; throw if called re-entrantly (§8.3)
 if !frozen: using Domain.Enter(); Rebuild(); if IsRoot: Settle()     // the parent is clean and canonical when cursors are initialized
+            refresh the rebuild indexes of this context and its non-frozen ancestors   // RefreshRebuildIndexesForChildren, ContextTables.RefreshOwnRebuildIndexes
 else: Debug.Assert(IsClean)
 if Depth + 1 > 31: throw InvalidOperationException       // X36
 child = new Context(store, this, options ?? Default)
@@ -1246,9 +1291,15 @@ lock (children) children.Add(child); foreach ancestor a (this included): a.Gate.
 Store.HasHadChildren = true
 ```
 
+- **Stopped parent.** The `Rebuild` above applies the stopped-parent rule of §6.9 to this context before a child is created.
+- **Failures.** A failure that this context's rebuild or the root's settle records during `CreateChild` stays recorded on this context, as for `Write` and `Rebuild`, which record failures without throwing. The child, which has its own failure slot, is still created. Taking that failure right after `CreateChild` is the bridge's job (§10.8).
+- **Rebuild indexes.** Creating a child of a context that is not frozen brings the rebuild indexes of that context and of its non-frozen ancestors up to date, as root work at child creation (§1 item 11): O(tables) plus the appends since each index's last refresh (all rows the first time, or after a compaction between child lifetimes). Afterwards the child's step 4 and its lift reads refresh a writable ancestor's index only from that ancestor's appends since the child's creation (§14.2).
+- DEBUG builds check I35 (`CheckRootSettled`) at `CreateChild` and `Freeze` of the root.
+
 **`Dispose`:**
 - A second call does nothing. The root throws. A re-entrant call throws (§8.3).
-- `lock (children)`: throws if any child is live.
+- `lock (children)`: throws if any child is live, and throws while a `ScanMerges`, `ScanOwn` or `ScanAncestorsMentioning` of the context runs, from its visitor or from another thread: a per-context scan counter that `Dispose` closes with a compare-and-swap. A frozen context is scanned without its domain, so the re-entrance check cannot see a dispose from inside its visitor.
+- The ancestors' gates and the tree change between `BeginChange` and `EndChange` (§6.8).
 - Enters `Domain`, which throws if it is busy on another thread.
 - Sets `disposed = true` (volatile), then removes itself from `Parent.children`.
 - `Gate.Exit()` on every ancestor, which releases compaction and retraction there.
@@ -1261,9 +1312,12 @@ Store.HasHadChildren = true
 **`ThreadAffinityGuard`** (`Concurrency/ThreadAffinityGuard.cs`):
 - `Enter()` is re-entrant on the owning thread. Otherwise it CASes the owner from 0, or throws `InvalidOperationException("…used from two threads at once; only children of a frozen context may run concurrently")`.
 - `Exit()` releases at depth 0.
-- `int Depth` (owner-thread only).
+- `int Depth` (owner-thread only); `IsHeld`.
+- `ThreadAffinityScope` (`Concurrency/ThreadAffinityScope.cs`) makes `using Domain.Enter()` allocation-free.
 
 **Re-entrant structural calls.** `CreateChild`, `Freeze` and `Dispose` throw `InvalidOperationException` when the calling thread already holds the context's domain (`Domain.Depth > 0` at entry): from inside a `Write` action, a rule's action or external, a `ScanMerges` visitor or a sink. Reads inside visitors stay allowed. This keeps every structure a running operation captured (states, guards, snapshots) valid until it ends.
+
+**Nested writes.** A write batch's action, a `ScanMerges`, `ScanOwn` or `ScanAncestorsMentioning` visitor or sink, and a child's rule search (§9.1) run as callbacks of the domain (`ThreadAffinityGuard.EnterCallback`, `ExitCallback`, `InCallback`). Inside a callback, `Write` and `Union` on any context of the domain, and a `Rebuild` that would run a pass, throw `InvalidOperationException` before anything is staged or faulted. Otherwise a nested rebuild would run an epoch inside the batch's epoch (breaking I3, and faulting the child through the journal's order check), a nested ancestor write would change the parent the batch caught up with, and a write inside a visitor would change the partition being scanned. Reads, and rebuilds with nothing to do, stay allowed.
 
 **Domains:**
 - A context that is not frozen shares its domain with every descendant created under it.
@@ -1285,6 +1339,7 @@ Together these give happens-before for every ancestor structure a child reads.
 - `DependencyGraph.levelSnapshot`;
 - the `ExternalFunctionRegistry` snapshot;
 - `ContainerValues` (thread-safe interning);
+- the root's `BaseValues` registry (thread-safe);
 - frozen ancestors' once-cells (serial builds);
 - `children` lists (locked).
 
@@ -1293,7 +1348,7 @@ Together these give happens-before for every ancestor structure a child reads.
 ### 8.4 Exceptions
 
 - **Root:** `Database`'s guarantee (`Database/Database.Merge.cs` catch): every table is back, the unmerged round stays notified, caches are reset.
-- **Child:** any exception escaping `Write`, a rule run, `Rebuild` or `Freeze` sets `IsFaulted` (X12). Every later call except `Dispose` throws.
+- **Child:** any exception escaping `Write`, a rule run, `Rebuild` or `Freeze` sets `IsFaulted` (X12). Every later call except `Dispose` throws. Refusals made before anything changes do not fault: the rule-run guards (§3.4), `Freeze`'s failure and contradiction refusals (§8.1), `ClearTable`'s checks (§6.7), nested writes (§8.3) and the stopped-parent refusal (§6.9).
 - Panics recorded through `ExecutionState.ReportFailure` are not exceptions and do not fault.
 
 ---
@@ -1309,15 +1364,18 @@ internal interface ILayerViewSource         // Layers/ILayerViewSource.cs; imple
 }
 internal sealed class ContextView : ILayeredHeaderEvaluator, IPlanStatistics      // Execution/ContextView.cs
 {
-    public static ContextView ForRoot(Database root);          // one LayerView per table, HiddenRows.None; cached per table
+    public static ContextView ForRoot(Database root);          // one LayerView per table (TableView.ForTable), HiddenRows.None; caches its own root views, so a bare Database works too
     public ContextView(Database database, ILayerViewSource source);
     public Database Database { get; }  public int Depth { get; }  public int LayerCount => Depth + 1;
     public bool IsLayered => Depth > 0;
+    public ILayerViewSource? Source { get; }  public bool CanCanonicalize { get; }
     public ParallelHeuristics Parallelism => Database.Parallelism;
     public long SizeEstimate => Database.TotalSizeEstimate;     // child: own rows only (C9, X26)
     public long Generation { get; }
+    public long Stamp { get; }                                  // Σ Database.ChangeStamp over the context and its ancestors (Context.ViewStamp); 0 without a context
     public TableView GetTableView(TableId table);               // child: $uf throws NotSupportedException (X23)
     public ViewSnapshot Snapshot(ReadOnlySpan<TableId> tables); // the cached instances, pinned for one run
+    internal ViewSnapshot Snapshot(ReadOnlySpan<RulePlan> rules, DenseIdMap<ActionId, ActionInfo> actions, TableId? skipLookups);   // atoms and lookup tables of a rule set (RuleSet.LookupTable)
     public bool TryCanonicalize(uint id, out uint canonical);   // false only for a bare Database (X19)
     public LayeredSubset Evaluate(TableId t, ReadOnlySpan<Constraint> cs, List<Constraint> fast, List<Constraint> slow);   // §9.4
     public int EstimateSize(TableId table, Constraint? constraint);
@@ -1326,7 +1384,8 @@ internal sealed class ContextView : ILayeredHeaderEvaluator, IPlanStatistics    
 }
 internal sealed class ViewSnapshot          // Execution/ViewSnapshot.cs: TableView?[] by table index; immutable
 {
-    public TableView? Get(TableId table);
+    public int Count { get; }  public TableView? Get(TableId table);  public TableView Require(TableId table);
+    internal bool Wraps(TableView?[] array);                    // whether it is a snapshot over this array (the shared root snapshot)
 }
 ```
 
@@ -1335,10 +1394,12 @@ internal sealed class ViewSnapshot          // Execution/ViewSnapshot.cs: TableV
 **Wiring:**
 - `Database.View` is created lazily at the root and assigned at child construction.
 - `RuleSetBuilder(Database db)` evaluates headers through `db.View` (`InstantiateLayered`, §9.4).
-- `RuleSetBuilder.Build()` collects the tables of every rule's atoms and of its actions' lookup instructions (`Lookup`, `LookupWithDefault`, `LookupWithFallback`, `LookupOrInsertDefault`), and stores `View.Snapshot(tables)` and `View.Generation` in the `RuleSet` (`RuleSet.Views`, `RuleSet.ViewGeneration`). Header evaluation and the snapshot read the same cached instances, because nothing invalidates views between them.
-- `Database.RunRuleSet` throws `ArgumentException` unless the rule set was built on this database's view, asserts the generation is unchanged, sets `layers.InSearch = true` around `RunRulesSerial`/`RunRulesParallel`, and gives the root state `views = ruleSet.Views`.
+- `RuleSetBuilder.Build()` stores in the `RuleSet` (`RuleSet.View`, `RuleSet.Views`) the snapshot `View.Snapshot(rules, actions, skip)`: the tables of every rule's atoms and of its actions' lookup instructions (`Lookup`, `LookupWithDefault`, `LookupWithFallback`, `LookupOrInsertDefault`), found through `RuleSet.LookupTable` without building a list. In a child `skip` is `$uf`, which a child reads through its overlay table, not a view (X23).
+- The builder records `View.Generation` and `View.Stamp` (`RuleSet.ViewGeneration`, `RuleSet.ViewStamp`) when its first header is evaluated, not at `Build`. Header subsets name row ids, which a merge, hide, clear or compaction anywhere on the chain changes without changing any view's structure; the stamp catches those, and the generation catches dropped views. Header evaluation and the snapshot read the same cached instances while neither moved.
+- `Database.RunRuleSet` throws `ArgumentException` unless the rule set was built on this database's view. A rule set assembled by hand through `RuleSet`'s public constructor (no view) runs on a database that is not layered, its views pinned when the run starts, and is refused with `ArgumentException` on a layered one. In a child the run applies §3.4's guards: it throws `InvalidOperationException` when the views are not current (§7.5) or when the generation or the stamp moved since the first header. The check is at the run, not at `Build`, because the views can also move between `Build` and the run. The root keeps egglog's rule: build right before running. The run sets `layers.InSearch = true` around `RunRulesSerial`/`RunRulesParallel`, as a callback of the domain (§8.3), and gives the root state `views = ruleSet.Views`.
+- **Current views.** `ContextView.Evaluate`, a child's `Snapshot` (when it reads any table) and the planning statistics require `IsViewCurrent` in a child (§7.5); `EstimateSize` does not, and building an empty rule set needs no current views.
 - `JoinRun(Database db, ViewSnapshot views, ExecutionSignals signals, bool parallel, FrameUpdatesPool?)` and `RuleWork` read tables from the snapshot (today's `db.GetTableInfo(info.Table)` at `Execution/JoinRun.cs:178` becomes `views.Get(info.Table)`). `idleSerialJoin` stays per `Database`.
-- At the root the snapshot holds the root's cached single-layer views; building it allocates one array per rule set, outside the run that `ExecutorAllocationProbeTests` measures.
+- **Root views.** `ContextView.ForRoot` caches its own single-layer views (`TableView.ForTable`, over any table kind, so `$uf`, tables that are not `SortedWritesTable`s and bare databases are covered), rather than using `LayeredSchema.RootView`. Every root rule set shares one `ViewSnapshot` over that cache, which is sound because its entries are only ever filled; a new snapshot is made only when the cache array grows. A root snapshot leaves out the tables of action lookups, which root lookups never read through it (§6.5). Building a root rule set therefore allocates no snapshot.
 
 ### 9.2 Layered subsets (`Offsets/`)
 
@@ -1349,20 +1410,20 @@ internal sealed class ViewSnapshot          // Execution/ViewSnapshot.cs: TableV
 - `Subset[]? layers` with `uint mask`: per-layer subsets when two or more layers are non-empty.
 
 **Members:**
-- `Empty`, `Single(int, Subset)`, `FromLayers(Subset[], SubsetArrayPool?)` (collapses to `Single` when possible);
-- `Size`, `IsEmpty`, `IsMultiLayer`, `LayerMask`, `SingleLayer`, `SingleRows`;
+- `Empty`, `Single(int, Subset)`, `FromLayers(Subset[], SubsetArrayPool?)`: accepts an array of any length up to 32, takes ownership of it, disposes its empty entries, and collapses to `Single` when possible;
+- `Size`, `IsEmpty`, `IsMultiLayer`, `LayerMask` (0 for an empty single-layer subset), `SingleLayer` (−1 for a multi-layer subset), `SingleRows` (throws `InvalidOperationException` for a multi-layer subset);
 - `GetLayer(int) → SubsetRef`;
 - `Intersect(in LayeredSubset, SubsetArrayPool?)`: two singles in the same layer use today's `Subset.Intersect`, which is the root path; otherwise it works per layer and collapses;
-- `Clone`, `Take`, `Dispose(pool)`.
+- `Clone(SubsetArrayPool? pool = null)`, `Take`, `TakeSingle`, `Dispose(pool)`, and a single-layer `GetEnumerator`, so code written against `Subset` headers (`PlanInstantiationTests`, `NaiveRuleRunner`) compiles unchanged.
 
-**`SubsetArrayPool`** (`Offsets/SubsetArrayPool.cs`) is a non-thread-safe stack of `Subset[LayerCount]`, owned by `TrieNodePool`.
+**`SubsetArrayPool`** (`Offsets/SubsetArrayPool.cs`) is a non-thread-safe stack of `Subset[LayerCount]`, owned by `TrieNodePool` (§9.5). It keeps only arrays of exactly `LayerCount` entries, at most `MaxRetained` (1024) of them, and checks in DEBUG that a returned array owns no buffers.
 
 ### 9.3 Visibility in scans and index builds (decisions' engine-wide rule)
 
 **`Tables/Table.cs`:**
 - `abstract Subset RefineVisible(Subset s, HiddenRows hidden)`.
 - Hidden-aware overloads of `ScanGenericBounded`, `ScanGeneric`, `ScanProject` (sink and `TaggedRowBuffer` forms) and `ForEachColumn`.
-- The existing overloads forward `HiddenRows.None`. Dispatch is on `Kind`, with new `OverlayDisplaced` arms.
+- The existing overloads are unchanged: they keep calling the plain sealed scans, and the hidden-aware overloads fall back to them when given `HiddenRows.None`. Results are the same as forwarding `None`, and the root, which calls the plain overloads, pays not even an `IsNone` test per call (§1 item 11). Dispatch is on `Kind`, with new `OverlayDisplaced` arms.
 
 **`Tables/SortedWritesTable.Scan.cs`:**
 - When `hidden.IsNone`, it runs today's code byte for byte.
@@ -1373,10 +1434,11 @@ internal sealed class ViewSnapshot          // Execution/ViewSnapshot.cs: TableV
 
 **Index builds:**
 - `Indexes/ColumnIndex.cs` gains `BuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)`, `RebuildForSubset(...)` and internal `MergeSubsetVisible(...)`.
-- `ColumnIndex.Build.cs` gains `RebuildFull(..., HiddenRows)`.
-- `TupleIndex.BuildForSubset(..., HiddenRows)`.
+- `ColumnIndex.Build.cs` gains `RebuildFull(..., HiddenRows)`; both `RebuildFull` overloads share the private `RentPairs` and `GroupPairs`, and the root's `RebuildFull` behaves as before.
+- `TupleIndex.BuildForSubset(..., HiddenRows)` and internal `TupleIndex.MergeSubsetVisible(...)`, matching `ColumnIndex`'s.
 - `TableIndexing.GroupByColumn/GroupByKey(..., HiddenRows)`.
-- `Execution/SparseColumnIndex.Build(Table, SubsetRef, ColumnId, HiddenRows)`.
+- `Execution/SparseColumnIndex.Build(Table, SubsetRef, ColumnId, HiddenRows)`, with a private `Group`.
+- As for scans, the plain index-build overloads are unchanged, and the hidden-aware ones fall back to them for `HiddenRows.None`. T2 and T3 assert that `None` matches the plain overloads bit for bit.
 - Catalog content (`Index.Refresh`, `MergeSubset`) stays hidden-agnostic (C6: hides are not index content).
 
 **`Tables/RowOps.cs`:** `static RowOps.IsVisible(uint[] data, int rowBase, int row, HiddenSet? frozen, HiddenSet? live)`, `AggressiveInlining`, for M12.
@@ -1393,7 +1455,7 @@ internal sealed class ViewSnapshot          // Execution/ViewSnapshot.cs: TableV
 ```text
 tv = GetTableView(t)
 if !IsLayered: return Single(0, ConstraintProcessor.Process(tv.Layers[0].Info, cs, fast, slow))
-if tv.PresentMask == 0: ConstraintProcessor.Split(...); return Empty
+if tv.PresentMask == 0: ConstraintProcessor.Split(root entry of t, or the database's own entry for synthetic layers, ...); return Empty
 for each present l: s_l = Process(lv_l.Info, cs, lf, ls)    // ts ranges: one binary search per layer
 a constraint is fast overall iff fast in some present layer; layers where it was slow refine with lv_l.Table.RefineOne
 return FromLayers(s_0..s_D)
@@ -1409,18 +1471,18 @@ return FromLayers(s_0..s_D)
 ### 9.5 Trie nodes, probers and kernels
 
 **`Execution/TrieNode.cs`:**
-- `Subset subset` becomes `LayeredSubset rows`.
-- New members: `Size`, `IsEmpty`, `LayerMask`, `IsMultiLayer`, `SingleLayer`, `GetLayerRows(int)`, `Initialize(LayeredSubset, bool)`, `Intersect(in LayeredSubset, SubsetArrayPool?)`, `GetCachedIndex(ColumnId, int layer, LayerView)`, `ResetDense(int layer, OffsetRange, TrieNodePool)`.
+- A single-layer node, which includes every root node, keeps a plain `Subset` plus a layer byte inline. A multi-layer node's rows, and the spare indexes of a recycled node, live in a `TrieNodeSideState` (`Execution/TrieNodeSideState.cs`), created on first use and kept with the node through the pool, so a warm serial run allocates none; a concurrent node with multi-layer rows (a child's parallel run) allocates one. `IsMultiLayer` is one flag test, and the node stays 64 B. Holding a `LayeredSubset` inline grew it to 80 B, which a parallel root run pays per frame at join positions 0 and 1 (§1 item 11).
+- New members: `Size`, `IsEmpty`, `LayerMask`, `IsMultiLayer`, `SingleLayer`, `GetLayerRows(int)`, `Initialize(LayeredSubset, bool)`, `Initialize(int layer, Subset, bool)`, `Intersect(in LayeredSubset, SubsetArrayPool?)`, `GetCachedIndex(ColumnId, int layer, LayerView)`, `ResetDense(int layer, OffsetRange, TrieNodePool)`. Cache arrays are sized from the rows' highest layer, and growing them copies the old entries.
 - Children: `TryGetChild(int slot, ...)`, `AddChild(int slot, ...)`, `static ChildSlot(int column, int selector, int arity)`.
 - Index slot: `IsMultiLayer ? layer * arity + column : column`. Child-map slot: `selector * arity + column`, where selector 0 means all layers and `l+1` means layer l only. A single-layer node, which includes every root node, uses today's slots after one `IsMultiLayer` test.
 
-**`TrieNodePool`:** `SubsetArrayPool Layers`, `Rent(LayeredSubset)`, `Rent(int layer, Subset)`; `Rent(Subset)` means layer 0.
+**`TrieNodePool`:** `SubsetArrayPool? Layers` (null for one-layer runs, so a root run allocates no array pool), `Rent(LayeredSubset)`, `Rent(int layer, Subset)`; `Rent(Subset)` means layer 0.
 
 **Probers:**
 - **`Execution/ProberPiece.cs`** (struct): `Kind`, `byte Layer`, `HasOuter`, `MayHoldInvisible`, `Outer`, `Column`, `Tuple`, `Sparse`, `LayerView View`, `Count`, and `TryGetSubset(uint)` / `TryGetSubset(uint[])`.
-- **`Execution/Prober.cs`** (changed): `TrieNode Node`, `ProberPiece First`, `ProberPiece[]? Rest`, `RestCount`, `PieceCount`, `Count` (the sum), `GetPiece(ref p, i)`.
+- **`Execution/Prober.cs`** (changed): `TrieNode Node`, `ProberPiece First`, `ProberPiece[]? Rest`, `RestCount`, `PieceCount`, `Count` (the sum), `GetPiece(ref p, i)`; `TryGetSubset` forwards to the first piece. A prober is 72 B (48 B before M10.2). It is per-position scratch, allocated once per join task, so a parallel root run pays it per morsel (§14.1).
 - **`ProberCursor.MoveNext(in ProberPiece)`.**
-- **`Execution/LayerHits.cs`:** per-position scratch (`SubsetRef[] Rows`, `int[] Pieces`, `Count`, `Total`).
+- **`Execution/LayerHits.cs`:** per-position scratch (`SubsetRef[] Rows`, `int[] Pieces`, `Count`, `Total`). The per-position array is allocated on first use, so a root run never allocates it.
 - **`FrameUpdate`** gains `byte Layer`; the struct stays 24 bytes (`FrameUpdateKind` is a byte enum).
 - **`FrameUpdates`:** `RefineAtomDense(AtomId, int layer, OffsetRange)`, `RefineAtomSubset(AtomId, int layer, Subset, TrieNodePool)`, `RefineAtomLayered(AtomId, LayeredSubset, TrieNodePool)`.
 
@@ -1437,7 +1499,7 @@ return FromLayers(s_0..s_D)
 - **Probed sides joined across layers:** a probe with `PieceCount == 1` takes today's path. Otherwise `ProbeAll` gathers the hits and `RefineHits` builds a `LayeredSubset`, cached under selector 0.
 - `RefineVisible(rows, cs, lv, mayHoldInvisible)` refines visibility only when the flag is set: rows from a visibility-aware build are already visible.
 - FusedScan, FusedIntersect and Mat stages loop over the cover node's layers, using the hidden-aware scan overloads.
-- `Replay` passes `e.Layer`; `CloneForMorsel` copies `views`.
+- `Replay` passes `e.Layer`; `CloneForMorsel` copies `views` and the roots array (tasks only compare nodes against it, to attribute counters).
 
 **Existence checks** (`JoinRun.BeginRule`) scan each layer in `node.LayerMask` with the hidden-aware `ScanGenericBounded`. This fixes map §8.1 row 2.
 
@@ -1462,22 +1524,22 @@ A (node, slot, key) always names one well-defined row set (I28):
 
 **What is recorded.**
 - Query constants: `IdConstant` (`Query/IdConstant.cs`), recorded by `RuleQueryBuilder.RecordIdConstants` (`Query/RuleQueryBuilder.cs:188`) for `EqConst` constraints and constant entries on Id columns, as today.
-- Action constants (new): `ActionIdConstant(int Instr, int Operand, Value Value)` (`Query/ActionIdConstant.cs`, a readonly record struct). `RuleBuilder` (`Query/RuleBuilder.cs`) records one for every constant operand that:
+- Action constants (new): `ActionIdConstant(int Instr, int Operand, Value Value)` (`Query/ActionIdConstant.cs`, a readonly record struct). `RuleBuilder.Build` (`Query/RuleBuilder.cs`) records them once, by scanning the program through `ActionSubstituter.Operands`, so the operand order is defined in one place. It records one for every constant operand that:
   - lands in an Id column of the instruction's table: `Insert` and `InsertIfEq` values, `Remove` keys, `Lookup`/`LookupWithDefault`/`LookupWithFallback` keys, `LookupOrInsert` keys and `WriteVal` entry defaults (`GetIdColumns(table)`), or either id column of the store's union-find table; or
-  - is flagged as an Id by the caller: new `QueryEntry.IdConst(Value)` (`Planning/QueryEntry.cs`) sets a new `IsIdConstant` flag. This covers `AssertEq`, `AssertNe`, `AssertAnyNe`, `InsertIfEq`'s comparands and external-function arguments, which have no table column. The bridge lowers every Id-typed constant through `IdConst`.
+  - is flagged as an Id by the caller: new `QueryEntry.IdConst(Value)` (`Planning/QueryEntry.cs`) sets a new `IsIdConstant` flag. This covers `AssertEq`, `AssertNe`, `AssertAnyNe`, `InsertIfEq`'s comparands and external-function arguments, which have no table column. The bridge lowers every Id-typed constant through `IdConst`. `QueryEntry` equality ignores the flag (a flagged and an unflagged constant of one value are the same operand), and `WithConstant` keeps it.
 
-  `Operand` indexes the instruction's operands in the order `ActionSubstituter` defines per `InstrKind`. `ActionInfo` (`Query/ActionInfo.cs`) gains `ActionIdConstant[] IdConstants`; `CachedPlan` carries it through `Actions`.
+  `Operand` indexes the instruction's operands in the order `ActionSubstituter` defines per `InstrKind`. `ActionInfo` (`Query/ActionInfo.cs`) gains `ActionIdConstant[] IdConstants`; `CachedPlan` carries it through `Actions`. A substituted `ActionInfo` keeps the written list.
 
 **Types:**
 
 | Type (file) | Role |
 |---|---|
-| `CanonicalConstants` (`Query/CanonicalConstants.cs`) | `static uint[]? Compute(ContextView view, IdConstant[] query, ActionIdConstant[] action)`: `null` iff there are none; otherwise, for each constant in that order, `view.TryCanonicalize(c) ? canonical : c.Value.Rep`. This is **K**. |
+| `CanonicalConstants` (`Query/CanonicalConstants.cs`) | `static uint[]? Compute(ContextView view, IdConstant[] query, ActionIdConstant[] action, uint[]? written = null)`: `null` iff there are none; otherwise, for each constant in that order, `view.TryCanonicalize(c) ? canonical : c.Value.Rep`. This is **K**. When no constant changes, and always for a bare `Database`, it returns the written vector itself (`Written(query, action)`, which the cached plan keeps), so a run allocates nothing per rule. |
 | `ConstantSubstitution` (`Query/ConstantSubstitution.cs`) | The query entries `(atom, column, written, canonical)` and action entries `(instr, operand, written, canonical)` that differ. `Create` returns `null` when nothing differs. |
 | `TemplateSubstituter` (`Query/TemplateSubstituter.cs`) | `Substitute(PlanTemplate, ConstantSubstitution)` rewrites only the matching `EqConst`s in atoms, headers, existence checks, stages and blocks. It shares unchanged sub-objects; new stage arrays get their own `PreparedBlock`. |
 | `ActionSubstituter` (`Query/ActionSubstituter.cs`) | `Substitute(ActionInfo, ConstantSubstitution)` builds a new `ActionInfo` whose changed instructions are new instances with the canonical operands; unchanged instructions are shared. |
 | `ConstantVariant` (`Query/ConstantVariant.cs`) | `(uint[] Key, PlanTemplate Template, ActionInfo Actions)`. |
-| `CachedPlan.GetVariantFor(uint[]? K)` (`Query/CachedPlan.cs`) | Returns `(Plan, Actions)` when K is null or equals the written values. Otherwise it consults a copy-on-write `ConstantVariant[]` (at most 16 entries; insert under a lock, then double-check). |
+| `CachedPlan.GetVariantFor(uint[]? K)` (`Query/CachedPlan.cs`) | Returns `(Plan, Actions)` when K is null or equals the written values. Otherwise it consults a copy-on-write `ConstantVariant[]` (at most `MaxVariants` = 16 entries; insert under a lock, then double-check). When the array is full, a new K's variant replaces the oldest; if it stopped caching instead, a Store-backed root would rebuild its variant on every run after 16 canonical changes. |
 
 **Call sites:**
 - `RuleSetBuilder.AddRuleFromCachedPlan(cached, extras, uint[]? canonical = null)` computes K if it is not given, takes `GetVariantFor(K)`, instantiates the variant's template and pushes the variant's actions.
@@ -1501,7 +1563,7 @@ At a Store-backed root, K differs from the written values only for a constant th
 - each `Probe.Scan.ToIndex`: a column index for one column, a tuple index otherwise;
 - each `EqConst` header column.
 
-`FreezeWarmup.From` feeds this list to `Database.Freeze` (§8.1).
+`FreezeWarmup.From(plans, schema)` feeds this list to `Database.Freeze` (§8.1).
 
 ---
 
@@ -1642,8 +1704,8 @@ Bridge `IsClean` is `context.IsClean && hostWrites.IsEmpty && (Parent?.IsClean ?
 
 ### 10.7 Containers (decision 9, C13)
 
-- **Registration:** `ContainerValues.RegisterType<T>(CounterId, ContainerMergeFunction, bool holdsIds = true)`. `ContainerEnvBase.HoldsIds`. Containers over base values register with `holdsIds: false`; the rule layer's built-in `ValueSet<T>` (rule-layer D20) is one, registered by that layer.
-- **New members:** `ContainerValues.HasEqContainers`, `ContainerValues.AnyEqContainerMentions(uint)`, `ContainerEnvBase.AnyContainerMentions(uint)` and `ContainerValueIndex.ContainsElement(uint)`.
+- **Registration:** `ContainerValues.RegisterType<T>(CounterId, ContainerMergeFunction, bool holdsIds = true)`. `ContainerEnvBase.HoldsIds`. Containers over base values register with `holdsIds: false`.
+- **New members:** `ContainerValues.HasEqContainers`, `ContainerValues.AnyEqContainerMentions(uint)`, `ContainerValues.EqVersion`, `ContainerEnvBase.AnyContainerMentions(uint)`, `ContainerEnvBase.EqVersionCounter` and `ContainerValueIndex.ContainsElement(uint)`. The storage members exist since M9.4, because G-a and G-b are M9.4 content; the bridge sets `holdsIds` when it registers containers.
 - **G-a:** `ContainerEnv.GetOrInsert` throws `InvalidOperationException` when `HoldsIds && state.InChildContext` (§6.5). `TryGetId` stays allowed.
 - **G-b, G-c:** §7.4.
 
@@ -1919,7 +1981,7 @@ Multiplicity may exceed the flat executor's only for keys that the own layer sha
 
 *Checker:* T4, T5; `ExecutorInvariants` check 2.
 
-**I29. Header coherence.** Headers and root nodes come from the same `TableView`s: the rule set's `ViewSnapshot`, taken at `Build` from the cache that header evaluation used. Nothing invalidates a view during the search (I34), and `RunRuleSet` asserts `ViewGeneration` is unchanged. *Checker:* T6.
+**I29. Header coherence.** Headers and root nodes come from the same `TableView`s: the rule set's `ViewSnapshot`, taken at `Build` from the cache that header evaluation used. Nothing invalidates a view during the search (I34). In a child, `RunRuleSet` refuses a rule set whose `ViewGeneration` or chain stamp (`ContextView.Stamp`) moved since its first header was evaluated (§9.1). *Checker:* T6.
 
 ### 12.6 Rules and lift
 
@@ -1948,7 +2010,7 @@ Multiplicity may exceed the flat executor's only for keys that the own layer sha
 
 **I32. Member maps (L2).** `Members(c)` is exactly the set of non-local, parent-canonical m with `Find_K(m) = c` (or `[c]` for an untouched class). The overlay's classes are exactly C's merged classes over P-canonicals once current (I5, I6). `MemberMap` copies the slots, filters local ids, and is invalidated by `UnionFindOverlay.Version`. *Checker:* bridge check C4.
 
-**I33. Lift soundness and completeness (L1, rule-layer §3.9, G1 fixed).**
+**I33. Lift soundness and completeness (L1, rule-layer §6.9, G1 fixed).**
 - **Soundness.** A lifted fact or equality holds in every live case, vacuous cases have no satisfying assignment (I25), and coverage is the caller's obligation. A case-joined value satisfies `v_K ⊑ J`. `StageTerm` asserts nothing.
 - **Completeness of facts.** Suppose R(Y) holds in seed case r and not in P. Let ρ = R(Find_r(Y)).
   - If ρ is an own row of r, step (a) yields Y through `Members`.
@@ -1969,16 +2031,20 @@ Multiplicity may exceed the flat executor's only for keys that the own layer sha
    4. cursor bounds and `IsUnionFindCurrent` (I9);
    5. local ids absent from ancestor overlays, journals and root rows (I10);
    6. frozen prefix, and a flattened map that agrees with the chain (I23);
-   7. `Gate.LiveDescendants` equals the recursive count.
-2. **`ContextTables.CheckInvariants`:** I12–I18 (including `UnsealedCount == 0`), I10 (the tables part), and every own layer adopted with an empty pending queue.
-3. **`ExecutorInvariants.Check`** (`Execution/ExecutorInvariants.cs`): view coherence, frozen catalogs current, per-layer sort order, creation stamps, watermark bounds (`Since ≤ clock`, `≥ CreatedAt`), canonical view, unique keys, hidden rows in range.
+   7. `Gate.LiveDescendants` equals the recursive count. The comparison is made only on a consistent reading of the tree and the gate (the gates' change marks, §6.8, with up to 16 retries). Under a frozen context whose descendants never stop changing, one run may skip this item rather than report a false violation; a context that is not frozen is always checked exactly, inside its domain.
+2. **`ContextTables.CheckInvariants`:** I12–I18 (including `UnsealedCount == 0`), I10 (the tables part), and every own layer adopted with an empty pending queue. Its cost is proportional to the context: I12 and I15 are checked over own rows and own hides; the ancestor part of I13 through the ancestors' rebuild indexes and the rows appended since creation; I14 by `Find` for constructors, by key for relations, and otherwise by the table's merge on a scratch catalog. I35 is a separate `CheckRootSettled`, run in DEBUG at `CreateChild` and `Freeze` of the root. `Context.CheckInvariants` adds a G-b part with this item, `CheckEqContainerElements`: no own displacement of a child is an element of an eq-sort container (the storage half of the bridge's C6).
+3. **`ExecutorInvariants.Check`** (`Execution/ExecutorInvariants.cs`): view coherence, frozen catalogs current, per-layer sort order and run index, creation stamps, watermark bounds (`Since ≤ clock`, `≥ CreatedAt`), canonical view, unique keys, hidden rows in range. Scope as built:
+   - the row-level properties (sort order and run index, creation stamps, canonical cells, unique keys) are checked on the context's own rows only;
+   - the view checks are skipped while any hidden set is unsealed, which the tables part reports (I18);
+   - two states are tolerated, as they are not violations: an empty layer created without a merge (X37) that a cached view does not have, and a `LayerView` that still says not frozen after its context froze;
+   - the watermark bounds are checked on `SemiNaiveFloor`; per-rule watermarks are bridge state, checked by C1.
 
 `EGraphContext.CheckInvariants()` (always compiled) calls the above and adds:
 - C1: progress `LastRunAt ≤ clock` and `≥ CreatedAt` in a child;
 - C2: frozen state current;
 - C4: member maps;
 - C5: stop implies `IsContradictory`;
-- C6: no own displaced id is an eq-container element;
+- C6: no own displaced id is an eq-container element (a wrapper of `CheckEqContainerElements`);
 - C7: tree and descendant counts.
 
 It throws `ContextInvariantException` (`Bridge/ContextInvariantException.cs`).
@@ -2017,9 +2083,9 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 
 **Lifecycle**
 
-22. `Freeze` with a writable parent, a stopped or faulted context, or a failure not taken → throws. A second `Freeze` is a no-op. Freezing a context that has live children is allowed: the children catch up once and get their own domains.
+22. `Freeze` with a writable parent, a stopped or faulted context, or a failure not taken → throws. A failure recorded, or a contradiction found, by `Freeze`'s own rebuild or settle → throws without faulting; the context stays unfrozen (§8.1). A second `Freeze` is a no-op. Freezing a context that has live children is allowed: the children catch up once and get their own domains.
 23. `Dispose` of the root or of a context with children → throws. A second `Dispose` is a no-op. Every later call → `ObjectDisposedException`.
-24. `CreateChild` on a dirty writable parent rebuilds it first (and settles the root). On a stopped or faulted parent, at depth 31, or re-entrantly from inside an operation of the same domain, it throws.
+24. `CreateChild` on a dirty writable parent rebuilds it first (and settles the root). On a stopped or faulted parent, at depth 31, or re-entrantly from inside an operation of the same domain, it throws. A failure the rebuild or settle records stays on the parent, and the child is created (§8.2). When a writable context's parent was stopped by a contradiction, the context's `Rebuild`, `Write`, `ClearTable` and `CreateChild` make it contradicted if it has `StopOnContradiction`, and otherwise throw without faulting it (§6.9).
 25. Clock or ids reaching their limits → `OverflowException` (store ids at `UnionFind.MaxId`). Children consume the shared counter (§4.2 memory note).
 26. `Database.Clone()` of a child, or of a root with descendants → throws.
 27. `AddTable` is allowed at any time (X16); frozen contexts answer for the new id through their parents (X43). `AddCounter` after the first child → throws.
@@ -2038,7 +2104,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 34. A lift with zero cases, a frozen parent, or a foreign case → throws.
 35. All cases vacuous → the parent contradicts.
 36. A function with an Id output and no common parent member → skipped (a documented gap).
-37. An eq container interned in a child → throws (G-a). A child union of an eq-container element → `NotSupportedException` (G-b); dispose the context.
+37. An eq container interned in a child → throws (G-a). A child union of an eq-container element, or an eq container interned or rebuilt later at an ancestor naming a child's own loser → `NotSupportedException` at the child's next rebuild (G-b); dispose the context. A new eq container interned in a frozen database → throws (§7.4).
 
 ---
 
@@ -2052,7 +2118,10 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Block test in `IncrementCounterInView` | Per mint | 1 null test |
 | Layer dispatch in `SortedWritesTable.Merge` | Per table merge | 1 null test |
 | Compaction gate in `MaybeRehash` | Per merge | 1 field load |
-| Retraction guard in `StageRemove` | Per staged-removal call | 1 null test (the guard is null at a root without live descendants, §6.7); with descendants, 1 `CheckRemove` call per staged removal |
+| Retraction guard in `StageRemove`, `Database.NewBuffer` buffers and the rule `Remove` instruction (once per batch) | Per staged removal | Store-backed root without live descendants: 1 guard load and 1 inlined volatile gate read; bare `Database`: 1 null test; with descendants, 1 full `CheckRemove` (§6.7) |
+| `GuardForNewState` | Per state creation | 1 owner test |
+| Layered fields of `ExecutionState` (`layers`, `guard`, `views`) | Per state and per clone | +24 B (three references) |
+| `DatabaseView.GetTable` child test | Per call | 1 readonly field test |
 | Layered branch in `PredictRow`/`PredictColumn` | Per call (bridge merge functions call it once per merged row) | 1 null test |
 | Layered branch in lookup instructions | Per instruction batch | 1 null test |
 | `LookupOrInsertDefault` buffer order | Per instruction batch | 1 null test |
@@ -2063,17 +2132,32 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `ThrowIfFrozen` | Per entry point | 1 volatile read |
 | Sealed check in `PendingState` | Per buffer flush | 1 volatile read |
 | New `TableKind` arms | Per scan or lookup call | 1 jump-table arm |
-| `hidden.IsNone` | Per scan call | 1 test |
+| `hidden.IsNone` | Per hidden-aware scan or index-build call | 1 test; the plain overloads, which root paths call, pay nothing (§9.3) |
+| Serial-refresh flag in `IndexCatalog.GetOrRefresh` | Per call | 1 volatile read |
 | `PieceCount == 1` | Per probe | 1 cached compare |
 | `Layer` byte in a frame | Per dense refinement | 1 byte store |
 | Child-cache slot | Per child-cache lookup | 1 `IsMultiLayer` test (single-layer nodes keep today's slot) |
-| Id constants (Store-backed root) | Per rule per run, for rules with constants | O(constants) `FindNaive` calls and one compare against the written vector |
-| View snapshot | Per rule set build | O(tables read), cached instances; outside the measured run |
+| `TrieNode` | Per node | None: 64 B as before, single-layer rows inline (§9.5) |
+| `Prober` | Per prober (once per join task; per morsel in a parallel run) | 72 B, up from 48 B: `ProberPiece` carries `Layer` and `View`, the prober `Rest` and `RestCount`. Against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%), parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%) |
+| Views check in `RunRuleSet`/`ExecuteRuleSet` | Per run | 1 reference compare and 1 null test |
+| `RuleSet` and `RulePlan` fields | Per rule set, per rule | `RuleSet`: `View`, `Views`, `ViewGeneration`, `ViewStamp`; `RulePlan`: `WrittenTemplate`, `WrittenActions`, `CanonicalConstants`; `CachedPlan`: `WrittenConstants` and up to 16 variants |
+| Id constants (Store-backed root) | Per rule per run, for rules with constants | O(constants) `FindNaive` calls and one compare against the written vector; no allocation when nothing changes (§9.8) |
+| View snapshot | Per rule set build | None at the root: every root rule set shares one snapshot (§9.1) |
+| Latest epoch in `BeginEpoch` | Per epoch | 1 compare, at most 1 store |
+| Executor counters | Per counted event | None unless `EGGNOG_COUNTERS` is set (a static readonly switch the JIT folds) |
+| Interning a new eq-sort container | Per intern that misses | 1 frozen check and 1 `Interlocked` increment (§7.4) |
+| New content in a root container rebuild | Per new content | 1 `Interlocked` increment |
+| G-a test | Per container intern | 1 field load (`InChildContext` is tested before `HoldsIds`) |
+| Layer test in `SortedWritesTable.RebuildWith` | Per table rebuild | 1 null test |
+| Pass result of `RunWithTakenOut`/`RunOnTables` | Per table | 1 bool |
+| Dirty-count compare in `Database.RebuildPass` | Per pass | 1 compare |
+| Rebuild diagnostics | Per rebuild | Stores of `LastRebuildRows` and `LastRebuildWasIncremental` |
 | `CompressRows` | Per merge that unions | O(new unions × path) |
 | Settle | Per `CreateChild` of the root, and at its freeze | O(rows written since the last rebuild) |
+| Rebuild-index refresh | Per `CreateChild` of a writable root | O(tables) plus the appends since each index's last refresh (§8.2) |
 | Freeze | Once | O(IdCount + rows) |
 
-`Canonicalizer` is identical after JIT specialization. Nothing is added per scanned row, per staged row, or per find.
+`Canonicalizer` is identical after JIT specialization. Nothing is added per scanned row, per staged insert, or per find; a staged removal at a Store's root pays the guard read above.
 
 **Gates:** the M9.0 root benchmark set within 2% (X33), each milestone on the classes listed for it in §17, and `ExecutorAllocationProbeTests` unchanged.
 
@@ -2081,8 +2165,9 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 
 | Operation | Cost |
 |---|---|
-| Creation | O(tables + depth) small objects; nothing is allocated for the union-find or a table before first use |
-| Layer creation | One empty single-shard table and `TableInfo` (about 1–2 KB, measured by `ManyChildrenBenchmarks`) plus an O(tables) catalog copy, once per touched table |
+| Creation | O(tables + depth) small objects; nothing is allocated for the union-find or a table before first use. Measured in M9.4 dry runs: about 7.4–9 KB for a bare child |
+| Layer creation | One empty single-shard table and `TableInfo` plus an O(tables) catalog copy, once per touched table. Estimated at 1–2 KB; measured in M9.4 dry runs of `ManyChildrenBenchmarks` (`ChildWithOneEmptyLayer` minus `ChildOnly`) at about 2.7–3.0 KB, mostly `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the catalog copy. Reducing it is M10.4 work (§21.9) |
+| Rebuild-index refresh | At creation under a writable parent: root work, §8.2. Afterwards step 4 and the lift reads refresh a writable ancestor's index from that ancestor's appends since the child's creation: per-child work of the same order as the catch-up's reading of those appends |
 | `find` | Root `FindNaive` (one hop when frozen) + at most one dense load + one probe per non-empty level below the prefix |
 | Own union | 2 parent finds + 2 probes + O(1) or O(smaller class) |
 | Lookup | One hash probe per layer + one sealed-set test on a hit |
@@ -2107,44 +2192,46 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Tables/DisplacedTable.cs` | `DisplacedSpec` internal; compression in `Merge`; `Freeze` override; `HasPendingUnions`; throws when frozen; hidden-aware scan overloads and `RefineVisible` |
 | `Tables/Canonicalizer.cs` | Bodies move to `CanonicalizeLoops<RootIdFinder>`; public surface unchanged |
 | `Tables/TableKind.cs` | Adds `OverlayDisplaced` |
-| `Tables/Table.cs` | `OverlayDisplaced` arms; `RefineVisible(Subset, HiddenRows)`; hidden-aware overloads; `virtual void Freeze()` |
+| `Tables/Table.cs` | `OverlayDisplaced` arms; `RefineVisible(Subset, HiddenRows)`; hidden-aware overloads; `abstract void Freeze()` and internal `HasPendingWrites` |
 | `Tables/SortedWritesTable.cs` | `Merge` dispatches to `MergeLayered`; `Freeze` override (rebuild index only with rebuild columns) |
 | `Tables/SortedWritesTable.Rehash.cs` | Gate in `MaybeRehash`; `ForceRehash`; `CompactionsBlocked` |
 | `Tables/SortedWritesTable.RebuildIndex.cs` | `RefreshRebuildIndex` becomes internal; `SharedRebuildIndex` (nullable); `IsShared` |
-| `Tables/SortedWritesTable.Rebuild.cs` | Layered incremental override in `RebuildWith`; `SettleAppends` |
+| `Tables/SortedWritesTable.Rebuild.cs` | Layered incremental override in `RebuildWith`; `SettleAppends`; `RebuildFull` refactored into `RebuildRange`, which `SettleAppends` shares; internal diagnostics `LastRebuildRows` and `LastRebuildWasIncremental` |
 | `Tables/SortedWritesTable.RebuildWatermark.cs` | `FirstRowSinceRebuild` and `MarkRebuilt` internal; `HasRowsSinceRebuild` |
-| `Tables/SortedWritesTable.Lookup.cs` | `FindRowHashed` |
+| `Tables/SortedWritesTable.Lookup.cs` | No change; `FindRowHashed` lives in the new `SortedWritesTable.Layered.cs` (§6.6) |
+| `Tables/MutationBuffer.cs` | `AttachRetractionGuard`; `FreshHandle` copies the guard (§6.7) |
 | `Tables/SortedWritesTable.Scan.cs` | Hidden-aware loops; `RefineVisible` |
 | `Tables/TableCatalog.cs` | Volatile map reads; `Resolver` (init); `GetForStaging`; copy-on-write `Publish` |
 | `Tables/ExecutionState.cs` | `CreateBuffer` uses `GetForStaging`; `StageRemove` calls `guard?.CheckRemove`; the clone copies view, layers, guard and views |
 | `Tables/PendingState.cs` | `Seal`, `IsSealed`; `Enqueue*` throw when sealed |
-| `Planning/QueryEntry.cs` | `IsIdConstant` flag; `IdConst(Value)` factory |
+| `Planning/QueryEntry.cs` | `IsIdConstant` flag, ignored by equality; `IdConst(Value)` factory |
+| `Planning/IQuerySchema.cs` | `IsCacheable` (default member, `true`) |
 | `Actions/ExecutionState.Database.cs` | `ReadCounter` pin; the view constructor sets `layers` and `guard`; `GetTable` throws when `layers` is set |
-| `Actions/ExecutionState.Predicted.cs` | `ReadTable` throws when layered; layered `PredictRow`/`PredictColumn` (both forms); `ValueFromCounter` rejects `≥ StaleRep` |
+| `Actions/ExecutionState.Predicted.cs` | `ReadTable` throws when layered; `ReadRootTable` (the former `ReadTable` body) on the root path of `PredictRow`/`PredictColumn`; layered `PredictRow`/`PredictColumn` (both forms, `PredictRowLayered`/`PredictColumnLayered` in `Layers/ExecutionState.Layers.cs`); `ValueFromCounter` rejects `≥ StaleRep` |
 | `Actions/ExecutionState.Actions.cs` | Layered dispatch at lines 137, 143, 208 and 290; `LookupOrInsertDefault` creates its buffer at the first miss in a child |
 | `Actions/VectorizedLookup.cs` | `TableView` overloads; `OverlayDisplaced` arm |
 | `Containers/ExecutionState.Containers.cs` | Unchanged; documented as reading the shared root instance |
-| `Database/Database.cs` | `AddCounter` sealing; `ClearTable` calls `RetractionGuard?.CheckClear`, bumps `ChangeStamp`, calls `ThrowIfFrozen`, routes in a child; `NewBuffer` uses `GetForStaging`, calls `ThrowIfFrozen`; `Clone` guard; `IncrementCounter` → `IncrementCounterInView`; `uint?` timestamps; layered member behaviour per §3.4; `GetTableSpec`, `GetTableName` |
+| `Database/Database.cs` | `AddCounter` sealing; `AddTable` throws at a Store's root, internal `AddTableCore`; `ClearTable` calls `RetractionGuard?.CheckClear`, bumps `ChangeStamp`, calls `ThrowIfFrozen`, routes in a child; `NewBuffer` uses `GetForStaging`, calls `ThrowIfFrozen`; `Clone` guard; `IncrementCounter` → `IncrementCounterInView`; `uint?` timestamps; layered member behaviour per §3.4; `GetTableSpec`, `GetTableName` |
 | `Database/Database.Merge.cs` | `uint?` timestamp; adoption in `TakeRound`; contradiction round stop; serial strata when layered; `ChangeStamp` in `MergeOne`/`MergeTable`; `AfterMerge` epilogue in `MergeAll` and `MergeTable`; `ThrowIfFrozen` |
-| `Database/Database.Rebuild.cs` | No change in code; `RunWithTakenOut` and `RunOnTables` are now also called by `ContextTables` and `Context.Settle` |
+| `Database/Database.Rebuild.cs` | Child guards in `ApplyRebuild` and `RefreshRowsForValues` (§3.4); `RunWithTakenOut`, `RunOnTables`, `RunOnTablesCore` and `RunOnTablesParallel` return whether any table reported a change (each such table is still notified), which `RefreshDirtyContainerIds` needs (§7.4); they are now also called by `ContextTables` and `Context.Settle` |
 | `Database/DatabaseView.cs` | `IncrementCounter` → `IncrementCounterInView`; `ClockCounterRep`; `IncrementSharedCounter`; layered `GetTable` (throws), `GetTableName`, `TableIds` |
 | `Database/CounterSet.cs` | `IncrementBy(CounterId, long)` |
 | `Database/DependencyGraph.cs` | Copy-on-write `levelSnapshot` for `LevelOf` |
 | `Database/ExternalFunctionRegistry.cs` | Copy-on-write snapshot |
 | `Database/ExternalFunction.cs`, `Database/DelegateExternalFunction.cs` | `ReadsTables` |
 | `Database/TableInfo.cs` | `FreezeIndexes()` |
-| `Database/Database.Constraints.cs` | Delegates to `ConstraintProcessor` |
-| `Database/ColumnCardEstimator.cs` | Static per-`TableInfo` overload |
+| `Database/Database.Constraints.cs` | Delegates to `ConstraintProcessor`; refuses a child through `GetQueryTableInfo` (§3.4) |
+| `Database/ColumnCardEstimator.cs` | Static per-`TableInfo` overload; the instance form refuses a child (§3.4) |
 | `Indexes/Index.cs`, `Indexes/IndexCatalog.cs` | `Refresh(Table, bool allowParallel)`; `SetSerialRefresh` |
 | `Indexes/ColumnIndex.cs`, `ColumnIndex.Build.cs`, `TupleIndex.cs`, `TableIndexing.cs`, `ColumnIndexGatherSink.cs` | Hidden-aware builds; `AddValue` |
 | `Concurrency/NotificationList.cs` | `IsEmpty` |
-| `Containers/ContainerValues.cs`, `ContainerEnvBase.cs`, `ContainerEnv.cs`, `ContainerValueIndex.cs`, `Database.Containers.cs` | `holdsIds`; `HasEqContainers`; `AnyEqContainerMentions`; G-a; `MintId` via the shared counter; `ContainsElement`; child throws; dirty-log append |
+| `Containers/ContainerValues.cs`, `ContainerEnvBase.cs`, `ContainerEnv.cs`, `ContainerValueIndex.cs`, `Database.Containers.cs` | `holdsIds`; `HasEqContainers`; `AnyEqContainerMentions`; `EqVersion` and `EqVersionCounter` (G-b, §7.4); the frozen-intern refusal; G-a; `MintId` via the shared counter; `ContainsElement`; child throws; dirty-log append; `RebuildContainers` resolves a `null` timestamp to the store clock (§4.1) |
 | `Planning/PlanTemplate.cs`, `PlanInstance.cs` | `InstantiateLayered`; `Instantiate` kept over `SingleLayerEvaluator`; `LayeredSubset[]` headers |
 | `Query/IdConstant.cs` | Remarks per X19 |
 | `Query/ActionInfo.cs` | `IdConstants` |
-| `Query/CachedPlan.cs` | Variants (`GetVariantFor`) |
+| `Query/CachedPlan.cs` | Variants (`GetVariantFor`, `MaxVariants`); `WrittenConstants` |
 | `Query/RulePlan.cs` | `WrittenTemplate`, `WrittenActions`, `CanonicalConstants` |
-| `Query/RuleSet.cs` | `Views`, `ViewGeneration`; `BuildCachedPlan` uses written plans |
+| `Query/RuleSet.cs` | `View`, `Views`, `ViewGeneration`, `ViewStamp`, `LookupTable`, and an internal constructor that takes them; `BuildCachedPlan` uses written plans |
 | `Query/RuleSetBuilder.cs` | Instantiates through `db.View`; computes K and substitutes in `AddRuleFromCachedPlan` and `AddBuiltRule`; snapshots views in `Build`; `EstimateSize` through the layered member |
 | `Query/RuleBuilder.cs` | `GetSpec` via `GetTableSpec`; records `ActionIdConstant`s |
 | `Query/RuleQueryBuilder.cs` | Arity via `GetTableSpec`; `GetIdColumns` layered |
@@ -2152,6 +2239,8 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Query/Database.Query.cs` | Layered `IQuerySchema`, `IPlanStatistics`, `IHeaderEvaluator`, `PlanQuery` per §3.4; `SplitConstraints` via `ConstraintProcessor` |
 | `Execution/TrieNode.cs`, `TrieNodePool.cs`, `Prober.cs`, `ProberCursor.cs`, `FrameUpdate.cs`, `FrameUpdates.cs`, `JoinRun*.cs`, `SparseColumnIndex.cs`, `RuleWork.cs`, `Database.Execution.cs` | Per §9.5 and §9.1 (`JoinRun` and `RuleWork` take the snapshot; `RunRuleSet` sets `InSearch` and the root state's views) |
 | Tests: `TrieNodeTests`, `ProberTests`, `FrameUpdatesTests`, `CachedPlanTests`, `RuleSetBuilderTests`, `TrieNodeSpareIndexTests`, `SparseColumnIndexTests` | Mechanical API updates only; assertions unchanged |
+| Tests updated as §21 records | `Contexts/ChildDatabaseTests`, `ContextEpochTests`, `ScanMergesTests`, `ContextUnionFindTests`; `Layers/RetractionTests`; `Actions/LayeredLookupTests`, `VectorizedLookupTests`; `Tables/DisplacedTableFreezeTests`; `Differential/DiffSemiNaiveStep`; and the review tests named there |
+| Engine doc comments outside this list | 18 `cref` attributes that the hidden-aware overloads made ambiguous (CS0419) name their overload's signature (M10.1) |
 | Tests: `Planning/PlanInstantiationTests`, `Execution/DecomposedExecutionTests`, `Planning/PlanTestDatabase`, `Query/DatabaseQueryTests` | Compile unchanged through the kept `Instantiate` overload |
 | Tests: `Execution/JoinPathTests`, `Execution/ExecutorVisibilityTests` | No source change (root `GetTableInfo` calls remain valid); re-run as executor regression |
 | `src/Eggnog.Relations.Tests/Eggnog.Relations.Tests.csproj` | `ProjectReference` to `../Eggnog.Storage/Eggnog.Storage.csproj` (second oracle), used only through `using Spike = Eggnog.Storage;` (X32) |
@@ -2172,11 +2261,11 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Tables/` | `OverlayDisplacedTable`, `OverlayCanonicalizer`, `CanonicalizeLoops`, `OverlayDisplacedConstraintFilter`, `SortedWritesTable.Layered` (partial), `RowOps` |
 | `Actions/` | `OverlayDisplacedLookup`, `LayeredKey1Lookup`, `LayeredKey2Lookup`, `LayeredKey3Lookup`, `LayeredKeyNLookup` |
 | `Offsets/` | `LayeredSubset`, `SubsetArrayPool` |
-| `Execution/` | `ContextView`, `ViewSnapshot`, `ProberPiece`, `LayerHits`, `ExecutorInvariants`, `ExecutorCounters` |
+| `Execution/` | `ContextView`, `ViewSnapshot`, `ProberPiece`, `LayerHits`, `TrieNodeSideState`, `ExecutorInvariants`, `ExecutorCounters` |
 | `Planning/` | `ILayeredHeaderEvaluator`, `SingleLayerEvaluator`, `CachedIndexKey`, `PlanIndexKeys` |
 | `Database/` | `ConstraintProcessor`, `FreezeWarmup`, `SettleTableOperation` |
 | `Query/` | `CanonicalConstants`, `ConstantSubstitution`, `TemplateSubstituter`, `ActionSubstituter`, `ConstantVariant`, `ActionIdConstant`, `ActionReadAnalysis` |
-| `Concurrency/` | `ThreadAffinityGuard`, `ParallelismBudget`, `ParallelismLease` |
+| `Concurrency/` | `ThreadAffinityGuard`, `ThreadAffinityScope`, `ParallelismBudget`, `ParallelismLease` |
 | `Containers/` | `ContainerDirtyLog` |
 | `Bridge/` | `EGraphContext` (+ 8 partials), `RuleProgress`, `RuleTable`, `HostWrites`, `ContextLocalSlot`, `StopOnContradictionFunction`, `SaturateReport`, `ConcurrentChildren`, `ContextInvariantException` |
 | `Cases/` | `MemberMap`, `ClassPartition`, `LiftSpec`, `LiftTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `LiftSignature`, `LiftCandidates`, `LiftKeySink`, `LiftWrites`, `Lifter` (+ `.Equalities`, `.Facts`), `CaseSet`, `SplitDriver`, `SplitRequest`, `SplitKey`, `SplitRecord`, `SplitOptions`, `SplitReport`, `ISplitSource`, `ISplitDemand`, `ICaseSchedule` |
@@ -2235,7 +2324,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - the `Clone` guard; `NotificationList.IsEmpty`; `ThreadAffinityGuard`; `DescendantGate`;
 - `ContainerEnv.MintId` on the shared counter.
 
-**Interim:** the child `Database` gets a placeholder `DisplacedTable` at `TableId 0` that is never written (unions arrive in M9.2), and no `Resolver`: staging into a child throws `NotSupportedException("Layers arrive in M9.3.")`.
+**Interim:** the child `Database` gets a placeholder `DisplacedTable` at `TableId 0` that is never written (unions arrive in M9.2), and a `Resolver` that always throws `NotSupportedException("Layers arrive in M9.3.")` (without a resolver, staging would throw `KeyNotFoundException`). The placeholder is in the child's table map but not in its catalog, so staging into `$uf` is refused the same way. `RunRuleSet` in a child throws `NotSupportedException` until M10.2, and the X23 refusal of `$uf` is in every query member of a child already (§3.4). (As shipped; M9.2–M10.2 replaced each of these.)
 
 **Tests:**
 - `Contexts/StoreTests`: `$uf` is `TableId 0`; counters 0 and 1; clock starts at 1; `AddTable` after children works; `AddCounter` throws; `ReadClock` overflow.
@@ -2266,7 +2355,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 
 **Interim:**
 - A minimal `Context.Write`: domain, `BeginEpoch`, `CreateExecutionState`, action, `Flush`, `RecordFailure`, `MergeAll`, `EndEpoch`, faulting. The child's `Resolver` maps `$uf` to the `OverlayDisplacedTable` and throws `NotSupportedException` for other tables until M9.3.
-- `Context.Rebuild` runs union-find catch-up plus `MergeAll`; `NeedsCatchUp` is `false` while `Tables` is null; `IsClean` omits the tables term.
+- In a child, `Context.Rebuild` runs union-find catch-up plus `MergeAll`; at the root it runs §7.1's root branch already (egglog's pass over `Schema.FunctionTables`, with the X42 clean test). `NeedsCatchUp` is `false` while `Tables` is null; `IsClean` omits the tables term.
 - A union-find-only `Context.Freeze`: `Rebuild`, `DisplacedTable.Freeze` / `OverlayDisplacedTable.Freeze`, flattening, domain reassignment and the volatile frozen flag, so frozen parents and their concurrent children exist.
 
 **Tests:**
@@ -2280,7 +2369,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
   - 400 seeds (`EGGNOG_CONTEXT_SEEDS`, `EGGNOG_CONTEXT_SOAK`); `LongProgramsAgree` (40 × 600);
   - checks: exact canonicals, `ScanMerges`, `IsLocalId`, journal completeness, own displacements, invariants;
   - second oracle: the spike (`Spike.Store`), compared modulo renaming.
-- `Contexts/UnionFindInvariantCheckerTests`: six deliberate corruptions.
+- `Contexts/UnionFindInvariantCheckerTests`: nine deliberate corruptions (I4, I5, I6, two of I8, I9, I10, I23 and the gate; the gate one also on a frozen root), plus root I4 and full compression of a frozen root.
 - `Contexts/UnionFindConcurrencyTests.StressFrozenRoot`: 200k ids; 1000 children in parallel under the union-find-only freeze; the root array is bit-identical afterwards.
 - `Contexts/ContextLifecycleTests.FrozenParentDomains`: children of a frozen context get their own domains; freezing reassigns live subtrees.
 
@@ -2297,7 +2386,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - `Context.Write`, `ClearTable`, `GetView`, `TryGetRow`, `IsContradictory`;
 - the storage part of freeze: `Table.Freeze` (rebuild index only with rebuild columns), `Database.Freeze`, `ContextTables.Freeze`, `FreezeRoot`, X43.
 
-**Interim:** `Rebuild` still runs only the union-find steps plus `MergeAll`, and throws `NotSupportedException("Row catch-up arrives in M9.4.")` when `NeedsCatchUp`. Random layered states are built by writing each ancestor before creating its children and freezing it, with no unions below the root.
+**Interim:** `Rebuild` still runs only the union-find steps plus `MergeAll`. It throws `NotSupportedException("Row catch-up arrives in M9.4.")` before anything changes, without faulting the child, only when row work would be needed: (a) an unsettled ancestor's shared layer version moved; (b) the union-find changes and a live own row names an id that stops being canonical; (c) a new own loser that is not local is named by a visible ancestor row. The same refusal reaches `Write`, `ClearTable`, `CreateChild` and `Freeze` through `Rebuild`. (Refusing whenever `NeedsCatchUp` holds would break M9.2's catch-up after every root union, and would not refuse a child's own unions over its rows.) Random layered states are built by writing each ancestor before creating its children and freezing it, with no unions below the root.
 
 **Tests** (`Layers/` unless noted):
 - `HiddenSetTests`: 1000 property sequences against `SortedSet<int>`; conversion; `Union`; reopening a sealed set.
@@ -2307,7 +2396,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - `LayeredMergeTests`: new key; ancestor key with true and false merges; a three-row fold; `UnionIdMerge` staging into the child; non-lattice throws at first write, not at a hitting lookup; deletes; same-stratum read throws.
 - `CanonicalWriteTests` (child part): a write naming a stale id lands on the canonical key and merges with the visible row; a raw write with ts 0 is stored at the merge's epoch.
 - `LayerCreationConcurrencyTests`: 8 threads, each with clones of one state (as `ActionBatchWork` makes them), staging into the same untouched tables; exactly one layer per table, every row merged, the catalog never torn, `ViewGeneration` unchanged until the merge.
-- `RetractionTests`: every cell of §6.7; a root state without descendants has no guard.
+- `RetractionTests`: every cell of §6.7; a Store's execution state always carries its database's guard, and raw buffers pass the guard.
 - `ContradictionTests`: storage level, with and without the option.
 - `Contexts/ChildSchemaTests`: the §3.4 table for members that need no planning (`GetTableSpec`, `GetTableName`, `GetIdColumns`, `EstimateSize`, `NewBuffer`, `ClearTable` routing, definitions throw).
 - `Contexts/FreezeTests` (storage part): freezing a store with the nullary contradiction table and a value-only table; `AddTable` after a freeze, then views of the new table from concurrent children of a frozen child (X43).
@@ -2341,11 +2430,12 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 **Gate tests:**
 - `Contexts/ContextDifferentialTests`:
   - the spike's `DifferentialTests`, `Harness/Pair` and `Reference/` ported to `Contexts/Spike/` as `SpikePair`, `SpikeTestSchema`, `SpikeReferenceContext` (with ordered `SpikeReferenceOp` including `Delete`/`Clear`), `SpikeReferenceView` and `SpikeContextFacade` (X32);
-  - the facade canonicalizes Id cells through `Context.Find` before every write, as the spike's `Insert`/`GetOrAdd` do (`Eggnog.Storage/Context.cs` `Canonicalize`);
+  - on spike seeds the facade canonicalizes Id cells through `Context.UnionFind` inside the batch, as the spike's `Insert`/`GetOrAdd` do (`Eggnog.Storage/Context.cs` `Canonicalize`); on spike-free seeds of `ContextDifferentialTests` and odd seeds of `ContextCopyTests` it writes raw (`RawWrites`, `RawChildWrites`): child writes pass id cells as given with timestamp 0, so X38's canonicalization and stamping are exercised, while root writes stay canonical, because a stale raw root write is legitimately invisible until the next rebuild (X42);
   - 400 seeds; 3 deep; changing ancestors; random freezes; dispose; retractions only where §6.7 allows, asserting throws elsewhere;
-  - views modulo renaming, lookups, column scans, `Scan(since)`;
+  - `SpikeTestSchema` has a `bits` table with `OrMerge`, a lattice join that differs from both inputs, so a merge that stores the incoming row instead of the output is caught; the spike is the second oracle on even seeds, which retract nothing;
+  - views modulo renaming, lookups, column scans, `Scan(since)`; `SpikePair.Check` compares `ScanColumn` with the visible rows as exact multisets;
   - `CheckInvariants` after every `Rebuild`; `LookupPathsAgree` after every write.
-- `Contexts/ContextCopyTests` (*context = copy*): replay the chain into a fresh `Store` with explicit ids; exact canonicals; **C's journal equals the copy's displaced set minus the ids displaced in P's view when C was created** (the harness records that set at `CreateChild`); row sets modulo renaming.
+- `Contexts/ContextCopyTests` (*context = copy*, 400 seeds): replay the chain into a fresh `Store` with explicit ids; exact canonicals; **C's journal equals the copy's displaced set minus the ids displaced in P's view when C was created** (the harness records that set at `CreateChild`); row sets modulo renaming.
 - `Contexts/SpikeLockstepTests`: 5000-step programs, no deletes.
 - `Contexts/ConcurrentChildrenStorageTests`: 16 children of a frozen root on 8 threads.
 - `Contexts/PerChildCostTests` (`[Trait("Category","Performance")]`): `AncestorRowsExamined`, `RowsCopied` and `CatchUpRowsExamined` identical for 20k- and 200k-row roots; allocation ratio ≤ 1.5×.
@@ -2382,13 +2472,16 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
   - `SyntheticLayers : ILayerViewSource` plus `LayerFlattener`;
   - 1500 small and 200 large seeds; every mode, strategy and decomposition setting;
   - an S6-off variant.
-- T9 `Differential/DiffLayeredSemiNaiveStep`.
-- T11 executor checker tests.
+- T9 `Differential/DiffLayeredSemiNaiveStep`: inserts a layered step before every semi-naive step of the generated programs, sharing `DiffSemiNaiveStep`'s variants through a `Split` helper; the programs of the existing profiles are unchanged.
+- T11 executor checker tests (`Execution/ExecutorInvariantsTests`).
 - T12 `Execution/LayeredAllocationProbeTests`: no allocation per row, probe or frame in a warm child run.
 - `Query/ChildPlanningTests` (R2-1): `NewRule`, `AddAtom`, `Build` and `PlanQuery` in a child that never wrote the rule's tables; `SymbolMap` names; statistics from the child's view; `$uf` atoms throw.
 - `Execution/LayeredParallelRunTests` (R1-2, R2-2): a child with `ParallelRuleSetsOverride = true` runs rules whose actions write untouched tables and look up untouched tables; equal to the serial run; a hitting `LookupOrInsertDefault` creates no layer; `ViewGeneration` unchanged during the search.
 
 **Done when:** the baseline holds; `ExecutorAllocationProbeTests` is unchanged; with `EGGNOG_COUNTERS`, ancestor-layer scanned rows and dynamic-index rows are 0 once `W ≥` every root stamp.
+- The counters (`ExecutorCounters`) are kept per database (`Database.ExecutorCounts`), behind a static readonly switch set from `EGGNOG_COUNTERS`. The test project's module initializer turns counting on for the suite; `EGGNOG_COUNTERS=0` turns it off, and the counter tests then skip.
+- Ancestor rows are counted in two kinds: rows of root nodes, narrowed by headers only, and rows of refined nodes (probe results). The 0 is read on the root-node counters, which measure the work that grows with the root; refined rows are bounded by the `|probe results|` term of §14.2.
+- The 0 holds for size-ordered plans (Gj, the default, and PureSize). MinCover covers with the widest atom by design, so its plan scans the old side; a test documents this.
 
 ### M10.3: Per-context rules in the bridge, including concurrent children
 
@@ -2555,3 +2648,182 @@ Two reviews were answered. Every finding was accepted. One fix uses the second o
 | R2-13 | minor | Frozen views cache grown concurrently | As R1-7. |
 | R2-14 | minor | Id blocks inflate root arrays; overflow bound wrong | First blocks of 16; `UnionFind.MaxId` cap; memory note; measured in `LateParentMintBenchmarks`. §4.2. |
 | R2-15 | minor | Test list and naming clashes | `Instantiate` overload kept; affected tests listed; `Spike` alias and `Spike`-prefixed ported types. X32, §9.4, §15. |
+
+---
+
+## 21. Implementation notes (M9.0–M10.2)
+
+M9.0 through M10.2 are implemented. This section records, per milestone, where the code departs from the text above: what the text said, what was built, and why. Each departure is listed once, under the milestone that made it; when a later milestone changed the same thing again, the later entry says so.
+
+The last column says what happened to the text:
+- **Corrected (§…)**: the text above now says what was built; the sections named were changed in this revision.
+- **Note**: the text is unchanged. The entry records interim behaviour that a later milestone replaced, work done earlier than planned (*placement*), or detail below the level of this document.
+
+Reports that only confirmed the text are not listed; for example, `Context.NewId` does not enter the thread domain, as §5.7 says, and a root `Context.Write` asserts the sort cells of every registered table, as §6.6 says. §21.8 lists the edits that rule-layer spec v2 asked of this document, and §21.9 lists what is still deferred.
+
+### 21.1 M9.0: Root benchmark baseline
+
+No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.9).
+
+### 21.2 M9.1: Store, contexts, clock and ids
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §3.4, §4.3 | The root's `Database.AddTable` is unchanged, and `Store.AddTable` calls it. | `AddTable` on a Store's root throws `InvalidOperationException("Definitions are added through the Store.")`, before and after children; the `Store` adds through the internal `AddTableCore`. A table added past the store would be unknown to the store's schema: children's `TableCount`, specs and names would disagree with the root, and the root's rebuild over `Schema.FunctionTables` would never rebuild it. A bare `Database` and a clone (no owner) keep egglog's `AddTable`. | Corrected (§3.4, §4.3, §15) |
+| §4.3 | `Store.AddTable` adds the table, then registers it. | It first checks that the table is a `SortedWritesTable`, which `LayeredSchema.Register` requires, so a rejected table leaves the root unchanged. | Corrected (§4.3) |
+| §4.1 | `null` timestamps resolve to the store clock on the members listed there. | `RebuildContainers` with a `null` timestamp also resolves to the store clock on a Store-backed database; a bare database keeps the newest union's timestamp. Under the C1 pin, a clock-reading `UnionContainerMerge` would otherwise stamp the newest union's timestamp instead of the clock value egglog's merge reads, which breaks root parity. | Corrected (§4.1, §15) |
+| §4.2 | `IdBlock` holds `Next` and `End`; the block size follows `Minted`. | `IdBlock` also holds `Start` and `ReservedBefore`, so `Minted` is read from the one published block. The size rule uses the total reserved so far, which equals `Minted` at refill time because the current block is spent. | Corrected (§4.2) |
+| §4.3 | `Clone` is guarded; nothing else is said. | A clone keeps the source's clock (the counter layout is the same) and has no owner, so it is a bare egglog `Database`. | Corrected (§4.3) |
+| §6.1 | `LayeredTableSchema` has public fields. | Get-only properties, plus `Spec`; `IsContradiction` is a volatile flag set once. A `ReadOnlySpan` cannot be a field of a class, and the schema should be immutable. | Corrected (§6.1) |
+| §3.4 | `DatabaseView.GetTable` throws in a child. | It throws `InvalidOperationException`, testing a readonly field cached at construction: one field test per call at the root. | Corrected (§3.4, §14.1) |
+| §3.4, X23, §17 | The `$uf` refusal is M10.2 work, for `SplitConstraints` and `GetTableView`. | Implemented in M9.1, in every query member of a child, through `Database.GetQueryTableInfo`: `ProcessConstraints` (and so `SplitConstraints`, `GetApproximateSize` and the header path), `EstimateSize` and `ColumnCardEstimator.GetColumnUniqueness`. Until views existed, these members would have answered from the child's never-written placeholder table, against context = copy. M10.2 gave them their final form (§21.7). | Note (placement) |
+| §17 M9.1 | Interim: the child has no `Resolver`, so staging throws `NotSupportedException("Layers arrive in M9.3.")`. | A `Resolver` that always throws that exception: without a resolver, `GetForStaging` throws `KeyNotFoundException`. The `$uf` placeholder is in the child's table map but not in its catalog, so staging into it is refused the same way and it is never written. | Corrected (§17); replaced in M9.2 and M9.3 |
+| §3.4, §17 M9.1 | `RunRuleSet` is unchanged in shape. | Until M10.2, `RunRuleSet` in a child threw `NotSupportedException("Rules in a child context arrive in M10.2.")`. Before views existed, the executor would have read the child's own layers (the `$uf` placeholder) as its view, and a rule set built on another database would have applied its header subsets to the child's tables. Root cost: one owner test per run. | Corrected (§17); replaced in M10.2 (§21.7) |
+| X30, §17 | `ChangeStamp` comes with M9.4. | Bumped from M9.1, in `MergeOne`/`MergeTable` when a merge adds or removes rows and on a `ClearTable` that removes rows, because `Context.Version` (an M9.1 item) reads it; hides and the stop flag bump it from M9.3. One test per table merge. | Note (placement) |
+| §15 | `Database/Database.Rebuild.cs` has no change in code; `Database.Constraints.cs` and `ColumnCardEstimator.cs` change in later milestones. | Child guards in `ApplyRebuild` and `RefreshRowsForValues`, which §3.4 requires to throw in a child, and the X23 guard in the other two files. M9.4 changed `Database.Rebuild.cs` again (§21.5). | Corrected (§15) |
+| §16 | — | Helpers not listed in §16: `ThreadAffinityScope` (an allocation-free `using Domain.Enter()`); `ThreadAffinityGuard.IsHeld`; `Context.MaxDepth`, `ChildCount`, `IdBlocks`, `Fault` and `ThrowIf*` helpers; `Database.IsChild`, `AddTableCore` and `GetQueryTableInfo`; `IdBlockAllocator.FirstBlockSize`, `MaxBlockSize`, `BlockCount`, `BlockStart` and `BlockEnd`; `Store.UnionFindName`, `NoteChildCreated` and `CheckEpoch`. | Corrected (§8.3, §16) for `ThreadAffinityScope` and `IsHeld`; note for the rest |
+
+### 21.3 M9.2: The layered union-find
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §7.1, §17 M9.2 | Interim: `Context.Rebuild` runs union-find catch-up plus `MergeAll`. | At the root, `Rebuild` runs egglog's pass already: `Database.RebuildPass` over `Schema.FunctionTables`, with the X42 clean test (journal mark and pending notifications). That is §7.1's root branch; the root has nothing to catch up with, and the pass keeps root rows canonical after root unions. | Corrected (§17) |
+| §5.6 | `CatchUpUnionFind` refuses staged, unmerged unions before the cursor test. | It refuses them only when the parent has new displacements. Refusing when there is nothing to catch up with would fault the child for no reason, because `Rebuild` merges those unions right away. | Corrected (§5.6) |
+| §5.5 | `OverlayDisplacedTable` takes four constructor parameters. | An optional fifth, `IdBlockAllocator? localIds`: `ParentIdLosers` (§5.6, G2, L7) needs to know which ids are local when the union happens. | Corrected (§5.5) |
+| §5.5 | — | `OverlayDisplacedTable.Merge` refuses ids above `UnionFind.MaxId` with `ArgumentOutOfRangeException`, as the root union-find's `Reserve` does. | Corrected (§5.5) |
+| §5.7 | `Find` and `AreEqual` call `ThrowIfNotReadable` only. | On a context that is not frozen, `Find`, `AreEqual`, `ScanMerges` and `CheckInvariants` enter its thread domain re-entrantly (I24). Frozen contexts take no guard (§8.3). | Corrected (§5.7) |
+| §8.3 | Only `CreateChild`, `Freeze` and `Dispose` are refused from inside an operation of the domain. | Inside a write batch's action or a `ScanMerges` visitor, `Write` and `Union` on any context of the domain, and a `Rebuild` that would run a pass, throw `InvalidOperationException` before anything is staged or faulted (`ThreadAffinityGuard.EnterCallback`, `ExitCallback`, `InCallback`). Without this, a nested rebuild runs an epoch inside the batch's epoch, which breaks I3 and faults the child through the journal's order check; a nested ancestor write changes the parent the batch caught up with; and a write inside a visitor changes or dirties the partition being scanned. Reads, and rebuilds with nothing to do, stay allowed. The `ScanMerges` version check is kept as a second safeguard; with writes refused it cannot fire. M9.4 and M10.2 made the lift scans and a child's rule search callbacks too. | Corrected (§5.7, §6.6, §6.10, §7.1, §8.3) |
+| §8.2 | `Dispose` is refused re-entrantly. | It also throws while a `ScanMerges` of the context runs, from its visitor or from another thread, through a per-context scan counter that `Dispose` closes with a compare-and-swap. A frozen context is scanned without its domain, so the re-entrance check cannot see a dispose from inside its visitor. M9.4 extended the counter to `ScanOwn` and `ScanAncestorsMentioning`. | Corrected (§5.7, §8.2) |
+| §6.8, §12.7 | Checker item 1.7 compares `Gate.LiveDescendants` with the recursive count. | `DescendantGate` carries change marks (`BeginChange`, `EndChange`, `Changes`, `IsChanging`), which `CreateChild` and `Dispose` set on every gate they change. The comparison is made only on a consistent reading of the tree and the gate, with up to 16 retries. Under a frozen context whose descendants never stop changing, one run of the checker may skip the item rather than report a false violation; a context that is not frozen is always checked exactly, inside its domain. | Corrected (§6.8, §8.2, §12.7) |
+| §6.6 | `Context.Write` enters the domain, then checks writability. | It checks `ThrowIfNotWritable` before entering as well, so a frozen context used from another thread reports "frozen" rather than a domain conflict. | Corrected (§6.6) |
+| §6.7, §17 | The retraction guard arrives in M9.3. | Its union-find row is enforced from M9.2, because I9 depends on it: `Database.ClearTable` at a Store's root refuses to clear `$uf` while the root has live descendants. | Note (placement) |
+| §8.1, §15 | `Table.Freeze` is a virtual whose default seals the pending state; `Context.Freeze` takes `FreezeWarmup?`. | In M9.2 the base `Table.Freeze` threw `NotSupportedException`, `DisplacedTable` and `OverlayDisplacedTable` overrode it, and `Context.Freeze` had no parameter. M9.3 made `Table.Freeze` abstract (§21.4) and added the parameter. | Note (interim) |
+| §17 M9.2 | `UnionFindInvariantCheckerTests` has six corruptions. | Nine: I4, I5, I6, two of I8, I9, I10, I23 and the gate, the gate one also on a frozen root. The checker also covers root I4 and full compression of a frozen root. | Corrected (§17) |
+| Tests | — | `ChildDatabaseTests.StagingIntoAChildIsNotSupportedBeforeItsLayersExist` became `StagingIntoAChildReachesOnlyItsUnionFindBeforeItsLayersExist`, because the interim resolver maps `$uf` to the child's `OverlayDisplacedTable`. `ContextEpochTests.RootTimestampsAreIdenticalToThePreChangeSequence` empties the calling thread's `ColumnIndex`, `TupleIndex` and `StagedOutputs` hash-table pools before each run: pooled tables keep their slot count, which changes iteration order and minted ids between runs in one process. The engine's pools, which mirror egglog's, are unchanged; this bears on decision 4. `ScanMergesTests.WritesAndStructuralCallsAreRefusedInsideTheVisitor` now asserts that the union does not land and that the context stays clean and not faulted, and has an ancestor-write case. | Note |
+
+### 21.4 M9.3: Layered tables
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §17 M9.3 | Interim: `Rebuild` throws `NotSupportedException("Row catch-up arrives in M9.4.")` when `NeedsCatchUp`. | A narrower refusal, made before anything changes and without faulting, only when row work would be needed: (a) an unsettled ancestor's shared layer version moved; (b) the union-find changes and a live own row names an id that stops being canonical; (c) a new own loser that is not local is named by a visible ancestor row. The same refusal reaches `Write`, `ClearTable`, `CreateChild` and `Freeze` through `Rebuild`, and `Freeze` ran it before its faulting `try`. The literal interim would break M9.2's catch-up after every root union and would not refuse a child's own unions over its rows; a first, looser check left a clean child holding stale rows (found in review). M9.4 replaced the interim. | Corrected (§17); replaced in M9.4 |
+| §7.2 | "A replaced row reappears as an append." | The interim, and M9.4's catch-up, rely on an invariant the text did not state: an ancestor with live descendants tombstones a row without appending one only when its rebuild folds a rewritten row into an existing row after a union. It holds because every retraction entry point is guarded and compaction is gated; `ContextTables.AncestorRowsChanged` documents it. Tombstone tracking in `AncestorCursor`, offered in review as defence in depth, was not added. | Corrected (§7.2) |
+| §3.4, §6.7, §14.1, §17 | `GuardForNewState` is `null` at a root without live descendants, snapshotted when a state is created. | It returns the database's guard at every Store-backed database, the root included; only a bare database gets `null`. The snapshot was unsound: a state from `CreateExecutionState`, or a buffer from `NewBuffer`, can outlive `CreateChild` and then delete the new child's rows. `RetractionGuard.AttachRoot` gives the root's guard the root's gate, and `CheckRemove`, `CheckClear` and `CheckSubsume` return after one inlined volatile read while the root has no live descendants. A Store's root pays one guard load and one gate read per staged removal; bare databases, and so the M9.0 benchmarks, keep one null test. | Corrected (§3.4, §6.7, §14.1, §17) |
+| §6.7 | Guarded entry points: the two `StageRemove` overloads and `ClearTable`. | Buffers from `Database.NewBuffer` carry the guard too (`MutationBuffer.AttachRetractionGuard`, copied by `FreshHandle`), because I22 requires it at every entry point; the check reuses the buffer's `allowsDelete` branch, so unguarded removals pay nothing, and buffers from `Table.NewBuffer` carry none. The rule `Remove` instruction consults the guard once per batch; rule deletes would otherwise bypass decision 1 and R1. | Corrected (§6.7, §14.1, §15) |
+| §14.1 | (Root costs.) | Rows the design requires but the table omitted: the layered fields of `ExecutionState` (two references, 16 B per state and per clone, in M9.3; three with M10.2's `views`), `GuardForNewState` per state creation (one owner test), the serial-refresh volatile read per `IndexCatalog.GetOrRefresh`, and the guard read per staged removal. | Corrected (§14.1) |
+| §6.5 | The root path of `PredictRow`/`PredictColumn` is `ReadTable(t)`. | They keep their pre-context root shape: after their own `layers` test they call `ReadRootTable` (the former `ReadTable` body, aggressively inlined) and read the spec only on a miss, through `PredictCore`/`PredictedColumn` overloads that take the table. The layered paths are `PredictRowLayered` and `PredictColumnLayered`. `ReadTable` stays the throwing dispatch point the lookup instructions use. | Corrected (§6.5) |
+| §6.5 | `VisibleRowCount` in a child is `ViewFor(t).VisibleCount`. | For `$uf`, which `ViewFor` refuses (X23), it returns `Context.DisplacedInViewCount`: the parent's view count when the child was created plus the journal (I8), which is what the parent and a copy report. The text left this case undefined. | Corrected (§6.5) |
+| §6.5 | `$uf` lookups use the `OverlayDisplaced` arm. | In a child, lookups, `PredictRow`, `PredictColumn` and `TryGetRow` of `$uf` go through the `OverlayDisplacedTable`'s view-level lookup, and `GetView($uf)` throws `NotSupportedException`. | Corrected (§6.5) |
+| §4.3 | `Store.AddTable` takes the definition lock and, for a root that is not frozen, its domain. | The frozen flag was first read before the domain was entered, which allowed a race (found in review). It is read again after entering, and a root found frozen there takes the frozen path. | Corrected (§4.3) |
+| §8.1, §15 | `Table.Freeze` is a virtual that seals pending writes. | Abstract, with an internal `HasPendingWrites`; `Database.Freeze` checks every table before freezing any of them. | Corrected (§8.1, §15) |
+| §6.3, §6.7, §8.1 | — | A frozen (shared) `SortedWritesTable` refuses `Clear`. The layers of a context's views are `SortedWritesTable`s; `LayeredSchema.RootView($uf)` throws; root views live in an array that grows geometrically. | Corrected (§6.3, §6.7, §8.1) |
+| §6.3 | `TableView.VisibleCount` is computed once per view. | Only its hidden-live part is cached; `LatestStamp` and `ApproximateCount` are computed on each read. | Corrected (§6.3) |
+| §6.2 | `NoteUnsealed(HiddenSet set)`; `new TableLayer(this, s, Depth)`. | `NoteUnsealed` also takes the ancestor table, so it can seal with that table's row count, and `TableLayer` takes its depth from its owner. In M9.3 `LayerStatistics` held only the M9.3 counters. | Corrected (§6.2) |
+| §6.2, §8.1 | `TakeRound` adopts deferred layers. | `Database.MergeTable` and `Database.Freeze` adopt them as well. | Corrected (§6.2, §8.1) |
+| §6.7 | A child's `ClearTable` routes to `ContextTables.ClearTable`. | `Context.ClearTable` in a child runs the guard and decision 2 checks before it changes anything and refuses `$uf`; only a failure after those checks faults the child. | Corrected (§6.7) |
+| §7.1 | DEBUG builds run the checker at the end of `Rebuild`. | Not when a contradiction stopped the merge with writes still pending. | Corrected (§7.1) |
+| §15 | `FindRowHashed` is in `Tables/SortedWritesTable.Lookup.cs`. | It is in `Tables/SortedWritesTable.Layered.cs`. | Corrected (§15) |
+| §6.8, §17 | The compaction gate and the row cursors are M9.4 items. | The gate was implemented in M9.3 (`MaybeRehash` and `ForceRehash` gated, root tables on the root's gate, shared layers on their owner's, `CompactionsBlocked` counting the skips), because the storage freeze compacts and children's hidden sets index row ids. `AncestorCursor` (with pending rows and stamp), `NeedsCatchUp`, `CommitCursors` and the settled-depth bookkeeping also arrived in M9.3, because the interim refusal needs them. | Note (placement) |
+| §3.4 | Child query members answer through `ContextView`. | Until M10.2 the members that need views (`ProcessConstraints`, `SplitConstraints`, `IPlanStatistics`, `ColumnCardEstimator`) threw `NotSupportedException` for function tables. `EstimateSize` went through the child's `TableView` from M9.3. | Note (interim); final form in §21.7 |
+| §6.3 | `LayerView.RefineVisible` calls `Table.RefineVisible`. | Until M10.1 it used `VisibleRowFilter` or `HiddenOnlyFilter` with `Subset.Retain`, because `Table.RefineVisible(Subset, HiddenRows)` is M10.1 content. | Note (interim); resolved in M10.1 |
+| §6.5 | `ViewFor` reads the state's `ViewSnapshot` first. | Until M10.2 states had no snapshot, and `ViewFor` read `ContextTables.GetView`. | Note (interim) |
+| Tests | — | `HiddenSealingTests`: the rule half of R1-1 was a scan of the view until rules in a child existed; M10.2 added it as `ARuleOverTheViewDerivesOnlyTheChildsValue`. `RootRetractionBypassReviewTests.ARawBufferOfAChildCannotRetractUnderAWritableParent` gained `child.Rebuild()` before its read; the test was wrong, because `NewBuffer` notifies the table when it creates the buffer (egglog's `new_buffer`) and a child with a pending notification is not clean (§7.5). `LayeredLookupTests.PredictionsUseTheWriteLookup` expected `VisibleRowCount($uf) == 0`, which encoded the defect above, and now expects 1. `RetractionTests.ARootStateWithoutDescendantsHasNoGuard` encoded the unsound snapshot; it is replaced by `AStoreStateAlwaysCarriesItsDatabasesGuard`, and `RawBuffersPassTheGuard` was added. `InterimRowWorkTests` (6 tests) was added. Earlier interim tests now assert M9.3 behaviour: `ChildDatabaseTests`, `ContextUnionFindTests.AnExceptionInAChildsWriteFaultsIt`, `DisplacedTableFreezeTests`, and a cast in `VectorizedLookupTests`. | Corrected (§17) for `RetractionTests`; note for the rest |
+| §16 | — | Helper members not listed: `Context.ThrowIfRowWorkPending` and `DisplacedInViewCount`; `ContextTables.AncestorRowsChanged`, `OwnRowsMention` and `AncestorRowsMention`; `TableLayer.HasHidden`; `RetractionGuard.AttachRoot`; `MutationBuffer.AttachRetractionGuard`; `ExecutionState.ReadRootTable`. | Note |
+
+### 21.5 M9.4: Child rebuild, catch-up, settle and dispose
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §7.4, §7.5, §6.6, §7.1 | G-b checks the journal rows of each pass. | That is unsound: the root can intern an eq-sort container naming a child's loser after the child displaced it, and the root's container rebuild can produce one. `ContainerValues.EqVersion`, shared with every environment that holds ids, moves on each new content (an `Interlocked` increment); a child records the version its guard last checked against. `IsClean` includes `IsEqGuardCurrent` (the journal is empty, or the version has not moved). When the version moved, `Rebuild` runs the guard over the whole journal before its clean test, taking no epoch when nothing else is to do, and so does each pass's guard; `PrepareForWrite` rebuilds in that case. A refusal throws `NotSupportedException` and faults the child, as G-b does. Own displacements are still the only ids checked: an intermediate ancestor's losers are its own guard's job, because a child is clean only while its parent is. | Corrected (§6.6, §7.1, §7.4, §7.5, §13 edge 37) |
+| §7.4, §10.7, §13 | — | A frozen database interns no new eq-sort container (`InvalidOperationException` in `ContainerEnv`'s insert path). A frozen context never re-runs its guard, so a container interned at a frozen root naming a frozen descendant's loser could never be refused. Looking a container up, re-interning an existing one, and interning containers over base values stay allowed. | Corrected (§7.4, §13 edge 37) |
+| §12.7 | C6 is a bridge check. | `Context.CheckInvariants` gains a G-b part, `CheckEqContainerElements`: no own displacement of a child is an element of an eq-sort container. This is the storage half of C6, added now because G-b is M9.4 content; `CheckInvariantsCatchesViolations` has a corruption test for it. | Corrected (§12.7) |
+| §6.9, §5.6, §7.1, §8.2, §13 | Children of a stopped case: not stated. | After rebuilding a parent that is not frozen, `Rebuild` and `PrepareForWrite` (so `Write`, `ClearTable` and `CreateChild`) check whether that parent was stopped by a contradiction. A child with `StopOnContradiction` becomes contradicted, which is sound because the contradiction row is visible in its parent (I25). Any other child gets `InvalidOperationException` without being faulted; it can only be disposed. | Corrected (§6.6, §6.9, §7.1, §8.2, §13 edge 24) |
+| §8.1, §8.4, §13 | `Freeze` throws on a failure not taken (edge 22). | A failure recorded and not taken is refused before the rebuild and again after the rebuild and, at the root, `Settle`; a contradiction the rebuild found is refused too. These refusals do not fault: a recorded failure is not an exception (§8.4), and the bridge's §10.8 also checks the failure outside storage's freeze. The context stays unfrozen and consistent, so the caller can take the failure and freeze again. Exceptions from the rebuild or from the database freeze still fault a child (X12). | Corrected (§8.1, §8.4, §13 edge 22) |
+| §7.6, §8.2, §10.8 | What `CreateChild` does with a failure: not stated. | A failure that the parent's rebuild or the root's settle records during `CreateChild` stays recorded on the parent, as for `Write` and `Rebuild`, which also record failures without throwing. The child, which has its own failure slot, is still created. Taking that failure right after `CreateChild` is the bridge's job (M10.3). | Corrected (§8.2, §13 edge 24) |
+| §6.6, §8.2, §14.2 | Rebuild indexes are refreshed when read. | `CreateChild` of a context that is not frozen brings the rebuild indexes of that context and of its non-frozen ancestors up to date (`RefreshRebuildIndexesForChildren`, `ContextTables.RefreshOwnRebuildIndexes`), as root work at child creation (§1 item 11): O(tables) plus the appends since each index's last refresh, all rows the first time or after a compaction between child lifetimes. Afterwards a child's step 4 and its lift reads refresh a writable ancestor's index only from that ancestor's appends since the child's creation. That is per-child work of the same order as its catch-up's reading of those appends, which §14.2 did not list. | Corrected (§7.3, §8.2, §14.1, §14.2) |
+| §14.1 | (Root costs.) | Rows the table omitted: interning a new eq-sort container (only on a miss: one frozen check and one `Interlocked` increment); new content in a root container rebuild (one `Interlocked` increment); the G-a test (one field load at the root, as `InChildContext` is tested before `HoldsIds`); one `layer is not null` test per table rebuild in `SortedWritesTable.RebuildWith`; one `DirtyCount` compare per pass in `Database.RebuildPass`; the stores of `LastRebuildRows` and `LastRebuildWasIncremental` per rebuild; one bool per table for the pass result; the rebuild-index refresh at `CreateChild` of a writable root. | Corrected (§14.1) |
+| X37, §14.2 | An empty layer costs about 1–2 KB. | Dry runs measure a bare child at about 7.4–9 KB and an empty layer at about 2.7–3.0 KB (`ManyChildrenBenchmarks`: `ChildWithOneEmptyLayer` minus `ChildOnly`). Most of the layer cost is `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the O(tables) catalog copy. Reducing it means changing root hot paths (the pending queues), so it is left to M10.4 (§21.9). | Corrected (X37, §14.2) with the measured figures |
+| §15 | `Database/Database.Rebuild.cs`: no change in code. | `RunWithTakenOut`, `RunOnTables`, `RunOnTablesCore` and `RunOnTablesParallel` return whether any table reported a change (each such table is still notified); `RefreshDirtyContainerIds` (§7.4) needs the result. Root cost: one bool per table. | Corrected (§7.4, §15) |
+| §7.6, §15 | `SettleAppends` calls `MarkRebuilt`. | `Settle` moves every function table's rebuild mark after its `MergeAll`, past the merged rewrites, so the next `CreateChild` does not settle the same rows again. `HasRowsSinceRebuild` is false for tables without rebuild columns. `RebuildFull` was refactored into `RebuildRange`, which `SettleAppends` shares, and the internal diagnostics `LastRebuildRows` and `LastRebuildWasIncremental` were added; the root path is unchanged. | Corrected (§7.6, §15) |
+| §6.2, §6.6 | `HasRetractions` is set when `DeleteLayered` hides an ancestor row. | It means that the context retracted rows of the table: `RetractionGuard` also marks the layer when it allows a delete or a subsume. The I14 checker needs this. | Corrected (§6.2) |
+| §7.2, §7.3 | The loops as written. | Three equivalent, cheaper forms: step 4 leaves out own losers that are local to the child (I10); step 3 is skipped when no id was displaced since the last pass (X38); `CatchUpRows` and the I16 generation check skip ancestors whose change stamp did not move. Context-private tables are left out of the row cursors and the generation check (decision 1: descendants never read them). | Corrected (§7.2, §7.3) |
+| §6.10 | `ScanOwn` and `ScanAncestorsMentioning` require `IsClean` and throw on the root. | They follow M9.2's rules for `ScanMerges`: they enter the domain of a context that is not frozen, run the sink as a callback, and count as running scans. `ScanAncestorsMentioning` returns nothing for context-private tables and delivers each row once. | Corrected (§6.10) |
+| §12.7 | The tables checker covers I12–I18. | Its cost is proportional to the context. I12 and I15 are checked over own rows and own hides; the ancestor part of I13 through the ancestors' rebuild indexes and the rows appended since creation; I14 by `Find` for constructors, by key for relations, and otherwise by the table's merge on a scratch catalog. I35 is a separate `CheckRootSettled`, run in DEBUG at `CreateChild` and `Freeze` of the root. | Corrected (§8.2, §12.7) |
+| §7.1 | `Rebuild` returns whether any pass changed something. | It returns false when the catch-up only moved cursors and copied nothing. The settled depth advances only when a rebuild runs passes. | Corrected (§7.1) |
+| §10.7, §17 | Container registration with `holdsIds` is an M10.3 item. | `ContainerValues.RegisterType` gained `holdsIds`, and `ContainerEnvBase` gained `HoldsIds`, `AnyContainerMentions` and `EqVersionCounter`, in M9.4, because G-a and G-b are M9.4 content. The bridge still has to pass `holdsIds` when it registers containers (§21.9). | Corrected (§10.7); placement |
+| §17 M9.4 | The facade canonicalizes Id cells through `Context.Find` before every write. | On spike seeds it canonicalizes through `Context.UnionFind` inside the batch, as the spike requires. On spike-free seeds of `ContextDifferentialTests` and odd seeds of `ContextCopyTests` it has a raw-write mode (`RawWrites`, `RawChildWrites`): child writes pass id cells as given with timestamp 0, so X38's canonicalization and stamping are exercised. Root writes stay canonical, because a stale raw root write is legitimately invisible until the next rebuild (X42). Adopted from review. | Corrected (§17) |
+| §17 M9.4 | Gate harness as listed. | Strengthened in review and adopted unchanged: `SpikeTestSchema` has a `bits` table with `OrMerge`, a lattice join that differs from both inputs, so a merge that stores the incoming row instead of the output is caught; `SpikePair.Check` compares `ScanColumn` with the visible rows as exact multisets, not only for completeness; the spike is the second oracle on even seeds, which retract nothing; `ContextCopyTests` runs 400 seeds. | Corrected (§17) |
+| Tests | — | `InterimRowWorkTests` was deleted; its case `AnAncestorFoldThatOnlyTombstonesIsSeenAsItIs` still holds and is restored verbatim in `Layers/CatchUpTests`. `SoundnessReviewTests` asserts the catch-up instead of the refusal. The `ChildDatabaseTests` container uses `holdsIds: false`. | Note |
+| §16 | — | Types not listed: on the test side `SpikeTable`, `SpikeReferenceOpKind`, `SpikeProgram`, `Coverage`, `DisposingSink` and `OrMerge`; on the benchmark side `RootWorkload`, renamed from `FrozenRootWorkload`, with a freeze flag so that `PerChildCostBenchmarks` also measures writable roots (its `FrozenRoot` parameter). | Note |
+
+### 21.6 M10.1: Visibility in scans, subsets and indexes
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §9.3, §14.1 | The existing plain overloads forward `HiddenRows.None`; every scan call pays one `IsNone` test. | The plain overloads keep calling the plain sealed scans, and the new hidden-aware overloads fall back to them when given `None`. The plain index-build overloads likewise stay unchanged, and the hidden-aware ones fall back to them: `ColumnIndex.BuildForSubset`, `RebuildForSubset`, `RebuildFull` and `MergeSubsetVisible`, `TupleIndex.BuildForSubset` and `MergeSubsetVisible`, and `SparseColumnIndex.Build`. Results are the same, and the root, and today's per-probe and per-node builds, no longer pay the one `IsNone` test per call that §14.1 budgeted (the root pays nothing). T2 and T3 assert that `None` matches the plain overloads bit for bit; `HiddenRootCostReviewTests` asserts zero allocation on both paths, and that `RefineVisible(None)` allocates what `RefineLive` does. | Corrected (§9.3, §14.1) |
+| §9.2 | `LayeredSubset` and `SubsetArrayPool` as sketched. | `Clone` takes an optional `SubsetArrayPool`; `SingleLayer` is −1 for a multi-layer subset; `SingleRows` throws `InvalidOperationException` for a multi-layer subset; `LayerMask` of an empty single-layer subset is 0; `FromLayers` accepts arrays of any length up to 32, takes ownership of them and disposes empty entries. `SubsetArrayPool` keeps only arrays of exactly `LayerCount` entries, at most 1024 (`MaxRetained`), and checks in DEBUG that returned arrays own no buffers. | Corrected (§9.2) |
+| §9.3, §16 | — | Helpers the text did not list: internal `TupleIndex.MergeSubsetVisible`, matching `ColumnIndex`'s; `LayerView.AnyVisible(SubsetRef)`, which `TableView.AnyVisible` forwards to; private `SparseColumnIndex.Group`; private `ColumnIndex.RentPairs` and `GroupPairs`, which both `RebuildFull` overloads share. The root's `RebuildFull` behaves as before. | Corrected (§6.3, §9.3) |
+| §6.3 | `AllRows` gives `Dense(0, n_l)` per present layer with rows; `AnyVisible` serves zero-variable atoms. | `n_l` is each present layer's physical row count, tombstones and hidden rows included, and present layers without rows are left out. `AnyVisible` returns false for an absent or out-of-range layer and for an empty subset, and throws `ArgumentOutOfRangeException` for a subset that extends past the layer's rows. | Corrected (§6.3) |
+| §6.3 | — | Resolves M9.3's interim (§21.4): `LayerView.RefineVisible` is now `Hidden.IsNone ? Table.RefineLive(s) : Table.RefineVisible(s, Hidden)`, exactly as §6.3 says. | Note |
+| §1, §3.1, §3.4 | A child shares the root's counters, external functions, dependency graph and containers by reference. | It shares the root's `BaseValues` too (rule-layer v2 §13 item 3, filed as an M9.3 defect and fixed at the start of M10.1): engine code that reads base values through `ExecutionState.BaseValues` in a child would otherwise see an empty registry. The root's registry is created when the first child is created, if the root never used it, as its container environments already were. Cost: one small object, once per store. | Corrected (§1 item 1, §3.1, §3.4) |
+| §15 | — | The hidden-aware overloads made 18 existing `cref` attributes ambiguous (CS0419); they now write out the overload signatures, and the touched paragraphs were rewrapped to the repository's width. With whitespace normalized, the generated XML documentation is identical apart from deliberate wording edits. A doc-only change outside §15's list. | Corrected (§15) |
+
+### 21.7 M10.2: Layered query execution
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §3.4, §9.1, X21, I29 | Rule runs in a child are unchanged in shape; `Build` records `ViewGeneration`, and `RunRuleSet` asserts it unchanged. | `RunRuleSet`, `ExecuteRuleSet` and `MergeRuleSet` in a child run as the context's operation. They enter the context's domain, refuse a call from inside a domain callback, and require current views. They throw `InvalidOperationException` when the view generation, or the chain's stamp (`ContextView.Stamp`: the sum of `Database.ChangeStamp` over the context and its ancestors), moved since the rule set's first header was evaluated; the builder records both then, not at `Build`. They refuse a timestamp below `max(SemiNaiveFloor, the context's latest epoch)` with `ArgumentOutOfRangeException` (`Context.UseEpoch`). The search runs as a domain callback, so a nested `Write` or `Rebuild` from an action or external is refused, and an escaping exception faults the child (X12). `MergeRuleSet` applies the domain, the floor and the fault rule. Every refusal happens before anything runs and does not fault. Why: header subsets name row ids, which a merge, hide, clear or compaction anywhere on the chain changes without changing any view's structure, and a timestamp below the floor would break I3, I19 and I21. Refusing in `Build` was considered; the run is refused instead, because views can also move between `Build` and the run. The root keeps egglog's rule: build right before running. | Corrected (§3.3, §3.4, §8.3, §8.4, §9.1, X21, I29) |
+| §3.5, §7.5, §9.1 | Reads, and so rule building, require `IsClean`. | Views are current when `IsClean` holds without its pending-notifications term, at every level of the chain (`Context.IsViewCurrent`): writes staged and not merged are invisible, as at the root (X42). `ContextView.Evaluate`, a child's `Snapshot` (when it reads any table) and the planning statistics require it in a child. `EstimateSize` keeps M9.3's unchecked behaviour. Building an empty rule set needs no current views. | Corrected (§3.3, §3.5, §7.5, §9.1) |
+| §9.1 | `RunRuleSet` throws `ArgumentException` unless the rule set was built on this database's view. | A rule set assembled by hand through `RuleSet`'s public constructor (no view) still runs on a database that is not layered, its views pinned when the run starts. It is refused with `ArgumentException` on a layered database. | Corrected (§9.1) |
+| §8.1, §9.10, §3.4 | `FreezeWarmup.From(IEnumerable<PlanTemplate>)`. | `FreezeWarmup.From(plans, IQuerySchema)`, which needs the schema to know which columns are cacheable. `IQuerySchema` gains a default member `IsCacheable` (`true`), which `Database` answers from `TableSpec`. | Corrected (§3.4, §8.1, §9.10, §15) |
+| §9.8 | `CanonicalConstants.Compute` builds the canonical-or-written vector. | It returns the cached plan's written vector itself (`CachedPlan.WrittenConstants`) when no constant changes, and always for a bare database. Same semantics, without an allocation per rule per run. | Corrected (§9.8, §14.1) |
+| §9.1, §6.3, §14.1 | Root views are `LayeredSchema.RootView`s; each rule set gets one snapshot array. | Four differences. `TableView.ForTable` builds single-layer views over any table kind, so root and bare-database views cover `$uf` and tables that are not `SortedWritesTable`s, and `AllRows` of a one-layer view is the table's `All()`. `ContextView.ForRoot` caches its own root views rather than using `LayeredSchema.RootView`, so bare databases work too. Every root rule set shares one `ViewSnapshot` over that cache, which is sound because its entries are only ever filled; a new one is made only when the cache array grows. A root snapshot leaves out the tables of action lookups, which root lookups never read through it (§6.5). Why: root rule-set builds allocated more than in M10.1 (found in review). | Corrected (§6.3, §9.1, §14.1) |
+| §9.4 | With no present layer, `Evaluate` splits and returns `Empty`. | It classifies the constraints on the root's entry of the table, or on the database's own entry for synthetic layers. When layers classify a constraint differently, it counts as fast overall, and the layers where it was slow refine by it with `RefineOne`, as the text says. | Corrected (§9.4) |
+| §9.5 | `TrieNodePool` owns a `SubsetArrayPool`. | `TrieNodePool.Layers` is `null` for one-layer runs, so a root run allocates no array pool. | Corrected (§9.5) |
+| §9.5, §16 | `TrieNode`'s `Subset subset` becomes `LayeredSubset rows`. | A single-layer node, which includes every root node, keeps a plain `Subset` plus a layer byte inline. A multi-layer node's rows, and the spare indexes of a recycled node, live in a new type, `TrieNodeSideState`, created on first use and kept through the pool, so a warm serial run allocates none; a concurrent multi-layer child node allocates one. `IsMultiLayer` is one flag test. Cache arrays are sized from the rows' highest layer, and growth copies the old entries. Why: §1 item 11, because a parallel root run allocates a node per frame at positions 0 and 1, and the inline `LayeredSubset` grew the node from 64 B to 80 B (found in review). It is 64 B again. | Corrected (§9.5, §14.1, §16) |
+| §9.5, §14.1 | The prober's size is not stated. | A `Prober` is 72 B (48 B in M10.1), because a `ProberPiece` carries `Layer` and `View` and the prober carries `Rest` and `RestCount`. It is per-position scratch, allocated once per join task, not per frame or row; a parallel root run therefore pays it per morsel. The `LayerHits` per-position array is now allocated on first use, so a root run never allocates it. Measured against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%); parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%). Shrinking the prober would mean moving `View` and `Rest` out of the piece in every kernel; that is left to the idle-machine gate (§21.9). | Corrected (§9.5, §14.1) |
+| §9.8 | `CachedPlan` keeps at most 16 variants. | When the cache is full, a new K's variant replaces the oldest (copy-on-write, under the lock). A first version stopped caching once full, which made a Store-backed root rebuild its variant on every run after 16 canonical changes (found in review). | Corrected (§9.8) |
+| §9.8 | `RuleBuilder` records an `ActionIdConstant` for every constant Id operand. | They are recorded once, in `RuleBuilder.Build`, by scanning the program through `ActionSubstituter.Operands`, so the operand order is defined in one place. A substituted `ActionInfo` keeps the written `IdConstants`. `QueryEntry` equality ignores the `IsIdConstant` flag, since a flagged and an unflagged constant of one value are the same operand; `WithConstant` keeps the flag. | Corrected (§9.8, §15) |
+| §9.1, §9.5 | `Build` collects the atom and lookup tables; `CloneForMorsel` copies `views`. | A child's snapshot leaves out `$uf` lookups, because a child reads `$uf` through its overlay table (X23). The tables a rule set reads are collected by `ContextView.Snapshot(rules, actions, skip)` through `RuleSet.LookupTable`, without a list; `RuleSet.ReadTables` was removed. `JoinRun.CloneForMorsel` copies the roots array, which M10.1 allocated anew; tasks only compare against it, for counter attribution. | Corrected (§9.1, §9.5) |
+| §12.7 | `ExecutorInvariants` checks view coherence, frozen catalogs, sort order, creation stamps and watermark bounds. | It checks row-level properties (sort order and run index, creation stamps, canonical cells, unique keys) on the context's own rows only. It skips its view checks while any hidden set is unsealed, because the tables part reports I18. It tolerates two states that are not violations: an empty layer created without a merge (X37) that a cached view does not have, and a `LayerView` that still says not frozen after its context froze. Watermark bounds are checked on `SemiNaiveFloor`; per-rule watermarks are bridge state (M10.3). | Corrected (§12.7) |
+| §17 M10.2 | Done when, with `EGGNOG_COUNTERS`, ancestor-layer scanned rows and dynamic-index rows are 0 once `W ≥` every root stamp. | Counters are kept per database (`Database.ExecutorCounts`), behind a static readonly switch set from `EGGNOG_COUNTERS`, which the JIT folds away when off; the test project's module initializer turns counting on for the suite, and `EGGNOG_COUNTERS=0` turns it off (the counter tests then skip). Ancestor rows are counted in two kinds: rows of root nodes, narrowed by headers only, and rows of refined nodes (probe results). The 0 is read on the root-node counters, which measure the work that grows with the root; refined rows are bounded by §14.2's probe-results term. It holds for size-ordered plans (Gj, the default, and PureSize); MinCover deliberately covers with the widest atom, so its plan scans the old side, and a test documents this. | Corrected (§14.1, §17) |
+| §3.4 | Child schema and planning members (carried over from M9.1 and M9.3). | Final form: `IQuerySchema.SplitConstraints` uses `ConstraintProcessor.Split` on the root's entry; `IPlanStatistics` and `PlanQuery` go through `View`; the single-table members (`ProcessConstraints`, the instance `ColumnCardEstimator`) refuse every table in a child with `NotSupportedException`, with the X23 message for `$uf`. | Corrected (§3.4, §15) |
+| §9.2, §9.5, §15 | Mechanical test updates. | `ProberTests` constructs `new ProberPiece { ... }`, and `Prober.TryGetSubset` forwards to its first piece. `LayeredSubset` gained `TakeSingle` and a single-layer `GetEnumerator`, so `PlanInstantiationTests` and `NaiveRuleRunner` compile unchanged over `LayeredSubset` headers. | Corrected (§9.2, §9.5) |
+| M10.1 finding | (M10.1 recorded a hazard: a child run that throws leaves writes staged in layers its search created, because `MarkStagedWrites` and `DiscardStagedWritesSince` visit only `Database.tables`, and the next `MergeAll` would adopt and merge them, against D18 and X18.) | Both `RunRuleSet` and `ExecuteRuleSet` set `InSearch` in a child, as the finding asked, and an exception escaping either faults the child (X12). Every later call except `Dispose` is then refused, including the run members, so those writes are never merged through the context. `DiscardStagedWritesSince` still visits only adopted tables, and `Database.MergeAll` and `MergeTable` do not test the fault flag. | Note; open item in §21.9 |
+| §3.3, §9.1, §16 | — | Helper members not named in §3 or §9: `Context.ViewStamp`, `IsViewCurrent`, `ThrowIfViewNotCurrent`, `UseEpoch` and the `lastEpoch` field (`BeginEpoch` now records the largest epoch it returns); `ContextView.Stamp`, `Source`, `CanCanonicalize` and the internal `Snapshot(rules, actions, skip)`; `RuleSet.View`, `ViewStamp` and `LookupTable`, and an internal `RuleSet` constructor that takes the stamp; `ViewSnapshot.Wraps`, `Count` and `Require`; `TrieNode.Initialize(int, Subset, bool)`; `CachedPlan.WrittenConstants` and `CanonicalConstants.Written`. | Corrected (§3.3, §9.1, §9.5, §15) |
+| §17 M10.2 | Tests as listed. | `ChildDatabaseTests`' M9.1 interim assertions now expect M10.2 behaviour: a rule set built at the root is refused in the child with `ArgumentException`, and an empty rule set returns `Empty`. `DiffSemiNaiveStep` gained a `Split` helper so that T9 shares its variants; T9 inserts a layered step before every semi-naive step of the generated programs, and the programs of the existing profiles are unchanged. The review probes `ParallelRootMathAllocationProbe` and `RootConstantVariantCostTests` write their report file to the test binary directory (`AppContext.BaseDirectory`), as the other review probes do, instead of the current directory, so a run from the repository root leaves no `rootcost.txt` in the working tree; `RC_OUT` still overrides it, and the assertions are unchanged. Every other review test was copied unchanged. | Corrected (§17) for T9; note for the rest |
+
+### 21.8 Edits asked by rule-layer spec v2
+
+Rule-layer spec v2 §13 asks nine edits of this document. Three need no new code here and are applied in this revision:
+
+1. **Citations.** §5.7 cites rule-layer D8 and I33 cites rule-layer §6.9; the earlier citations ("§2.1", "§3.9") were version 1's section numbers. The "callback rules" of X41, §10.2 and I31 stay in the text, although rule-layer v2 defers callbacks.
+2. **§10.7.** The sentence saying that the rule layer registers its `ValueSet<T>` as a container is dropped: the rule layer registers no container, and `ValueSet<T>` is an interned base value.
+3. **`BaseValues`** in a child: §21.6.
+
+Items 4–9 change bridge and lift APIs; they are listed in §21.9 with M10.3 and M10.4.
+
+### 21.9 Still deferred
+
+The spec-text updates that the M9.1–M10.2 stages left for this document, and rule-layer v2 §13 items 1–3, are applied in this revision. Everything below is still open.
+
+| Item | Recorded in | Target |
+|---|---|---|
+| §10 in full on the bridge: `EGraph` on a `Store`; `EGraphContext` and its partials; `RuleTable` and `RuleProgress` (watermarks, seeding, inheritance); `ActionReadAnalysis` and `ExternalFunction.ReadsTables`; `RunRules` (calling `NoteRuleRun`, and running at T within `UseEpoch`'s floor through `RunRuleSet`), `EnsureClean`, `Saturate`, `FlushUpdates`, `HostWrites` and the reads; `IterationReport`'s new fields; `ContextLocalSlot`; `StopOnContradictionFunction`; panics per context | M10.2 | M10.3 |
+| The bridge lowering Id-typed constants through `QueryEntry.IdConst`, and its freeze passing `FreezeWarmup.From(cached plans, schema)` | M10.2 | M10.3 |
+| Container registration in the bridge (passing `holdsIds`), and G-a on the bridge's paths | M9.4, M10.2 | M10.3 |
+| `EGraphContext` freeze and failure handling, including taking a failure that the parent's rebuild or the root's settle recorded during `CreateChild` (§8.2) | M9.4 | M10.3 |
+| The rest of `EGraphContext.CheckInvariants`: C1 (including per-rule watermark bounds, which `ExecutorInvariants` leaves to the bridge), C2, C4, C5, C7, and the C6 wrapper over `CheckEqContainerElements` | M9.4, M10.2 | M10.3 |
+| `ParallelismBudget`, `ParallelismLease` and `ConcurrentChildren` | M10.2 | M10.3 |
+| Every M10.3 unit and differential test of §17, including `ContextRuleDifferentialTests`, `ContextRuleCopyTests`, `SeededWatermarkDifferentialTests`, `IdConstantContextTests` and `ConcurrentChildRulesTests` | M10.2 | M10.3 |
+| Rule-layer v2 §13 items 4–7, in this text and in code: a factory (or setter) for `ContextLocalSlot`; `EGraph.DesignateContradiction`, the `EGraphContext` members `CreateChild`, `Dispose`, `IsFaulted`, `Parent` and `OwnRowCount`, `RunRules` reporting at the graph's `ReportLevel`, and `ParallelHeuristics` on the Store-backed `EGraph` constructor; `Freeze(planRules)` planning exactly the given rules; an extraction section (extraction over an `EGraphContext`, with staleness keyed on the extraction tables and the union-find of the context and its non-frozen ancestors, not on the clock) | M10.1 | M10.3 |
+| Failed child runs (§21.7, M10.1 finding): decide whether an exception in a child's `ExecuteRuleSet`, which the rule layer's queries call directly, must keep faulting the child. If it must not, discard the writes staged in deferred layers as well (`AdoptDeferred` before `MarkStagedWrites`, or mark and discard the deferred layers), and have `Database.MergeAll` and `MergeTable` refuse a faulted child | M10.1 | M10.3 |
+| §11 in full: lift primitives and split hooks (`MemberMap`, `ClassPartition`, `Lifter`, `CaseSet`, `SplitDriver` and the rest), and `EGraphContext.Lift.cs` | M10.2 | M10.4 |
+| Rule-layer v2 §13 items 8–9: `CaseSet.AddCase(ContextOptions?)`, `DisposeVacuous`, and `Lift` with a cancellation token checked between rounds; `ISplitSource.FindRequests` receiving the `SplitReport`, `SplitOptions.CaseOptions`, and `SplitDriver.Step` not holding the scope's domain while it calls sources and schedules | M10.1 | M10.4 |
+| `PerChildCostBenchmarks`' full workload (100 merges plus one rule run) | M9.4 | M10.4 |
+| The L6 and L7 reports; `CaseSplitMemoryBenchmarks`, `CopyVolumeBenchmarks` and `LateParentMintBenchmarks` | M9.4, M10.2 | M10.4 |
+| Reducing a bare child (about 7.4–9 KB) and an empty layer (about 2.7–3.0 KB) toward §14.2's estimate: lazy `PendingState` queue segments and lazy `IndexCatalog`s. These touch root hot paths, so the M9.0 gates apply | M9.4 | M10.4 |
+| The ≤2% root gates against the M9.0 baseline, which need an idle machine (only Release builds and dry runs were done): M9.1 (`ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks`); M9.2 (`DisplacedRebuildBenchmarks`, `UnionFind/*`); M9.3 (`WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks`); M9.4 (`DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks`); M10.1 (`ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks`); M10.2 (`RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks`) | M9.1–M10.2 | No milestone: an idle-machine run |
+| M9.4's done-when: per-child time and bytes flat within 1.5× from 20k to 2M rows (L6, B4). Dry runs show per-child bytes flat at about 98–101 KB across 20k, 200k and 2M rows, for frozen and writable roots; time is not measured | M9.4 | No milestone: an idle-machine run |
+| Whether the `Prober`'s growth (+24 B per prober) stays within the `RuleSetRunBenchmarks` Parallel gate. If it does not, shrink `ProberPiece` by moving `View` and `Rest` out of line | M10.2 | Idle-machine run; an M10.2 follow-up if the gate fails |
+| §19 item 9: turn a nonzero `RestampedCopies` into a `Debug.Assert` once I21 is proven over M10 workloads | §19 | After M10.3 |
+| Left open by design (§19 items 7 and 8): G2 ranking (after the L7 report), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |

@@ -14,8 +14,8 @@ namespace Eggnog.Relations.Tests
     /// at once, also after a merge that grows no union-find.
     /// </summary>
     /// <remarks>
-    /// R1-1's rule half ("a rule over <c>f</c> derives <c>g(a,5)</c> only") needs rules in a child, which arrive with the
-    /// layered executor (M10.2); here the view is scanned, which is what a rule's atom reads.
+    /// R1-1's rule half ("a rule over <c>f</c> derives <c>g(a,5)</c> only") runs a rule in the child through the layered
+    /// executor (M10.2, <see cref="ARuleOverTheViewDerivesOnlyTheChildsValue"/>); the scan half reads the view directly.
     /// </remarks>
     public class HiddenSealingTests
     {
@@ -47,6 +47,32 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new uint[] { a, 5 }, rows[0].Cells[..2]);
             Assert.Equal(1, rows[0].Layer);
             Assert.Equal(5u, Row(child, f, a)![1]);
+            LookupPaths.Check(child);
+        }
+
+        [Fact]
+        public void ARuleOverTheViewDerivesOnlyTheChildsValue()
+        {
+            // R1-1, rule half: root f(a)=1, frozen; the child writes f(a)=5 (a merge that grows no union-find); a rule over
+            // f in the child derives g(a,5) only, never g(a,1) from the hidden root row.
+            var (store, f, child, a) = Setup();
+            var g = store.AddTable(Relation(2), name: "g");
+            Insert(child, f, a, 5, 0);
+            LayeredRuleUtil.Run(child, rsb =>
+            {
+                var q = rsb.NewRule();
+                var x = q.NewVariable("x");
+                var v = q.NewVariable("v");
+                q.AddAtom(f, [x, v, QueryEntry.Wildcard()]);
+                var rb = q.Build();
+                var ts = rb.ReadCounter(store.ClockCounter);
+                rb.Insert(g, [x, v, ts]);
+                rb.Build("f to g");
+            });
+
+            Assert.Equal([$"{a},5"], LayeredRuleUtil.Visible(child, g));
+            Assert.Equal(0, child.Tables!.UnsealedCount);
+            child.CheckInvariants();
             LookupPaths.Check(child);
         }
 

@@ -184,7 +184,7 @@ namespace Eggnog.Relations
                         nodes[e.Id] = e.Node;
                         break;
                     case FrameUpdateKind.RefineAtomDense:
-                        InsertDense(cur, e.Id, new OffsetRange(e.A, e.B), exclusive);
+                        InsertDense(cur, e.Id, e.Layer, new OffsetRange(e.A, e.B), exclusive);
                         break;
                     default:
                         if (leaf)
@@ -227,16 +227,16 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/>: egglog's <c>insert_subset</c>
-        /// (core-relations/src/free_join/execute.rs:775-785), which reuses the node in the slot when nothing else holds
-        /// it. Here the position's scratch node for the atom is reused, which nothing outside the position's frames can
-        /// hold, unless the run may share it, when a fresh node is taken.
+        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer <paramref name="layer"/>:
+        /// egglog's <c>insert_subset</c> (core-relations/src/free_join/execute.rs:775-785), which reuses the node in the
+        /// slot when nothing else holds it. Here the position's scratch node for the atom is reused, which nothing outside
+        /// the position's frames can hold, unless the run may share it, when a fresh node is taken.
         /// </summary>
-        void InsertDense(int cur, int atom, OffsetRange range, bool exclusive)
+        void InsertDense(int cur, int atom, int layer, OffsetRange range, bool exclusive)
         {
             if (exclusive == false)
             {
-                nodes[atom] = pool.Rent(Subset.Dense(range));
+                nodes[atom] = pool.Rent(layer, Subset.Dense(range));
                 return;
             }
 
@@ -247,11 +247,11 @@ namespace Eggnog.Relations
             var node = row[atom];
             if (node is null)
             {
-                row[atom] = node = pool.Rent(Subset.Dense(range));
+                row[atom] = node = pool.Rent(layer, Subset.Dense(range));
             }
             else
             {
-                node.ResetDense(range, pool);
+                node.ResetDense(layer, range, pool);
             }
 
             nodes[atom] = node;

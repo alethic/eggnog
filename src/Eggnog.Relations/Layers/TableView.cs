@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -19,8 +20,10 @@ namespace Eggnog.Relations
     /// views are <see cref="LayeredSchema.RootView"/>.
     /// </para>
     /// <para>
-    /// The fields are plain readonly fields so compiled kernels can read them (§9.9). The layered subset members
-    /// (<c>AllRows</c>, <c>AnyVisible</c>) arrive with the layered executor (M10.1-M10.2).
+    /// The fields are plain readonly fields so compiled kernels can read them (§9.9). <see cref="AllRows"/> and
+    /// <see cref="AnyVisible"/> are the layered executor's entry points: the rows a root trie node starts from, and the
+    /// existence test of a zero-variable atom (§9.2), which fixes egglog's defect for layered views
+    /// (core-relations/src/free_join/plan.rs:1502-1505; map §8.1 row 2).
     /// </para>
     /// </remarks>
     internal sealed partial class TableView
@@ -64,7 +67,16 @@ namespace Eggnog.Relations
         /// <param name="id">The table's id.</param>
         /// <param name="spec">The table's spec.</param>
         /// <param name="layers">The layers by depth; at most 32 (X36), each over a <see cref="SortedWritesTable"/>.</param>
-        internal TableView(TableId id, TableSpec spec, LayerView?[] layers)
+        internal TableView(TableId id, TableSpec spec, LayerView?[] layers) :
+            this(id, spec, layers, requireSorted: true)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a view, checking the layers' table kind when <paramref name="requireSorted"/> is set.
+        /// </summary>
+        TableView(TableId id, TableSpec spec, LayerView?[] layers, bool requireSorted)
         {
             ArgumentNullException.ThrowIfNull(layers);
             if (layers.Length > 32)
@@ -80,13 +92,99 @@ namespace Eggnog.Relations
                 if (layers[j] is not { } layer)
                     continue;
 
-                if (layer.Sorted is null)
+                if (requireSorted && layer.Sorted is null)
                     throw new ArgumentException("Every layer of a function table's view is a sorted-writes table.", nameof(layers));
 
                 mask |= 1u << j;
             }
 
             PresentMask = mask;
+        }
+
+        /// <summary>
+        /// Creates the one-layer view of a database's own table, hiding nothing: what a root context, or a bare database,
+        /// sees of each of its tables (colored-contexts spec §9.1, <see cref="ContextView.ForRoot"/>). The table may be of
+        /// any kind (the union-find included), since the executor only scans and indexes it; the point lookups of this
+        /// type (<see cref="FindRow(uint, out int)"/> and its overloads) need a <see cref="SortedWritesTable"/> and are
+        /// used only on a child's views.
+        /// </summary>
+        /// <param name="id">The table's id.</param>
+        /// <param name="info">The database's entry for the table.</param>
+        /// <param name="isFrozen">Whether the database is frozen.</param>
+        /// <returns>The view.</returns>
+        internal static TableView ForTable(TableId id, TableInfo info, bool isFrozen)
+        {
+            ArgumentNullException.ThrowIfNull(info);
+            return new TableView(id, info.Spec, [new LayerView(0, info, HiddenRows.None, isFrozen)], requireSorted: false);
+        }
+
+        /// <summary>
+        /// Gets every physical row of every present layer that has rows, as one dense subset per layer (§9.2): the
+        /// layered form of a table's <see cref="Table.All"/>. Tombstones and hidden rows are included, as egglog's
+        /// <c>all</c> includes tombstones; the executor refines visibility where it reads rows (I26). A view with one
+        /// layer with rows gives a single-layer subset, which is every root view's case. O(layers).
+        /// </summary>
+        /// <param name="pool">The pool a per-layer array comes from when two or more layers have rows, or <c>null</c>.</param>
+        /// <returns>The rows, which the caller owns.</returns>
+        public LayeredSubset AllRows(SubsetArrayPool? pool)
+        {
+            // One layer (every root view, and a child's view of a table no level of its chain touched): the table's own
+            // All(), exactly the root executor's row set, for any table kind.
+            if (Layers.Length == 1)
+                return Layers[0] is { } only0 ? LayeredSubset.Single(0, only0.Table.All()) : LayeredSubset.Empty;
+
+            Span<int> counts = stackalloc int[LayeredSubset.MaxLayers];
+            var withRows = 0u;
+            for (var j = 0; j < Layers.Length; j++)
+            {
+                if (Layers[j] is not { } layer)
+                    continue;
+
+                var count = layer.Sorted!.Rows.Count;
+                if (count == 0)
+                    continue;
+
+                counts[j] = count;
+                withRows |= 1u << j;
+            }
+
+            if (withRows == 0)
+                return LayeredSubset.Empty;
+
+            if ((withRows & (withRows - 1)) == 0)
+            {
+                var only = BitOperations.TrailingZeroCount(withRows);
+                return LayeredSubset.Single(only, Subset.Dense(0, counts[only]));
+            }
+
+            var length = 32 - BitOperations.LeadingZeroCount(withRows);
+            var layers = pool is not null && pool.LayerCount >= length ? pool.Rent() : new Subset[length];
+            var remaining = withRows;
+            while (remaining != 0)
+            {
+                var j = BitOperations.TrailingZeroCount(remaining);
+                remaining &= remaining - 1;
+                layers[j] = Subset.Dense(0, counts[j]);
+            }
+
+            return LayeredSubset.FromLayers(layers, pool);
+        }
+
+        /// <summary>
+        /// Gets whether some row of <paramref name="subset"/> of layer <paramref name="layer"/> is visible to the view:
+        /// the existence test of a zero-variable atom. Defect fixed (core-relations/src/free_join/plan.rs:1502-1505; map
+        /// §8.1 row 2): egglog answers that test by a nonempty header alone, so a deleted fact still fires; this test
+        /// requires a live row that no level hides. See <see cref="LayerView.AnyVisible"/>.
+        /// </summary>
+        /// <param name="layer">The layer; an absent or out-of-range layer has no visible row.</param>
+        /// <param name="subset">Row ids of that layer, within its physical rows.</param>
+        /// <returns><c>true</c> if a visible row is found.</returns>
+        public bool AnyVisible(int layer, SubsetRef subset)
+        {
+            if ((uint)layer >= (uint)LayerCount || Layers[layer] is not { } view)
+                return false;
+
+            return view.AnyVisible(subset);
         }
 
         /// <summary>

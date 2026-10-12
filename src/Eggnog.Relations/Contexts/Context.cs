@@ -170,6 +170,12 @@ namespace Eggnog.Relations
         int activeScans;
 
         uint semiNaiveFloor;
+
+        /// <summary>
+        /// The largest epoch the context captured (<see cref="BeginEpoch"/>) or ran rules at (<see cref="UseEpoch"/>):
+        /// with <see cref="semiNaiveFloor"/>, the floor of a rule run's timestamp (I3). Domain thread only.
+        /// </summary>
+        uint lastEpoch;
         volatile bool frozen;
         volatile bool disposed;
         volatile bool faulted;
@@ -315,6 +321,24 @@ namespace Eggnog.Relations
         public long Version => database.ChangeStamp;
 
         /// <summary>
+        /// Gets a stamp of the rows the context's views show (§9.1, I29): the sum of <see cref="Version"/> over the context
+        /// and its ancestors. Each only grows, so the sum moves whenever any of them merges rows in or out (a compaction
+        /// included), hides, clears or stops, and only then. A rule set records it when its first header is evaluated, and
+        /// a child's run refuses the rule set once it moved (<see cref="Database.RunRuleSet"/>). O(depth).
+        /// </summary>
+        internal long ViewStamp
+        {
+            get
+            {
+                long stamp = 0;
+                foreach (var context in ancestors)
+                    stamp += context.database.ChangeStamp;
+
+                return stamp;
+            }
+        }
+
+        /// <summary>
         /// Gets whether this is the root context.
         /// </summary>
         public bool IsRoot => parent is null;
@@ -377,6 +401,34 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets whether the context's views show what it sees now (colored-contexts spec §9.1): <see cref="IsClean"/>
+        /// without its term for writes staged and not merged, at every level of the chain. Staged writes are invisible
+        /// until merged (as at a root, X42), so they never make a view stale; a pending own rebuild, an ancestor change
+        /// not caught up with, or an eq-container guard behind do. What rule building, planning and a rule run in a child
+        /// require (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
+        /// </summary>
+        internal bool IsViewCurrent
+        {
+            get
+            {
+                if (disposed || faulted)
+                    return false;
+
+                if (frozen)
+                    return true;
+
+                if (parent is null)
+                    return journalMark == DisplacedCount;
+
+                return journalMark == journal!.Count
+                    && unionFindCursor == parent.DisplacedCount
+                    && tables!.NeedsCatchUp == false
+                    && IsEqGuardCurrent
+                    && parent.IsViewCurrent;
+            }
+        }
+
+        /// <summary>
         /// Gets whether a child's eq-container guard has checked its displacements against every eq-sort container the
         /// store holds (§7.4, G-b): its journal is empty, or the store's eq-container version has not moved since the
         /// last check. One volatile read. Always <c>true</c> at the root.
@@ -433,6 +485,22 @@ namespace Eggnog.Relations
 
             ThrowIfFaulted();
             ThrowIfContradicted();
+        }
+
+        /// <summary>
+        /// Throws unless the context's views may be read by rule building, planning or a rule run (§9.1): disposed →
+        /// <see cref="ObjectDisposedException"/>; faulted or contradicted → <see cref="InvalidOperationException"/>; views
+        /// not current (<see cref="IsViewCurrent"/>) → <see cref="InvalidOperationException"/> naming <see cref="Rebuild"/>.
+        /// </summary>
+        internal void ThrowIfViewNotCurrent()
+        {
+            ThrowIfDisposed();
+            ThrowIfFaulted();
+            ThrowIfContradicted();
+            if (IsViewCurrent == false)
+                ThrowNotClean();
+
+            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context's views were read with a hidden set not sealed (I18, X40)");
         }
 
         /// <summary>

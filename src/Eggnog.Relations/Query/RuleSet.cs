@@ -32,10 +32,31 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="rules">The rules.</param>
         /// <param name="actions">The actions, one per rule, with the same indexes.</param>
-        public RuleSet(IdVec<RuleId, RulePlan> rules, DenseIdMap<ActionId, ActionInfo> actions)
+        public RuleSet(IdVec<RuleId, RulePlan> rules, DenseIdMap<ActionId, ActionInfo> actions) :
+            this(rules, actions, null, null, 0, 0)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a rule set built on <paramref name="view"/> (colored-contexts spec §9.1, X21): its rules' headers
+        /// were evaluated at <paramref name="viewGeneration"/> and <paramref name="viewStamp"/>, and they read the pinned
+        /// views <paramref name="views"/>. The collections are owned by the new instance.
+        /// </summary>
+        /// <param name="rules">The rules.</param>
+        /// <param name="actions">The actions, one per rule, with the same indexes.</param>
+        /// <param name="view">The view the rule set was built on, or <c>null</c> for one assembled by hand.</param>
+        /// <param name="views">The views of every table the rules read, or <c>null</c>.</param>
+        /// <param name="viewGeneration">The view's generation when the first header was evaluated.</param>
+        /// <param name="viewStamp">The view's <see cref="ContextView.Stamp"/> when the first header was evaluated.</param>
+        internal RuleSet(IdVec<RuleId, RulePlan> rules, DenseIdMap<ActionId, ActionInfo> actions, ContextView? view, ViewSnapshot? views, long viewGeneration, long viewStamp)
         {
             ArgumentNullException.ThrowIfNull(rules);
             ArgumentNullException.ThrowIfNull(actions);
+            View = view;
+            Views = views;
+            ViewGeneration = viewGeneration;
+            ViewStamp = viewStamp;
             if (rules.Count != actions.IdCount)
                 throw new ArgumentException("Every rule needs exactly one action.", nameof(actions));
 
@@ -44,6 +65,35 @@ namespace Eggnog.Relations
             for (var i = 0; i < rules.Count; i++)
                 Debug.Assert(rules[new RuleId(i)].Action.Index == i && actions.ContainsKey(new ActionId(i)), "rule and action ids must stand in a bijection");
         }
+
+        /// <summary>
+        /// Gets the view the rule set was built on (<see cref="Database.View"/>), or <c>null</c> for a rule set assembled
+        /// by hand from rules of a root database. <see cref="Database.RunRuleSet"/> runs it only on that view's database.
+        /// </summary>
+        public ContextView? View { get; }
+
+        /// <summary>
+        /// Gets the views of every table the rules' atoms and lookups read, pinned when the rule set was built
+        /// (colored-contexts spec §9.1, X21): the run reads only these. <c>null</c> for a rule set assembled by hand, which
+        /// a root run pins when it starts.
+        /// </summary>
+        public ViewSnapshot? Views { get; }
+
+        /// <summary>
+        /// Gets the view's <see cref="ContextView.Generation"/> when the first header of the rule set was evaluated (or
+        /// when it was built, for a rule set without rules); a child's run checks it has not moved, so its headers and trie
+        /// roots read the same views (I29). <see cref="Views"/> is pinned at the build, so a generation that moved between
+        /// the first header and the build is caught too.
+        /// </summary>
+        public long ViewGeneration { get; }
+
+        /// <summary>
+        /// Gets the view's <see cref="ContextView.Stamp"/> when the first header was evaluated: a child's run checks it has
+        /// not moved, since header subsets name rows, which a merge of the context or an ancestor can move (a compaction),
+        /// remove or add to without changing any view's structure (I29). 0 at a root, which keeps egglog's rule: build a
+        /// rule set right before running it.
+        /// </summary>
+        public long ViewStamp { get; }
 
         /// <summary>
         /// Gets the number of rules (and of actions).
@@ -59,6 +109,11 @@ namespace Eggnog.Relations
         /// Gets the rules, indexed by <see cref="RuleId"/>. The span must not be written.
         /// </summary>
         public ReadOnlySpan<RulePlan> Rules => rules.AsSpan();
+
+        /// <summary>
+        /// Gets the actions, by <see cref="ActionId"/>. Callers must not modify the map.
+        /// </summary>
+        internal DenseIdMap<ActionId, ActionInfo> Actions => actions;
 
         /// <summary>
         /// Gets rule <paramref name="rule"/>.
@@ -99,7 +154,9 @@ namespace Eggnog.Relations
         /// <remarks>
         /// The cached plan keeps the rule's headers as constraints, not as subsets: the template's headers, plus, for a
         /// rule that was itself added from a cached plan, the extra constraints it was added with (egglog clones that
-        /// rule's plan, whose headers include them).
+        /// rule's plan, whose headers include them). It keeps the written template and program
+        /// (<see cref="RulePlan.WrittenTemplate"/>, <see cref="RulePlan.WrittenActions"/>), never a context's canonical
+        /// variant (colored-contexts spec §9.8).
         /// </remarks>
         /// <param name="rule">The rule.</param>
         /// <returns>The cached plan.</returns>
@@ -107,8 +164,24 @@ namespace Eggnog.Relations
         public CachedPlan BuildCachedPlan(RuleId rule)
         {
             var plan = this[rule];
-            return new CachedPlan(plan.Template, plan.Description, plan.Symbols, GetAction(plan.Action), plan.IdConstants, plan.ExtraConstraints);
+            return new CachedPlan(plan.WrittenTemplate, plan.Description, plan.Symbols, plan.WrittenActions ?? GetAction(plan.Action), plan.IdConstants, plan.ExtraConstraints);
         }
+
+        /// <summary>
+        /// Gets the table an action instruction looks up, which a child's search reads through the rule set's snapshot
+        /// (colored-contexts spec §6.5, §9.1): that of a <see cref="LookupInstr"/>, <see cref="LookupWithDefaultInstr"/>,
+        /// <see cref="LookupWithFallbackInstr"/> or <see cref="LookupOrInsertDefaultInstr"/>.
+        /// </summary>
+        /// <param name="instr">The instruction.</param>
+        /// <returns>The table, or <c>null</c> for an instruction that looks nothing up.</returns>
+        internal static TableId? LookupTable(Instr instr) => instr switch
+        {
+            LookupInstr i => i.Table,
+            LookupWithDefaultInstr i => i.Table,
+            LookupWithFallbackInstr i => i.Table,
+            LookupOrInsertDefaultInstr i => i.Table,
+            _ => null,
+        };
 
         /// <summary>
         /// Returns the header subsets' pooled buffers. Idempotent; the rule set must not be run afterwards.

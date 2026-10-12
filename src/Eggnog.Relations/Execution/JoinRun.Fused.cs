@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace Eggnog.Relations
 {
@@ -11,10 +12,16 @@ namespace Eggnog.Relations
         /// (core-relations/src/free_join/execute.rs:1376-1455).
         /// </summary>
         /// <remarks>
+        /// <para>
         /// As a leaf scan (no later stage reads the atom or the variables), the cover's projected rows become one binding
         /// set and one empty frame, so the cross product is expanded only at the action. Otherwise the cover is scanned
         /// in chunks and every row is its own frame, refining the cover to that row; duplicate projections are not
         /// merged, as in egglog. Scans skip invisible rows, with or without constraints (map §8.1 row 1).
+        /// </para>
+        /// <para>
+        /// Layers (colored-contexts spec §9.5): the cover's rows are scanned layer by layer, each with the rows its layer's
+        /// view hides, and a row's frame refines the cover to that row of that layer. A root's cover has one layer.
+        /// </para>
         /// </remarks>
         void RunFusedScan<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
@@ -24,7 +31,7 @@ namespace Eggnog.Relations
             if (nodes[atom]!.IsEmpty)
                 return;
 
-            var table = tables[atom];
+            var view = atomViews[atom]!;
             var node = nodes[atom]!;
             nodes[atom] = null;
             var variables = info.BindVariables;
@@ -32,7 +39,18 @@ namespace Eggnog.Relations
             if (leafScans[cur])
             {
                 var rows = TakeLeafBuffer(cur, variables.Length);
-                table.ScanProject(node.Rows, info.Projection, 0, int.MaxValue, constraints, rows);
+                var mask = node.LayerMask;
+                while (mask != 0)
+                {
+                    var layer = BitOperations.TrailingZeroCount(mask);
+                    mask &= mask - 1;
+                    var lv = view.Layers[layer]!;
+                    var layerRows = node.GetLayerRows(layer);
+                    lv.Table.ScanProject(layerRows, info.Projection, 0, int.MaxValue, constraints, lv.Hidden, rows);
+                    if (ExecutorCounters.Enabled)
+                        counters!.NoteScanned(layer < depth, IsRoot(atom, node), layerRows.Size);
+                }
+
                 if (rows.IsEmpty)
                 {
                     nodes[atom] = node;
@@ -52,31 +70,43 @@ namespace Eggnog.Relations
 
             var buffer = TakeScanBuffer(cur, variables.Length);
             var updates = TakeFrames(cur);
-            var subset = node.Rows;
-            var offset = 0;
-            while (true)
+            var layers = node.LayerMask;
+            while (layers != 0)
             {
-                buffer.Clear();
-                var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, buffer);
-                var data = buffer.Data;
-                var stride = buffer.Stride;
-                for (var r = 0; r < buffer.Count; r++)
+                var layer = BitOperations.TrailingZeroCount(layers);
+                layers &= layers - 1;
+                var lv = view.Layers[layer]!;
+                var table = lv.Table;
+                var hidden = lv.Hidden;
+                var subset = node.GetLayerRows(layer);
+                var offset = 0;
+                while (true)
                 {
-                    var start = r * stride;
-                    var row = (int)data[start + variables.Length];
-                    updates.RefineAtomDense(cover, new OffsetRange(row, row + 1));
-                    for (var k = 0; k < variables.Length; k++)
-                        updates.PushBinding(variables[k], data[start + k]);
+                    buffer.Clear();
+                    var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, hidden, buffer);
+                    if (ExecutorCounters.Enabled)
+                        counters!.NoteScanned(layer < depth, IsRoot(atom, node), (next < 0 ? subset.Size : next) - offset);
 
-                    updates.FinishFrame();
-                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
-                        return;
+                    var data = buffer.Data;
+                    var stride = buffer.Stride;
+                    for (var r = 0; r < buffer.Count; r++)
+                    {
+                        var start = r * stride;
+                        var row = (int)data[start + variables.Length];
+                        updates.RefineAtomDense(cover, layer, new OffsetRange(row, row + 1));
+                        for (var k = 0; k < variables.Length; k++)
+                            updates.PushBinding(variables[k], data[start + k]);
+
+                        updates.FinishFrame();
+                        if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                            return;
+                    }
+
+                    if (next < 0)
+                        break;
+
+                    offset = next;
                 }
-
-                if (next < 0)
-                    break;
-
-                offset = next;
             }
 
             if (Drain(cur, ref updates, ref sink) == false)
@@ -89,6 +119,7 @@ namespace Eggnog.Relations
         /// Runs a <see cref="FusedIntersectStage"/> with probes: a Free Join step. For each row of the cover, bind its
         /// variables, then probe each index with a key built from the row; a miss, or a probe with no visible row
         /// satisfying its constraints, discards the row. egglog's kernel (core-relations/src/free_join/execute.rs:1456-1569).
+        /// The cover is scanned layer by layer (§9.5), and each probe joins its hits across the probed atom's layers.
         /// </summary>
         void RunFusedIntersect<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
@@ -103,48 +134,60 @@ namespace Eggnog.Relations
             for (var j = 0; j < probes.Length; j++)
                 GetIndex(ref ps[j], probes[j].Scan.Atom.Index, probes[j].Scan.ToIndex.Columns);
 
-            var table = tables[atom];
+            var view = atomViews[atom]!;
             var node = nodes[atom]!;
             nodes[atom] = null;
             var variables = info.BindVariables;
             var constraints = stage.Cover.Constraints;
             var buffer = TakeScanBuffer(cur, variables.Length);
             var updates = TakeFrames(cur);
-            var subset = node.Rows;
-            var offset = 0;
-            while (true)
+            var layers = node.LayerMask;
+            while (layers != 0)
             {
-                buffer.Clear();
-                var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, buffer);
-                var data = buffer.Data;
-                var stride = buffer.Stride;
-                for (var r = 0; r < buffer.Count; r++)
+                var layer = BitOperations.TrailingZeroCount(layers);
+                layers &= layers - 1;
+                var lv = view.Layers[layer]!;
+                var table = lv.Table;
+                var hidden = lv.Hidden;
+                var subset = node.GetLayerRows(layer);
+                var offset = 0;
+                while (true)
                 {
-                    var start = r * stride;
-                    var row = (int)data[start + variables.Length];
-                    updates.RefineAtomDense(cover, new OffsetRange(row, row + 1));
-                    for (var k = 0; k < variables.Length; k++)
-                        updates.PushBinding(variables[k], data[start + k]);
+                    buffer.Clear();
+                    var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, hidden, buffer);
+                    if (ExecutorCounters.Enabled)
+                        counters!.NoteScanned(layer < depth, IsRoot(atom, node), (next < 0 ? subset.Size : next) - offset);
 
-                    var ok = true;
-                    for (var j = 0; j < probes.Length && ok; j++)
-                        ok = ProbeTuple(ps[j], probes[j], data, start, out var rows) && RefineProbe(updates, ps[j], probes[j], rows);
-
-                    if (ok == false)
+                    var data = buffer.Data;
+                    var stride = buffer.Stride;
+                    for (var r = 0; r < buffer.Count; r++)
                     {
-                        updates.Rollback(pool);
-                        continue;
+                        var start = r * stride;
+                        var row = (int)data[start + variables.Length];
+                        updates.RefineAtomDense(cover, layer, new OffsetRange(row, row + 1));
+                        for (var k = 0; k < variables.Length; k++)
+                            updates.PushBinding(variables[k], data[start + k]);
+
+                        var ok = true;
+                        for (var j = 0; j < probes.Length && ok; j++)
+                            ok = ProbeRefine(updates, ref ps[j], probes[j], data, start, cur);
+
+                        if (ok == false)
+                        {
+                            updates.Rollback(pool);
+                            continue;
+                        }
+
+                        updates.FinishFrame();
+                        if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                            return;
                     }
 
-                    updates.FinishFrame();
-                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
-                        return;
+                    if (next < 0)
+                        break;
+
+                    offset = next;
                 }
-
-                if (next < 0)
-                    break;
-
-                offset = next;
             }
 
             if (Drain(cur, ref updates, ref sink) == false)

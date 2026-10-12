@@ -52,9 +52,15 @@ namespace Eggnog.Relations
         volatile bool frozen;
 
         /// <summary>
+        /// What rule building, planning and the executor read (§9.1): a child's, attached with its layers; a root's or
+        /// bare database's, made on first use of <see cref="View"/>.
+        /// </summary>
+        ContextView? contextView;
+
+        /// <summary>
         /// Initializes a child context's database (§3.4): its own catalog, notification list, table map and size
-        /// estimate, sharing the root's counters, external functions, dependency graph and container environments by
-        /// reference.
+        /// estimate, sharing the root's counters, external functions, dependency graph, container environments and base
+        /// value registry by reference.
         /// </summary>
         /// <remarks>
         /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>, §5.5) at the store's
@@ -62,7 +68,9 @@ namespace Eggnog.Relations
         /// through the catalog's resolver, which hands out the child's union-find for the union-find id and the child's
         /// layer of any other table, created on first use (<see cref="ContextTables.ResolveForStaging"/>, §6.2, X37). The
         /// context attaches its layering right after construction (<see cref="AttachLayers"/>). The root's container
-        /// environments are created here if they did not exist, so both share one instance.
+        /// environments and base value registry are created here if they did not exist, so both share one instance: a
+        /// value the root boxed unboxes in the child, and a type or value registered through either is seen by both
+        /// (rule-layer spec §13 item 3; the registry is thread-safe, so concurrent children may share it too).
         /// </remarks>
         /// <param name="root">The store's root database.</param>
         /// <param name="owner">The child context.</param>
@@ -88,6 +96,7 @@ namespace Eggnog.Relations
             externalFunctions = root.externalFunctions;
             deps = root.deps;
             containers = root.Containers;
+            baseValues = root.BaseValues;
             view = new DatabaseView(this);
         }
 
@@ -152,8 +161,21 @@ namespace Eggnog.Relations
         internal RetractionGuard? GuardForNewState() => owner is null ? null : RetractionGuard;
 
         /// <summary>
-        /// Attaches a child's layering engine (§3.4), which the catalog's resolver and the merge epilogue use, and makes
-        /// its guard the database's. Once.
+        /// Gets the view rules are built, planned and run through (colored-contexts spec §9.1, X39): a child's reads its
+        /// layers; a root's or bare database's, made on first use (<see cref="ContextView.ForRoot"/>), sees each table as
+        /// one layer and answers as the database's own members do.
+        /// </summary>
+        internal ContextView View => Volatile.Read(ref contextView) ?? CreateRootView();
+
+        /// <summary>
+        /// Gets the view when tables may lie in several layers (a child, or a synthetic layer set attached in executor
+        /// tests), else <c>null</c>: the switch of the layered planning and query members (§3.4). One field load at a root.
+        /// </summary>
+        internal ContextView? LayeredView => Volatile.Read(ref contextView) is { IsLayered: true } layered ? layered : null;
+
+        /// <summary>
+        /// Attaches a child's layering engine (§3.4), which the catalog's resolver and the merge epilogue use, makes its
+        /// guard the database's, and attaches the view over it (§9.1). Once.
         /// </summary>
         /// <param name="tables">The child's layering.</param>
         /// <exception cref="InvalidOperationException">This is not a child's database, or layers are attached already.</exception>
@@ -165,6 +187,34 @@ namespace Eggnog.Relations
 
             layers = tables;
             RetractionGuard = tables.Guard;
+            AttachView(tables);
+        }
+
+        /// <summary>
+        /// Attaches the view of <paramref name="source"/>'s layers as the database's <see cref="View"/> (§9.1): a child's
+        /// <see cref="ContextTables"/>, or, in executor tests, a synthetic layer set over a bare database whose own tables
+        /// are the layers' layer 0 (their specs and names answer schema questions). Before any view is made. Once.
+        /// </summary>
+        /// <param name="source">The layers.</param>
+        /// <exception cref="InvalidOperationException">The database already has a view, or is a store's root.</exception>
+        internal void AttachView(ILayerViewSource source)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            if (owner is { IsRoot: true })
+                throw new InvalidOperationException("A store's root database sees its own tables; its view is made on first use.");
+
+            var view = new ContextView(this, source);
+            if (Interlocked.CompareExchange(ref contextView, view, null) is not null)
+                throw new InvalidOperationException("The database already has a view.");
+        }
+
+        /// <summary>
+        /// Makes the root's or bare database's view on first use of <see cref="View"/>.
+        /// </summary>
+        ContextView CreateRootView()
+        {
+            var view = ContextView.ForRoot(this);
+            return Interlocked.CompareExchange(ref contextView, view, null) ?? view;
         }
 
         /// <summary>
@@ -285,23 +335,23 @@ namespace Eggnog.Relations
         void BumpChangeStamp() => Interlocked.Increment(ref changeStamp);
 
         /// <summary>
-        /// Gets the entry of <paramref name="table"/> that the query members read: planning, statistics, header
-        /// evaluation and size estimates (<see cref="ProcessConstraints(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>,
-        /// <see cref="EstimateSize"/>, <see cref="ColumnCardEstimator"/>). At the root and in a bare database, the table
-        /// map's entry, at the cost of one owner test.
+        /// Gets the entry of <paramref name="table"/> that the single-table query members read
+        /// (<see cref="ProcessConstraints(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>,
+        /// <see cref="EstimateSize"/>, <see cref="ColumnCardEstimator"/>): the table map's entry, at the cost of one owner
+        /// test.
         /// </summary>
         /// <remarks>
-        /// In a child these members read the context's view (§3.4, X39), which arrives with layered planning (M10.2).
-        /// Until then every table is refused there: the child's entry for a table is its own layer (and for the union-find
-        /// its own union-find layer), not what the child sees, and a rule in a child never reads the union-find as an atom
-        /// (X23, decision 10: only lookups reach it). Context = copy: a child never answers a query from a layer as if it
-        /// were its view. (<see cref="EstimateSize"/> reads the child's views already.)
+        /// A child answers those questions through its view (§3.4, X39, <see cref="View"/>): its entry for a table is its
+        /// own layer (and for the union-find its own union-find layer), not what it sees, and its rows lie in several
+        /// layers, which no single subset describes. So every table is refused here in a child: context = copy, a child
+        /// never answers a query from a layer as if it were its view, and a rule in a child never reads the union-find as
+        /// an atom (X23, decision 10: only lookups reach it).
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <returns>The entry.</returns>
         /// <exception cref="KeyNotFoundException">No such table, or it is taken out.</exception>
         /// <exception cref="NotSupportedException">This is a child context's database: <paramref name="table"/> is the
-        /// store's union-find (X23), or a function table, which is answered through the child's view from M10.2.</exception>
+        /// store's union-find (X23), or a function table, which is answered through <see cref="View"/>.</exception>
         internal TableInfo GetQueryTableInfo(TableId table)
         {
             if (IsChild)
@@ -371,7 +421,7 @@ namespace Eggnog.Relations
             if (table == owner!.Store.UnionFindTable)
                 throw new NotSupportedException($"The union-find (table {table}) cannot be an atom of a query in a child context; a child reads it only through lookups (X23).");
 
-            throw new NotSupportedException($"Table {table} is answered in a child context through the context's view; planning and header evaluation over views arrive in M10.2.");
+            throw new NotSupportedException($"Table {table} lies in several layers in a child context; read it through the database's View (ContextView), which evaluates headers, statistics and estimates per layer.");
         }
 
     }

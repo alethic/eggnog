@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -16,9 +17,10 @@ namespace Eggnog.Relations
     /// never re-planned or copied.
     /// </para>
     /// <para>
-    /// Holds no row subsets, so it stays valid however the tables change, and it is immutable: one instance may be
+    /// Holds no row subsets, so it stays valid however the tables change, and it is immutable apart from its cache of
+    /// constant variants, which is thread-safe: one instance may be
     /// added to any number of rule sets, on any thread, in any context (the executor's per-context header evaluation
-    /// and <see cref="IdConstants"/> are what differ between contexts).
+    /// and the executed form of the Id constants, K, are what differ between contexts: <see cref="GetVariantFor"/>).
     /// </para>
     /// </remarks>
     internal sealed class CachedPlan
@@ -48,7 +50,18 @@ namespace Eggnog.Relations
             Actions = actions;
             IdConstants = idConstants;
             ExtraConstraints = extraConstraints;
+            WrittenConstants = CanonicalConstants.Written(idConstants, actions.IdConstants);
         }
+
+        /// <summary>
+        /// The most variants a cached plan keeps (§9.8). A new variant beyond them replaces the oldest, so the variant of
+        /// the most recent K is always cached: a store-backed root has one current K per rule, and a rule whose constant
+        /// changed its canonical form many times keeps paying O(constants) per run (§14.1).
+        /// </summary>
+        public const int MaxVariants = 16;
+
+        readonly object variantGate = new();
+        ConstantVariant[] variants = [];
 
         /// <summary>
         /// Gets the plan template.
@@ -82,6 +95,59 @@ namespace Eggnog.Relations
         /// Callers must not modify the array.
         /// </summary>
         public (AtomId Atom, Constraint Constraint)[] ExtraConstraints { get; }
+
+        /// <summary>
+        /// Gets the written values of the rule's Id constants, query constants (<see cref="IdConstants"/>) first and then
+        /// action constants (<see cref="ActionInfo.IdConstants"/>), or <c>null</c> when it has none (colored-contexts spec
+        /// §9.8). <see cref="CanonicalConstants.Compute"/> returns this very array when every constant is canonical.
+        /// Callers must not modify it.
+        /// </summary>
+        public uint[]? WrittenConstants { get; }
+
+        /// <summary>
+        /// Gets the number of variants cached so far.
+        /// </summary>
+        internal int VariantCount => Volatile.Read(ref variants).Length;
+
+        /// <summary>
+        /// Gets the template and action program to run for the executed constants <paramref name="canonical"/>
+        /// (colored-contexts spec §9.8, X19): the written ones when K is <c>null</c> or equals
+        /// <see cref="WrittenConstants"/>; otherwise a <see cref="ConstantVariant"/> with the changed constants rewritten
+        /// (<see cref="TemplateSubstituter"/>, <see cref="ActionSubstituter"/>), cached copy-on-write per K, at most
+        /// <see cref="MaxVariants"/> of them (inserted under a lock, then double-checked; when the cache is full the oldest
+        /// variant makes room for the new one).
+        /// </summary>
+        /// <remarks>
+        /// Thread-safe: concurrent contexts may ask for variants of one cached plan. Lock-free once a K's variant exists.
+        /// </remarks>
+        /// <param name="canonical">K, from <see cref="CanonicalConstants.Compute"/>.</param>
+        /// <returns>The template and the program.</returns>
+        /// <exception cref="ArgumentException">K does not have one value per constant.</exception>
+        public (PlanTemplate Plan, ActionInfo Actions) GetVariantFor(uint[]? canonical)
+        {
+            if (canonical is null || ReferenceEquals(canonical, WrittenConstants) || (WrittenConstants is { } written && written.AsSpan().SequenceEqual(canonical)))
+                return (Plan, Actions);
+
+            foreach (var variant in Volatile.Read(ref variants))
+                if (variant.Matches(canonical))
+                    return (variant.Template, variant.Actions);
+
+            lock (variantGate)
+            {
+                var current = variants;
+                foreach (var variant in current)
+                    if (variant.Matches(canonical))
+                        return (variant.Template, variant.Actions);
+
+                var substitution = ConstantSubstitution.Create(IdConstants, Actions.IdConstants, canonical);
+                if (substitution is null)
+                    return (Plan, Actions);
+
+                var made = new ConstantVariant((uint[])canonical.Clone(), TemplateSubstituter.Substitute(Plan, substitution), ActionSubstituter.Substitute(Actions, substitution));
+                Volatile.Write(ref variants, current.Length < MaxVariants ? [.. current, made] : [.. current.AsSpan(1), made]);
+                return (made.Template, made.Actions);
+            }
+        }
 
     }
 

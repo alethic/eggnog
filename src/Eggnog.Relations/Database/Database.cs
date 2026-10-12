@@ -52,9 +52,9 @@ namespace Eggnog.Relations
     /// Colored contexts (Contexts/Database.Contexts.cs, colored-contexts spec §3.4): a <see cref="Store"/>'s root
     /// database is this egglog database, attached to the root <see cref="Context"/> and to the store's clock, which
     /// execution states pin to their timestamp (C1). Each child context owns a database of its own that shares the
-    /// root's counters, external functions, strata and containers; its definitions go through the store, its schema
-    /// questions are answered from the store's schema, and it rebuilds through its context. A bare database belongs to
-    /// no store and behaves exactly as egglog's.
+    /// root's counters, external functions, strata, containers and base values by reference; its definitions go
+    /// through the store, its schema questions are answered from the store's schema, and it rebuilds through its
+    /// context. A bare database belongs to no store and behaves exactly as egglog's.
     /// </para>
     /// </remarks>
     internal sealed partial class Database
@@ -402,33 +402,29 @@ namespace Eggnog.Relations
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate.</returns>
         /// <remarks>
-        /// In a child context's database (colored-contexts spec §3.4) the estimate is the sum of the per-layer estimates
-        /// over the layers of the child's view of the table (<see cref="ContextTables.GetView"/>), hidden rows included, as
-        /// a root estimate includes tombstones.
+        /// In a child context's database (colored-contexts spec §3.4) the estimate is its view's
+        /// (<see cref="ContextView.EstimateSize"/>): the sum of the per-layer estimates over the layers of the child's view
+        /// of the table, hidden rows included, as a root estimate includes tombstones.
         /// </remarks>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
         /// <exception cref="NotSupportedException">This is a child context's database and the table is the union-find
         /// (X23).</exception>
         public int EstimateSize(TableId table, Constraint? constraint = null)
         {
-            if (layers is { } l)
-            {
-                var view = l.GetView(table);
-                long total = 0;
-                foreach (var layer in view.Layers)
-                    if (layer is not null)
-                        total += EstimateTable(layer.Table, constraint);
-
-                return (int)Math.Min(total, int.MaxValue);
-            }
+            if (LayeredView is { } layered)
+                return layered.EstimateSize(table, constraint);
 
             return EstimateTable(GetQueryTableInfo(table).Table, constraint);
         }
 
         /// <summary>
-        /// egglog's <c>estimate_size</c> on one table (mod.rs:463-482).
+        /// egglog's <c>estimate_size</c> on one table (mod.rs:463-482); a layered view sums it over its present layers
+        /// (<see cref="ContextView.EstimateSize"/>).
         /// </summary>
-        static int EstimateTable(Table t, Constraint? constraint)
+        /// <param name="t">The table.</param>
+        /// <param name="constraint">The constraint, or <c>null</c>.</param>
+        /// <returns>The estimate.</returns>
+        internal static int EstimateTable(Table t, Constraint? constraint)
         {
             if (constraint is not { } c)
                 return t.Count;

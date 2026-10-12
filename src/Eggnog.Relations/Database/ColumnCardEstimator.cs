@@ -5,8 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The column statistics the planner reads from a database: egglog's <c>ColumnCardEst</c>
-    /// (core-relations/src/free_join/mod.rs:878-902). <see cref="GetColumnUniqueness"/> pairs a table's live row count
-    /// with the number of distinct values its cached column index holds for the column.
+    /// (core-relations/src/free_join/mod.rs:878-902). <see cref="GetColumnUniqueness(TableId, ColumnId)"/> pairs a table's
+    /// live row count with the number of distinct values its cached column index holds for the column.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -42,13 +42,23 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="column">The column.</param>
         /// <returns>The estimate.</returns>
-        /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or (in a child context's
-        /// database) the table has no layer there.</exception>
-        /// <exception cref="NotSupportedException">The database is a child context's and the table is the union-find
-        /// (colored-contexts spec X23, <see cref="Database.GetQueryTableInfo"/>).</exception>
-        public ColumnUniqueness GetColumnUniqueness(TableId table, ColumnId column)
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table.</exception>
+        /// <exception cref="NotSupportedException">The database is a child context's, whose statistics come from its view
+        /// (colored-contexts spec §9.7, <see cref="Database.GetQueryTableInfo"/>).</exception>
+        public ColumnUniqueness GetColumnUniqueness(TableId table, ColumnId column) => GetColumnUniqueness(database.GetQueryTableInfo(table), column);
+
+        /// <summary>
+        /// Gets the uniqueness estimate of <paramref name="column"/> of one table entry: its live row count and the
+        /// column's distinct-value count in the entry's cached column index (colored-contexts spec §9.7). A layered
+        /// context's view (<see cref="ContextView"/>) sums these over the present layers of a table. O(1) when the column
+        /// index is current; otherwise the cost of refreshing it.
+        /// </summary>
+        /// <param name="info">The table entry: a database's own, or one layer of a view.</param>
+        /// <param name="column">The column.</param>
+        /// <returns>The estimate.</returns>
+        public static ColumnUniqueness GetColumnUniqueness(TableInfo info, ColumnId column)
         {
-            var info = database.GetQueryTableInfo(table);
+            ArgumentNullException.ThrowIfNull(info);
             var index = info.GetColumnIndex(column);
             return new ColumnUniqueness((ulong)info.Table.Count, (ulong)index.Count);
         }

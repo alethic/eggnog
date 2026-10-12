@@ -293,7 +293,7 @@ namespace Eggnog.Relations
         /// <param name="domain">The domain the calling thread holds.</param>
         /// <param name="operation">The refused operation's name.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void ThrowIfInCallback(ThreadAffinityGuard domain, string operation)
+        internal static void ThrowIfInCallback(ThreadAffinityGuard domain, string operation)
         {
             if (domain.InCallback)
                 ThrowInCallback(operation);

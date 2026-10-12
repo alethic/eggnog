@@ -18,6 +18,12 @@ namespace Eggnog.Relations
         public FrameUpdateKind Kind;
 
         /// <summary>
+        /// The layer of a <see cref="FrameUpdateKind.RefineAtomDense"/> refinement's rows (colored-contexts spec §9.5): 0
+        /// at a root. A byte beside <see cref="Kind"/>, so the struct stays 24 bytes.
+        /// </summary>
+        public byte Layer;
+
+        /// <summary>
         /// The variable or atom index.
         /// </summary>
         public int Id;

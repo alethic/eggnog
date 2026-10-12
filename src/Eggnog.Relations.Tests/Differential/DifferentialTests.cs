@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
@@ -117,6 +118,29 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// T9 (colored-contexts spec §17 M10.2): small and larger programs in which every semi-naive step is preceded by
+        /// the same variants run over a layered copy of the engine's tables (<see cref="DiffLayeredSemiNaiveStep"/>): rows
+        /// spread over two to four levels with their timestamps, overridden rows hidden in lower levels, so each variant's
+        /// time ranges split per layer; every variant's distinct matches must be the oracle's. 2000 small and 100 larger
+        /// programs by default (<c>EGGNOG_DIFF_LAYERED_SEEDS</c>, <c>EGGNOG_DIFF_LAYERED_LARGER_SEEDS</c>).
+        /// </summary>
+        [Fact]
+        public void LayeredSemiNaiveVariantsAgreeWithTheModel()
+        {
+            var stats = new DiffStats();
+            for (var seed = 6_000_000; seed < 6_000_000 + Count("EGGNOG_DIFF_LAYERED_SEEDS", 2000); seed++)
+                RunOne(DiffProfile.Small, seed, stats, layered: true);
+
+            for (var seed = 7_000_000; seed < 7_000_000 + Count("EGGNOG_DIFF_LAYERED_LARGER_SEEDS", 100); seed++)
+                RunOne(DiffProfile.Larger, seed, stats, layered: true);
+
+            output.WriteLine(stats.ToString());
+            Assert.True(stats.LayeredVariants > 0, "no layered variant ran: " + stats);
+            Assert.True(stats.LayeredVariantsWithMatches > 300, "too few layered variants have matches: " + stats);
+            Assert.True(stats.LayeredHiddenRows > 0, "no layered copy hid a row: " + stats);
+        }
+
+        /// <summary>
         /// A time-boxed soak over fresh seeds of every profile, for <c>EGGNOG_DIFF_SOAK</c> seconds. A program still
         /// running after <c>EGGNOG_DIFF_SLOW</c> seconds fails the soak at once, with its seed and listing, and is left
         /// running on its thread-pool thread (a pathological plan may never finish).
@@ -198,9 +222,12 @@ namespace Eggnog.Relations.Tests
         /// With <paramref name="limit"/>, the program runs on a thread-pool thread and fails as soon as it has run that
         /// long, before shrinking; a disagreement found in time is shrunk without a limit.
         /// </summary>
-        static void RunOne(DiffProfile profile, int seed, DiffStats stats, TimeSpan? limit = null)
+        static void RunOne(DiffProfile profile, int seed, DiffStats stats, TimeSpan? limit = null, bool layered = false)
         {
             var program = DiffGenerator.Generate(seed, profile);
+            if (layered)
+                program = Layered(program);
+
             Exception? e = null;
             if (limit is { } l)
             {
@@ -238,6 +265,24 @@ namespace Eggnog.Relations.Tests
 
                 Assert.Fail(b.ToString());
             }
+        }
+
+        /// <summary>
+        /// Puts a <see cref="DiffLayeredSemiNaiveStep"/> before every semi-naive step of <paramref name="program"/>, over
+        /// the same variants and the same tables.
+        /// </summary>
+        static DiffProgram Layered(DiffProgram program)
+        {
+            var steps = new List<DiffStep>();
+            for (var i = 0; i < program.Steps.Count; i++)
+            {
+                if (program.Steps[i] is DiffSemiNaiveStep semi)
+                    steps.Add(new DiffLayeredSemiNaiveStep(semi, program.Seed * 31 + i));
+
+                steps.Add(program.Steps[i]);
+            }
+
+            return program with { Steps = steps };
         }
 
         static int Count(string variable, int fallback) => int.TryParse(Environment.GetEnvironmentVariable(variable), out var n) && n > 0 ? n : fallback;

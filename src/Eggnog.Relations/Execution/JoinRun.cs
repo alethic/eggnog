@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
@@ -21,6 +22,15 @@ namespace Eggnog.Relations
     /// ends with <see cref="EndRule"/>.
     /// </para>
     /// <para>
+    /// Layers (colored-contexts spec §9.1, §9.5). Every table is read through the rule set's pinned views
+    /// (<see cref="ViewSnapshot"/>): an atom's rows are a <see cref="LayeredSubset"/> over the layers of its view, and
+    /// each prober has one <see cref="ProberPiece"/> per layer of its atom's rows. Drivers enumerate their pieces one after
+    /// the other, one frame per (piece, key); probed sides of one piece take egglog's path, and probes of several pieces
+    /// join their hits across layers (<see cref="LayerHits"/>). Every path that yields rows checks what the view sees
+    /// (I26). At a root every view has one layer and every node, prober and frame one piece, so a root run takes egglog's
+    /// paths behind a handful of per-stage and per-probe tests.
+    /// </para>
+    /// <para>
     /// Moving a node out of the bindings (egglog's <c>unwrap_val</c>) is reading its slot and nulling it; moving it back
     /// is writing it again. Bindings are never cleared: every frame overwrites the variables and atoms its stage
     /// touches, so values left by abandoned branches are never read.
@@ -28,9 +38,9 @@ namespace Eggnog.Relations
     /// <para>
     /// Memory: frames are replayed position by position, depth first, so each position owns one
     /// <see cref="FrameUpdates"/> buffer, one scratch node per atom for dense refinements (egglog reuses a uniquely
-    /// owned node in <c>insert_subset</c>), probers and scan buffers, all reused. Nodes a frame creates for sparse
-    /// refinements are released after the frame's recursion. In a parallel run, the state reachable from a hand-off
-    /// must not change underneath the task. Hand-offs happen only at positions 0 and 1 and only for more than one
+    /// owned node in <c>insert_subset</c>), probers, layer hits and scan buffers, all reused. Nodes a frame creates for
+    /// sparse refinements are released after the frame's recursion. In a parallel run, the state reachable from a
+    /// hand-off must not change underneath the task. Hand-offs happen only at positions 0 and 1 and only for more than one
     /// frame, so a leaf scan's single frame is never handed off, and a task forked at position 1 can reach only what
     /// position 0 installed: the nodes installed while replaying frames at position 0 and the leaf-scan rows of
     /// position 0 are fresh and never reused or released (the garbage collector reclaims them, as it does the root
@@ -66,6 +76,9 @@ namespace Eggnog.Relations
         const int ExistenceChunk = 64;
 
         readonly Database db;
+        readonly int depth;
+        readonly ExecutorCounters? counters;
+        ViewSnapshot views;
         ExecutionSignals signals;
         readonly bool parallel;
         readonly TrieNodePool pool;
@@ -74,8 +87,7 @@ namespace Eggnog.Relations
         // Rule state.
         PlanTemplate? template;
         int atomCount;
-        Table[] tables = Array.Empty<Table>();
-        TableInfo[] infos = Array.Empty<TableInfo>();
+        TableView?[] atomViews = Array.Empty<TableView?>();
         TrieNode?[] nodes = Array.Empty<TrieNode?>();
         TrieNode?[] roots = Array.Empty<TrieNode?>();
         uint[] values = Array.Empty<uint>();
@@ -96,6 +108,7 @@ namespace Eggnog.Relations
         FrameUpdates?[] frames = Array.Empty<FrameUpdates?>();
         TrieNode?[]?[] scratch = Array.Empty<TrieNode?[]?>();
         Prober[]?[] probers = Array.Empty<Prober[]?>();
+        LayerHits?[] hits = Array.Empty<LayerHits?>();
         TaggedRowBuffer?[] scanBuffers = Array.Empty<TaggedRowBuffer?>();
         TaggedRowBuffer?[] leafBuffers = Array.Empty<TaggedRowBuffer?>();
         long[] timesRefined = Array.Empty<long>();
@@ -108,19 +121,24 @@ namespace Eggnog.Relations
         /// <summary>
         /// Initializes an idle join task.
         /// </summary>
-        /// <param name="database">The database whose tables are joined.</param>
+        /// <param name="database">The database whose rules run: its view's depth sizes the layered row sets.</param>
+        /// <param name="views">The rule set's pinned views, which every table is read through (§9.1).</param>
         /// <param name="signals">The stop signal shared by every state of the run.</param>
         /// <param name="parallel">Whether the run hands work to other tasks, so shared state must not be reused.</param>
         /// <param name="framePool">The run's recycled frame buffers, for a parallel run; <c>null</c> otherwise.</param>
-        public JoinRun(Database database, ExecutionSignals signals, bool parallel, FrameUpdatesPool? framePool = null)
+        public JoinRun(Database database, ViewSnapshot views, ExecutionSignals signals, bool parallel, FrameUpdatesPool? framePool = null)
         {
             ArgumentNullException.ThrowIfNull(database);
+            ArgumentNullException.ThrowIfNull(views);
             ArgumentNullException.ThrowIfNull(signals);
             db = database;
+            this.views = views;
             this.signals = signals;
             this.parallel = parallel;
             this.framePool = framePool;
-            pool = new TrieNodePool(parallel);
+            depth = database.View.Depth;
+            counters = ExecutorCounters.Enabled ? database.ExecutorCounts : null;
+            pool = new TrieNodePool(parallel, depth + 1);
         }
 
         /// <summary>
@@ -155,9 +173,10 @@ namespace Eggnog.Relations
         public int GetMaterializationSize(int mat) => materializations[mat]!.Count;
 
         /// <summary>
-        /// Sets up the current rule: a root node over every row of each atom's table, narrowed by every header subset of
-        /// the rule's instance, then the existence checks of the atoms without variables. egglog's opening of each plan
-        /// in <c>run_rule_set</c> (core-relations/src/free_join/execute.rs:517-539), plus the fix of map §8.1 row 2.
+        /// Sets up the current rule: a root node over every row of each atom's view (every layer's physical rows), narrowed
+        /// by every header subset of the rule's instance, then the existence checks of the atoms without variables.
+        /// egglog's opening of each plan in <c>run_rule_set</c> (core-relations/src/free_join/execute.rs:517-539), plus the
+        /// fix of map §8.1 row 2.
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns><c>false</c> if the rule cannot match: it has no instance, a header or root is empty, or an atom
@@ -170,15 +189,17 @@ namespace Eggnog.Relations
             var atoms = plan.Atoms;
             atomCount = atoms.IdCount;
             EnsureAtoms(atomCount);
+            if (ExecutorCounters.Enabled)
+                counters!.NoteRule();
+
             for (var a = 0; a < atomCount; a++)
             {
                 if (atoms.TryGetValue(new AtomId(a), out var info) == false)
                     continue;
 
-                var tableInfo = db.GetTableInfo(info.Table);
-                infos[a] = tableInfo;
-                tables[a] = tableInfo.Table;
-                var root = pool.Rent(tableInfo.Table.All());
+                var view = views.Require(info.Table);
+                atomViews[a] = view;
+                var root = pool.Rent(view.AllRows(pool.Layers));
                 roots[a] = root;
                 nodes[a] = root;
             }
@@ -198,7 +219,7 @@ namespace Eggnog.Relations
                 return false;
 
             // Several headers on one atom compose by intersection. Root nodes are not shared yet, so they are narrowed
-            // in place (egglog's Arc::try_unwrap).
+            // in place (egglog's Arc::try_unwrap). A root's header and node lie in layer 0, so this is a plain intersection.
             var headers = instance.Headers;
             var subsets = instance.HeaderSubsets;
             for (var h = 0; h < headers.Length; h++)
@@ -207,14 +228,15 @@ namespace Eggnog.Relations
                     return false;
 
                 var node = nodes[headers[h].Atom.Index]!;
-                node.Intersect(subsets[h].AsRef());
+                node.Intersect(in subsets[h], pool.Layers);
                 if (node.IsEmpty)
                     return false;
             }
 
             // Fix (map §8.1 row 2, core-relations/src/free_join/plan.rs:1502-1505): no stage scans an atom without
-            // variables, and egglog only checks that its header subset is non-empty, which may hold only tombstones and
-            // ignores its slow constraints. Check that a visible row satisfying them exists.
+            // variables, and egglog only checks that its header subset is non-empty, which may hold only tombstones (or,
+            // in a child, rows the view hides) and ignores its slow constraints. Check that a visible row satisfying them
+            // exists, in some layer of the atom's rows.
             foreach (var check in plan.ExistenceChecks)
                 if (ExistsVisibleRow(check) == false)
                     return false;
@@ -260,19 +282,20 @@ namespace Eggnog.Relations
         /// Creates the state a morsel task starts from: egglog's <c>clone_state</c>
         /// (core-relations/src/free_join/execute.rs:2546-2554). The bindings, nodes and binding-set stack are copied
         /// (the nodes and leaf rows themselves are shared, and immutable from now on), the stage order and leaf-scan
-        /// flags are copied, the materializations are shared, and the scratch is the task's own.
+        /// flags are copied, the materializations and the pinned views are shared, and the scratch is the task's own.
         /// </summary>
         /// <returns>The task's join.</returns>
         public JoinRun CloneForMorsel()
         {
-            var child = new JoinRun(db, signals, parallel: true, framePool)
+            var child = new JoinRun(db, views, signals, parallel: true, framePool)
             {
                 template = template,
                 atomCount = atomCount,
-                tables = tables,
-                infos = infos,
+                atomViews = atomViews,
                 nodes = (TrieNode?[])nodes.Clone(),
-                roots = new TrieNode?[atomCount],
+
+                // Shared, never released by a task: only read to tell an atom's root rows from refined ones (counters).
+                roots = (TrieNode?[])roots.Clone(),
                 values = (uint[])values.Clone(),
                 materializations = materializations,
                 boundVariables = boundVariables,
@@ -295,24 +318,59 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Checks that some visible row of the atom's current node satisfies the check's slow constraints.
+        /// Checks that some visible row of the atom's current node satisfies the check's slow constraints: each layer of
+        /// the node's rows is scanned with the layer's hidden rows (§9.5), so a root scans its one layer as before.
         /// </summary>
         bool ExistsVisibleRow(ExistenceCheck check)
         {
             var atom = check.Atom.Index;
-            var rows = nodes[atom]!.Rows;
-            var table = tables[atom];
-            var sink = new ExistenceSink();
-            var next = 0;
-            do
+            var node = nodes[atom]!;
+            var view = atomViews[atom]!;
+            var remaining = node.LayerMask;
+            while (remaining != 0)
             {
-                next = table.ScanGenericBounded(rows, next, ExistenceChunk, check.SlowConstraints, ref sink);
-                if (sink.Found)
-                    return true;
+                var layer = BitOperations.TrailingZeroCount(remaining);
+                remaining &= remaining - 1;
+                var lv = view.Layers[layer]!;
+                var rows = node.GetLayerRows(layer);
+                var table = lv.Table;
+                var sink = new ExistenceSink();
+                var next = 0;
+                do
+                {
+                    var start = next;
+                    next = table.ScanGenericBounded(rows, next, ExistenceChunk, check.SlowConstraints, lv.Hidden, ref sink);
+                    if (ExecutorCounters.Enabled)
+                        counters!.NoteScanned(layer < depth, true, (next < 0 ? rows.Size : next) - start);
+
+                    if (sink.Found)
+                        return true;
+                }
+                while (next >= 0);
             }
-            while (next >= 0);
 
             return false;
+        }
+
+        /// <summary>
+        /// Gets whether <paramref name="node"/> is the root node of atom <paramref name="atom"/>: its rows are the atom's
+        /// view narrowed by headers only, not a refinement. What the executor's counters split ancestor rows by
+        /// (<see cref="ExecutorCounters"/>).
+        /// </summary>
+        bool IsRoot(int atom, TrieNode node) => ReferenceEquals(roots[atom], node);
+
+        /// <summary>
+        /// Counts the rows a driver enumerates: every piece's rows of the prober's node (<see cref="ExecutorCounters"/>).
+        /// </summary>
+        void NoteDriver(int atom, in Prober prober)
+        {
+            var node = prober.Node;
+            var root = IsRoot(atom, node);
+            for (var i = 0; i < prober.PieceCount; i++)
+            {
+                var layer = prober.Piece(i).Layer;
+                counters!.NoteScanned(layer < depth, root, node.GetLayerRows(layer).Size);
+            }
         }
 
         /// <summary>
@@ -339,8 +397,7 @@ namespace Eggnog.Relations
             if (nodes.Length >= count)
                 return;
 
-            tables = new Table[count];
-            infos = new TableInfo[count];
+            atomViews = new TableView?[count];
             nodes = new TrieNode?[count];
             roots = new TrieNode?[count];
             timesRefined = new long[count];

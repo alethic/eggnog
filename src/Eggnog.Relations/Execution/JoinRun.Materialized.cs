@@ -125,7 +125,7 @@ namespace Eggnog.Relations
                                 updates.PushBinding(variables[k], c < keyLength ? keys[keyOffset + c] : data[valueOffset + c - keyLength]);
                             }
 
-                            if (PruneProbers(updates, probes, ps, keys, keyOffset, keyLength, data, valueOffset))
+                            if (PruneProbers(cur, updates, probes, ps, keys, keyOffset, keyLength, data, valueOffset))
                                 updates.FinishFrame();
                             else
                                 updates.Rollback(pool);
@@ -143,7 +143,7 @@ namespace Eggnog.Relations
                         for (var k = 0; k < columns.Length; k++)
                             updates.PushBinding(variables[k], keys[keyOffset + columns[k].Index]);
 
-                        if (PruneProbers(updates, probes, ps, keys, keyOffset, keyLength, keys, 0))
+                        if (PruneProbers(cur, updates, probes, ps, keys, keyOffset, keyLength, keys, 0))
                             updates.FinishFrame();
                         else
                             updates.Rollback(pool);
@@ -170,7 +170,7 @@ namespace Eggnog.Relations
                             for (var k = 0; k < columns.Length; k++)
                                 updates.PushBinding(variables[k], data[valueOffset + columns[k].Index]);
 
-                            if (PruneProbers(updates, probes, ps, data, valueOffset, -1, data, valueOffset))
+                            if (PruneProbers(cur, updates, probes, ps, data, valueOffset, -1, data, valueOffset))
                                 updates.FinishFrame();
                             else
                                 updates.Rollback(pool);
@@ -194,20 +194,30 @@ namespace Eggnog.Relations
         /// Probes every index of a materialization scan with a key built from the current key and row, refining each
         /// probed atom. egglog's <c>prune_probers</c> (core-relations/src/free_join/execute.rs:1676-1715): a key position
         /// below the key length reads the key, the rest read the row offset by the key length; without a key
-        /// (<paramref name="keyLength"/> negative) every position reads the row.
+        /// (<paramref name="keyLength"/> negative) every position reads the row. A prober of several pieces joins its hits
+        /// across layers (colored-contexts spec §9.5).
         /// </summary>
         /// <returns><c>false</c> on a miss or an empty refinement; the caller rolls the frame back.</returns>
-        bool PruneProbers(FrameUpdates updates, Probe[] probes, Prober[] ps, uint[] keys, int keyOffset, int keyLength, uint[] row, int rowOffset)
+        bool PruneProbers(int cur, FrameUpdates updates, Probe[] probes, Prober[] ps, uint[] keys, int keyOffset, int keyLength, uint[] row, int rowOffset)
         {
             for (var j = 0; j < probes.Length; j++)
             {
                 var probe = probes[j];
                 var positions = probe.Key;
+                ref var prober = ref ps[j];
+                if (prober.PieceCount != 1)
+                {
+                    if (PruneLayered(cur, updates, ref prober, probe, keys, keyOffset, keyLength, row, rowOffset) == false)
+                        return false;
+
+                    continue;
+                }
+
                 SubsetRef rows;
                 bool found;
                 if (positions.Length == 1)
                 {
-                    found = ps[j].TryGetSubset(MatCell(keys, keyOffset, keyLength, row, rowOffset, positions[0].Index), out rows);
+                    found = prober.First.TryGetSubset(MatCell(keys, keyOffset, keyLength, row, rowOffset, positions[0].Index), out rows);
                 }
                 else
                 {
@@ -215,14 +225,39 @@ namespace Eggnog.Relations
                     for (var k = 0; k < positions.Length; k++)
                         scratchKey[k] = MatCell(keys, keyOffset, keyLength, row, rowOffset, positions[k].Index);
 
-                    found = ps[j].TryGetSubset(scratchKey, out rows);
+                    found = prober.First.TryGetSubset(scratchKey, out rows);
                 }
 
-                if (found == false || RefineProbe(updates, ps[j], probe, rows) == false)
+                if (found == false || RefineProbe(updates, prober.First, probe, rows) == false)
                     return false;
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// One probe of <see cref="PruneProbers"/> over a prober of several pieces: probes every piece with the key and
+        /// refines the probed atom to the hits of every layer.
+        /// </summary>
+        bool PruneLayered(int cur, FrameUpdates updates, ref Prober prober, Probe probe, uint[] keys, int keyOffset, int keyLength, uint[] row, int rowOffset)
+        {
+            var positions = probe.Key;
+            var layerHits = TakeHits(cur);
+            bool found;
+            if (positions.Length == 1)
+            {
+                found = ProbeAll(ref prober, MatCell(keys, keyOffset, keyLength, row, rowOffset, positions[0].Index), layerHits);
+            }
+            else
+            {
+                var scratchKey = keyScratch;
+                for (var k = 0; k < positions.Length; k++)
+                    scratchKey[k] = MatCell(keys, keyOffset, keyLength, row, rowOffset, positions[k].Index);
+
+                found = ProbeAll(ref prober, scratchKey, layerHits);
+            }
+
+            return found && RefineProbeHits(updates, ref prober, probe, layerHits);
         }
 
         /// <summary>

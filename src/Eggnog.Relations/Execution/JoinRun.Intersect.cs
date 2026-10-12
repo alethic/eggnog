@@ -11,6 +11,12 @@ namespace Eggnog.Relations
         /// share. egglog's <c>JoinStage::Intersect</c> kernel (core-relations/src/free_join/execute.rs:1111-1375), with
         /// separate loops for one, two and more scans.
         /// </summary>
+        /// <remarks>
+        /// Layers (colored-contexts spec §9.5): the driving scan enumerates each piece of its prober in turn, one frame per
+        /// (piece, key), refining its atom to that layer's rows; the probed scans join their hits across layers. A key
+        /// present in several layers of the driver yields several frames, which partition the driver's rows with that key
+        /// (I27; decision 6 allows the multiplicity).
+        /// </remarks>
         void RunIntersect<TSink>(int cur, IntersectStage stage, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
         {
@@ -31,7 +37,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// One scan: every value of the column, each a frame refining the atom to its rows.
+        /// One scan: every value of the column, each a frame refining the atom to its rows of one layer.
         /// </summary>
         void RunIntersectOne<TSink>(int cur, IntersectStage stage, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
@@ -44,23 +50,30 @@ namespace Eggnog.Relations
             var ps = TakeProbers(cur, 1);
             ref var p = ref ps[0];
             GetIndex(ref p, atom, [scan.Column]);
-            var table = tables[atom];
+            if (ExecutorCounters.Enabled)
+                NoteDriver(atom, p);
+
             var variable = stage.Variable;
             var updates = TakeFrames(cur);
-            var cursor = default(ProberCursor);
-            while (cursor.MoveNext(p))
+            var pieces = p.PieceCount;
+            for (var i = 0; i < pieces; i++)
             {
-                var key = cursor.Key;
-                updates.PushBinding(variable, key);
-                if (RefineScan(updates, p, scan, key, cursor.Rows, table) == false)
+                ref var piece = ref Prober.GetPiece(ref p, i);
+                var cursor = default(ProberCursor);
+                while (cursor.MoveNext(piece))
                 {
-                    updates.Rollback(pool);
-                    continue;
-                }
+                    var key = cursor.Key;
+                    updates.PushBinding(variable, key);
+                    if (RefineScan(updates, p.Node, piece, scan, key, cursor.Rows) == false)
+                    {
+                        updates.Rollback(pool);
+                        continue;
+                    }
 
-                updates.FinishFrame();
-                if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
-                    return;
+                    updates.FinishFrame();
+                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                        return;
+                }
             }
 
             if (Drain(cur, ref updates, ref sink) == false)
@@ -86,28 +99,51 @@ namespace Eggnog.Relations
             ref var larger = ref ps[large];
             var smallScan = stage.Scans[small];
             var largeScan = stage.Scans[large];
-            var smallTable = tables[smallScan.Atom.Index];
-            var largeTable = tables[largeScan.Atom.Index];
+            if (ExecutorCounters.Enabled)
+                NoteDriver(smallScan.Atom.Index, smaller);
+
+            var layerHits = larger.PieceCount != 1 ? TakeHits(cur) : null;
             var variable = stage.Variable;
             var updates = TakeFrames(cur);
-            var cursor = default(ProberCursor);
-            while (cursor.MoveNext(smaller))
+            var pieces = smaller.PieceCount;
+            for (var i = 0; i < pieces; i++)
             {
-                var key = cursor.Key;
-                if (larger.TryGetSubset(key, out var largeRows) == false)
-                    continue;
-
-                updates.PushBinding(variable, key);
-                if (RefineScan(updates, smaller, smallScan, key, cursor.Rows, smallTable) == false ||
-                    RefineScan(updates, larger, largeScan, key, largeRows, largeTable) == false)
+                ref var piece = ref Prober.GetPiece(ref smaller, i);
+                var cursor = default(ProberCursor);
+                while (cursor.MoveNext(piece))
                 {
-                    updates.Rollback(pool);
-                    continue;
-                }
+                    var key = cursor.Key;
+                    if (layerHits is not null)
+                    {
+                        if (ProbeAll(ref larger, key, layerHits) == false)
+                            continue;
 
-                updates.FinishFrame();
-                if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
-                    return;
+                        updates.PushBinding(variable, key);
+                        if (RefineScan(updates, smaller.Node, piece, smallScan, key, cursor.Rows) == false ||
+                            RefineScanHits(updates, ref larger, largeScan, key, layerHits) == false)
+                        {
+                            updates.Rollback(pool);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        if (larger.First.TryGetSubset(key, out var largeRows) == false)
+                            continue;
+
+                        updates.PushBinding(variable, key);
+                        if (RefineScan(updates, smaller.Node, piece, smallScan, key, cursor.Rows) == false ||
+                            RefineScan(updates, larger.Node, larger.First, largeScan, key, largeRows) == false)
+                        {
+                            updates.Rollback(pool);
+                            continue;
+                        }
+                    }
+
+                    updates.FinishFrame();
+                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                        return;
+                }
             }
 
             if (Drain(cur, ref updates, ref sink) == false)
@@ -143,32 +179,40 @@ namespace Eggnog.Relations
             if (smallestSize != 0)
             {
                 var main = scans[smallest];
-                var mainTable = tables[main.Atom.Index];
                 var variable = stage.Variable;
                 var updates = TakeFrames(cur);
-                var cursor = default(ProberCursor);
-                while (cursor.MoveNext(ps[smallest]))
+                ref var driver = ref ps[smallest];
+                if (ExecutorCounters.Enabled)
+                    NoteDriver(main.Atom.Index, driver);
+
+                var pieces = driver.PieceCount;
+                for (var pi = 0; pi < pieces; pi++)
                 {
-                    var key = cursor.Key;
-                    updates.PushBinding(variable, key);
-                    var ok = true;
-                    for (var i = 0; i < n && ok; i++)
+                    ref var piece = ref Prober.GetPiece(ref driver, pi);
+                    var cursor = default(ProberCursor);
+                    while (cursor.MoveNext(piece))
                     {
-                        if (i == smallest)
+                        var key = cursor.Key;
+                        updates.PushBinding(variable, key);
+                        var ok = true;
+                        for (var i = 0; i < n && ok; i++)
+                        {
+                            if (i == smallest)
+                                continue;
+
+                            ok = ProbeRefineScan(updates, ref ps[i], scans[i], key, cur);
+                        }
+
+                        if (ok == false || RefineScan(updates, driver.Node, piece, main, key, cursor.Rows) == false)
+                        {
+                            updates.Rollback(pool);
                             continue;
+                        }
 
-                        ok = ps[i].TryGetSubset(key, out var rows) && RefineScan(updates, ps[i], scans[i], key, rows, tables[scans[i].Atom.Index]);
+                        updates.FinishFrame();
+                        if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                            return;
                     }
-
-                    if (ok == false || RefineScan(updates, ps[smallest], main, key, cursor.Rows, mainTable) == false)
-                    {
-                        updates.Rollback(pool);
-                        continue;
-                    }
-
-                    updates.FinishFrame();
-                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
-                        return;
                 }
 
                 if (Drain(cur, ref updates, ref sink) == false)

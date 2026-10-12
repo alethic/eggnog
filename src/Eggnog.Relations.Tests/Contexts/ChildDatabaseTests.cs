@@ -174,24 +174,26 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<NotSupportedException>(() => db.EstimateSize(uf));
             Assert.Throws<NotSupportedException>(() => new ColumnCardEstimator(db).GetColumnUniqueness(uf, C(0)));
 
-            // Function tables are answered through the child's view: estimates now (sum over the view's layers), planning
-            // and header evaluation from M10.2; never from the child's own layer alone.
+            // Function tables are answered through the child's view (sum over the view's layers, M10.2); never from the
+            // child's own layer alone, so the single-table members refuse them.
             Assert.Equal(0, db.EstimateSize(f));
             Assert.Throws<NotSupportedException>(() => db.ProcessConstraints(f, []));
+            Assert.Throws<NotSupportedException>(() => new ColumnCardEstimator(db).GetColumnUniqueness(f, C(0)));
 
             // §3.4: a child never evaluates a header as a single table.
             Assert.Throws<InvalidOperationException>(() => ((IHeaderEvaluator)db).Evaluate(uf, [], fast, slow));
             Assert.Throws<InvalidOperationException>(() => ((IHeaderEvaluator)db).Evaluate(f, [], fast, slow));
 
-            // A rule set built at the root is not run against the child's tables, and no rule set runs in a child yet.
+            // A rule set built at the root is not run against the child's tables (M10.2: it was built on another view);
+            // the child runs its own.
             using (var rootRules = OverUnionFind(root.Database, uf))
             {
-                Assert.Equal("Rules in a child context arrive in M10.2.", Assert.Throws<NotSupportedException>(() => db.RunRuleSet(rootRules)).Message);
+                Assert.Throws<ArgumentException>(() => db.RunRuleSet(rootRules));
                 Assert.Equal(1L, root.Database.RunRuleSet(rootRules, ReportLevel.WithPlan).NumMatches("over-uf"));
             }
 
             using (var empty = db.NewRuleSet().Build())
-                Assert.Throws<NotSupportedException>(() => db.RunRuleSet(empty));
+                Assert.Same(RuleSetReport.Empty, db.RunRuleSet(empty));
 
             // The root's query members answer as before.
             Assert.Equal(1, root.Database.EstimateSize(uf));

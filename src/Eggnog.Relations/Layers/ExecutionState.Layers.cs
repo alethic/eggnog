@@ -22,6 +22,12 @@ namespace Eggnog.Relations
         RetractionGuard? guard;
 
         /// <summary>
+        /// The views a rule run's search reads (§9.1, X21): the rule set's pinned snapshot, given to the run's root state
+        /// and copied by its clones (action batches); <c>null</c> outside a rule run.
+        /// </summary>
+        ViewSnapshot? views;
+
+        /// <summary>
         /// Gets whether the state runs in a child context: committed tables are read through the context's views and
         /// write-phase lookups, never as single tables (§6.5).
         /// </summary>
@@ -36,6 +42,18 @@ namespace Eggnog.Relations
         /// Gets the retraction guard the state's removals go through, or <c>null</c>.
         /// </summary>
         internal RetractionGuard? Guard => guard;
+
+        /// <summary>
+        /// Gets the views of the rule run the state belongs to, or <c>null</c> outside a rule run.
+        /// </summary>
+        internal ViewSnapshot? Views => views;
+
+        /// <summary>
+        /// Gives a rule run's root state the rule set's pinned views (§9.1): its search-phase lookups in a child read them
+        /// first, so they see the tables as the run's join does. One store at a root, whose lookups never read views.
+        /// </summary>
+        /// <param name="snapshot">The rule set's views.</param>
+        internal void AttachViews(ViewSnapshot snapshot) => views = snapshot;
 
         /// <summary>
         /// Increments <paramref name="counter"/> on the store's shared counters, never redirected to a child context's id
@@ -67,17 +85,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the view a child reads <paramref name="table"/> through in the search phase: its cached view (§6.5). The
-        /// rule set's view snapshot, which a run reads first, arrives with layered rules (M10.2).
+        /// Gets the view a child reads <paramref name="table"/> through in the search phase (§6.5): the rule set's pinned
+        /// view when the state belongs to a rule run that reads the table, otherwise the context's cached view.
         /// </summary>
-        static TableView ViewFor(ContextTables layers, TableId table) => layers.GetView(table);
+        TableView ViewFor(ContextTables layers, TableId table) => views?.Get(table) ?? layers.GetView(table);
 
         /// <summary>
         /// <c>Lookup</c> and the lookup half of <c>LookupOrInsertDefault</c> and <c>LookupWithFallback</c> in a child
         /// (§6.5): through the context's view of the table, or, for the union-find, through the child's union-find table
         /// (its <see cref="TableKind.OverlayDisplaced"/> arm).
         /// </summary>
-        static void LayeredLookupRow(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, Variable output)
+        void LayeredLookupRow(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, Variable output)
         {
             if (table == layers.Schema.UnionFind)
                 VectorizedLookup.LookupRow(layers.Owner.UnionFindTable, ref mask, bindings, args, column, output);
@@ -88,7 +106,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// <c>LookupWithDefault</c> in a child (§6.5); see <see cref="LayeredLookupRow"/>.
         /// </summary>
-        static void LayeredLookupWithDefault(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, QueryEntry @default, Variable output)
+        void LayeredLookupWithDefault(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, QueryEntry @default, Variable output)
         {
             if (table == layers.Schema.UnionFind)
                 VectorizedLookup.LookupWithDefault(layers.Owner.UnionFindTable, ref mask, bindings, args, column, @default, output);

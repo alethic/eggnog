@@ -43,8 +43,31 @@ namespace Eggnog.Relations
         /// <param name="idConstants">The constant ids the rule's atoms match against.</param>
         /// <param name="extraConstraints">The constraints added on top of the template's headers when the rule came
         /// from a cached plan, in header order; empty for a rule built from scratch.</param>
-        public RulePlan(PlanTemplate template, ActionId action, PlanInstance? instance, string description, SymbolMap symbols, IdConstant[] idConstants, (AtomId Atom, Constraint Constraint)[] extraConstraints)
+        public RulePlan(PlanTemplate template, ActionId action, PlanInstance? instance, string description, SymbolMap symbols, IdConstant[] idConstants, (AtomId Atom, Constraint Constraint)[] extraConstraints) :
+            this(template, action, instance, description, symbols, idConstants, extraConstraints, template, null, null)
         {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance whose template and program may run Id constants other than the written ones
+        /// (colored-contexts spec §9.8, X19).
+        /// </summary>
+        /// <param name="template">The plan template that runs: the written one, or its variant for K.</param>
+        /// <param name="action">The rule's action id in its rule set.</param>
+        /// <param name="instance">The header subsets of this rule set, or <c>null</c> when a header is empty.</param>
+        /// <param name="description">The rule's description.</param>
+        /// <param name="symbols">The names of the rule's atoms and variables.</param>
+        /// <param name="idConstants">The constant ids the rule's atoms match against, as written.</param>
+        /// <param name="extraConstraints">The constraints added on top of the template's headers.</param>
+        /// <param name="writtenTemplate">The template as planned, with the written constants.</param>
+        /// <param name="writtenActions">The action program as written, or <c>null</c> when the rule set's program for the
+        /// rule is it.</param>
+        /// <param name="canonicalConstants">K, the executed constants (query constants first), or <c>null</c> when the
+        /// rule has none.</param>
+        public RulePlan(PlanTemplate template, ActionId action, PlanInstance? instance, string description, SymbolMap symbols, IdConstant[] idConstants, (AtomId Atom, Constraint Constraint)[] extraConstraints, PlanTemplate writtenTemplate, ActionInfo? writtenActions, uint[]? canonicalConstants)
+        {
+            ArgumentNullException.ThrowIfNull(writtenTemplate);
             ArgumentNullException.ThrowIfNull(template);
             ArgumentNullException.ThrowIfNull(description);
             ArgumentNullException.ThrowIfNull(symbols);
@@ -60,6 +83,9 @@ namespace Eggnog.Relations
             Symbols = symbols;
             IdConstants = idConstants;
             ExtraConstraints = extraConstraints;
+            WrittenTemplate = writtenTemplate;
+            WrittenActions = writtenActions;
+            CanonicalConstants = canonicalConstants;
         }
 
         /// <summary>
@@ -96,6 +122,24 @@ namespace Eggnog.Relations
         /// Gets the constant ids the rule's atoms match against. Callers must not modify the array.
         /// </summary>
         public IdConstant[] IdConstants { get; }
+
+        /// <summary>
+        /// Gets the template as planned, with the Id constants as written: <see cref="Template"/>, unless the rule runs a
+        /// variant for K (colored-contexts spec §9.8). <see cref="RuleSet.BuildCachedPlan"/> caches this one, so a cached
+        /// plan never bakes one context's canonical forms.
+        /// </summary>
+        public PlanTemplate WrittenTemplate { get; }
+
+        /// <summary>
+        /// Gets the action program as written, or <c>null</c> when the program the rule set runs for the rule is it.
+        /// </summary>
+        public ActionInfo? WrittenActions { get; }
+
+        /// <summary>
+        /// Gets K, the executed form of the rule's Id constants in the context it was added in (query constants first,
+        /// then action constants), or <c>null</c> when the rule has none (colored-contexts spec §9.8, I30).
+        /// </summary>
+        public uint[]? CanonicalConstants { get; }
 
         /// <summary>
         /// Gets the extra constraints of a rule added from a cached plan, in header order: egglog keeps them as headers

@@ -75,7 +75,45 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(description);
             owner.ThrowIfNotOpen(this);
-            return owner.AddBuiltRule(this, query.Query, instrs.ToArray(), query.IdConstants.ToArray(), description);
+            var program = instrs.ToArray();
+            return owner.AddBuiltRule(this, query.Query, program, query.IdConstants.ToArray(), RecordIdConstants(program), description);
+        }
+
+        /// <summary>
+        /// Lists the constant ids among <paramref name="program"/>'s operands (colored-contexts spec §9.8, X19): every
+        /// constant operand that lands in an id column of its instruction's table (<see cref="Database.GetIdColumns"/>:
+        /// insert and conditional-insert values, remove and lookup keys, the keys and entry defaults of a lookup-or-insert),
+        /// or in either id column of the store's union-find, or that the caller flagged as an id
+        /// (<see cref="QueryEntry.IdConst"/>: comparisons, external-function arguments). Operands are numbered as
+        /// <see cref="ActionSubstituter.Operands"/> numbers them.
+        /// </summary>
+        /// <param name="program">The rule's instructions.</param>
+        /// <returns>The constant ids, in instruction and operand order.</returns>
+        ActionIdConstant[] RecordIdConstants(Instr[] program)
+        {
+            var database = owner.Database;
+            var unionFind = database.Owner?.Store.UnionFindTable;
+            List<ActionIdConstant>? found = null;
+            for (var i = 0; i < program.Length; i++)
+            {
+                var table = ActionSubstituter.TableOf(program[i]);
+                var idColumns = table is { } t && t != unionFind ? database.GetIdColumns(t) : ReadOnlySpan<ColumnId>.Empty;
+                var operands = ActionSubstituter.Operands(program[i]);
+                for (var o = 0; o < operands.Length; o++)
+                {
+                    var (entry, isEntry, column) = operands[o];
+                    if (isEntry == false || entry.IsVariable)
+                        continue;
+
+                    var isId = entry.IsIdConstant
+                        || (column >= 0 && table is { } owned && owned == unionFind && column < 2)
+                        || (column >= 0 && idColumns.Contains(new ColumnId(column)));
+                    if (isId)
+                        (found ??= new List<ActionIdConstant>()).Add(new ActionIdConstant(i, o, entry.Constant));
+                }
+            }
+
+            return found?.ToArray() ?? [];
         }
 
         /// <summary>
