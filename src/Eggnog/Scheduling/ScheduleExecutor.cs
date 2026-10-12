@@ -9,12 +9,14 @@ namespace Eggnog
 
     /// <summary>
     /// Runs one top-level <see cref="Scope.Run(Schedule, RunOptions, CancellationToken)"/>: chooses the rules of each
-    /// iteration, checks cancellation and limits before each, runs it, and accumulates the report (§6.5).
+    /// iteration, checks cancellation and limits before each, runs it, records its step (§6.11), and accumulates the
+    /// report (§6.5).
     /// </summary>
     internal sealed class ScheduleExecutor
     {
 
         readonly CancellationToken cancellationToken;
+        readonly bool wantsSteps;
 
         /// <summary>
         /// Initializes a new instance.
@@ -27,7 +29,23 @@ namespace Eggnog
             Top = top;
             Options = options;
             this.cancellationToken = cancellationToken;
+            wantsSteps = options.RecordSteps || options.Observer is not null;
+            if (options.RecordSteps)
+                Statistics.Steps = new List<RunStep>();
+
+            Clock = Stopwatch.StartNew();
         }
+
+        /// <summary>
+        /// Gets the run's clock, started with the executor: <see cref="RunOptions.TimeLimit"/> and
+        /// <see cref="RunReport.Elapsed"/> read it.
+        /// </summary>
+        public Stopwatch Clock { get; }
+
+        /// <summary>
+        /// Gets the cases of this run that are alive, for <see cref="RunOptions.RowLimit"/>: none before R3.
+        /// </summary>
+        public IReadOnlyCollection<Scope> LiveCases => Array.Empty<Scope>();
 
         /// <summary>
         /// Gets the scope the run was called on.
@@ -68,7 +86,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks, before an iteration, cancellation and then the iteration limit (D42).
+        /// Checks, before an iteration, cancellation and then the limits (D42): the iteration limit, the time limit (the
+        /// run's clock against <see cref="RunOptions.TimeLimit"/>), and the row limit (the own rows of the top-level scope
+        /// and of the run's live cases against <see cref="RunOptions.RowLimit"/>).
         /// </summary>
         /// <param name="scope">The scope about to iterate.</param>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
@@ -78,6 +98,19 @@ namespace Eggnog
             cancellationToken.ThrowIfCancellationRequested();
             if (Statistics.Iterations >= Options.IterationLimit)
                 throw new ScheduleStopException(RunStopReason.IterationLimit);
+
+            if (Options.TimeLimit is { } time && Clock.Elapsed > time)
+                throw new ScheduleStopException(RunStopReason.TimeLimit);
+
+            if (Options.RowLimit is { } limit)
+            {
+                var rows = Top.Engine.OwnRowCount;
+                foreach (var live in LiveCases)
+                    rows += live.Engine.OwnRowCount;
+
+                if (rows > limit)
+                    throw new ScheduleStopException(RunStopReason.RowLimit);
+            }
         }
 
         /// <summary>
@@ -94,6 +127,7 @@ namespace Eggnog
             if (rules.Count == 0)
                 return false;
 
+            var started = Stopwatch.GetTimestamp();
             var engine = scope.Engine;
             engine.EnsureClean();
             var lowered = engine.PrepareRules(rules, Options.SemiNaive);
@@ -116,8 +150,10 @@ namespace Eggnog
                 throw exception;
             }
 
+            var elapsed = Stopwatch.GetElapsedTime(started);
             Statistics.Iterations++;
             var report = iteration.Report;
+            List<RuleStatistics>? matched = wantsSteps ? new List<RuleStatistics>() : null;
             foreach (var variant in lowered)
             {
                 if (variant.Rule is not { } rule)
@@ -126,7 +162,12 @@ namespace Eggnog
                 if (Statistics.Rules.TryGetValue(rule, out var builder) == false)
                     Statistics.Rules.Add(rule, builder = new RuleStatisticsBuilder());
 
-                builder.Add(report.NumMatches(variant.Description), report.RuleSearchAndApplyTime(variant.Description), null);
+                var matches = report.NumMatches(variant.Description);
+                var searchTime = report.RuleSearchAndApplyTime(variant.Description);
+                var plan = PlanOf(report, variant.Description);
+                builder.Add(matches, searchTime, plan);
+                if (matched is not null && matches > 0)
+                    matched.Add(new RuleStatistics(rule, matches, searchTime, 1, plan));
             }
 
             Statistics.SearchTime += report.SearchAndApplyTime;
@@ -139,7 +180,42 @@ namespace Eggnog
                 Statistics.TopChanged |= changed;
             }
 
+            RecordStep(RunStepKind.Iteration, scope, changed, elapsed, matched);
             return changed;
+        }
+
+        /// <summary>
+        /// Records a step (§6.11): keeps it with <see cref="RunOptions.RecordSteps"/>, and hands it to
+        /// <see cref="RunOptions.Observer"/> on the run's thread, with the scope's guard marked so that the observer may
+        /// read the run's scopes and nothing else. Every step takes an index, recorded or not.
+        /// </summary>
+        /// <param name="kind">What the step was.</param>
+        /// <param name="scope">The scope it ran in.</param>
+        /// <param name="changed">Whether it changed the scope.</param>
+        /// <param name="elapsed">How long it took.</param>
+        /// <param name="rules">For an iteration, the rules that matched in it; <c>null</c> when no step is wanted.</param>
+        public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics>? rules)
+        {
+            var index = Statistics.StepCount++;
+            if (wantsSteps == false)
+                return;
+
+            var step = new RunStep(kind, scope, index, changed, elapsed, rules ?? Array.Empty<RuleStatistics>());
+            Statistics.Steps?.Add(step);
+            if (Options.Observer is not { } observer)
+                return;
+
+            var guard = scope.Guard;
+            var outer = guard.InObserver;
+            guard.InObserver = true;
+            try
+            {
+                observer(step);
+            }
+            finally
+            {
+                guard.InObserver = outer;
+            }
         }
 
         /// <summary>
@@ -155,8 +231,23 @@ namespace Eggnog
                 rules.Add(rule, builder.Build(rule));
 
             var saturated = reason == RunStopReason.Completed && Statistics.LastTopStepChanged == false;
-            return new RunReport(Statistics.Iterations, Statistics.TopChanged, saturated, reason, clock.Elapsed, new ReadOnlyDictionary<Rule, RuleStatistics>(rules),
-                Statistics.SearchTime, Statistics.MergeTime, Statistics.RebuildTime);
+            IReadOnlyList<RunStep> steps = Statistics.Steps is { } recorded ? recorded.AsReadOnly() : Array.Empty<RunStep>();
+            return new RunReport(Statistics.Iterations, Statistics.TopChanged, saturated, reason, clock.Elapsed,
+                new ReadOnlyDictionary<Rule, RuleStatistics>(rules), Statistics.SearchTime, Statistics.MergeTime, Statistics.RebuildTime, steps);
+        }
+
+        /// <summary>
+        /// Gets the plan of a variant from an iteration's report: the first plan its description's reports carry, which the
+        /// engine records only at its plan level (<see cref="EGraphOptions.RecordPlans"/>).
+        /// </summary>
+        static string? PlanOf(Relations.RuleSetReport report, string description)
+        {
+            if (report.RuleReports.TryGetValue(description, out var reports))
+                foreach (var rule in reports)
+                    if (rule.Plan is { } plan)
+                        return plan;
+
+            return null;
         }
 
     }

@@ -12,19 +12,23 @@ namespace Eggnog
         long matches;
         TimeSpan searchTime;
         int iterationsWithMatches;
+        string? plan;
 
         /// <summary>
         /// Adds one iteration's figures for the rule.
         /// </summary>
         /// <param name="matches">The engine's match count in the iteration.</param>
         /// <param name="searchTime">The engine's search-and-apply time in the iteration.</param>
-        /// <param name="plan">The rule's plan, when recorded (R1b); unused in R1a.</param>
+        /// <param name="plan">The rule's plan in the iteration, when recorded; the latest one recorded is kept.</param>
         public void Add(long matches, TimeSpan searchTime, string? plan)
         {
             this.matches += matches;
             this.searchTime += searchTime;
             if (matches > 0)
                 iterationsWithMatches++;
+
+            if (plan is not null)
+                this.plan = plan;
         }
 
         /// <summary>
@@ -32,7 +36,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns>The statistics.</returns>
-        public RuleStatistics Build(Rule rule) => new(rule, matches, searchTime, iterationsWithMatches);
+        public RuleStatistics Build(Rule rule) => new(rule, matches, searchTime, iterationsWithMatches, plan);
 
     }
 

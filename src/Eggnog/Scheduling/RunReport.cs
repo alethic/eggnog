@@ -23,9 +23,12 @@ namespace Eggnog
         /// <param name="searchTime">The engine's search-and-apply time.</param>
         /// <param name="mergeTime">The engine's merge time.</param>
         /// <param name="rebuildTime">The engine's rebuild time.</param>
+        /// <param name="steps">Every step of the run, with <see cref="RunOptions.RecordSteps"/>; otherwise empty.</param>
         internal RunReport(int iterations, bool changed, bool saturated, RunStopReason stopReason, TimeSpan elapsed,
-            IReadOnlyDictionary<Rule, RuleStatistics> rules, TimeSpan searchTime, TimeSpan mergeTime, TimeSpan rebuildTime)
+            IReadOnlyDictionary<Rule, RuleStatistics> rules, TimeSpan searchTime, TimeSpan mergeTime, TimeSpan rebuildTime,
+            IReadOnlyList<RunStep> steps)
         {
+            Steps = steps;
             Iterations = iterations;
             Changed = changed;
             Saturated = saturated;
@@ -82,6 +85,11 @@ namespace Eggnog
         /// Gets the engine's rebuild time, summed over the run.
         /// </summary>
         public TimeSpan RebuildTime { get; }
+
+        /// <summary>
+        /// Gets every step of the run, in order, when <see cref="RunOptions.RecordSteps"/> is set; otherwise empty (§6.11).
+        /// </summary>
+        public IReadOnlyList<RunStep> Steps { get; }
 
         /// <summary>
         /// Renders the report: <c>Completed after 5 iterations, saturated, changed, 3 rules, 1.2 ms</c>.

@@ -1,0 +1,85 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+
+namespace Eggnog
+{
+
+    public sealed partial class EGraph
+    {
+
+        readonly ConcurrentDictionary<string, Query> queriesByName = new(StringComparer.Ordinal);
+        readonly ConcurrentQueue<RuleVariants> deferredFrees = new();
+
+        /// <summary>
+        /// Defines a compiled conjunctive query for host reads (<see cref="Scope.Any(Query)"/>,
+        /// <see cref="Scope.Count(Query)"/>, <see cref="Scope.ForEachMatch(Query, QueryCallback)"/>), compiled
+        /// immediately like a rule body (§6.6.4). Any thread, any time (D6). Define a reusable query once; dispose one made
+        /// for a single request (D49).
+        /// </summary>
+        /// <param name="name">The query's name, unique among the graph's live queries.</param>
+        /// <param name="define">Declares the variables (the columns of a match) and the body.</param>
+        /// <returns>The query.</returns>
+        /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or a live query has it.</exception>
+        /// <exception cref="RuleDefinitionException">The query is not valid (the messages of §6.3); nothing is
+        /// registered.</exception>
+        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost
+        /// function.</exception>
+        public Query DefineQuery(string name, Action<QueryBuilder> define)
+        {
+            EngineCallMarker.ThrowIfActive();
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(define);
+            var builder = new QueryBuilder(this, name);
+            try
+            {
+                define(builder);
+            }
+            finally
+            {
+                builder.Close();
+            }
+
+            lock (DefinitionLock)
+            {
+                if (queriesByName.ContainsKey(name))
+                    throw new ArgumentException($"A query named '{name}' is already defined.", nameof(name));
+
+                var compiled = RuleCompiler.CompileQuery(this, builder.Draft);
+                queriesByName[name] = compiled.Query;
+                return compiled.Query;
+            }
+        }
+
+        /// <summary>
+        /// Gets the live queries (a snapshot), for the plans of a freeze (R2) and for tests.
+        /// </summary>
+        internal IReadOnlyCollection<Query> Queries => new List<Query>(queriesByName.Values);
+
+        /// <summary>
+        /// Forgets a disposed query's name, so that it may be defined again. Lock-free, so a disposal never waits.
+        /// </summary>
+        /// <param name="query">The disposed query.</param>
+        internal void ForgetQuery(Query query) => queriesByName.TryRemove(new KeyValuePair<string, Query>(query.Name, query));
+
+        /// <summary>
+        /// Hands variants to free to the graph, from a user delegate the engine invoked, whose thread may be inside an
+        /// engine call: they are freed before the next engine call (<see cref="FreeDeferred"/>).
+        /// </summary>
+        /// <param name="variants">The variants.</param>
+        internal void DeferFree(RuleVariants variants) => deferredFrees.Enqueue(variants);
+
+        /// <summary>
+        /// Frees the variants handed over by <see cref="DeferFree"/>. Called by the root adapter under the engine lock,
+        /// from a host call.
+        /// </summary>
+        internal void FreeDeferred()
+        {
+            while (deferredFrees.TryDequeue(out var variants))
+                variants.Free(this);
+        }
+
+    }
+
+}

@@ -10,8 +10,8 @@ namespace Eggnog
     /// <remarks>
     /// Atoms are lowered in program order (the engine's variant order), each relation atom ending with the unit constant;
     /// then the body steps as <c>QueryPrim</c>s in placement order, which the bridge runs after the join on every match;
-    /// then the head operations in builder-call order. Every call site is registered as an external function owned by
-    /// the variant. Called under the graph's engine lock.
+    /// then the head operations in builder-call order (a query's or split matcher's head is one collector). Every call
+    /// site is registered as an external function owned by the variant. Called under the graph's engine lock.
     /// </remarks>
     internal static class RuleLowering
     {
@@ -98,6 +98,7 @@ namespace Eggnog
                 }
 
                 var head = new Relations.RuleVariable?[program.Registers.Length];
+                MatchCollector? collector = null;
                 foreach (var op in program.Head)
                 {
                     var inputs = new Relations.RuleEntry[op.Inputs.Length];
@@ -127,6 +128,16 @@ namespace Eggnog
                         case HeadOpKind.Union:
                             builder.Union(inputs[0], inputs[1]);
                             break;
+                        case HeadOpKind.Collect:
+                        {
+                            // The collector never fails, so its panic message is never built; the call stages nothing.
+                            collector = new MatchCollector(graph, inputs.Length, graph.Unit.Unit);
+                            var function = engine.RegisterExternalFunction(collector);
+                            owned.Add(function);
+                            var name = program.Name;
+                            builder.CallExternalFunc(function, inputs, unitType, () => $"'{name}': collector failed");
+                            break;
+                        }
                         default:
                         {
                             var resultType = program.Registers[op.Target].Type;
@@ -142,7 +153,7 @@ namespace Eggnog
                 }
 
                 var id = builder.Build();
-                var variant = new LoweredRule(id, description, semiNaive, lowered, owned.ToArray(), rule);
+                var variant = new LoweredRule(id, description, semiNaive, lowered, owned.ToArray(), rule, collector);
                 graph.VariantsByDescription[description] = variant;
                 return variant;
             }

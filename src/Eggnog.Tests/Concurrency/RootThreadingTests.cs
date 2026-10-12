@@ -186,7 +186,10 @@ namespace Eggnog.Tests.Concurrency
                     {
                         threads[Environment.CurrentManagedThreadId] = Thread.CurrentThread.IsThreadPoolThread;
                         refusals.Add(Assert.Throws<InvalidOperationException>(() => t.Root.Check(t.Num.Of(1L))));
-                        Thread.Sleep(20);
+
+                        // Hold this rule until a second thread runs one. Under load the pool may otherwise run every rule
+                        // inline on the calling thread, and the test would not observe a pool thread at all.
+                        SpinWait.SpinUntil(() => threads.Count >= 2, TimeSpan.FromSeconds(10));
                         return true;
                     });
                     r.Then(tagged.Of(x));

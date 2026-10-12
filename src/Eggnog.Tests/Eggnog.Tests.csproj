@@ -21,4 +21,9 @@
         <ProjectReference Include="..\Eggnog\Eggnog.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- The public surface R1a and R1b ship (Surface/PublicSurfaceTests). -->
+        <EmbeddedResource Include="Surface\PublicSurface.txt" LogicalName="Eggnog.Tests.Surface.PublicSurface.txt" />
+    </ItemGroup>
+
 </Project>

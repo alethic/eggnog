@@ -20,6 +20,13 @@ namespace Eggnog
         /// </summary>
         public int DegreeOfParallelism { get; init; } = 1;
 
+        /// <summary>
+        /// Gets whether each rule's query plan is recorded in <see cref="RuleStatistics.Plan"/>: the graph's engine then
+        /// reports at its plan level, set at graph construction (D41). Off by default, because rendering a plan costs a
+        /// little on every iteration.
+        /// </summary>
+        public bool RecordPlans { get; init; }
+
     }
 
 }

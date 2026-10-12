@@ -120,6 +120,44 @@ namespace Eggnog.Tests.Rendering
             return variable!;
         }
 
+        [Fact]
+        public void UntilAndQueriesRender()
+        {
+            var t = new NodeTheory();
+            Assert.Equal("(saturate (until (run rules) (num 4) (tag (A))))", Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(4L), t.Tag.Of(t.A.Of()))).ToString());
+            var query = t.Graph.DefineQuery("wrapped", q =>
+            {
+                var (n, x) = q.Vars<Node, long>("n", "x");
+                q.When(n.Is(t.Wrap.Of(t.Lit.Of(x))), t.Num.Of(x));
+            });
+            Assert.Equal("(query ((= n (Wrap (Lit x))) (num x)) (n x))", query.ToString());
+        }
+
+        [Fact]
+        public void TableRowsRenderAsSExpressions()
+        {
+            var t = new NodeTheory();
+            var present = t.Graph.DefineRelation<string>("present");
+            var dom = t.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var strEq = t.Graph.DefineConstructor<string, string, Node>("StrEq");
+            t.Root.Assume(present.Of("kind"), dom.Of("kind").Is(ValueSet.Of("b", "a")));
+            var made = t.Root.Make(strEq.Of("kind", "a"));
+
+            Assert.Equal("(present \"kind\")", t.Root.Rows(present)[0].ToString());
+            Assert.Equal("(dom \"kind\") = (set-of \"a\" \"b\")", t.Root.Rows(dom)[0].ToString());
+            Assert.Equal($"(StrEq \"kind\" \"a\") = {made.Id}", t.Root.Rows(strEq)[0].ToString());
+            Assert.Equal("(contradiction)", RowOf(t, t.Graph.Contradiction));
+        }
+
+        /// <summary>
+        /// Writes the nullary relation and renders its row.
+        /// </summary>
+        static string RowOf(NodeTheory t, Relation relation)
+        {
+            t.Root.Assume(relation.Of());
+            return t.Root.Rows(relation)[0].ToString();
+        }
+
     }
 
 }

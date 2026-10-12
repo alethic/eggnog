@@ -25,6 +25,7 @@ namespace Eggnog
         readonly RuleDraft draft;
         readonly Scope? owner;
         readonly string ruleName;
+        readonly bool query;
 
         readonly List<ColumnType> rawTypes = new();
         readonly List<string> rawNames = new();
@@ -56,12 +57,15 @@ namespace Eggnog
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="draft">The draft.</param>
-        /// <param name="owner">The rule's owner scope; <c>null</c> for a global rule (always in R1).</param>
-        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner)
+        /// <param name="owner">The rule's owner scope; <c>null</c> for a global rule (always in R1) or a query.</param>
+        /// <param name="query">Whether the draft is a query's (R1b): its class constants are checked at each call,
+        /// against the scope it runs in, rather than against an owner here (§6.3 step 3, §6.6.4).</param>
+        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false)
         {
             this.graph = graph;
             this.draft = draft;
             this.owner = owner;
+            this.query = query;
             ruleName = draft.Name;
         }
 
@@ -95,6 +99,34 @@ namespace Eggnog
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
                 named.ToArray(), writesAnalysis);
+        }
+
+        /// <summary>
+        /// Compiles a query's draft (§6.6.4): the body as a rule's (steps 1 to 7), and a head of one
+        /// <see cref="HeadOpKind.Collect"/> of the declared variables in declaration order (step 9). Each declared
+        /// variable must be bound by the body or by an equality with a constant; a constant-bound one collects the
+        /// constant.
+        /// </summary>
+        /// <returns>The program.</returns>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid query.</exception>
+        public RuleProgram BuildQuery()
+        {
+            DeclareVariables();
+            foreach (var fact in draft.Body)
+                AddBodyFact(fact);
+
+            ResolveBody();
+            var columns = new Operand[draft.Variables.Count];
+            for (var i = 0; i < columns.Length; i++)
+                columns[i] = EvalHead(draft.Variables[i].Variable);
+
+            head.Add(new HeadOp(HeadOpKind.Collect, null, columns, -1, null));
+            var named = new int[columns.Length];
+            for (var i = 0; i < named.Length; i++)
+                named[i] = columns[i].IsRegister ? columns[i].Index : -1;
+
+            return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
+                named, false);
         }
 
         /// <summary>
@@ -596,6 +628,10 @@ namespace Eggnog
                 if (ReferenceEquals(origin.Graph, graph) == false)
                     throw Error($"class {id} belongs to another graph");
 
+                // A query's constants are checked at each call, against the scope it runs in (§6.6.4).
+                if (query)
+                    return IdConstant(id, origin, type);
+
                 if (origin.IsBatch && origin.Committed == false)
                     throw Error($"class {id} was made by a Write batch that did not commit");
 
@@ -611,15 +647,7 @@ namespace Eggnog
                     throw Error($"class {id} came from scope '{scope.Path}', which is not '{owner.Path}' or an ancestor of it");
                 }
 
-                if (idIndex.TryGetValue(id.Cell, out var index) == false)
-                {
-                    index = idCells.Count;
-                    idCells.Add(id.Cell);
-                    idOrigins.Add(origin);
-                    idIndex.Add(id.Cell, index);
-                }
-
-                return Operand.IdConstant(index, type);
+                return IdConstant(id, origin, type);
             }
 
             try
@@ -630,6 +658,22 @@ namespace Eggnog
             {
                 throw Error(exception.Message, exception);
             }
+        }
+
+        /// <summary>
+        /// Gets the operand of a class constant, one index per distinct cell.
+        /// </summary>
+        Operand IdConstant(ClassId id, ScopeOrigin origin, ColumnType type)
+        {
+            if (idIndex.TryGetValue(id.Cell, out var index) == false)
+            {
+                index = idCells.Count;
+                idCells.Add(id.Cell);
+                idOrigins.Add(origin);
+                idIndex.Add(id.Cell, index);
+            }
+
+            return Operand.IdConstant(index, type);
         }
 
         /// <summary>

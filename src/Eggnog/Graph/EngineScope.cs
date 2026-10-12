@@ -27,6 +27,12 @@ namespace Eggnog
         public abstract bool IsContradictory { get; }
 
         /// <summary>
+        /// Gets the number of rows in the scope's own layers, the engine's row-count estimate (the R1 root's
+        /// <c>Database.TotalSizeEstimate</c>): what <see cref="RunOptions.RowLimit"/> bounds (D42). O(1).
+        /// </summary>
+        public abstract long OwnRowCount { get; }
+
+        /// <summary>
         /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current (always at
         /// the R1 root, which is rebuilt after every flush and run).
         /// </summary>
@@ -96,6 +102,17 @@ namespace Eggnog
         public abstract uint Find(uint id);
 
         /// <summary>
+        /// Maps the cells of some columns of row-major tuples through <see cref="Find"/>, in place, as one engine call:
+        /// the sort columns of a query's matches or a table's rows (§6.6.4, §6.11). Not in the spec's member list; it
+        /// spares a lock per cell. O(tuples × columns).
+        /// </summary>
+        /// <param name="cells">The tuples' cells, <paramref name="width"/> per tuple.</param>
+        /// <param name="width">The number of cells per tuple.</param>
+        /// <param name="columns">The columns to canonicalize, each below <paramref name="width"/>.</param>
+        /// <returns>Whether a cell changed, so that two tuples may now be equal.</returns>
+        public abstract bool CanonicalizeColumns(Span<uint> cells, int width, ReadOnlySpan<int> columns);
+
+        /// <summary>
         /// Looks up a row by key: key sort cells are canonicalized here; a class output is canonical.
         /// </summary>
         /// <param name="function">The table's engine function.</param>
@@ -103,6 +120,13 @@ namespace Eggnog
         /// <param name="output">The output cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the table holds a row for the key.</returns>
         public abstract bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output);
+
+        /// <summary>
+        /// Gets the number of rows of a table in this scope's view (<c>Scope.CountRows</c>, §6.11). O(1).
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <returns>The row count.</returns>
+        public abstract long TableSize(Relations.FunctionId function);
 
         /// <summary>
         /// Visits every row of a table in this scope's view: keys then output, sort cells canonical in a clean scope.
@@ -113,6 +137,16 @@ namespace Eggnog
         /// <param name="visit">Receives each row; the cells are valid only during the visit, and it must not call the
         /// engine.</param>
         public abstract void ForEach(Relations.FunctionId function, Relations.FunctionRowCallback visit);
+
+        /// <summary>
+        /// Runs a query's naive engine rule against the scope's current contents (D34, D49): its collector hands each
+        /// match to the scope's runtime. R1 runs it without merging and without advancing the clock, so nothing a query
+        /// does moves <see cref="Version"/> or invalidates an extractor.
+        /// </summary>
+        /// <param name="query">The query's variant, prepared for this scope.</param>
+        /// <exception cref="Relations.PanicException">A call site recorded a failure; the rule layer turns it into a
+        /// <see cref="RuleEvaluationException"/> without faulting the scope.</exception>
+        public abstract void RunQuery(LoweredRule query);
 
         /// <summary>
         /// Creates an engine extractor over this scope as it is now (§6.10).

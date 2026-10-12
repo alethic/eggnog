@@ -51,6 +51,16 @@ namespace Eggnog
         /// </summary>
         public TimeSpan RebuildTime;
 
+        /// <summary>
+        /// The steps of the run, with <see cref="RunOptions.RecordSteps"/>; <c>null</c> otherwise.
+        /// </summary>
+        public List<RunStep>? Steps;
+
+        /// <summary>
+        /// The number of steps made, recorded or not: the next step's <see cref="RunStep.Index"/>.
+        /// </summary>
+        public int StepCount;
+
     }
 
 }

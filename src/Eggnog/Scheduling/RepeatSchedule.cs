@@ -46,10 +46,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
         {
             foreach (var step in Steps)
-                step.Collect(rulesets);
+                step.Collect(rulesets, conditions);
         }
 
     }

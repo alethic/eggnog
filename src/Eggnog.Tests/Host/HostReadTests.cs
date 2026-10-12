@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 using Eggnog.Tests.Support;
 
@@ -166,6 +167,95 @@ namespace Eggnog.Tests.Host
             Assert.Throws<ArgumentException>(() => t.Root.Get(Primitives.Add.Of(1L, 2L)));
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(1L)));
+        }
+
+        [Fact]
+        public void CountRowsCountsATablesRows()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<string, long>("f");
+            Assert.Equal(0, t.Root.CountRows(t.Num));
+            t.Root.Assume(t.Num.Of(3L), t.Num.Of(1L), t.Num.Of(3L), f.Of("a").Is(1L), f.Of("b").Is(2L));
+            Assert.Equal(2, t.Root.CountRows(t.Num));
+            Assert.Equal(2, t.Root.CountRows(f));
+            Assert.Equal(0, t.Root.CountRows(t.Lit));
+            Assert.Equal(0, t.Root.CountRows(t.Graph.Contradiction));
+
+            t.Root.Make(t.Add.Of(t.Lit.Of(1L), t.Lit.Of(2L)));
+            Assert.Equal(2, t.Root.CountRows(t.Lit));
+            Assert.Equal(1, t.Root.CountRows(t.Add));
+
+            // Rows of classes that merge become one row.
+            t.Root.Assume(t.Lit.Of(1L).Is(t.Lit.Of(2L)));
+            t.Root.Make(t.Wrap.Of(t.Lit.Of(1L)));
+            t.Root.Make(t.Wrap.Of(t.Lit.Of(2L)));
+            Assert.Equal(1, t.Root.CountRows(t.Wrap));
+        }
+
+        [Fact]
+        public void RowsDecodeEveryRowInContentOrder()
+        {
+            var t = new NodeTheory();
+            var named = t.Graph.DefineRelation<string, long>("named");
+            var dom = t.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            t.Root.Assume(named.Of("b", 10L), named.Of("a", 2L), named.Of("b", 9L), named.Of("Z", 1L));
+            t.Root.Assume(dom.Of("x").Is(ValueSet.Of("q", "p")));
+
+            var rows = t.Root.Rows(named);
+            Assert.Equal(new[] { "(named \"Z\" 1)", "(named \"a\" 2)", "(named \"b\" 9)", "(named \"b\" 10)" }, rows.Select(r => r.ToString()));
+            Assert.All(rows, r => Assert.Same(named, r.Table));
+            Assert.All(rows, r => Assert.Null(r.Output));
+            Assert.Equal(new object[] { "b", 10L }, rows[3].Keys);
+
+            var values = t.Root.Rows(dom);
+            Assert.Single(values);
+            Assert.Equal(new object[] { "x" }, values[0].Keys);
+            Assert.Equal(ValueSet.Of("p", "q"), values[0].Output);
+            Assert.Empty(t.Root.Rows(t.Num));
+        }
+
+        [Fact]
+        public void RowsGiveCanonicalClassesUsableInTheScope()
+        {
+            var t = new NodeTheory();
+            var one = t.Root.Make(t.Lit.Of(1L));
+            var two = t.Root.Make(t.Lit.Of(2L));
+            var sum = t.Root.Make(t.Add.Of(one, two));
+            t.Root.Union(one, two);
+
+            var lits = t.Root.Rows(t.Lit);
+            Assert.Equal(2, lits.Count);
+            Assert.Equal(lits[0].Output, lits[1].Output);
+            var literal = Node.FromId((ClassId)lits[0].Output!);
+            Assert.Equal(t.Root.Find(one), literal);
+            Assert.True(t.Root.AreEqual(literal, two));
+
+            var adds = t.Root.Rows(t.Add);
+            var add = Assert.Single(adds);
+            Assert.Equal(literal.Id, add.Keys[0]);
+            Assert.Equal(literal.Id, add.Keys[1]);
+            Assert.Equal(t.Root.Find(sum).Id, add.Output);
+            Assert.Equal($"(Add {literal.Id} {literal.Id}) = {t.Root.Find(sum).Id}", add.ToString());
+        }
+
+        [Fact]
+        public void RowReadsNeverInternAndRefuseAnotherGraphsTable()
+        {
+            var t = new NodeTheory();
+            var other = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            var interned = t.Graph.Values.InternedCount;
+            var version = t.Root.Version;
+
+            t.Root.Rows(t.Num);
+            t.Root.CountRows(t.Num);
+
+            Assert.Equal(interned, t.Graph.Values.InternedCount);
+            Assert.Equal(version, t.Root.Version);
+            Assert.Throws<ArgumentException>(() => t.Root.Rows(other.Num));
+            Assert.Throws<ArgumentException>(() => t.Root.CountRows(other.Num));
+            Assert.Throws<ArgumentNullException>(() => t.Root.Rows(null!));
+            Assert.Throws<ArgumentNullException>(() => t.Root.CountRows(null!));
         }
 
     }

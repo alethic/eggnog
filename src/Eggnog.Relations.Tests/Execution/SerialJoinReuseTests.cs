@@ -66,8 +66,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A run stopped early leaves its join half-way through; the next run starts from a fresh one and finds every
-        /// match.
+        /// A run stopped early leaves its join half-way through; the join is released (<see cref="JoinRun.ReleaseInterrupted"/>)
+        /// and kept, and the next run, reusing it, finds every match.
         /// </summary>
         [Theory]
         [MemberData(nameof(StrategiesData))]
@@ -91,6 +91,91 @@ namespace Eggnog.Relations.Tests
             stopAfter = -1;
             for (var run = 0; run < 3; run++)
                 Assert.Equal(expected, RunTwoHops(db, edge, f, strategyName));
+        }
+
+        /// <summary>
+        /// Runs stopped at different depths of the join (the first match, inside the first morsel, after several) alternate
+        /// with full runs on one kept join: every full run finds every match, and every stopped run stops.
+        /// </summary>
+        [Theory]
+        [MemberData(nameof(StrategiesData))]
+        public void StoppedAndFullRunsAlternateOnOneJoin(string strategyName)
+        {
+            var (db, edge, expected) = TwoHops(6);
+            var stopAfter = -1;
+            var calls = 0;
+            var f = db.AddExternalFunction(ExternalFunction.Create((ExecutionState state, ReadOnlySpan<uint> args, out uint result) =>
+            {
+                if (++calls == stopAfter)
+                    state.TriggerEarlyStop();
+
+                result = 0;
+                return true;
+            }));
+
+            foreach (var stop in new[] { 1, 7, 129, 300, 1, 2 })
+            {
+                calls = 0;
+                stopAfter = stop;
+                Assert.InRange(RunTwoHops(db, edge, f, strategyName), 1, expected - 1);
+
+                calls = 0;
+                stopAfter = -1;
+                Assert.Equal(expected, RunTwoHops(db, edge, f, strategyName));
+            }
+        }
+
+        /// <summary>
+        /// A run stopped at its first match keeps its join, so the next one reuses the join's leaf-scan buffer instead of
+        /// growing a new one as large as the table: the allocation of a stopped run does not grow with the table.
+        /// </summary>
+        [Fact]
+        public void AnEarlyStoppedRunKeepsItsJoin()
+        {
+            const int small = 1_000;
+            const int large = 21_000;
+            var perRow = (StoppedRunAllocation(large) - StoppedRunAllocation(small)) / (double)(large - small);
+            Assert.True(perRow <= 4, $"A stopped run allocates {perRow:0.#} bytes per row of the table it scans.");
+        }
+
+        /// <summary>
+        /// The bytes the second of two runs of <c>edge(x, y) =&gt; f(x, y)</c> allocates on this thread, over
+        /// <paramref name="rows"/> edges, where <c>f</c> stops the run at its first call.
+        /// </summary>
+        static long StoppedRunAllocation(int rows)
+        {
+            var db = ExecutionTestUtil.NewDatabase("Serial");
+            var edge = db.AddTable(Strict(2, 2));
+            DatabaseTestUtil.Stage(db, edge, Enumerable.Range(0, rows).Select(i => new[] { (uint)i, (uint)(i % 97) }).ToArray());
+            db.MergeAll();
+            var f = db.AddExternalFunction(ExternalFunction.Create((ExecutionState state, ReadOnlySpan<uint> args, out uint result) =>
+            {
+                state.TriggerEarlyStop();
+                result = 0;
+                return true;
+            }));
+
+            Assert.True(RunEdges(db, edge, f) > 0);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            Assert.True(RunEdges(db, edge, f) > 0);
+            return GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        /// <summary>
+        /// Runs <c>edge(x, y) =&gt; f(x, y)</c> once and returns its match count.
+        /// </summary>
+        static long RunEdges(Database db, TableId edge, ExternalFunctionId f)
+        {
+            var rsb = db.NewRuleSet();
+            var q = rsb.NewRule();
+            var x = q.NewVariable("x");
+            var y = q.NewVariable("y");
+            q.AddAtom(edge, [x, y]);
+            var rb = q.Build();
+            rb.CallExternal(f, [x, y]);
+            rb.Build("edges");
+            using var rs = rsb.Build();
+            return db.RunRuleSet(rs).NumMatches("edges");
         }
 
         /// <summary>

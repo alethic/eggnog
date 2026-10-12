@@ -5,7 +5,8 @@ namespace Eggnog
 
     /// <summary>
     /// An evaluation failure: a primitive, filter or lattice delegate threw, or a function without a lattice received two
-    /// values from rules. After a run or a write the scope is faulted (D18).
+    /// values from rules. After a run or a write the scope is faulted (D18); after a query it is not, because a query
+    /// writes nothing (D49).
     /// </summary>
     public sealed class RuleEvaluationException : Exception
     {

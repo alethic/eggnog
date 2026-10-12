@@ -17,7 +17,9 @@ namespace Eggnog
         /// <param name="constants">The values the class constants were lowered with.</param>
         /// <param name="owned">The call sites registered for the variant, freed with it.</param>
         /// <param name="rule">The rule; <c>null</c> for a query, a split matcher or a copy rule.</param>
-        public LoweredRule(Relations.EGraphRuleId id, string description, bool semiNaive, uint[] constants, Relations.ExternalFunctionId[] owned, Rule? rule)
+        /// <param name="collector">The collector of a query or split matcher; <c>null</c> otherwise.</param>
+        public LoweredRule(Relations.EGraphRuleId id, string description, bool semiNaive, uint[] constants, Relations.ExternalFunctionId[] owned, Rule? rule,
+            MatchCollector? collector = null)
         {
             Id = id;
             Description = description;
@@ -25,6 +27,7 @@ namespace Eggnog
             Constants = constants;
             Owned = owned;
             Rule = rule;
+            Collector = collector;
         }
 
         /// <summary>
@@ -56,6 +59,12 @@ namespace Eggnog
         /// Gets the rule; <c>null</c> for a query, a split matcher or a copy rule.
         /// </summary>
         public Rule? Rule { get; }
+
+        /// <summary>
+        /// Gets the collector of a query or split matcher (R1b, R3): the head action that hands each match to the scope's
+        /// runtime; <c>null</c> for a rule or a copy rule.
+        /// </summary>
+        public MatchCollector? Collector { get; }
 
         /// <inheritdoc />
         public override string ToString() => Description;

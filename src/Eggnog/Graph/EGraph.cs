@@ -42,6 +42,9 @@ namespace Eggnog
             Options = options;
             var parallelism = options.DegreeOfParallelism == 1 ? Relations.ParallelHeuristics.Serial : new Relations.ParallelHeuristics(options.DegreeOfParallelism);
             Engine = new Relations.EGraph(parallelism);
+            if (options.RecordPlans)
+                Engine.ReportLevel = Relations.ReportLevel.WithPlan;
+
             BaseValues = Engine.BaseValues;
             Values = new ValueStore(BaseValues);
             Unit = new UnitColumnType(BaseValues) { Store = Values };

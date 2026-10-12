@@ -31,10 +31,42 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Trims a serial join that finished its run normally, before the database keeps it for the next one: drops the
-        /// references to the last rule's tables and hands leaf-scan buffers over <see cref="RetainedLeafCells"/> cells
-        /// back to the pool. Everything else is already idle: <see cref="EndRule"/> released the nodes and cleared the
-        /// frames. A join interrupted by an early stop or an exception is not kept.
+        /// Releases what an early stop left in a serial join's probers, so that the database can keep the join as it keeps
+        /// one that ran to the end. An early stop (an action's <see cref="ExecutionState.TriggerEarlyStop"/>, or a failure
+        /// it reported) returns from the stages at their checks and skips their <see cref="MoveBack"/>, so a prober still
+        /// holds its node and, for a sparse or a per-stage tuple index, an index it owns. Those indexes go back to their
+        /// pools and every prober is cleared. <see cref="EndRule"/> has already released the rule's nodes and cleared its
+        /// frames and bindings; the frame-owned nodes the stop dropped are left to the garbage collector, as the pool
+        /// leaves nodes beyond <see cref="TrieNodePool.MaxPooled"/>. Not in egglog, whose pooled buffers return to their
+        /// pools when dropped however a run ends. O(positions × probers).
+        /// </summary>
+        public void ReleaseInterrupted()
+        {
+            Debug.Assert(parallel == false && template is null, "only an idle serial join is released after an early stop");
+            for (var p = 0; p < probers.Length; p++)
+            {
+                if (probers[p] is not { } row)
+                    continue;
+
+                for (var j = 0; j < row.Length; j++)
+                {
+                    ref var prober = ref row[j];
+                    if (prober.Kind == ProberKind.Sparse)
+                        ReturnSparse(prober.Sparse!);
+                    else if (prober.Kind == ProberKind.DynamicTuple)
+                        prober.Tuple!.Dispose();
+
+                    prober = default;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Trims a serial join that finished its run, before the database keeps it for the next one: drops the references
+        /// to the last rule's tables and hands leaf-scan buffers over <see cref="RetainedLeafCells"/> cells back to the
+        /// pool. Everything else is already idle: <see cref="EndRule"/> released the nodes and cleared the frames, and
+        /// after an early stop <see cref="ReleaseInterrupted"/> cleared the probers. A join interrupted by an exception is
+        /// not kept.
         /// </summary>
         public void Park()
         {

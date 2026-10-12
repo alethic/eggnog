@@ -1,0 +1,413 @@
+struct Eggnog.ClassId : IEquatable<ClassId>
+    Boolean Equals(ClassId other)
+    Boolean IsDefault { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(ClassId left, ClassId right)
+    static Boolean op_Inequality(ClassId left, ClassId right)
+enum Eggnog.ColumnKind
+    Sort
+    Value
+abstract class Eggnog.ColumnType
+    ColumnKind Kind { get }
+    String Format(Object value)
+    String Name { get }
+    Type ClrType { get }
+    override String ToString()
+abstract class Eggnog.ColumnType<T> : ColumnType
+    Int32 Compare(T x, T y)
+    String Format(T value)
+static class Eggnog.Compute
+    static Term<TResult> Of<T1, T2, T3, T4, TResult>(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d, Func<T1, T2, T3, T4, TResult> function)
+    static Term<TResult> Of<T1, T2, T3, TResult>(Term<T1> a, Term<T2> b, Term<T3> c, Func<T1, T2, T3, TResult> function)
+    static Term<TResult> Of<T1, T2, TResult>(Term<T1> a, Term<T2> b, Func<T1, T2, TResult> function)
+    static Term<TResult> Of<T1, TResult>(Term<T1> a, Func<T1, TResult> function)
+abstract class Eggnog.ConstructorHandle : TableHandle
+    Boolean Extractable { get }
+    Int64 Cost { get }
+sealed class Eggnog.ConstructorTerm<TSort> : Term<TSort>
+    ConstructorHandle Head { get }
+sealed class Eggnog.Constructor<TSort> : ConstructorHandle
+    ConstructorTerm<TSort> Of()
+sealed class Eggnog.Constructor<T1, TSort> : ConstructorHandle
+    ConstructorTerm<TSort> Of(Term<T1> a)
+sealed class Eggnog.Constructor<T1, T2, TSort> : ConstructorHandle
+    ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b)
+sealed class Eggnog.Constructor<T1, T2, T3, TSort> : ConstructorHandle
+    ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c)
+sealed class Eggnog.Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle
+    ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
+sealed class Eggnog.CostModel
+    CostModel Unextractable(ConstructorHandle head)
+    CostModel With(ConstructorHandle head, Int64 cost)
+    CostModel With(ConstructorHandle head, NodeCostFunction cost)
+    CostModel WithValueCost(ColumnType type, Int64 cost)
+    CostModel WithValueCost<T>(ColumnType<T> type, Func<T, Int64> cost)
+    static CostModel Default { get }
+sealed class Eggnog.EGraph
+    ColumnType<TSort> DefineSort<TSort : struct, ISort<TSort>>(String name)
+    Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    IReadOnlyList<Ruleset> Rulesets { get }
+    IReadOnlyList<TableHandle> Tables { get }
+    Query DefineQuery(String name, Action<QueryBuilder> define)
+    Relation Contradiction { get }
+    Relation DefineRelation(String name, TableOptions options = null)
+    Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(String name, TableOptions options = null)
+    Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(String name, TableOptions options = null)
+    Relation<T1, T2> DefineRelation<T1, T2>(String name, TableOptions options = null)
+    Relation<T1> DefineRelation<T1>(String name, TableOptions options = null)
+    Ruleset DefineRuleset(String name)
+    Scope Root { get }
+    ValueStore Values { get }
+    ctor(EGraphOptions options = null)
+sealed class Eggnog.EGraphOptions
+    Boolean RecordPlans { get; init }
+    Int32 DegreeOfParallelism { get; init }
+    ctor()
+    static EGraphOptions Default { get }
+struct Eggnog.ExtractedArgument<T>
+    ExtractedTerm Term { get }
+    T Value { get }
+    override String ToString()
+sealed class Eggnog.ExtractedTerm
+    Boolean Is(ConstructorHandle head)
+    Boolean IsChild(Int32 index)
+    Boolean Mentions(ConstructorHandle head)
+    Boolean TryMatch<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(Constructor<T1, T2, T3, T4, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b, out ExtractedArgument<T3> c, out ExtractedArgument<T4> d)
+    Boolean TryMatch<T1, T2, T3, TSort : struct, ISort<TSort>>(Constructor<T1, T2, T3, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b, out ExtractedArgument<T3> c)
+    Boolean TryMatch<T1, T2, TSort : struct, ISort<TSort>>(Constructor<T1, T2, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b)
+    Boolean TryMatch<T1, TSort : struct, ISort<TSort>>(Constructor<T1, TSort> head, out ExtractedArgument<T1> a)
+    Boolean TryMatch<TSort : struct, ISort<TSort>>(Constructor<TSort> head)
+    ClassId Class { get }
+    ConstructorHandle Head { get }
+    ExtractedTerm Child(Int32 index)
+    Int32 Arity { get }
+    Int64 Cost { get }
+    Object Argument(Int32 index)
+    T Value<T>(Int32 index)
+    override String ToString()
+sealed class Eggnog.Extractor
+    Boolean TryExtract<TSort : struct, ISort<TSort>>(TSort root, out ExtractedTerm term)
+    Boolean TryGetCost<TSort : struct, ISort<TSort>>(TSort root, out Int64 cost)
+    CostModel Costs { get }
+    ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root)
+    Scope Scope { get }
+abstract class Eggnog.Fact
+    override String ToString()
+    static Fact Exists(Term application)
+    static Fact True(Term<Boolean> condition)
+sealed class Eggnog.FactConflictException : InvalidOperationException
+    IReadOnlyList<Object> Key { get }
+    Object NewValue { get }
+    Object StoredValue { get }
+    TableHandle Table { get }
+    ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
+abstract class Eggnog.FunctionHandle : TableHandle
+    ValueLattice Lattice { get }
+sealed class Eggnog.Function<TOut> : FunctionHandle
+    Term<TOut> Of()
+    ValueLattice<TOut> Lattice { get }
+sealed class Eggnog.Function<T1, TOut> : FunctionHandle
+    Term<TOut> Of(Term<T1> a)
+    ValueLattice<TOut> Lattice { get }
+sealed class Eggnog.Function<T1, T2, TOut> : FunctionHandle
+    Term<TOut> Of(Term<T1> a, Term<T2> b)
+    ValueLattice<TOut> Lattice { get }
+sealed class Eggnog.Function<T1, T2, T3, TOut> : FunctionHandle
+    Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c)
+    ValueLattice<TOut> Lattice { get }
+sealed class Eggnog.Function<T1, T2, T3, T4, TOut> : FunctionHandle
+    Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
+    ValueLattice<TOut> Lattice { get }
+interface Eggnog.ISort<TSort>
+    ClassId Id { get }
+    static abstract TSort FromId(ClassId id)
+delegate Eggnog.NodeCostFunction
+    Int64 Invoke(NodeView node)
+ref struct Eggnog.NodeView
+    ConstructorHandle Head { get }
+    Int32 Arity { get }
+    Object Get(Int32 column)
+    T Get<T>(Int32 column)
+abstract class Eggnog.Primitive
+    IReadOnlyList<Type> ParameterTypes { get }
+    String Name { get }
+    Type ResultType { get }
+    override String ToString()
+    static Primitive<T1, T2, T3, T4, TResult> Create<T1, T2, T3, T4, TResult>(String name, Func<T1, T2, T3, T4, TResult> function)
+    static Primitive<T1, T2, T3, TResult> Create<T1, T2, T3, TResult>(String name, Func<T1, T2, T3, TResult> function)
+    static Primitive<T1, T2, TResult> Create<T1, T2, TResult>(String name, Func<T1, T2, TResult> function)
+    static Primitive<T1, TResult> Create<T1, TResult>(String name, Func<T1, TResult> function)
+sealed class Eggnog.Primitive<T1, TResult> : Primitive
+    Func<T1, TResult> Function { get }
+    Term<TResult> Of(Term<T1> a)
+sealed class Eggnog.Primitive<T1, T2, TResult> : Primitive
+    Func<T1, T2, TResult> Function { get }
+    Term<TResult> Of(Term<T1> a, Term<T2> b)
+sealed class Eggnog.Primitive<T1, T2, T3, TResult> : Primitive
+    Func<T1, T2, T3, TResult> Function { get }
+    Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c)
+sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
+    Func<T1, T2, T3, T4, TResult> Function { get }
+    Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
+static class Eggnog.Primitives
+    static Primitive<Int64, Int64, Boolean> Greater { get }
+    static Primitive<Int64, Int64, Boolean> GreaterOrEqual { get }
+    static Primitive<Int64, Int64, Boolean> Less { get }
+    static Primitive<Int64, Int64, Boolean> LessOrEqual { get }
+    static Primitive<Int64, Int64, Int64> Add { get }
+    static Primitive<Int64, Int64, Int64> Max { get }
+    static Primitive<Int64, Int64, Int64> Min { get }
+    static Primitive<Int64, Int64, Int64> Subtract { get }
+    static Primitive<T, ValueSet<T>> Singleton<T>()
+    static Primitive<ValueSet<T>, Boolean> IsEmpty<T>()
+    static Primitive<ValueSet<T>, Int64> Count<T>()
+    static Primitive<ValueSet<T>, T, Boolean> Contains<T>()
+    static Primitive<ValueSet<T>, T, ValueSet<T>> Insert<T>()
+    static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>()
+    static Primitive<ValueSet<T>, ValueSet<T>, Boolean> IsSubsetOf<T>()
+    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Except<T>()
+    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Intersect<T>()
+    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Union<T>()
+sealed class Eggnog.Query : IDisposable
+    Boolean IsDisposed { get }
+    IReadOnlyList<Term> Variables { get }
+    String Name { get }
+    Void Dispose()
+    override String ToString()
+sealed class Eggnog.QueryBuilder
+    ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
+    ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
+    Var<T> Var<T>(String name)
+    Void When(params Fact[] facts)
+    Void Where(Term<Boolean> condition)
+    Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
+    Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
+delegate Eggnog.QueryCallback
+    Boolean Invoke(QueryMatch match)
+ref struct Eggnog.QueryMatch
+    T Get<T>(Var<T> variable)
+sealed class Eggnog.Relation : RelationHandle
+    Fact Of()
+abstract class Eggnog.RelationHandle : TableHandle
+sealed class Eggnog.Relation<T1> : RelationHandle
+    Fact Of(Term<T1> a)
+sealed class Eggnog.Relation<T1, T2> : RelationHandle
+    Fact Of(Term<T1> a, Term<T2> b)
+sealed class Eggnog.Relation<T1, T2, T3> : RelationHandle
+    Fact Of(Term<T1> a, Term<T2> b, Term<T3> c)
+sealed class Eggnog.Relation<T1, T2, T3, T4> : RelationHandle
+    Fact Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
+sealed class Eggnog.Rule
+    Boolean IsNaive { get }
+    Ruleset Ruleset { get }
+    Scope Owner { get }
+    String Name { get }
+    override String ToString()
+sealed class Eggnog.RuleBuilder
+    String Name { get }
+    ValueTuple<Var<T1>, Var<T2>, Var<T3>, Var<T4>> Vars<T1, T2, T3, T4>(String name1, String name2, String name3, String name4)
+    ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
+    ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
+    Var<T> Var<T>(String name)
+    Var<TSort> Make<TSort : struct, ISort<TSort>>(String name, ConstructorTerm<TSort> term)
+    Void Naive()
+    Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right)
+    Void Then(params Fact[] facts)
+    Void When(params Fact[] facts)
+    Void Where(Term<Boolean> condition)
+    Void Where<T1, T2, T3, T4>(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d, Func<T1, T2, T3, T4, Boolean> predicate)
+    Void Where<T1, T2, T3>(Term<T1> a, Term<T2> b, Term<T3> c, Func<T1, T2, T3, Boolean> predicate)
+    Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
+    Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
+sealed class Eggnog.RuleDefinitionException : Exception
+    String RuleName { get }
+    ctor(String ruleName, String message, Exception inner = null)
+sealed class Eggnog.RuleEvaluationException : Exception
+    String Bindings { get }
+    String RuleName { get }
+    ctor(String ruleName, String bindings, String message, Exception inner)
+sealed class Eggnog.RuleStatistics
+    Int32 IterationsWithMatches { get }
+    Int64 Matches { get }
+    Rule Rule { get }
+    String Plan { get }
+    TimeSpan SearchTime { get }
+    override String ToString()
+sealed class Eggnog.Ruleset
+    EGraph Graph { get }
+    IReadOnlyList<Rule> Rules { get }
+    Rule DefineRule(String name, Action<RuleBuilder> define)
+    String Name { get }
+    override String ToString()
+    static Schedule op_Implicit(Ruleset ruleset)
+sealed class Eggnog.RunOptions
+    Action<RunStep> Observer { get; init }
+    Boolean RecordSteps { get; init }
+    Boolean StopOnContradiction { get; init }
+    Int32 IterationLimit { get; init }
+    Int64? RowLimit { get; init }
+    TimeSpan? TimeLimit { get; init }
+    ctor()
+    static RunOptions Default { get }
+sealed class Eggnog.RunReport
+    Boolean Changed { get }
+    Boolean Saturated { get }
+    IReadOnlyDictionary<Rule, RuleStatistics> Rules { get }
+    IReadOnlyList<RunStep> Steps { get }
+    Int32 Iterations { get }
+    RunStopReason StopReason { get }
+    TimeSpan Elapsed { get }
+    TimeSpan MergeTime { get }
+    TimeSpan RebuildTime { get }
+    TimeSpan SearchTime { get }
+    override String ToString()
+sealed class Eggnog.RunStep
+    Boolean Changed { get }
+    IReadOnlyList<RuleStatistics> Rules { get }
+    Int32 Index { get }
+    RunStepKind Kind { get }
+    Scope Scope { get }
+    String ScopePath { get }
+    TimeSpan Elapsed { get }
+    override String ToString()
+enum Eggnog.RunStepKind
+    Iteration
+enum Eggnog.RunStopReason
+    Completed
+    IterationLimit
+    Contradiction
+    TimeLimit
+    RowLimit
+abstract class Eggnog.Schedule
+    override String ToString()
+    static Schedule Repeat(Int32 times, params Schedule[] steps)
+    static Schedule Run(params Ruleset[] rulesets)
+    static Schedule Saturate(params Schedule[] steps)
+    static Schedule Sequence(params Schedule[] steps)
+    static Schedule Until(Schedule body, params Fact[] condition)
+sealed class Eggnog.Scope : IDisposable
+    Boolean Any(Query query)
+    Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+    Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, Term<TSort> b)
+    Boolean Check(params Fact[] facts)
+    Boolean IsContradictory { get }
+    Boolean IsDisposed { get }
+    Boolean IsFaulted { get }
+    Boolean IsRoot { get }
+    Boolean TryGet<T>(Term<T> term, out T value)
+    Boolean Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+    EGraph Graph { get }
+    Exception Failure { get }
+    ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root, CostModel costs = null)
+    Extractor CreateExtractor(CostModel costs = null)
+    IReadOnlyList<TableRow> Rows(TableHandle table)
+    Int64 Count(Query query)
+    Int64 CountRows(TableHandle table)
+    Int64 Version { get }
+    RunReport Run(Schedule schedule, RunOptions options = null, CancellationToken cancellationToken = null)
+    String Path { get }
+    T Get<T>(Term<T> term)
+    TSort Find<TSort : struct, ISort<TSort>>(TSort value)
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
+    Void Assume(params Fact[] facts)
+    Void Dispose()
+    Void ForEachMatch(Query query, QueryCallback callback)
+    Void Write(Action<ScopeWriter> write)
+    override String ToString()
+sealed class Eggnog.ScopeWriter
+    Scope Scope { get }
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
+    Void Assume(params Fact[] facts)
+    Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+abstract class Eggnog.TableHandle
+    Boolean IsValueOnly { get }
+    Boolean Lift { get }
+    ColumnType Output { get }
+    EGraph Graph { get }
+    IReadOnlyList<ColumnType> Keys { get }
+    Int32 Index { get }
+    String Name { get }
+    TableKind Kind { get }
+    TableRole Role { get }
+    override String ToString()
+enum Eggnog.TableKind
+    Relation
+    Function
+    Constructor
+sealed class Eggnog.TableOptions
+    Boolean Extractable { get; init }
+    Boolean? Lift { get; init }
+    TableRole Role { get; init }
+    ctor()
+enum Eggnog.TableRole
+    Term
+    Fact
+    Analysis
+sealed class Eggnog.TableRow
+    IReadOnlyList<Object> Keys { get }
+    Object Output { get }
+    TableHandle Table { get }
+    override String ToString()
+abstract class Eggnog.Term
+    Type ClrType { get }
+    override String ToString()
+abstract class Eggnog.Term<T> : Term
+    Fact Is(Term<T> other)
+    Fact IsNot(Term<T> other)
+    Type ClrType { get }
+    static Term<T> op_Implicit(T value)
+abstract class Eggnog.ValueLattice
+    String Name { get }
+    Type ValueType { get }
+    override String ToString()
+    static ValueLattice<T> Max<T : IComparable<T>>()
+    static ValueLattice<T> Min<T : IComparable<T>>()
+    static ValueLattice<ValueSet<T>> Intersect<T>()
+    static ValueLattice<ValueSet<T>> Union<T>()
+sealed class Eggnog.ValueLattice<T> : ValueLattice
+    Func<T, T, T> CaseJoin { get }
+    Func<T, T, T> Merge { get }
+    Void Verify(IEnumerable<T> samples)
+    ctor(String name, Func<T, T, T> merge, Func<T, T, T> caseJoin = null)
+static class Eggnog.ValueSet
+    static ValueSet<T> From<T>(IEnumerable<T> items)
+    static ValueSet<T> Of<T>(params T[] items)
+sealed class Eggnog.ValueSet<T> : IEnumerable, IEnumerable<T>, IEquatable<ValueSet<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
+    Boolean Contains(T item)
+    Boolean Equals(ValueSet<T> other)
+    Boolean IsEmpty { get }
+    Boolean IsSubsetOf(ValueSet<T> other)
+    Boolean Overlaps(ValueSet<T> other)
+    IEnumerator<T> GetEnumerator()
+    Int32 Count { get }
+    T this[Int32 index] { get }
+    ValueSet<T> Add(T item)
+    ValueSet<T> Except(ValueSet<T> other)
+    ValueSet<T> Intersect(ValueSet<T> other)
+    ValueSet<T> Remove(T item)
+    ValueSet<T> Union(ValueSet<T> other)
+    ValueSet<T> Where(Func<T, Boolean> predicate)
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static ValueSet<T> Empty { get }
+sealed class Eggnog.ValueStore
+    Boolean TryGetType<T>(out ColumnType<T> type)
+    ColumnType<T> Register<T : IEquatable<T>>(String name, IComparer<T> order = null, Func<T, String> format = null)
+    ColumnType<T> TypeOf<T>()
+    ColumnType<TEnum> RegisterEnum<TEnum : struct, Enum>()
+    ColumnType<ValueSet<T>> RegisterSet<T>()
+    Int64 InternedCount { get }
+sealed class Eggnog.Var<T> : Term<T>
+    String Name { get }

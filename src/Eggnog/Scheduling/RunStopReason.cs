@@ -22,6 +22,16 @@ namespace Eggnog
         /// </summary>
         Contradiction,
 
+        /// <summary>
+        /// The run reached <see cref="RunOptions.TimeLimit"/>.
+        /// </summary>
+        TimeLimit,
+
+        /// <summary>
+        /// The run reached <see cref="RunOptions.RowLimit"/>.
+        /// </summary>
+        RowLimit,
+
     }
 
 }

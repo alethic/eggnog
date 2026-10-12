@@ -101,6 +101,90 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Checks, without reading the scope's contents, that <see cref="Check"/> can test <paramref name="fact"/>: what it
+        /// would refuse whatever the scope holds. With no scope, only the fact's shape: a relation row, an equality or an
+        /// existence, whose terms are constants and table applications (no variable, no computation). With a scope, also
+        /// every table and column type is of its graph and every class constant may be used in it (D39). Used for
+        /// <c>Until</c> conditions, which <see cref="Check"/> reads only when their node executes (§6.5.3).
+        /// </summary>
+        /// <param name="scope">The scope the fact will be checked in; <c>null</c> to check the shape only.</param>
+        /// <param name="fact">The fact.</param>
+        /// <returns>Why the fact cannot be checked, or <c>null</c> when it can.</returns>
+        public static string? Validate(Scope? scope, Fact fact)
+        {
+            ArgumentNullException.ThrowIfNull(fact);
+            switch (fact)
+            {
+                case RelationFact relation:
+                {
+                    if (scope is not null && ReferenceEquals(relation.Table.Graph, scope.Graph) == false)
+                        return $"table '{relation.Table.Name}' belongs to another graph";
+
+                    foreach (var argument in relation.Arguments)
+                        if (ValidateTerm(scope, argument) is { } error)
+                            return error;
+
+                    return null;
+                }
+                case EqualityFact equality:
+                    return ValidateTerm(scope, equality.Left) ?? ValidateTerm(scope, equality.Right);
+                case ExistsFact exists:
+                    return ValidateTerm(scope, exists.Application);
+                case NotEqualFact:
+                    return "host checks are ground facts, not filters; 'IsNot' is a filter";
+                case FilterFact:
+                    return "host checks are ground facts, not filters; 'True' is a filter";
+                default:
+                    return $"a {fact.GetType().Name} cannot be checked";
+            }
+        }
+
+        /// <summary>
+        /// <see cref="Validate"/> for one term.
+        /// </summary>
+        static string? ValidateTerm(Scope? scope, Term term)
+        {
+            ArgumentNullException.ThrowIfNull(term);
+            var shape = term.Shape;
+            switch (shape.Kind)
+            {
+                case TermShapeKind.Constant:
+                {
+                    if (scope is null)
+                        return null;
+
+                    ColumnType type;
+                    try
+                    {
+                        type = TypeOf(scope, shape);
+                    }
+                    catch (ArgumentException exception)
+                    {
+                        return exception.Message;
+                    }
+
+                    return type.Kind == ColumnKind.Sort ? ClassChecks.Check(scope.Origin, type.ClassOf(shape.Constant!), null) : null;
+                }
+                case TermShapeKind.Application:
+                {
+                    var table = shape.Table!;
+                    if (scope is not null && ReferenceEquals(table.Graph, scope.Graph) == false)
+                        return $"table '{table.Name}' belongs to another graph";
+
+                    foreach (var argument in shape.Arguments)
+                        if (ValidateTerm(scope, argument) is { } error)
+                            return error;
+
+                    return null;
+                }
+                case TermShapeKind.Variable:
+                    return $"host reads are ground; '{shape.Name}' is a variable";
+                default:
+                    return $"host reads do not compute; '{shape.Primitive!.Name}' is a computation";
+            }
+        }
+
+        /// <summary>
         /// Gets the column type of a constant.
         /// </summary>
         static ColumnType TypeOf(Scope scope, TermShape shape)

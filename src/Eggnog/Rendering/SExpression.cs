@@ -90,6 +90,55 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Renders a query as written: <c>(query ((present p) (= d (dom p))) (p d))</c>, its body then its variables.
+        /// </summary>
+        /// <param name="query">The query.</param>
+        /// <returns>The rendering.</returns>
+        public static string Render(Query query)
+        {
+            var draft = query.Draft;
+            var builder = new StringBuilder("(query (");
+            for (var i = 0; i < draft.Body.Count; i++)
+            {
+                if (i > 0)
+                    builder.Append(' ');
+
+                Append(builder, draft.Body[i]);
+            }
+
+            builder.Append(") (");
+            for (var i = 0; i < draft.Variables.Count; i++)
+            {
+                if (i > 0)
+                    builder.Append(' ');
+
+                builder.Append(draft.Variables[i].Name);
+            }
+
+            return builder.Append("))").ToString();
+        }
+
+        /// <summary>
+        /// Renders a table row (§6.11): <c>(present "kind")</c>, <c>(dom "kind") = (set-of "a" "b")</c>,
+        /// <c>(StrEq "kind" "a") = #17</c>.
+        /// </summary>
+        /// <param name="row">The row.</param>
+        /// <returns>The rendering.</returns>
+        public static string Render(TableRow row)
+        {
+            var table = row.Table;
+            var builder = new StringBuilder("(").Append(table.Name);
+            for (var i = 0; i < row.Keys.Count; i++)
+                builder.Append(' ').Append(Cell(row.Keys[i], table.KeyArray[i]));
+
+            builder.Append(')');
+            if (row.Output is { } output)
+                builder.Append(" = ").Append(Cell(output, table.Output!));
+
+            return builder.ToString();
+        }
+
+        /// <summary>
         /// Renders a schedule: <c>(saturate (run horn) (run rewrite))</c>.
         /// </summary>
         /// <param name="schedule">The schedule.</param>
@@ -247,6 +296,17 @@ namespace Eggnog
                     builder.Append("(seq");
                     AppendSteps(builder, sequence.Steps);
                     break;
+                case UntilSchedule until:
+                    builder.Append("(until ");
+                    Append(builder, until.Body);
+                    foreach (var fact in until.Condition)
+                    {
+                        builder.Append(' ');
+                        Append(builder, fact);
+                    }
+
+                    builder.Append(')');
+                    break;
                 default:
                     builder.Append(schedule.GetType().Name);
                     break;
@@ -266,6 +326,11 @@ namespace Eggnog
 
             builder.Append(')');
         }
+
+        /// <summary>
+        /// Formats a decoded cell of a table row: a class as <c>#17</c>, a value by its column type.
+        /// </summary>
+        static string Cell(object value, ColumnType type) => value is ClassId id ? id.ToString() : Literal(value, type);
 
         /// <summary>
         /// Formats a constant: by its column type when known, else with the built-in literal syntax.

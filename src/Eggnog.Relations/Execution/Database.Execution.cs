@@ -9,9 +9,9 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The serial join of the last serial run that finished normally, kept so the next serial run reuses its node
-        /// pool, per-node indexes, frame buffers and scratch (<see cref="JoinRun.Rebind"/>); <c>null</c> while a run
-        /// holds it or after a run that stopped early or threw. A clone starts without one.
+        /// The serial join of the last serial run that ran to the end or stopped early, kept so the next serial run reuses
+        /// its node pool, per-node indexes, frame buffers and scratch (<see cref="JoinRun.Rebind"/>); <c>null</c> while a
+        /// run holds it or after a run that threw. A clone starts without one.
         /// </summary>
         JoinRun? idleSerialJoin;
 
@@ -238,7 +238,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// The serial path: every rule in rule order on one join with one in-place action buffer, flushed once at the
         /// end on a clone of the root state (core-relations/src/free_join/execute.rs:500-607). The join is the one the
-        /// last serial run kept, if any, and is kept again unless the run stops early or throws.
+        /// last serial run kept, if any, and is kept again unless the run throws; after an early stop its probers are
+        /// released first (<see cref="JoinRun.ReleaseInterrupted"/>).
         /// </summary>
         void RunRulesSerial(RuleSet ruleSet, ActionInfo[] actions, MatchCounter counter, ExecutionState root, ReportLevel reportLevel, RuleReport?[] reports)
         {
@@ -264,13 +265,14 @@ namespace Eggnog.Relations
                 reports[i] = new RuleReport(plan, Stopwatch.GetElapsedTime(start), 0);
             }
 
-            // An early stop may leave probers and frame-owned nodes behind; only a join that ran to the end is clean.
-            if (root.ShouldStop == false)
-            {
-                join.Park();
-                idleSerialJoin = join;
-            }
+            // An early stop leaves its probers holding what the stages it interrupted never moved back; released, the join
+            // is as idle as one that ran to the end, and kept, so the run after an early stop (a query's Any, a failure)
+            // does not rebuild it and its leaf-scan buffers. An exception propagates before this, and the join is dropped.
+            if (root.ShouldStop)
+                join.ReleaseInterrupted();
 
+            join.Park();
+            idleSerialJoin = join;
             buffer.FlushOnClone();
         }
 

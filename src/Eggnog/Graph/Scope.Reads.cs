@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Eggnog
@@ -159,6 +160,149 @@ namespace Eggnog
             {
                 Guard.Exit();
             }
+        }
+
+        /// <summary>
+        /// Gets the number of rows of a table in this scope's view: egglog's <c>print-size</c> (§6.11).
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <returns>The row count.</returns>
+        /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
+        public long CountRows(TableHandle table)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+            EnterRead();
+            try
+            {
+                return RowReader.Count(this, table);
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Gets the rows of a table in this scope's view, decoded and in content order: for debugging and tests (§6.11). A
+        /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <returns>The rows.</returns>
+        /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
+        public IReadOnlyList<TableRow> Rows(TableHandle table)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+            EnterRead();
+            try
+            {
+                return RowReader.Read(this, table);
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Gets whether a query has a match here (§6.6.4). The engine stops at the first match. A query writes nothing: it
+        /// moves neither <see cref="Version"/> nor any extractor (D49).
+        /// </summary>
+        /// <param name="query">The query.</param>
+        /// <returns>Whether it has a match.</returns>
+        /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
+        /// (D39).</exception>
+        /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
+        /// (D49).</exception>
+        public bool Any(Query query)
+        {
+            using var matches = RunQuery(query, true);
+            return matches.Count > 0;
+        }
+
+        /// <summary>
+        /// Gets the number of a query's matches here: its distinct full bindings (§6.6.4). A query writes nothing (D49).
+        /// </summary>
+        /// <param name="query">The query.</param>
+        /// <returns>The number of matches.</returns>
+        /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
+        /// (D39).</exception>
+        /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
+        /// (D49).</exception>
+        public long Count(Query query)
+        {
+            using var matches = RunQuery(query, false);
+            return matches.Count;
+        }
+
+        /// <summary>
+        /// Delivers a query's matches here, its distinct full bindings, in content order (§6.6.4), until the callback
+        /// returns <c>false</c>. The matches are collected, and ordered, before the first callback, so the callback may call
+        /// the scope, writes and runs included: a class a match returns is canonical when it is read
+        /// (<see cref="QueryMatch.Get{T}(Var{T})"/>), so after a union made by an earlier callback two matches may name one
+        /// class. A query writes nothing (D49); the query counts as in use until this returns.
+        /// </summary>
+        /// <param name="query">The query.</param>
+        /// <param name="callback">Receives each match; returns <c>false</c> to stop.</param>
+        /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
+        /// (D39).</exception>
+        /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
+        /// (D49).</exception>
+        public void ForEachMatch(Query query, QueryCallback callback)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            ArgumentNullException.ThrowIfNull(callback);
+            CheckQuery(query);
+            EnterRead();
+            try
+            {
+                var compiled = query.Compiled;
+                compiled.Acquire();
+                try
+                {
+                    using var matches = QueryRunner.Run(this, compiled, false, true);
+                    for (var i = 0; i < matches.Count; i++)
+                        if (callback(new QueryMatch(compiled, this, matches[i])) == false)
+                            break;
+                }
+                finally
+                {
+                    compiled.Release();
+                }
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Runs a query here for <see cref="Any"/> and <see cref="Count"/>, unordered; the caller disposes the matches.
+        /// </summary>
+        TupleBuffer RunQuery(Query query, bool stopAtFirst)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            CheckQuery(query);
+            EnterRead();
+            try
+            {
+                return QueryRunner.Run(this, query.Compiled, stopAtFirst, false);
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Checks that a query belongs to this scope's graph.
+        /// </summary>
+        void CheckQuery(Query query)
+        {
+            if (ReferenceEquals(query.Graph, Graph) == false)
+                throw new ArgumentException($"Query '{query.Name}' belongs to another graph.", nameof(query));
         }
 
     }

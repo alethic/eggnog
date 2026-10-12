@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 
@@ -12,7 +13,8 @@ namespace Eggnog.Tests.Surface
     /// <summary>
     /// The package shows one API (D29, D44): no public or protected member of <c>Eggnog</c> mentions an engine or spike
     /// type, no public type of another packaged assembly shares a simple name with a public <c>Eggnog</c> type, and
-    /// <c>Eggnog</c> references no spike assembly.
+    /// <c>Eggnog</c> references no spike assembly. And the public surface is exactly the one the milestones so far list
+    /// (R1a and R1b, §3): <c>Surface/PublicSurface.txt</c>.
     /// </summary>
     public sealed class PublicSurfaceTests
     {
@@ -52,6 +54,30 @@ namespace Eggnog.Tests.Surface
 
             Assert.Empty(leaks);
             Assert.NotEmpty(Library.GetExportedTypes());
+        }
+
+        /// <summary>
+        /// The public surface is exactly R1a's and R1b's (§3, §9): every public type and member the spec tags R1a or R1b,
+        /// and none it tags R2 or R3. After a reviewed change of the surface, set <c>EGGNOG_SURFACE</c> to a file path to
+        /// write the listing there, and replace <c>Surface/PublicSurface.txt</c> with it.
+        /// </summary>
+        [Fact]
+        public void TheSurfaceIsExactlyR1aAndR1b()
+        {
+            var actual = SurfaceListing.Of(Library);
+            if (Environment.GetEnvironmentVariable("EGGNOG_SURFACE") is { Length: > 0 } path)
+                File.WriteAllText(path, string.Join("\n", actual) + "\n");
+
+            using var stream = typeof(PublicSurfaceTests).Assembly.GetManifestResourceStream("Eggnog.Tests.Surface.PublicSurface.txt")
+                ?? throw new InvalidOperationException("The expected surface is not embedded.");
+            using var reader = new StreamReader(stream);
+            var expected = reader.ReadToEnd().Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToArray();
+
+            var missing = expected.Except(actual).ToArray();
+            var extra = actual.Except(expected).ToArray();
+            Assert.True(missing.Length == 0 && extra.Length == 0,
+                "Missing from the library:\n  " + string.Join("\n  ", missing) + "\nNot in the R1a and R1b surface:\n  " + string.Join("\n  ", extra));
+            Assert.Equal(expected, actual);
         }
 
         [Fact]

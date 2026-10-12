@@ -42,6 +42,47 @@ namespace Eggnog
             return compiled;
         }
 
+        /// <summary>
+        /// Compiles a query (§6.6.4): the body as a rule's (§6.3 steps 1 to 7) and a head of one collector of the declared
+        /// variables, then lowers its one variant, naive, with the written class constants. Called under the graph's
+        /// definition lock.
+        /// </summary>
+        /// <param name="graph">The graph.</param>
+        /// <param name="draft">What the query's builder collected.</param>
+        /// <returns>The compiled query, with its public <see cref="Query"/>.</returns>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid query, or the engine rejected it; nothing is
+        /// registered then.</exception>
+        public static CompiledQuery CompileQuery(EGraph graph, RuleDraft draft)
+        {
+            var program = new ProgramBuilder(graph, draft, null, query: true).BuildQuery();
+            var serial = graph.NextSerial();
+            var description = "$query/" + draft.Name + "#" + serial;
+            var variants = new RuleVariants(program, null, description, true);
+            var columns = program.Head[0].Inputs;
+            var types = new ColumnType[columns.Length];
+            var variables = new Term[columns.Length];
+            for (var i = 0; i < columns.Length; i++)
+            {
+                types[i] = columns[i].Type;
+                variables[i] = draft.Variables[i].Variable;
+            }
+
+            var query = new Query(graph, draft.Name, variables) { Draft = draft };
+            var compiled = new CompiledQuery(graph, query, program, variants, serial, types);
+            query.Compiled = compiled;
+            try
+            {
+                variants.Get(graph, false, program.WrittenIdConstants);
+            }
+            catch (Exception exception) when (exception is not RuleDefinitionException)
+            {
+                variants.Free(graph);
+                throw new RuleDefinitionException(draft.Name, "the engine rejected the query: " + exception.Message, exception);
+            }
+
+            return compiled;
+        }
+
     }
 
 }

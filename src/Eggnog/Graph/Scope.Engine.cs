@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 
 namespace Eggnog
@@ -16,8 +15,10 @@ namespace Eggnog
         /// <param name="options">The run's options; <c>null</c> for <see cref="RunOptions.Default"/>.</param>
         /// <param name="cancellationToken">Cancels the run between iterations.</param>
         /// <returns>What the run did.</returns>
-        /// <exception cref="ArgumentException">A ruleset of the schedule belongs to another graph.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The iteration limit is negative.</exception>
+        /// <exception cref="ArgumentException">A ruleset of the schedule belongs to another graph, or an <c>Until</c>
+        /// condition cannot be checked here: it names a table or column type of another graph, or a class this scope cannot
+        /// use (D39). Both are refused before any work, so nothing is written.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The iteration, time or row limit is negative.</exception>
         /// <exception cref="InvalidOperationException">The scope is faulted, or the call comes from another thread while
         /// the scope is in use, from a primitive, lattice, filter or cost function, or from a run observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
@@ -29,17 +30,29 @@ namespace Eggnog
             if (options.IterationLimit < 0)
                 throw new ArgumentOutOfRangeException(nameof(options), options.IterationLimit, "The iteration limit must not be negative.");
 
+            if (options.TimeLimit < TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(options), options.TimeLimit, "The time limit must not be negative.");
+
+            if (options.RowLimit < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.RowLimit, "The row limit must not be negative.");
+
             EnterWrite();
             try
             {
+                // Everything the schedule reaches is checked before any work (§6.5.3): a condition that fails only when its
+                // Until node executes would leave the earlier steps' writes behind and lose the run's report.
                 var rulesets = new HashSet<Ruleset>(ReferenceEqualityComparer.Instance);
-                schedule.Collect(rulesets);
+                var conditions = new List<Fact>();
+                schedule.Collect(rulesets, conditions);
                 foreach (var ruleset in rulesets)
                     if (ReferenceEquals(ruleset.Graph, Graph) == false)
                         throw new ArgumentException($"Ruleset '{ruleset.Name}' belongs to another graph.", nameof(schedule));
 
+                foreach (var fact in conditions)
+                    if (TermReader.Validate(this, fact) is { } error)
+                        throw new ArgumentException($"An until condition cannot be checked in scope '{Path}': {error}: {fact}.", nameof(schedule));
+
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
-                var clock = Stopwatch.StartNew();
                 RunStopReason reason;
                 try
                 {
@@ -51,7 +64,7 @@ namespace Eggnog
                     reason = stop.Reason;
                 }
 
-                return executor.Complete(reason, clock);
+                return executor.Complete(reason, executor.Clock);
             }
             finally
             {

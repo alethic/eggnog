@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Eggnog
@@ -57,6 +58,16 @@ namespace Eggnog
         public override bool IsContradictory => TryLookup(graph.Contradiction.Function, ReadOnlySpan<uint>.Empty, out _);
 
         /// <inheritdoc />
+        public override long OwnRowCount
+        {
+            get
+            {
+                lock (graph.EngineLock)
+                    return engine.Database.TotalSizeEstimate;
+            }
+        }
+
+        /// <inheritdoc />
         public override void EnsureClean()
         {
 
@@ -67,6 +78,7 @@ namespace Eggnog
         {
             lock (graph.EngineLock)
             {
+                graph.FreeDeferred();
                 var lowered = new LoweredRule[rules.Count];
                 for (var i = 0; i < lowered.Length; i++)
                 {
@@ -83,6 +95,7 @@ namespace Eggnog
         {
             lock (graph.EngineLock)
             {
+                graph.FreeDeferred();
                 Span<uint> canonical = writtenIdConstants.Length <= 16 ? stackalloc uint[writtenIdConstants.Length] : new uint[writtenIdConstants.Length];
                 for (var i = 0; i < canonical.Length; i++)
                     canonical[i] = engine.GetCanonInUf(new Relations.Value(writtenIdConstants[i])).Rep;
@@ -162,6 +175,33 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public override bool CanonicalizeColumns(Span<uint> cells, int width, ReadOnlySpan<int> columns)
+        {
+            if (width == 0 || columns.IsEmpty || cells.IsEmpty)
+                return false;
+
+            var changed = false;
+            lock (graph.EngineLock)
+            {
+                for (var offset = 0; offset < cells.Length; offset += width)
+                {
+                    foreach (var column in columns)
+                    {
+                        ref var cell = ref cells[offset + column];
+                        var canonical = engine.GetCanonInUf(new Relations.Value(cell)).Rep;
+                        if (canonical != cell)
+                        {
+                            cell = canonical;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            return changed;
+        }
+
+        /// <inheritdoc />
         public override bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output)
         {
             lock (graph.EngineLock)
@@ -184,10 +224,42 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public override long TableSize(Relations.FunctionId function)
+        {
+            lock (graph.EngineLock)
+                return engine.TableSize(function);
+        }
+
+        /// <inheritdoc />
         public override void ForEach(Relations.FunctionId function, Relations.FunctionRowCallback visit)
         {
             lock (graph.EngineLock)
                 engine.ForEach(function, visit);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// The bridge's <c>RunRules</c> would merge and advance the clock, which would invalidate every extractor (B1).
+        /// Instead the query's rule is planned once (as <c>RunRules</c> plans a rule), instantiated alone and without
+        /// timestamp constraints (a naive rule), and executed at the current timestamp without the merge: its only action
+        /// is a collector, which stages nothing, so there is nothing to merge. A failure a call site recorded is taken from
+        /// the bridge's panic channel and thrown as <see cref="Relations.PanicException"/>.
+        /// </remarks>
+        public override void RunQuery(LoweredRule query)
+        {
+            lock (graph.EngineLock)
+            {
+                var info = engine.GetRuleInfo(query.Id);
+                info.CachedPlan ??= info.Query.BuildCachedPlan(engine.Database, info.Description);
+                var builder = engine.Database.NewRuleSet();
+                info.Query.AddRulesFromCached(builder, 0, info.CachedPlan);
+                using (var ruleSet = builder.Build())
+                    engine.Database.ExecuteRuleSet(ruleSet, Relations.ReportLevel.TimeOnly, engine.NextTimestamp);
+
+                AssertNothingStaged();
+                if (engine.TryTakePanic(out var message))
+                    throw new Relations.PanicException(message);
+            }
         }
 
         /// <inheritdoc />
@@ -209,6 +281,18 @@ namespace Eggnog
         {
             lock (graph.EngineLock)
                 return extractor.TryGetCost(sort, engine.GetCanonInUf(new Relations.Value(id)), out cost);
+        }
+
+        /// <summary>
+        /// Checks, in debug builds, that a query staged no write to any table of the graph: a collector stages nothing,
+        /// so a query needs no merge (§6.6.5).
+        /// </summary>
+        [Conditional("DEBUG")]
+        void AssertNothingStaged()
+        {
+            foreach (var table in graph.Tables)
+                Debug.Assert(engine.Database.GetTable(engine.GetFunctionInfo(table.Function).Table).Pending.IsEmpty,
+                    $"A query staged a write to '{table.Name}'.");
         }
 
         /// <summary>
