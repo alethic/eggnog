@@ -29,6 +29,13 @@ namespace Eggnog.Relations
         public int DisplacedCount => journal is { } j ? j.Count : store.RootUnionFind.UnionFind.Count;
 
         /// <summary>
+        /// Gets the number of ids that are not canonical in the context's view: the root's displaced count, or, in a child,
+        /// the ids displaced in its parent's view when it was created plus its journal, which holds exactly the others
+        /// (I8). Exact when the context is current with its parent (<see cref="IsUnionFindCurrent"/>). O(1).
+        /// </summary>
+        internal long DisplacedInViewCount => displacedInParentView + DisplacedCount;
+
+        /// <summary>
         /// Gets the ids displaced in the context's union-find table, in row order: the root's union children, or a
         /// child's journal. What a child of this context catches up with (X7). Valid until the next union.
         /// </summary>

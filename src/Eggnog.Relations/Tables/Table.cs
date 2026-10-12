@@ -245,19 +245,18 @@ namespace Eggnog.Relations
         /// <summary>
         /// Makes the table read-only for good, because its context is freezing (colored-contexts spec §8.1, X13): the
         /// one freeze hook of every table kind. Implementations finish the work a frozen reader must not pay for (the
-        /// union-find compresses every path) and seal their pending state, so that staging into the table throws and it
-        /// never merges again. Requires exclusive access; the table must have no staged writes.
+        /// root's union-find compresses every path; a sorted-writes table compacts where its gate allows and brings its
+        /// rebuild index up to date) and seal their pending state, so that staging into the table throws and it never
+        /// merges again. A second call does nothing. Requires exclusive access.
         /// </summary>
-        /// <remarks>
-        /// <see cref="DisplacedTable"/> and <see cref="OverlayDisplacedTable"/> freeze from M9.2 on. Freezing a
-        /// sorted-writes table (compaction, the shared rebuild index, sealing) is part of the storage freeze of M9.3
-        /// (§17); until then the base implementation refuses rather than leave a table writable under a frozen context.
-        /// </remarks>
-        /// <exception cref="NotSupportedException">The table kind cannot be frozen yet (sorted-writes tables, M9.3).</exception>
-        public virtual void Freeze()
-        {
-            throw new NotSupportedException("Freezing a sorted-writes table arrives in M9.3.");
-        }
+        /// <exception cref="InvalidOperationException">Writes are staged and not merged.</exception>
+        public abstract void Freeze();
+
+        /// <summary>
+        /// Gets whether writes are staged into the table and not merged yet: what <see cref="Freeze"/> refuses, checked by
+        /// a freezing database for every table before it freezes any (colored-contexts spec §8.1).
+        /// </summary>
+        internal abstract bool HasPendingWrites { get; }
 
         /// <summary>
         /// Stages a re-insertion, with a fresh timestamp, of every live row whose rebuildable columns mention one of

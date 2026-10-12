@@ -19,8 +19,10 @@ namespace Eggnog.Relations
     /// slot 0 is the union-find, which has no <see cref="LayeredTableSchema"/>.
     /// </para>
     /// <para>
-    /// This milestone (M9.1) carries the registration and the schema questions of §3.4. The root views
-    /// (<c>RootView</c>, <c>FreezeRoot</c>) and the root retraction guard arrive with the layered tables (M9.3).
+    /// It also holds the root's side of layering (§6.1): the root's retraction guard (<see cref="RootGuard"/>), the
+    /// root's single-layer view of every table (<see cref="RootView"/>, which children whose ancestors never touched a
+    /// table share), and the compaction gate of every shared root table, which keeps the root from renumbering rows its
+    /// descendants hold cursors and hidden sets over (§6.8).
     /// </para>
     /// </remarks>
     internal sealed class LayeredSchema
@@ -41,6 +43,12 @@ namespace Eggnog.Relations
         TableId[] functionTables;
 
         /// <summary>
+        /// The root's view of each table by index, built on first use and published with a compare-exchange; replaced
+        /// with frozen views by <see cref="FreezeRoot"/>. Grown copy-on-write, geometrically, by <see cref="Register"/>.
+        /// </summary>
+        TableView?[] rootViews;
+
+        /// <summary>
         /// The index of the contradiction table, or −1.
         /// </summary>
         volatile int contradiction = -1;
@@ -55,7 +63,20 @@ namespace Eggnog.Relations
             this.store = store;
             byId = new LayeredTableSchema?[store.UnionFindTable.Index + 1];
             functionTables = Array.Empty<TableId>();
+            rootViews = new TableView?[byId.Length];
+            RootGuard = new RetractionGuard(this, null);
         }
+
+        /// <summary>
+        /// Gets the store the schema belongs to.
+        /// </summary>
+        internal Store Store => store;
+
+        /// <summary>
+        /// Gets the root context's retraction guard (§6.7): the root retracts no row of a shared table while it has live
+        /// descendants (decision 1).
+        /// </summary>
+        public RetractionGuard RootGuard { get; }
 
         /// <summary>
         /// Gets the union-find table's id, <see cref="Store.UnionFindTable"/>.
@@ -162,6 +183,19 @@ namespace Eggnog.Relations
                 Array.Copy(tables, grown, tables.Length);
                 grown[id.Index] = schema;
 
+                // §6.8: a shared root table does not compact while the root has live descendants.
+                if (contextPrivate == false)
+                    schema.Root.CompactionGate = store.Root.Gate;
+
+                // Grown geometrically: a slot beyond the registered ids is never read as a view.
+                var views = rootViews;
+                if (views.Length < grown.Length)
+                {
+                    var nextViews = new TableView?[Math.Max(grown.Length, views.Length * 2)];
+                    Array.Copy(views, nextViews, views.Length);
+                    Volatile.Write(ref rootViews, nextViews);
+                }
+
                 // Ids arrive ascending from the root's AddTable, so the new id almost always goes last.
                 var functions = functionTables;
                 var at = functions.Length;
@@ -179,6 +213,65 @@ namespace Eggnog.Relations
                 Volatile.Write(ref byId, grown);
                 Volatile.Write(ref functionTables, nextFunctions);
             }
+        }
+
+        /// <summary>
+        /// Gets the root's view of table <paramref name="id"/> (§6.1, §6.3): one layer, the root's table, hiding nothing.
+        /// Built once and published with a compare-exchange; frozen once the root is (<see cref="FreezeRoot"/>). Children
+        /// whose chain never touched the table share it. Lock-free, O(1) once built.
+        /// </summary>
+        /// <param name="id">A registered function table.</param>
+        /// <returns>The view.</returns>
+        /// <exception cref="NotSupportedException">The table is the union-find, which has no table view (it is read
+        /// through finds and lookups).</exception>
+        /// <exception cref="KeyNotFoundException">The table is not registered.</exception>
+        public TableView RootView(TableId id)
+        {
+            if (id == UnionFind)
+                throw new NotSupportedException($"The union-find (table {id}) has no table view; read it through Find or lookups.");
+
+            var views = Volatile.Read(ref rootViews);
+            if ((uint)id.Index < (uint)views.Length && Volatile.Read(ref views[id.Index]) is { } cached)
+                return cached;
+
+            var view = BuildRootView(Require(id), store.Root.IsFrozen);
+            if ((uint)id.Index >= (uint)views.Length)
+                return view;
+
+            return Interlocked.CompareExchange(ref views[id.Index], view, null) ?? view;
+        }
+
+        /// <summary>
+        /// Builds the root's view of every registered table as frozen (§8.1 step 5): called by the root's freeze, after
+        /// its database froze. Under the schema lock, so a concurrent registration waits.
+        /// </summary>
+        internal void FreezeRoot()
+        {
+            lock (sync)
+            {
+                var views = rootViews;
+                foreach (var id in functionTables)
+                    Volatile.Write(ref views[id.Index], BuildRootView(byId[id.Index]!, true));
+            }
+        }
+
+        /// <summary>
+        /// Publishes the frozen root view of <paramref name="id"/>, a table just added to a frozen root and frozen
+        /// (§4.3 step 4, X43).
+        /// </summary>
+        /// <param name="id">The table.</param>
+        internal void PublishFrozenRootView(TableId id)
+        {
+            lock (sync)
+                Volatile.Write(ref rootViews[id.Index], BuildRootView(Require(id), true));
+        }
+
+        /// <summary>
+        /// Builds a single-layer view of the root's table.
+        /// </summary>
+        static TableView BuildRootView(LayeredTableSchema schema, bool isFrozen)
+        {
+            return new TableView(schema.Id, schema.Spec, [new LayerView(0, schema.RootInfo, HiddenRows.None, isFrozen)]);
         }
 
         /// <summary>

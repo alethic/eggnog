@@ -292,17 +292,28 @@ namespace Eggnog.Relations
         /// <see cref="MergeAll"/> merges it. egglog's <c>new_buffer</c> (mod.rs:708-716). The caller must
         /// <see cref="MutationBuffer.Flush"/> the buffer (what dropping it does in egglog) before that merge.
         /// </summary>
+        /// <remarks>
+        /// In a <see cref="Store"/> the buffer carries the database's retraction guard (colored-contexts spec §6.7, I22):
+        /// a removal staged through it is refused, when it is staged, wherever a removal through an execution state would
+        /// be (a context with live descendants, or a child under a writable parent, deleting a shared table's row). A bare
+        /// database's buffers carry none.
+        /// </remarks>
         /// <param name="table">The table id.</param>
         /// <returns>The buffer.</returns>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
-        /// <exception cref="NotSupportedException">This is a child context's database and the table is not its
-        /// union-find: a child cannot write its other tables before its layers exist (M9.2 interim).</exception>
+        /// <exception cref="InvalidOperationException">The database is frozen; or, in a child context, the layer of the
+        /// table cannot be created (decision 2, or the context is faulted or contradicted).</exception>
         public MutationBuffer NewBuffer(TableId table)
         {
+            ThrowIfFrozen();
+
             // egglog notifies before looking the table up; looking it up first keeps a bad id from leaving a
             // notification that the next merge could not resolve. The table is resolved as staging resolves it
             // (colored-contexts spec §3.4, §6.2): in a child, the catalog's resolver supplies the context's layer.
             var buffer = catalog.GetForStaging(table).NewBuffer();
+            if (GuardForNewState() is { } guard)
+                buffer.AttachRetractionGuard(guard, table);
+
             catalog.Notifications.Notify(table);
             return buffer;
         }
@@ -386,13 +397,35 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate.</returns>
-        /// <exception cref="KeyNotFoundException">No such table, or (in a child context's database) the table has no
-        /// layer there; a child estimates through its view from M10.2 (§3.4).</exception>
+        /// <remarks>
+        /// In a child context's database (colored-contexts spec §3.4) the estimate is the sum of the per-layer estimates
+        /// over the layers of the child's view of the table (<see cref="ContextTables.GetView"/>), hidden rows included, as
+        /// a root estimate includes tombstones.
+        /// </remarks>
+        /// <exception cref="KeyNotFoundException">No such table.</exception>
         /// <exception cref="NotSupportedException">This is a child context's database and the table is the union-find
-        /// (X23, <see cref="GetQueryTableInfo"/>).</exception>
+        /// (X23).</exception>
         public int EstimateSize(TableId table, Constraint? constraint = null)
         {
-            var t = GetQueryTableInfo(table).Table;
+            if (layers is { } l)
+            {
+                var view = l.GetView(table);
+                long total = 0;
+                foreach (var layer in view.Layers)
+                    if (layer is not null)
+                        total += EstimateTable(layer.Table, constraint);
+
+                return (int)Math.Min(total, int.MaxValue);
+            }
+
+            return EstimateTable(GetQueryTableInfo(table).Table, constraint);
+        }
+
+        /// <summary>
+        /// egglog's <c>estimate_size</c> on one table (mod.rs:463-482).
+        /// </summary>
+        static int EstimateTable(Table t, Constraint? constraint)
+        {
             if (constraint is not { } c)
                 return t.Count;
 
@@ -416,24 +449,25 @@ namespace Eggnog.Relations
         /// access.
         /// </summary>
         /// <remarks>
-        /// At the root of a <see cref="Store"/> the union-find cannot be cleared while the root has live descendants
-        /// (§6.7, I9): each child's catch-up cursor indexes the root's displaced ids, which must only grow while it lives.
-        /// Interim (M9.2): this is the union-find row of the retraction guard; the guard's other rows (decision 1, R1) arrive
-        /// with the layers that read the root's rows (M9.3).
+        /// In a <see cref="Store"/> the clear goes through the context's retraction guard (colored-contexts spec §6.7,
+        /// decision 1): a shared table cannot be cleared while the context has live descendants, which read its rows; the
+        /// union-find is never context-private, so it cannot be cleared then either (each child's catch-up cursor indexes
+        /// the root's displaced ids, I9). A child's database routes the clear to its context
+        /// (<see cref="Context.ClearTable"/>), which clears the child's layer and hides every ancestor layer (R1 applies).
         /// </remarks>
         /// <param name="table">The table id.</param>
-        /// <exception cref="NotSupportedException">This is a child context's database: a child clears through its
-        /// context (§6.7), which arrives with its layers (M9.3).</exception>
-        /// <exception cref="InvalidOperationException">The table is the store's union-find and the root has live
-        /// descendants.</exception>
+        /// <exception cref="InvalidOperationException">The database is frozen, or the retraction guard refuses the
+        /// clear.</exception>
         public void ClearTable(TableId table)
         {
             if (IsChild)
-                throw new NotSupportedException("Clearing a table in a child context arrives in M9.3.");
+            {
+                owner!.ClearTable(table);
+                return;
+            }
 
-            if (owner is { } root && table == root.Store.UnionFindTable && root.Gate.HasLiveDescendants)
-                throw new InvalidOperationException($"The union-find ({Store.UnionFindName}) cannot be cleared while the root has live descendants: their catch-up cursors index its displaced ids (decision 1, I9).");
-
+            ThrowIfFrozen();
+            RetractionGuard?.CheckClear(table);
             var info = GetTableInfo(table);
             var previous = info.Table.Count;
             info.Table.Clear();

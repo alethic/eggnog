@@ -100,7 +100,9 @@ namespace Eggnog.Relations
         /// after a generation change.
         /// </summary>
         /// <param name="table">The table the index was built over (or a clone of it with the same row ids).</param>
-        public void Refresh(Table table)
+        /// <param name="allowParallel">Whether a large refresh may run in parallel; <c>false</c> for a frozen context's
+        /// catalogs, which refresh serially (colored-contexts spec X14).</param>
+        public void Refresh(Table table, bool allowParallel = true)
         {
             ArgumentNullException.ThrowIfNull(table);
 
@@ -120,7 +122,7 @@ namespace Eggnog.Relations
                 subset = table.UpdatesSince(updatedTo.Minor);
             }
 
-            if (data.Parallelism.ParallelizeIndexConstruction(subset.Size))
+            if (allowParallel && data.Parallelism.ParallelizeIndexConstruction(subset.Size))
                 data.MergeParallel(table, key, subset.AsRef());
             else if (full)
                 data.RebuildFull(table, key, subset.AsRef());

@@ -157,7 +157,7 @@ namespace Eggnog.Relations.Tests
             var mask = new Mask(1);
             Assert.Throws<ArgumentOutOfRangeException>(() => VectorizedLookup.LookupRow(table, ref mask, b, [V(0)], C(2), V(1)));
             Assert.Throws<ArgumentException>(() => VectorizedLookup.LookupRow(table, ref mask, b, [V(0), V(0)], C(1), V(1)));
-            Assert.Throws<ArgumentNullException>(() => VectorizedLookup.LookupRow(null!, ref mask, b, [V(0)], C(1), V(1)));
+            Assert.Throws<ArgumentNullException>(() => VectorizedLookup.LookupRow((Table)null!, ref mask, b, [V(0)], C(1), V(1)));
             Assert.False(b.Contains(V(1)));
             Assert.Throws<ArgumentException>(() =>
             {

@@ -30,10 +30,11 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Interim (M9.2): the union-find part (<see cref="CheckUnionFindInvariants"/>). The tables part
-        /// (<c>ContextTables.CheckInvariants</c>, I12-I18) and the executor part arrive with the layers and the layered
-        /// executor (M9.4, M10.2). Cost: linear in the context's overlay and journal, its parent's displacements since its
-        /// creation, its ancestors' overlays, journals and root rows (I10), and the root's id range at the root.
+        /// Interim (M9.3): the union-find part (<see cref="CheckUnionFindInvariants"/>). The tables part
+        /// (<c>ContextTables.CheckInvariants</c>, I12-I18) and the executor part arrive with the child's rebuild and the
+        /// layered executor (M9.4, M10.2); until then the layered tables are checked by the tests' <c>LookupPathsAgree</c>
+        /// comparison. Cost: linear in the context's overlay and journal, its parent's displacements since its creation,
+        /// its ancestors' overlays, journals and root rows (I10), and the root's id range at the root.
         /// </para>
         /// <para>
         /// A context that is not frozen is checked inside its thread domain (I24), so nothing it reads changes under the

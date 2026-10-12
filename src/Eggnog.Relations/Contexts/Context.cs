@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -37,10 +38,16 @@ namespace Eggnog.Relations
     /// the parent's displaced ids.
     /// </para>
     /// <para>
-    /// Interim (M9.2, §17): writes reach only the union-find in a child (its other tables have no layers before M9.3);
-    /// <see cref="Rebuild"/> runs the union-find catch-up and the merge in a child, and egglog's rebuild pass at the root;
-    /// <see cref="Freeze"/> freezes the union-find, flattens it for the children and reassigns their domains. Row layers,
-    /// row catch-up, settling and the storage half of freezing arrive in M9.3–M9.4.
+    /// Tables (§6, M9.3). A child stores only what it writes, in lazily created layers (<see cref="Tables"/>), and hides
+    /// the ancestor rows it replaces or deletes; it reads every table through a <see cref="TableView"/>
+    /// (<see cref="GetView"/>): its ancestors' layers minus what it hides, plus its own. Writes are canonicalized and
+    /// stamped when they merge (X38).
+    /// </para>
+    /// <para>
+    /// Interim (M9.3, §17): <see cref="Rebuild"/> runs the union-find catch-up and the merge in a child, and egglog's rebuild
+    /// pass at the root; a child whose rebuild would need row work (an ancestor appended rows since it last caught up, or
+    /// its union-find changes over rows it holds or sees) is refused (row catch-up, the child's rebuild pass and the root's
+    /// settling arrive in M9.4).
     /// </para>
     /// </remarks>
     internal sealed partial class Context : IDisposable
@@ -68,6 +75,11 @@ namespace Eggnog.Relations
         readonly uint createdAt;
 
         /// <summary>
+        /// The child's layering (§6.2); <c>null</c> at the root.
+        /// </summary>
+        readonly ContextTables? tables;
+
+        /// <summary>
         /// The context's find: the root's union-find, or the parent's find extended with <see cref="overlay"/>.
         /// </summary>
         readonly LayeredUnionFind finder;
@@ -89,6 +101,12 @@ namespace Eggnog.Relations
         /// The parent's displaced count when the child was created: the first parent displacement it catches up with.
         /// </summary>
         readonly int parentDisplacedAtCreation;
+
+        /// <summary>
+        /// The number of ids displaced in the parent's view when the child was created: those it inherits rather than
+        /// journals (I8); 0 at the root. <see cref="DisplacedInViewCount"/> adds the journal to it.
+        /// </summary>
+        readonly long displacedInParentView;
 
         /// <summary>
         /// The find this context gives the children it creates: its own chain until it freezes, then its flattened
@@ -154,10 +172,12 @@ namespace Eggnog.Relations
             finderForChildren = finder;
             journalMark = store.RootUnionFind.UnionFind.Count;
 
-            // Set later by Freeze and by the contradiction stop (M9.3).
+            // Set later by Freeze and by the contradiction stop.
             frozen = false;
             contradicted = false;
             database.AttachRoot(this, store.ClockCounter);
+            database.RetractionGuard = store.Schema.RootGuard;
+            store.Schema.RootGuard.AttachRoot(this);
         }
 
         /// <summary>
@@ -190,13 +210,22 @@ namespace Eggnog.Relations
             finderForChildren = finder;
             unionFindCursor = parent.DisplacedCount;
             parentDisplacedAtCreation = unionFindCursor;
+            displacedInParentView = parent.DisplacedInViewCount;
             database = new Database(store.Root.Database, this, overlayTable, idBlocks, parallelism);
             domain = parent.IsFrozen ? new ThreadAffinityGuard() : parent.Domain;
 
-            // Read after every cursor is initialized (the union-find cursor above; M9.3-M9.4 add the row cursors before
-            // this point), so anything the parent wrote at an earlier epoch is already part of the child's starting view.
+            // §6.2: no layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
+            tables = new ContextTables(store.Schema, this);
+            database.AttachLayers(tables);
+
+            // Read after every cursor is initialized (the union-find cursor and the row cursors above), so anything the
+            // parent wrote at an earlier epoch is already part of the child's starting view.
             createdAt = store.ReadClock();
             semiNaiveFloor = createdAt;
+
+            // §6.9 step 3: a case created where a contradiction is already visible starts stopped.
+            if (options.StopOnContradiction && store.Schema.Contradiction is { } contradiction && tables.GetView(contradiction).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0)
+                tables.SetContradicted();
         }
 
         /// <summary>
@@ -228,6 +257,11 @@ namespace Eggnog.Relations
         /// Gets the context's database.
         /// </summary>
         public Database Database => database;
+
+        /// <summary>
+        /// Gets the child's layering (§6.2): its layers, hidden sets, views and cursors; <c>null</c> at the root.
+        /// </summary>
+        public ContextTables? Tables => tables;
 
         /// <summary>
         /// Gets the gate counting the context's live descendants (§6.8).
@@ -287,7 +321,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in egglog
-        /// (X42). Interim (M9.2): a child's row term (<c>!Tables.NeedsCatchUp</c>) arrives with its layers (M9.3-M9.4).
+        /// (X42). A child is not clean while an ancestor that is not settled changed since it last caught up
+        /// (<see cref="ContextTables.NeedsCatchUp"/>).
         /// </remarks>
         public bool IsClean
         {
@@ -305,6 +340,7 @@ namespace Eggnog.Relations
                 return journalMark == journal!.Count
                     && database.Catalog.Notifications.IsEmpty
                     && unionFindCursor == parent.DisplacedCount
+                    && tables!.NeedsCatchUp == false
                     && parent.IsClean;
             }
         }
@@ -363,7 +399,14 @@ namespace Eggnog.Relations
             ThrowIfContradicted();
             if (IsClean == false)
                 ThrowNotClean();
+
+            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context was read with a hidden set not sealed (I18, X40)");
         }
+
+        /// <summary>
+        /// Sets the sticky contradiction stop (§6.9); <see cref="ContextTables.SetContradicted"/> decides when.
+        /// </summary>
+        internal void MarkContradicted() => contradicted = true;
 
         /// <summary>
         /// Marks a child faulted: an exception escaped one of its operations and may have left a hide without its copy

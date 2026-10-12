@@ -73,6 +73,7 @@ namespace Eggnog.Relations
         public ContainerRebuildSummary RebuildContainers(TableId unionFind, uint? timestamp = null)
         {
             ThrowIfChildRebuild(nameof(RebuildContainers));
+            ThrowIfFrozen();
             var table = GetTable(unionFind);
             if (containers is not { } values)
                 return new ContainerRebuildSummary();
@@ -116,6 +117,7 @@ namespace Eggnog.Relations
         public bool RebuildPass(TableId unionFind, ReadOnlySpan<TableId> tables, uint? nextTimestamp = null)
         {
             ThrowIfChildRebuild(nameof(RebuildPass));
+            ThrowIfFrozen();
             var next = ResolveTimestamp(nextTimestamp);
             var containerRebuild = RebuildContainers(unionFind, next);
             var tableRebuild = ApplyRebuild(unionFind, tables, next);
@@ -138,6 +140,7 @@ namespace Eggnog.Relations
         public int Rebuild(TableId unionFind, ReadOnlySpan<TableId> tables, CounterId timestampCounter)
         {
             ThrowIfChildRebuild(nameof(Rebuild));
+            ThrowIfFrozen();
             var passes = 0;
             while (true)
             {

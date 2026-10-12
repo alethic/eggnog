@@ -43,7 +43,8 @@ namespace Eggnog.Relations
         /// <remarks>
         /// The committed table is read through the database view, so a table the database has taken out (while it
         /// merges or rebuilds) cannot be predicted into, as in egglog. Staging a new row sets <see cref="Changed"/> and
-        /// notifies the table.
+        /// notifies the table. In a child context the committed row is the one the context sees, found by the write-phase
+        /// lookup (<see cref="ContextTables.TryGetVisibleRow"/>, colored-contexts spec §6.5): one null test at the root.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key.</param>
@@ -51,7 +52,13 @@ namespace Eggnog.Relations
         /// <param name="row">Receives the row; at least as many cells as the table has columns.</param>
         public void PredictRow(TableId table, ReadOnlySpan<uint> key, ReadOnlySpan<MergeVal> values, Span<uint> row)
         {
-            var t = ReadTable(table);
+            if (layers is { } l)
+            {
+                PredictRowLayered(l, table, key, values, row);
+                return;
+            }
+
+            var t = ReadRootTable(table);
             if (row.Length < t.Arity)
                 throw new ArgumentException($"The destination needs room for {t.Arity} cells.", nameof(row));
 
@@ -75,7 +82,7 @@ namespace Eggnog.Relations
         /// <returns>The row.</returns>
         public uint[] PredictRow(TableId table, ReadOnlySpan<uint> key, ReadOnlySpan<MergeVal> values)
         {
-            var row = new uint[ReadTable(table).Arity];
+            var row = new uint[layers is { } l ? l.Schema.GetSpec(table).Arity : ReadRootTable(table).Arity];
             PredictRow(table, key, values, row);
             return row;
         }
@@ -84,6 +91,10 @@ namespace Eggnog.Relations
         /// Gets column <paramref name="column"/> of what <see cref="PredictRow(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, Span{uint})"/>
         /// would return, without copying the row. egglog's <c>predict_col</c> (core-relations/src/action/mod.rs:558-580).
         /// </summary>
+        /// <remarks>
+        /// In a child context the committed value is the one the context sees
+        /// (<see cref="ContextTables.TryGetVisibleColumn"/>, colored-contexts spec §6.5): one null test at the root.
+        /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key.</param>
         /// <param name="values">The value columns of a new row.</param>
@@ -91,7 +102,10 @@ namespace Eggnog.Relations
         /// <returns>The value.</returns>
         public uint PredictColumn(TableId table, ReadOnlySpan<uint> key, ReadOnlySpan<MergeVal> values, ColumnId column)
         {
-            var t = ReadTable(table);
+            if (layers is { } l)
+                return PredictColumnLayered(l, table, key, values, column);
+
+            var t = ReadRootTable(table);
             if (t.TryGetRowColumn(key, column, out var value))
                 return value;
 
@@ -117,7 +131,10 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(key);
             ArgumentNullException.ThrowIfNull(values);
-            var t = ReadTable(table);
+            if (layers is { } l)
+                return PredictColumnLayered(l, table, key, keyOffset, keyLength, values, column);
+
+            var t = ReadRootTable(table);
             if (t.TryGetRowColumn(new ReadOnlySpan<uint>(key, keyOffset, keyLength), column, out var value))
                 return value;
 
@@ -125,15 +142,33 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Reads <paramref name="column"/> of the predicted row for a key the committed table lacks.
+        /// Reads <paramref name="column"/> of the predicted row for a key the committed table <paramref name="t"/> lacks.
         /// </summary>
         uint PredictedColumn(PredictedValues p, Table t, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
         {
-            if ((uint)column.Rep >= (uint)t.Arity)
-                throw new ArgumentOutOfRangeException(nameof(column), column, $"The table has {t.Arity} columns.");
+            return PredictedColumn(p, t.Spec.KeyCount, t.Arity, table, key, keyOffset, keyLength, values, column);
+        }
 
-            var offset = PredictCore(p, t, table, key, keyOffset, keyLength, values);
+        /// <summary>
+        /// Reads <paramref name="column"/> of the predicted row for a key the committed table lacks, given the table's key
+        /// count and arity (from the table at a root, from the store's schema in a child).
+        /// </summary>
+        uint PredictedColumn(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
+        {
+            if ((uint)column.Rep >= (uint)arity)
+                throw new ArgumentOutOfRangeException(nameof(column), column, $"The table has {arity} columns.");
+
+            var offset = PredictCore(p, keyCount, arity, table, key, keyOffset, keyLength, values);
             return p.Cells[offset + column.Rep];
+        }
+
+        /// <summary>
+        /// <see cref="PredictCore(PredictedValues, int, int, TableId, uint[], int, int, ReadOnlySpan{MergeVal})"/> for the
+        /// committed table <paramref name="t"/>, whose spec is read only here, on a miss.
+        /// </summary>
+        int PredictCore(PredictedValues p, Table t, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values)
+        {
+            return PredictCore(p, t.Spec.KeyCount, t.Arity, table, key, keyOffset, keyLength, values);
         }
 
         /// <summary>
@@ -143,11 +178,11 @@ namespace Eggnog.Relations
         /// </summary>
         /// <returns>The offset of the row in the cache's arena.</returns>
         /// <exception cref="ArgumentException">The key and values do not make a row of the table.</exception>
-        int PredictCore(PredictedValues p, Table t, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values)
+        int PredictCore(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values)
         {
             // Checked before any id is minted: the row is staged, and a row of the wrong width cannot be.
-            if (keyLength != t.Spec.KeyCount || keyLength + values.Length != t.Arity)
-                throw new ArgumentException($"A row of the table has {t.Spec.KeyCount} key and {t.Arity - t.Spec.KeyCount} value columns, not {keyLength} and {values.Length}.", nameof(values));
+            if (keyLength != keyCount || keyLength + values.Length != arity)
+                throw new ArgumentException($"A row of the table has {keyCount} key and {arity - keyCount} value columns, not {keyLength} and {values.Length}.", nameof(values));
 
             var offset = p.FindOrBegin(table, key, keyOffset, keyLength, keyLength + values.Length, out var found);
             if (found)
@@ -166,13 +201,32 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the table with id <paramref name="table"/> for reading: through the database view when the state has
-        /// one (which fails for a table taken out by a merge in progress, as egglog's <c>db.table_info[table]</c>
-        /// does), otherwise from the catalog.
+        /// Gets the table with id <paramref name="table"/> for reading: the single dispatch point for committed-table reads
+        /// (colored-contexts spec §6.5). Every caller takes its layered path first, so this throws in a child context; root
+        /// paths that have already tested for layers call <see cref="ReadRootTable"/>.
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
-        Table ReadTable(TableId table) => View is { } view ? view.GetTable(table) : catalog[table];
+        /// <exception cref="InvalidOperationException">The state runs in a child context.</exception>
+        Table ReadTable(TableId table)
+        {
+            if (layers is not null)
+                return ThrowLayeredRead(table);
+
+            return ReadRootTable(table);
+        }
+
+        /// <summary>
+        /// Gets the table with id <paramref name="table"/> for reading at a root, in a bare database or over a bare
+        /// catalog: through the database view when the state has one (which fails for a table taken out by a merge in
+        /// progress, as egglog's <c>db.table_info[table]</c> does), otherwise from the catalog. The body
+        /// <see cref="ReadTable"/> had before contexts, small enough to inline on the root paths that have already tested
+        /// for layers (§14.1: one null test per call there).
+        /// </summary>
+        /// <param name="table">The table id.</param>
+        /// <returns>The table.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        Table ReadRootTable(TableId table) => View is { } view ? view.GetTable(table) : catalog[table];
 
         /// <summary>
         /// Converts a counter value to a cell value: egglog's <c>Value::from_usize</c>, which panics when the value does

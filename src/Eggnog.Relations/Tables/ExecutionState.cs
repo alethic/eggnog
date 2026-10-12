@@ -58,6 +58,14 @@ namespace Eggnog.Relations
                 buffers.Insert(id, buffer.FreshHandle());
 
             Timestamp = parent.Timestamp;
+
+            // Colored contexts (colored-contexts spec §6.5): the clone reads and guards as its parent does, and never falls
+            // back to finding its view through the catalog (declared in Actions/ExecutionState.Database.cs and
+            // Layers/ExecutionState.Layers.cs).
+            view = parent.view;
+            viewResolved = parent.viewResolved;
+            layers = parent.layers;
+            guard = parent.guard;
         }
 
         /// <summary>
@@ -125,11 +133,18 @@ namespace Eggnog.Relations
         /// Stages the removal of the row with key <paramref name="key"/> from <paramref name="table"/>. egglog's
         /// <c>stage_remove</c>.
         /// </summary>
+        /// <remarks>
+        /// In a store the removal first passes the state's retraction guard (colored-contexts spec §6.7), decided when the
+        /// removal is staged: at a store's root without live descendants, one volatile read of the root's gate; in a bare
+        /// database, one null test.
+        /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key; copied.</param>
+        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void StageRemove(TableId table, ReadOnlySpan<uint> key)
         {
+            guard?.CheckRemove(table);
             GetBuffer(table).StageRemove(key);
             catalog.Notifications.Notify(table);
             Changed = true;
@@ -142,8 +157,10 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="source">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>
+        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal (§6.7).</exception>
         public void StageRemove(TableId table, uint[] source, int offset)
         {
+            guard?.CheckRemove(table);
             GetBuffer(table).StageRemove(source, offset);
             catalog.Notifications.Notify(table);
             Changed = true;

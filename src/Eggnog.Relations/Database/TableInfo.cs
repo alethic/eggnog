@@ -108,6 +108,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Switches both index catalogs to serial refresh, because the table's context is freezing (colored-contexts spec
+        /// §8.1 step 4.4, X14): a frozen catalog is never reset again, and an index built lazily for a concurrent
+        /// descendant is built on the thread that needs it, never by parallel work that a waiter would have to run.
+        /// </summary>
+        public void FreezeIndexes()
+        {
+            Indexes.SetSerialRefresh();
+            ColumnIndexes.SetSerialRefresh();
+        }
+
+        /// <summary>
         /// Creates an independent copy: the table cloned and every cached index refreshed against this table,
         /// deep-copied and re-armed. egglog's <c>Clone for TableInfo</c> (core-relations/src/free_join/mod.rs:156-180).
         /// Requires that the table does not change meanwhile. O(rows + index sizes).

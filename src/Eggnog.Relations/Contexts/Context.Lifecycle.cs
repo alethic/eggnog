@@ -22,8 +22,9 @@ namespace Eggnog.Relations
         /// one included, counts it until it is disposed. The first child seals the store's counters (X16).
         /// </para>
         /// <para>
-        /// Interim (M9.2): the root's settling of rows written since its last rebuild (§7.6) arrives with the layers that
-        /// read them (M9.4).
+        /// A child created with <see cref="ContextOptions.StopOnContradiction"/> where a contradiction row is already
+        /// visible starts stopped (§6.9). Interim (M9.3): the root's settling of rows written since its last rebuild
+        /// (§7.6) arrives with row catch-up (M9.4).
         /// </para>
         /// </remarks>
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
@@ -116,8 +117,8 @@ namespace Eggnog.Relations
                         ancestors[i].gate.EndChange();
                 }
 
-                // M9.3-M9.4 release the layers here, and clear the store's container dirty log when the root's gate
-                // reaches zero (§8.2).
+                // M9.4 clears the store's container dirty log here when the root's gate reaches zero (§8.2).
+                tables!.Release();
                 overlay!.Release();
                 journal!.Release();
                 Volatile.Write(ref host, null);
@@ -137,10 +138,18 @@ namespace Eggnog.Relations
         /// parent's union-find (<see cref="CatchUpUnionFind"/>), and every pass merges what is staged in the child.
         /// </para>
         /// <para>
-        /// Interim (M9.2, §17): a child's passes do no row work (catch-up of ancestor rows, rewriting its own rows, hiding
-        /// and copying ancestor rows that mention its losers), which arrives with its layers (M9.3-M9.4). An exception
-        /// escaping a child's rebuild faults it (X12). DEBUG builds check the context's invariants at the end
-        /// (<see cref="CheckInvariants"/>).
+        /// The loop ends by committing the child's cursors, sealing its hidden sets and, when it caught up with an ancestor,
+        /// dropping its cached views (§7.1). An exception escaping a child's rebuild faults it (X12). DEBUG builds check the
+        /// context's invariants at the end (<see cref="CheckInvariants"/>).
+        /// </para>
+        /// <para>
+        /// Interim (M9.3, §17): a child's passes do no row work (catch-up of ancestor rows, rewriting its own rows, hiding
+        /// and copying ancestor rows that mention its losers), which arrives in M9.4. A rebuild that would need any of it
+        /// is refused with <see cref="NotSupportedException"/> before anything changes, so the child is not faulted: an
+        /// ancestor appended or replaced rows since the child last caught up, or the child's union-find changes while it
+        /// holds rows of a table with id columns, or while an ancestor row it sees names one of its new losers
+        /// (<see cref="ThrowIfRowWorkPending"/>). A child whose ancestor changed only its union-find, and that holds nothing
+        /// the change could make stale, catches up.
         /// </para>
         /// </remarks>
         /// <returns>Whether any pass changed anything; <c>false</c> for a frozen, contradicted or clean context.</returns>
@@ -148,6 +157,8 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
         /// it (or a parent that is not frozen) has work to do and the call comes from inside a write batch's action or a
         /// <c>ScanMerges</c> visitor of the same domain (§8.3), where a rebuild with nothing to do is allowed.</exception>
+        /// <exception cref="NotSupportedException">Interim (M9.3): the rebuild would need row work
+        /// (<see cref="ThrowIfRowWorkPending"/>).</exception>
         public bool Rebuild()
         {
             if (frozen)
@@ -168,6 +179,11 @@ namespace Eggnog.Relations
 
             // A pass inside a running batch or visitor would run an epoch inside its epoch (I3) or change what it reads.
             ThrowIfInCallback(current, nameof(Rebuild));
+
+            // Interim (M9.3): refuse row work before anything changes; an ancestor that changed only its union-find needs
+            // none when the child holds no rows the change could make stale.
+            ThrowIfRowWorkPending();
+            var caughtUp = tables is { NeedsCatchUp: true };
 
             var first = true;
             var changed = false;
@@ -205,8 +221,17 @@ namespace Eggnog.Relations
             }
 
             journalMark = DisplacedCount;
+            if (tables is { } t)
+            {
+                caughtUp |= t.CommitCursors();
+                t.SealHidden();
+                t.InvalidateViews(caughtUp);
+            }
+
 #if DEBUG
-            CheckInvariants();
+            // A contradiction stopped the merge with writes pending: the context answers only IsContradictory (§6.9).
+            if (contradicted == false)
+                CheckInvariants();
 #endif
             return changed;
         }
@@ -216,24 +241,30 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Rebuilds the context, freezes its union-find table (the root's compresses every path; a child's overlay stops
-        /// changing) and seals it; flattens a child's chain of union-find levels into one map for the children created
-        /// from now on (§5.4); gives each live child subtree a thread domain of its own, so children of a frozen context
-        /// may run concurrently (§8.3); and publishes the frozen flag last, which orders every structure a child reads
-        /// before the child's own reads. A second call does nothing. Freezing a context with live children is allowed:
-        /// they catch up once.
+        /// Rebuilds the context, then freezes its database (<see cref="Relations.Database.Freeze"/>): every table freezes
+        /// (the root's union-find compresses every path, a child's overlay stops changing, each sorted-writes table
+        /// compacts where its gate allows and builds its rebuild index), the indexes of <paramref name="warmup"/> are built,
+        /// the index catalogs refresh serially from now on, and staging into any table throws. Then it builds every view:
+        /// a child folds every hidden set into its views' frozen parts (<see cref="ContextTables.Freeze"/>), the root
+        /// freezes its root views (<see cref="LayeredSchema.FreezeRoot"/>). It flattens a child's chain of union-find levels
+        /// into one map for the children created from now on (§5.4); gives each live child subtree a thread domain of its
+        /// own, so children of a frozen context may run concurrently (§8.3); and publishes the frozen flag last, which
+        /// orders every structure a child reads before the child's own reads. A second call does nothing. Freezing a
+        /// context with live children is allowed.
         /// </para>
         /// <para>
-        /// Interim (M9.2, §17): only the union-find is frozen. The storage half (sealing and compacting the row tables,
-        /// prebuilding their indexes and views, settling the root) arrives in M9.3-M9.4; meanwhile writes through the
-        /// context are refused once it is frozen.
+        /// Interim (M9.3, §17): the root's settling of the rows written since its last rebuild (§7.6) arrives in M9.4. A
+        /// child whose rebuild would need row work is refused with <see cref="NotSupportedException"/> before anything
+        /// changes, and is not faulted (<see cref="ThrowIfRowWorkPending"/>).
         /// </para>
         /// </remarks>
+        /// <param name="warmup">The cached indexes to build before the context is shared, or <c>null</c>.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted or contradicted;
-        /// unions are staged in it and were never notified for merging; the call comes from inside another operation of
+        /// writes are staged in it and were never notified for merging; the call comes from inside another operation of
         /// the same thread domain; or the domain is held by another thread.</exception>
-        public void Freeze()
+        /// <exception cref="NotSupportedException">Interim (M9.3): the child's rebuild would need row work.</exception>
+        public void Freeze(FreezeWarmup? warmup = null)
         {
             if (frozen)
                 return;
@@ -254,14 +285,24 @@ namespace Eggnog.Relations
                 if (parent is { IsFrozen: false })
                     throw new InvalidOperationException("A context can be frozen only once its parent is.");
 
+                // Interim (M9.3): a rebuild that would need row work is refused before anything changes, as a direct
+                // Rebuild refuses it, so the refusal does not fault the child here either.
+                if (parent is not null && IsClean == false)
+                    ThrowIfRowWorkPending();
+
                 try
                 {
                     Rebuild();
-                    UnionFindTable.Freeze();
-                    if (parent is not null)
+                    database.Freeze(warmup);
+                    if (tables is { } t)
                     {
+                        t.Freeze();
                         flattened = FlattenedUnionFind.Build(finder);
                         Volatile.Write(ref finderForChildren, LayeredUnionFind.Flattened(store.RootUnionFind.UnionFind, flattened));
+                    }
+                    else
+                    {
+                        store.Schema.FreezeRoot();
                     }
                 }
                 catch when (IsRoot == false)

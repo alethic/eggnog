@@ -95,11 +95,17 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void TheBaseTableCannotFreezeBeforeTheStorageFreeze()
+        public void ASortedWritesTableFreezesWithTheStorageFreeze()
         {
-            // M9.2 interim: sorted-writes tables freeze with the storage half of freezing (M9.3).
+            // M9.3 (§8.1, X13): a sorted-writes table freezes too: sealed, shared, and no longer clearable.
             var table = new SortedWritesTable(1, 2, null, [], new KeepCurrentMerge());
-            Assert.Throws<NotSupportedException>(() => table.Freeze());
+            table.Freeze();
+            Assert.True(table.IsShared);
+            var buffer = table.NewBuffer();
+            buffer.StageInsert([1, 2]);
+            Assert.Throws<InvalidOperationException>(() => buffer.Flush());
+            Assert.Throws<InvalidOperationException>(() => table.Clear());
+            table.Freeze();
         }
 
     }

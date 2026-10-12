@@ -106,6 +106,9 @@ namespace Eggnog.Relations
         /// </summary>
         public bool HasPendingUnions => pending.RowQueue(0).IsEmpty == false;
 
+        /// <inheritdoc />
+        internal override bool HasPendingWrites => HasPendingUnions;
+
         /// <summary>
         /// Gets whether the table is frozen.
         /// </summary>

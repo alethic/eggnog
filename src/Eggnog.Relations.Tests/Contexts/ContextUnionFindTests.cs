@@ -168,11 +168,11 @@ namespace Eggnog.Relations.Tests
             var f = store.AddTable(StoreTests.Function(store), [], [store.UnionFindTable], "f");
             var child = store.Root.CreateChild();
 
-            // M9.2 interim: staging into a table other than the union-find is not supported, which faults the child.
-            Assert.Throws<NotSupportedException>(() => child.Write(s =>
+            // An exception escaping the batch, after something was staged, faults the child (X12).
+            Assert.Throws<ArgumentException>(() => child.Write<int>(s =>
             {
                 s.StageInsert(f, [1, 2, 3]);
-                return 0;
+                throw new ArgumentException("boom");
             }));
             Assert.True(child.IsFaulted);
             Assert.False(child.IsClean);

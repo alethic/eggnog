@@ -233,6 +233,11 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(state);
 
+            // A child context's layer merges against what the context sees (colored-contexts spec §6.6, X2): one null
+            // test per table merge at the root.
+            if (layer is { } owner)
+                return MergeLayered(state, owner);
+
             var removed = DoDelete();
             var added = DoInsert(state);
             MaybeRehash();
@@ -243,10 +248,14 @@ namespace Eggnog.Relations
         /// <remarks>
         /// egglog's <c>clear</c> (core-relations/src/table/mod.rs:296-305): staged writes are dropped, and a nonempty
         /// table loses its rows, key index and runs and moves to a new generation. The staged-row totals are reset too,
-        /// which egglog leaves alone.
+        /// which egglog leaves alone. A frozen table (<see cref="IsShared"/>) cannot be cleared.
         /// </remarks>
+        /// <exception cref="InvalidOperationException">The table is frozen.</exception>
         public override void Clear()
         {
+            if (isShared)
+                throw new InvalidOperationException("The context is frozen.");
+
             pending.Clear();
             if (data.Count == 0)
                 return;

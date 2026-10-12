@@ -10,10 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for a child context's database as far as it exists without layers (colored-contexts spec §3.4, §4.2,
-    /// §17 M9.1): definitions go through the store, schema questions come from the store's schema, ids come from the
-    /// child's blocks while container ids stay shared, and staging reaches only the union-find until the layers arrive
-    /// (interim).
+    /// Tests for a child context's database (colored-contexts spec §3.4, §4.2, §6.2): definitions go through the store,
+    /// schema questions come from the store's schema, ids come from the child's blocks while container ids stay shared,
+    /// and staging reaches the child's union-find and creates the child's layer of a table on first use.
     /// </summary>
     public class ChildDatabaseTests
     {
@@ -65,7 +64,7 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<KeyNotFoundException>(() => db.GetTableSpec(new TableId(5)));
             Assert.Throws<KeyNotFoundException>(() => db.GetIdColumns(new TableId(5)));
 
-            // The child's own map holds only its union-find (and, from M9.3, its layers).
+            // The child's own map holds only its union-find and the layers it created.
             Assert.Equal("$uf", db.GetTableInfo(uf).Name);
             Assert.NotSame(store.RootUnionFind, db.GetTable(uf));
             var missing = Assert.Throws<KeyNotFoundException>(() => db.GetTableInfo(f));
@@ -83,21 +82,39 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void StagingIntoAChildReachesOnlyItsUnionFindBeforeItsLayersExist()
+        public void StagingIntoAChildCreatesItsLayerOfTheTable()
         {
             var (store, f, child) = Setup();
             var db = child.Database;
 
-            Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => db.NewBuffer(f)).Message);
+            // M9.3 (§6.2, X37): the first staging into a table creates the child's layer, published to the catalog and
+            // adopted into the table map; the layer is an ordinary single-shard table of the same shape.
+            Assert.Null(child.Tables!.TryGetLayer(f));
+            Assert.False(db.TryGetTableInfo(f, out _));
             var state = db.CreateExecutionState();
-            Assert.Equal("Layers arrive in M9.3.", Assert.Throws<NotSupportedException>(() => state.StageInsert(f, [1, 2, 3])).Message);
-            Assert.Throws<NotSupportedException>(() => db.ClearTable(f));
-            Assert.True(db.Catalog.Notifications.IsEmpty);
-            Assert.False(db.MergeAll());
-            Assert.Equal(0, child.Version);
+            state.StageInsert(f, [1, 2, 3]);
+            var layer = child.Tables.TryGetLayer(f);
+            Assert.NotNull(layer);
+            Assert.True(layer!.IsAdopted);
+            Assert.Same(layer.Own, db.Catalog.GetForStaging(f));
+            Assert.Same(layer.Info, db.GetTableInfo(f));
+            Assert.Same(layer, layer.Own.Layer);
+            Assert.Equal(1, layer.Own.Parallelism.ShardData.Count);
+            Assert.Same(child.Gate, layer.Own.CompactionGate);
+            Assert.Equal(1, child.Tables.Statistics.LayersCreated);
+            state.Flush();
+            Assert.True(db.MergeAll(1));
+            Assert.Equal(1, layer.Own.Count);
+            Assert.Equal(1, child.Version);
 
-            // M9.2: the union-find id resolves to the child's own union-find through the resolver (the child's catalog
-            // holds no table), so it is found even while a merge has it taken out of the table map.
+            // A buffer from the database stages into the same layer; no second layer is created.
+            db.NewBuffer(f).Flush();
+            Assert.Same(layer, child.Tables.TryGetLayer(f));
+            Assert.Equal(1, child.Tables.Statistics.LayersCreated);
+            Assert.False(db.MergeAll(1));
+
+            // The union-find id resolves to the child's own union-find through the resolver (the child's catalog
+            // never holds it), so it is found even while a merge has it taken out of the table map.
             Assert.False(db.Catalog.TryGetTable(store.UnionFindTable, out _));
             Assert.Same(child.UnionFindTable, db.Catalog.GetForStaging(store.UnionFindTable));
             Assert.IsType<OverlayDisplacedTable>(db.GetTable(store.UnionFindTable));
@@ -157,9 +174,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<NotSupportedException>(() => db.EstimateSize(uf));
             Assert.Throws<NotSupportedException>(() => new ColumnCardEstimator(db).GetColumnUniqueness(uf, C(0)));
 
-            // Function tables have no layer in the child before M9.3, and are read through views from M10.2.
-            Assert.Throws<KeyNotFoundException>(() => db.EstimateSize(f));
-            Assert.Throws<KeyNotFoundException>(() => db.ProcessConstraints(f, []));
+            // Function tables are answered through the child's view: estimates now (sum over the view's layers), planning
+            // and header evaluation from M10.2; never from the child's own layer alone.
+            Assert.Equal(0, db.EstimateSize(f));
+            Assert.Throws<NotSupportedException>(() => db.ProcessConstraints(f, []));
 
             // §3.4: a child never evaluates a header as a single table.
             Assert.Throws<InvalidOperationException>(() => ((IHeaderEvaluator)db).Evaluate(uf, [], fast, slow));

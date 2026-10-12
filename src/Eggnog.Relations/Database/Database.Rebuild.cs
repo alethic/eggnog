@@ -42,6 +42,7 @@ namespace Eggnog.Relations
         public bool ApplyRebuild(TableId rebuilder, ReadOnlySpan<TableId> tablesToRebuild, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(ApplyRebuild));
+            ThrowIfFrozen();
             var operation = new RebuildTableOperation(rebuilder, GetTable(rebuilder), nextTimestamp);
             RunWithTakenOut(rebuilder, tablesToRebuild, operation);
             return MergeAllCore(nextTimestamp);
@@ -65,6 +66,7 @@ namespace Eggnog.Relations
         public bool RefreshRowsForValues(ReadOnlySpan<TableId> tablesToRefresh, ReadOnlySpan<uint> dirtyIds, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(RefreshRowsForValues));
+            ThrowIfFrozen();
             if (dirtyIds.IsEmpty)
                 return false;
 
