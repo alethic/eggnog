@@ -23,8 +23,10 @@ Last updated 2026-10-12.
    and deviations are recorded in the colors spec §21. Push/pop conformance uses hand-translated egglog programs; there
    is no `.egg` reader.
 2. **Rule layer R2** (scopes; needs M10.3) and **R3** (case splits and lift; needs M10.4), per the rule-layer spec §9.
-3. **Cosmos integration plan:** a read-only study of `D:\calcite-cosmos` (a .NET adapter) mapping its pushdown
-   reasoning onto the library, with a shadow-mode migration. Not started.
+3. **Cosmos integration plan:** written (`docs/design/cosmos-integration-plan.md`). Eggnog replaces the adapter's
+   closure over declared facts, not its rewriter; the two reasonings run side by side in shadow mode and switch per
+   fact kind. Phases 0a-0c (correctness fixes and the seam, in the adapter) and 1 (the theory on R1b, offline) can
+   start now; production use needs R2, and case splits need R3. Its library requests are in its §8.3.
 4. **Performance (deferred):** after M10.2, the root benchmark `RuleSetRunBenchmarks.BasicMath` is 10-15% slower than
    the M9.0 baseline (`f9b76ab`) in all four configurations, with allocation unchanged; the other root benchmark
    classes are within noise (median -1.0% over 112 cases). Unreviewed experiments toward a fix are on the branch
