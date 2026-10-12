@@ -90,6 +90,7 @@ jobs:
       fail-fast: false
       matrix:
         run:
+        - Eggnog.Tests
         - Eggnog.Relations.Tests
         - Eggnog.Storage.Tests
         sys:

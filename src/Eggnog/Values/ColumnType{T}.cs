@@ -1,0 +1,132 @@
+using System;
+
+namespace Eggnog
+{
+
+    /// <summary>
+    /// The type of a column whose values are <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The CLR type of the values.</typeparam>
+    public abstract class ColumnType<T> : ColumnType
+    {
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="name">The type's name, unique in its store.</param>
+        /// <param name="kind">Whether cells are classes or values.</param>
+        private protected ColumnType(string name, ColumnKind kind)
+            : base(name, kind, typeof(T))
+        {
+
+        }
+
+        /// <summary>
+        /// Formats a value as an s-expression literal (see <see cref="ColumnType.Format(object)"/>).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The literal.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
+        public string Format(T value)
+        {
+            if (value is null)
+                throw new ArgumentNullException(nameof(value));
+
+            return FormatValue(value);
+        }
+
+        /// <summary>
+        /// Compares two values in content order: strings ordinal, numbers numeric, <c>false &lt; true</c>, sets
+        /// lexicographic over their sorted elements, registered types by their comparer (else
+        /// <c>Comparer&lt;T&gt;.Default</c> when comparable, else their cells), classes by id. Extraction breaks ties by
+        /// this order. Comparing is a read: it never interns (D15). Ordered by cell, a value that was never interned
+        /// comes after every interned one, and two such values compare by hash code (zero when they are equal).
+        /// </summary>
+        /// <param name="x">One value.</param>
+        /// <param name="y">The other value.</param>
+        /// <returns>Negative, zero or positive, as <paramref name="x"/> comes before, with or after
+        /// <paramref name="y"/>.</returns>
+        /// <exception cref="ArgumentNullException">A value is <c>null</c>.</exception>
+        public int Compare(T x, T y)
+        {
+            if (x is null)
+                throw new ArgumentNullException(nameof(x));
+
+            if (y is null)
+                throw new ArgumentNullException(nameof(y));
+
+            return CompareValues(x, y);
+        }
+
+        /// <summary>
+        /// Encodes a value into its cell, interning it when its codec does not box it inline. Thread-safe.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="ArgumentException">The value is not representable (a NaN double, a default class).</exception>
+        internal abstract uint Encode(T value);
+
+        /// <summary>
+        /// Gets the cell of a value that is inline or interned already, without interning (D15, E1).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="cell">The cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether the value has a cell already.</returns>
+        internal abstract bool TryEncodeExisting(T value, out uint cell);
+
+        /// <summary>
+        /// Decodes a cell: a value, or for a sort a class with <paramref name="scope"/>'s origin. Lock-free.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <param name="scope">The scope serving the call; needed for a sort.</param>
+        /// <returns>The value.</returns>
+        internal abstract T Decode(uint cell, Scope? scope);
+
+        /// <summary>
+        /// Formats a non-null value.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The literal.</returns>
+        internal abstract string FormatValue(T value);
+
+        /// <summary>
+        /// Compares two non-null values in content order.
+        /// </summary>
+        /// <param name="x">One value.</param>
+        /// <param name="y">The other value.</param>
+        /// <returns>The order.</returns>
+        internal abstract int CompareValues(T x, T y);
+
+        /// <inheritdoc />
+        internal override uint EncodeObject(object value) => Encode(Cast(value));
+
+        /// <inheritdoc />
+        internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
+
+        /// <inheritdoc />
+        internal override object DecodeObject(uint cell, Scope? scope) => Decode(cell, scope)!;
+
+        /// <inheritdoc />
+        internal override string FormatObject(object value) => FormatValue(Cast(value));
+
+        /// <inheritdoc />
+        internal override string FormatCell(uint cell) => FormatValue(Decode(cell, null));
+
+        /// <inheritdoc />
+        internal override int CompareCells(uint x, uint y) => x == y ? 0 : CompareValues(Decode(x, null), Decode(y, null));
+
+        /// <summary>
+        /// Casts a value to <typeparamref name="T"/>.
+        /// </summary>
+        /// <exception cref="ArgumentException">The value is not a <typeparamref name="T"/>.</exception>
+        T Cast(object value)
+        {
+            if (value is T typed)
+                return typed;
+
+            throw new ArgumentException($"A {value?.GetType().Name ?? "null"} is not a value of column type {Name} ({typeof(T).Name}).", nameof(value));
+        }
+
+    }
+
+}

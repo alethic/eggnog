@@ -3,7 +3,9 @@
     <PropertyGroup>
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
         <IsPackable>false</IsPackable>
-        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <!-- xUnit1051 asks every call with an optional CancellationToken (Scope.Run) to pass the test's token; the tests
+             that exercise cancellation pass their own, and the rest run to completion. -->
+        <NoWarn>$(NoWarn);CS1591;xUnit1051</NoWarn>
         <!-- xunit.v3 builds the assembly as its own runner, and writes the entry point itself. -->
         <OutputType>Exe</OutputType>
         <GenerateProgramFile>false</GenerateProgramFile>
