@@ -79,8 +79,9 @@ namespace Eggnog.Relations
         /// <param name="merge">Resolves the ids of containers that become equal.</param>
         /// <param name="counter">The counter fresh container ids come from.</param>
         /// <param name="parallelism">When rebuilds go parallel; also fixes the shard count.</param>
-        public ContainerEnv(ContainerTypeId typeId, ContainerMergeFunction merge, CounterId counter, ParallelHeuristics parallelism)
-            : base(typeId)
+        /// <param name="holdsIds">Whether the containers hold e-class ids (<see cref="ContainerEnvBase.HoldsIds"/>).</param>
+        public ContainerEnv(ContainerTypeId typeId, ContainerMergeFunction merge, CounterId counter, ParallelHeuristics parallelism, bool holdsIds = true)
+            : base(typeId, holdsIds)
         {
             ArgumentNullException.ThrowIfNull(merge);
             ArgumentNullException.ThrowIfNull(parallelism);
@@ -102,7 +103,7 @@ namespace Eggnog.Relations
         /// Initializes a copy, for <see cref="Clone"/>.
         /// </summary>
         ContainerEnv(ContainerEnv<TContainer> source)
-            : base(source.TypeId)
+            : base(source.TypeId, source.HoldsIds)
         {
             merge = source.merge;
             counter = source.counter;
@@ -167,10 +168,17 @@ namespace Eggnog.Relations
         /// <param name="state">The execution state, which mints the id; it must belong to a database.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
-        /// ids.</exception>
+        /// ids; or the containers hold e-class ids and the state belongs to a child context (colored-contexts spec
+        /// §10.7, G-a, decision 9: eq-sort containers in children come after M10; <see cref="TryGetId"/> stays
+        /// allowed), or the container is new and the state's database is frozen (§7.4, G-b).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
+
+            // G-a (colored-contexts spec §10.7): a child interns no eq-sort container. One field test at the root, which
+            // runs in no child.
+            if (state.InChildContext && HoldsIds)
+                ThrowInternedInChild();
 
             var hash = container.ComputeHash();
             var shard = toId[shardData.ShardOf(hash)];
@@ -181,6 +189,11 @@ namespace Eggnog.Relations
                 var slot = shard.FindOrFindInsertSlot(hash, ref match, default(ContainerContentHasher<TContainer>));
                 if (slot >= 0)
                     return shard.EntryAt(slot).Id;
+
+                // G-b (§7.4): a new eq-sort container may name an id some child displaced; the children re-run their
+                // guard before they are read again. A frozen database interns none: its descendants could not be told.
+                if (HoldsIds)
+                    NoteNewEqContainer(state);
 
                 id = MintId(state);
                 var entry = new ContainerEntry<TContainer>(container, hash, id);
@@ -313,6 +326,9 @@ namespace Eggnog.Relations
                 var fresh = new ContainerEntry<TContainer>(container, hash, value);
                 AddById(fresh);
                 shard.InsertInSlot(hash, ~slot, fresh);
+
+                // A rebuilt content may name an id some child displaced (§7.4, G-b).
+                NoteNewContent();
             }
 
             Index(container, value);
@@ -330,6 +346,32 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         public override ContainerEnvBase Clone() => new ContainerEnv<TContainer>(this);
+
+        /// <inheritdoc />
+        public override bool AnyContainerMentions(uint value) => valIndex.ContainsElement(value);
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowInternedInChild()
+        {
+            throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a child context: eq-sort containers in children are not supported yet (decision 9). Look it up with TryGetId, or intern it at the root.");
+        }
+
+        /// <summary>
+        /// The slow path of <see cref="GetOrInsert"/> for a new container of a type that holds e-class ids (§7.4, G-b):
+        /// refuses a frozen database, whose descendants never re-run their guard, and moves the eq-container version, so
+        /// every child re-checks its own displacements against the new content before it is read again. Under the
+        /// hash-cons shard's lock; nothing is inserted when it throws.
+        /// </summary>
+        /// <param name="state">The interning state.</param>
+        /// <exception cref="InvalidOperationException">The state's database is frozen.</exception>
+        void NoteNewEqContainer(ExecutionState state)
+        {
+            if (state.View?.Owner is { IsFrozen: true })
+                throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: a descendant that displaced one of its elements could no longer be refused (decision 9, G-b). Look it up with TryGetId.");
+
+            NoteNewContent();
+        }
 
         /// <summary>
         /// Gets the shard of the hash-cons a content hash belongs to.

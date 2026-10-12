@@ -134,13 +134,21 @@ namespace Eggnog.Relations
                 case InstrKind.LookupWithDefault:
                 {
                     var i = Unsafe.As<LookupWithDefaultInstr>(instr);
-                    VectorizedLookup.LookupWithDefault(ReadTable(i.Table), ref mask, bindings, i.Args, i.Column, i.Default, i.Destination);
+                    if (layers is { } l)
+                        LayeredLookupWithDefault(l, i.Table, ref mask, bindings, i.Args, i.Column, i.Default, i.Destination);
+                    else
+                        VectorizedLookup.LookupWithDefault(ReadTable(i.Table), ref mask, bindings, i.Args, i.Column, i.Default, i.Destination);
+
                     break;
                 }
                 case InstrKind.Lookup:
                 {
                     var i = Unsafe.As<LookupInstr>(instr);
-                    VectorizedLookup.LookupRow(ReadTable(i.Table), ref mask, bindings, i.Args, i.Column, i.Destination);
+                    if (layers is { } l)
+                        LayeredLookupRow(l, i.Table, ref mask, bindings, i.Args, i.Column, i.Destination);
+                    else
+                        VectorizedLookup.LookupRow(ReadTable(i.Table), ref mask, bindings, i.Args, i.Column, i.Destination);
+
                     break;
                 }
                 case InstrKind.LookupWithFallback:
@@ -199,13 +207,24 @@ namespace Eggnog.Relations
         /// mask; for the live lanes that missed, take the row this state predicted for the key, or build
         /// <c>key ++ defaults</c>, stage it and remember it; then write the destination column of the row. Drops no lane.
         /// </summary>
+        /// <remarks>
+        /// In a child context (colored-contexts spec §6.5, X37) the lookup reads the context's view, and the table's
+        /// buffer is created only at the first miss, so a lookup that hits creates no layer of the table; the row width
+        /// is checked against the store's schema.
+        /// </remarks>
         void RunLookupOrInsertDefault(ref Mask mask, LookupOrInsertDefaultInstr instr, Bindings bindings)
         {
-            // egglog creates the table's buffer before the lookup, whether or not anything is staged.
-            var buffer = GetBuffer(instr.Table);
+            // egglog creates the table's buffer before the lookup, whether or not anything is staged; a child creates it
+            // at the first miss, since creating it creates the context's layer.
+            var layered = layers;
+            var buffer = layered is null ? GetBuffer(instr.Table) : null;
             var args = instr.Args;
             var misses = mask;
-            VectorizedLookup.LookupRow(ReadTable(instr.Table), ref misses, bindings, args, instr.Column, instr.Destination);
+            if (layered is not null)
+                LayeredLookupRow(layered, instr.Table, ref misses, bindings, args, instr.Column, instr.Destination);
+            else
+                VectorizedLookup.LookupRow(ReadTable(instr.Table), ref misses, bindings, args, instr.Column, instr.Destination);
+
             misses.SymmetricDifference(mask);
             if (misses.IsEmpty)
                 return;
@@ -213,8 +232,11 @@ namespace Eggnog.Relations
             var defaults = instr.Defaults;
             var keyLength = args.Length;
             var rowLength = keyLength + defaults.Length;
-            if (rowLength != buffer.Arity)
-                throw new InvalidOperationException($"{instr} builds rows of {rowLength} cells for a table of {buffer.Arity} columns.");
+            var arity = layered is null ? buffer!.Arity : layered.Schema.GetSpec(instr.Table).Arity;
+            if (rowLength != arity)
+                throw new InvalidOperationException($"{instr} builds rows of {rowLength} cells for a table of {arity} columns.");
+
+            buffer ??= GetBuffer(instr.Table);
 
             var column = instr.Column.Rep;
             var data = bindings.Data;
@@ -287,7 +309,11 @@ namespace Eggnog.Relations
         void RunLookupWithFallback(ref Mask mask, LookupWithFallbackInstr instr, Bindings bindings)
         {
             var found = mask;
-            VectorizedLookup.LookupRow(ReadTable(instr.Table), ref found, bindings, instr.Key, instr.Column, instr.Destination);
+            if (layers is { } l)
+                LayeredLookupRow(l, instr.Table, ref found, bindings, instr.Key, instr.Column, instr.Destination);
+            else
+                VectorizedLookup.LookupRow(ReadTable(instr.Table), ref found, bindings, instr.Key, instr.Column, instr.Destination);
+
             var call = found;
             call.SymmetricDifference(mask);
             if (call.IsEmpty)
@@ -324,6 +350,10 @@ namespace Eggnog.Relations
         void RunStage(ref Mask mask, TableId table, QueryEntry[] operands, Bindings bindings, bool remove)
         {
             Debug.Assert(mask.IsEmpty == false, "the interpreter stops before an instruction with no live lane");
+
+            // A rule's delete is a retraction (colored-contexts spec §6.7): it passes the state's guard, once per batch.
+            if (remove)
+                guard?.CheckRemove(table);
 
             var buffer = GetBuffer(table);
             var cells = ActionScratch.RentCells(operands.Length);

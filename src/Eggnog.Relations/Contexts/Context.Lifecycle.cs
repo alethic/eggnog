@@ -15,23 +15,39 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A context that is not frozen is entered (its domain) and rebuilt first, so the child's cursors start on a clean
-        /// parent whose union-find is current with its own parent's; the child shares that domain. A frozen context is not
-        /// entered, and the child gets a domain of its own, so children of a frozen context may run on different threads
-        /// (§8.3). The child is added to this context's children under their lock, and the gate of every ancestor, this
-        /// one included, counts it until it is disposed. The first child seals the store's counters (X16).
+        /// A context that is not frozen is entered (its domain) and rebuilt first, and the root also settles the rows
+        /// written since its last rebuild (<see cref="Settle"/>, §7.6), so the child's cursors start on a clean parent whose
+        /// rows are canonical and whose union-find is current with its own parent's (I35); the child shares that domain.
+        /// A frozen context is not entered, and the child gets a domain of its own, so children of a frozen context may run
+        /// on different threads (§8.3). The child is added to this context's children under their lock, and the gate of
+        /// every ancestor, this one included, counts it until it is disposed. The first child seals the store's counters
+        /// (X16).
         /// </para>
         /// <para>
-        /// Interim (M9.2): the root's settling of rows written since its last rebuild (§7.6) arrives with the layers that
-        /// read them (M9.4).
+        /// A child created with <see cref="ContextOptions.StopOnContradiction"/> where a contradiction row is already
+        /// visible starts stopped (§6.9). DEBUG builds check that a root that is not frozen is settled (I35) before the
+        /// child is created.
+        /// </para>
+        /// <para>
+        /// A context that is not frozen also brings its rebuild indexes, and those of its ancestors that are not frozen, up
+        /// to date (<see cref="RefreshRebuildIndexesForChildren"/>), so the child never builds an ancestor's whole index on
+        /// its own path (§14.2: step 4 is never a scan); this is child-creation work of the parent (§1 item 11).
+        /// </para>
+        /// <para>
+        /// Like <see cref="Write{TResult}(Func{ExecutionState, TResult})"/> and <see cref="Rebuild"/>, the rebuild and the
+        /// settle record a failure a merge function reports (<see cref="Relations.Database.Failure"/>) and do not throw:
+        /// the failure stays on this context for its caller to take (the bridge takes it right after, M10.3), and the
+        /// child, which has a failure slot of its own, is created.
         /// </para>
         /// </remarks>
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
         /// <returns>The child.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted or contradicted; it is at depth
-        /// <see cref="MaxDepth"/>; the call comes from inside another operation of the same thread domain; or the
-        /// domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or contradicted; its parent (or an ancestor
+        /// that is not frozen) was stopped by a contradiction; it is at depth <see cref="MaxDepth"/>; the call comes from
+        /// inside another operation of the same thread domain; or the domain is held by another thread.</exception>
+        /// <exception cref="NotSupportedException">The context displaced an id an eq-sort container holds (G-b); it is
+        /// faulted.</exception>
         public Context CreateChild(ContextOptions? options = null)
         {
             ThrowIfDisposed();
@@ -51,6 +67,13 @@ namespace Eggnog.Relations
             using (current.Enter())
             {
                 Rebuild();
+                if (IsRoot)
+                {
+                    Settle();
+                    AssertRootSettled();
+                }
+
+                RefreshRebuildIndexesForChildren();
                 return AddChild(options);
             }
         }
@@ -59,16 +82,18 @@ namespace Eggnog.Relations
         /// Disposes the child (§8.2): it leaves its parent's children, every ancestor's gate stops counting it, and its
         /// structures are released. A second call does nothing; every later call to another member throws
         /// <see cref="ObjectDisposedException"/>. The ids it minted leak, which is harmless; its journal needs no reader
-        /// tracking.
+        /// tracking. When the root's gate reaches zero, the store's container dirty log is cleared: no cursor into it is
+        /// left (§7.4).
         /// </summary>
         /// <remarks>
         /// A frozen context is scanned without its domain, so a dispose from inside one of its
         /// <see cref="ScanMerges{TVisitor}"/> visitors is not caught by the domain; it is refused through the context's
-        /// count of running scans instead (§8.3), which also refuses a dispose while another thread scans it.
+        /// count of running scans instead (§8.3), which also refuses a dispose while another thread scans it. A faulted
+        /// context may be disposed.
         /// </remarks>
         /// <exception cref="InvalidOperationException">The context is the root; it has live children; the call comes
-        /// from inside another operation of the same thread domain, or while a <c>ScanMerges</c> of the context runs; or
-        /// the domain is held by another thread.</exception>
+        /// from inside another operation of the same thread domain, or while a scan of the context runs; or the domain is
+        /// held by another thread.</exception>
         public void Dispose()
         {
             if (disposed)
@@ -99,7 +124,7 @@ namespace Eggnog.Relations
                             throw new InvalidOperationException($"The context has {children.Count} live children; dispose them first.");
 
                         if (Interlocked.CompareExchange(ref activeScans, ScansClosed, 0) != 0)
-                            throw new InvalidOperationException("Dispose cannot be called while a ScanMerges of the context runs, from its visitor or from another thread.");
+                            throw new InvalidOperationException("Dispose cannot be called while a scan of the context runs (ScanMerges, ScanOwn or ScanAncestorsMentioning), from its visitor or from another thread.");
 
                         disposed = true;
                     }
@@ -116,8 +141,10 @@ namespace Eggnog.Relations
                         ancestors[i].gate.EndChange();
                 }
 
-                // M9.3-M9.4 release the layers here, and clear the store's container dirty log when the root's gate
-                // reaches zero (§8.2).
+                if (store.Root.Gate.HasLiveDescendants == false)
+                    store.ContainerDirtyLog.Clear();
+
+                tables!.Release();
                 overlay!.Release();
                 journal!.Release();
                 Volatile.Write(ref host, null);
@@ -133,21 +160,37 @@ namespace Eggnog.Relations
         /// At the root a pass is egglog's (<see cref="Relations.Database.RebuildPass"/> over every function table of the
         /// store, which also merges writes staged at the root), and the loop runs only when the union-find grew since the
         /// last rebuild or writes are pending (X42), with the numbering of egglog-bridge's <c>rebuild</c>: read the clock,
-        /// run the pass, advance the clock, until a pass changes nothing. In a child the first pass catches up with the
-        /// parent's union-find (<see cref="CatchUpUnionFind"/>), and every pass merges what is staged in the child.
+        /// run the pass, advance the clock, until a pass changes nothing.
         /// </para>
         /// <para>
-        /// Interim (M9.2, §17): a child's passes do no row work (catch-up of ancestor rows, rewriting its own rows, hiding
-        /// and copying ancestor rows that mention its losers), which arrives with its layers (M9.3-M9.4). An exception
-        /// escaping a child's rebuild faults it (X12). DEBUG builds check the context's invariants at the end
-        /// (<see cref="CheckInvariants"/>).
+        /// In a child (C8) the first pass catches up: it re-keys the union-find over the parent's new displacements
+        /// (<see cref="CatchUpUnionFind"/>), absorbs the rows the unsettled ancestors appended since its cursors
+        /// (<see cref="ContextTables.CatchUpRows"/>), and re-stamps the own rows that name a container the root rebuilt in
+        /// place (<see cref="RefreshDirtyContainerIds"/>). Every pass then rewrites the own rows that name an id displaced
+        /// since the last pass, hides and copies the ancestor rows that name the child's own new losers, and merges
+        /// (<see cref="ContextTables.RebuildPass"/>); the eq-container guard checks the pass's own displacements
+        /// (<see cref="EqContainerGuard"/>). A contradiction that stops the child ends the loop at once.
+        /// </para>
+        /// <para>
+        /// The loop ends by committing the child's cursors, sealing its hidden sets and, when it caught up with an ancestor,
+        /// dropping its cached views (§7.1). An exception escaping a child's rebuild faults it (X12). DEBUG builds check the
+        /// context's invariants at the end (<see cref="CheckInvariants"/>).
+        /// </para>
+        /// <para>
+        /// Before any pass, a child refuses to catch up with a parent that a contradiction stopped (§6.9): such a parent is
+        /// never clean again. A child that stops on contradictions stops too; any other child is refused, unfaulted
+        /// (<see cref="StopIfParentStopped"/>). And when the store gained an eq-sort container since the child's guard last
+        /// ran, the guard checks the whole journal again (§7.4 G-b), even when nothing else is to be done.
         /// </para>
         /// </remarks>
         /// <returns>Whether any pass changed anything; <c>false</c> for a frozen, contradicted or clean context.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
-        /// it (or a parent that is not frozen) has work to do and the call comes from inside a write batch's action or a
-        /// <c>ScanMerges</c> visitor of the same domain (§8.3), where a rebuild with nothing to do is allowed.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; its
+        /// parent (or an ancestor that is not frozen) was stopped by a contradiction and it does not stop on contradictions;
+        /// or it (or a parent that is not frozen) has work to do and the call comes from inside a write batch's action or a
+        /// visitor of the same domain (§8.3), where a rebuild with nothing to do is allowed.</exception>
+        /// <exception cref="NotSupportedException">The child displaced an id an eq-sort container holds (G-b); the child
+        /// is faulted.</exception>
         public bool Rebuild()
         {
             if (frozen)
@@ -158,10 +201,18 @@ namespace Eggnog.Relations
             using var scope = current.Enter();
             ThrowIfFaulted();
             if (parent is { IsFrozen: false } p)
+            {
                 p.Rebuild();
+                StopIfParentStopped(p);
+            }
 
             if (contradicted)
                 return false;
+
+            // G-b (§7.4): the store gained an eq-sort container since the guard last ran; it reads nothing it writes, so it
+            // runs even inside a callback, before the clean test that it is part of.
+            if (IsEqGuardCurrent == false)
+                CheckEqContainers();
 
             if (parent is null ? journalMark == DisplacedCount && database.Catalog.Notifications.IsEmpty : IsClean)
                 return false;
@@ -171,6 +222,7 @@ namespace Eggnog.Relations
 
             var first = true;
             var changed = false;
+            var caughtUp = false;
             try
             {
                 while (true)
@@ -181,11 +233,19 @@ namespace Eggnog.Relations
                     {
                         pass = false;
                         if (first && parent is not null)
+                        {
                             pass |= CatchUpUnionFind(epoch) != journal!.Count;
+                            caughtUp |= tables!.CatchUpRows(epoch);
+                            pass |= caughtUp;
+                            pass |= RefreshDirtyContainerIds(epoch);
+                        }
 
                         pass |= parent is null
                             ? database.RebuildPass(store.UnionFindTable, store.Schema.FunctionTables, epoch)
-                            : database.MergeAll(epoch);
+                            : tables!.RebuildPass(epoch);
+
+                        if (parent is not null)
+                            EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
                     }
                     finally
                     {
@@ -205,8 +265,17 @@ namespace Eggnog.Relations
             }
 
             journalMark = DisplacedCount;
+            if (tables is { } t)
+            {
+                caughtUp |= t.CommitCursors();
+                t.SealHidden();
+                t.InvalidateViews(caughtUp);
+            }
+
 #if DEBUG
-            CheckInvariants();
+            // A contradiction stopped the merge with writes pending: the context answers only IsContradictory (§6.9).
+            if (contradicted == false)
+                CheckInvariants();
 #endif
             return changed;
         }
@@ -216,24 +285,32 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Rebuilds the context, freezes its union-find table (the root's compresses every path; a child's overlay stops
-        /// changing) and seals it; flattens a child's chain of union-find levels into one map for the children created
-        /// from now on (§5.4); gives each live child subtree a thread domain of its own, so children of a frozen context
-        /// may run concurrently (§8.3); and publishes the frozen flag last, which orders every structure a child reads
-        /// before the child's own reads. A second call does nothing. Freezing a context with live children is allowed:
-        /// they catch up once.
+        /// Rebuilds the context (the root also settles, <see cref="Settle"/>, §7.6), then freezes its database
+        /// (<see cref="Relations.Database.Freeze"/>): every table freezes (the root's union-find compresses every path, a
+        /// child's overlay stops changing, each sorted-writes table compacts where its gate allows and builds its rebuild
+        /// index), the indexes of <paramref name="warmup"/> are built, the index catalogs refresh serially from now on, and
+        /// staging into any table throws. Then it builds every view: a child folds every hidden set into its views' frozen
+        /// parts (<see cref="ContextTables.Freeze"/>), the root freezes its root views
+        /// (<see cref="LayeredSchema.FreezeRoot"/>). It flattens a child's chain of union-find levels into one map for the
+        /// children created from now on (§5.4); gives each live child subtree a thread domain of its own, so children of a
+        /// frozen context may run concurrently (§8.3); and publishes the frozen flag last, which orders every structure a
+        /// child reads before the child's own reads. A second call does nothing. Freezing a context with live children is
+        /// allowed: they catch up once, and get their own domains.
         /// </para>
         /// <para>
-        /// Interim (M9.2, §17): only the union-find is frozen. The storage half (sealing and compacting the row tables,
-        /// prebuilding their indexes and views, settling the root) arrives in M9.3-M9.4; meanwhile writes through the
-        /// context are refused once it is frozen.
+        /// An exception escaping a child's rebuild or freeze proper faults it (X12). A failure recorded and not taken
+        /// (§13 edge 22), before the call or by its own rebuild or settle, refuses the freeze without faulting: the
+        /// context stays consistent and unfrozen, and its caller may take the failure and freeze again. So does a
+        /// contradiction its rebuild found.
         /// </para>
         /// </remarks>
+        /// <param name="warmup">The cached indexes to build before the context is shared, or <c>null</c>.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted or contradicted;
-        /// unions are staged in it and were never notified for merging; the call comes from inside another operation of
-        /// the same thread domain; or the domain is held by another thread.</exception>
-        public void Freeze()
+        /// <exception cref="InvalidOperationException">The parent is not frozen; the context is faulted or contradicted
+        /// (or its rebuild stopped it); a failure was recorded and not taken, before the call or by its rebuild or
+        /// settle (§13 edge 22); writes are staged in it and were never notified for merging; the call comes from inside
+        /// another operation of the same thread domain; or the domain is held by another thread.</exception>
+        public void Freeze(FreezeWarmup? warmup = null)
         {
             if (frozen)
                 return;
@@ -254,14 +331,44 @@ namespace Eggnog.Relations
                 if (parent is { IsFrozen: false })
                     throw new InvalidOperationException("A context can be frozen only once its parent is.");
 
+                // §13 edge 22: a failure a write or a merge reported and nobody took would be shared with every
+                // descendant, which could never take it.
+                ThrowIfFailureNotTaken();
+
                 try
                 {
                     Rebuild();
-                    UnionFindTable.Freeze();
-                    if (parent is not null)
+                    if (parent is null)
                     {
+                        Settle();
+                        AssertRootSettled();
+                    }
+                }
+                catch when (IsRoot == false)
+                {
+                    Fault();
+                    throw;
+                }
+
+                // The same for a failure the rebuild or the settle just recorded (a merge conflict found by a copy, a
+                // fold or a rewrite): the bridge orders it so too (§10.8: rebuild, check the failure, freeze). A recorded
+                // failure is not an exception (§8.4): the context stays consistent and unfrozen, and is not faulted. A
+                // contradiction the rebuild found stops the context (§6.9), which is then not frozen either.
+                ThrowIfContradicted();
+                ThrowIfFailureNotTaken();
+
+                try
+                {
+                    database.Freeze(warmup);
+                    if (tables is { } t)
+                    {
+                        t.Freeze();
                         flattened = FlattenedUnionFind.Build(finder);
                         Volatile.Write(ref finderForChildren, LayeredUnionFind.Flattened(store.RootUnionFind.UnionFind, flattened));
+                    }
+                    else
+                    {
+                        store.Schema.FreezeRoot();
                     }
                 }
                 catch when (IsRoot == false)
@@ -277,6 +384,131 @@ namespace Eggnog.Relations
                         child.AssignDomain(new ThreadAffinityGuard());
 
                 frozen = true;
+            }
+        }
+
+        /// <summary>
+        /// Settles the root before it is shared (§7.6, X38, I35): rewrites, at an epoch of its own, the rows written since
+        /// each table last rebuilt that name a non-canonical id (a raw write may have left them stale), merges, and
+        /// rebuilds if the merge staged unions. Called by <see cref="CreateChild"/> and <see cref="Freeze"/> at the root,
+        /// after its rebuild; nothing elsewhere. Root programs that never create a child or freeze never settle, so their
+        /// timestamps are egglog's.
+        /// </summary>
+        /// <remarks>
+        /// Rows before a table's rebuild mark were canonical at the mark and are kept canonical by the journal-driven
+        /// rebuilds since; rows after it are exactly the rows a raw write could have left stale. A root whose tables hold no
+        /// row written since their last rebuild returns at once, without an epoch. Cost: O(tables) plus O(rows written since
+        /// the last rebuild) (<see cref="SortedWritesTable.SettleAppends"/>).
+        /// </remarks>
+        internal void Settle()
+        {
+            if (parent is not null || frozen)
+                return;
+
+            var uf = store.UnionFindTable;
+            var any = false;
+            foreach (var id in store.Schema.FunctionTables)
+            {
+                if (store.Schema[id]!.Root.HasRowsSinceRebuild(uf))
+                {
+                    any = true;
+                    break;
+                }
+            }
+
+            if (any == false)
+                return;
+
+            var epoch = BeginEpoch();
+            try
+            {
+                database.RunWithTakenOut(uf, store.Schema.FunctionTables, new SettleTableOperation(uf, store.RootUnionFind, epoch));
+                database.MergeAll(epoch);
+
+                // The merge appended the canonical rewrites; the marks move past them, so the next settle does not read
+                // them again. A union the merge staged reaches each table's next rebuild as its delta, which still
+                // finds every row naming its loser through the rebuild index.
+                foreach (var id in store.Schema.FunctionTables)
+                    store.Schema[id]!.Root.MarkRebuilt(uf);
+            }
+            finally
+            {
+                EndEpoch();
+            }
+
+            // The settle's merge may have staged unions (congruence among rewritten rows).
+            Rebuild();
+        }
+
+        /// <summary>
+        /// Called by a child after it rebuilt <paramref name="p"/>, its parent that is not frozen: refuses to catch up
+        /// with a parent a contradiction stopped (§6.9). Such a parent answers only <c>IsContradictory</c> and may have
+        /// stopped its merge with writes pending, so it is neither clean nor ever will be, and §5.6 and §7.1 catch up only
+        /// with a frozen or clean parent. A child that stops on contradictions stops too: the contradiction row is
+        /// visible in its parent, so in it (I25). Any other child is refused, without faulting; it can only be disposed.
+        /// </summary>
+        /// <param name="p">The parent, just rebuilt.</param>
+        /// <exception cref="InvalidOperationException">The parent is stopped and this context does not stop on
+        /// contradictions.</exception>
+        void StopIfParentStopped(Context p)
+        {
+            if (p.contradicted == false || contradicted)
+                return;
+
+            if (options.StopOnContradiction)
+            {
+                tables!.SetContradicted();
+                return;
+            }
+
+            throw new InvalidOperationException("The parent context was stopped by a contradiction and answers only IsContradictory, so this context cannot catch up with it; dispose it.");
+        }
+
+        /// <summary>
+        /// Runs the eq-container guard over the whole journal when the store gained an eq-sort container since the guard
+        /// last ran (§7.4, G-b; <see cref="EqContainerGuard"/>). A refusal faults the child (X12): its view names, through
+        /// the new container, an id it displaced, and only a container rebuild in the child could reconcile that.
+        /// </summary>
+        /// <exception cref="NotSupportedException">An eq-sort container holds one of the child's own displacements.</exception>
+        void CheckEqContainers()
+        {
+            try
+            {
+                EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
+            }
+            catch
+            {
+                Fault();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Brings the rebuild indexes of this context and of its ancestors that are not frozen up to date before a child is
+        /// created from it (§1 item 11): the child's step 4 and its lift reads probe them (§6.6, §6.10), and would
+        /// otherwise build an ancestor's whole index on their own path, O(ancestor rows), the first time. Frozen ancestors
+        /// built theirs at their freeze. Afterwards a child refreshes an ancestor's index only from the rows the ancestor
+        /// appended since, which its catch-up reads anyway.
+        /// </summary>
+        /// <remarks>
+        /// Cost, as child-creation work of the parent: O(tables of each context that is not frozen) plus, per shared table
+        /// with rebuild columns, the rows appended since its index's last refresh (all of its rows the first time, or after
+        /// a compaction between child lifetimes).
+        /// </remarks>
+        void RefreshRebuildIndexesForChildren()
+        {
+            for (var level = Depth; level >= 0 && ancestors[level].frozen == false; level--)
+            {
+                var context = ancestors[level];
+                if (context.tables is { } t)
+                {
+                    t.RefreshOwnRebuildIndexes();
+                    continue;
+                }
+
+                foreach (var id in store.Schema.FunctionTables)
+                    if (store.Schema[id] is { IsContextPrivate: false } s && s.RebuildColumns.Length > 0)
+                        s.Root.SharedRebuildIndex();
             }
         }
 
@@ -341,6 +573,16 @@ namespace Eggnog.Relations
                 lock (children)
                     return children.Count;
             }
+        }
+
+        /// <summary>
+        /// Throws when the context's database holds a failure that was recorded and not taken (§13 edge 22): freezing
+        /// would share it with every descendant, none of which could take it.
+        /// </summary>
+        void ThrowIfFailureNotTaken()
+        {
+            if (database.Failure is { } failure)
+                throw new InvalidOperationException($"The context recorded a failure that was not taken ({failure}); take it (Database.TakeFailure) before freezing.");
         }
 
         [DoesNotReturn]

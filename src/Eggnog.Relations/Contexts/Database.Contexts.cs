@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -40,10 +41,15 @@ namespace Eggnog.Relations
         long changeStamp;
 
         /// <summary>
-        /// A child's union-find table, which its catalog's resolver hands out for the union-find id even while a merge
-        /// has it taken out of the table map; <c>null</c> at the root and in a bare database.
+        /// A child's layering engine, which its catalog's resolver asks for the table a write is staged into; <c>null</c>
+        /// at the root and in a bare database.
         /// </summary>
-        Table? childUnionFind;
+        ContextTables? layers;
+
+        /// <summary>
+        /// Whether the database is frozen (§8.1). Written last by <see cref="Freeze"/>.
+        /// </summary>
+        volatile bool frozen;
 
         /// <summary>
         /// Initializes a child context's database (§3.4): its own catalog, notification list, table map and size
@@ -52,10 +58,11 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>, §5.5) at the store's
-        /// union-find id (and, from M9.3, the child's own layers as they are created). Writes are staged through the
-        /// catalog's resolver, which maps the union-find id to the child's union-find and, in this milestone (M9.2),
-        /// refuses every other table: a child has no layers until M9.3 (§17 interim). The root's container environments
-        /// are created here if they did not exist, so both share one instance.
+        /// union-find id, and the child's own layers as they are adopted (<see cref="AdoptLayer"/>). Writes are staged
+        /// through the catalog's resolver, which hands out the child's union-find for the union-find id and the child's
+        /// layer of any other table, created on first use (<see cref="ContextTables.ResolveForStaging"/>, §6.2, X37). The
+        /// context attaches its layering right after construction (<see cref="AttachLayers"/>). The root's container
+        /// environments are created here if they did not exist, so both share one instance.
         /// </remarks>
         /// <param name="root">The store's root database.</param>
         /// <param name="owner">The child context.</param>
@@ -73,9 +80,8 @@ namespace Eggnog.Relations
             this.parallelism = parallelism;
             this.owner = owner;
             idBlocks = ids;
-            childUnionFind = unionFind;
             clockRep = root.clockRep;
-            catalog = new TableCatalog { Resolver = ResolveForStagingInterim };
+            catalog = new TableCatalog { Resolver = ResolveForStaging };
             tables = new DenseIdMap<TableId, TableInfo>();
             tables.Insert(owner.Store.UnionFindTable, new TableInfo(Store.UnionFindName, unionFind, ParallelHeuristics.Serial));
             counters = root.counters;
@@ -103,10 +109,107 @@ namespace Eggnog.Relations
         internal int ClockCounterRep => clockRep;
 
         /// <summary>
-        /// Gets the change stamp (D16, X30): moved by merges that add or remove rows and by clears that empty a table;
-        /// no-ops and redundant unions leave it alone. <see cref="Context.Version"/> reads it.
+        /// Gets the change stamp (D16, X30): moved by merges that add or remove rows, by clears that empty a table, by
+        /// hides and by the contradiction stop; no-ops and redundant unions leave it alone. <see cref="Context.Version"/>
+        /// reads it.
         /// </summary>
         internal long ChangeStamp => Interlocked.Read(ref changeStamp);
+
+        /// <summary>
+        /// Gets a child's layering engine, or <c>null</c> at the root and in a bare database (§3.4).
+        /// </summary>
+        internal ContextTables? Layers => layers;
+
+        /// <summary>
+        /// Gets or sets the guard this database's retractions go through (§6.7): the root's
+        /// <see cref="LayeredSchema.RootGuard"/>, a child's <see cref="ContextTables.Guard"/>; <c>null</c> in a bare
+        /// database. <see cref="ClearTable"/> consults it; execution states and the buffers of <see cref="NewBuffer"/>
+        /// take <see cref="GuardForNewState"/>.
+        /// </summary>
+        internal RetractionGuard? RetractionGuard { get; set; }
+
+        /// <summary>
+        /// Gets whether the database is frozen (§8.1): its tables are sealed and its indexes refresh serially; merges,
+        /// rebuilds, clears, rule runs and new buffers throw.
+        /// </summary>
+        public bool IsFrozen => frozen;
+
+        /// <summary>
+        /// Gets the guard an execution state or a buffer of <see cref="NewBuffer"/> created now keeps (§6.7): none in a bare
+        /// database (one null test per staged removal there), otherwise <see cref="RetractionGuard"/>, which decides when a
+        /// removal is staged.
+        /// </summary>
+        /// <remarks>
+        /// The spec hands out none at a root without live descendants as well, reasoning that a child cannot be created
+        /// while a state of the root is in use. That holds for the states of a write batch or a rule run (structural calls
+        /// are refused re-entrantly, §8.3), but not for a state from <see cref="CreateExecutionState"/> or a buffer from
+        /// <see cref="NewBuffer"/>, which may outlive a <see cref="Context.CreateChild"/> and would then delete rows the new
+        /// child reads (I22). So a store's root always hands out its guard, whose checks start with one volatile read of
+        /// the root's gate and return at once while the root has no live descendants
+        /// (<see cref="RetractionGuard.CheckRemove"/>).
+        /// </remarks>
+        /// <returns>The guard, or <c>null</c>.</returns>
+        internal RetractionGuard? GuardForNewState() => owner is null ? null : RetractionGuard;
+
+        /// <summary>
+        /// Attaches a child's layering engine (§3.4), which the catalog's resolver and the merge epilogue use, and makes
+        /// its guard the database's. Once.
+        /// </summary>
+        /// <param name="tables">The child's layering.</param>
+        /// <exception cref="InvalidOperationException">This is not a child's database, or layers are attached already.</exception>
+        internal void AttachLayers(ContextTables tables)
+        {
+            ArgumentNullException.ThrowIfNull(tables);
+            if (IsChild == false || layers is not null)
+                throw new InvalidOperationException("Layers are attached once, to a child context's database.");
+
+            layers = tables;
+            RetractionGuard = tables.Guard;
+        }
+
+        /// <summary>
+        /// Puts a child's new layer into the table map (§6.2, X37), so its merges, rebuilds and index resets visit it. On
+        /// the domain thread, outside a search: at creation, or at the next merge round for a layer created during a
+        /// search (<see cref="ContextTables.AdoptDeferred"/>).
+        /// </summary>
+        /// <param name="layer">The layer.</param>
+        internal void AdoptLayer(TableLayer layer)
+        {
+            ArgumentNullException.ThrowIfNull(layer);
+            var had = tables.Insert(layer.Id, layer.Info);
+            Debug.Assert(had == false, "a layer was adopted twice");
+            layer.SetAdopted();
+        }
+
+        /// <summary>
+        /// Gets whether the child's layer of <paramref name="table"/> is adopted and taken out of the table map by a merge
+        /// in progress (§6.2): a write-phase read of it is a read of the stratum being merged (X2). Exact whenever the
+        /// write phase asks, since every layer is adopted before a merge round starts.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <returns><c>true</c> if the layer is taken out.</returns>
+        internal bool IsTakenOut(TableId table) => layers?.TryGetLayer(table) is { IsAdopted: true } && tables.ContainsKey(table) == false;
+
+        /// <summary>
+        /// Moves the change stamp for a change of a child's layering that no merge reports: a hide, the contradiction
+        /// stop (X30).
+        /// </summary>
+        internal void NoteLayerChange() => BumpChangeStamp();
+
+        /// <summary>
+        /// Clears a child's own layer for <see cref="ContextTables.ClearTable"/> (§6.7): its rows and staged writes,
+        /// its cached indexes, the size estimate, and the change stamp.
+        /// </summary>
+        /// <param name="info">The layer's entry.</param>
+        internal void ClearOwnLayer(TableInfo info)
+        {
+            ArgumentNullException.ThrowIfNull(info);
+            var previous = info.Table.Count;
+            info.Table.Clear();
+            info.ResetIndexes();
+            totalSizeEstimate -= previous;
+            BumpChangeStamp();
+        }
 
         /// <summary>
         /// Attaches a store's root database to its root context and designates the store's clock (§3.2).
@@ -189,21 +292,20 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// In a child these members read the context's view (§3.4, X39), which arrives with layered planning (M10.2).
-        /// Until then a table that has no layer in the child throws <see cref="KeyNotFoundException"/>
-        /// (<see cref="GetTableInfo"/>), and the union-find is refused: the child's entry for it is the child's own
-        /// union-find layer, not the union-find the child sees, and a rule in a child never reads the union-find as an
-        /// atom (X23, decision 10: only lookups reach it). Context = copy: a child never answers a query from a layer as
-        /// if it were its view.
+        /// Until then every table is refused there: the child's entry for a table is its own layer (and for the union-find
+        /// its own union-find layer), not what the child sees, and a rule in a child never reads the union-find as an atom
+        /// (X23, decision 10: only lookups reach it). Context = copy: a child never answers a query from a layer as if it
+        /// were its view. (<see cref="EstimateSize"/> reads the child's views already.)
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <returns>The entry.</returns>
-        /// <exception cref="KeyNotFoundException">No such table, or it is taken out, or (in a child) it has no layer.</exception>
-        /// <exception cref="NotSupportedException">This is a child context's database and <paramref name="table"/> is the
-        /// store's union-find.</exception>
+        /// <exception cref="KeyNotFoundException">No such table, or it is taken out.</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database: <paramref name="table"/> is the
+        /// store's union-find (X23), or a function table, which is answered through the child's view from M10.2.</exception>
         internal TableInfo GetQueryTableInfo(TableId table)
         {
-            if (IsChild && table == owner!.Store.UnionFindTable)
-                ThrowUnionFindQueriedInChild(table);
+            if (IsChild)
+                ThrowQueriedInChild(table);
 
             return GetTableInfo(table);
         }
@@ -240,20 +342,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The staging resolver of a child's catalog in M9.2 (§17 interim): the union-find id resolves to the child's
-        /// union-find table, which merges the unions into the child's overlay (§5.5); a child has no layers yet, so
-        /// staging into any other table is not supported. From M9.3 the resolver creates the child's layer of the table
-        /// (§6.2, X37).
+        /// The staging resolver of a child's catalog (§6.2): the child's union-find for the union-find id, otherwise the
+        /// child's layer of the table, created on first use (X37).
         /// </summary>
         /// <param name="table">The table staged into.</param>
-        /// <returns>The child's union-find table.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="table"/> is not the union-find.</exception>
-        Table ResolveForStagingInterim(TableId table)
+        /// <returns>The table writes are staged into.</returns>
+        /// <exception cref="InvalidOperationException">No layering is attached yet, or the layer cannot be created
+        /// (<see cref="ContextTables.GetOrCreateLayer"/>).</exception>
+        Table ResolveForStaging(TableId table)
         {
-            if (childUnionFind is { } unionFind && table == owner!.Store.UnionFindTable)
-                return unionFind;
+            if (layers is not { } l)
+                throw new InvalidOperationException("The child context's layers are not attached yet.");
 
-            throw new NotSupportedException("Layers arrive in M9.3.");
+            return l.ResolveForStaging(table);
         }
 
         [DoesNotReturn]
@@ -265,9 +366,12 @@ namespace Eggnog.Relations
 
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowUnionFindQueriedInChild(TableId table)
+        void ThrowQueriedInChild(TableId table)
         {
-            throw new NotSupportedException($"The union-find (table {table}) cannot be an atom of a query in a child context; a child reads it only through lookups (X23).");
+            if (table == owner!.Store.UnionFindTable)
+                throw new NotSupportedException($"The union-find (table {table}) cannot be an atom of a query in a child context; a child reads it only through lookups (X23).");
+
+            throw new NotSupportedException($"Table {table} is answered in a child context through the context's view; planning and header evaluation over views arrive in M10.2.");
         }
 
     }

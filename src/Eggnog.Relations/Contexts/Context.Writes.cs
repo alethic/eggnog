@@ -28,10 +28,12 @@ namespace Eggnog.Relations
         /// with, and the batch's own merge would then fail its order check or run against a stale parent.
         /// </para>
         /// <para>
-        /// Interim (M9.2, §17): in a child the state stages only into the union-find (its other tables have no layers
-        /// until M9.3, and staging into them throws <see cref="NotSupportedException"/>, which faults the child). The
-        /// DEBUG check of the root's sort cells and the canonicalizing, stamping merge of child rows arrive with the
-        /// layers (M9.3, X38).
+        /// In a child the rows merge into the child's layers (§6.6): each incoming row's id cells are canonicalized in the
+        /// child and its sort cell set to the batch's epoch before it is stored, so a write naming a stale id lands on the
+        /// canonical key and merges with the row visible there (X38). At the root rows are stored as given, and DEBUG
+        /// builds assert that every staged row of a registered table carries the batch's epoch
+        /// (<see cref="SortedWritesTable.AssertPendingSortCells"/>, I21). Every hidden set the merge touched is sealed
+        /// before the batch returns (X40).
         /// </para>
         /// </remarks>
         /// <typeparam name="TResult">The action's result type.</typeparam>
@@ -82,6 +84,9 @@ namespace Eggnog.Relations
 
                 state.Flush();
                 database.RecordFailure(state);
+                if (parent is null)
+                    AssertRootSortCells(epoch);
+
                 database.MergeAll(epoch);
                 return result;
             }
@@ -98,20 +103,87 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the context up to date before anything is staged in it (§6.6): rebuilds a parent that is not frozen,
-        /// then, in a child that is behind its parent's union-find, rebuilds the child, which catches up first. Nothing
-        /// at the root.
+        /// then, in a child that is behind its parent's union-find, some ancestor of which changed since it last caught
+        /// up (<see cref="ContextTables.NeedsCatchUp"/>), or whose eq-container guard has not seen every eq-sort container
+        /// (<see cref="IsEqGuardCurrent"/>, §7.4), rebuilds the child, which catches up first. The child's own pending
+        /// rebuild work (unions merged since its last rebuild) is left for <see cref="Rebuild"/>, as the spike leaves it.
+        /// Nothing at the root.
         /// </summary>
-        /// <remarks>Interim (M9.2): the row term (<c>Tables.NeedsCatchUp</c>) arrives with the layers (M9.3-M9.4).</remarks>
+        /// <exception cref="InvalidOperationException">The parent was stopped by a contradiction (§6.9): a child that
+        /// stops on contradictions is then stopped, any other is refused; neither is faulted.</exception>
         internal void PrepareForWrite()
         {
             if (parent is null)
                 return;
 
             if (parent.IsFrozen == false)
+            {
                 parent.Rebuild();
+                StopIfParentStopped(parent);
+                ThrowIfContradicted();
+            }
 
-            if (IsUnionFindCurrent == false)
+            if (IsUnionFindCurrent == false || tables!.NeedsCatchUp || IsEqGuardCurrent == false)
                 Rebuild();
+        }
+
+        /// <summary>
+        /// Removes every row of <paramref name="table"/> from this context's view (§6.7). At the root, egglog's
+        /// <c>clear_table</c> (<see cref="Relations.Database.ClearTable"/>); in a child, the child's layer is cleared and
+        /// every ancestor layer of a shared table disappears from its views (<see cref="ContextTables.ClearTable"/>).
+        /// </summary>
+        /// <remarks>
+        /// The retraction guard refuses the clear of a shared table while the context has live descendants, and in a child
+        /// whose parent is not frozen (decision 1, R1); a refusal changes nothing and does not fault the child. Runs inside
+        /// the context's domain, after catching up with the parent.
+        /// </remarks>
+        /// <param name="table">The table.</param>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; the clear is refused
+        /// (§6.7, decision 2); the domain is held by another thread; or the call comes from inside a write batch's action or
+        /// a <c>ScanMerges</c> visitor of the same domain.</exception>
+        public void ClearTable(TableId table)
+        {
+            ThrowIfNotWritable();
+            var current = Domain;
+            using var scope = current.Enter();
+            ThrowIfNotWritable();
+            ThrowIfInCallback(current, nameof(ClearTable));
+            if (tables is not { } t)
+            {
+                database.ClearTable(table);
+                return;
+            }
+
+            if (table == store.UnionFindTable)
+                throw new InvalidOperationException($"The union-find ({Store.UnionFindName}) of a child context cannot be cleared: its displacements are never retracted (decision 1).");
+
+            PrepareForWrite();
+
+            // The checks of ContextTables.ClearTable run before it changes anything; a failure after them faults (X12).
+            t.Guard.CheckClear(table);
+            t.GetOrCreateLayer(table);
+
+            try
+            {
+                t.ClearTable(table);
+            }
+            catch
+            {
+                Fault();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// DEBUG builds: asserts the root's raw-write contract on every registered table before a root batch merges
+        /// (X38, I21).
+        /// </summary>
+        [System.Diagnostics.Conditional("DEBUG")]
+        void AssertRootSortCells(uint epoch)
+        {
+            foreach (var id in store.Schema.FunctionTables)
+                store.Schema[id]!.Root.AssertPendingSortCells(epoch);
         }
 
     }

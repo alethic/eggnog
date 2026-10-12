@@ -19,15 +19,15 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Staging resolves tables through <see cref="GetForStaging"/>: the catalog's own table, or else what the
-    /// <see cref="Resolver"/> supplies. A child context's catalog has a resolver that supplies (and, from M9.3,
-    /// lazily creates) the context's layer of a table on its first write (colored-contexts spec §6.2, X37); a root or
-    /// bare catalog has none.
+    /// <see cref="Resolver"/> supplies. A child context's catalog has a resolver that supplies the context's union-find
+    /// and lazily creates the context's layer of a table on its first write, which it then publishes here
+    /// (<see cref="Publish"/>; colored-contexts spec §6.2, X37); a root or bare catalog has none.
     /// </para>
     /// <para>
     /// Reads (<see cref="this[TableId]"/>, <see cref="TryGetTable"/>, <see cref="GetForStaging"/>) are safe from many
-    /// threads while nobody adds or replaces a table, and read the table map with a volatile load, so a map a layered
-    /// catalog publishes whole is seen whole. <see cref="Add"/> and <see cref="Set"/> change the map in place and need
-    /// exclusive access.
+    /// threads while nobody adds or replaces a table, and read the table map with a volatile load, so a map
+    /// <see cref="Publish"/> replaces whole is seen whole, also by a rule task staging while another task creates a
+    /// layer. <see cref="Add"/> and <see cref="Set"/> change the map in place and need exclusive access.
     /// </para>
     /// </remarks>
     internal sealed class TableCatalog
@@ -82,6 +82,21 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(table);
             tables.Insert(id, table);
+        }
+
+        /// <summary>
+        /// Adds <paramref name="table"/> at <paramref name="id"/> copy-on-write (colored-contexts spec §6.2, X37): clones
+        /// the map, inserts, and publishes the clone with a volatile write, so readers on other threads see the old map or
+        /// the new one, never a torn one. The caller serializes publications (a child context's layer lock). O(tables).
+        /// </summary>
+        /// <param name="id">The table id.</param>
+        /// <param name="table">The table.</param>
+        internal void Publish(TableId id, Table table)
+        {
+            ArgumentNullException.ThrowIfNull(table);
+            var next = Volatile.Read(ref tables).Clone();
+            next.Insert(id, table);
+            Volatile.Write(ref tables, next);
         }
 
         /// <summary>

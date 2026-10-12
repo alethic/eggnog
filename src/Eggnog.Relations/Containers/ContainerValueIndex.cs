@@ -73,6 +73,23 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets whether some live container holds <paramref name="element"/> (the index is exact): the probe of the eq
+        /// guard of colored contexts (colored-contexts spec §7.4, G-b). One lock and one expected-O(1) probe.
+        /// </summary>
+        /// <param name="element">The value.</param>
+        /// <returns><c>true</c> if a container holds it.</returns>
+        public bool ContainsElement(uint element)
+        {
+            var hash = FxHasher.Hash(element);
+            var shard = shards[shardData.ShardOf(hash)];
+            lock (shard)
+            {
+                var match = new ValueIndexElementMatch(element);
+                return shard.Find(hash, ref match) >= 0;
+            }
+        }
+
+        /// <summary>
         /// Records one occurrence of <paramref name="element"/> in the container <paramref name="id"/>. egglog's
         /// <c>val_index.entry(val).or_default().insert(id)</c>.
         /// </summary>

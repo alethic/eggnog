@@ -1,10 +1,41 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
 
     internal sealed partial class ExecutionState
     {
+
+        /// <summary>
+        /// The layering of the child context whose database the state runs over, or <c>null</c> at a root, in a bare
+        /// database and over a bare catalog (colored-contexts spec §6.5). Set by the view constructor and copied by
+        /// clones.
+        /// </summary>
+        ContextTables? layers;
+
+        /// <summary>
+        /// The retraction guard of the state's database (§6.7), taken when the state was created and consulted when a
+        /// removal is staged; <c>null</c> in a bare database. Copied by clones.
+        /// </summary>
+        RetractionGuard? guard;
+
+        /// <summary>
+        /// Gets whether the state runs in a child context: committed tables are read through the context's views and
+        /// write-phase lookups, never as single tables (§6.5).
+        /// </summary>
+        public bool InChildContext => layers is not null;
+
+        /// <summary>
+        /// Gets the child context's layering, or <c>null</c>.
+        /// </summary>
+        internal ContextTables? Layers => layers;
+
+        /// <summary>
+        /// Gets the retraction guard the state's removals go through, or <c>null</c>.
+        /// </summary>
+        internal RetractionGuard? Guard => guard;
 
         /// <summary>
         /// Increments <paramref name="counter"/> on the store's shared counters, never redirected to a child context's id
@@ -15,6 +46,135 @@ namespace Eggnog.Relations
         /// <returns>The value before the increment.</returns>
         /// <exception cref="InvalidOperationException">The state is not attached to a database.</exception>
         public long IncrementSharedCounter(CounterId counter) => RequireView().IncrementSharedCounter(counter);
+
+        /// <summary>
+        /// Gets the number of rows of <paramref name="table"/> the state's context sees: the committed table's live row
+        /// count at a root, the view's exact visible count in a child (§6.5; the bridge's <c>TableAction.row_count</c>).
+        /// </summary>
+        /// <remarks>
+        /// The union-find has no view in a child (X23); its count there is the number of ids not canonical in the child's
+        /// view (<see cref="Context.DisplacedInViewCount"/>), one row per displaced id as at the root, so a child that
+        /// asserts nothing counts what its parent counts (context = copy).
+        /// </remarks>
+        /// <param name="table">The table.</param>
+        /// <returns>The row count.</returns>
+        public long VisibleRowCount(TableId table)
+        {
+            if (layers is not { } l)
+                return ReadRootTable(table).Count;
+
+            return table == l.Schema.UnionFind ? l.Owner.DisplacedInViewCount : ViewFor(l, table).VisibleCount;
+        }
+
+        /// <summary>
+        /// Gets the view a child reads <paramref name="table"/> through in the search phase: its cached view (§6.5). The
+        /// rule set's view snapshot, which a run reads first, arrives with layered rules (M10.2).
+        /// </summary>
+        static TableView ViewFor(ContextTables layers, TableId table) => layers.GetView(table);
+
+        /// <summary>
+        /// <c>Lookup</c> and the lookup half of <c>LookupOrInsertDefault</c> and <c>LookupWithFallback</c> in a child
+        /// (§6.5): through the context's view of the table, or, for the union-find, through the child's union-find table
+        /// (its <see cref="TableKind.OverlayDisplaced"/> arm).
+        /// </summary>
+        static void LayeredLookupRow(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, Variable output)
+        {
+            if (table == layers.Schema.UnionFind)
+                VectorizedLookup.LookupRow(layers.Owner.UnionFindTable, ref mask, bindings, args, column, output);
+            else
+                VectorizedLookup.LookupRow(ViewFor(layers, table), ref mask, bindings, args, column, output);
+        }
+
+        /// <summary>
+        /// <c>LookupWithDefault</c> in a child (§6.5); see <see cref="LayeredLookupRow"/>.
+        /// </summary>
+        static void LayeredLookupWithDefault(ContextTables layers, TableId table, ref Mask mask, Bindings bindings, ReadOnlySpan<QueryEntry> args, ColumnId column, QueryEntry @default, Variable output)
+        {
+            if (table == layers.Schema.UnionFind)
+                VectorizedLookup.LookupWithDefault(layers.Owner.UnionFindTable, ref mask, bindings, args, column, @default, output);
+            else
+                VectorizedLookup.LookupWithDefault(ViewFor(layers, table), ref mask, bindings, args, column, @default, output);
+        }
+
+        /// <summary>
+        /// <see cref="PredictRow(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, Span{uint})"/> in a child (§6.5): the
+        /// committed row is the one the context sees, found by the write-phase lookup, and the row's shape comes from the
+        /// store's schema.
+        /// </summary>
+        void PredictRowLayered(ContextTables layers, TableId table, ReadOnlySpan<uint> key, ReadOnlySpan<MergeVal> values, Span<uint> row)
+        {
+            var spec = layers.Schema.GetSpec(table);
+            if (row.Length < spec.Arity)
+                throw new ArgumentException($"The destination needs room for {spec.Arity} cells.", nameof(row));
+
+            if (TryGetVisibleRow(layers, table, key, row))
+                return;
+
+            var p = Predicted;
+            var probe = p.GetProbeBuffer(key.Length);
+            key.CopyTo(probe);
+            var offset = PredictCore(p, spec.KeyCount, spec.Arity, table, probe, 0, key.Length, values);
+            p.Cells.AsSpan(offset, spec.Arity).CopyTo(row);
+        }
+
+        /// <summary>
+        /// <see cref="PredictColumn(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, ColumnId)"/> in a child (§6.5).
+        /// </summary>
+        uint PredictColumnLayered(ContextTables layers, TableId table, ReadOnlySpan<uint> key, ReadOnlySpan<MergeVal> values, ColumnId column)
+        {
+            var spec = layers.Schema.GetSpec(table);
+            if (TryGetVisibleColumn(layers, table, key, column, out var visible))
+                return visible;
+
+            var p = Predicted;
+            var probe = p.GetProbeBuffer(key.Length);
+            key.CopyTo(probe);
+            return PredictedColumn(p, spec.KeyCount, spec.Arity, table, probe, 0, key.Length, values, column);
+        }
+
+        /// <summary>
+        /// The array form of <see cref="PredictColumn(TableId, uint[], int, int, MergeVal[], ColumnId)"/> in a child (§6.5).
+        /// </summary>
+        uint PredictColumnLayered(ContextTables layers, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
+        {
+            var spec = layers.Schema.GetSpec(table);
+            if (TryGetVisibleColumn(layers, table, new ReadOnlySpan<uint>(key, keyOffset, keyLength), column, out var visible))
+                return visible;
+
+            return PredictedColumn(Predicted, spec.KeyCount, spec.Arity, table, key, keyOffset, keyLength, values, column);
+        }
+
+        /// <summary>
+        /// The write-phase row lookup of <see cref="PredictRow(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, Span{uint})"/>
+        /// in a child (§6.5): <see cref="ContextTables.TryGetVisibleRow"/>, or the child's union-find table's view-level
+        /// lookup for the union-find.
+        /// </summary>
+        static bool TryGetVisibleRow(ContextTables layers, TableId table, ReadOnlySpan<uint> key, Span<uint> row)
+        {
+            if (table == layers.Schema.UnionFind)
+                return layers.Owner.UnionFindTable.TryGetRow(key, row, out _);
+
+            return layers.TryGetVisibleRow(table, key, row);
+        }
+
+        /// <summary>
+        /// The write-phase column lookup of <see cref="PredictColumn(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, ColumnId)"/>
+        /// in a child (§6.5).
+        /// </summary>
+        static bool TryGetVisibleColumn(ContextTables layers, TableId table, ReadOnlySpan<uint> key, ColumnId column, out uint value)
+        {
+            if (table == layers.Schema.UnionFind)
+                return layers.Owner.UnionFindTable.TryGetRowColumn(key, column, out value);
+
+            return layers.TryGetVisibleColumn(table, key, column, out value);
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static Table ThrowLayeredRead(TableId table)
+        {
+            throw new InvalidOperationException($"Table {table} is layered in a child context and is read through the context's views, not as one table (colored-contexts spec §6.5).");
+        }
 
     }
 

@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Eggnog.Relations
@@ -48,6 +49,16 @@ namespace Eggnog.Relations
         int[] bySlot;
 
         /// <summary>
+        /// Whether a registered type holds e-class ids (<see cref="ContainerEnvBase.HoldsIds"/>).
+        /// </summary>
+        volatile bool hasEqContainers;
+
+        /// <summary>
+        /// The eq-container version (<see cref="EqVersion"/>), shared with every environment that holds e-class ids.
+        /// </summary>
+        readonly StrongBox<long> eqVersion = new();
+
+        /// <summary>
         /// Initializes an instance with no container types. egglog's <c>ContainerValues::new</c>.
         /// </summary>
         /// <param name="parallelism">When rebuilds go parallel; <see cref="ParallelHeuristics.Default"/> if
@@ -68,10 +79,18 @@ namespace Eggnog.Relations
             parallelism = source.parallelism;
             subsetTracker = source.subsetTracker.Clone();
             envs = new DenseIdMap<ContainerTypeId, ContainerEnvBase>(source.envs.IdCount);
+            eqVersion.Value = source.EqVersion;
             foreach (var (id, env) in source.envs)
-                envs.Insert(id, env.Clone());
+            {
+                var copy = env.Clone();
+                if (copy.HoldsIds)
+                    copy.EqVersionCounter = eqVersion;
+
+                envs.Insert(id, copy);
+            }
 
             bySlot = (int[])source.bySlot.Clone();
+            hasEqContainers = source.hasEqContainers;
         }
 
         /// <summary>
@@ -85,6 +104,41 @@ namespace Eggnog.Relations
         public int TypeCount => envs.IdCount;
 
         /// <summary>
+        /// Gets whether any registered container type holds e-class ids (colored-contexts spec §7.4, §10.7): the quick
+        /// test of the eq guard, which a child's rebuild runs only when it holds. One volatile read.
+        /// </summary>
+        public bool HasEqContainers => hasEqContainers;
+
+        /// <summary>
+        /// Gets the eq-container version (colored-contexts spec §7.4, G-b): it moves each time an environment that holds
+        /// e-class ids gains a container whose content it did not hold before (a new intern at the root, or a content a
+        /// root container rebuild produced). A child context records the version its eq-container guard last checked its
+        /// own displacements against, and is not clean while the version has moved since (<see cref="Context.IsClean"/>):
+        /// a new content may name an id the child displaced, which only a container rebuild in the child could
+        /// reconcile, and children never rebuild containers. One volatile read.
+        /// </summary>
+        public long EqVersion => Volatile.Read(ref eqVersion.Value);
+
+        /// <summary>
+        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/> (colored-contexts spec
+        /// §7.4, G-b): a child that displaced such an id would need the container rebuilt in the child, which is not
+        /// supported yet (decision 9). O(types) probes of exact element indexes; thread-safe.
+        /// </summary>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if an eq-sort container holds it.</returns>
+        public bool AnyEqContainerMentions(uint id)
+        {
+            if (hasEqContainers == false)
+                return false;
+
+            foreach (var (_, env) in envs)
+                if (env.HoldsIds && env.AnyContainerMentions(id))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
         /// Registers the container type <typeparamref name="TContainer"/>, whose fresh ids come from
         /// <paramref name="idCounter"/> and whose colliding ids <paramref name="merge"/> resolves, and returns its id.
         /// egglog's <c>register_type</c> (mod.rs:242-256). Registering a type again returns its id and keeps its
@@ -94,8 +148,11 @@ namespace Eggnog.Relations
         /// <param name="idCounter">The counter fresh container ids come from (the bridge's e-class id counter).</param>
         /// <param name="merge">Resolves the ids of containers that become equal (the bridge's
         /// <see cref="UnionContainerMerge"/>).</param>
+        /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers, the default); containers
+        /// over base values pass <c>false</c> and may then be interned in child contexts (colored-contexts spec §10.7,
+        /// <see cref="ContainerEnvBase.HoldsIds"/>).</param>
         /// <returns>The type's id.</returns>
-        public ContainerTypeId RegisterType<TContainer>(CounterId idCounter, ContainerMergeFunction merge)
+        public ContainerTypeId RegisterType<TContainer>(CounterId idCounter, ContainerMergeFunction merge, bool holdsIds = true)
             where TContainer : struct, IContainerValue<TContainer>
         {
             ArgumentNullException.ThrowIfNull(merge);
@@ -104,7 +161,13 @@ namespace Eggnog.Relations
                 return existing;
 
             var id = envs.NextId;
-            var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism);
+            var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism, holdsIds);
+            if (holdsIds)
+            {
+                env.EqVersionCounter = eqVersion;
+                hasEqContainers = true;
+            }
+
             var slot = ContainerTypeSlot<TContainer>.Index;
             if (slot >= bySlot.Length)
                 Array.Resize(ref bySlot, Math.Max(slot + 1, bySlot.Length * 2));

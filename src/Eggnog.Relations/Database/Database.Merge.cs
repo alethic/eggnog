@@ -73,22 +73,32 @@ namespace Eggnog.Relations
         /// carries; <c>null</c> for the store clock's current value, or zero for a database without a store (writes made
         /// outside any run, loading data).</param>
         /// <returns><c>true</c> if any merge added rows or staged writes.</returns>
+        /// <exception cref="InvalidOperationException">The database is frozen.</exception>
         public bool MergeAll(uint? timestamp = null)
         {
+            ThrowIfFrozen();
             return MergeAllCore(ResolveTimestamp(timestamp));
         }
 
         /// <summary>
         /// <see cref="MergeAll"/> with the timestamp resolved.
         /// </summary>
+        /// <remarks>
+        /// In a child context's database (colored-contexts spec X2, X40, §6.9): strata always merge serially (a layer's
+        /// merge creates layers and hides rows on the domain thread); every round starts by adopting the layers created
+        /// during a search (<see cref="TakeRound"/>); the loop stops before a round once a contradiction stopped the
+        /// context, leaving the remaining writes pending; and the epilogue seals every hidden set the merge touched and
+        /// drops the views whose structure changed (<see cref="ContextTables.AfterMerge"/>). At the root each costs one
+        /// null test.
+        /// </remarks>
         bool MergeAllCore(uint timestamp)
         {
             var everChanged = false;
-            var parallel = parallelism.ParallelizeDbLevelOp(totalSizeEstimate);
+            var parallel = layers is null && parallelism.ParallelizeDbLevelOp(totalSizeEstimate);
             var count = 0;
             try
             {
-                while ((count = TakeRound()) > 0)
+                while (layers?.Owner.IsContradicted != true && (count = TakeRound()) > 0)
                 {
                     everChanged |= MergeRound(count, parallel, timestamp);
                     count = 0;
@@ -106,6 +116,7 @@ namespace Eggnog.Relations
             finally
             {
                 ResetIndexesAndEstimateSize();
+                layers?.AfterMerge();
             }
 
             return everChanged;
@@ -132,9 +143,12 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The epoch captured for the run or pass being merged, which the merge state carries
         /// (see <see cref="MergeAll"/>); <c>null</c> for the store clock's current value, or zero without a store.</param>
         /// <returns><c>true</c> if the merge added rows.</returns>
+        /// <exception cref="InvalidOperationException">The database is frozen.</exception>
         public bool MergeTable(TableId table, uint? timestamp = null)
         {
+            ThrowIfFrozen();
             var resolved = ResolveTimestamp(timestamp);
+            layers?.AdoptDeferred();
             var info = TakeOut(table);
             var before = info.Table.Count;
             try
@@ -153,6 +167,7 @@ namespace Eggnog.Relations
                 totalSizeEstimate += info.Table.Count - before;
                 info.ResetIndexes();
                 PutBack(table, info);
+                layers?.AfterMerge();
             }
         }
 
@@ -162,6 +177,8 @@ namespace Eggnog.Relations
         /// <returns>The number of tables.</returns>
         int TakeRound()
         {
+            // Layers created during a search enter the table map before the round takes its tables (X37).
+            layers?.AdoptDeferred();
             notified.Clear();
             var count = catalog.Notifications.Reset(notified);
             if (count == 0)

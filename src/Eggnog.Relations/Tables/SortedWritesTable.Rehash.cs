@@ -14,11 +14,49 @@ namespace Eggnog.Relations
         /// (core-relations/src/table/mod.rs:1036-1046). Sorted tables above
         /// <see cref="ParallelHeuristics.TableOpThreshold"/> rows compact in parallel.
         /// </summary>
+        /// <remarks>
+        /// Compaction gate (colored-contexts spec §6.8, C12, X27): a table whose <see cref="CompactionGate"/> has live
+        /// descendants does not compact (<see cref="CompactionsBlocked"/> counts the skips), because compaction renumbers
+        /// rows and descendants hold cursors and hidden sets over the row ids. The gate is read only when the table would
+        /// compact, so a table that does not compact pays nothing for it.
+        /// </remarks>
         void MaybeRehash()
         {
             if (staleRows <= Math.Max(16, data.Count / 2))
                 return;
 
+            if (compactionGate is { } gate && gate.HasLiveDescendants)
+            {
+                compactionsBlocked++;
+                return;
+            }
+
+            CompactNow();
+        }
+
+        /// <summary>
+        /// Compacts the table whenever it holds a tombstone and its gate allows (§6.8): what freezing does, so frozen
+        /// tables are read without tombstones where possible.
+        /// </summary>
+        internal void ForceRehash()
+        {
+            if (staleRows == 0)
+                return;
+
+            if (compactionGate is { } gate && gate.HasLiveDescendants)
+            {
+                compactionsBlocked++;
+                return;
+            }
+
+            CompactNow();
+        }
+
+        /// <summary>
+        /// Compacts the table, in parallel above <see cref="ParallelHeuristics.TableOpThreshold"/> rows.
+        /// </summary>
+        void CompactNow()
+        {
             if (parallelism.ParallelizeTableOp(data.Count))
                 ParallelRehash();
             else

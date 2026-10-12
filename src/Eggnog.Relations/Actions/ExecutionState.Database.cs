@@ -25,6 +25,11 @@ namespace Eggnog.Relations
         /// <c>ExecutionState::new(db.read_only_view(), ..)</c>. Writes stage through the database's catalog and notify
         /// its notification list; counters and external functions come from the view.
         /// </summary>
+        /// <remarks>
+        /// In a store (colored-contexts spec §6.5, §6.7) the state also takes the child context's layering, through which
+        /// it reads committed tables, and the database's retraction guard (<see cref="Database.GuardForNewState"/>), which
+        /// its removals go through.
+        /// </remarks>
         /// <param name="view">The database view.</param>
         /// <param name="timestamp">The timestamp of the batch this state executes.</param>
         public ExecutionState(DatabaseView view, uint timestamp = 0)
@@ -32,6 +37,8 @@ namespace Eggnog.Relations
         {
             this.view = view;
             viewResolved = true;
+            layers = view.Owner.Layers;
+            guard = view.Owner.GuardForNewState();
         }
 
         /// <summary>
@@ -39,8 +46,8 @@ namespace Eggnog.Relations
         /// <see cref="TableCatalog"/>. Clones share their parent's view. egglog's <c>db</c> field.
         /// </summary>
         /// <remarks>
-        /// The clone constructor (Tables/ExecutionState.cs) does not copy the view, so a clone looks it up from its
-        /// catalog once (<see cref="DatabaseView.TryGetForCatalog"/>) and caches it.
+        /// The clone constructor (Tables/ExecutionState.cs) copies the view; a state over a bare catalog looks it up from
+        /// its catalog once (<see cref="DatabaseView.TryGetForCatalog"/>) and caches it.
         /// </remarks>
         public DatabaseView? View
         {
@@ -125,9 +132,10 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
-        /// <exception cref="InvalidOperationException">The state is not attached to a database.</exception>
+        /// <exception cref="InvalidOperationException">The state is not attached to a database, or it runs in a child
+        /// context, whose tables are layered (colored-contexts spec §6.5).</exception>
         /// <exception cref="KeyNotFoundException">No such table, or it is taken out.</exception>
-        public Table GetTable(TableId table) => RequireView().GetTable(table);
+        public Table GetTable(TableId table) => layers is null ? RequireView().GetTable(table) : ThrowLayeredRead(table);
 
         /// <summary>
         /// Gets the human-readable name of <paramref name="table"/>. egglog's <c>table_name</c>.

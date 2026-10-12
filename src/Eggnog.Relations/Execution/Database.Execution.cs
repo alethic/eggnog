@@ -70,6 +70,7 @@ namespace Eggnog.Relations
         public RuleSetReport RunRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
+            ThrowIfFrozen();
             if (IsChild)
                 throw new NotSupportedException("Rules in a child context arrive in M10.2.");
 

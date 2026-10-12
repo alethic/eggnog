@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Eggnog.Relations
@@ -42,6 +43,7 @@ namespace Eggnog.Relations
         public bool ApplyRebuild(TableId rebuilder, ReadOnlySpan<TableId> tablesToRebuild, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(ApplyRebuild));
+            ThrowIfFrozen();
             var operation = new RebuildTableOperation(rebuilder, GetTable(rebuilder), nextTimestamp);
             RunWithTakenOut(rebuilder, tablesToRebuild, operation);
             return MergeAllCore(nextTimestamp);
@@ -65,6 +67,7 @@ namespace Eggnog.Relations
         public bool RefreshRowsForValues(ReadOnlySpan<TableId> tablesToRefresh, ReadOnlySpan<uint> dirtyIds, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(RefreshRowsForValues));
+            ThrowIfFrozen();
             if (dirtyIds.IsEmpty)
                 return false;
 
@@ -84,7 +87,8 @@ namespace Eggnog.Relations
         /// <param name="excluded">The table to take out, which <paramref name="ids"/> must not list.</param>
         /// <param name="ids">The tables to run on; distinct.</param>
         /// <param name="operation">The operation.</param>
-        internal void RunWithTakenOut<TOperation>(TableId excluded, ReadOnlySpan<TableId> ids, TOperation operation)
+        /// <returns>Whether the operation reported any table changed (each such table is notified).</returns>
+        internal bool RunWithTakenOut<TOperation>(TableId excluded, ReadOnlySpan<TableId> ids, TOperation operation)
             where TOperation : struct, ITableOperation
         {
             GetTableInfo(excluded);
@@ -93,7 +97,7 @@ namespace Eggnog.Relations
             var info = TakeOut(excluded);
             try
             {
-                RunOnTablesCore(ids, operation);
+                return RunOnTablesCore(ids, operation);
             }
             finally
             {
@@ -110,25 +114,25 @@ namespace Eggnog.Relations
         /// <typeparam name="TOperation">The operation; a struct, so the loop is specialized for it.</typeparam>
         /// <param name="ids">The tables; existing and distinct.</param>
         /// <param name="operation">The operation.</param>
-        internal void RunOnTables<TOperation>(ReadOnlySpan<TableId> ids, TOperation operation)
+        /// <returns>Whether the operation reported any table changed (each such table is notified).</returns>
+        internal bool RunOnTables<TOperation>(ReadOnlySpan<TableId> ids, TOperation operation)
             where TOperation : struct, ITableOperation
         {
             CheckTableList(ids, null, nameof(ids));
-            RunOnTablesCore(ids, operation);
+            return RunOnTablesCore(ids, operation);
         }
 
         /// <summary>
         /// <see cref="RunOnTables{TOperation}"/> on a validated list.
         /// </summary>
-        void RunOnTablesCore<TOperation>(ReadOnlySpan<TableId> ids, TOperation operation)
+        /// <returns>Whether the operation reported any table changed.</returns>
+        bool RunOnTablesCore<TOperation>(ReadOnlySpan<TableId> ids, TOperation operation)
             where TOperation : struct, ITableOperation
         {
             if (ids.Length > 1 && parallelism.ParallelizeDbLevelOp(totalSizeEstimate))
-            {
-                RunOnTablesParallel(ids.ToArray(), operation);
-                return;
-            }
+                return RunOnTablesParallel(ids.ToArray(), operation);
 
+            var any = false;
             foreach (var id in ids)
             {
                 var info = TakeOut(id);
@@ -143,18 +147,24 @@ namespace Eggnog.Relations
                 }
 
                 if (changed)
+                {
                     catalog.Notifications.Notify(id);
+                    any = true;
+                }
             }
+
+            return any;
         }
 
         /// <summary>
         /// The parallel arm of <see cref="RunOnTablesCore{TOperation}"/>. An exception one operation throws propagates
         /// as itself rather than wrapped in an <see cref="AggregateException"/>, as on the serial arm.
         /// </summary>
-        void RunOnTablesParallel<TOperation>(TableId[] ids, TOperation operation)
+        bool RunOnTablesParallel<TOperation>(TableId[] ids, TOperation operation)
             where TOperation : struct, ITableOperation
         {
             var infos = new TableInfo?[ids.Length];
+            var any = 0;
             try
             {
                 for (var i = 0; i < ids.Length; i++)
@@ -163,8 +173,13 @@ namespace Eggnog.Relations
                 Parallel.For(0, ids.Length, parallelism.Options, i =>
                 {
                     if (operation.Run(ids[i], infos[i]!, view))
+                    {
                         catalog.Notifications.Notify(ids[i]);
+                        Interlocked.Exchange(ref any, 1);
+                    }
                 });
+
+                return any != 0;
             }
             catch (AggregateException e)
             {

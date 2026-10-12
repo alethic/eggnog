@@ -44,6 +44,11 @@ namespace Eggnog.Relations
         IndexCatalogEntry<TIndex>[] entries;
 
         /// <summary>
+        /// Whether refreshes run serially (<see cref="SetSerialRefresh"/>).
+        /// </summary>
+        volatile bool serialRefresh;
+
+        /// <summary>
         /// Initializes an empty catalog whose indexes use <paramref name="parallelism"/>. egglog's
         /// <c>IndexCatalog::new</c>.
         /// </summary>
@@ -107,7 +112,9 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(table);
 
             var cell = GetOrInsert(key);
-            var index = cell.GetOrUpdate(table, static (ref Index<TIndex> value, Table t) => value.Refresh(t));
+            var index = serialRefresh
+                ? cell.GetOrUpdate(table, static (ref Index<TIndex> value, Table t) => value.Refresh(t, false))
+                : cell.GetOrUpdate(table, static (ref Index<TIndex> value, Table t) => value.Refresh(t));
             Debug.Assert(index.NeedsRefresh(table) == false, "a refreshed index lags its table");
             return index;
         }
@@ -123,6 +130,18 @@ namespace Eggnog.Relations
         {
             return GetOrRefresh(table, new ReadOnlySpan<ColumnId>(in column));
         }
+
+        /// <summary>
+        /// Gets whether refreshes run serially: the catalog belongs to a frozen context (colored-contexts spec X14).
+        /// </summary>
+        public bool IsSerialRefresh => serialRefresh;
+
+        /// <summary>
+        /// Makes every later refresh run serially (colored-contexts spec §8.1, X14): the table's context is frozen, so
+        /// its indexes may be built lazily by concurrent descendants, each on its own thread, and a build never waits on
+        /// parallel work its waiter would have to run (map §5.5). Irreversible.
+        /// </summary>
+        public void SetSerialRefresh() => serialRefresh = true;
 
         /// <summary>
         /// Re-arms every index so that its next use refreshes it: egglog's <c>update(|_, ti| ti.reset())</c> at the end of

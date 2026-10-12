@@ -30,6 +30,13 @@ namespace Eggnog.Relations
     /// panics. Not thread-safe: each thread stages into its own handle (<see cref="FreshHandle"/>); any number of
     /// handles may flush concurrently.
     /// </para>
+    /// <para>
+    /// Colored contexts (colored-contexts spec §6.7, I22): a buffer handed out by <see cref="Database.NewBuffer"/> in a
+    /// store carries its database's retraction guard (<see cref="AttachRetractionGuard"/>), so a removal staged through it
+    /// is a retraction the guard may refuse, as through an execution state. Buffers of rebuilds and refreshes come from
+    /// <see cref="Table.NewBuffer"/> and carry none. A guarded buffer takes the same branch out of the fast path as a
+    /// table without deletion, so an unguarded removal pays nothing for it.
+    /// </para>
     /// </remarks>
     internal sealed class MutationBuffer
     {
@@ -42,6 +49,22 @@ namespace Eggnog.Relations
         readonly RowBuffer?[] rows;
         readonly ArbitraryRowBuffer?[] removals;
         bool dirty;
+
+        /// <summary>
+        /// Whether <see cref="StageRemove(ReadOnlySpan{uint})"/> may skip every check: the table allows deletion and no
+        /// retraction guard is attached. The one test of the fast path.
+        /// </summary>
+        bool removesUnchecked;
+
+        /// <summary>
+        /// The retraction guard removals pass, or <c>null</c> (§6.7).
+        /// </summary>
+        RetractionGuard? guard;
+
+        /// <summary>
+        /// The table <see cref="guard"/> is asked about.
+        /// </summary>
+        TableId guardedTable;
 
         /// <summary>
         /// Initializes an empty buffer that publishes into <paramref name="state"/>.
@@ -64,6 +87,7 @@ namespace Eggnog.Relations
             shardData = state.ShardData;
             rows = new RowBuffer?[state.ShardCount];
             removals = new ArbitraryRowBuffer?[state.ShardCount];
+            removesUnchecked = allowsDelete;
         }
 
         /// <summary>
@@ -117,12 +141,13 @@ namespace Eggnog.Relations
         /// Removals of a merge apply before its inserts. egglog's <c>stage_remove</c>.
         /// </summary>
         /// <param name="key">The key; exactly <see cref="KeyCount"/> cells, copied.</param>
-        /// <exception cref="InvalidOperationException">The table does not allow deletion.</exception>
+        /// <exception cref="InvalidOperationException">The table does not allow deletion, or the attached retraction
+        /// guard refuses the removal (colored-contexts spec §6.7).</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void StageRemove(ReadOnlySpan<uint> key)
         {
-            if (allowsDelete == false)
-                ThrowNoDelete();
+            if (removesUnchecked == false)
+                CheckRemove();
 
             if (key.Length != keyCount)
                 ThrowLength(key.Length, keyCount, nameof(key));
@@ -153,7 +178,41 @@ namespace Eggnog.Relations
         /// <returns>The new buffer.</returns>
         public MutationBuffer FreshHandle()
         {
-            return new MutationBuffer(state, arity, keyCount, allowsDelete);
+            var handle = new MutationBuffer(state, arity, keyCount, allowsDelete);
+            if (guard is { } g)
+                handle.AttachRetractionGuard(g, guardedTable);
+
+            return handle;
+        }
+
+        /// <summary>
+        /// Makes every removal staged through this buffer (and its fresh handles) pass <paramref name="retractionGuard"/>'s
+        /// <see cref="RetractionGuard.CheckRemove"/> for <paramref name="table"/> when it is staged (colored-contexts spec
+        /// §6.7): <see cref="Database.NewBuffer"/> attaches its database's guard, so a raw buffer is no way around decision 1
+        /// or R1. Before the buffer is used.
+        /// </summary>
+        /// <param name="retractionGuard">The guard.</param>
+        /// <param name="table">The table the buffer stages into.</param>
+        internal void AttachRetractionGuard(RetractionGuard retractionGuard, TableId table)
+        {
+            ArgumentNullException.ThrowIfNull(retractionGuard);
+            guard = retractionGuard;
+            guardedTable = table;
+            removesUnchecked = false;
+        }
+
+        /// <summary>
+        /// The checks a removal skips on the fast path: the table must allow deletion, and the attached guard must allow
+        /// the retraction.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The table does not allow deletion, or the guard refuses.</exception>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void CheckRemove()
+        {
+            if (allowsDelete == false)
+                ThrowNoDelete();
+
+            guard?.CheckRemove(guardedTable);
         }
 
         /// <summary>

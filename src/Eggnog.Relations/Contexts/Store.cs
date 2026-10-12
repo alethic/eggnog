@@ -92,6 +92,12 @@ namespace Eggnog.Relations
         public CounterId ClockCounter { get; }
 
         /// <summary>
+        /// Gets the log of containers the root rebuilt in place while it had live descendants, from which children
+        /// re-stamp their own rows (§7.4, X31).
+        /// </summary>
+        public ContainerDirtyLog ContainerDirtyLog { get; } = new();
+
+        /// <summary>
         /// Gets the counters every context shares.
         /// </summary>
         internal CounterSet Counters { get; }
@@ -147,15 +153,41 @@ namespace Eggnog.Relations
 
             lock (definitionLock)
             {
+                // A root that is not frozen cannot freeze while this thread holds its domain, so the flag read once the
+                // domain is held is stable. A freeze can complete on another thread between the first read and the enter
+                // (it holds the domain until its frozen flag is written), so the flag is read again inside: a root found
+                // frozen there takes the frozen path, without its domain.
                 var root = Root;
-                using var scope = root.IsFrozen ? default : root.Domain.Enter();
-                var id = root.Database.AddTableCore(table, readDependencies, writeDependencies, name);
-                Schema.Register(id, contextPrivate);
+                var frozenRoot = root.IsFrozen;
+                var scope = frozenRoot ? default : root.Domain.Enter();
+                try
+                {
+                    if (frozenRoot == false && root.IsFrozen)
+                    {
+                        scope.Dispose();
+                        scope = default;
+                        frozenRoot = true;
+                    }
 
-                // M9.3: a table added to a frozen root is frozen at once (Table.Freeze, TableInfo.FreezeIndexes) and its
-                // root view published (§4.3 step 4). Until then a frozen root freezes only its union-find (M9.2 interim),
-                // so the new table is left as it is: a context's writes to it are refused while the context is frozen.
-                return id;
+                    var id = root.Database.AddTableCore(table, readDependencies, writeDependencies, name);
+                    Schema.Register(id, contextPrivate);
+
+                    // §4.3 step 4 (X43): a table added to a frozen root is frozen at once, empty, and its frozen root
+                    // view is published; frozen children answer for it through their parents.
+                    if (frozenRoot)
+                    {
+                        var info = root.Database.GetTableInfo(id);
+                        info.Table.Freeze();
+                        info.FreezeIndexes();
+                        Schema.PublishFrozenRootView(id);
+                    }
+
+                    return id;
+                }
+                finally
+                {
+                    scope.Dispose();
+                }
             }
         }
 
