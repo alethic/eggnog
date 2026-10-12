@@ -52,9 +52,9 @@ namespace Eggnog.Relations
     /// Colored contexts (Contexts/Database.Contexts.cs, colored-contexts spec §3.4): a <see cref="Store"/>'s root
     /// database is this egglog database, attached to the root <see cref="Context"/> and to the store's clock, which
     /// execution states pin to their timestamp (C1). Each child context owns a database of its own that shares the
-    /// root's counters, external functions, strata and containers; its definitions go through the store, its schema
-    /// questions are answered from the store's schema, and it rebuilds through its context. A bare database belongs to
-    /// no store and behaves exactly as egglog's.
+    /// root's counters, external functions, strata, containers and base values by reference; its definitions go
+    /// through the store, its schema questions are answered from the store's schema, and it rebuilds through its
+    /// context. A bare database belongs to no store and behaves exactly as egglog's.
     /// </para>
     /// </remarks>
     internal sealed partial class Database

@@ -27,8 +27,9 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Building: one row at a time (<see cref="AddRow(uint, int)"/>, <see cref="MergeSubset"/>), by sorting
-    /// (<see cref="RebuildFull"/>), or in parallel (<see cref="MergeParallel"/>); <see cref="Index{TIndex}"/> picks the
-    /// path. Probing (<see cref="TryGetSubset"/>) is a non-virtual, inlinable call on this sealed class.
+    /// (<see cref="RebuildFull(Table, ReadOnlySpan{ColumnId}, SubsetRef)"/>), or in parallel
+    /// (<see cref="MergeParallel"/>); <see cref="Index{TIndex}"/> picks the path. Probing (<see cref="TryGetSubset"/>)
+    /// is a non-virtual, inlinable call on this sealed class.
     /// </para>
     /// <para>
     /// Threading: any number of readers while nobody writes; one writer at a time. A parallel build splits work so
@@ -296,12 +297,36 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Empties this index and refills it with the live rows of <paramref name="subset"/> of <paramref name="table"/>
-        /// grouped by <paramref name="column"/>: <see cref="BuildForSubset"/> into an existing index, typically one from
-        /// <see cref="BuildForSubset"/> that was disposed. The join's trie nodes keep their per-column indexes across
-        /// reuse this way (egglog allocates an <c>Arc&lt;ColumnIndex&gt;</c> and its shard vector per build), so a
-        /// recycled node's build takes its hash table and arena from the pools and allocates nothing once they are
-        /// warm.
+        /// Groups the rows of <paramref name="subset"/> of <paramref name="table"/> a view sees (live and not in
+        /// <paramref name="hidden"/>) by <paramref name="column"/>: the visibility-aware
+        /// <see cref="BuildForSubset(Table, SubsetRef, ColumnId)"/> of a layered run's per-subset indexes
+        /// (colored-contexts spec §9.3), whose probe results therefore need no further visibility refinement. With
+        /// <see cref="HiddenRows.None"/> it is the plain build.
+        /// </summary>
+        /// <param name="table">The table: one layer of a view.</param>
+        /// <param name="subset">The rows to group.</param>
+        /// <param name="column">The column to group by.</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        /// <returns>The index, which the caller owns; dispose it when done.</returns>
+        public static ColumnIndex BuildForSubset(Table table, SubsetRef subset, ColumnId column, HiddenRows hidden)
+        {
+            if (hidden.IsNone)
+                return BuildForSubset(table, subset, column);
+
+            ArgumentNullException.ThrowIfNull(table);
+            var index = new ColumnIndex(ParallelHeuristics.Serial);
+            index.RebuildForSubset(table, subset, column, hidden);
+            return index;
+        }
+
+        /// <summary>
+        /// Empties this index and refills it with the live rows of <paramref name="subset"/> of
+        /// <paramref name="table"/> grouped by <paramref name="column"/>:
+        /// <see cref="BuildForSubset(Table, SubsetRef, ColumnId)"/> into an existing index, typically one from
+        /// <see cref="BuildForSubset(Table, SubsetRef, ColumnId)"/> that was disposed. The join's trie nodes keep their
+        /// per-column indexes across reuse this way (egglog allocates an <c>Arc&lt;ColumnIndex&gt;</c> and its shard
+        /// vector per build), so a recycled node's build takes its hash table and arena from the pools and allocates
+        /// nothing once they are warm.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="subset">The rows to group.</param>
@@ -321,6 +346,67 @@ namespace Eggnog.Relations
                 ReserveForRows(subset.Size);
                 MergeSubset(table, columns, subset);
             }
+        }
+
+        /// <summary>
+        /// Empties this index and refills it with the rows of <paramref name="subset"/> of <paramref name="table"/> a
+        /// view sees, grouped by <paramref name="column"/>: the visibility-aware
+        /// <see cref="RebuildForSubset(Table, SubsetRef, ColumnId)"/> (colored-contexts spec §9.3), with the same choice
+        /// between the sort-based and the row-at-a-time build. With <see cref="HiddenRows.None"/> it is the plain
+        /// rebuild.
+        /// </summary>
+        /// <param name="table">The table: one layer of a view.</param>
+        /// <param name="subset">The rows to group.</param>
+        /// <param name="column">The column to group by.</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        public void RebuildForSubset(Table table, SubsetRef subset, ColumnId column, HiddenRows hidden)
+        {
+            if (hidden.IsNone)
+            {
+                RebuildForSubset(table, subset, column);
+                return;
+            }
+
+            ArgumentNullException.ThrowIfNull(table);
+            Clear();
+            ReadOnlySpan<ColumnId> columns = [column];
+            if (subset.Size >= SortBulkThreshold)
+            {
+                RebuildFull(table, columns, subset, hidden);
+            }
+            else
+            {
+                ReserveForRows(subset.Size);
+                MergeSubsetVisible(table, columns, subset, hidden);
+            }
+        }
+
+        /// <summary>
+        /// Adds the rows of <paramref name="subset"/> of <paramref name="table"/> a view sees (live and not in
+        /// <paramref name="hidden"/>), one row at a time: the visibility-aware <see cref="MergeSubset"/> for per-subset
+        /// builds (colored-contexts spec §9.3). Not part of <see cref="IIndexBase{TSelf}"/>: a catalog index lists every
+        /// live row of its layer, because hides belong to views, not to index content (C6), so
+        /// <see cref="Index{TIndex}"/> never calls this. With <see cref="HiddenRows.None"/> it is
+        /// <see cref="MergeSubset"/>.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="columns">The key columns.</param>
+        /// <param name="subset">The rows to add; greater than every row already indexed.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        internal void MergeSubsetVisible(Table table, ReadOnlySpan<ColumnId> columns, SubsetRef subset, HiddenRows hidden)
+        {
+            if (hidden.IsNone)
+            {
+                MergeSubset(table, columns, subset);
+                return;
+            }
+
+            var projection = CheckColumns(table, columns);
+            if (subset.IsEmpty)
+                return;
+
+            var sink = new ColumnIndexInsertSink(this, projection);
+            table.ScanGeneric(subset, hidden, ref sink);
         }
 
         /// <inheritdoc />

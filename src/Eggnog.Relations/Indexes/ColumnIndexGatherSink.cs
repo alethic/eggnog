@@ -10,9 +10,10 @@ namespace Eggnog.Relations
     /// them (egglog's loop over <c>rebuild_index.get_subset</c>, core-relations/src/table/rebuild.rs:175-183).
     /// </summary>
     /// <remarks>
-    /// Feed it one-cell rows (<see cref="Table.ForEachColumn{TSink}"/>). The rows accumulate in a pooled array in probe
-    /// order, duplicates included; <see cref="SortUnique"/> turns them into a sorted set. A struct passed by reference:
-    /// read <see cref="Rows"/> and <see cref="Count"/> after the scan, and <see cref="Release"/> the array when done.
+    /// Feed it one-cell rows (<see cref="Table.ForEachColumn{TSink}(SubsetRef, ColumnId, ref TSink)"/>). The rows
+    /// accumulate in a pooled array in probe order, duplicates included; <see cref="SortUnique"/> turns them into a
+    /// sorted set. A struct passed by reference: read <see cref="Rows"/> and <see cref="Count"/> after the scan, and
+    /// <see cref="Release"/> the array when done.
     /// </remarks>
     internal struct ColumnIndexGatherSink : IRowSink
     {

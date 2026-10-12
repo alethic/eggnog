@@ -20,7 +20,8 @@ namespace Eggnog.Relations
     /// <item>per column, a <see cref="ColumnIndex"/> grouping the node's rows by that column
     /// (<see cref="GetCachedIndex"/>, egglog's <c>get_cached_index</c>). When the caches are reset the index is
     /// disposed but its object is kept as a spare for that column, and the next build refills it in place
-    /// (<see cref="ColumnIndex.RebuildForSubset"/>), so a recycled node builds its indexes without allocating;</item>
+    /// (<see cref="ColumnIndex.RebuildForSubset(Table, SubsetRef, ColumnId)"/>), so a recycled node builds its indexes
+    /// without allocating;</item>
     /// <item>per column, a map from a value to the child node holding the node's rows with that value, refined by the
     /// atom's constraints (<see cref="TryGetChild"/> and <see cref="AddChild"/>, egglog's
     /// <c>get_cached_trie_node</c>). So a (node, column, value) is refined once per rule execution.</item>
@@ -116,8 +117,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the index of the node's rows by <paramref name="column"/>, building it on first use. egglog's
-        /// <c>get_cached_index</c>: <see cref="ColumnIndex.BuildForSubset"/> over the live rows, O(rows) once, refilling
-        /// the column's spare index when the node has one, so that a recycled node allocates nothing.
+        /// <c>get_cached_index</c>: <see cref="ColumnIndex.BuildForSubset(Table, SubsetRef, ColumnId)"/> over the live
+        /// rows, O(rows) once, refilling the column's spare index when the node has one, so that a recycled node
+        /// allocates nothing.
         /// </summary>
         /// <param name="column">The column.</param>
         /// <param name="table">The atom's table.</param>

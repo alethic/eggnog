@@ -32,18 +32,65 @@ namespace Eggnog.Relations
         {
             var projection = CheckColumns(table, columns);
             Debug.Assert(Count == 0, "rebuild_full requires an empty index");
+            if (RentPairs(subset, projection) is not { } pairs)
+                return;
 
+            var sink = new ColumnPairSink(pairs, projection);
+            table.ScanGeneric(subset, ref sink);
+            GroupPairs(pairs, sink.Count);
+        }
+
+        /// <summary>
+        /// Builds the index from scratch from the rows of <paramref name="subset"/> a view sees (live and not in
+        /// <paramref name="hidden"/>): the visibility-aware
+        /// <see cref="RebuildFull(Table, ReadOnlySpan{ColumnId}, SubsetRef)"/> of per-subset builds (colored-contexts
+        /// spec §9.3), the same sort-based grouping over a hidden-aware scan. The index must be empty. With
+        /// <see cref="HiddenRows.None"/> it is the plain build.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="columns">The key columns.</param>
+        /// <param name="subset">The rows to index.</param>
+        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        public void RebuildFull(Table table, ReadOnlySpan<ColumnId> columns, SubsetRef subset, HiddenRows hidden)
+        {
+            if (hidden.IsNone)
+            {
+                RebuildFull(table, columns, subset);
+                return;
+            }
+
+            var projection = CheckColumns(table, columns);
+            Debug.Assert(Count == 0, "rebuild_full requires an empty index");
+            if (RentPairs(subset, projection) is not { } pairs)
+                return;
+
+            var sink = new ColumnPairSink(pairs, projection);
+            table.ScanGeneric(subset, hidden, ref sink);
+            GroupPairs(pairs, sink.Count);
+        }
+
+        /// <summary>
+        /// Rents the pair scratch of a sort-based build: room for every (value, row) pair of <paramref name="subset"/>
+        /// projected onto <paramref name="projection"/>, or <c>null</c> when there are none.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The pairs would not fit in one array.</exception>
+        static ulong[]? RentPairs(SubsetRef subset, int[] projection)
+        {
             var capacity = (long)subset.Size * projection.Length;
             if (capacity == 0)
-                return;
+                return null;
 
             if (capacity > Array.MaxLength)
                 throw new InvalidOperationException($"Indexing {subset.Size} rows by {projection.Length} columns needs more than {Array.MaxLength} pairs.");
 
-            var pairs = PooledArray.Allocate<ulong>((int)capacity);
-            var sink = new ColumnPairSink(pairs, projection);
-            table.ScanGeneric(subset, ref sink);
-            var count = sink.Count;
+            return PooledArray.Allocate<ulong>((int)capacity);
+        }
+
+        /// <summary>
+        /// Sorts the first <paramref name="count"/> scanned pairs, inserts their groups, and releases the scratch.
+        /// </summary>
+        void GroupPairs(ulong[] pairs, int count)
+        {
             PairRadixSort.SortByValue(pairs, count);
             InsertGroups(pairs, count);
             PooledArray.Release(pairs);

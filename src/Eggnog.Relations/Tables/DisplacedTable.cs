@@ -150,8 +150,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Visits the rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that satisfy every
         /// constraint, each expanded to its three cells: egglog's <c>scan_generic_bounded</c>
-        /// (core-relations/src/uf/mod.rs:316-344). Hides <see cref="Table.ScanGenericBounded{TSink}"/>, which dispatches
-        /// here.
+        /// (core-relations/src/uf/mod.rs:316-344). Hides
+        /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>,
+        /// which dispatches here.
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan.</param>
@@ -202,7 +203,35 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every row of <paramref name="subset"/>. Hides <see cref="Table.ScanGeneric{TSink}"/>.
+        /// Visits the rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that are not in
+        /// <paramref name="hidden"/> and satisfy every constraint (colored-contexts spec §9.3): the plain scan through a
+        /// <see cref="HiddenSkippingSink{TSink}"/>, since the table has no tombstones. Hides the hidden-aware
+        /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
+        /// which dispatches here; with <see cref="HiddenRows.None"/> it is the plain scan.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="count">The number of positions to visit.</param>
+        /// <param name="constraints">The constraints rows must satisfy.</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="sink">Receives each expanded visible row with its row id; must not keep the span.</param>
+        /// <returns>The next position, or -1.</returns>
+        public new int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            if (hidden.IsNone)
+                return ScanGenericBounded(subset, start, count, constraints, ref sink);
+
+            var skipping = new HiddenSkippingSink<TSink>(sink, hidden);
+            var next = ScanGenericBounded(subset, start, count, constraints, ref skipping);
+            sink = skipping.Inner;
+            return next;
+        }
+
+        /// <summary>
+        /// Visits every row of <paramref name="subset"/>. Hides
+        /// <see cref="Table.ScanGeneric{TSink}(SubsetRef, ref TSink)"/>.
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan.</param>
@@ -211,6 +240,20 @@ namespace Eggnog.Relations
             where TSink : struct, IRowSink
         {
             ScanGenericBounded(subset, 0, int.MaxValue, ReadOnlySpan<Constraint>.Empty, ref sink);
+        }
+
+        /// <summary>
+        /// Visits every row of <paramref name="subset"/> not in <paramref name="hidden"/>. Hides
+        /// <see cref="Table.ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="sink">Receives each expanded visible row with its row id.</param>
+        public new void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            ScanGenericBounded(subset, 0, int.MaxValue, ReadOnlySpan<Constraint>.Empty, hidden, ref sink);
         }
 
         /// <inheritdoc />
@@ -223,6 +266,23 @@ namespace Eggnog.Relations
             var filter = new DisplacedConstraintFilter(this, constraint);
             subset.Retain(ref filter);
             return subset;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// <see cref="Table.RefineLive"/> (which keeps every row: the union-find has no tombstones), then, when something
+        /// is hidden, one <see cref="Subset.Retain{TFilter}(ref TFilter)"/> with a <see cref="HiddenOnlyFilter"/>.
+        /// O(subset size).
+        /// </remarks>
+        public override Subset RefineVisible(Subset subset, HiddenRows hidden)
+        {
+            var live = RefineLive(subset);
+            if (hidden.IsNone)
+                return live;
+
+            var filter = new HiddenOnlyFilter(hidden);
+            live.Retain(ref filter);
+            return live;
         }
 
         /// <summary>

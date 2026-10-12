@@ -253,9 +253,9 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// Two things stay with the arena, so that an index disposed and rebuilt in place
-        /// (<see cref="ColumnIndex.RebuildForSubset"/>, the join's recycled trie nodes) allocates nothing: the free-list
-        /// heads, emptied in place, and an array too short for the pool to keep (at most
-        /// <see cref="PooledArray.MaxUnpooledLength"/> slots), which the pool would drop and the next build would
+        /// (<see cref="ColumnIndex.RebuildForSubset(Table, SubsetRef, ColumnId)"/>, the join's recycled trie nodes)
+        /// allocates nothing: the free-list heads, emptied in place, and an array too short for the pool to keep (at
+        /// most <see cref="PooledArray.MaxUnpooledLength"/> slots), which the pool would drop and the next build would
         /// allocate again. The next growth of the empty arena still tries the pool first (<see cref="Grow"/>). What
         /// stays is bounded by about a kilobyte per arena.
         /// </remarks>

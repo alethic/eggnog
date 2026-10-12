@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -19,8 +20,10 @@ namespace Eggnog.Relations
     /// views are <see cref="LayeredSchema.RootView"/>.
     /// </para>
     /// <para>
-    /// The fields are plain readonly fields so compiled kernels can read them (§9.9). The layered subset members
-    /// (<c>AllRows</c>, <c>AnyVisible</c>) arrive with the layered executor (M10.1-M10.2).
+    /// The fields are plain readonly fields so compiled kernels can read them (§9.9). <see cref="AllRows"/> and
+    /// <see cref="AnyVisible"/> are the layered executor's entry points: the rows a root trie node starts from, and the
+    /// existence test of a zero-variable atom (§9.2), which fixes egglog's defect for layered views
+    /// (core-relations/src/free_join/plan.rs:1502-1505; map §8.1 row 2).
     /// </para>
     /// </remarks>
     internal sealed partial class TableView
@@ -87,6 +90,70 @@ namespace Eggnog.Relations
             }
 
             PresentMask = mask;
+        }
+
+        /// <summary>
+        /// Gets every physical row of every present layer that has rows, as one dense subset per layer (§9.2): the
+        /// layered form of a table's <see cref="Table.All"/>. Tombstones and hidden rows are included, as egglog's
+        /// <c>all</c> includes tombstones; the executor refines visibility where it reads rows (I26). A view with one
+        /// layer with rows gives a single-layer subset, which is every root view's case. O(layers).
+        /// </summary>
+        /// <param name="pool">The pool a per-layer array comes from when two or more layers have rows, or <c>null</c>.</param>
+        /// <returns>The rows, which the caller owns.</returns>
+        public LayeredSubset AllRows(SubsetArrayPool? pool)
+        {
+            Span<int> counts = stackalloc int[LayeredSubset.MaxLayers];
+            var withRows = 0u;
+            for (var j = 0; j < Layers.Length; j++)
+            {
+                if (Layers[j] is not { } layer)
+                    continue;
+
+                var count = layer.Sorted!.Rows.Count;
+                if (count == 0)
+                    continue;
+
+                counts[j] = count;
+                withRows |= 1u << j;
+            }
+
+            if (withRows == 0)
+                return LayeredSubset.Empty;
+
+            if ((withRows & (withRows - 1)) == 0)
+            {
+                var only = BitOperations.TrailingZeroCount(withRows);
+                return LayeredSubset.Single(only, Subset.Dense(0, counts[only]));
+            }
+
+            var length = 32 - BitOperations.LeadingZeroCount(withRows);
+            var layers = pool is not null && pool.LayerCount >= length ? pool.Rent() : new Subset[length];
+            var remaining = withRows;
+            while (remaining != 0)
+            {
+                var j = BitOperations.TrailingZeroCount(remaining);
+                remaining &= remaining - 1;
+                layers[j] = Subset.Dense(0, counts[j]);
+            }
+
+            return LayeredSubset.FromLayers(layers, pool);
+        }
+
+        /// <summary>
+        /// Gets whether some row of <paramref name="subset"/> of layer <paramref name="layer"/> is visible to the view:
+        /// the existence test of a zero-variable atom. Defect fixed (core-relations/src/free_join/plan.rs:1502-1505; map
+        /// §8.1 row 2): egglog answers that test by a nonempty header alone, so a deleted fact still fires; this test
+        /// requires a live row that no level hides. See <see cref="LayerView.AnyVisible"/>.
+        /// </summary>
+        /// <param name="layer">The layer; an absent or out-of-range layer has no visible row.</param>
+        /// <param name="subset">Row ids of that layer, within its physical rows.</param>
+        /// <returns><c>true</c> if a visible row is found.</returns>
+        public bool AnyVisible(int layer, SubsetRef subset)
+        {
+            if ((uint)layer >= (uint)LayerCount || Layers[layer] is not { } view)
+                return false;
+
+            return view.AnyVisible(subset);
         }
 
         /// <summary>

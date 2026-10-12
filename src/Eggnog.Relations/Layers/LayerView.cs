@@ -73,26 +73,64 @@ namespace Eggnog.Relations
         public bool HasInvisible => Table.HasStaleRows || Hidden.IsNone == false;
 
         /// <summary>
-        /// Keeps the rows of <paramref name="subset"/> the view sees: live and not hidden. O(subset size).
+        /// Keeps the rows of <paramref name="subset"/> the view sees: live and not hidden (§6.3):
+        /// <see cref="Table.RefineLive"/> when the view hides nothing of the layer, else
+        /// <see cref="Table.RefineVisible"/> with <see cref="Hidden"/>. O(subset size).
         /// </summary>
         /// <param name="subset">Row ids of the layer, consumed.</param>
         /// <returns>The visible rows, which the caller owns.</returns>
-        public Subset RefineVisible(Subset subset)
-        {
-            if (Hidden.IsNone)
-                return Table.RefineLive(subset);
+        public Subset RefineVisible(Subset subset) => Hidden.IsNone ? Table.RefineLive(subset) : Table.RefineVisible(subset, Hidden);
 
-            if (Sorted is { } sorted)
+        /// <summary>
+        /// Gets whether some row of <paramref name="subset"/> is visible to the view: live and not hidden. Stops at the
+        /// first one; when the layer has nothing invisible (<see cref="HasInvisible"/>), any row is. O(rows tested), with
+        /// the hidden test a <see cref="HiddenCursor"/> walk. Defect fixed for layered views
+        /// (core-relations/src/free_join/plan.rs:1502-1505; map §8.1 row 2): egglog takes a nonempty header as proof that
+        /// a zero-variable atom holds, which tombstones (and, here, hides) make false; this test looks for a visible row.
+        /// </summary>
+        /// <param name="subset">Row ids of the layer, within its physical rows.</param>
+        /// <returns><c>true</c> if a visible row is found.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="subset"/> extends past the layer's rows.</exception>
+        public bool AnyVisible(SubsetRef subset)
+        {
+            if (subset.TryGetBounds(out var bounds) == false || bounds.Start == bounds.End)
+                return false;
+
+            var rowCount = Sorted is { } sorted ? sorted.Rows.Count : Table.All().Size;
+            if (bounds.Start < 0 || bounds.End > rowCount)
+                throw new ArgumentOutOfRangeException(nameof(subset), bounds.End, $"The subset extends past the layer's {rowCount} rows.");
+
+            if (HasInvisible == false)
+                return true;
+
+            if (Sorted is not { } table)
+                return AnyNotHidden(subset);
+
+            var data = table.Rows.Data;
+            var arity = table.Arity;
+            var hidden = Hidden.Cursor();
+            foreach (var row in subset)
             {
-                var filter = new VisibleRowFilter(sorted, Hidden);
-                subset.Retain(ref filter);
-                return subset;
+                if (data[row * arity] != Value.StaleRep && hidden.IsHidden(row) == false)
+                    return true;
             }
 
-            var live = Table.RefineLive(subset);
-            var hiddenOnly = new HiddenOnlyFilter(Hidden);
-            live.Retain(ref hiddenOnly);
-            return live;
+            return false;
+        }
+
+        /// <summary>
+        /// The <see cref="AnyVisible"/> of a layer without tombstones: some row not hidden.
+        /// </summary>
+        bool AnyNotHidden(SubsetRef subset)
+        {
+            var hidden = Hidden.Cursor();
+            foreach (var row in subset)
+            {
+                if (hidden.IsHidden(row) == false)
+                    return true;
+            }
+
+            return false;
         }
 
     }

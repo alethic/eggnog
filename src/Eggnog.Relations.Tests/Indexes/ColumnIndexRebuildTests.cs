@@ -7,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="ColumnIndex.RebuildForSubset"/>: refilling an existing per-subset index in place, which the join's
-    /// recycled trie nodes do instead of building a new index per node, gives the same contents as a fresh build and
-    /// allocates nothing once the pools are warm.
+    /// <see cref="ColumnIndex.RebuildForSubset(Table, SubsetRef, ColumnId)"/>: refilling an existing per-subset index
+    /// in place, which the join's recycled trie nodes do instead of building a new index per node, gives the same
+    /// contents as a fresh build and allocates nothing once the pools are warm.
     /// </summary>
     [Collection(IndexStressCollection.Name)]
     public class ColumnIndexRebuildTests

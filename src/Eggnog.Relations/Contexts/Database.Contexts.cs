@@ -53,8 +53,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Initializes a child context's database (§3.4): its own catalog, notification list, table map and size
-        /// estimate, sharing the root's counters, external functions, dependency graph and container environments by
-        /// reference.
+        /// estimate, sharing the root's counters, external functions, dependency graph, container environments and base
+        /// value registry by reference.
         /// </summary>
         /// <remarks>
         /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>, §5.5) at the store's
@@ -62,7 +62,9 @@ namespace Eggnog.Relations
         /// through the catalog's resolver, which hands out the child's union-find for the union-find id and the child's
         /// layer of any other table, created on first use (<see cref="ContextTables.ResolveForStaging"/>, §6.2, X37). The
         /// context attaches its layering right after construction (<see cref="AttachLayers"/>). The root's container
-        /// environments are created here if they did not exist, so both share one instance.
+        /// environments and base value registry are created here if they did not exist, so both share one instance: a
+        /// value the root boxed unboxes in the child, and a type or value registered through either is seen by both
+        /// (rule-layer spec §13 item 3; the registry is thread-safe, so concurrent children may share it too).
         /// </remarks>
         /// <param name="root">The store's root database.</param>
         /// <param name="owner">The child context.</param>
@@ -88,6 +90,7 @@ namespace Eggnog.Relations
             externalFunctions = root.externalFunctions;
             deps = root.deps;
             containers = root.Containers;
+            baseValues = root.BaseValues;
             view = new DatabaseView(this);
         }
 
