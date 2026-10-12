@@ -66,6 +66,7 @@ namespace Eggnog.Relations
             viewResolved = parent.viewResolved;
             layers = parent.layers;
             guard = parent.guard;
+            views = parent.views;
         }
 
         /// <summary>

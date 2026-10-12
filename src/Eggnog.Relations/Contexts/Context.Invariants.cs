@@ -32,8 +32,9 @@ namespace Eggnog.Relations
         /// <para>
         /// Composition (§12.7, B2): the union-find part (<see cref="CheckUnionFindInvariants"/>, I4-I10, I23 and the
         /// gate), then, in a child, the tables part (<see cref="ContextTables.CheckInvariants"/>, I10 and I12-I19) and the
-        /// eq-container part (<see cref="CheckEqContainerElements"/>, G-b). The
-        /// executor part (<c>ExecutorInvariants</c>) arrives with the layered executor (M10.2). The root's rows are checked
+        /// eq-container part (<see cref="CheckEqContainerElements"/>, G-b), and at every level the executor part
+        /// (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as the executor reads
+        /// them). The root's rows are checked
         /// canonical (I35) where the root settles, at <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds
         /// (<see cref="CheckRootSettled"/>): elsewhere a raw root write may leave a stale row until the next rebuild, as
         /// in egglog (X38). Cost: linear in the context's overlay and journal, its parent's displacements since its
@@ -59,6 +60,7 @@ namespace Eggnog.Relations
             CheckUnionFindInvariants(violations);
             tables?.CheckInvariants(violations);
             CheckEqContainerElements(violations);
+            ExecutorInvariants.Check(this, violations);
             if (violations.Count > 0)
                 throw new InvalidOperationException($"The context at depth {Depth} violates {violations.Count} invariant(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
         }

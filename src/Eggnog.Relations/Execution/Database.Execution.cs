@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -14,6 +15,32 @@ namespace Eggnog.Relations
         /// holds it or after a run that stopped early or threw. A clone starts without one.
         /// </summary>
         JoinRun? idleSerialJoin;
+
+        /// <summary>
+        /// What the executor did, when <see cref="ExecutorCounters.Enabled"/>; made on first use.
+        /// </summary>
+        ExecutorCounters? executorCounts;
+
+        /// <summary>
+        /// Gets the counts the database's rule runs add to (colored-contexts spec §17 M10.2), or <c>null</c> unless the
+        /// process runs with <c>EGGNOG_COUNTERS</c> (<see cref="ExecutorCounters.Enabled"/>). One instance per database, so
+        /// a context's counts are its own.
+        /// </summary>
+        internal ExecutorCounters? ExecutorCounts
+        {
+            get
+            {
+                if (ExecutorCounters.Enabled == false)
+                    return null;
+
+                var counts = Volatile.Read(ref executorCounts);
+                if (counts is not null)
+                    return counts;
+
+                counts = new ExecutorCounters();
+                return Interlocked.CompareExchange(ref executorCounts, counts, null) ?? counts;
+            }
+        }
 
         /// <summary>
         /// Gets or sets whether <see cref="RunRuleSet"/> takes the parallel path regardless of the database's size;
@@ -53,6 +80,20 @@ namespace Eggnog.Relations
         /// The rule set's header subsets must have been evaluated against the tables as they are now: build the rule set
         /// right before running it. Requires exclusive access to the database.
         /// </para>
+        /// <para>
+        /// Views (colored-contexts spec §9.1, X21, X22). The run reads every table through the views the rule set pinned
+        /// when it was built on this database's <see cref="View"/> (<see cref="RuleSet.Views"/>), which a root's run reads
+        /// as its single-layer tables. A rule set built on another database's view is refused: its header subsets describe
+        /// other tables. In a child context the run is the context's (§8.3, X12, X37): it enters the context's thread
+        /// domain (refused from inside a write batch's action or a visitor of the domain), requires the context's views to be
+        /// current (<see cref="Context.ThrowIfViewNotCurrent"/>) and unchanged since the rule set's first header was
+        /// evaluated (<see cref="RuleSet.ViewGeneration"/> and <see cref="RuleSet.ViewStamp"/>, I29), requires the
+        /// timestamp to keep the context's epochs nondecreasing and at or above its floor (<see cref="Context.UseEpoch"/>),
+        /// marks the search (<see cref="ContextTables.InSearch"/>, so layers its tasks create are adopted at the merge) as a
+        /// callback of the domain (writes and rebuilds of the domain are refused inside it), and faults the context when an
+        /// exception escapes. A refusal happens before anything runs and does not fault. The root pays one reference compare
+        /// and one null test per run.
+        /// </para>
         /// </remarks>
         /// <param name="ruleSet">The rules.</param>
         /// <param name="reportLevel">How much to report per rule.</param>
@@ -62,24 +103,26 @@ namespace Eggnog.Relations
         /// (<see cref="ReadCounterInstr"/>) returns it, however far other contexts advance the clock meanwhile (C1).</param>
         /// <returns>What the run did. An empty rule set returns <see cref="RuleSetReport.Empty"/> without merging, as
         /// egglog does.</returns>
-        /// <exception cref="NotSupportedException">This is a child context's database (colored-contexts spec §17, M9.1
-        /// interim): a child's rules run against its views, which arrive with layered execution (M10.2). Until then the
-        /// executor would read the child's own layers (its own union-find rows) as if they were what the child sees,
-        /// or a foreign rule set's header subsets against them; the run is refused instead. One owner test per run at
-        /// the root.</exception>
+        /// <exception cref="ArgumentException">The rule set was built on another database's view.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">In a child, the timestamp is below the context's creation, its last
+        /// noted rule run or its latest epoch.</exception>
+        /// <exception cref="InvalidOperationException">The database is frozen; or, in a child, the context is not writable,
+        /// its views are not current or changed since the rule set's first header was evaluated, its domain is held by
+        /// another thread, or the call comes from inside a write batch's action or a visitor of its domain.</exception>
         public RuleSetReport RunRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
             ThrowIfFrozen();
-            if (IsChild)
-                throw new NotSupportedException("Rules in a child context arrive in M10.2.");
-
+            var views = RequireViews(ruleSet);
             if (ruleSet.IsEmpty)
                 return RuleSetReport.Empty;
 
             // Resolved once, so the run and its merge carry the same timestamp however the store clock moves between.
             var resolved = ResolveTimestamp(timestamp);
-            var executed = ExecuteRuleSetCore(ruleSet, reportLevel, resolved);
+            if (layers is { } l)
+                return RunInChild(l, ruleSet, views, reportLevel, resolved, merge: true);
+
+            var executed = ExecuteRuleSetCore(ruleSet, views, reportLevel, resolved);
             return MergeRuleSetCore(executed, resolved);
         }
 
@@ -110,24 +153,101 @@ namespace Eggnog.Relations
         /// current value, or zero without a store (colored-contexts spec §4.1).</param>
         /// <returns>The run's report, not merged yet: <see cref="RuleSetReport.Changed"/> is <c>false</c> and
         /// <see cref="RuleSetReport.MergeTime"/> zero. <see cref="RuleSetReport.Empty"/> for an empty rule set.</returns>
-        /// <exception cref="NotSupportedException">This is a child context's database (see <see cref="RunRuleSet"/>).
-        /// </exception>
+        /// <exception cref="ArgumentException">The rule set was built on another database's view.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">In a child, as for <see cref="RunRuleSet"/>.</exception>
+        /// <exception cref="InvalidOperationException">In a child, as for <see cref="RunRuleSet"/>.</exception>
         public RuleSetReport ExecuteRuleSet(RuleSet ruleSet, ReportLevel reportLevel = ReportLevel.TimeOnly, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
-            if (IsChild)
-                throw new NotSupportedException("Rules in a child context arrive in M10.2.");
-
+            var views = RequireViews(ruleSet);
             if (ruleSet.IsEmpty)
                 return RuleSetReport.Empty;
 
-            return ExecuteRuleSetCore(ruleSet, reportLevel, ResolveTimestamp(timestamp));
+            var resolved = ResolveTimestamp(timestamp);
+            if (layers is { } l)
+                return RunInChild(l, ruleSet, views, reportLevel, resolved, merge: false);
+
+            return ExecuteRuleSetCore(ruleSet, views, reportLevel, resolved);
         }
 
         /// <summary>
-        /// <see cref="ExecuteRuleSet"/> on a nonempty rule set with the timestamp resolved.
+        /// Gets the views a run of <paramref name="ruleSet"/> reads (§9.1): the ones it pinned when it was built on this
+        /// database's view, or, for a rule set assembled by hand from a root's rules, the root's views of the tables it
+        /// reads, pinned now.
         /// </summary>
-        RuleSetReport ExecuteRuleSetCore(RuleSet ruleSet, ReportLevel reportLevel, uint timestamp)
+        /// <exception cref="ArgumentException">The rule set was built on another database's view, or assembled by hand for
+        /// a layered database, whose runs need the views header evaluation read.</exception>
+        ViewSnapshot RequireViews(RuleSet ruleSet)
+        {
+            if (ruleSet.View is { } built)
+            {
+                if (ReferenceEquals(built, Volatile.Read(ref contextView)) == false)
+                    throw new ArgumentException("The rule set was built on another database's view; build it with this database's NewRuleSet.", nameof(ruleSet));
+
+                return ruleSet.Views!;
+            }
+
+            if (LayeredView is not null)
+                throw new ArgumentException("A rule set run in a layered context must be built on the context's database (NewRuleSet), so its headers and its run read the same views.", nameof(ruleSet));
+
+            return View.Snapshot(ruleSet.Rules, ruleSet.Actions, null);
+        }
+
+        /// <summary>
+        /// A run of a child context's database (§8.3, §9.1, X12, X37): see <see cref="RunRuleSet"/>. The search is a
+        /// callback of the context's thread domain and runs with <see cref="ContextTables.InSearch"/> set; an exception
+        /// faults the context.
+        /// </summary>
+        RuleSetReport RunInChild(ContextTables tables, RuleSet ruleSet, ViewSnapshot views, ReportLevel reportLevel, uint timestamp, bool merge)
+        {
+            var context = owner!;
+            context.ThrowIfNotWritable();
+            var domain = context.Domain;
+            using var scope = domain.Enter();
+            context.ThrowIfNotWritable();
+            Context.ThrowIfInCallback(domain, nameof(RunRuleSet));
+            context.ThrowIfViewNotCurrent();
+
+            // I29: the header subsets were evaluated against the views as they were at the rule set's first header. A
+            // dropped view (the generation) or a merge, hide, clear or stop anywhere on the chain (the stamp: header subsets
+            // name rows, which a compaction moves) since then makes them describe other rows than the snapshot shows.
+            var generation = View.Generation;
+            if (ruleSet.ViewGeneration != generation || ruleSet.ViewStamp != context.ViewStamp)
+                throw new InvalidOperationException("The context's views changed since the rule set's headers were evaluated (a merge, rebuild, clear or freeze of the context or an ancestor); build the rule set again.");
+
+            // I3, I19, I21: the run stamps every row it merges with the timestamp (X38).
+            context.UseEpoch(timestamp);
+            try
+            {
+                RuleSetReport executed;
+                tables.InSearch = true;
+                domain.EnterCallback();
+                try
+                {
+                    executed = ExecuteRuleSetCore(ruleSet, views, reportLevel, timestamp);
+                }
+                finally
+                {
+                    domain.ExitCallback();
+                    tables.InSearch = false;
+                }
+
+                // I29, I34: nothing drops a view while the search runs; layer creation never does (X37).
+                Debug.Assert(View.Generation == generation, "a context's views changed during a rule search");
+                return merge ? MergeRuleSetCore(executed, timestamp) : executed;
+            }
+            catch
+            {
+                context.Fault();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// <see cref="ExecuteRuleSet"/> on a nonempty rule set with the timestamp resolved, reading
+        /// <paramref name="views"/>.
+        /// </summary>
+        RuleSetReport ExecuteRuleSetCore(RuleSet ruleSet, ViewSnapshot views, ReportLevel reportLevel, uint timestamp)
         {
             var rules = ruleSet.Rules;
             var actions = new ActionInfo[ruleSet.Count];
@@ -139,12 +259,13 @@ namespace Eggnog.Relations
             var start = Stopwatch.GetTimestamp();
             var marks = MarkStagedWrites();
             var root = new ExecutionState(view, timestamp);
+            root.AttachViews(views);
             try
             {
                 if (ParallelRuleSetsOverride ?? parallelism.ParallelizeDbLevelOp(totalSizeEstimate))
-                    RunRulesParallel(ruleSet, actions, counter, root, reportLevel, reports);
+                    RunRulesParallel(ruleSet, views, actions, counter, root, reportLevel, reports);
                 else
-                    RunRulesSerial(ruleSet, actions, counter, root, reportLevel, reports);
+                    RunRulesSerial(ruleSet, views, actions, counter, root, reportLevel, reports);
             }
             catch
             {
@@ -180,6 +301,13 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The timestamp the run carried, which the merge states carry
         /// (<see cref="MergeAll"/>); <c>null</c> for the store clock's current value, or zero without a store.</param>
         /// <returns>The report, with whether the merge changed the database and how long it took.</returns>
+        /// <remarks>
+        /// In a child context the merge enters the context's thread domain, refuses a timestamp below the context's floor
+        /// (<see cref="Context.UseEpoch"/>, before anything is merged) and faults the context when an exception escapes
+        /// (X12), as <see cref="RunRuleSet"/> does.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">In a child, the timestamp is below the context's creation, its
+        /// last noted rule run or its latest epoch.</exception>
         public RuleSetReport MergeRuleSet(RuleSet ruleSet, RuleSetReport executed, uint? timestamp = null)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
@@ -187,7 +315,26 @@ namespace Eggnog.Relations
             if (ruleSet.IsEmpty)
                 return executed;
 
-            return MergeRuleSetCore(executed, ResolveTimestamp(timestamp));
+            var resolved = ResolveTimestamp(timestamp);
+            if (IsChild == false)
+                return MergeRuleSetCore(executed, resolved);
+
+            var context = owner!;
+            context.ThrowIfNotWritable();
+            var domain = context.Domain;
+            using var scope = domain.Enter();
+            context.ThrowIfNotWritable();
+            Context.ThrowIfInCallback(domain, nameof(MergeRuleSet));
+            context.UseEpoch(resolved);
+            try
+            {
+                return MergeRuleSetCore(executed, resolved);
+            }
+            catch
+            {
+                context.Fault();
+                throw;
+            }
         }
 
         /// <summary>
@@ -240,15 +387,15 @@ namespace Eggnog.Relations
         /// end on a clone of the root state (core-relations/src/free_join/execute.rs:500-607). The join is the one the
         /// last serial run kept, if any, and is kept again unless the run stops early or throws.
         /// </summary>
-        void RunRulesSerial(RuleSet ruleSet, ActionInfo[] actions, MatchCounter counter, ExecutionState root, ReportLevel reportLevel, RuleReport?[] reports)
+        void RunRulesSerial(RuleSet ruleSet, ViewSnapshot views, ActionInfo[] actions, MatchCounter counter, ExecutionState root, ReportLevel reportLevel, RuleReport?[] reports)
         {
             var rules = ruleSet.Rules;
             var join = idleSerialJoin;
             idleSerialJoin = null;
             if (join is null)
-                join = new JoinRun(this, root.Signals, parallel: false);
+                join = new JoinRun(this, views, root.Signals, parallel: false);
             else
-                join.Rebind(root.Signals);
+                join.Rebind(root.Signals, views);
 
             var buffer = new ActionBuffer(actions, counter, root, scope: null);
             for (var i = 0; i < rules.Length; i++)
@@ -278,7 +425,7 @@ namespace Eggnog.Relations
         /// The parallel path: one task per rule in one scope, which also receives the rules' morsels and full action
         /// batches; the calling thread helps until all have finished (core-relations/src/free_join/execute.rs:358-499).
         /// </summary>
-        void RunRulesParallel(RuleSet ruleSet, ActionInfo[] actions, MatchCounter counter, ExecutionState root, ReportLevel reportLevel, RuleReport?[] reports)
+        void RunRulesParallel(RuleSet ruleSet, ViewSnapshot views, ActionInfo[] actions, MatchCounter counter, ExecutionState root, ReportLevel reportLevel, RuleReport?[] reports)
         {
             var rules = ruleSet.Rules;
             var scope = new WorkScope(parallelism.DegreeOfParallelism);
@@ -288,7 +435,7 @@ namespace Eggnog.Relations
                 var rule = rules[i];
                 var plan = reportLevel == ReportLevel.TimeOnly ? null : rule.Template.ToString();
                 var buffer = new ActionBuffer(actions, counter, root, scope);
-                scope.Spawn(new RuleWork(this, rule, buffer, root.Signals, framePool, plan, reports, i));
+                scope.Spawn(new RuleWork(this, views, rule, buffer, root.Signals, framePool, plan, reports, i));
             }
 
             scope.Wait();

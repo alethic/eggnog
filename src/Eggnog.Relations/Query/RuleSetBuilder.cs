@@ -32,10 +32,26 @@ namespace Eggnog.Relations
     {
 
         readonly Database db;
+        readonly ContextView view;
         readonly IdVec<RuleId, RulePlan> rules = new();
         readonly DenseIdMap<ActionId, ActionInfo> actions = new();
         object? open;
         bool built;
+
+        /// <summary>
+        /// Whether a header has been evaluated, so <see cref="pinnedGeneration"/> and <see cref="pinnedStamp"/> are set.
+        /// </summary>
+        bool pinned;
+
+        /// <summary>
+        /// The view's <see cref="ContextView.Generation"/> when the first header was evaluated.
+        /// </summary>
+        long pinnedGeneration;
+
+        /// <summary>
+        /// The view's <see cref="ContextView.Stamp"/> when the first header was evaluated.
+        /// </summary>
+        long pinnedStamp;
 
         /// <summary>
         /// Initializes a new instance. egglog's <c>RuleSetBuilder::new</c>.
@@ -45,12 +61,19 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(database);
             db = database;
+            view = database.View;
         }
 
         /// <summary>
         /// Gets the database the rules run against.
         /// </summary>
         public Database Database => db;
+
+        /// <summary>
+        /// Gets the view rules are instantiated through and the rule set pins (<see cref="Database.View"/>,
+        /// colored-contexts spec §9.1).
+        /// </summary>
+        public ContextView View => view;
 
         /// <summary>
         /// Gets the number of rules added so far.
@@ -65,6 +88,9 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate.</returns>
+        /// <remarks>
+        /// In a child, its view's estimate (colored-contexts spec §3.4): the sum over the layers of the table's view.
+        /// </remarks>
         public int EstimateSize(TableId table, Constraint? constraint = null) => db.EstimateSize(table, constraint);
 
         /// <summary>
@@ -95,30 +121,43 @@ namespace Eggnog.Relations
         /// <para>
         /// O(headers) constraint evaluations, typically binary searches on a sorted timestamp column; no planning.
         /// </para>
+        /// <para>
+        /// Id constants (colored-contexts spec §9.8, X19): the rule runs K, the canonical form of each of its Id constants
+        /// in this database's context (<paramref name="canonical"/>, computed through <see cref="View"/> when not given):
+        /// the cached plan's variant for K (<see cref="CachedPlan.GetVariantFor"/>), which is the written plan itself
+        /// whenever every constant is canonical, as it always is in a bare database.
+        /// </para>
         /// </remarks>
         /// <param name="cached">The cached plan.</param>
         /// <param name="extraConstraints">Constraints on atoms of the plan; each must have a fast evaluation.</param>
+        /// <param name="canonical">K, when the caller computed it (<see cref="CanonicalConstants.Compute"/>, the bridge's
+        /// watermark check); <c>null</c> to compute it here.</param>
         /// <returns>The new rule, or <c>null</c> when it provably matches nothing.</returns>
-        /// <exception cref="ArgumentException">An extra constraint names an atom the plan does not have.</exception>
+        /// <exception cref="ArgumentException">An extra constraint names an atom the plan does not have, or K does not
+        /// have one value per constant.</exception>
         /// <exception cref="InvalidOperationException">A constraint has no fast evaluation (egglog panics: cached plans
         /// only support constraints with a fast pushdown).</exception>
-        public RuleId? AddRuleFromCachedPlan(CachedPlan cached, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints = default)
+        public RuleId? AddRuleFromCachedPlan(CachedPlan cached, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints = default, uint[]? canonical = null)
         {
             ArgumentNullException.ThrowIfNull(cached);
             ThrowIfBuilt();
             open = null;
 
             var extras = CombineExtras(extraConstraints, cached.ExtraConstraints);
+            canonical ??= CanonicalConstants.Compute(view, cached.IdConstants, cached.Actions.IdConstants, cached.WrittenConstants);
+            var (template, program) = cached.GetVariantFor(canonical);
 
             // Peek at the action id without taking it, so an empty variant does not break the bijection.
             var action = actions.NextId;
-            var instance = GetRuleWithExtraConstraints(cached, action, extras);
+            PinViews();
+            var evaluator = view;
+            var instance = template.InstantiateLayered(ref evaluator, extras, action);
             if (instance is null)
                 return null;
 
-            var pushed = actions.Push(cached.Actions);
+            var pushed = actions.Push(program);
             Debug.Assert(pushed == action, "the peeked action id must be the one pushed");
-            var rule = rules.Push(new RulePlan(cached.Plan, action, instance, cached.Description, cached.Symbols, cached.IdConstants, extras));
+            var rule = rules.Push(new RulePlan(template, action, instance, cached.Description, cached.Symbols, cached.IdConstants, extras, cached.Plan, cached.Actions, canonical));
             Debug.Assert(rule.Index == action.Index, "rule and action ids must stand in a bijection");
             return rule;
         }
@@ -128,12 +167,29 @@ namespace Eggnog.Relations
         /// cannot be used afterwards.
         /// </summary>
         /// <returns>The rule set, which the caller disposes.</returns>
+        /// <remarks>
+        /// <para>
+        /// The rule set pins the views of every table its rules' atoms and lookups read
+        /// (<see cref="ContextView.Snapshot(ReadOnlySpan{RulePlan}, DenseIdMap{ActionId, ActionInfo}, TableId?)"/>,
+        /// colored-contexts spec §9.1, X21), and records the view's generation and stamp as they were when its first header
+        /// was evaluated (I29). A merge between the first header and the run, in the context or an ancestor, moves one of
+        /// them, and a child's run then refuses the rule set (<see cref="Database.RunRuleSet"/>): its header subsets name
+        /// rows of the views as they were, which the run's snapshot no longer is. With neither moved, the snapshot holds the
+        /// cached view instances header evaluation read.
+        /// </para>
+        /// <para>
+        /// At a root the views are its single-layer views, shared by every rule set, so building allocates no snapshot.
+        /// </para>
+        /// </remarks>
         public RuleSet Build()
         {
             ThrowIfBuilt();
             built = true;
             open = null;
-            return new RuleSet(rules, actions);
+            PinViews();
+            var skip = db.IsChild ? db.Owner!.Store.UnionFindTable : (TableId?)null;
+            var snapshot = view.Snapshot(rules.AsSpan(), actions, skip);
+            return new RuleSet(rules, actions, view, snapshot, pinnedGeneration, pinnedStamp);
         }
 
         /// <summary>
@@ -155,7 +211,26 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The program reads a variable that no atom binds and no
         /// instruction defines (egglog leaves this undefined: the join would push an unbound value; see
         /// core-relations/src/action/mod.rs:225-235).</exception>
-        internal RuleId AddBuiltRule(RuleBuilder builder, QueryBuilder query, Instr[] instrs, IdConstant[] idConstants, string description)
+        internal RuleId AddBuiltRule(RuleBuilder builder, QueryBuilder query, Instr[] instrs, IdConstant[] idConstants, string description) =>
+            AddBuiltRule(builder, query, instrs, idConstants, [], description);
+
+        /// <summary>
+        /// Plans and adds the rule <paramref name="query"/> describes, with its action program and the program's constant
+        /// ids: <see cref="AddBuiltRule(RuleBuilder, QueryBuilder, Instr[], IdConstant[], string)"/>, after which the rule
+        /// runs K (colored-contexts spec §9.8): the query is planned with its constants as written, then the template and
+        /// the program are rewritten to the constants' canonical forms in this database's context before the headers are
+        /// evaluated. The rule keeps the written ones for <see cref="RuleSet.BuildCachedPlan"/>.
+        /// </summary>
+        /// <param name="builder">The rule's builder, which must be the open one; it is closed.</param>
+        /// <param name="query">The rule's query builder.</param>
+        /// <param name="instrs">The action program; owned by the rule afterwards.</param>
+        /// <param name="idConstants">The constant ids the rule's atoms match against.</param>
+        /// <param name="actionIdConstants">The constant ids among the program's operands.</param>
+        /// <param name="description">The rule's description.</param>
+        /// <returns>The new rule.</returns>
+        /// <exception cref="InvalidOperationException">The program reads a variable that no atom binds and no
+        /// instruction defines.</exception>
+        internal RuleId AddBuiltRule(RuleBuilder builder, QueryBuilder query, Instr[] instrs, IdConstant[] idConstants, ActionIdConstant[] actionIdConstants, string description)
         {
             ThrowIfNotOpen(builder);
 
@@ -172,13 +247,24 @@ namespace Eggnog.Relations
                     throw new InvalidOperationException($"The action reads {variable}, which no atom of the query binds.");
 
             var symbols = SymbolMap.Create(db, q);
-            var template = db.PlanQuery(q);
-            var evaluator = db;
-            var instance = template.Instantiate(ref evaluator, default, action);
+            var written = db.PlanQuery(q);
+            var writtenActions = new ActionInfo(instrs, used, actionIdConstants);
+            var canonical = CanonicalConstants.Compute(view, idConstants, actionIdConstants);
+            var template = written;
+            var program = writtenActions;
+            if (ConstantSubstitution.Create(idConstants, actionIdConstants, canonical) is { } substitution)
+            {
+                template = TemplateSubstituter.Substitute(written, substitution);
+                program = ActionSubstituter.Substitute(writtenActions, substitution);
+            }
 
-            var pushed = actions.Push(new ActionInfo(instrs, used));
+            PinViews();
+            var evaluator = view;
+            var instance = template.InstantiateLayered(ref evaluator, default, action);
+
+            var pushed = actions.Push(program);
             Debug.Assert(pushed == action, "the peeked action id must be the one pushed");
-            var rule = rules.Push(new RulePlan(template, action, instance, description, symbols, idConstants, Array.Empty<(AtomId, Constraint)>()));
+            var rule = rules.Push(new RulePlan(template, action, instance, description, symbols, idConstants, Array.Empty<(AtomId, Constraint)>(), written, writtenActions, canonical));
             Debug.Assert(rule.Index == action.Index, "rule and action ids must stand in a bijection");
             return rule;
         }
@@ -186,7 +272,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Evaluates the headers of one instantiation of <paramref name="cached"/>. egglog's
         /// <c>get_rule_with_extra_constraints</c> (core-relations/src/query.rs:191-243), on
-        /// <see cref="PlanTemplate.Instantiate{TEvaluator}"/> with this database as the evaluator.
+        /// <see cref="PlanTemplate.InstantiateLayered{TEvaluator}"/> through the database's view (colored-contexts spec
+        /// §9.4): one subset per layer of each table's view, the root's single layer at a root.
         /// </summary>
         /// <param name="cached">The cached plan.</param>
         /// <param name="action">The action id of the instantiation.</param>
@@ -194,8 +281,9 @@ namespace Eggnog.Relations
         /// <returns>The instance, or <c>null</c> when a header selects no rows.</returns>
         internal PlanInstance? GetRuleWithExtraConstraints(CachedPlan cached, ActionId action, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints)
         {
-            var evaluator = db;
-            return cached.Plan.Instantiate(ref evaluator, extraConstraints, action);
+            PinViews();
+            var evaluator = view;
+            return cached.Plan.InstantiateLayered(ref evaluator, extraConstraints, action);
         }
 
         /// <summary>
@@ -232,6 +320,20 @@ namespace Eggnog.Relations
             extras.CopyTo(all);
             cached.CopyTo(all.AsSpan(extras.Length));
             return all;
+        }
+
+        /// <summary>
+        /// Records the view's generation and stamp before the first header is evaluated (I29): what a child's run checks
+        /// the views still are. O(depth) once per builder; a root's are constant.
+        /// </summary>
+        void PinViews()
+        {
+            if (pinned)
+                return;
+
+            pinnedGeneration = view.Generation;
+            pinnedStamp = view.Stamp;
+            pinned = true;
         }
 
         /// <summary>

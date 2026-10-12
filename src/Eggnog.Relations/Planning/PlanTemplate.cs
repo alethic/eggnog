@@ -14,8 +14,8 @@ namespace Eggnog.Relations
     /// (<see cref="PlanKind.Decomposed"/>). Produced by <see cref="QueryPlanner"/> once per rule and shared by every run,
     /// thread and context: stages, specs and atoms never change, and nothing in a template refers to rows. The per-run
     /// part (header subsets, the action id of this run) lives in a <see cref="PlanInstance"/>, made by
-    /// <see cref="Instantiate{TEvaluator}"/>, which is egglog's cached-plan instantiation
-    /// (core-relations/src/query.rs:191-274).
+    /// <see cref="InstantiateLayered{TEvaluator}"/> (or <see cref="Instantiate{TEvaluator}"/> over a single table), which
+    /// is egglog's cached-plan instantiation (core-relations/src/query.rs:191-274).
     /// </para>
     /// <para>
     /// <see cref="Atoms"/> is the full atom map of the original query in both kinds; the planner's synthetic covering
@@ -82,7 +82,10 @@ namespace Eggnog.Relations
         /// <summary>
         /// Evaluates the headers for one run: egglog's <c>get_rule_with_extra_constraints</c>
         /// (core-relations/src/query.rs:191-243). Each extra constraint becomes a header of its own, followed by each of
-        /// the template's headers re-evaluated against the current tables.
+        /// the template's headers re-evaluated against the current tables. Forwards to
+        /// <see cref="InstantiateLayered{TEvaluator}"/> through <see cref="SingleLayerEvaluator{TEvaluator}"/>, so every
+        /// header subset lies in layer 0 (colored-contexts spec §9.4; C# cannot overload on constraints alone, hence the
+        /// second name).
         /// </summary>
         /// <typeparam name="TEvaluator">The evaluator type; a struct type argument specializes the calls.</typeparam>
         /// <param name="evaluator">Evaluates constraints against the current tables.</param>
@@ -96,9 +99,36 @@ namespace Eggnog.Relations
         public PlanInstance? Instantiate<TEvaluator>(ref TEvaluator evaluator, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints, ActionId action)
             where TEvaluator : IHeaderEvaluator
         {
+            var layered = new SingleLayerEvaluator<TEvaluator>(evaluator);
+            try
+            {
+                return InstantiateLayered(ref layered, extraConstraints, action);
+            }
+            finally
+            {
+                evaluator = layered.Inner;
+            }
+        }
+
+        /// <summary>
+        /// Evaluates the headers for one run in a context whose tables may lie in several layers (colored-contexts spec
+        /// §9.4): egglog's <c>get_rule_with_extra_constraints</c> with every header subset a <see cref="LayeredSubset"/>.
+        /// A header is empty iff it is empty in every layer; the run is then skipped before an action id is taken.
+        /// </summary>
+        /// <typeparam name="TEvaluator">The evaluator type: a context's <see cref="ContextView"/>, or a wrapped
+        /// single-table evaluator.</typeparam>
+        /// <param name="evaluator">Evaluates constraints against the context's views of the tables.</param>
+        /// <param name="extraConstraints">Additional constraints, typically semi-naive timestamp bounds.</param>
+        /// <param name="action">The action id of this run.</param>
+        /// <returns>The instance, or <c>null</c> when some header selects no rows.</returns>
+        /// <exception cref="ArgumentException">An extra constraint names an atom the plan does not have.</exception>
+        /// <exception cref="InvalidOperationException">A constraint has no fast evaluation.</exception>
+        public PlanInstance? InstantiateLayered<TEvaluator>(ref TEvaluator evaluator, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints, ActionId action)
+            where TEvaluator : ILayeredHeaderEvaluator
+        {
             var count = extraConstraints.Length + Headers.Length;
             var specs = new JoinHeaderSpec[count];
-            var subsets = new Subset[count];
+            var subsets = new LayeredSubset[count];
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var n = 0;
@@ -128,22 +158,22 @@ namespace Eggnog.Relations
             return new PlanInstance(this, action, specs, subsets);
         }
 
-        static bool TryEvaluate<TEvaluator>(ref TEvaluator evaluator, AtomId atom, TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, JoinHeaderSpec[] specs, Subset[] subsets, int n)
-            where TEvaluator : IHeaderEvaluator
+        static bool TryEvaluate<TEvaluator>(ref TEvaluator evaluator, AtomId atom, TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, JoinHeaderSpec[] specs, LayeredSubset[] subsets, int n)
+            where TEvaluator : ILayeredHeaderEvaluator
         {
             fast.Clear();
             slow.Clear();
             var subset = evaluator.Evaluate(table, constraints, fast, slow);
             if (slow.Count > 0)
             {
-                subset.Dispose();
+                subset.Dispose(null);
                 Release(subsets, n);
                 throw new InvalidOperationException($"Cached plans only support constraints with a fast pushdown. Got [{string.Join(", ", slow)}] for table {table}.");
             }
 
-            if (subset.Size == 0)
+            if (subset.IsEmpty)
             {
-                subset.Dispose();
+                subset.Dispose(null);
                 Release(subsets, n);
                 return false;
             }
@@ -153,10 +183,10 @@ namespace Eggnog.Relations
             return true;
         }
 
-        static void Release(Subset[] subsets, int n)
+        static void Release(LayeredSubset[] subsets, int n)
         {
             for (var i = 0; i < n; i++)
-                subsets[i].Dispose();
+                subsets[i].Dispose(null);
         }
 
     }

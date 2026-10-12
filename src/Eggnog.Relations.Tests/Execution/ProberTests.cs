@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
         public void ClampedProbesSeeOnlyTheRange()
         {
             var (_, index) = Indexed();
-            var prober = new Prober { Kind = ProberKind.CachedColumn, Column = index, HasOuter = true, Outer = new OffsetRange(40, 47) };
+            var prober = new ProberPiece { Kind = ProberKind.CachedColumn, Column = index, HasOuter = true, Outer = new OffsetRange(40, 47) };
             Assert.True(prober.TryGetSubset(3, out var rows));
             Assert.Equal([43], ExecutionTestUtil.Ids(rows));
             Assert.False(prober.TryGetSubset(8, out _));
@@ -46,11 +46,11 @@ namespace Eggnog.Relations.Tests
         public void ClampedCountIsAtMostTheRangeSize()
         {
             var (_, index) = Indexed();
-            var whole = new Prober { Kind = ProberKind.CachedColumn, Column = index };
+            var whole = new ProberPiece { Kind = ProberKind.CachedColumn, Column = index };
             Assert.Equal(10, whole.Count);
 
             // egglog reports 10 here, the whole index's key count.
-            var clamped = new Prober { Kind = ProberKind.CachedColumn, Column = index, HasOuter = true, Outer = new OffsetRange(51, 55) };
+            var clamped = new ProberPiece { Kind = ProberKind.CachedColumn, Column = index, HasOuter = true, Outer = new OffsetRange(51, 55) };
             Assert.Equal(4, clamped.Count);
         }
 
@@ -59,7 +59,7 @@ namespace Eggnog.Relations.Tests
         {
             var (table, _) = Indexed();
             var tuple = table.GroupByKey(table.All().AsRef(), [new ColumnId(1), new ColumnId(0)]);
-            var prober = new Prober { Kind = ProberKind.CachedTuple, Tuple = tuple, HasOuter = true, Outer = new OffsetRange(0, 50) };
+            var prober = new ProberPiece { Kind = ProberKind.CachedTuple, Tuple = tuple, HasOuter = true, Outer = new OffsetRange(0, 50) };
             Assert.True(prober.TryGetSubset([3u, 13u], out var rows));
             Assert.Equal([13], ExecutionTestUtil.Ids(rows));
             Assert.False(prober.TryGetSubset([3u, 63u], out _));

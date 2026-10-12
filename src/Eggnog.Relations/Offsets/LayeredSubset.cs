@@ -307,6 +307,33 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Enumerates the rows of a single-layer subset (every root subset, so root code reads a header or node as it read
+        /// a plain subset). A multi-layer subset is read per layer (<see cref="GetLayer"/>), since its row ids repeat
+        /// across layers.
+        /// </summary>
+        /// <returns>The enumerator.</returns>
+        /// <exception cref="InvalidOperationException">The subset is multi-layer.</exception>
+        public readonly OffsetEnumerator GetEnumerator() => SingleRows.GetEnumerator();
+
+        /// <summary>
+        /// Moves the rows of a single-layer subset out as a plain <see cref="Subset"/>, leaving <see cref="Empty"/> behind:
+        /// how a layered refinement that ended up in one layer becomes an ordinary frame refinement without a copy. O(1).
+        /// </summary>
+        /// <param name="layer">The layer the rows lie in.</param>
+        /// <returns>The rows, now owned by the caller.</returns>
+        /// <exception cref="InvalidOperationException">The subset is multi-layer.</exception>
+        public Subset TakeSingle(out int layer)
+        {
+            if (layers is not null)
+                ThrowMultiLayer();
+
+            layer = singleLayer;
+            var taken = single.Take();
+            this = default;
+            return taken;
+        }
+
+        /// <summary>
         /// Moves the subset out, leaving <see cref="Empty"/> behind. O(1).
         /// </summary>
         /// <returns>The subset, now owned by the caller.</returns>

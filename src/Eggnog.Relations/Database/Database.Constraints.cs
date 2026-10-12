@@ -31,7 +31,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// First the table answers what it can (<see cref="Table.SplitFastSlow"/>: ranges on its sorted column, a key
+        /// The body is <see cref="ConstraintProcessor.Process"/> on the table's entry (colored-contexts spec §9.4). First
+        /// the table answers what it can (<see cref="Table.SplitFastSlow"/>: ranges on its sorted column, a key
         /// lookup on the union-find). Then every remaining <see cref="ConstraintKind.EqConst"/> on a cacheable column is
         /// promoted to fast: the subset is intersected with the rows the database's cached column index lists under
         /// the constant, or emptied when the constant does not occur; the index is built on first use, O(rows) once.
@@ -48,47 +49,15 @@ namespace Eggnog.Relations
         /// <param name="fast">Receives the fast constraints.</param>
         /// <param name="slow">Receives the slow constraints.</param>
         /// <returns>The rows matching every fast constraint, which the caller owns.</returns>
-        /// <exception cref="KeyNotFoundException">No such table, or (in a child context's database) the table has no
-        /// layer there.</exception>
-        /// <exception cref="NotSupportedException">This is a child context's database and the table is the union-find
-        /// (X23, <see cref="GetQueryTableInfo"/>).</exception>
+        /// <exception cref="KeyNotFoundException">No such table.</exception>
+        /// <exception cref="NotSupportedException">This is a child context's database (<see cref="GetQueryTableInfo"/>):
+        /// its rows lie in several layers, which <see cref="View"/> evaluates (colored-contexts spec §9.4); the union-find
+        /// is never an atom there (X23).</exception>
         public Subset ProcessConstraints(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
             ArgumentNullException.ThrowIfNull(fast);
             ArgumentNullException.ThrowIfNull(slow);
-
-            var info = GetQueryTableInfo(table);
-            var firstSlow = slow.Count;
-            var subset = info.Table.SplitFastSlow(constraints, fast, slow);
-
-            // egglog's slow.retain (mod.rs:725-759), compacting in place.
-            var kept = firstSlow;
-            for (var i = firstSlow; i < slow.Count; i++)
-            {
-                var constraint = slow[i];
-                var column = new ColumnId(constraint.Column);
-                if (constraint.Kind != ConstraintKind.EqConst || info.Spec.IsUncacheable(column))
-                {
-                    slow[kept++] = constraint;
-                    continue;
-                }
-
-                fast.Add(constraint);
-                var index = info.GetColumnIndex(column);
-                if (index.Data.TryGetSubset(constraint.Constant, out var rows))
-                {
-                    subset.Intersect(rows);
-                }
-                else
-                {
-                    // No row holds the constant: nothing matches.
-                    subset.Dispose();
-                    subset = Subset.Empty;
-                }
-            }
-
-            slow.RemoveRange(kept, slow.Count - kept);
-            return subset;
+            return ConstraintProcessor.Process(GetQueryTableInfo(table), constraints, fast, slow);
         }
 
     }

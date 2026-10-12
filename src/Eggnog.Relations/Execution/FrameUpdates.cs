@@ -83,28 +83,73 @@ namespace Eggnog.Relations
         /// <param name="atom">The atom.</param>
         /// <param name="range">The rows.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RefineAtomDense(AtomId atom, OffsetRange range)
+        public void RefineAtomDense(AtomId atom, OffsetRange range) => RefineAtomDense(atom, 0, range);
+
+        /// <summary>
+        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer <paramref name="layer"/>
+        /// (colored-contexts spec §9.5): egglog's <c>refine_atom_dense</c> with the layer the frame's rows lie in.
+        /// </summary>
+        /// <param name="atom">The atom.</param>
+        /// <param name="layer">The layer of the rows: 0 at a root.</param>
+        /// <param name="range">The rows.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RefineAtomDense(AtomId atom, int layer, OffsetRange range)
         {
             ref var e = ref Append();
             e.Kind = FrameUpdateKind.RefineAtomDense;
+            e.Layer = (byte)layer;
             e.Id = atom.Index;
             e.A = range.Start;
             e.B = range.End;
         }
 
         /// <summary>
-        /// Refines <paramref name="atom"/> to <paramref name="rows"/>: a dense refinement when the rows are a range,
-        /// otherwise a node from <paramref name="pool"/> that the frame owns. egglog's <c>refine_atom_subset</c>
+        /// Refines <paramref name="atom"/> to <paramref name="rows"/>, in layer 0: a dense refinement when the rows are a
+        /// range, otherwise a node from <paramref name="pool"/> that the frame owns. egglog's <c>refine_atom_subset</c>
         /// (core-relations/src/free_join/execute.rs:752-761).
         /// </summary>
         /// <param name="atom">The atom.</param>
         /// <param name="rows">The refined rows, nonempty; owned by the frame from now on.</param>
         /// <param name="pool">The pool to take the node from.</param>
-        public void RefineAtomSubset(AtomId atom, Subset rows, TrieNodePool pool)
+        public void RefineAtomSubset(AtomId atom, Subset rows, TrieNodePool pool) => RefineAtomSubset(atom, 0, rows, pool);
+
+        /// <summary>
+        /// Refines <paramref name="atom"/> to <paramref name="rows"/> of layer <paramref name="layer"/> (colored-contexts
+        /// spec §9.5): a dense refinement when the rows are a range, otherwise a node from <paramref name="pool"/> that the
+        /// frame owns.
+        /// </summary>
+        /// <param name="atom">The atom.</param>
+        /// <param name="layer">The layer of the rows: 0 at a root.</param>
+        /// <param name="rows">The refined rows, nonempty; owned by the frame from now on.</param>
+        /// <param name="pool">The pool to take the node from.</param>
+        public void RefineAtomSubset(AtomId atom, int layer, Subset rows, TrieNodePool pool)
         {
             if (rows.TryGetDense(out var range))
             {
-                RefineAtomDense(atom, range);
+                RefineAtomDense(atom, layer, range);
+                return;
+            }
+
+            ref var e = ref Append();
+            e.Kind = FrameUpdateKind.RefineAtomOwned;
+            e.Id = atom.Index;
+            e.Node = pool.Rent(layer, rows);
+        }
+
+        /// <summary>
+        /// Refines <paramref name="atom"/> to <paramref name="rows"/>, which may lie in several layers (colored-contexts
+        /// spec §9.5, a probed side joined across layers): <see cref="RefineAtomSubset(AtomId, int, Subset, TrieNodePool)"/>
+        /// when they lie in one layer, otherwise a multi-layer node from <paramref name="pool"/> that the frame owns.
+        /// </summary>
+        /// <param name="atom">The atom.</param>
+        /// <param name="rows">The refined rows, nonempty; owned by the frame from now on.</param>
+        /// <param name="pool">The pool to take the node from.</param>
+        public void RefineAtomLayered(AtomId atom, LayeredSubset rows, TrieNodePool pool)
+        {
+            if (rows.IsMultiLayer == false)
+            {
+                var single = rows.TakeSingle(out var layer);
+                RefineAtomSubset(atom, layer, single, pool);
                 return;
             }
 

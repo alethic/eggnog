@@ -58,8 +58,14 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         public (int Atom, Constraint Constraint)[] Pinned { get; }
 
-        /// <inheritdoc />
-        public override void Execute(DiffRunner runner)
+        /// <summary>
+        /// Splits the query at the runner's current boundary: the semi-naive variants and the oracle's matches of each
+        /// (an entry is <c>null</c> when that variant is over the oracle's budget). Shared with
+        /// <see cref="DiffLayeredSemiNaiveStep"/>, which runs the same variants over a layered copy.
+        /// </summary>
+        /// <param name="runner">The runner.</param>
+        /// <returns>The variants, their matches, the sorted atoms and the boundary.</returns>
+        public (List<(int Atom, Constraint Constraint)[]> Variants, Dictionary<string, uint[]>?[] Expected, int[] Sorted, uint Boundary) Split(DiffRunner runner)
         {
             var program = runner.Program;
             var boundary = runner.Epoch > Back ? runner.Epoch - (uint)Back : 0u;
@@ -78,7 +84,14 @@ namespace Eggnog.Relations.Tests
                 variants.Add(extras.ToArray());
             }
 
-            var expected = variants.Select(v => runner.Reference(Query, Constrain(v))).ToArray();
+            return (variants, variants.Select(v => runner.Reference(Query, Constrain(v))).ToArray(), sorted, boundary);
+        }
+
+        /// <inheritdoc />
+        public override void Execute(DiffRunner runner)
+        {
+            var program = runner.Program;
+            var (variants, expected, sorted, boundary) = Split(runner);
             var all = runner.Reference(Query, Constrain(Pinned));
             var old = runner.Reference(Query, Constrain(sorted.Select(j => (j, Constraint.LtConst(Ts(program, j), new Value(boundary)))).Concat(Pinned).ToArray()));
             if (all is null || old is null || expected.Any(e => e is null))

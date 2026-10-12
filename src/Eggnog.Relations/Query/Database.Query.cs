@@ -28,11 +28,13 @@ namespace Eggnog.Relations
         public RuleSetBuilder NewRuleSet() => new(this);
 
         /// <summary>
-        /// Plans <paramref name="query"/> with the statistics of the current tables. egglog's <c>plan_query</c>.
+        /// Plans <paramref name="query"/> with the statistics of the current tables. egglog's <c>plan_query</c>. A layered
+        /// database (a child) plans with its view's statistics (<see cref="View"/>, colored-contexts spec §3.4, §9.7): what
+        /// the context sees, read through, even of tables it never wrote.
         /// </summary>
         /// <param name="query">The query; not modified.</param>
         /// <returns>The plan template.</returns>
-        internal PlanTemplate PlanQuery(Query query) => QueryPlanner.PlanQuery(query, this);
+        internal PlanTemplate PlanQuery(Query query) => QueryPlanner.PlanQuery(query, LayeredView is { } layered ? layered : (IPlanStatistics)this);
 
         /// <summary>
         /// Gets the columns of <paramref name="table"/> that hold e-class ids: the columns its rebuild canonicalizes
@@ -71,9 +73,10 @@ namespace Eggnog.Relations
         /// calls <c>process_constraints</c> and keeps its split (core-relations/src/query.rs:407).
         /// </summary>
         /// <remarks>
-        /// In a child context's database the union-find is refused (colored-contexts spec §3.4, X23): a rule in a child
-        /// never reads the union-find as an atom. Other tables split against the root's entry from M10.2; until then a
-        /// table with no layer in the child throws (<see cref="GetQueryTableInfo"/>).
+        /// In a child context's database (colored-contexts spec §3.4) the split is
+        /// <see cref="ConstraintProcessor.Split"/> on the root's entry of the table: it depends only on the table's kind and
+        /// cacheable columns, which every layer shares, and builds no index. The union-find is refused there (X23, the
+        /// <c>$uf</c> atom guard): a rule in a child never reads the union-find as an atom, so such a rule cannot be built.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="constraints">The constraints.</param>
@@ -81,15 +84,31 @@ namespace Eggnog.Relations
         /// <param name="slow">Receives the slow constraints.</param>
         /// <exception cref="NotSupportedException">This is a child context's database and the table is the
         /// union-find.</exception>
+        /// <exception cref="KeyNotFoundException">No such table.</exception>
         void IQuerySchema.SplitConstraints(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
+            if (IsChild)
+            {
+                var schema = owner!.Store.Schema;
+                if (table == schema.UnionFind)
+                    ThrowQueriedInChild(table);
+
+                var entry = schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.");
+                ConstraintProcessor.Split(entry.RootInfo, constraints, fast, slow);
+                return;
+            }
+
             ProcessConstraints(table, constraints, fast, slow).Dispose();
         }
+
+        /// <inheritdoc />
+        bool IQuerySchema.IsCacheable(TableId table, ColumnId column) => GetTableSpec(table).IsUncacheable(column) == false;
 
         /// <summary>
         /// Gets the number of rows of the atom's table that match its fast constraints, tombstones included: egglog's
         /// <c>approx_size</c>, the size of the subset <c>process_constraints</c> computed for the atom
-        /// (core-relations/src/free_join/mod.rs:91-94).
+        /// (core-relations/src/free_join/mod.rs:91-94). A layered database reads its view's statistics (colored-contexts
+        /// spec §9.7).
         /// </summary>
         /// <param name="atom">The atom's id.</param>
         /// <param name="info">The atom.</param>
@@ -97,6 +116,9 @@ namespace Eggnog.Relations
         long IPlanStatistics.GetApproximateSize(AtomId atom, QueryAtom info)
         {
             ArgumentNullException.ThrowIfNull(info);
+            if (LayeredView is IPlanStatistics layered)
+                return layered.GetApproximateSize(atom, info);
+
             var fast = new List<Constraint>(info.FastConstraints.Length);
             var slow = new List<Constraint>();
             var subset = ProcessConstraints(info.Table, info.FastConstraints, fast, slow);
@@ -108,12 +130,14 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the table's live row count and the column's distinct-value count from its cached column index. egglog's
         /// <c>col_uniqueness</c> (core-relations/src/free_join/mod.rs:888-895), through
-        /// <see cref="ColumnCardEstimator"/>.
+        /// <see cref="ColumnCardEstimator"/>. A layered database sums its view's per-layer counts (colored-contexts spec
+        /// §9.7).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="column">The column.</param>
         /// <returns>The estimate.</returns>
-        ColumnUniqueness IPlanStatistics.GetColumnUniqueness(TableId table, ColumnId column) => new ColumnCardEstimator(this).GetColumnUniqueness(table, column);
+        ColumnUniqueness IPlanStatistics.GetColumnUniqueness(TableId table, ColumnId column) =>
+            LayeredView is IPlanStatistics layered ? layered.GetColumnUniqueness(table, column) : new ColumnCardEstimator(this).GetColumnUniqueness(table, column);
 
         /// <summary>
         /// Evaluates a header's constraints against the current table:

@@ -102,6 +102,21 @@ namespace Eggnog.Relations.Tests
         public int MaxVariables { get; set; }
 
         /// <summary>
+        /// Gets or sets the number of semi-naive variants run over a layered copy (<see cref="DiffLayeredSemiNaiveStep"/>).
+        /// </summary>
+        public int LayeredVariants { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of those that had matches.
+        /// </summary>
+        public int LayeredVariantsWithMatches { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of rows the layered copies hid (rows of lower layers a higher one overrides).
+        /// </summary>
+        public long LayeredHiddenRows { get; set; }
+
+        /// <summary>
         /// Adds <paramref name="other"/> into this.
         /// </summary>
         public void Add(DiffStats other)
@@ -124,6 +139,9 @@ namespace Eggnog.Relations.Tests
             Generations += other.Generations;
             RowsCompared += other.RowsCompared;
             MaxVariables = System.Math.Max(MaxVariables, other.MaxVariables);
+            LayeredVariants += other.LayeredVariants;
+            LayeredVariantsWithMatches += other.LayeredVariantsWithMatches;
+            LayeredHiddenRows += other.LayeredHiddenRows;
         }
 
         /// <inheritdoc />
@@ -137,6 +155,9 @@ namespace Eggnog.Relations.Tests
             b.Append(RebuildPasses).Append(" rebuild passes (").Append(ChangingRebuildPasses).Append(" changing), ");
             b.Append(Generations).Append(" table generations, ").Append(RowsCompared).Append(" rows compared, ");
             b.Append("at most ").Append(MaxVariables).Append(" variables per rule");
+            if (LayeredVariants > 0)
+                b.Append(", ").Append(LayeredVariants).Append(" layered variants (").Append(LayeredVariantsWithMatches).Append(" matching, ").Append(LayeredHiddenRows).Append(" hidden rows)");
+
             return b.ToString();
         }
 

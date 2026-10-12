@@ -67,7 +67,16 @@ namespace Eggnog.Relations
         /// <param name="id">The table's id.</param>
         /// <param name="spec">The table's spec.</param>
         /// <param name="layers">The layers by depth; at most 32 (X36), each over a <see cref="SortedWritesTable"/>.</param>
-        internal TableView(TableId id, TableSpec spec, LayerView?[] layers)
+        internal TableView(TableId id, TableSpec spec, LayerView?[] layers) :
+            this(id, spec, layers, requireSorted: true)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a view, checking the layers' table kind when <paramref name="requireSorted"/> is set.
+        /// </summary>
+        TableView(TableId id, TableSpec spec, LayerView?[] layers, bool requireSorted)
         {
             ArgumentNullException.ThrowIfNull(layers);
             if (layers.Length > 32)
@@ -83,13 +92,30 @@ namespace Eggnog.Relations
                 if (layers[j] is not { } layer)
                     continue;
 
-                if (layer.Sorted is null)
+                if (requireSorted && layer.Sorted is null)
                     throw new ArgumentException("Every layer of a function table's view is a sorted-writes table.", nameof(layers));
 
                 mask |= 1u << j;
             }
 
             PresentMask = mask;
+        }
+
+        /// <summary>
+        /// Creates the one-layer view of a database's own table, hiding nothing: what a root context, or a bare database,
+        /// sees of each of its tables (colored-contexts spec §9.1, <see cref="ContextView.ForRoot"/>). The table may be of
+        /// any kind (the union-find included), since the executor only scans and indexes it; the point lookups of this
+        /// type (<see cref="FindRow(uint, out int)"/> and its overloads) need a <see cref="SortedWritesTable"/> and are
+        /// used only on a child's views.
+        /// </summary>
+        /// <param name="id">The table's id.</param>
+        /// <param name="info">The database's entry for the table.</param>
+        /// <param name="isFrozen">Whether the database is frozen.</param>
+        /// <returns>The view.</returns>
+        internal static TableView ForTable(TableId id, TableInfo info, bool isFrozen)
+        {
+            ArgumentNullException.ThrowIfNull(info);
+            return new TableView(id, info.Spec, [new LayerView(0, info, HiddenRows.None, isFrozen)], requireSorted: false);
         }
 
         /// <summary>
@@ -102,6 +128,11 @@ namespace Eggnog.Relations
         /// <returns>The rows, which the caller owns.</returns>
         public LayeredSubset AllRows(SubsetArrayPool? pool)
         {
+            // One layer (every root view, and a child's view of a table no level of its chain touched): the table's own
+            // All(), exactly the root executor's row set, for any table kind.
+            if (Layers.Length == 1)
+                return Layers[0] is { } only0 ? LayeredSubset.Single(0, only0.Table.All()) : LayeredSubset.Empty;
+
             Span<int> counts = stackalloc int[LayeredSubset.MaxLayers];
             var withRows = 0u;
             for (var j = 0; j < Layers.Length; j++)
