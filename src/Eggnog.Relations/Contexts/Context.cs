@@ -44,10 +44,11 @@ namespace Eggnog.Relations
     /// stamped when they merge (X38).
     /// </para>
     /// <para>
-    /// Interim (M9.3, §17): <see cref="Rebuild"/> runs the union-find catch-up and the merge in a child, and egglog's rebuild
-    /// pass at the root; a child whose rebuild would need row work (an ancestor appended rows since it last caught up, or
-    /// its union-find changes over rows it holds or sees) is refused (row catch-up, the child's rebuild pass and the root's
-    /// settling arrive in M9.4).
+    /// Rebuild (§7). <see cref="Rebuild"/> is the one rebuild loop of every level: egglog's passes at the root; in a
+    /// child, catch-up with its ancestors (union-find re-key, ancestor appends, container refresh) in the first pass, then
+    /// per pass the rewrite of its own rows, the hide-and-copy of ancestor rows naming its own losers (losers only,
+    /// decision 3) and the merge. Before the root is shared (a child created from it, or a freeze) it settles the rows
+    /// written since its last rebuild (<see cref="Settle"/>, X38).
     /// </para>
     /// </remarks>
     internal sealed partial class Context : IDisposable
@@ -135,6 +136,28 @@ namespace Eggnog.Relations
         long rekeyedMembers;
 
         /// <summary>
+        /// The child's cursor into the store's container dirty log (§7.4): the ids logged before it are refreshed.
+        /// </summary>
+        int dirtyCursor;
+
+        /// <summary>
+        /// The journal rows the eq-container guard has checked (§7.4, G-b).
+        /// </summary>
+        int eqCheckedRows;
+
+        /// <summary>
+        /// The eq-container version the guard last checked the journal against (§7.4, G-b,
+        /// <see cref="ContainerValues.EqVersion"/>); when the store's version has moved past it, the whole journal is
+        /// checked again before the child is clean.
+        /// </summary>
+        long eqCheckedVersion;
+
+        /// <summary>
+        /// The store's container environments, shared with the root; <c>null</c> at the root, which needs none here.
+        /// </summary>
+        readonly ContainerValues? containers;
+
+        /// <summary>
         /// The thread domain; reassigned (on the domain's own thread) when an ancestor freezes, so read volatile.
         /// </summary>
         ThreadAffinityGuard domain;
@@ -214,9 +237,14 @@ namespace Eggnog.Relations
             database = new Database(store.Root.Database, this, overlayTable, idBlocks, parallelism);
             domain = parent.IsFrozen ? new ThreadAffinityGuard() : parent.Domain;
 
+            // §7.4 G-b: the journal is empty, so it is checked against the current eq-container version.
+            containers = database.Containers;
+            eqCheckedVersion = containers.EqVersion;
+
             // §6.2: no layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
             tables = new ContextTables(store.Schema, this);
             database.AttachLayers(tables);
+            dirtyCursor = store.ContainerDirtyLog.End;
 
             // Read after every cursor is initialized (the union-find cursor and the row cursors above), so anything the
             // parent wrote at an earlier epoch is already part of the child's starting view.
@@ -322,7 +350,9 @@ namespace Eggnog.Relations
         /// <remarks>
         /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in egglog
         /// (X42). A child is not clean while an ancestor that is not settled changed since it last caught up
-        /// (<see cref="ContextTables.NeedsCatchUp"/>).
+        /// (<see cref="ContextTables.NeedsCatchUp"/>), nor while the store gained an eq-sort container its eq-container
+        /// guard has not checked its displacements against (<see cref="ContainerValues.EqVersion"/>, §7.4 G-b): such a
+        /// container is reconciled only by a rebuild, which refuses the child if the container names one of its losers.
         /// </remarks>
         public bool IsClean
         {
@@ -341,9 +371,17 @@ namespace Eggnog.Relations
                     && database.Catalog.Notifications.IsEmpty
                     && unionFindCursor == parent.DisplacedCount
                     && tables!.NeedsCatchUp == false
+                    && IsEqGuardCurrent
                     && parent.IsClean;
             }
         }
+
+        /// <summary>
+        /// Gets whether a child's eq-container guard has checked its displacements against every eq-sort container the
+        /// store holds (§7.4, G-b): its journal is empty, or the store's eq-container version has not moved since the
+        /// last check. One volatile read. Always <c>true</c> at the root.
+        /// </summary>
+        internal bool IsEqGuardCurrent => containers is null || journal!.Count == 0 || eqCheckedVersion == containers.EqVersion;
 
         /// <summary>
         /// Gets or sets the object that wraps this context in the bridge (its <c>EGraphContext</c>). Set once.
@@ -363,6 +401,16 @@ namespace Eggnog.Relations
         /// Gets the context's id blocks, or <c>null</c> at the root.
         /// </summary>
         internal IdBlockAllocator? IdBlocks => idBlocks;
+
+        /// <summary>
+        /// Gets or sets the displaced count at the end of the last rebuild pass (§7.3): the journal rows past it are the
+        /// next pass's delta, which <see cref="ContextTables.RebuildPass"/> consumes. Domain thread only.
+        /// </summary>
+        internal int JournalMark
+        {
+            get => journalMark;
+            set => journalMark = value;
+        }
 
         /// <summary>
         /// Throws <see cref="ObjectDisposedException"/> once the context is disposed.

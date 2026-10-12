@@ -92,6 +92,12 @@ namespace Eggnog.Relations
         public CounterId ClockCounter { get; }
 
         /// <summary>
+        /// Gets the log of containers the root rebuilt in place while it had live descendants, from which children
+        /// re-stamp their own rows (§7.4, X31).
+        /// </summary>
+        public ContainerDirtyLog ContainerDirtyLog { get; } = new();
+
+        /// <summary>
         /// Gets the counters every context shares.
         /// </summary>
         internal CounterSet Counters { get; }

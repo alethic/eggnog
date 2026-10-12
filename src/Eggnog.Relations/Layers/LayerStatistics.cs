@@ -39,6 +39,31 @@ namespace Eggnog.Relations
         /// </summary>
         public long RowsCanonicalized;
 
+        /// <summary>
+        /// The ancestor rows a row catch-up looked at (§7.2): every row an unsettled ancestor appended since the context
+        /// last caught up, live or not. Zero under frozen ancestors once the context has read them.
+        /// </summary>
+        public long CatchUpRowsExamined;
+
+        /// <summary>
+        /// The distinct ancestor rows step 4 of a rebuild pass found through the ancestors' rebuild indexes under the
+        /// context's new own losers (§7.3): the uses of those losers, live or not; never a scan.
+        /// </summary>
+        public long AncestorRowsExamined;
+
+        /// <summary>
+        /// The ancestor rows the context copied into its own layers and hid (§7.2, §7.3): by catch-up, for each of its
+        /// branches, and by step 4. The copy volume of decision 3 (G3).
+        /// </summary>
+        public long RowsCopied;
+
+        /// <summary>
+        /// The ancestor rows a catch-up copied only to re-stamp them, because their timestamp lies below the context's
+        /// semi-naive floor (§7.2 branch c′, the C7 safeguard). Zero whenever writers stamp with their state's timestamp
+        /// (I21), which tests assert.
+        /// </summary>
+        public long RestampedCopies;
+
     }
 
 }

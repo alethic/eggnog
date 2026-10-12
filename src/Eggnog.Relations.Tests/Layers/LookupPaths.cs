@@ -23,7 +23,28 @@ namespace Eggnog.Relations.Tests
         /// <param name="context">A clean context.</param>
         /// <param name="probes">Extra keys to probe, by key width.</param>
         /// <returns>The visible rows, by table, by key (<see cref="LayeredTestUtil.KeyOf"/>).</returns>
-        public static Dictionary<TableId, Dictionary<string, uint[]>> Check(Context context, IEnumerable<uint[]>? probes = null)
+        public static Dictionary<TableId, Dictionary<string, uint[]>> Check(Context context, IEnumerable<uint[]>? probes = null) => Run(context, probes, true);
+
+        /// <summary>
+        /// The same comparison on a context that has caught up with its ancestors but may have rebuild work of its own
+        /// pending (unions merged since its last rebuild): what a write leaves behind. The layering is coherent then (every
+        /// hidden set sealed, every cached view current with the ancestors' hides); only the context's own read API, which
+        /// requires a clean context, is left out.
+        /// </summary>
+        /// <param name="context">A context caught up with its ancestors.</param>
+        /// <returns>The visible rows, by table, by key.</returns>
+        public static Dictionary<TableId, Dictionary<string, uint[]>> CheckLayers(Context context)
+        {
+            if (context.Tables is { } tables)
+                Assert.False(tables.NeedsCatchUp, "the comparison needs a context caught up with its ancestors");
+
+            return Run(context, null, false);
+        }
+
+        /// <summary>
+        /// Checks every table of <paramref name="context"/>.
+        /// </summary>
+        static Dictionary<TableId, Dictionary<string, uint[]>> Run(Context context, IEnumerable<uint[]>? probes, bool clean)
         {
             var schema = context.Store.Schema;
             if (context.Tables is { } tables)
@@ -32,7 +53,7 @@ namespace Eggnog.Relations.Tests
             var extra = probes?.ToList() ?? new List<uint[]>();
             var seen = new Dictionary<TableId, Dictionary<string, uint[]>>();
             foreach (var table in schema.FunctionTables.ToArray())
-                seen[table] = CheckTable(context, table, extra);
+                seen[table] = CheckTable(context, table, extra, clean);
 
             return seen;
         }
@@ -40,11 +61,11 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Checks one table.
         /// </summary>
-        static Dictionary<string, uint[]> CheckTable(Context context, TableId table, List<uint[]> probes)
+        static Dictionary<string, uint[]> CheckTable(Context context, TableId table, List<uint[]> probes, bool clean)
         {
             var spec = context.Store.Schema.GetSpec(table);
             var keyCount = spec.KeyCount;
-            var view = context.GetView(table);
+            var view = clean ? context.GetView(table) : context.Tables?.GetView(table) ?? context.Store.Schema.RootView(table);
 
             // The filtered scan: one visible row per key (I12).
             var visible = new Dictionary<string, (int Layer, int Row, uint[] Cells)>();
@@ -114,12 +135,17 @@ namespace Eggnog.Relations.Tests
                     Assert.Equal(scanned.Row, writeRow);
                 }
 
-                // The context's own read API and the view's row copy.
-                Assert.Equal(found, context.TryGetRow(table, key, viaContext));
+                // The context's own read API (on a clean context) and the view's row copy.
+                if (clean)
+                {
+                    Assert.Equal(found, context.TryGetRow(table, key, viaContext));
+                    if (found)
+                        Assert.Equal(scanned.Cells, viaContext);
+                }
+
                 Assert.Equal(found, view.TryGetRow(key, destination, out _, out _));
                 if (found)
                 {
-                    Assert.Equal(scanned.Cells, viaContext);
                     Assert.Equal(scanned.Cells, destination);
                     for (var c = 0; c < spec.Arity; c++)
                     {

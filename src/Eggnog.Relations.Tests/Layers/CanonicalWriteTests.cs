@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for canonical and stamped writes in a child (colored-contexts spec X38, §6.6, I13, I19, I21; review finding
-    /// R2-4), the child part: a write naming a stale id lands on the canonical key and merges with the row visible there,
-    /// and a raw write's timestamp is replaced by the merge's epoch. (The rest, after a child's own union and rebuild,
-    /// arrives with the child's rebuild pass in M9.4.)
+    /// R2-4): a write naming a stale id lands on the canonical key and merges with the row visible there, also after the
+    /// child's own union and rebuild, without another rebuild; and a raw write's timestamp is replaced by the merge's
+    /// epoch.
     /// </summary>
     public class CanonicalWriteTests
     {
@@ -61,6 +61,46 @@ namespace Eggnog.Relations.Tests
             Insert(child, g, ids[0], ids[2], 0);
             Assert.Equal(ids[1], Row(child, g, ids[0])![1]);
             Assert.Equal(0, child.DisplacedCount);
+        }
+
+        /// <summary>
+        /// R2-4: after the child's own <c>Union(x, y)</c> and rebuild, a write of <c>f(y)</c> merges into <c>f(x)</c> at
+        /// once: the child stays clean, needs no rebuild, and its invariants hold.
+        /// </summary>
+        [Fact]
+        public void AfterAnOwnUnionAWriteOfTheLoserMergesIntoTheWinner()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var x = root.NewId();
+            var y = root.NewId();
+            var z = root.NewId();
+            Insert(root, f, x, 2, 0);
+            root.Freeze();
+
+            var child = root.CreateChild();
+            Insert(child, f, z, 1, 0);
+            child.Union(x, y);
+            child.Union(z, child.NewId());
+            child.Rebuild();
+            Assert.True(child.IsClean);
+
+            // A larger value under the loser raises the winner's row; a smaller one changes nothing; no rebuild either way.
+            Insert(child, f, y, 6, 0);
+            Assert.True(child.IsClean);
+            Assert.Equal(6u, Row(child, f, x)![1]);
+            Assert.Null(Row(child, f, y));
+            Insert(child, f, y, 3, 0);
+            Assert.True(child.IsClean);
+            Assert.Equal(6u, Row(child, f, x)![1]);
+            Assert.Equal(2, child.GetView(f).VisibleCount);
+            child.CheckInvariants();
+            LookupPaths.Check(child, [[x], [y], [z]]);
+
+            // The root is untouched.
+            Assert.Equal(2u, Row(root, f, x)![1]);
+            Assert.NotEqual(root.Find(x), root.Find(y));
         }
 
         [Fact]

@@ -285,7 +285,8 @@ namespace Eggnog.Relations.Tests
         {
             var store = new Store();
             var root = store.Root;
-            root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter));
+            // A container over base values (holdsIds: false), which a child may intern (§10.7, G-a).
+            root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter), holdsIds: false);
             var child = root.CreateChild();
             Assert.Same(root.Database.Containers, child.Database.Containers);
 

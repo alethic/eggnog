@@ -22,8 +22,10 @@ namespace Eggnog.Relations.Tests
     /// the egglog-parity suites cover. At the end every context is checked again (isolation), and the chain is disposed.
     /// </para>
     /// <para>
-    /// Interim (M9.3): no ancestor changes after it has children, so no catch-up is needed; deletes and clears happen only
-    /// where §6.7 allows them (a root before its first child, a child under a frozen parent before its own children).
+    /// These states are built as M9.3's were: no ancestor changes after it has children, so no catch-up is needed (the
+    /// context differential, <see cref="ContextDifferentialTests"/>, covers ancestors that change); deletes and clears
+    /// happen only where §6.7 allows them (a root before its first child, a child under a frozen parent before its own
+    /// children).
     /// </para>
     /// </remarks>
     sealed class RandomLayeredProgram

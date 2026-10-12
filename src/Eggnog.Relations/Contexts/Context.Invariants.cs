@@ -30,11 +30,15 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Interim (M9.3): the union-find part (<see cref="CheckUnionFindInvariants"/>). The tables part
-        /// (<c>ContextTables.CheckInvariants</c>, I12-I18) and the executor part arrive with the child's rebuild and the
-        /// layered executor (M9.4, M10.2); until then the layered tables are checked by the tests' <c>LookupPathsAgree</c>
-        /// comparison. Cost: linear in the context's overlay and journal, its parent's displacements since its creation,
-        /// its ancestors' overlays, journals and root rows (I10), and the root's id range at the root.
+        /// Composition (§12.7, B2): the union-find part (<see cref="CheckUnionFindInvariants"/>, I4-I10, I23 and the
+        /// gate), then, in a child, the tables part (<see cref="ContextTables.CheckInvariants"/>, I10 and I12-I19) and the
+        /// eq-container part (<see cref="CheckEqContainerElements"/>, G-b). The
+        /// executor part (<c>ExecutorInvariants</c>) arrives with the layered executor (M10.2). The root's rows are checked
+        /// canonical (I35) where the root settles, at <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds
+        /// (<see cref="CheckRootSettled"/>): elsewhere a raw root write may leave a stale row until the next rebuild, as
+        /// in egglog (X38). Cost: linear in the context's overlay and journal, its parent's displacements since its
+        /// creation, its ancestors' overlays, journals and root rows (I10), the root's id range at the root, and the
+        /// tables part's cost.
         /// </para>
         /// <para>
         /// A context that is not frozen is checked inside its thread domain (I24), so nothing it reads changes under the
@@ -53,9 +57,74 @@ namespace Eggnog.Relations
 
             var violations = new List<string>();
             CheckUnionFindInvariants(violations);
+            tables?.CheckInvariants(violations);
+            CheckEqContainerElements(violations);
             if (violations.Count > 0)
                 throw new InvalidOperationException($"The context at depth {Depth} violates {violations.Count} invariant(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
         }
+
+        /// <summary>
+        /// Checks I35 at the root (§12.3, §7.6): every id cell of every live row of every registered table is canonical in
+        /// the root's view, as after <see cref="Settle"/>; throws listing the violations. The root part of the tables check,
+        /// which DEBUG builds run where the root settles (<see cref="CreateChild"/>, <see cref="Freeze"/>).
+        /// </summary>
+        /// <remarks>Cost: O(root rows × id columns), plus the union-find's finds.</remarks>
+        /// <exception cref="InvalidOperationException">This is not the root, or a root row names a non-canonical
+        /// id.</exception>
+        internal void CheckRootSettled()
+        {
+            if (parent is not null)
+                throw new InvalidOperationException("Only the root settles.");
+
+            var violations = new List<string>();
+            var find = store.RootUnionFind.UnionFind;
+            foreach (var id in store.Schema.FunctionTables)
+            {
+                var s = store.Schema[id]!;
+                var columns = s.RebuildColumns;
+                if (columns.Length == 0)
+                    continue;
+
+                var rows = s.Root.Rows;
+                for (var r = 0; r < rows.Count; r++)
+                {
+                    if (rows.IsStale(r))
+                        continue;
+
+                    var cells = rows.GetRow(r);
+                    foreach (var column in columns)
+                    {
+                        var cell = cells[column.Rep];
+                        if (find.FindNaive(cell) != cell)
+                            Report(violations, $"I35: root row {r} of table {id} names {cell} in column {column.Rep}, which is {find.FindNaive(cell)} at the root");
+                    }
+                }
+            }
+
+            if (violations.Count > 0)
+                throw new InvalidOperationException($"The root is not settled; {violations.Count} violation(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
+        }
+
+        /// <summary>
+        /// Adds to <paramref name="violations"/> every own displacement of a child that an eq-sort container holds (§7.4
+        /// G-b, decision 9; the storage half of the bridge's check C6, §12.7): what the eq-container guard refuses. Nothing
+        /// at the root or without a container type holding ids. O(journal × container types) probes.
+        /// </summary>
+        void CheckEqContainerElements(List<string> violations)
+        {
+            if (containers is not { HasEqContainers: true } values)
+                return;
+
+            foreach (var id in journal!.Ids)
+                if (IsOwnDisplacement(id) && values.AnyEqContainerMentions(id))
+                    Report(violations, $"G-b: the context displaced {id}, which an eq-sort container holds");
+        }
+
+        /// <summary>
+        /// DEBUG builds: <see cref="CheckRootSettled"/>, where the root settles; nothing in a release build.
+        /// </summary>
+        [System.Diagnostics.Conditional("DEBUG")]
+        void AssertRootSettled() => CheckRootSettled();
 
         /// <summary>
         /// Adds to <paramref name="violations"/> every violation of the union-find invariants (§12.2, §12.7 item 1).
@@ -416,7 +485,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Adds a violation, up to <see cref="MaxReportedViolations"/>.
         /// </summary>
-        static void Report(List<string> violations, string message)
+        internal static void Report(List<string> violations, string message)
         {
             if (violations.Count < MaxReportedViolations)
                 violations.Add(message);

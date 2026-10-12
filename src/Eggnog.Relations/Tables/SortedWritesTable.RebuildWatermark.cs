@@ -25,7 +25,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="rebuilderTableId">The rebuilder's table id.</param>
         /// <returns>The first row written since that rebuild.</returns>
-        int FirstRowSinceRebuild(TableId rebuilderTableId)
+        internal int FirstRowSinceRebuild(TableId rebuilderTableId)
         {
             return rebuiltAt is not null && rebuiltAt.TryGetValue(rebuilderTableId, out var at) && at.Major == generation
                 ? Math.Min(at.Minor, data.Count)
@@ -38,11 +38,20 @@ namespace Eggnog.Relations
         /// rebuild treats as new). The marks of other rebuilders stay as they are. O(1) amortized.
         /// </summary>
         /// <param name="rebuilderTableId">The rebuilder's table id.</param>
-        void MarkRebuilt(TableId rebuilderTableId)
+        internal void MarkRebuilt(TableId rebuilderTableId)
         {
             rebuiltAt ??= new DenseIdMap<TableId, TableVersion>();
             rebuiltAt.Insert(rebuilderTableId, new TableVersion(generation, data.Count));
         }
+
+        /// <summary>
+        /// Gets whether rows were appended since <see cref="ApplyRebuild"/> (or <see cref="SettleAppends"/>) last ran
+        /// against <paramref name="rebuilderTableId"/>: the rows a raw write may have left stale (colored-contexts spec
+        /// §7.6). Always <c>false</c> for a table without rebuild columns, which no union can make stale. O(1).
+        /// </summary>
+        /// <param name="rebuilderTableId">The rebuilder's table id.</param>
+        /// <returns><c>true</c> if such rows exist.</returns>
+        internal bool HasRowsSinceRebuild(TableId rebuilderTableId) => toRebuild.Length > 0 && FirstRowSinceRebuild(rebuilderTableId) < data.Count;
 
     }
 

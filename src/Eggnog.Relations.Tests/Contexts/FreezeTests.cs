@@ -15,7 +15,8 @@ namespace Eggnog.Relations.Tests
     /// Tests for the storage part of freezing (colored-contexts spec §8.1, §4.3, X13, X14, X43; review finding R2-5):
     /// tables without rebuild columns freeze without a rebuild index, frozen databases refuse writes, warm-up builds
     /// indexes, catalogs refresh serially, compaction at freeze respects the gate, frozen views fold every hide, and a
-    /// table added after a freeze is answered through the frozen contexts' parents, also from concurrent children.
+    /// table added after a freeze is answered through the frozen contexts' parents, also from concurrent children; and
+    /// the full freeze (§8.1, M9.4): finds on frozen contexts write nothing, from many threads at once.
     /// </summary>
     public class FreezeTests
     {
@@ -233,6 +234,205 @@ namespace Eggnog.Relations.Tests
             Assert.Same(store.Schema.RootView(g), middle.GetView(g));
         }
 
+
+        /// <summary>
+        /// Frozen finds do not write (I11, I23, X34): 8 threads find 10⁵ ids each on a frozen chain (a frozen root with
+        /// unions, a frozen child with its own unions over it, a frozen grandchild with its flattened chain), plus as many
+        /// ids beyond the root's array, while siblings of the frozen grandchild mint, union and rebuild, and find their own
+        /// local ids; the root's parent array (its length included), the overlays and the journals are bit-identical
+        /// afterwards, and every find agrees with a serial reading taken before.
+        /// </summary>
+        [Fact]
+        public void FrozenFindsDoNotWrite()
+        {
+            const int Ids = 20_000;
+            const int FindsPerThread = 100_000;
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            for (var i = 0; i < Ids; i++)
+                root.NewId();
+
+            var random = new Random(3);
+            root.Write((random, store.UnionFindTable), static (state, args) =>
+            {
+                Span<uint> row = stackalloc uint[3];
+                for (var i = 0; i < Ids / 2; i++)
+                {
+                    row[0] = (uint)args.random.Next(Ids);
+                    row[1] = (uint)args.random.Next(Ids);
+                    row[2] = state.Timestamp;
+                    state.StageInsert(args.UnionFindTable, row);
+                }
+
+                return 0;
+            });
+            root.Write(state =>
+            {
+                for (var i = 0; i < 1000; i++)
+                    state.StageInsert(f, [(uint)i, 1, state.Timestamp]);
+
+                return 0;
+            });
+            root.Rebuild();
+            root.Freeze();
+
+            var child = root.CreateChild();
+            for (var i = 0; i < 500; i++)
+                child.Union((uint)random.Next(Ids), (uint)random.Next(Ids));
+
+            child.Rebuild();
+            child.Freeze();
+            var grandchild = child.CreateChild();
+            for (var i = 0; i < 100; i++)
+                grandchild.Union((uint)random.Next(Ids), (uint)random.Next(Ids));
+
+            grandchild.Rebuild();
+            grandchild.Freeze();
+
+            // A frozen root is fully compressed (§5.1), so its parent array is its find.
+            var parents = store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray();
+            var overlays = new[] { child, grandchild }.Select(c => (c.Overlay!.Version, c.Overlay.MemberCount, c.Journal!.Ids.ToArray())).ToArray();
+            var expected = Enumerable.Range(0, Ids).Select(i => grandchild.Find((uint)i)).ToArray();
+            var expectedChild = Enumerable.Range(0, Ids).Select(i => child.Find((uint)i)).ToArray();
+
+            var failures = 0;
+            var threads = Enumerable.Range(0, 8).Select(t => new Thread(() =>
+            {
+                var local = new Random(100 + t);
+                for (var k = 0; k < FindsPerThread; k++)
+                {
+                    var x = (uint)local.Next(Ids);
+                    if (grandchild.Find(x) != expected[x] || child.Find(x) != expectedChild[x] || root.Find(x) != parents[x])
+                        Interlocked.Increment(ref failures);
+
+                    // Ids beyond the root's array (never minted there, or minted in a sibling's blocks) are their own
+                    // canonical along the frozen chain, and finding them grows no frozen array.
+                    var beyond = (uint)(Ids + local.Next(4096));
+                    if (grandchild.Find(beyond) != beyond || child.Find(beyond) != beyond || root.Find(beyond) != beyond)
+                        Interlocked.Increment(ref failures);
+
+                    // A sibling under the frozen child mints, writes and rebuilds on its own domain meanwhile, and finds
+                    // its local ids through the frozen chain.
+                    if (t == 0 && k % 20_000 == 0)
+                    {
+                        var sibling = child.CreateChild();
+                        var fresh = sibling.NewId();
+                        sibling.Union((uint)local.Next(Ids), (uint)local.Next(Ids));
+                        sibling.Union(fresh, sibling.NewId());
+                        sibling.Rebuild();
+                        if (sibling.Find(fresh) != fresh)
+                            Interlocked.Increment(ref failures);
+
+                        sibling.Dispose();
+                    }
+                }
+            })).ToArray();
+
+            foreach (var thread in threads)
+                thread.Start();
+
+            foreach (var thread in threads)
+                thread.Join();
+
+            Assert.Equal(0, failures);
+            Assert.Equal(parents, store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray());
+            var after = new[] { child, grandchild }.Select(c => (c.Overlay!.Version, c.Overlay.MemberCount, c.Journal!.Ids.ToArray())).ToArray();
+            for (var i = 0; i < overlays.Length; i++)
+            {
+                Assert.Equal(overlays[i].Version, after[i].Version);
+                Assert.Equal(overlays[i].MemberCount, after[i].MemberCount);
+                Assert.Equal(overlays[i].Item3, after[i].Item3);
+            }
+
+            grandchild.CheckInvariants();
+            child.CheckInvariants();
+            root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// §13 edge 22: freezing refuses a writable parent, a stopped or faulted context and a failure nobody took, and
+        /// changes nothing; a second freeze is a no-op; freezing a context with live children is allowed, and the children
+        /// catch up once.
+        /// </summary>
+        [Fact]
+        public void FreezeRefusesWhatItCannotShare()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var a = root.NewId();
+            var child = root.CreateChild();
+            Assert.Throws<InvalidOperationException>(() => child.Freeze());
+
+            root.Write(state =>
+            {
+                state.ReportFailure("boom");
+                return 0;
+            });
+            Assert.Throws<InvalidOperationException>(() => root.Freeze());
+            Assert.False(root.IsFrozen);
+            Assert.Equal("boom", root.Database.TakeFailure());
+
+            Insert(root, f, a, 2, 0);
+            root.Freeze();
+            root.Freeze();
+            Assert.True(root.IsFrozen);
+            child.Rebuild();
+            Assert.Equal(2u, Row(child, f, a)![1]);
+
+            var faulted = root.CreateChild();
+            Assert.Throws<InvalidOperationException>(() => faulted.Write<int>(_ => throw new InvalidOperationException("inside")));
+            Assert.True(faulted.IsFaulted);
+            Assert.Throws<InvalidOperationException>(() => faulted.Freeze());
+            Assert.False(faulted.IsFrozen);
+            faulted.Dispose();
+        }
+
+        /// <summary>
+        /// §13 edge 22 for a failure the freeze itself causes: the root's settle (a stale raw write folding into its
+        /// canonical key under an asserting merge) and a child's rebuild (step 4 copies g(b)=2 onto g(a)=1) record a
+        /// failure; the freeze refuses after them, without faulting, and leaves the context unfrozen and clean; once the
+        /// failure is taken, the freeze succeeds.
+        /// </summary>
+        [Fact]
+        public void AFailureTheFreezeItselfRecordsIsRefusedWithoutFaulting()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var g = store.AddTable(new SortedWritesTable(1, 3, C(2), [C(0)], new AssertEqualMerge(C(1), "g"), ParallelHeuristics.Serial), name: "g");
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var c = root.NewId();
+            var d = root.NewId();
+
+            // The root's settle: d lost to c, then g(c)=1 and the stale g(d)=2 are written raw.
+            root.Union(c, d);
+            root.Rebuild();
+            Insert(root, g, c, 1, 0);
+            Insert(root, g, d, 2, 0);
+            Insert(root, g, a, 1, 0);
+            Insert(root, g, b, 2, 0);
+            Assert.Null(root.Database.Failure);
+            Assert.Throws<InvalidOperationException>(() => root.Freeze());
+            Assert.False(root.IsFrozen);
+            Assert.NotNull(root.Database.TakeFailure());
+            root.Freeze();
+            Assert.True(root.IsFrozen);
+
+            // The child's rebuild.
+            var child = root.CreateChild();
+            child.Union(a, b);
+            Assert.Null(child.Database.Failure);
+            Assert.Throws<InvalidOperationException>(() => child.Freeze());
+            Assert.False(child.IsFrozen);
+            Assert.False(child.IsFaulted);
+            Assert.True(child.IsClean);
+            Assert.NotNull(child.Database.TakeFailure());
+            child.Freeze();
+            Assert.True(child.IsFrozen);
+            Assert.Equal(1u, Row(child, g, a)![1]);
+        }
     }
 
 }

@@ -8,18 +8,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Review tests for M9.3 (soundness lens): each exposes a behaviour that breaks context = copy, a stated deviation or
-    /// the spec's interim. They are expected to fail until the defect is fixed.
+    /// Review tests from M9.3 (soundness lens), kept as regressions: each exposed a behaviour that broke context = copy, a
+    /// stated deviation or the spec's interim. With the child's rebuild (M9.4) the interim refusals are gone, and the
+    /// child catches up instead.
     /// </summary>
     public class SoundnessReviewTests
     {
 
         /// <summary>
-        /// The refined interim refusal (Rebuild throws only when an ancestor's layer version moved) admits a union-find
-        /// import over the child's own rows: the root unions a and b after the child wrote g(b); no root table changed, so
-        /// the child commits its cursors and reports clean with an own row naming b, which is no longer canonical in it.
-        /// The spec's interim refuses (NeedsCatchUp); M9.4 rewrites the row (step 3). Either is sound; a clean child that
-        /// answers g(b) and misses g(a) is not (I13, context = copy).
+        /// A union-find import over the child's own rows: the root unions a and b after the child wrote g(b); no root table
+        /// changed. The child's rebuild rewrites its row (step 3, §7.3): a clean child that answered g(b) and missed g(a)
+        /// would break I13 and context = copy.
         /// </summary>
         [Fact]
         public void AParentUnionOverAnOwnRowNeverLeavesACleanStaleChild()
@@ -35,17 +34,7 @@ namespace Eggnog.Relations.Tests
             // The root (not frozen, same domain) unions a and b: b loses. No root row mentions either id.
             root.Union(a, b);
 
-            try
-            {
-                child.Rebuild();
-            }
-            catch (NotSupportedException)
-            {
-                // The spec's interim: refused before anything changed.
-                Assert.False(child.IsFaulted);
-                return;
-            }
-
+            child.Rebuild();
             Assert.True(child.IsClean);
             Assert.Equal(a, child.Find(b));
 
@@ -55,13 +44,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The deviation states that the interim row catch-up refusal "throws before anything changes, so the child is not
-        /// faulted". Through <see cref="Context.Freeze"/> it does fault: the parent wrote a row and froze (allowed with a live
-        /// child), and the child's freeze runs its rebuild inside the freeze's faulting catch. A direct Rebuild of the same
-        /// child refuses without faulting, so the same refusal leaves the child usable or dead depending on the entry point.
+        /// The parent writes a row while its child lives and then freezes (edge case 22: allowed, the child catches up
+        /// once). In M9.3 the child's rebuild was refused (row catch-up arrived in M9.4); now the child catches the row up,
+        /// through a direct rebuild or through its own freeze, and neither faults it.
         /// </summary>
         [Fact]
-        public void TheInterimRefusalDoesNotFaultAChildThroughFreeze()
+        public void AChildCatchesUpWithAParentThatWroteAndFroze()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var f = store.AddTable(MaxFunction(1), name: "f");
@@ -75,11 +63,17 @@ namespace Eggnog.Relations.Tests
             Insert(parent, f, a, 1, 0);
             parent.Freeze();
 
-            Assert.Throws<NotSupportedException>(() => child.Rebuild());
+            // The row is visible as it is (§7.2 branch c): nothing is copied, so the rebuild changes nothing of the child's.
+            Assert.False(child.Rebuild());
             Assert.False(child.IsFaulted);
+            Assert.True(child.IsClean);
+            Assert.Equal(1u, Row(child, f, a)![1]);
 
-            Assert.Throws<NotSupportedException>(() => child.Freeze());
+            child.Freeze();
             Assert.False(child.IsFaulted);
+            Assert.True(child.IsFrozen);
+            Assert.Equal(1u, Row(child, f, a)![1]);
+            Assert.Equal(0, child.Tables!.Statistics.RowsCopied);
         }
 
         /// <summary>

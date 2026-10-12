@@ -51,6 +51,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Collects every row the index lists under <paramref name="value"/>: one probe, as <see cref="AddRow"/> makes for
+        /// a scanned one-cell row (colored-contexts spec §7.3 step 4, §6.10: a child's own losers probed in an ancestor's
+        /// rebuild index). O(1) expected plus the rows listed.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddValue(uint value)
+        {
+            if (index.TryGetSubset(value, out var subset))
+                Append(subset);
+        }
+
+        /// <summary>
         /// Appends the rows <c>[start, end)</c> themselves, whatever they hold. O(end - start).
         /// </summary>
         /// <param name="start">The first row.</param>

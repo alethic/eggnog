@@ -104,7 +104,9 @@ namespace Eggnog.Relations
         public bool IsCleared => isCleared;
 
         /// <summary>
-        /// Gets whether the context deleted a row it saw through an ancestor (a <see cref="HideReason.Retracted"/> hide).
+        /// Gets whether the context retracted rows of the table: it staged a delete (§6.7; its own row tombstoned, or a row
+        /// it saw through an ancestor hidden with <see cref="HideReason.Retracted"/>), or a subsumption. A row it hid
+        /// earlier may then have lost its carrier, which I14 allows.
         /// </summary>
         public bool HasRetractions => hasRetractions;
 
@@ -196,7 +198,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Records that the context deleted a row it saw through an ancestor.
+        /// Records that the context retracted rows of the table.
         /// </summary>
         internal void SetRetracted() => hasRetractions = true;
 

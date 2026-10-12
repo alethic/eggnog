@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Generic;
-using System.Threading;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -14,10 +14,22 @@ namespace Eggnog.Relations
         readonly AncestorCursor?[] cursors;
 
         /// <summary>
+        /// The layer versions of each ancestor that was not settled when the context was created, by depth then table
+        /// index: where its view started. Rows an ancestor appended at or beyond them came after the context's creation;
+        /// the invariant checker reads them (I13). <c>null</c> for the ancestors settled at creation, which never append.
+        /// </summary>
+        readonly TableVersion[]?[] creationRows;
+
+        /// <summary>
         /// The number of leading ancestors the context has read in full: frozen ancestors that cannot change any more,
         /// whose cursors are dropped (§6.2).
         /// </summary>
         int settled;
+
+        /// <summary>
+        /// The number of leading ancestors that were settled when the context was created.
+        /// </summary>
+        int settledAtCreation;
 
         /// <summary>
         /// Gets whether some ancestor that is not settled changed since the context last caught up with it: its change
@@ -48,22 +60,173 @@ namespace Eggnog.Relations
         internal AncestorCursor? CursorAt(int depthOfAncestor) => cursors[depthOfAncestor];
 
         /// <summary>
-        /// Interim (M9.3, §17): gets whether an ancestor that is not settled appended or replaced rows of a shared table
-        /// since the context last caught up with it (the version of its layer moved), which only the row catch-up of M9.4
-        /// (<c>CatchUpRows</c>, §7.2) can bring into the context's view. O(tables × changed ancestors).
+        /// Catch-up step 2 (§7.2, C8): reads every row the unsettled ancestors appended to a shared table since the
+        /// context last caught up with them, and copies into the context, at <paramref name="epoch"/>, each one the context
+        /// must hold itself; the copied ancestor rows are hidden once their copies are staged.
         /// </summary>
         /// <remarks>
-        /// A layer whose version did not move holds the same rows, except for tombstones, which a version does not count.
-        /// An ancestor with live descendants tombstones a row without appending one only when its own rebuild folds a
-        /// rewritten row into a row that already holds the result: every retraction is refused there (decision 1, I22,
-        /// at every entry point, <see cref="Database.NewBuffer"/> included), compaction is gated (§6.8), and a replaced row
-        /// reappears as an append (§7.2). Such a fold follows a union, which reaches the context as an import, and
-        /// <see cref="Context.Rebuild"/> refuses an import whenever the context holds rows it could make stale
-        /// (<see cref="OwnRowsMention"/>). Otherwise the context sees the ancestor's tombstones as they are, which is
-        /// what a copy sees.
+        /// <para>
+        /// Run by the first pass of <see cref="Context.Rebuild"/>, after the union-find caught up (step 1), while every
+        /// ancestor is idle: frozen, or rebuilt and sharing the context's thread domain. For each live appended row that
+        /// the context sees (hidden at no level between the row's layer and the context, and not below a level that
+        /// cleared the table):
+        /// </para>
+        /// <list type="bullet">
+        /// <item><description>(a) it names an id that is not canonical in the context: copied canonically
+        /// (<see cref="HideReason.Mentions"/>). This also covers an ancestor row that was stale in its own layer when a
+        /// raw root write appended it (X38), since <c>find_C = overlay ∘ find_P</c>;</description></item>
+        /// <item><description>(b) the context's own layer holds its key: copied as it is
+        /// (<see cref="HideReason.KeyHeld"/>), so the next merge folds it into the own row (I12);</description></item>
+        /// <item><description>(c′) its timestamp lies below the context's semi-naive floor (<see cref="Context.SemiNaiveFloor"/>):
+        /// copied to re-stamp it (<see cref="HideReason.Restamped"/>), so a watermark the context already used still
+        /// sees it as new (the C7 safeguard; it never fires while writers stamp with their state's timestamp, I21);</description></item>
+        /// <item><description>(c) otherwise it is visible as it is: canonical in the context, and no own row holds its
+        /// key.</description></item>
+        /// </list>
+        /// <para>
+        /// A visible contradiction row stops a context created with <see cref="ContextOptions.StopOnContradiction"/>
+        /// (§6.9); the copies staged so far are then dropped unflushed, and the context answers only
+        /// <see cref="Context.IsContradictory"/>. Ancestor tombstones need no work: a replaced row reappears as an append.
+        /// Before reading, every layer the cursors have seen is checked to be in the same generation (I16): a layer that
+        /// compacted or was cleared under a live descendant would renumber the rows the cursors and hidden sets name, so
+        /// the catch-up throws, which faults the context (X12).
+        /// </para>
+        /// <para>
+        /// What was read is recorded in the cursors as pending, and <see cref="CommitCursors"/> publishes it after the
+        /// rebuild loop. Cost: O(rows appended to unsettled ancestors since the last catch-up) plus O(tables × unsettled
+        /// depth); an ancestor whose change stamp did not move is skipped, so nothing under frozen ancestors once read.
+        /// </para>
         /// </remarks>
-        /// <returns><c>true</c> if some ancestor's rows changed.</returns>
-        internal bool AncestorRowsChanged()
+        /// <param name="epoch">The pass's epoch, which the copies are stamped with.</param>
+        /// <returns>Whether any ancestor row was copied and hidden.</returns>
+        /// <exception cref="InvalidOperationException">An ancestor layer changed generation (I16), or a copy would create
+        /// the layer of a table whose merge is not a lattice merge (decision 2).</exception>
+        internal bool CatchUpRows(uint epoch)
+        {
+            if (settled == depth)
+                return false;
+
+            var tables = schema.FunctionTables;
+            CheckGenerations(tables);
+            ExecutionState? state = null;
+            PendingHides();
+            var floor = owner.SemiNaiveFloor;
+            for (var a = settled; a < depth; a++)
+            {
+                var cursor = cursors[a]!;
+                var stamp = chain[a].Database.ChangeStamp;
+                if (stamp == cursor.Stamp)
+                    continue;
+
+                foreach (var table in tables)
+                {
+                    if (schema[table] is not { IsContextPrivate: false } s || AncestorLayer(a, table) is not { } layer)
+                        continue;
+
+                    var version = layer.Version;
+                    var from = cursor.RowsOrDefault(table).Minor;
+                    cursor.SetPendingRows(table, version);
+                    if (from >= version.Minor || a < ClearedFloor(table))
+                        continue;
+
+                    if (CatchUpLayer(ref state, s, layer, a, from, version.Minor, floor, epoch))
+                        return true;
+                }
+
+                cursor.SetPendingStamp(stamp);
+            }
+
+            if (state is not null)
+            {
+                state.Flush();
+                owner.Database.RecordFailure(state);
+            }
+
+            return ApplyHides();
+        }
+
+        /// <summary>
+        /// Moves every cursor to what the last catch-up read, after the rebuild loop, while no ancestor can change (they
+        /// are frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor.
+        /// </summary>
+        /// <returns>Whether any cursor moved: the context's views must then be rebuilt, since an ancestor's hides may have
+        /// changed even where none of its layers grew.</returns>
+        internal bool CommitCursors()
+        {
+            var moved = false;
+            for (var a = settled; a < depth; a++)
+                moved |= cursors[a]!.CommitPending();
+
+            while (settled < depth && chain[settled].IsFrozen)
+                cursors[settled++] = null;
+
+            return moved;
+        }
+
+        /// <summary>
+        /// Reads the rows <c>[from, to)</c> of the ancestor layer at depth <paramref name="a"/>; see
+        /// <see cref="CatchUpRows"/>.
+        /// </summary>
+        /// <returns><c>true</c> if a contradiction stopped the context, which ends the catch-up.</returns>
+        bool CatchUpLayer(ref ExecutionState? state, LayeredTableSchema s, SortedWritesTable layer, int a, int from, int to, uint floor, uint epoch)
+        {
+            var table = s.Id;
+            var find = owner.UnionFind;
+            var columns = s.RebuildColumns;
+            var sortColumn = s.SortColumn;
+            var arity = layer.Arity;
+
+            // The ancestor is idle: staging copies into the own layer never moves its rows.
+            var data = layer.Rows.Data;
+            for (var r = from; r < to; r++)
+            {
+                statistics.CatchUpRowsExamined++;
+                var offset = r * arity;
+                if (data[offset] == Value.StaleRep || HiddenBetween(table, a, r))
+                    continue;
+
+                if (s.IsContradiction)
+                {
+                    SetContradicted();
+                    if (owner.IsContradicted)
+                        return true;
+                }
+
+                var stale = false;
+                foreach (var column in columns)
+                {
+                    var id = data[offset + column.Rep];
+                    if (find.Find(id) != id)
+                    {
+                        stale = true;
+                        break;
+                    }
+                }
+
+                if (stale)
+                {
+                    StageCopy(ref state, s, layer, a, r, HideReason.Mentions, true, epoch);
+                }
+                else if (TryGetLayer(table)?.Own is { } own && own.FindRow(data, offset) >= 0)
+                {
+                    StageCopy(ref state, s, layer, a, r, HideReason.KeyHeld, false, epoch);
+                }
+                else if (sortColumn >= 0 && data[offset + sortColumn] < floor)
+                {
+                    StageCopy(ref state, s, layer, a, r, HideReason.Restamped, false, epoch);
+                    statistics.RestampedCopies++;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Throws when a layer some unsettled cursor has seen is no longer in the generation the cursor saw (I16). Only
+        /// ancestors whose change stamp moved are checked: a layer changes generation only in a merge that changed rows,
+        /// a clear, or a compaction, each of which moves its context's stamp.
+        /// </summary>
+        void CheckGenerations(ReadOnlySpan<TableId> tables)
         {
             for (var a = settled; a < depth; a++)
             {
@@ -71,148 +234,18 @@ namespace Eggnog.Relations
                 if (chain[a].Database.ChangeStamp == cursor.Stamp)
                     continue;
 
-                foreach (var table in schema.FunctionTables)
+                foreach (var table in tables)
                 {
-                    if (schema[table] is not { IsContextPrivate: false })
+                    // A context-private table is never read by descendants and may be retracted or cleared freely.
+                    var seen = cursor.RowsOrDefault(table);
+                    if (seen == default || schema[table] is not { IsContextPrivate: false })
                         continue;
 
-                    var current = AncestorLayer(a, table)?.Version ?? default;
-                    if (current != cursor.RowsOrDefault(table))
-                        return true;
+                    var major = AncestorLayer(a, table)?.Version.Major ?? 0;
+                    if (major != seen.Major)
+                        ThrowGenerationChanged(table, a, seen.Major, major);
                 }
             }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Interim (M9.3, §17): gets whether a live row the context holds itself names one of <paramref name="ids"/> in an
-        /// id column: ids that stop being canonical in the context, so the row would need the rewrite that only step 3 of
-        /// a child's rebuild pass (§7.3, M9.4) does. Rows the context hides are invisible and need none.
-        /// </summary>
-        /// <remarks>
-        /// With <paramref name="unknownIds"/> the ids are not known before the rebuild runs (unions staged and not merged,
-        /// or a re-key that may move the canonical of a class the context merged, §5.6), and any live own row of a table
-        /// with id columns counts. Cost: O(own rows × id columns), the context's own state only.
-        /// </remarks>
-        /// <param name="ids">The ids known to stop being canonical.</param>
-        /// <param name="unknownIds">Whether further ids may stop being canonical.</param>
-        /// <returns><c>true</c> if such a row exists.</returns>
-        internal bool OwnRowsMention(ReadOnlySpan<uint> ids, bool unknownIds)
-        {
-            HashSet<uint>? set = null;
-            var current = Volatile.Read(ref slots);
-            foreach (var layer in current)
-            {
-                if (layer is null || layer.Own.Count == 0)
-                    continue;
-
-                var columns = layer.Schema.RebuildColumns;
-                if (columns.Length == 0)
-                    continue;
-
-                if (unknownIds)
-                    return true;
-
-                if (ids.IsEmpty)
-                    return false;
-
-                if (set is null)
-                {
-                    set = new HashSet<uint>();
-                    foreach (var id in ids)
-                        set.Add(id);
-                }
-
-                var rows = layer.Own.Rows;
-                for (var r = 0; r < rows.Count; r++)
-                {
-                    if (rows.IsStale(r))
-                        continue;
-
-                    var cells = rows.GetRow(r);
-                    foreach (var column in columns)
-                        if (set.Contains(cells[column.Rep]))
-                            return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Interim (M9.3, §17): gets whether some ancestor row the context sees names one of <paramref name="losers"/>,
-        /// ids that stop being canonical in the context while they stay canonical in its parent: such a row must be hidden
-        /// and copied canonically, which only step 4 of a child's rebuild pass (§7.3, M9.4) does.
-        /// </summary>
-        /// <remarks>
-        /// A frozen ancestor layer is probed through its rebuild index, built at its freeze (§8.1); a writable one, whose
-        /// rebuild index belongs to its owner, counts as soon as it holds a live row. With
-        /// <paramref name="unknownLosers"/> the losers are not known before the rebuild runs (unions staged and not merged,
-        /// or a re-key that may move the canonical of a class the context merged, §5.6), and any visible layer of a shared
-        /// table with id columns that holds a live row counts. O(tables × depth × losers) index probes.
-        /// </remarks>
-        /// <param name="losers">The own losers known now; ids local to the context are left out (no ancestor row names
-        /// them, I10).</param>
-        /// <param name="unknownLosers">Whether further losers may appear.</param>
-        /// <returns><c>true</c> if such a row exists.</returns>
-        internal bool AncestorRowsMention(ReadOnlySpan<uint> losers, bool unknownLosers)
-        {
-            foreach (var table in schema.FunctionTables)
-            {
-                if (schema[table] is not { IsContextPrivate: false } s || s.RebuildColumns.Length == 0)
-                    continue;
-
-                for (var j = ClearedFloor(table); j < depth; j++)
-                {
-                    if (AncestorLayer(j, table) is not { } layer || layer.Count == 0)
-                        continue;
-
-                    if (unknownLosers || layer.IsShared == false || layer.RebuildIndex is not { } index || index.NeedsRefresh(layer))
-                        return true;
-
-                    foreach (var loser in losers)
-                    {
-                        if (index.Data.TryGetSubset(loser, out var rows) == false)
-                            continue;
-
-                        foreach (var row in rows)
-                            if (layer.Rows.IsStale(row) == false && HiddenBetween(table, j, row) == false)
-                                return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Moves every cursor to its ancestor's current state, after a rebuild loop, while no ancestor can change (they are
-        /// frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor. Interim
-        /// (M9.3): <see cref="AncestorRowsChanged"/> has established that no layer version moved, so only stamps change.
-        /// </summary>
-        /// <returns>Whether any cursor moved.</returns>
-        internal bool CommitCursors()
-        {
-            var moved = false;
-            for (var a = settled; a < depth; a++)
-            {
-                var cursor = cursors[a]!;
-                var stamp = chain[a].Database.ChangeStamp;
-                if (stamp == cursor.Stamp && cursor.TableCount >= schema.TableCount)
-                    continue;
-
-                foreach (var table in schema.FunctionTables)
-                    cursor.SetPendingRows(table, AncestorLayer(a, table)?.Version ?? default);
-
-                cursor.SetPendingStamp(stamp);
-                moved |= cursor.CommitPending();
-            }
-
-            while (settled < depth && chain[settled].IsFrozen)
-                cursors[settled++] = null;
-
-            return moved;
         }
 
         /// <summary>
@@ -225,16 +258,26 @@ namespace Eggnog.Relations
             while (settled < depth && chain[settled].IsFrozen)
                 settled++;
 
+            settledAtCreation = settled;
             var count = schema.TableCount;
             for (var a = settled; a < depth; a++)
             {
                 var rows = new TableVersion[count];
                 foreach (var table in schema.FunctionTables)
-                    if (table.Index < count)
+                    if (table.Index < count && schema[table] is { IsContextPrivate: false })
                         rows[table.Index] = AncestorLayer(a, table)?.Version ?? default;
 
+                // The cursor replaces its array when it commits and never writes this one, so it can be shared.
                 cursors[a] = new AncestorCursor(rows, chain[a].Database.ChangeStamp);
+                creationRows[a] = rows;
             }
+        }
+
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowGenerationChanged(TableId table, int depth, int seen, int now)
+        {
+            throw new InvalidOperationException($"The layer of table {table} at depth {depth} moved from generation {seen} to {now} while a descendant held cursors and hidden sets over its rows (I16); compaction and clears are gated while descendants live.");
         }
 
     }

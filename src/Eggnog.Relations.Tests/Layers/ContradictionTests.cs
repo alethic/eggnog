@@ -95,6 +95,58 @@ namespace Eggnog.Relations.Tests
             Assert.True(ordinary.IsContradictory);
         }
 
+        /// <summary>
+        /// The children of a case that a contradiction stopped with writes pending: its parent is never clean again, so a
+        /// child does not catch up with it (§5.6, §7.1). A child that stops on contradictions stops too (the contradiction
+        /// row is visible in its parent); any other child is refused on rebuild, write and child creation, unfaulted and
+        /// without taking an epoch; both may be disposed.
+        /// </summary>
+        [Fact]
+        public void TheChildrenOfAStoppedCaseStopOrAreRefused()
+        {
+            var (store, bottom, g) = Setup();
+            var root = store.Root;
+            var a = root.NewId();
+            var x = root.NewId();
+            var y = root.NewId();
+            Insert(root, g, a, x, 0);
+            root.Freeze();
+            var @case = root.CreateChild(ContextOptions.Case);
+            var ordinary = @case.CreateChild();
+            var subcase = @case.CreateChild(ContextOptions.Case);
+            var grandchild = ordinary.CreateChild();
+
+            @case.Write(state =>
+            {
+                state.StageInsert(bottom, [state.Timestamp]);
+                state.StageInsert(g, [a, y, state.Timestamp]);
+                return 0;
+            });
+            Assert.True(@case.IsContradicted);
+            Assert.False(@case.IsClean);
+
+            var clock = store.ReadClock();
+            Assert.Throws<InvalidOperationException>(() => ordinary.Rebuild());
+            Assert.Throws<InvalidOperationException>(() => Insert(ordinary, g, x, x, 0));
+            Assert.Throws<InvalidOperationException>(() => ordinary.CreateChild());
+            Assert.Throws<InvalidOperationException>(() => grandchild.Rebuild());
+            Assert.False(ordinary.IsFaulted);
+            Assert.False(grandchild.IsFaulted);
+            Assert.False(ordinary.IsClean);
+
+            Assert.False(subcase.Rebuild());
+            Assert.True(subcase.IsContradicted);
+            Assert.True(subcase.IsContradictory);
+            Assert.Throws<InvalidOperationException>(() => Insert(subcase, g, x, x, 0));
+            Assert.False(subcase.IsFaulted);
+            Assert.Equal(clock, store.ReadClock());
+
+            grandchild.Dispose();
+            ordinary.Dispose();
+            subcase.Dispose();
+            @case.Dispose();
+        }
+
         [Fact]
         public void TheRootIsNeverStopped()
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -81,6 +82,102 @@ namespace Eggnog.Relations
                     return false;
 
                 return GetView(table).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0;
+            }
+        }
+
+        /// <summary>
+        /// Visits every live row the child stored itself in <paramref name="table"/> (§6.10, L1): its own layer's rows,
+        /// canonical in it (I13). Nothing when it has no layer of the table. O(own rows).
+        /// </summary>
+        /// <remarks>
+        /// Requires the context to be clean. The sink runs as a callback of the context's thread domain, as a
+        /// <see cref="ScanMerges{TVisitor}"/> visitor does (§8.3): it may read any context, and writes, rebuilds with work
+        /// to do and structural calls are refused there; disposing the context during the scan is refused.
+        /// </remarks>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="table">A registered function table.</param>
+        /// <param name="sink">Receives each row with its row id in the own layer.</param>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is the root, which has no layer of its own over a
+        /// parent (§13 edge 33); or it is faulted, contradicted or not clean, or its domain is held by another
+        /// thread.</exception>
+        public void ScanOwn<TSink>(TableId table, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            var t = LiftTables(nameof(ScanOwn));
+            var current = frozen ? null : Domain;
+            using var scope = current is null ? default : current.Enter();
+            ThrowIfNotReadable();
+            BeginScan();
+            current?.EnterCallback();
+            try
+            {
+                t.ScanOwn(table, ref sink);
+            }
+            finally
+            {
+                current?.ExitCallback();
+                Interlocked.Decrement(ref activeScans);
+            }
+        }
+
+        /// <summary>
+        /// Visits every ancestor row of <paramref name="table"/> the child sees that names <paramref name="id"/> in an id
+        /// column (§6.10, L1): the winner probe of the lift, through the ancestors' rebuild indexes, never a scan.
+        /// </summary>
+        /// <remarks>
+        /// Returns at once for a table without rebuild columns (no id can be named), for a context-private table, and for
+        /// an id local to the child (no ancestor row names one, I10). <paramref name="id"/> must be canonical in the child.
+        /// Requires the context to be clean; the sink runs as a callback, as in <see cref="ScanOwn{TSink}"/>. Cost:
+        /// O(depth) index probes plus the uses of the id.
+        /// </remarks>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="table">A registered function table.</param>
+        /// <param name="id">An id canonical in the child.</param>
+        /// <param name="sink">Receives each row with its row id in its layer; layers come from the root up.</param>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is the root (§13 edge 33); or it is faulted,
+        /// contradicted or not clean, or its domain is held by another thread.</exception>
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">The table is not registered.</exception>
+        public void ScanAncestorsMentioning<TSink>(TableId table, uint id, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
+            var t = LiftTables(nameof(ScanAncestorsMentioning));
+            var current = frozen ? null : Domain;
+            using var scope = current is null ? default : current.Enter();
+            ThrowIfNotReadable();
+            BeginScan();
+            current?.EnterCallback();
+            try
+            {
+                t.ScanAncestorsMentioning(table, id, ref sink);
+            }
+            finally
+            {
+                current?.ExitCallback();
+                Interlocked.Decrement(ref activeScans);
+            }
+        }
+
+        /// <summary>
+        /// Gets the child's layering for a lift read, or throws on the root and on a disposed context.
+        /// </summary>
+        ContextTables LiftTables(string operation)
+        {
+            ThrowIfDisposed();
+            return tables ?? throw new InvalidOperationException($"{operation} reads a child's layers over its ancestors; the root has none.");
+        }
+
+        /// <summary>
+        /// Counts a scan of the context as running, so a dispose meanwhile is refused; throws if the context was disposed.
+        /// Pair with a decrement of <see cref="activeScans"/>.
+        /// </summary>
+        void BeginScan()
+        {
+            if (Interlocked.Increment(ref activeScans) <= 0)
+            {
+                Interlocked.Decrement(ref activeScans);
+                ThrowDisposed();
             }
         }
 

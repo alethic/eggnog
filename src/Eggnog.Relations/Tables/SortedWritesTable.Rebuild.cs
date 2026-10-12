@@ -17,9 +17,32 @@ namespace Eggnog.Relations
         internal const int RebuildStepSize = 2048;
 
         /// <summary>
+        /// The number of rows the last rebuild handed its rebuilder; see <see cref="LastRebuildRows"/>.
+        /// </summary>
+        int lastRebuildRows;
+
+        /// <summary>
+        /// Whether the last rebuild took the incremental path; see <see cref="LastRebuildWasIncremental"/>.
+        /// </summary>
+        bool lastRebuildIncremental;
+
+        /// <summary>
         /// Gets the columns a rebuild canonicalizes.
         /// </summary>
         public ReadOnlySpan<ColumnId> RebuildColumns => MemoryMarshal.Cast<int, ColumnId>(toRebuild.AsSpan());
+
+        /// <summary>
+        /// Gets the number of rows the last <see cref="ApplyRebuild"/> (or <see cref="SettleAppends"/>) handed its
+        /// rebuilder: the rows gathered by the incremental path, or the physical rows the full path scanned. For
+        /// diagnostics and tests (colored-contexts spec §17 M9.4: a child's incremental rebuild examines only the rows
+        /// naming its new losers); one field store per rebuild.
+        /// </summary>
+        internal int LastRebuildRows => lastRebuildRows;
+
+        /// <summary>
+        /// Gets whether the last <see cref="ApplyRebuild"/> took the incremental path. For diagnostics and tests.
+        /// </summary>
+        internal bool LastRebuildWasIncremental => lastRebuildIncremental;
 
         /// <inheritdoc />
         /// <remarks>
@@ -62,6 +85,14 @@ namespace Eggnog.Relations
         /// <summary>
         /// The body of <see cref="ApplyRebuild"/>: picks the incremental or the full path and stages the rewrites.
         /// </summary>
+        /// <remarks>
+        /// A child context's layer (colored-contexts spec §7.3, R2-12) takes the incremental path whenever the rebuilder's
+        /// delta is no larger than its row count (or 64), instead of egglog's rule, which requires more than 10 000 rows:
+        /// a child's layers are small, and their full path would rewrite every own row on every pass. Refreshing a small
+        /// layer's rebuild index is cheap, and the incremental path also gathers the rows written since the last rebuild,
+        /// so both paths stage the same writes (<see cref="RebuildIncremental"/>). The root keeps egglog's rule; it pays one
+        /// null test per table rebuild.
+        /// </remarks>
         /// <returns>Whether anything was staged.</returns>
         bool RebuildWith(Rebuilder rebuilder, TableId rebuilderTableId, Table rebuilderTable, uint nextTimestamp, ExecutionState state)
         {
@@ -69,13 +100,17 @@ namespace Eggnog.Relations
             {
                 var toScan = subsetTracker.RecentUpdates(rebuilderTableId, rebuilderTable);
                 var size = toScan.Size;
-                if (ShouldRebuildIncrementally(size, data.Count, parallelism.ParallelizeRebuild(size)))
+                var incremental = layer is not null
+                    ? size <= Math.Max(data.Count, 64)
+                    : ShouldRebuildIncrementally(size, data.Count, parallelism.ParallelizeRebuild(size));
+                if (incremental)
                 {
                     var handled = false;
                     var changed = false;
                     RebuildIncremental(rebuilderTableId, rebuilderTable, rebuilder, hintColumn, toScan.AsRef(), nextTimestamp, state, ref handled, ref changed);
                     if (handled)
                     {
+                        lastRebuildIncremental = true;
                         toScan.Dispose();
                         return changed;
                     }
@@ -197,14 +232,23 @@ namespace Eggnog.Relations
         /// mutation buffer and execution-state clone.
         /// </summary>
         /// <returns>Whether any row was staged.</returns>
-        bool RebuildFull(Rebuilder rebuilder, uint nextTimestamp, ExecutionState state)
+        bool RebuildFull(Rebuilder rebuilder, uint nextTimestamp, ExecutionState state) => RebuildRange(rebuilder, 0, data.Count, nextTimestamp, state);
+
+        /// <summary>
+        /// Rebuilds the physical rows <c>[first, end)</c> in chunks of <see cref="RebuildStepSize"/>, in parallel above
+        /// <see cref="ParallelHeuristics.RebuildThreshold"/> rows: the body of <see cref="RebuildFull"/> (the whole table)
+        /// and of <see cref="SettleAppends"/> (the rows written since the last rebuild).
+        /// </summary>
+        /// <returns>Whether any row was staged.</returns>
+        bool RebuildRange(Rebuilder rebuilder, int first, int end, uint nextTimestamp, ExecutionState state)
         {
-            var end = data.Count;
-            if (parallelism.ParallelizeRebuild(end))
-                return RebuildFullParallel(rebuilder, nextTimestamp, state, end);
+            lastRebuildIncremental = false;
+            lastRebuildRows = end - first;
+            if (parallelism.ParallelizeRebuild(end - first))
+                return RebuildFullParallel(rebuilder, nextTimestamp, state, first, end);
 
             var rebuilt = new TaggedRowBuffer(Arity);
-            for (var start = 0; start < end; start += RebuildStepSize)
+            for (var start = first; start < end; start += RebuildStepSize)
                 rebuilder.RebuildBuffer(data, start, Math.Min(start + RebuildStepSize, end), rebuilt, state);
 
             var changed = false;
@@ -222,9 +266,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// The parallel arm of <see cref="RebuildFull"/>: egglog's <c>into_par_iter().step_by(STEP_SIZE).fold</c>.
         /// </summary>
-        bool RebuildFullParallel(Rebuilder rebuilder, uint nextTimestamp, ExecutionState state, int end)
+        bool RebuildFullParallel(Rebuilder rebuilder, uint nextTimestamp, ExecutionState state, int first, int end)
         {
-            var chunks = (end + RebuildStepSize - 1) / RebuildStepSize;
+            var chunks = (end - first + RebuildStepSize - 1) / RebuildStepSize;
             var changed = 0;
             var stateChanged = 0;
             Parallel.For(
@@ -234,7 +278,7 @@ namespace Eggnog.Relations
                 () => (Writes: NewBuffer(), Rebuilt: new TaggedRowBuffer(Arity), State: state.Clone(), Changed: false),
                 (chunk, _, local) =>
                 {
-                    var start = chunk * RebuildStepSize;
+                    var start = first + chunk * RebuildStepSize;
                     rebuilder.RebuildBuffer(data, start, Math.Min(start + RebuildStepSize, end), local.Rebuilt, local.State);
                     local.Changed |= StageRebuiltRows(local.Rebuilt, local.Writes, nextTimestamp);
                     local.Rebuilt.Clear();
@@ -256,6 +300,42 @@ namespace Eggnog.Relations
                 state.Changed = true;
 
             return changed != 0;
+        }
+
+        /// <summary>
+        /// Settles the rows written since the table last rebuilt against <paramref name="unionFind"/> (colored-contexts
+        /// spec §7.6, X38): rewrites every live row of <c>[FirstRowSinceRebuild, Rows.Count)</c> that names a
+        /// non-canonical id, as egglog's rebuild rewrites a row (stage the removal of its key and the canonical row stamped
+        /// <paramref name="timestamp"/>), and moves the table's rebuild mark to its end. Called on the root, before it is
+        /// shared (<see cref="Context.Settle"/>), through <see cref="SettleTableOperation"/>, so the database notifies a
+        /// table that staged anything and the next merge applies the rewrites.
+        /// </summary>
+        /// <remarks>
+        /// Rows before the mark were canonical at the last rebuild and are kept canonical by the journal-driven rebuilds
+        /// since; rows after it are exactly the rows a raw write could have left stale. A table without rebuild columns has
+        /// nothing to settle. Moving the mark is sound for the next incremental rebuild: every row before the new mark is
+        /// canonical now, and ids displaced later are in that rebuild's delta. Cost: O(rows written since the last rebuild).
+        /// </remarks>
+        /// <param name="unionFind">The union-find's table id, which keys the rebuild mark.</param>
+        /// <param name="unionFindTable">The union-find table, which provides the rebuilder.</param>
+        /// <param name="timestamp">The settle's epoch, which rewritten rows get.</param>
+        /// <param name="state">The execution state the rebuilder runs in.</param>
+        /// <returns>Whether anything was staged.</returns>
+        internal bool SettleAppends(TableId unionFind, Table unionFindTable, uint timestamp, ExecutionState state)
+        {
+            ArgumentNullException.ThrowIfNull(unionFindTable);
+            ArgumentNullException.ThrowIfNull(state);
+            if (toRebuild.Length == 0)
+                return false;
+
+            var first = FirstRowSinceRebuild(unionFind);
+            var end = data.Count;
+            var changed = false;
+            if (first < end && unionFindTable.GetRebuilder(RebuildColumns) is { } rebuilder)
+                changed = RebuildRange(rebuilder, first, end, timestamp, state);
+
+            MarkRebuilt(unionFind);
+            return changed;
         }
 
         /// <summary>

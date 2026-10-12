@@ -135,6 +135,11 @@ namespace Eggnog.Relations
 
             if (needsFrozenParent && context.Parent is { IsFrozen: false })
                 ThrowWritableParent(operation, table);
+
+            // A child records that it retracts rows of the table: a row it hid may then have lost its carrier to the
+            // retraction, which the invariant checker allows (I14).
+            if (context.Tables is { } tables && table != schema.UnionFind)
+                tables.GetOrCreateLayer(table).SetRetracted();
         }
 
         [DoesNotReturn]

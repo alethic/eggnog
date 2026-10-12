@@ -43,8 +43,6 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is held
         /// by another thread; or the call comes from inside a write batch's action or a <c>ScanMerges</c> visitor of the
         /// same domain.</exception>
-        /// <exception cref="NotSupportedException">Interim (M9.3): catching up first would need row work
-        /// (<see cref="Rebuild"/>).</exception>
         public TResult Write<TResult>(Func<ExecutionState, TResult> action)
         {
             ArgumentNullException.ThrowIfNull(action);
@@ -105,19 +103,27 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the context up to date before anything is staged in it (§6.6): rebuilds a parent that is not frozen,
-        /// then, in a child that is behind its parent's union-find, rebuilds the child, which catches up first. Nothing
-        /// at the root.
+        /// then, in a child that is behind its parent's union-find, some ancestor of which changed since it last caught
+        /// up (<see cref="ContextTables.NeedsCatchUp"/>), or whose eq-container guard has not seen every eq-sort container
+        /// (<see cref="IsEqGuardCurrent"/>, §7.4), rebuilds the child, which catches up first. The child's own pending
+        /// rebuild work (unions merged since its last rebuild) is left for <see cref="Rebuild"/>, as the spike leaves it.
+        /// Nothing at the root.
         /// </summary>
-        /// <remarks>Also rebuilds a child some ancestor of which changed since it last caught up (<see cref="ContextTables.NeedsCatchUp"/>).</remarks>
+        /// <exception cref="InvalidOperationException">The parent was stopped by a contradiction (§6.9): a child that
+        /// stops on contradictions is then stopped, any other is refused; neither is faulted.</exception>
         internal void PrepareForWrite()
         {
             if (parent is null)
                 return;
 
             if (parent.IsFrozen == false)
+            {
                 parent.Rebuild();
+                StopIfParentStopped(parent);
+                ThrowIfContradicted();
+            }
 
-            if (IsUnionFindCurrent == false || tables!.NeedsCatchUp)
+            if (IsUnionFindCurrent == false || tables!.NeedsCatchUp || IsEqGuardCurrent == false)
                 Rebuild();
         }
 
@@ -136,8 +142,6 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; the clear is refused
         /// (§6.7, decision 2); the domain is held by another thread; or the call comes from inside a write batch's action or
         /// a <c>ScanMerges</c> visitor of the same domain.</exception>
-        /// <exception cref="NotSupportedException">Interim (M9.3): catching up first would need row work
-        /// (<see cref="Rebuild"/>).</exception>
         public void ClearTable(TableId table)
         {
             ThrowIfNotWritable();

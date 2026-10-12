@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -28,11 +29,38 @@ namespace Eggnog.Relations
         /// refresh), or O(rows) after a new generation.
         /// </summary>
         /// <returns>The index.</returns>
-        Index<ColumnIndex> RefreshRebuildIndex()
+        /// <remarks>
+        /// Requires rebuild columns (an index needs a key column). Exclusive: the table's owner calls it while it
+        /// rebuilds or freezes, and a child context calls it on an ancestor that is idle in the child's thread domain
+        /// (<see cref="SharedRebuildIndex"/>, I11).
+        /// </remarks>
+        internal Index<ColumnIndex> RefreshRebuildIndex()
         {
             var index = rebuildIndex ??= new Index<ColumnIndex>(RebuildColumns, new ColumnIndex(parallelism));
             index.Refresh(this);
             return index;
+        }
+
+        /// <summary>
+        /// Gets the rebuild index as descendants read it (colored-contexts spec §6.6, §7.3 step 4, §6.10): <c>null</c> for
+        /// a table without rebuild columns (no id can be mentioned, and an index needs a key column); for a frozen table,
+        /// the index its freeze built, which is current and shared lock-free by any number of concurrent descendants;
+        /// otherwise the index refreshed now (<see cref="RefreshRebuildIndex"/>), which a child context does only for an
+        /// ancestor that is not frozen and so shares its thread domain and is idle.
+        /// </summary>
+        /// <returns>The index, or <c>null</c>.</returns>
+        internal Index<ColumnIndex>? SharedRebuildIndex()
+        {
+            if (toRebuild.Length == 0)
+                return null;
+
+            if (isShared)
+            {
+                Debug.Assert(rebuildIndex is not null && rebuildIndex.NeedsRefresh(this) == false, "a frozen table's rebuild index is current (I23)");
+                return rebuildIndex;
+            }
+
+            return RefreshRebuildIndex();
         }
 
         /// <summary>
@@ -99,6 +127,7 @@ namespace Eggnog.Relations
             rebuilderTable.ForEachColumn(toScan, hintColumn, ref gather);
             gather.AppendRange(FirstRowSinceRebuild(rebuilderTableId), data.Count);
             var count = gather.SortUnique();
+            lastRebuildRows = count;
             changed = count > 0 && RebuildRows(rebuilder, gather.Rows, count, nextTimestamp, state, parallelism.ParallelizeRebuild(count));
             gather.Release();
             handled = true;

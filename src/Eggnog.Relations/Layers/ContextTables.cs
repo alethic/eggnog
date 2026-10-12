@@ -29,10 +29,12 @@ namespace Eggnog.Relations
     /// through its parent.
     /// </para>
     /// <para>
-    /// Interim (M9.3, §17): the context catches up with its ancestors' union-find only; when an ancestor appended rows
-    /// since the context last caught up, or a change of the context's union-find could make rows it holds or sees stale,
-    /// <see cref="Context.Rebuild"/> refuses (row catch-up, <c>CatchUpRows</c>, and the child's rebuild pass arrive in
-    /// M9.4).
+    /// Rebuild (§7, C5, C8). <see cref="CatchUpRows"/> absorbs what the context's unsettled ancestors appended since its
+    /// cursors, and <see cref="RebuildPass"/> rewrites the context's own rows over the ids displaced since its last pass,
+    /// hides and copies the ancestor rows naming its own losers, and merges; both copy through
+    /// <see cref="StageCopy"/> and hide only once the copies are staged (X12). <see cref="ScanOwn{TSink}"/> and
+    /// <see cref="ScanAncestorsMentioning{TSink}"/> are the lift's reads (§6.10), and <see cref="CheckInvariants"/> is the
+    /// tables part of the context's checker (§12.7).
     /// </para>
     /// </remarks>
     internal sealed partial class ContextTables : ILayerViewSource
@@ -94,6 +96,7 @@ namespace Eggnog.Relations
             views = new TableView?[count];
             dirty = new bool[count];
             cursors = new AncestorCursor?[depth];
+            creationRows = new TableVersion[]?[depth];
             InitializeCursors();
         }
 

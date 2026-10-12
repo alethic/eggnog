@@ -120,6 +120,13 @@ namespace Eggnog.Relations
             ThrowIfFrozen();
             var next = ResolveTimestamp(nextTimestamp);
             var containerRebuild = RebuildContainers(unionFind, next);
+
+            // Colored contexts (§7.4, C13 interim): while the root has live descendants, the ids of containers rebuilt in
+            // place go to the store's dirty log, from which each child re-stamps its own rows (its root rows arrive as
+            // appends). One compare at the root when nothing is dirty.
+            if (containerRebuild.DirtyCount > 0 && owner is { IsRoot: true } root && root.Gate.HasLiveDescendants)
+                root.Store.ContainerDirtyLog.Append(containerRebuild.DirtyIds);
+
             var tableRebuild = ApplyRebuild(unionFind, tables, next);
             var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, next);
             return tableRebuild || refreshed || containerRebuild.Changed;
