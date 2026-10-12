@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// frontend's <c>S = Boxed&lt;String&gt;</c>): never inline; every string is interned and stored as its intern index
     /// (core-relations/src/base_values/mod.rs:46-47). Strings are compared ordinally, as Rust compares them.
     /// </summary>
-    public readonly struct StringCodec : IBaseValueCodec<string>
+    internal readonly struct StringCodec : IBaseValueCodec<string>
     {
 
         /// <inheritdoc />

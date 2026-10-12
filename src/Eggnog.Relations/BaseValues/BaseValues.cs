@@ -33,12 +33,17 @@ namespace Eggnog.Relations
     /// values are never freed: the store is append-only, as in egglog.
     /// </para>
     /// <para>
+    /// Two members egglog lacks serve readers that must not grow the store (request E1 of the rule-layer spec):
+    /// <see cref="TryGetExisting{TCodec, T}"/> finds a value's <see cref="Value"/> without interning it, and
+    /// <see cref="InternedCount"/> reports how many values have been interned.
+    /// </para>
+    /// <para>
     /// egglog finds a type's table by hashing its <c>TypeId</c> on every interned <c>get</c> and <c>unwrap</c>. Here each
     /// base value type has a process-wide slot number (<see cref="BaseValueSlot{TCodec, T}"/>), a JIT-time constant, and
     /// the registry indexes an array by it.
     /// </para>
     /// </remarks>
-    public sealed class BaseValues
+    internal sealed class BaseValues
     {
 
         /// <summary>
@@ -232,6 +237,59 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets the <see cref="Value"/> that stores <paramref name="value"/> if it boxes inline or has already been
+        /// interned, without interning it. egglog has no such member: it serves readers that must not grow the store
+        /// with values they only look up (rule-layer D15, request E1). Thread-safe.
+        /// </summary>
+        /// <remarks>
+        /// The inline path is <see cref="Get{TCodec, T}"/>'s and needs no registration: a value that boxes inline always
+        /// succeeds and never consults the registry. The interned path is one lookup in the type's intern table under one
+        /// shard lock (<see cref="InternTable{TKey}.TryGetId"/>), and it never adds to the table: a value never interned
+        /// fails, and <see cref="InternedCount"/> stays unchanged. A value that succeeds gets exactly the
+        /// <see cref="Value"/> <see cref="Get{TCodec, T}"/> returns.
+        /// </remarks>
+        /// <typeparam name="TCodec">The codec, which identifies the type.</typeparam>
+        /// <typeparam name="T">The .NET type of the base values.</typeparam>
+        /// <param name="value">The base value.</param>
+        /// <param name="boxed">The value that stores it when this returns <c>true</c>; otherwise <c>default</c>.</param>
+        /// <returns>Whether <paramref name="value"/> boxes inline or has been interned.</returns>
+        /// <exception cref="InvalidOperationException">The value would have to be interned and its type is not
+        /// registered, as for <see cref="Get{TCodec, T}"/>.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryGetExisting<TCodec, T>(T value, out Value boxed)
+            where TCodec : struct, IBaseValueCodec<T>
+            where T : notnull, IEquatable<T>
+        {
+            if (TCodec.MayUnbox && TCodec.TryBox(value, out boxed))
+                return true;
+
+            return TryGetExistingInterned<TCodec, T>(value, out boxed);
+        }
+
+        /// <summary>
+        /// Gets the number of base values interned in this registry's intern tables, summed over every registered type:
+        /// how much the append-only store has grown (rule-layer D15, request E1). Values stored inline are not counted.
+        /// </summary>
+        /// <remarks>
+        /// Lock-free; costs one read per registered type. Never decreases. A clone (<see cref="Clone"/>) shares the
+        /// tables of the types registered before it was made, so a value of such a type interned through either
+        /// registry counts in both. Under concurrent interning the sum reads each table at its own moment, not all of
+        /// them at once.
+        /// </remarks>
+        public long InternedCount
+        {
+            get
+            {
+                var current = Volatile.Read(ref tables);
+                var total = 0L;
+                foreach (var table in current)
+                    total += table.InternedCount;
+
+                return total;
+            }
+        }
+
+        /// <summary>
         /// Formats the base value stored as <paramref name="value"/> in a column of type <paramref name="type"/>, as
         /// egglog's <c>BaseValuePrinter</c> does (core-relations/src/base_values/mod.rs:56-64). Cold path.
         /// </summary>
@@ -309,6 +367,17 @@ namespace Eggnog.Relations
             where T : notnull, IEquatable<T>
         {
             return GetTable<TCodec, T>().GetFromTable(value);
+        }
+
+        /// <summary>
+        /// The interned half of <see cref="TryGetExisting{TCodec, T}"/>, kept out of line so the inline path stays small.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        bool TryGetExistingInterned<TCodec, T>(T value, out Value boxed)
+            where TCodec : struct, IBaseValueCodec<T>
+            where T : notnull, IEquatable<T>
+        {
+            return GetTable<TCodec, T>().TryGetExistingInTable(value, out boxed);
         }
 
         /// <summary>

@@ -17,7 +17,7 @@ namespace Eggnog.Relations
     /// </para>
     /// </remarks>
     /// <param name="Rep">The raw representation.</param>
-    public readonly record struct Value(uint Rep) : INumericId<Value>
+    internal readonly record struct Value(uint Rep) : INumericId<Value>
     {
 
         /// <summary>

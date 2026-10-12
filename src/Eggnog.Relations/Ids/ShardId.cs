@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a shard of a sharded hash table.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct ShardId(int Rep) : INumericId<ShardId>
+    internal readonly record struct ShardId(int Rep) : INumericId<ShardId>
     {
 
         /// <inheritdoc />

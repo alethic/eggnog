@@ -5,7 +5,7 @@ namespace Eggnog.Relations
     /// The cases of <see cref="RuleTerm"/>: the three argument forms of egglog-bridge's rule macros
     /// (egglog-bridge/src/macros.rs).
     /// </summary>
-    public enum RuleTermKind : byte
+    internal enum RuleTermKind : byte
     {
 
         /// <summary>

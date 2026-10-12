@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a counter of a <see cref="Database"/>.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct CounterId(int Rep) : INumericId<CounterId>
+    internal readonly record struct CounterId(int Rep) : INumericId<CounterId>
     {
 
         /// <inheritdoc />

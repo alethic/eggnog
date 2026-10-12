@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Eggnog.Relations
 {
 
-    public sealed partial class Extractor
+    internal sealed partial class Extractor
     {
 
         // Replaying earlier queries' finalizations, on demand.

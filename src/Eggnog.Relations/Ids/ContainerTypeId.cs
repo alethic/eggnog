@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a registered container type.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct ContainerTypeId(int Rep) : INumericId<ContainerTypeId>
+    internal readonly record struct ContainerTypeId(int Rep) : INumericId<ContainerTypeId>
     {
 
         /// <inheritdoc />

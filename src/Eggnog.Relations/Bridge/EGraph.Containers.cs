@@ -3,7 +3,7 @@ using System;
 namespace Eggnog.Relations
 {
 
-    public sealed partial class EGraph
+    internal sealed partial class EGraph
     {
 
         /// <summary>

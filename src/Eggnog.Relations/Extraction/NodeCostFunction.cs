@@ -9,6 +9,6 @@ namespace Eggnog.Relations
     /// <param name="function">The function.</param>
     /// <param name="row">The row: keys and output, valid only during the call.</param>
     /// <returns>The row's own cost.</returns>
-    public delegate long NodeCostFunction(FunctionId function, FunctionRow row);
+    internal delegate long NodeCostFunction(FunctionId function, FunctionRow row);
 
 }

@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// An <see cref="IRowRemap"/> that ignores the renumbering, for compactions nobody indexes.
     /// </summary>
-    public readonly struct NoRowRemap : IRowRemap
+    internal readonly struct NoRowRemap : IRowRemap
     {
 
         /// <inheritdoc />

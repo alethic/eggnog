@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// (egglog-bridge/src/lib.rs:105). Function ids are dense, in declaration order, and never reused.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct FunctionId(int Rep) : INumericId<FunctionId>
+    internal readonly record struct FunctionId(int Rep) : INumericId<FunctionId>
     {
 
         /// <inheritdoc />

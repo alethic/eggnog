@@ -6,7 +6,7 @@ namespace Eggnog.Relations
     /// egglog-bridge's <c>DefaultVal</c> (egglog-bridge/src/lib.rs:1000-1008). Constructors mint a fresh id, custom
     /// functions fail, and the frontend's scheduler bookkeeping tables insert a constant.
     /// </summary>
-    public readonly record struct DefaultVal
+    internal readonly record struct DefaultVal
     {
 
         DefaultVal(DefaultValKind kind, Value constant)

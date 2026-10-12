@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// A right-hand-side command of the rule language of egglog-bridge's macros (egglog-bridge/src/macros.rs:50-72):
     /// <c>(let name term)</c>, <c>(set (f args...) value)</c> or <c>(union left right)</c>. Immutable.
     /// </summary>
-    public sealed class RuleCommand
+    internal sealed class RuleCommand
     {
 
         RuleCommand(RuleCommandKind kind, string? name, RuleTerm left, RuleTerm right)

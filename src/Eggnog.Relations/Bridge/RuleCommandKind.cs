@@ -5,7 +5,7 @@ namespace Eggnog.Relations
     /// The cases of <see cref="RuleCommand"/>: the right-hand-side commands of egglog-bridge's rule macros
     /// (egglog-bridge/src/macros.rs:50-72).
     /// </summary>
-    public enum RuleCommandKind : byte
+    internal enum RuleCommandKind : byte
     {
 
         /// <summary>

@@ -1,0 +1,98 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+
+namespace Eggnog
+{
+
+    public sealed partial class Scope
+    {
+
+        /// <summary>
+        /// Runs a schedule in this scope (§6.5).
+        /// </summary>
+        /// <param name="schedule">The schedule.</param>
+        /// <param name="options">The run's options; <c>null</c> for <see cref="RunOptions.Default"/>.</param>
+        /// <param name="cancellationToken">Cancels the run between iterations.</param>
+        /// <returns>What the run did.</returns>
+        /// <exception cref="ArgumentException">A ruleset of the schedule belongs to another graph.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The iteration limit is negative.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted, or the call comes from another thread while
+        /// the scope is in use, from a primitive, lattice, filter or cost function, or from a run observer.</exception>
+        /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
+        /// <exception cref="RuleEvaluationException">An evaluation failure; the scope is then faulted.</exception>
+        public RunReport Run(Schedule schedule, RunOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(schedule);
+            options ??= RunOptions.Default;
+            if (options.IterationLimit < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.IterationLimit, "The iteration limit must not be negative.");
+
+            EnterWrite();
+            try
+            {
+                var rulesets = new HashSet<Ruleset>(ReferenceEqualityComparer.Instance);
+                schedule.Collect(rulesets);
+                foreach (var ruleset in rulesets)
+                    if (ReferenceEquals(ruleset.Graph, Graph) == false)
+                        throw new ArgumentException($"Ruleset '{ruleset.Name}' belongs to another graph.", nameof(schedule));
+
+                var executor = new ScheduleExecutor(this, options, cancellationToken);
+                var clock = Stopwatch.StartNew();
+                RunStopReason reason;
+                try
+                {
+                    schedule.Execute(executor, this, 0, false, true);
+                    reason = executor.Statistics.StopReason;
+                }
+                catch (ScheduleStopException stop)
+                {
+                    reason = stop.Reason;
+                }
+
+                return executor.Complete(reason, clock);
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Creates an extractor over this scope as it is now (§6.10). Reads, queries and writes that change nothing never
+        /// invalidate it; a write that changes the scope, or a run, may.
+        /// </summary>
+        /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
+        /// <returns>The extractor.</returns>
+        /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph.</exception>
+        public Extractor CreateExtractor(CostModel? costs = null)
+        {
+            costs ??= CostModel.Default;
+            EnterRead();
+            try
+            {
+                var schema = Graph.Extraction.SchemaFor(costs);
+                var engineCosts = Graph.Extraction.EngineCosts(costs);
+                return new Extractor(this, costs, Engine.CreateExtractor(schema, engineCosts));
+            }
+            finally
+            {
+                Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Extracts the cheapest term of a class here: <c>CreateExtractor(costs).Extract(root)</c>.
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="root">The class.</param>
+        /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
+        /// <returns>The term.</returns>
+        /// <exception cref="InvalidOperationException">No finite term exists.</exception>
+        public ExtractedTerm Extract<TSort>(TSort root, CostModel? costs = null) where TSort : struct, ISort<TSort> =>
+            CreateExtractor(costs).Extract(root);
+
+    }
+
+}

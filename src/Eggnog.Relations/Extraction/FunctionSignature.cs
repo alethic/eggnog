@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// <c>term_constructor</c> annotations. Declared with <see cref="ExtractionSchema.Declare"/>, which copies what it
     /// needs, so the instance may be reused.
     /// </summary>
-    public sealed class FunctionSignature
+    internal sealed class FunctionSignature
     {
 
         /// <summary>

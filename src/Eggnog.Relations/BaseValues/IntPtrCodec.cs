@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// themselves; all others are interned and stored as <see cref="BaseValues.InternedTag"/> plus their intern index
     /// (core-relations/src/base_values/unboxed.rs:71-105). The top bit of a value tells the two apart.
     /// </summary>
-    public readonly struct IntPtrCodec : IBaseValueCodec<nint>
+    internal readonly struct IntPtrCodec : IBaseValueCodec<nint>
     {
 
         /// <inheritdoc />

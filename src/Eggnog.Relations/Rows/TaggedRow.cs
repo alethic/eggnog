@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// <c>(RowId, &amp;[Value])</c> pairs. Deconstructs, so <c>foreach (var (id, row) in buffer.EnumerateRows())</c>
     /// works.
     /// </summary>
-    public readonly ref struct TaggedRow
+    internal readonly ref struct TaggedRow
     {
 
         /// <summary>

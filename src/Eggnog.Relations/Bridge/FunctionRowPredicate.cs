@@ -8,6 +8,6 @@ namespace Eggnog.Relations
     /// </summary>
     /// <param name="row">The row; valid only during the call.</param>
     /// <returns><c>false</c> to stop the iteration.</returns>
-    public delegate bool FunctionRowPredicate(FunctionRow row);
+    internal delegate bool FunctionRowPredicate(FunctionRow row);
 
 }

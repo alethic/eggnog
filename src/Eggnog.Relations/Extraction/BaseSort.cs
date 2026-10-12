@@ -30,7 +30,7 @@ namespace Eggnog.Relations
     /// </remarks>
     /// <typeparam name="TCodec">The codec, which identifies the base value type.</typeparam>
     /// <typeparam name="T">The .NET type of the values.</typeparam>
-    public sealed class BaseSort<TCodec, T> : Sort
+    internal sealed class BaseSort<TCodec, T> : Sort
         where TCodec : struct, IBaseValueCodec<T>
         where T : notnull, IEquatable<T>
     {

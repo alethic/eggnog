@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// way. Formatting is a cold path: one virtual call to the type's table and the codec's
     /// <see cref="IBaseValueCodec{T}.Format"/>.
     /// </summary>
-    public readonly struct BaseValuePrinter
+    internal readonly struct BaseValuePrinter
     {
 
         /// <summary>

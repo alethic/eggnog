@@ -13,7 +13,7 @@ namespace Eggnog.Relations
     /// the per-row call is direct and inlinable. <see cref="TaggedRowSink"/> adapts a <see cref="TaggedRowBuffer"/>,
     /// the sink egglog uses.
     /// </remarks>
-    public interface IRowSink
+    internal interface IRowSink
     {
 
         /// <summary>

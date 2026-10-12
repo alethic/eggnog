@@ -21,7 +21,7 @@ namespace Eggnog.Relations
     /// thread-safe while declaring; any number of threads may read it otherwise.
     /// </para>
     /// </remarks>
-    public sealed class ExtractionSchema
+    internal sealed class ExtractionSchema
     {
 
         readonly List<ExtractionFunction?> functions;

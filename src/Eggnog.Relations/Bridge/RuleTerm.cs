@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     /// <c>(-&gt; (add x (add y z)) id)</c>. Strings convert to variables, <see cref="RuleEntry"/> and
     /// <see cref="Value"/> to constants. Immutable.
     /// </remarks>
-    public sealed class RuleTerm
+    internal sealed class RuleTerm
     {
 
         static readonly RuleTerm[] NoArgs = Array.Empty<RuleTerm>();

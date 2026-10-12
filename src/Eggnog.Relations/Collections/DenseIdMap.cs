@@ -16,7 +16,7 @@ namespace Eggnog.Relations
     /// </remarks>
     /// <typeparam name="TKey">The identifier type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
-    public sealed class DenseIdMap<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>
+    internal sealed class DenseIdMap<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>
         where TKey : struct, INumericId<TKey>
     {
 

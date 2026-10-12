@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-        <Description>Equality saturation for .NET: rules, scheduling, case splits and extraction over colored e-graph storage.</Description>
+        <Description>Equality saturation for .NET: typed definitions, rules, schedules, host writes and reads, and extraction, on the Eggnog.Relations engine.</Description>
         <PackageTags>egraph;e-graph;equality-saturation;datalog;rewriting</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageIcon>icon.png</PackageIcon>
@@ -18,7 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Eggnog.Storage\Eggnog.Storage.csproj" />
+        <ProjectReference Include="..\Eggnog.Relations\Eggnog.Relations.csproj" />
     </ItemGroup>
 
 </Project>

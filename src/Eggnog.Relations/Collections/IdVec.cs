@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <typeparam name="TKey">The identifier type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
-    public sealed class IdVec<TKey, TValue>
+    internal sealed class IdVec<TKey, TValue>
         where TKey : struct, INumericId<TKey>
     {
 

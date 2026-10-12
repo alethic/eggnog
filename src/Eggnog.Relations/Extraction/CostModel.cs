@@ -29,7 +29,7 @@ namespace Eggnog.Relations
     /// Immutable: every <c>With</c> method returns a new model. Thread-safe.
     /// </para>
     /// </remarks>
-    public sealed class CostModel
+    internal sealed class CostModel
     {
 
         readonly Dictionary<FunctionId, long> functionCosts;

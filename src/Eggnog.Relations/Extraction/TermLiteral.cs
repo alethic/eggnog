@@ -12,7 +12,7 @@ namespace Eggnog.Relations
     /// <param name="Type">The base value type.</param>
     /// <param name="Value">The boxed value.</param>
     /// <param name="Text">How the literal prints; never <c>null</c> in a DAG.</param>
-    public readonly record struct TermLiteral(BaseValueTypeId Type, Value Value, string Text)
+    internal readonly record struct TermLiteral(BaseValueTypeId Type, Value Value, string Text)
     {
 
         /// <inheritdoc />

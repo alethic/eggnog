@@ -48,7 +48,7 @@ namespace Eggnog.Relations
     /// flush and run. Using it after the e-graph changed throws. Not thread-safe: queries extend its caches.
     /// </para>
     /// </remarks>
-    public sealed partial class Extractor
+    internal sealed partial class Extractor
     {
 
         readonly ExtractionSchema schema;

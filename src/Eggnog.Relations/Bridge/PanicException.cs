@@ -12,7 +12,7 @@ namespace Eggnog.Relations
     /// <remarks>
     /// The run is not rolled back: the writes it made before stopping, and their merge, stay (map §3.9 item 8).
     /// </remarks>
-    public sealed class PanicException : Exception
+    internal sealed class PanicException : Exception
     {
 
         /// <summary>

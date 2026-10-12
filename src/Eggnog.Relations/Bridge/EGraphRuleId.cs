@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// and reused after <see cref="EGraph.FreeRule"/>.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct EGraphRuleId(int Rep) : INumericId<EGraphRuleId>
+    internal readonly record struct EGraphRuleId(int Rep) : INumericId<EGraphRuleId>
     {
 
         /// <inheritdoc />

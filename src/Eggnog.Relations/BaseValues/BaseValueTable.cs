@@ -9,7 +9,8 @@ namespace Eggnog.Relations
     /// indexed by <see cref="BaseValueTypeId"/>.
     /// </summary>
     /// <remarks>
-    /// The only virtual member is <see cref="Format"/>, a diagnostics path. Boxing and unboxing go through the sealed
+    /// The only virtual members are <see cref="Format"/>, a diagnostics path, and <see cref="InternedCount"/>, which
+    /// <see cref="BaseValues.InternedCount"/> sums on a cold path. Boxing and unboxing go through the sealed
     /// <see cref="BaseInternTable{TCodec, T}"/>, never through this class. Instances are immutable apart from the intern
     /// table they own, and are shared between a <see cref="BaseValues"/> and its clones, as egglog's
     /// <c>Arc</c>-backed <c>InternTable</c> is.
@@ -45,6 +46,12 @@ namespace Eggnog.Relations
         /// Gets the .NET type of the base values.
         /// </summary>
         public Type ValueType { get; }
+
+        /// <summary>
+        /// Gets the number of base values interned in this table. Values stored inline are not counted: they never
+        /// touch the table. Lock-free; never decreases, because interned values are never freed.
+        /// </summary>
+        public abstract int InternedCount { get; }
 
         /// <summary>
         /// Formats the base value stored as <paramref name="value"/>: egglog's <c>print_value</c>. Cold path.

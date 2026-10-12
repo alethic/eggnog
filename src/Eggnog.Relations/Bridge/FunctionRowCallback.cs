@@ -6,6 +6,6 @@ namespace Eggnog.Relations
     /// as a delegate, for callers that do not need a specialized visitor (<see cref="IFunctionRowVisitor"/>).
     /// </summary>
     /// <param name="row">The row; valid only during the call.</param>
-    public delegate void FunctionRowCallback(FunctionRow row);
+    internal delegate void FunctionRowCallback(FunctionRow row);
 
 }

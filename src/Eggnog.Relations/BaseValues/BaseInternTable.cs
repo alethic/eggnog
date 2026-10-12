@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
@@ -18,7 +19,8 @@ namespace Eggnog.Relations
     /// <para>
     /// Thread-safe: interning and lookups go through <see cref="InternTable{TKey}"/>, which is fully concurrent.
     /// Costs: the inline path is the codec's compare and cast; the interned path is one
-    /// <see cref="InternTable{TKey}.Intern"/> (a hash, a shard lock, an expected-O(1) probe) or one lock-free
+    /// <see cref="InternTable{TKey}.Intern"/> (a hash, a shard lock, an expected-O(1) probe), one
+    /// <see cref="InternTable{TKey}.TryGetId"/> (the same, never appending) or one lock-free
     /// <see cref="InternTable{TKey}.Get"/>.
     /// </para>
     /// </remarks>
@@ -82,6 +84,39 @@ namespace Eggnog.Relations
 
             return new Value(index + BaseValues.InternedTag);
         }
+
+        /// <summary>
+        /// Gets the <see cref="Value"/> of a base value that does not box inline, if it has been interned: the lookup
+        /// half of <see cref="InternInTable"/>, which never appends. One <see cref="InternTable{TKey}.TryGetId"/>.
+        /// </summary>
+        /// <param name="value">A base value that the codec cannot box inline.</param>
+        /// <param name="boxed">Its value when this returns <c>true</c>, tagged as <see cref="InternInTable"/> tags it;
+        /// otherwise <c>default</c>.</param>
+        /// <returns>Whether the value has been interned.</returns>
+        public bool TryGetExistingInTable(T value, out Value boxed)
+        {
+            if (table.TryGetId(value, out var index) == false)
+            {
+                boxed = default;
+                return false;
+            }
+
+            if (TCodec.MayUnbox == false)
+            {
+                boxed = new Value(index);
+                return true;
+            }
+
+            // InternInTable rejects an index above MaxTaggedIndex only after the intern table has stored it, so such a
+            // key could in principle be found here. It cannot exist: the table holds at most Array.MaxLength keys, and
+            // Array.MaxLength - 1 < MaxTaggedIndex.
+            Debug.Assert(index <= BaseValues.MaxTaggedIndex);
+            boxed = new Value(index + BaseValues.InternedTag);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public override int InternedCount => table.Count;
 
         /// <summary>
         /// Gets the base value stored as <paramref name="value"/>: egglog's <c>BaseInternTable::get</c>.

@@ -5,7 +5,7 @@ namespace Eggnog.Relations
     /// What a lookup of a missing key in a function does: the cases of egglog-bridge's <c>DefaultVal</c>
     /// (egglog-bridge/src/lib.rs:1000-1008). See <see cref="DefaultVal"/>.
     /// </summary>
-    public enum DefaultValKind : byte
+    internal enum DefaultValKind : byte
     {
 
         /// <summary>

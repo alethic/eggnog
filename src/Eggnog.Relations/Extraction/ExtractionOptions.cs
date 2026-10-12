@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// <remarks>
     /// Immutable.
     /// </remarks>
-    public sealed class ExtractionOptions
+    internal sealed class ExtractionOptions
     {
 
         /// <summary>

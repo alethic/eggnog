@@ -13,7 +13,7 @@ namespace Eggnog.Relations
     /// each description maps to the reports of its rules in rule order. Immutable once returned. Public because
     /// <see cref="EGraph.RunRules"/> returns it inside its <see cref="IterationReport"/>; only the engine creates one.
     /// </remarks>
-    public sealed class RuleSetReport
+    internal sealed class RuleSetReport
     {
 
         /// <summary>

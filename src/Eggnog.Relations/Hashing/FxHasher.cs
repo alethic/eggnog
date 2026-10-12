@@ -12,7 +12,7 @@ namespace Eggnog.Relations
     /// It is fast, not collision-resistant. The final rotate spreads entropy into both the high bits (used to pick a
     /// shard) and the low bits (used to pick a slot), which is what the sharded tables rely on.
     /// </remarks>
-    public struct FxHasher
+    internal struct FxHasher
     {
 
         /// <summary>

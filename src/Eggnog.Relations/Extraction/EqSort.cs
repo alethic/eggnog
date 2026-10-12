@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// <remarks>
     /// Immutable and thread-safe.
     /// </remarks>
-    public sealed class EqSort : Sort
+    internal sealed class EqSort : Sort
     {
 
         /// <summary>

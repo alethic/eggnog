@@ -4,7 +4,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// What an <see cref="ExtractedTerm"/> is.
     /// </summary>
-    public enum ExtractedTermKind : byte
+    internal enum ExtractedTermKind : byte
     {
 
         /// <summary>

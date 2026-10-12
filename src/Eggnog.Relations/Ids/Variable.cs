@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a variable of a query.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct Variable(int Rep) : INumericId<Variable>
+    internal readonly record struct Variable(int Rep) : INumericId<Variable>
     {
         /// <summary>
         /// A placeholder variable that marks a wildcard column: the column is not bound to anything.

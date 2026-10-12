@@ -43,7 +43,7 @@ namespace Eggnog.Relations
     /// the database's operations.
     /// </para>
     /// </remarks>
-    public sealed partial class EGraph
+    internal sealed partial class EGraph
     {
 
         /// <summary>

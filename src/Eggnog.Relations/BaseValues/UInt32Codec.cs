@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// (core-relations/src/base_values/unboxed.rs:12-31). Never touches an intern table. <see cref="uint.MaxValue"/>
     /// boxes to <see cref="Value.StaleRep"/>, so it must not be stored in a table's first column.
     /// </summary>
-    public readonly struct UInt32Codec : IBaseValueCodec<uint>
+    internal readonly struct UInt32Codec : IBaseValueCodec<uint>
     {
 
         /// <inheritdoc />

@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace Eggnog.Relations
 {
 
-    public sealed partial class Extractor
+    internal sealed partial class Extractor
     {
 
         /// <summary>

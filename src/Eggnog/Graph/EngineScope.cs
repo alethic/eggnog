@@ -1,0 +1,149 @@
+using System;
+using System.Collections.Generic;
+
+namespace Eggnog
+{
+
+    /// <summary>
+    /// The engine side of one <see cref="Scope"/> (D28): the only way the rest of the rule layer reaches the engine for a
+    /// scope's contents. R1 implements it for the root over the bridge's egglog-compatible root API
+    /// (<see cref="RootEngineScope"/>); R2 implements it over a context for every scope and deletes the root adapter.
+    /// </summary>
+    /// <remarks>
+    /// Every member runs while the scope's <see cref="ScopeGuard"/> is held by the calling thread (or, from R2, on a
+    /// frozen scope). Cells are the engine's: sort cells are class ids, value cells base values.
+    /// </remarks>
+    internal abstract class EngineScope
+    {
+
+        /// <summary>
+        /// Gets the engine's change stamp (X30): it moves on every effective change to the scope's own layer.
+        /// </summary>
+        public abstract long Version { get; }
+
+        /// <summary>
+        /// Gets whether the graph's <see cref="EGraph.Contradiction"/> holds in the scope.
+        /// </summary>
+        public abstract bool IsContradictory { get; }
+
+        /// <summary>
+        /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current (always at
+        /// the R1 root, which is rebuilt after every flush and run).
+        /// </summary>
+        public abstract void EnsureClean();
+
+        /// <summary>
+        /// Gets the engine variants to run for <paramref name="rules"/> in this scope, lowering them on demand (§6.4.4). A
+        /// naive rule always runs its naive variant.
+        /// </summary>
+        /// <param name="rules">The rules of one iteration.</param>
+        /// <param name="semiNaive">Whether semi-naive variants are wanted (the internal <c>RunOptions.SemiNaive</c>).</param>
+        /// <returns>One variant per rule, in order.</returns>
+        public abstract LoweredRule[] PrepareRules(IReadOnlyList<CompiledRule> rules, bool semiNaive);
+
+        /// <summary>
+        /// Gets one variant of a program for this scope: R1 lowers it with the canonical forms of
+        /// <paramref name="writtenIdConstants"/> (§6.4.5); R2 with the written values.
+        /// </summary>
+        /// <param name="variants">The program's variants.</param>
+        /// <param name="writtenIdConstants">The class constants as written.</param>
+        /// <param name="semiNaive">Whether the semi-naive variant is wanted.</param>
+        /// <returns>The variant.</returns>
+        public abstract LoweredRule PrepareVariant(RuleVariants variants, uint[] writtenIdConstants, bool semiNaive);
+
+        /// <summary>
+        /// Runs one engine iteration of <paramref name="rules"/> (§6.5.1).
+        /// </summary>
+        /// <param name="rules">The variants to run.</param>
+        /// <returns>What the iteration did.</returns>
+        /// <exception cref="Relations.PanicException">A failure was recorded; the rule layer turns it into a
+        /// <see cref="RuleEvaluationException"/>.</exception>
+        public abstract EngineIteration RunRules(ReadOnlySpan<Relations.EGraphRuleId> rules);
+
+        /// <summary>
+        /// Mints a class id for a new term of a host batch (§6.6.1).
+        /// </summary>
+        /// <returns>The id.</returns>
+        public abstract uint FreshId();
+
+        /// <summary>
+        /// Stages a row of a host batch: keys then output; a relation row ends with the unit value. Sort cells must be
+        /// canonical or fresh; they are canonicalized again (invariant C).
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <param name="row">The row.</param>
+        public abstract void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row);
+
+        /// <summary>
+        /// Stages a union of a host batch.
+        /// </summary>
+        /// <param name="a">One class.</param>
+        /// <param name="b">The other class.</param>
+        public abstract void StageUnion(uint a, uint b);
+
+        /// <summary>
+        /// Merges what was staged and rebuilds. Never called for an empty batch.
+        /// </summary>
+        /// <returns>Whether the scope changed.</returns>
+        /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
+        public abstract bool Flush();
+
+        /// <summary>
+        /// Gets the canonical member of a class in this scope.
+        /// </summary>
+        /// <param name="id">The class.</param>
+        /// <returns>Its canonical id.</returns>
+        public abstract uint Find(uint id);
+
+        /// <summary>
+        /// Looks up a row by key: key sort cells are canonicalized here; a class output is canonical.
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <param name="key">The key cells.</param>
+        /// <param name="output">The output cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether the table holds a row for the key.</returns>
+        public abstract bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output);
+
+        /// <summary>
+        /// Visits every row of a table in this scope's view: keys then output, sort cells canonical in a clean scope.
+        /// Tagged R1b in the spec (for <c>Scope.Rows</c>); R1a's host batches use it to check the merges a batch would
+        /// cause (D32). O(rows).
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <param name="visit">Receives each row; the cells are valid only during the visit, and it must not call the
+        /// engine.</param>
+        public abstract void ForEach(Relations.FunctionId function, Relations.FunctionRowCallback visit);
+
+        /// <summary>
+        /// Creates an engine extractor over this scope as it is now (§6.10).
+        /// </summary>
+        /// <param name="schema">The extraction schema.</param>
+        /// <param name="costs">The engine cost model.</param>
+        /// <returns>The extractor.</returns>
+        public abstract Relations.Extractor CreateExtractor(Relations.ExtractionSchema schema, Relations.CostModel costs);
+
+        /// <summary>
+        /// Extracts the cheapest term of a class with an extractor this scope created.
+        /// </summary>
+        /// <param name="extractor">The extractor.</param>
+        /// <param name="sort">The class's extraction sort.</param>
+        /// <param name="id">The class; canonicalized here.</param>
+        /// <param name="term">The term, when the result is <c>true</c>.</param>
+        /// <returns>Whether a finite term exists.</returns>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
+        public abstract bool TryExtract(Relations.Extractor extractor, Relations.Sort sort, uint id, out Relations.ExtractedTerm? term);
+
+        /// <summary>
+        /// Gets the cost of the cheapest term of a class with an extractor this scope created.
+        /// </summary>
+        /// <param name="extractor">The extractor.</param>
+        /// <param name="sort">The class's extraction sort.</param>
+        /// <param name="id">The class; canonicalized here.</param>
+        /// <param name="cost">The cost, when the result is <c>true</c>.</param>
+        /// <returns>Whether a finite term exists.</returns>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
+        public abstract bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out long cost);
+
+    }
+
+}

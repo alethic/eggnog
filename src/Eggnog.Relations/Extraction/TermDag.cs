@@ -23,7 +23,7 @@ namespace Eggnog.Relations
     /// Not thread-safe; any number of threads may read while nobody adds.
     /// </para>
     /// </remarks>
-    public sealed class TermDag
+    internal sealed class TermDag
     {
 
         readonly RawHashTable<TermDagEntry> index;

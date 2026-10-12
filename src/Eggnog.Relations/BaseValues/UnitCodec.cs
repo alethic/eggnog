@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// stored as 0, and every value reads back as unit (core-relations/src/base_values/unboxed.rs:54-69). Never touches an
     /// intern table.
     /// </summary>
-    public readonly struct UnitCodec : IBaseValueCodec<ValueTuple>
+    internal readonly struct UnitCodec : IBaseValueCodec<ValueTuple>
     {
 
         /// <inheritdoc />

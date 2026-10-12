@@ -36,7 +36,7 @@ namespace Eggnog.Relations
     /// <see cref="InvalidOperationException"/>. Cold path.
     /// </para>
     /// </remarks>
-    public sealed class EGraphRuleBuilder
+    internal sealed class EGraphRuleBuilder
     {
 
         readonly EGraph egraph;

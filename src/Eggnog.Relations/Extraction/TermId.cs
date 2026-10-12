@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// arena. Ids are dense, in insertion order, and only meaningful in the DAG that issued them.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct TermId(int Rep) : INumericId<TermId>
+    internal readonly record struct TermId(int Rep) : INumericId<TermId>
     {
 
         /// <inheritdoc />

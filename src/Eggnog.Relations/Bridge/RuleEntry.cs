@@ -15,7 +15,7 @@ namespace Eggnog.Relations
     /// its id and name reference, takes 16; the constant, its column type and the flag the rest); equality is
     /// structural. Entries are recorded and lowered on the cold path only, so the size costs nothing per match.
     /// </remarks>
-    public readonly record struct RuleEntry
+    internal readonly record struct RuleEntry
     {
 
         readonly RuleVariable variable;

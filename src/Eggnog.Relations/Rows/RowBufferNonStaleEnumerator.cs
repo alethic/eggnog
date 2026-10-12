@@ -23,7 +23,7 @@ namespace Eggnog.Relations
     /// <see cref="Current"/> returns them with no bounds checks.
     /// </para>
     /// </remarks>
-    public ref struct RowBufferNonStaleEnumerator
+    internal ref struct RowBufferNonStaleEnumerator
     {
 
         readonly uint[] data;

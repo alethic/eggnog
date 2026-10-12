@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies the action (right-hand side) of a rule.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct ActionId(int Rep) : INumericId<ActionId>
+    internal readonly record struct ActionId(int Rep) : INumericId<ActionId>
     {
 
         /// <inheritdoc />

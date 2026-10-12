@@ -10,14 +10,14 @@ namespace Eggnog.Relations
     /// of them allocates nothing.
     /// </summary>
     /// <remarks>
-    /// Public only so that <c>foreach</c> works over the public subset types; it is created by them, never directly.
+    /// It exists so that <c>foreach</c> works over the subset types; it is created by them, never directly.
     /// A plain (non-ref) struct, so compiled plans can hold one in a local and drive it with
     /// <see cref="MoveNext"/> and <see cref="Current"/>. For a dense range <c>rows</c> is <see langword="null"/>
     /// and the cursor walks row ids; otherwise it walks array positions. The enumerator borrows the array: it is
     /// valid only while the owner does not change or return it. Hot loops should prefer the <c>ForEach</c> visitor
     /// methods, which hoist the dense/sparse test out of the loop.
     /// </remarks>
-    public struct OffsetEnumerator
+    internal struct OffsetEnumerator
     {
 
         readonly int[]? rows;

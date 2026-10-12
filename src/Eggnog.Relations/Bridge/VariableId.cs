@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// are unrelated.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct VariableId(int Rep) : INumericId<VariableId>
+    internal readonly record struct VariableId(int Rep) : INumericId<VariableId>
     {
 
         /// <inheritdoc />

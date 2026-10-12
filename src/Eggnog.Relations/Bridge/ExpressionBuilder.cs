@@ -27,7 +27,7 @@ namespace Eggnog.Relations
     /// rules directly. An instance holds the name-to-variable map of one rule; not thread-safe. Cold path.
     /// </para>
     /// </remarks>
-    public sealed class ExpressionBuilder
+    internal sealed class ExpressionBuilder
     {
 
         readonly Dictionary<string, RuleEntry> vars = new(StringComparer.Ordinal);

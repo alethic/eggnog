@@ -13,9 +13,6 @@
         <PackageProjectReference Include="..\Eggnog.Relations\Eggnog.Relations.csproj">
             <PackageTargetPath>.</PackageTargetPath>
         </PackageProjectReference>
-        <PackageProjectReference Include="..\Eggnog.Storage\Eggnog.Storage.csproj">
-            <PackageTargetPath>.</PackageTargetPath>
-        </PackageProjectReference>
     </ItemGroup>
 
 </Project>

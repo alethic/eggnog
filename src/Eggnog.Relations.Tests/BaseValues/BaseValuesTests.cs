@@ -1,4 +1,8 @@
 using System;
+using System.Globalization;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
 
@@ -277,6 +281,211 @@ namespace Eggnog.Relations.Tests
             Assert.True(UnitCodec.TryUnbox(unitValue, out var unit));
             Assert.Equal(default(ValueTuple), unit);
             Assert.Equal(0u, unitValue.Rep);
+        }
+
+        /// <summary>
+        /// Request E1 of the rule-layer spec: a value that was never interned is not found, and looking it up interns
+        /// nothing, for codecs that intern everything and for one that boxes some values inline.
+        /// </summary>
+        [Fact]
+        public void TryGetExistingFailsForAnUnseenValueAndLeavesTheCountUnchanged()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            bases.RegisterType<Int64Codec, long>();
+            bases.RegisterType<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>();
+            Assert.Equal(0L, bases.InternedCount);
+
+            Assert.False(bases.TryGetExisting<StringCodec, string>("never interned", out var text));
+            Assert.Equal(default, text);
+            Assert.False(bases.TryGetExisting<Int64Codec, long>(long.MinValue, out var number));
+            Assert.Equal(default, number);
+            Assert.False(bases.TryGetExisting<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(new BaseValueTestPoint(1, 2), out var point));
+            Assert.Equal(default, point);
+            Assert.Equal(0L, bases.InternedCount);
+            Assert.Equal(0, bases.GetTable<StringCodec, string>().Table.Count);
+            Assert.Equal(0, bases.GetTable<Int64Codec, long>().Table.Count);
+
+            // Interning other values of the same types does not make the unseen ones visible, nor do failed lookups add
+            // them.
+            bases.Get<StringCodec, string>("seen");
+            bases.Get<Int64Codec, long>(-1L);
+            Assert.Equal(2L, bases.InternedCount);
+            Assert.False(bases.TryGetExisting<StringCodec, string>("never interned", out _));
+            Assert.False(bases.TryGetExisting<Int64Codec, long>(long.MinValue, out _));
+            Assert.False(bases.TryGetExisting<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(new BaseValueTestPoint(1, 2), out _));
+            Assert.Equal(2L, bases.InternedCount);
+            Assert.Equal(1, bases.GetTable<StringCodec, string>().Table.Count);
+            Assert.Equal(1, bases.GetTable<Int64Codec, long>().Table.Count);
+        }
+
+        /// <summary>
+        /// Request E1: a value that was interned is found with the very <see cref="Value"/> <c>Get</c> returned (tagged
+        /// or not, as its codec stores it), it unwraps to the value, and the lookup interns nothing.
+        /// </summary>
+        [Fact]
+        public void TryGetExistingRoundTripsASeenValue()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            bases.RegisterType<Int64Codec, long>();
+            bases.RegisterType<DoubleCodec, double>();
+            bases.RegisterType<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>();
+
+            var kind = bases.Get<StringCodec, string>("kind");
+            var smallest = bases.Get<Int64Codec, long>(long.MinValue);
+            var belowInline = bases.Get<Int64Codec, long>(-2147483649L);
+            var half = bases.Get<DoubleCodec, double>(1.5);
+            var point = bases.Get<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(new BaseValueTestPoint(3, 4));
+            Assert.Equal(5L, bases.InternedCount);
+
+            // An equal string that is a different instance.
+            Assert.True(bases.TryGetExisting<StringCodec, string>(new string(new[] { 'k', 'i', 'n', 'd' }), out var foundKind));
+            Assert.Equal(kind, foundKind);
+            Assert.Equal("kind", bases.Unwrap<StringCodec, string>(foundKind));
+
+            // Interned 64-bit integers carry the interned tag.
+            Assert.True(bases.TryGetExisting<Int64Codec, long>(long.MinValue, out var foundSmallest));
+            Assert.Equal(smallest, foundSmallest);
+            Assert.True(foundSmallest.Rep >= BaseValues.InternedTag);
+            Assert.Equal(long.MinValue, bases.Unwrap<Int64Codec, long>(foundSmallest));
+            Assert.True(bases.TryGetExisting<Int64Codec, long>(-2147483649L, out var foundBelowInline));
+            Assert.Equal(belowInline, foundBelowInline);
+            Assert.Equal(-2147483649L, bases.Unwrap<Int64Codec, long>(foundBelowInline));
+
+            Assert.True(bases.TryGetExisting<DoubleCodec, double>(1.5, out var foundHalf));
+            Assert.Equal(half, foundHalf);
+            Assert.Equal(1.5, bases.Unwrap<DoubleCodec, double>(foundHalf));
+
+            Assert.True(bases.TryGetExisting<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(new BaseValueTestPoint(3, 4), out var foundPoint));
+            Assert.Equal(point, foundPoint);
+            Assert.Equal(new BaseValueTestPoint(3, 4), bases.Unwrap<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(foundPoint));
+
+            Assert.Equal(5L, bases.InternedCount);
+        }
+
+        /// <summary>
+        /// Request E1: a value that boxes inline is always found, with the <see cref="Value"/> <c>Get</c> gives it,
+        /// without consulting the registry (none of these types is registered, so touching a table would throw) and
+        /// without adding to any intern table.
+        /// </summary>
+        [Fact]
+        public void TryGetExistingOfAnInlineValueNeverTouchesATable()
+        {
+            var bases = new BaseValues();
+
+            Assert.True(bases.TryGetExisting<Int64Codec, long>(42L, out var answer));
+            Assert.Equal(new Value(42), answer);
+            Assert.True(bases.TryGetExisting<Int64Codec, long>(2147483647L, out var largestInline));
+            Assert.Equal(new Value(2147483647u), largestInline);
+            Assert.True(bases.TryGetExisting<BooleanCodec, bool>(true, out var yes));
+            Assert.Equal(new Value(1), yes);
+            Assert.True(bases.TryGetExisting<UnitCodec, ValueTuple>(default, out var unit));
+            Assert.Equal(new Value(0), unit);
+            Assert.True(bases.TryGetExisting<Int32Codec, int>(int.MinValue, out var smallest));
+            Assert.Equal(bases.Get<Int32Codec, int>(int.MinValue), smallest);
+            Assert.True(bases.TryGetExisting<UInt64Codec, ulong>(7UL, out var seven));
+            Assert.Equal(new Value(7), seven);
+
+            // Registered types: inline values still leave their intern tables empty.
+            bases.RegisterType<Int64Codec, long>();
+            bases.RegisterType<BooleanCodec, bool>();
+            Assert.True(bases.TryGetExisting<Int64Codec, long>(0L, out var zero));
+            Assert.Equal(bases.Get<Int64Codec, long>(0L), zero);
+            Assert.True(bases.TryGetExisting<BooleanCodec, bool>(false, out _));
+            Assert.Equal(0, bases.GetTable<Int64Codec, long>().InternedCount);
+            Assert.Equal(0, bases.GetTable<BooleanCodec, bool>().InternedCount);
+            Assert.Equal(0L, bases.InternedCount);
+        }
+
+        /// <summary>
+        /// Request E1: a value that would have to be interned, of a type that is not registered, throws as
+        /// <c>Get</c> does: no registry can have interned it, and asking is a misuse.
+        /// </summary>
+        [Fact]
+        public void TryGetExistingOfAnUnregisteredInternedTypeThrows()
+        {
+            var bases = new BaseValues();
+            Assert.Throws<InvalidOperationException>(() => bases.TryGetExisting<StringCodec, string>("x", out _));
+            Assert.Throws<InvalidOperationException>(() => bases.TryGetExisting<Int64Codec, long>(-1L, out _));
+        }
+
+        /// <summary>
+        /// Request E1: <see cref="BaseValues.InternedCount"/> sums every intern table, counts each distinct value once,
+        /// ignores inline values, and sees values interned through a clone in the tables the clone shares.
+        /// </summary>
+        [Fact]
+        public void InternedCountSumsEveryInternTable()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            bases.RegisterType<Int64Codec, long>();
+            bases.RegisterType<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>();
+
+            bases.Get<StringCodec, string>("a");
+            bases.Get<StringCodec, string>("b");
+            bases.Get<StringCodec, string>("a");
+            bases.Get<Int64Codec, long>(-1L);
+            bases.Get<Int64Codec, long>(-2L);
+            bases.Get<Int64Codec, long>(7L);
+            bases.Get<InternedCodec<BaseValueTestPoint>, BaseValueTestPoint>(new BaseValueTestPoint(0, 0));
+            Assert.Equal(5L, bases.InternedCount);
+
+            var clone = bases.Clone();
+            Assert.Equal(5L, clone.InternedCount);
+            clone.Get<StringCodec, string>("c");
+            Assert.Equal(6L, bases.InternedCount);
+            Assert.Equal(6L, clone.InternedCount);
+
+            // A type registered after the clone was made belongs to one registry only.
+            clone.RegisterType<DoubleCodec, double>();
+            clone.Get<DoubleCodec, double>(2.5);
+            Assert.Equal(6L, bases.InternedCount);
+            Assert.Equal(7L, clone.InternedCount);
+        }
+
+        /// <summary>
+        /// Request E1: lookups that race with interning never intern and never see a wrong value; once interning ends,
+        /// every value is found with the <see cref="Value"/> <c>Get</c> gave it.
+        /// </summary>
+        [Fact]
+        public async Task TryGetExistingAgreesWithConcurrentInterning()
+        {
+            const int keys = 20_000;
+            const int readers = 4;
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            var boxed = new Value[keys];
+
+            using var writing = new CancellationTokenSource();
+            var lookups = Enumerable.Range(0, readers).Select(r => Task.Factory.StartNew(() =>
+            {
+                var random = new Random(r);
+                while (writing.IsCancellationRequested == false)
+                {
+                    var k = random.Next(keys);
+                    if (bases.TryGetExisting<StringCodec, string>(Key(k), out var value))
+                        Assert.Equal(Key(k), bases.Unwrap<StringCodec, string>(value));
+                }
+            }, TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+            for (var k = 0; k < keys; k++)
+                boxed[k] = bases.Get<StringCodec, string>(Key(k));
+
+            writing.Cancel();
+            await Task.WhenAll(lookups);
+
+            Assert.Equal((long)keys, bases.InternedCount);
+            for (var k = 0; k < keys; k++)
+            {
+                Assert.True(bases.TryGetExisting<StringCodec, string>(Key(k), out var value));
+                Assert.Equal(boxed[k], value);
+            }
+
+            Assert.False(bases.TryGetExisting<StringCodec, string>(Key(keys), out _));
+            Assert.Equal((long)keys, bases.InternedCount);
+
+            static string Key(int k) => "key" + k.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>

@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// <see cref="TaggedRowBuffer.AddRow(int, ReadOnlySpan{uint})"/> into the per-row loop, where egglog makes a
     /// virtual call through <c>&amp;mut dyn RowSink</c>.
     /// </summary>
-    public readonly struct TaggedRowSink : IRowSink
+    internal readonly struct TaggedRowSink : IRowSink
     {
 
         readonly TaggedRowBuffer buffer;
