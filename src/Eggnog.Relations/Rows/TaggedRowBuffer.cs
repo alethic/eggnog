@@ -31,7 +31,7 @@ namespace Eggnog.Relations
     /// The same threading rules as <see cref="RowBuffer"/>: one writer, or many readers.
     /// </para>
     /// </remarks>
-    public sealed class TaggedRowBuffer : IRowSink, IDisposable
+    internal sealed class TaggedRowBuffer : IRowSink, IDisposable
     {
 
         /// <summary>

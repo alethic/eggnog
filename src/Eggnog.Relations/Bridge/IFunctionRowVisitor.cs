@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// Implemented by structs, so the scan is specialized for the visitor and the per-row call is direct, as egglog's
     /// closure is monomorphized.
     /// </remarks>
-    public interface IFunctionRowVisitor
+    internal interface IFunctionRowVisitor
     {
 
         /// <summary>

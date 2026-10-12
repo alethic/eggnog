@@ -4,7 +4,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// The shape of a <see cref="Term"/>: egglog's <c>Term</c> variants (src/termdag.rs:13-17), in their order.
     /// </summary>
-    public enum TermKind : byte
+    internal enum TermKind : byte
     {
 
         /// <summary>

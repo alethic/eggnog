@@ -28,7 +28,7 @@ namespace Eggnog.Relations
     /// position <c>p</c> is row <c>lo + p</c> when dense and <c>rows[lo + p]</c> when sparse.
     /// </para>
     /// </remarks>
-    public readonly struct SubsetRef
+    internal readonly struct SubsetRef
     {
 
         readonly int[]? rows;

@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a column of a table, counting key columns first and then value columns.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct ColumnId(int Rep) : INumericId<ColumnId>
+    internal readonly record struct ColumnId(int Rep) : INumericId<ColumnId>
     {
 
         /// <inheritdoc />

@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// (egglog-bridge/src/macros.rs:131-142): the row of <c>f</c> for the key <c>args</c> has output <c>output</c>. Made
     /// by <see cref="RuleTerm.Is"/>. Immutable.
     /// </summary>
-    public sealed class RuleFact
+    internal sealed class RuleFact
     {
 
         /// <summary>

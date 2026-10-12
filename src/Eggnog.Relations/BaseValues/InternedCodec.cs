@@ -22,7 +22,7 @@ namespace Eggnog.Relations
     /// second codec.
     /// </remarks>
     /// <typeparam name="T">The base value type.</typeparam>
-    public readonly struct InternedCodec<T> : IBaseValueCodec<T>
+    internal readonly struct InternedCodec<T> : IBaseValueCodec<T>
         where T : notnull, IEquatable<T>
     {
 

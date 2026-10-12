@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     /// A four-byte value: zero for <see cref="Id"/> (so <c>default</c> is the id type), otherwise the base type's index
     /// plus one. Equality is structural.
     /// </remarks>
-    public readonly record struct ColumnTy
+    internal readonly record struct ColumnTy
     {
 
         readonly int code;

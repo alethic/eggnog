@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a registered base value type.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct BaseValueTypeId(int Rep) : INumericId<BaseValueTypeId>
+    internal readonly record struct BaseValueTypeId(int Rep) : INumericId<BaseValueTypeId>
     {
 
         /// <inheritdoc />

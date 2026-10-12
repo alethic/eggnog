@@ -18,6 +18,7 @@
         <InternalsVisibleTo Include="Eggnog.Relations.Tests" />
         <InternalsVisibleTo Include="Eggnog.Relations.Benchmarks" />
         <InternalsVisibleTo Include="Eggnog" />
+        <InternalsVisibleTo Include="Eggnog.Tests" />
     </ItemGroup>
 
 </Project>

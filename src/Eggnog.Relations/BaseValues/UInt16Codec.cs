@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// The codec for <see cref="ushort"/> base values (Rust <c>u16</c>): always inline, zero-extended to 32 bits, and
     /// read back by truncation (core-relations/src/base_values/unboxed.rs:12-31). Never touches an intern table.
     /// </summary>
-    public readonly struct UInt16Codec : IBaseValueCodec<ushort>
+    internal readonly struct UInt16Codec : IBaseValueCodec<ushort>
     {
 
         /// <inheritdoc />

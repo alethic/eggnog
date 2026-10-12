@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// value reads back as <c>true</c> (core-relations/src/base_values/unboxed.rs:33-52). Never touches an intern table.
     /// egglog stores a table's <c>subsumed</c> column with this encoding.
     /// </summary>
-    public readonly struct BooleanCodec : IBaseValueCodec<bool>
+    internal readonly struct BooleanCodec : IBaseValueCodec<bool>
     {
 
         /// <inheritdoc />

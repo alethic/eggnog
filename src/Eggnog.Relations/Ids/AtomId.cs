@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies an atom of a query.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct AtomId(int Rep) : INumericId<AtomId>
+    internal readonly record struct AtomId(int Rep) : INumericId<AtomId>
     {
 
         /// <inheritdoc />

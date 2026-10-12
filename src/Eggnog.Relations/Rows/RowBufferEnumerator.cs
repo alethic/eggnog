@@ -28,7 +28,7 @@ namespace Eggnog.Relations
     /// <see cref="Current"/> do no bounds checks, like egglog's <c>chunks</c>.
     /// </para>
     /// </remarks>
-    public ref struct RowBufferEnumerator
+    internal ref struct RowBufferEnumerator
     {
 
         readonly uint[] data;

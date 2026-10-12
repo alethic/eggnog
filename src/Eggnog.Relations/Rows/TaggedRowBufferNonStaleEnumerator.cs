@@ -23,7 +23,7 @@ namespace Eggnog.Relations
     /// reads tags and builds spans with no bounds checks.
     /// </para>
     /// </remarks>
-    public ref struct TaggedRowBufferNonStaleEnumerator
+    internal ref struct TaggedRowBufferNonStaleEnumerator
     {
 
         readonly uint[] data;

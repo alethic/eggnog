@@ -11,7 +11,7 @@ namespace Eggnog.Relations
     /// <c>Plan::to_report</c> is a <c>todo!()</c> for them); here the plan is the template's text, for both kinds.
     /// Immutable. Public because <see cref="RuleSetReport"/> holds it; only the engine creates one.
     /// </remarks>
-    public sealed class RuleReport
+    internal sealed class RuleReport
     {
 
         /// <summary>

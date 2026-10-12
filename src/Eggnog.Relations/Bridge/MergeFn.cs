@@ -28,7 +28,7 @@ namespace Eggnog.Relations
     /// lattice primitive are typically <see cref="Old"/> and <see cref="New"/>.
     /// </para>
     /// </remarks>
-    public sealed class MergeFn
+    internal sealed class MergeFn
     {
 
         static readonly MergeFn[] NoArgs = Array.Empty<MergeFn>();

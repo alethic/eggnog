@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// interface dispatch.
     /// </remarks>
     /// <typeparam name="TSelf">The identifier type.</typeparam>
-    public interface INumericId<TSelf>
+    internal interface INumericId<TSelf>
         where TSelf : struct, INumericId<TSelf>
     {
 

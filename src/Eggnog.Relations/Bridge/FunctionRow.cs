@@ -12,7 +12,7 @@ namespace Eggnog.Relations
     /// The values alias the table's storage and are valid only during the visit that received them; copy them to keep
     /// them.
     /// </remarks>
-    public readonly ref struct FunctionRow
+    internal readonly ref struct FunctionRow
     {
 
         /// <summary>

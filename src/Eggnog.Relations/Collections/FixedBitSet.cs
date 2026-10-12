@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// A fixed-size set of small non-negative integers, stored one bit each.
     /// </summary>
-    public sealed class FixedBitSet
+    internal sealed class FixedBitSet
     {
 
         readonly ulong[] words;

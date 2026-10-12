@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <param name="Id">The variable's id within its rule.</param>
     /// <param name="Name">The name given at creation, or <c>null</c>.</param>
-    public readonly record struct RuleVariable(VariableId Id, string? Name)
+    internal readonly record struct RuleVariable(VariableId Id, string? Name)
     {
 
         /// <summary>

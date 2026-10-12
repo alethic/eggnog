@@ -9,6 +9,6 @@ namespace Eggnog.Relations
     /// <param name="sort">The container's sort.</param>
     /// <param name="value">The container's id.</param>
     /// <returns>The container's own cost.</returns>
-    public delegate long ContainerCostFunction(Sort sort, Value value);
+    internal delegate long ContainerCostFunction(Sort sort, Value value);
 
 }

@@ -18,7 +18,7 @@ namespace Eggnog.Relations
     /// Immutable and thread-safe.
     /// </para>
     /// </remarks>
-    public abstract class Sort
+    internal abstract class Sort
     {
 
         /// <summary>

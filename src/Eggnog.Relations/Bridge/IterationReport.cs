@@ -13,7 +13,7 @@ namespace Eggnog.Relations
     /// docs/engine/decisions.md). Immutable. Public because <see cref="EGraph.RunRules"/> returns it; only the engine
     /// creates one.
     /// </remarks>
-    public sealed class IterationReport
+    internal sealed class IterationReport
     {
 
         /// <summary>

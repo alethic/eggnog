@@ -5,7 +5,7 @@ namespace Eggnog.Relations
     /// What the values of a <see cref="Sort"/> are, which decides how extraction treats a column of it: egglog's
     /// <c>is_eq_sort</c> and <c>is_container_sort</c> split (src/sort/mod.rs:72-79).
     /// </summary>
-    public enum SortKind : byte
+    internal enum SortKind : byte
     {
 
         /// <summary>

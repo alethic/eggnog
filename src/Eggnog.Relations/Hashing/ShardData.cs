@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// How a sharded structure maps a 64-bit hash to a shard: by the bits just below the top seven, so that the low
     /// bits stay free for picking a slot within the shard and the top seven for a control byte.
     /// </summary>
-    public readonly struct ShardData
+    internal readonly struct ShardData
     {
 
         readonly int log2;

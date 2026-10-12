@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a materialization produced by one block of a decomposed plan.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct MatId(int Rep) : INumericId<MatId>
+    internal readonly record struct MatId(int Rep) : INumericId<MatId>
     {
 
         /// <inheritdoc />

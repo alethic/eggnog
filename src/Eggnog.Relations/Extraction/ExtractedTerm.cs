@@ -15,7 +15,7 @@ namespace Eggnog.Relations
     /// <remarks>
     /// Immutable and thread-safe.
     /// </remarks>
-    public sealed class ExtractedTerm
+    internal sealed class ExtractedTerm
     {
 
         readonly EGraph egraph;

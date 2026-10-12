@@ -24,11 +24,12 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Costs: <see cref="Intern"/> is one key hash, one shard lock and one expected-O(1) probe, plus an amortized O(1)
-    /// append for a new key. <see cref="Get"/> and <see cref="GetRef"/> are two volatile reads and an array access.
+    /// append for a new key. <see cref="TryGetId"/> is the same lookup without the append. <see cref="Get"/> and
+    /// <see cref="GetRef"/> are two volatile reads and an array access.
     /// </para>
     /// </remarks>
     /// <typeparam name="TKey">The key type.</typeparam>
-    public sealed class InternTable<TKey>
+    internal sealed class InternTable<TKey>
         where TKey : notnull, IEquatable<TKey>
     {
 
@@ -107,6 +108,44 @@ namespace Eggnog.Relations
                 shard.InsertUnique(hash, id, new InternKeyHasher<TKey>(Volatile.Read(ref keys)));
                 return id;
             }
+        }
+
+        /// <summary>
+        /// Gets the id of <paramref name="key"/> if it has been interned, without interning it. egglog has no such
+        /// member; it serves host reads, which must not grow a pool with values they only look up (rule-layer D15,
+        /// request E1). Thread-safe; never appends to the store.
+        /// </summary>
+        /// <remarks>
+        /// Costs one key hash, the key's shard lock and one expected-O(1) probe, as <see cref="Intern"/> does for a key
+        /// that is present. The lock is needed because a shard table may be growing on another thread; it orders this
+        /// lookup with every <see cref="Intern"/> of the same shard, so a key interned before the call is found, and a
+        /// key interned concurrently is either found with its final id or not found.
+        /// </remarks>
+        /// <param name="key">The key.</param>
+        /// <param name="id">The key's id when this returns <c>true</c>; otherwise 0.</param>
+        /// <returns>Whether the key has been interned.</returns>
+        public bool TryGetId(TKey key, out uint id)
+        {
+            if (key is null)
+                throw new ArgumentNullException(nameof(key));
+
+            var hash = HashKey(key);
+            var shard = shards[shardData.ShardOf(hash)];
+
+            lock (shard)
+            {
+                // As in Intern: every id in this shard was appended under this lock, so this snapshot holds them all.
+                var match = new InternKeyMatch<TKey>(Volatile.Read(ref keys), key);
+                var slot = shard.Find(hash, ref match);
+                if (slot >= 0)
+                {
+                    id = shard.GetEntry(slot);
+                    return true;
+                }
+            }
+
+            id = 0;
+            return false;
         }
 
         /// <summary>

@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// zero in the order they are added, which is also the order of the rule's semi-naive variants.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct RuleAtomId(int Rep) : INumericId<RuleAtomId>
+    internal readonly record struct RuleAtomId(int Rep) : INumericId<RuleAtomId>
     {
 
         /// <inheritdoc />

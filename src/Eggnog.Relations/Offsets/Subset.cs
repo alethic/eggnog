@@ -33,7 +33,7 @@ namespace Eggnog.Relations
     /// Not thread-safe for mutation; any number of threads may read a subset nobody mutates.
     /// </para>
     /// </remarks>
-    public struct Subset : IEquatable<Subset>
+    internal struct Subset : IEquatable<Subset>
     {
 
         int[]? rows;

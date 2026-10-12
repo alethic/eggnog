@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies an external (host-provided) function registered with a <see cref="Database"/>.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct ExternalFunctionId(int Rep) : INumericId<ExternalFunctionId>
+    internal readonly record struct ExternalFunctionId(int Rep) : INumericId<ExternalFunctionId>
     {
 
         /// <inheritdoc />

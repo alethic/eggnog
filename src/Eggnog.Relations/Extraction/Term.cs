@@ -12,7 +12,7 @@ namespace Eggnog.Relations
     /// A two-field struct: copying it is free, and every accessor is an array read in the DAG. Two views are equal when
     /// they name the same term of the same DAG, which, the DAG being hash-consed, is when the terms are equal.
     /// </remarks>
-    public readonly struct Term : IEquatable<Term>
+    internal readonly struct Term : IEquatable<Term>
     {
 
         readonly TermDag dag;

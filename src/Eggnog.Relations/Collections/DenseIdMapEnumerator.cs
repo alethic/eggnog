@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <typeparam name="TKey">The identifier type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
-    public struct DenseIdMapEnumerator<TKey, TValue> : IEnumerator<KeyValuePair<TKey, TValue>>
+    internal struct DenseIdMapEnumerator<TKey, TValue> : IEnumerator<KeyValuePair<TKey, TValue>>
         where TKey : struct, INumericId<TKey>
     {
 

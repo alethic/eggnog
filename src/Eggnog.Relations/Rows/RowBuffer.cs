@@ -42,7 +42,7 @@ namespace Eggnog.Relations
     /// distinct rows are fine (see there).
     /// </para>
     /// </remarks>
-    public sealed class RowBuffer : IDisposable
+    internal sealed class RowBuffer : IDisposable
     {
 
         readonly int arity;

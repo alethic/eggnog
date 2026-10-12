@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     /// value, and so do both zeros: whichever was interned first is the one <see cref="BaseValues.Unwrap{TCodec, T}"/>
     /// returns, as in egglog.
     /// </remarks>
-    public readonly struct DoubleCodec : IBaseValueCodec<double>
+    internal readonly struct DoubleCodec : IBaseValueCodec<double>
     {
 
         /// <inheritdoc />

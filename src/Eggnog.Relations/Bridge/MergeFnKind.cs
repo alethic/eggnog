@@ -4,7 +4,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// The cases of egglog-bridge's <c>MergeFn</c> (egglog-bridge/src/lib.rs:1010-1030); see <see cref="MergeFn"/>.
     /// </summary>
-    public enum MergeFnKind : byte
+    internal enum MergeFnKind : byte
     {
 
         /// <summary>

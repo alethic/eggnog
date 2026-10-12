@@ -8,6 +8,6 @@ namespace Eggnog.Relations
     /// <param name="sort">The value's sort.</param>
     /// <param name="value">The value.</param>
     /// <returns>The value's cost.</returns>
-    public delegate long BaseValueCostFunction(Sort sort, Value value);
+    internal delegate long BaseValueCostFunction(Sort sort, Value value);
 
 }

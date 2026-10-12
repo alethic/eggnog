@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Eggnog.Relations
 {
 
-    public sealed partial class EGraph
+    internal sealed partial class EGraph
     {
 
         /// <summary>

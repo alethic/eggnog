@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     /// with <see cref="IsEmpty"/>, not by comparing against <c>default</c>. Copying is free: two
     /// <see cref="int"/>s.
     /// </remarks>
-    public readonly record struct OffsetRange
+    internal readonly record struct OffsetRange
     {
 
         /// <summary>

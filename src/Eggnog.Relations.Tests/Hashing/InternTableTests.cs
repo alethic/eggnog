@@ -64,6 +64,70 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(1000, table.Count);
         }
 
+        /// <summary>
+        /// <see cref="InternTable{TKey}.TryGetId"/> (request E1 of the rule-layer spec) finds exactly the interned keys,
+        /// with their ids, and never adds a key.
+        /// </summary>
+        [Fact]
+        public void TryGetIdFindsInternedKeysAndAddsNone()
+        {
+            var table = new InternTable<string>();
+            Assert.False(table.TryGetId("a", out var missing));
+            Assert.Equal(0u, missing);
+            Assert.Equal(0, table.Count);
+
+            Assert.Equal(0u, table.Intern("a"));
+            Assert.Equal(1u, table.Intern("b"));
+            Assert.True(table.TryGetId("a", out var a));
+            Assert.Equal(0u, a);
+            Assert.True(table.TryGetId(new string('b', 1), out var b));
+            Assert.Equal(1u, b);
+            Assert.False(table.TryGetId("c", out _));
+            Assert.Equal(2, table.Count);
+
+            // A key looked up and missed is still assigned the next id when it is interned.
+            Assert.Equal(2u, table.Intern("c"));
+            Assert.True(table.TryGetId("c", out var c));
+            Assert.Equal(2u, c);
+            Assert.Throws<ArgumentNullException>(() => table.TryGetId(null!, out _));
+        }
+
+        /// <summary>
+        /// <see cref="InternTable{TKey}.TryGetId"/> probes past colliding keys, in one shard and in many, and across the
+        /// key store's growth.
+        /// </summary>
+        [Fact]
+        public void TryGetIdProbesPastCollisionsAndGrowth()
+        {
+            var colliding = new InternTable<InternTestCollidingKey>();
+            for (var i = 0; i < 1000; i += 2)
+                colliding.Intern(new InternTestCollidingKey(i));
+
+            for (var i = 0; i < 1000; i++)
+            {
+                var found = colliding.TryGetId(new InternTestCollidingKey(i), out var id);
+                Assert.Equal(i % 2 == 0, found);
+                if (found)
+                    Assert.Equal((uint)(i / 2), id);
+            }
+
+            Assert.Equal(500, colliding.Count);
+
+            var single = new InternTable<long>(1);
+            for (var i = 0; i < 5000; i++)
+                single.Intern(i * 3L);
+
+            for (var i = 0; i < 15000; i++)
+            {
+                var found = single.TryGetId(i, out var id);
+                Assert.Equal(i % 3 == 0, found);
+                if (found)
+                    Assert.Equal((uint)(i / 3), id);
+            }
+
+            Assert.Equal(5000, single.Count);
+        }
+
         [Fact]
         public void ASingleShardWorks()
         {

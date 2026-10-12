@@ -6,7 +6,7 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// A codec that (wrongly) describes two value types, used to show that a codec can be registered for only one.
     /// </summary>
-    public readonly struct BaseValueTestDualCodec : IBaseValueCodec<int>, IBaseValueCodec<long>
+    internal readonly struct BaseValueTestDualCodec : IBaseValueCodec<int>, IBaseValueCodec<long>
     {
 
         public static bool MayUnbox => false;

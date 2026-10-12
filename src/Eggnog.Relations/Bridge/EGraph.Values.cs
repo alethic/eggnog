@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace Eggnog.Relations
 {
 
-    public sealed partial class EGraph
+    internal sealed partial class EGraph
     {
 
         /// <summary>

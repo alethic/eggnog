@@ -11,7 +11,7 @@ namespace Eggnog.Relations
     /// Implement it on a struct and pass it by reference: the compaction is generic over the struct, so the JIT
     /// specializes it and can inline the callback, as Rust monomorphizes the closure.
     /// </remarks>
-    public interface IRowRemap
+    internal interface IRowRemap
     {
 
         /// <summary>

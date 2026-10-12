@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a rule within a rule set.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct RuleId(int Rep) : INumericId<RuleId>
+    internal readonly record struct RuleId(int Rep) : INumericId<RuleId>
     {
 
         /// <inheritdoc />

@@ -9,7 +9,7 @@ namespace Eggnog.Relations.Tests
     /// inline and interns the rest with <see cref="BaseValues.InternedTag"/>, following the contract of
     /// <see cref="IBaseValueCodec{T}"/>. Used to show that two codecs over one .NET type are two base value types.
     /// </summary>
-    public readonly struct BaseValueTestTinyLongCodec : IBaseValueCodec<long>
+    internal readonly struct BaseValueTestTinyLongCodec : IBaseValueCodec<long>
     {
 
         public static bool MayUnbox => true;

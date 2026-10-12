@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// Identifies a table in a <see cref="Database"/>.
     /// </summary>
     /// <param name="Rep">The raw index.</param>
-    public readonly record struct TableId(int Rep) : INumericId<TableId>
+    internal readonly record struct TableId(int Rep) : INumericId<TableId>
     {
         /// <summary>
         /// A placeholder table identifier, used for synthetic atoms during planning; never names a real table.

@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// back by truncation (core-relations/src/base_values/unboxed.rs:12-31). Never touches an intern table. <c>-1</c> boxes
     /// to <see cref="Value.StaleRep"/>, so it must not be stored in a table's first column.
     /// </summary>
-    public readonly struct Int16Codec : IBaseValueCodec<short>
+    internal readonly struct Int16Codec : IBaseValueCodec<short>
     {
 
         /// <inheritdoc />

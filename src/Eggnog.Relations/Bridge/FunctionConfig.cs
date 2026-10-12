@@ -13,7 +13,7 @@ namespace Eggnog.Relations
     /// or its <c>:merge</c> expression; a relation to a constructor whose output is a fresh, non-unionable sort
     /// (map §3.1). <see cref="EGraph.AddTable"/> copies what it needs, so the instance may be reused.
     /// </remarks>
-    public sealed class FunctionConfig
+    internal sealed class FunctionConfig
     {
 
         /// <summary>

@@ -7,7 +7,7 @@ namespace Eggnog.Relations
     /// A function's rows extracted as terms: egglog's <c>function_to_dag</c> result, <c>(inputs, output, termdag)</c>
     /// (src/extract.rs:858-915). <see cref="Extractor.FunctionToDag"/> builds it.
     /// </summary>
-    public sealed class FunctionDag
+    internal sealed class FunctionDag
     {
 
         /// <summary>

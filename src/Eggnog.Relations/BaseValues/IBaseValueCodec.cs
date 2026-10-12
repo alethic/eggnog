@@ -40,7 +40,7 @@ namespace Eggnog.Relations
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The base value type. Equality is <see cref="IEquatable{T}"/>, as the intern table uses.</typeparam>
-    public interface IBaseValueCodec<T>
+    internal interface IBaseValueCodec<T>
         where T : notnull, IEquatable<T>
     {
 
