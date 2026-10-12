@@ -1,475 +1,600 @@
-> **Status (2026-10-09).** Produced by a design panel (four independent designs, three judges, one synthesis)
-> against the API of the `Eggnog.Storage` spike. The spike is not the engine: the real storage and query engine will
-> reproduce egglog's `core-relations` with colored contexts, and in that architecture the planner and executor live
-> inside the engine. Treat this spec's matching, planning and storage-boundary sections as superseded. Its rule
-> language, scheduling, case split and lift, extraction, interning and test plan are the reusable parts.
+# Eggnog rule layer: specification, version 2
 
-# Eggnog rule layer: final specification
+> **Status (2026-10-11).** This is version 2 of the rule-layer specification, revised to answer two design reviews
+> (§14 maps every finding to its resolution). It replaces version 1, which is in git history at commit `5acd00e` and was
+> written against the API of the `Eggnog.Storage` spike. Version 2 specifies the public `Eggnog` library on top of the
+> real engine, `Eggnog.Relations`:
+> - rules compile to the bridge's rule builder (`EGraphRuleBuilder`);
+> - semi-naive evaluation and watermarks belong to the bridge and to `EGraphContext`;
+> - scopes are contexts (`Store`, `Context`, `EGraphContext`);
+> - case splits and lift use the M10.4 primitives;
+> - extraction is `Eggnog.Relations`' extractor.
+>
+> Section 1 re-decides every v1 decision. D1–D26 keep their v1 numbers, D27–D37 are version 2's own, and D38–D49 were
+> added in answer to the reviews. The colored-contexts spec cites D3, D4, D6, D11, D16, D18, D20 and D21; the rows of
+> D20 and D21 changed, and §13 lists the edits that spec needs.
+>
+> **First landing.** Milestone R1a (§9) is small on purpose. It turns `src/Eggnog` from an empty project into the
+> library (definitions, rules, runs, host writes and reads, and extraction, at the root on today's engine), drops the
+> spike from the project and from the package, and merges to main before any other rule-layer work.
 
-This specification starts from the winning "dotnet-idiomatic" design. It fixes every flaw the three judges raised against that design, adds the ideas they recommended taking from the other three designs, and records a decision for every open question. I re-checked it against the storage source as it stands in `D:\eggnog\src\Eggnog.Storage` (commit `f950433`), against the prototype in `prototypes/cosmos-facts`, and against egglog's `run_schedule` and its extraction cost model.
+**Binding inputs.**
+- `docs/design/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
+- `docs/engine/conventions.md` and `docs/engine/decisions.md` (decisions 1–12, L1–L7).
+- `docs/design/egglog-engine-map.md` §3 (the bridge and what the frontend assumes).
+- `prototypes/cosmos-facts` (`prelude.egg`, `01`–`07`, `README.md`), and the adapter's gap tests in `D:\calcite-cosmos`
+  (`src/Apache.Calcite.Cosmos.Adapter.Tests/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`, on the adapter's
+  fact-gap-tests branch; see the prototype README, "Confirmed against the adapter").
+
+**Code baseline.** Worktree `project-overview-1f1e82` at `5acd00e`:
+- The bridge (`src/Eggnog.Relations/Bridge`) and extraction (`src/Eggnog.Relations/Extraction`) are ported (M4).
+- Colors M9.0–M9.2 are in (`Store`, `Context`, the clock, id blocks, the layered union-find).
+- M9.3–M10.4 are not. Today's bridge `EGraph` runs on a bare `Database` (no `Store`) and has only a root.
+- `src/Eggnog` is an empty project that references the spike `src/Eggnog.Storage`; `src/dist-nuget` packs the spike
+  beside `Eggnog` and `Eggnog.Relations`.
+- `Eggnog.Relations` declares about 95 public types (the bridge, extraction, codecs, ids and collections).
+
+**Paths.**
+- Public and internal rule-layer files: `src/Eggnog/<Folder>/<Type>.cs`, namespace `Eggnog`.
+- Tests: `src/Eggnog.Tests/<Folder>/<Type>Tests.cs`, namespace `Eggnog.Tests`.
+- Engine paths are relative to `src/Eggnog.Relations/`.
+
+**Labels.**
+- Decisions **D1–D26** (re-decided), **D27–D37** (version 2) and **D38–D49** (answers to the reviews), §1.
+- Engine members this layer needs that do not exist yet: **E1–E11**, §5.2 (E2, E3 and E6 are withdrawn).
+- Invariants owned by this layer: **V, C, R, S, M, Q, E, A, O**; invariants delegated to the engine are cited by their
+  colors number (I19–I33), §7.
+- Milestones **R1a, R1b, R2, R3**, §9. Every public member in §3 carries the milestone that adds it.
 
 ---
 
-## 0. Decisions
+## Contents
+
+1. [Decisions](#1-decisions)
+2. [Overview](#2-overview)
+3. [Public types](#3-public-types)
+4. [Internal types](#4-internal-types)
+5. [The engine contract](#5-the-engine-contract)
+6. [Semantics and algorithms](#6-semantics-and-algorithms)
+7. [Invariants](#7-invariants)
+8. [Test plan](#8-test-plan)
+9. [Milestones](#9-milestones)
+10. [Scenario 02 against the v2 API](#10-scenario-02-against-the-v2-api)
+11. [Residual risks](#11-residual-risks)
+12. [Appendix: porting an egglog program by hand](#12-appendix-porting-an-egglog-program-by-hand)
+13. [Edits this spec asks of the colored-contexts spec](#13-edits-this-spec-asks-of-the-colored-contexts-spec)
+14. [Review responses](#14-review-responses)
+
+---
+
+## 1. Decisions
+
+**Status key.**
+- **Kept**: the v1 decision stands; the mechanism may now be the engine's.
+- **Changed**: the decision is different, and the row says how and why.
+- **Engine**: the engine now provides it; the row says where. The rule layer adds nothing but configuration.
+- **Deferred**: not in version 2; the row says what replaces it and when it may return.
+
+### 1.1 The v1 decisions, re-decided
+
+| # | v1 question | Status | v2 decision |
+|---|---|---|---|
+| D1 | How do class values join across scopes? | **Changed** | A scoped atom (`handle.In(tag)`, `Fact.In(tag, …)`) may read only a **value-only table**: every key and the output are value types, never a sort. It compiles to an ordinary atom over a hidden **mirror table** `T@tag`. Copy rules, run in the tagged scope just before anything reads the mirror (D48), keep it equal to the tagged scope's own view of `T` (§6.8, invariant M). No class value ever crosses a scope boundary inside a rule, so v1's invariant H holds by construction and is no longer checked per variable. **Why:** the engine runs a rule against exactly one context's view (colors §9, §10.3). Reading an ancestor's view in the ancestor's own identifiers would need a per-atom view source in the executor, which no milestone provides. Value cells are untouched by equalities, so a mirror is exact. The Cosmos theory reads only value-keyed scoped facts. |
+| D2 | Semi-naive windows | **Engine** | The bridge's variants (map §3.4; colors I27, Lemma 1 of I31): the focus atom reads rows with `ts ≥ W`, earlier atoms rows with `ts < W`. Each match is therefore found once per iteration, so v1's per-iteration `MatchBuffer` deduplication is gone. The rule layer passes no windows. |
+| D3 | An Id constant loses a union | **Engine** from R2; **rule layer** in R1 | Colors X19/I30 (M10.2, M10.3): every Store-backed context, the root included, runs each Id constant of a rule in its canonical form there, and a watermark is used only when the stored constants equal the current ones. The bridge lowers Id constants through `QueryEntry.IdConst`. R1 runs on a bare `Database`, where constants run as written (as in egglog). So the R1 root adapter compares, before every iteration, the canonical forms of a rule's Id constants with those its engine variant was built with, and re-lowers the rule when they differ. The new variant starts at watermark 0, which is the full run D3 requires (§6.4.5). R2 deletes this path. Which class constants a rule may hold at all is D39's. |
+| D4 | Inheriting watermarks | **Engine** | Colors §10.2: lazy seeding `min(W_a, CreatedAt)` of the ancestor's child on the path, refused when the constants differ, generations against `RuleId` reuse. `AllowInheritance` comes from `ActionReadAnalysis` (X41). v1's tag check ("refuse when the scope carries a tag the rule reads") is no longer needed: mirror tables are ordinary tables (D1), so a child tagged with a read tag sees its ancestors' mirror rows as old rows of its own view, which is exactly I31 Case 2. Rule-layer actions never read tables (invariant Q), so every semi-naive rule may inherit. Naive rules, queries and split matchers are naive bridge rules and never inherit. |
+| D5 | Cost of delta scans | **Engine** | Tables are sorted by their timestamp column. `GeConst`/`LtConst` cost one binary search per layer (I19). An untouched frozen layer contributes nothing. Planner statistics are per context (colors §9.7). |
+| D6 | Sealing definitions | **Kept** | Definitions are never sealed. Rule, query, split and tag definitions may be made from any thread at any time and take part from the next iteration of every run. A table definition (and, from R2, a rule whose first scoped read of a table creates a mirror table) follows the engine's rule (colors §4.3): from any thread once the root is frozen; before that, it throws `InvalidOperationException` while another thread is using the root. R1's root guard enforces the same rule, so no milestone changes it (§6.12, D47). Local rules are a rule-layer notion: every engine rule is global, and the rule layer chooses which rules each iteration passes to `RunRules` (§6.7). The recommended topology stays: containers are children of an empty, frozen root. |
+| D7 | Re-splitting | **Changed** (mostly **Engine**) | Split records, the B6 skip of keys already covered by a live record in the scope or an ancestor, the limits, lift before deepening, and disposal belong to M10.4's `SplitDriver` (colors §11.3). Split matchers are **naive** bridge rules, re-matched at every split step, so there is no split watermark to reset. Records live until the top-level `Run` ends. Which keys a split considers is part of the split rule's body (D43); the rule layer passes no `ISplitDemand`. |
+| D8 | Lift algorithm | **Engine** | M10.4's `Lifter` (colors §11.2, I33): a full partition meet over `MemberMap`s, term lift in rounds, the `IsLocalId` filter, a signature memo, and the L1 winner probe (`ScanAncestorsMentioning`), which v1's lift lacked. The rule layer supplies only the `LiftSpec`: which tables lift, and their case joins (§6.9). |
+| D9 | Zero cases | **Kept** | A host lift with no cases throws (the engine also throws, colors §13 #34). A split match whose element set is empty produces no split request and counts in `RunReport.SplitsSkipped`; the theory's own rules derive the contradiction. |
+| D10 | Extraction | **Engine** | `Eggnog.Relations.Extractor` (Knuth's algorithm over the classes reachable from the root; content tie-breaks, culture-invariant; acyclic with zero costs). |
+| D11 | `StopOnContradiction` | **Kept** (mechanism partly **Engine**) | `false` by default for host runs and `true` inside cases. In cases the engine does it: `ContextOptions.Case`, the storage stop flag (X11, colors §6.9), `IterationReport.Stopped`, and the disposal of vacuous cases (L4). For a host run the option stays a rule-layer schedule check. What a stopped case still answers is D45's. |
+| D12 | "A conjunct never proves itself redundant" | **Kept**, now structural by default | A ruleset defined with a licence tag (`RulesetOptions.Licence`) makes every rule in it **erasing**: every atom over a Fact table must read the licence scope. A rule that may judge on the running scope's facts says so with `RuleBuilder.ReadsOwnFacts(reason)`, which `Rule.ToString` renders; `RuleBuilder.Erasing(licence)` makes one rule erasing in a ruleset without a licence. Invariants R (writes are never scoped) and A (writers of analysis tables read only term and analysis tables) hold as before. Invariant H is gone (D1). The residue is unchanged: an erasing rule can still see class equalities its running scope derived (§11, risk 2). |
+| D13 | Arity limit and lambdas | **Kept**, narrowed | Typed handles go up to four key columns. The untyped layer (`Apply`, `Term.Constant`, `Fact.Equal`, `Fact.NotEqual`, `Compute.Of(Primitive, …)`, `Var(ColumnType, …)` and the untyped `Define*` overloads) is **internal** until a consumer needs more than four columns; the differential generator reaches it through `InternalsVisibleTo`. Named primitives render by name; lambdas render as `<lambda>`. |
+| D14 | `.egg` frontend | **Changed** | Never. Consumers use the C# API only, and no milestone adds a parser. v1's frontend mapping (§3.14) is dropped; §12 keeps a correspondence table for porting egglog programs by hand, which the Cosmos tests use. |
+| D15 | Interner growth | **Kept** | Pools are permanent per `EGraph` (the engine's `BaseValues` is append-only). Constants used only for reading never intern: host reads use `BaseValues.TryGetExisting` (E1). `ValueStore.InternedCount` reports growth (E1) so a host can recycle a graph. Constants of rules and queries intern at definition. |
+| D16 | Storage surface | **Changed** | No storage surface is public. What v1 added to the spike exists in the engine and stays internal: `Version` is `Database.ChangeStamp` (X30). It moves on every effective change to the scope's own layer, including (R2) the catch-up copies that hide an ancestor's rows when one of the scope's own classes merges; queries, reads and writes that change nothing never move it. `ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` come with M9.2–M9.4 and M10.4. `LatestStamp` and `ApproximateCount` are not needed, because the engine plans. |
+| D17 | Parallel cases | **Kept** (**Engine**-enforced) | Sequential. A writable parent shares its thread domain with every case under it (colors §8.3). Children of a frozen scope may run concurrently. |
+| D18 | Rollback | **Changed** | No rollback, and no re-run guarantee. In Store-backed contexts the engine commits watermarks only after a run without a recorded failure (X18), and a child that throws is faulted (X12). The rule layer **faults the scope** after any `RuleEvaluationException` from a run or a write, the root included. `Scope.Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as `InnerException`; a faulted root makes the graph unusable. A failed query is the exception: it wrote nothing, so it throws without faulting (D49). Limits and cancellation stop between iterations and are not failures. |
+| D19 | Cost type | **Engine** | `long`, saturating addition, negative costs rejected (`Extraction/CostMath.cs`). |
+| D20 | Built-in value types | **Changed** | Values are the engine's 32-bit base values (`Value`, `IBaseValueCodec<T>`). Built in: `long` (`Int64Codec`), `int` (stored as `i64`), `bool`, `double` (`DoubleCodec`, with −0.0 normalized to +0.0 and NaN rejected by the rule layer before encoding), `string`, registered enums (stored as `i64`), and `ValueSet<T>` (an **interned base value**, not a container; the rule layer registers no container, §13). User types use `ValueStore.Register<T>` over `InternedCodec<T>`. v1's `IValueCodec<T>` is dropped, because engine codecs are static struct types. There are no sets of classes. `int` and enums are stored as `i64` because `Int32Codec` boxes −1 to `Value.StaleRep`, which must never appear in a table's first column. |
+| D21 | Callbacks | **Deferred** | Version 2 has no rule callbacks. Observation after a run is a read or a query (D34, D49); a run observer (D41) sees progress during a run but cannot write. Callbacks that write return only when a consumer needs them; they would then opt out of watermark inheritance by overriding `ExternalFunction.ReadsTables` (colors §10.2) on their collector, which needs no new engine member. |
+| D22 | Naming | **Kept** | Host writes are `Scope.Assume(facts)`, `Scope.Make(term)` and `Scope.Union(a, b)`, and `Scope.Write(batch)` makes several of them one batch. `Scope` (a node of the tree) and `ScopeTag` (a label that scoped atoms resolve) stay separate types. |
+| D23 | Relative scopes | **Kept** | Not supported. Tags are absolute labels, owned by one graph (D38), that resolve to the nearest ancestor-or-self. |
+| D24 | `:until` | **Kept** | `Schedule.Until(body, facts)` (R1b). |
+| D25 | Lattice laws | **Kept** | `ValueLattice<T>` bundles `Merge` with its `CaseJoin` and has `Verify(samples)`. `Merge` lowers to `MergeFn.Primitive(merge, MergeFn.Old, MergeFn.New).AsLattice()` (decision 2 needs the lattice flag to let children write); `CaseJoin` lowers to `LiftTable`'s case join (§6.9). |
+| D26 | First atom of a full run | **Engine** | The planner chooses (decision 7). A rule is planned once, on the statistics of the context it first runs in, or of the frozen context that pre-plans it (colors §9.7, §10.8, E10). |
+
+### 1.2 Version 2 decisions
 
 | # | Question | Decision |
 |---|---|---|
-| D1 | How do class values (Ids) join across scopes? | **Each class value lives in one scope (invariant H).** Every Id-typed variable has one *home scope*: the single read scope of every atom it appears in. A rule that joins an Id variable across two scopes is rejected when it is defined, with a message naming the variable. A scoped atom reads its ancestor's view in that ancestor's own canonical identifiers. There is no translation through the running scope's equalities, no member expansion, and no fallback to naive matching. Value variables are unrestricted. Reasons: (1) "the schema alone says" must exclude equalities the query derived; (2) semi-naive matching stays exact; (3) no index over several levels is needed, so no thread-safety question arises. The Cosmos theory uses only value-keyed scoped atoms, so it loses nothing. |
-| D2 | Semi-naive windows | The focus atom reads rows changed since W; every other atom reads all rows. Matches are deduplicated per rule per iteration on the projected tuple. **No `until` parameter is added to `Scan`/`ScanColumn`**, and `TryLookup` gets no stamp. |
-| D3 | An Id constant loses a union | The canonical Id constants are stored with each watermark (taken from egglog's I5 rule). Any change forces a full run. |
-| D4 | Inheriting watermarks | Lazy. A rule's first run in scope S takes `min(parent W, S.CreatedAt)` from the nearest ancestor that ran it, walking up the chain. Inheritance is refused when the step changes how a tag resolves (S carries a tag the rule reads), and when the constants differ. It never applies to split rules, naive rules, or rules with callbacks. |
-| D5 | Cost of delta scans | Storage gains a per-`RowSet` `MaxStamp` and a change log, so `Scan(since)` costs O(changes) and skips unchanged levels such as a frozen schema. Engine variants are skipped when `LatestStamp(table) <= W`. |
-| D6 | Sealing definitions | **Never sealed.** Definitions are thread-safe and can be added at any time. A rule can be local to one scope (`Scope.DefineRule`), active in that scope and its descendants and gone when the scope is disposed. Containers are children of an empty, frozen root, so one `EGraph` and one compiled theory serve every container. |
-| D7 | Re-splitting | Cases persist for the length of one `Run`. They are keyed by the split rule and its key registers, never by the domain. They absorb the parent's later facts through their own watermarks. When the cases are disposed at the end of the `Run`, the scope's split-rule progress is reset. |
-| D8 | Lift algorithm | Not incremental. Each lift starts from scratch, so a change in the set of live cases is handled automatically. Equalities use a full partition meet. Case-local ids are filtered out with `IsLocalId`, so nothing is aliased into the parent even when only one case is live. Term lift (`GetOrAdd` in the parent, in rounds) is kept. A signature memo skips a lift when nothing has changed. |
-| D9 | Zero cases | A host lift with no cases throws. A split rule whose element set is empty skips the split and counts it as skipped; the theory's own rules derive the contradiction. |
-| D10 | Extraction | Knuth's algorithm over the classes reachable from the root. Ties are broken by content: cost, then function index, then columns (class columns by canonical id, value columns by content order). The result is acyclic even with zero costs. |
-| D11 | `StopOnContradiction` | **`false` by default for host runs, always `true` inside cases.** Contradiction is a fact like any other, and rules such as "contradicted predicate becomes `PFalse`" react to it. Stopping early is an optimisation the host opts into. A vacuous case is dropped from the lift, so it never needs to saturate. |
-| D12 | "A conjunct never proves itself redundant" | Three structural checks: invariant R (writes are never scoped), invariant H, and an opt-in **`RuleBuilder.Erasing(licence)`** checked at definition (every Fact-role atom must read the licence scope). Writers of `Analysis`-role tables may read only terms and analyses. There is no run-time `HasAssumptions` check, and no frame layout is imposed. The equality residue is stated in §3.3. |
-| D13 | Arity limit and lambdas | Typed handles go up to 4 key columns. Beyond that, an **untyped layer** (`RelationHandle.Apply(params Term[])`, `Fact.Equal`, `Fact.In`, `Compute.Of(Primitive, params Term[])`) has no arity limit. **Named primitives** (`Primitive.Create`, the built-in `Primitives`) render by name. Lambdas render as `<lambda>`. |
-| D14 | `.egg` frontend | Not in v1. The untyped layer and the schedule nodes map onto egglog one to one (§3.14). |
-| D15 | Interner growth | Pools are permanent per `EGraph` in v1. Constants used only for reading never intern. `ValueStore.InternedCount` lets the host recycle a graph. |
-| D16 | Storage surface | Public additions: `Version`, `ScanOwn`, `ScanMerges` (+ `MergeAction`), `IsLocalId`, `LatestStamp`, `ApproximateCount`. Internal changes: change log, `MaxStamp`, allocation-free probes and viewer lists, and an `IsClean` that costs O(unfrozen ancestors). |
-| D17 | Parallel cases | Sequential. A lift writes to the parent, so the parent cannot be frozen. |
-| D18 | Rollback | None. A failed `Run` commits no watermarks, and re-running finds the uncommitted matches again, because actions are idempotent. |
-| D19 | Cost type | `long`, with saturating addition. Negative costs are rejected. |
-| D20 | Built-in value types | `long`, `int`, `bool`, `double` (−0.0 normalised, NaN rejected), `string`, enums (registered), and `ValueSet<T>`. User types can be added as codecs or interned types. There are no sets of classes. |
-| D21 | Callbacks | They run once per distinct projected match per iteration. A restamped copy may deliver a match again, so callbacks must be idempotent. Rules with callbacks never inherit watermarks. |
-| D22 | Naming | Host writes are `Scope.Assume(facts)` and `Scope.Make(term)`. `Assert` is not used, because it clashes with xunit and `Debug`. `Scope` (a node of the tree) and `ScopeTag` (a label that scoped atoms resolve) are kept as two separate types. |
-| D23 | Relative scopes | Not supported. Tags are absolute labels that resolve to the nearest ancestor-or-self. |
-| D24 | `:until` | `Schedule.Until(body, facts)`. |
-| D25 | Lattice laws | `ValueLattice<T>` bundles `Merge` with its `CaseJoin`, so the pair cannot be mismatched. `ValueLattice<T>.Verify(samples)` checks idempotence, commutativity, associativity and absorption, and is meant for consumers' tests. |
-| D26 | First atom of a full run | Chosen at run time by `ApproximateCount`. Variant plans are static. |
+| D27 | How is a relation represented? | As a bridge function whose output column is the engine's unit base value: `Default = DefaultVal.Const(unit)`, `Merge = MergeFn.AssertEq`, no subsumption. egglog's frontend instead desugars a relation into a constructor with a fresh sort (map §3.1). Ours mints no id per row, adds no rebuild column, and its merge is a lattice merge, so children may write it (decision 2). The contradiction relation is the nullary case, schema `[Unit]`, which is what `Store.DesignateContradiction` expects. |
+| D28 | How does R2 add contexts without changing the public API? | Through an internal **engine-scope** abstraction (`EngineScope`, §4.1). R1 implements it for the root over the bridge's egglog-compatible root API (`RootEngineScope`). R2 implements it over `EGraphContext` for every scope, the root included (`ContextEngineScope`), and deletes `RootEngineScope`. Public types only gain members (and overloads) in later milestones; no member changes signature or meaning once it has shipped. |
+| D29 | Engine types in the public API | None in public signatures: they use only `Eggnog` types and BCL types. The package must not show two APIs either, so the engine's own public types become internal (D44, E11). Rule-layer files never write `using Eggnog.Relations;`; they name engine types through the child namespace (`Relations.EGraph`, `Relations.FunctionId`). Engine internals are reached through `InternalsVisibleTo("Eggnog")`, which `Eggnog.Relations.csproj` already declares. |
+| D30 | When are host writes visible? | Every host write call (`Make`, `Assume`, `Union`) is one atomic batch, and `Scope.Write(Action<ScopeWriter>)` makes several calls one batch: validate, stage, flush and rebuild before it returns. A batch whose facts all hold already stages nothing and flushes nothing, so `Version`, the clock and live extractors are untouched. A read first brings its scope current (`EngineScope.EnsureClean`, a no-op when clean). So v1's cleanliness contract (`Rebuild()`, `IsClean`, reads that throw while dirty) is gone from the public API. |
+| D31 | Primitive failures | A primitive or lattice delegate that throws is caught inside its external function. The failure (rule, primitive, decoded arguments, exception) is recorded in the scope's runtime, and `ExecutionState.ReportFailure` is called, so the engine stops the run early and treats it as a panic (in Store-backed contexts no watermark commits, X18). The rule layer then throws `RuleEvaluationException` and faults the scope (D18). |
+| D32 | Host writes to a function without a lattice | Checked before anything is staged: a value that conflicts with the stored one, or two different values for one key in one batch, throw `FactConflictException` (an `InvalidOperationException` carrying the table, the key, the stored value and the new one) and write nothing. Merge conflicts can therefore only come from rules, where they are engine panics (D31). |
+| D33 | Deletion and subsumption | Not exposed. The engine has them under decision 1 and refinement R1 (colors X28). Watermark inheritance (I31), lift soundness (I33) and mirror exactness (M) all rest on monotone contents. |
+| D34 | Host conjunctive queries (`Any`, `Count`, `ForEachMatch`) | A query compiles to a naive bridge rule whose only action is a collector. R1 runs it without merging and without advancing the clock (D49). From R2, in a writable scope it runs as an iteration of that scope that writes nothing; in a frozen scope it runs in a transient child context created for the call and disposed after it (cheap, colors §14.2, and thread-safe on a frozen parent), so a frozen scope stays read-only and can be queried from many threads. A transient child is not listed in `Children`, but it defers its parent's release like any child (D40). |
+| D35 | Cosmos conformance | In two encodings. The **literal** encoding ports `prelude.egg` and all seven scenario files as written (contexts as data at the root, splits written as rules): files 01–03 in R1a, 04–07 in R1b. The **scoped** encoding uses scopes, frozen schemas, local rules and engine splits (R2 for the scenarios without a split, R3 for the rest). The literal encoding is also the oracle for scoped programs (§8.2). |
+| D36 | Rule-layer ids for engine rules | One `CompiledRule` per rule-layer rule, with up to two engine variants: semi-naive (or naive for `Naive()` rules) and, on demand, a naive twin for the internal `RunOptions.SemiNaive = false` that differential tests use. In R1 a variant is re-lowered when its Id constants change (D3). Each variant has a unique description, which keys its statistics. |
+| D37 | Gap 5 | The adapter's fifth gap (an integer enum against a bound) is expressed as a new scoped scenario (`Scenario08IntegerDomainTests`, §8.1.2) with an integer-domain lattice. It is not in the prototype. |
+
+### 1.3 Decisions added in answer to the reviews
+
+| # | Question | Decision |
+|---|---|---|
+| D38 | Who owns a scope tag? | **The graph.** `EGraph.DefineScopeTag(name)` makes one (names are unique per graph; there is no public constructor), and `EGraph.RootTag` is the root's. Every member that takes a tag (`CreateChild`, `In`, `Fact.In`, `RuleBuilder.Erasing`, `RulesetOptions.Licence`, split case tags, `CaseSet.Add`) throws `ArgumentException` for another graph's tag. The count of live frozen scopes per tag, which guards mirror creation (§6.8), lives in the graph's `MirrorRegistry`. **Why:** v2 kept that count on a static tag object, so one graph's frozen schema made every other graph's theory fail to compile, and two tags of the same name never resolved to each other. |
+| D39 | What may a class value be used for? | **Class values carry the scope that returned them** (their *origin*). Only the library makes a `ClassId`; `default(ClassId)` has no origin and every scope rejects it. Every host entry point, and every rule and query, checks that a class value is of this graph, that its origin is the scope or an ancestor of it, and that its origin is not disposed; otherwise `ArgumentException` naming both scopes. Global and split rules accept class constants only from the root; local rules from their owner or its ancestors; queries are checked against the scope they run in. A value made inside a `Write` batch is valid only once the batch commits. Values die with the scope that returned them, which covers every value obtained in a case. **Why:** the adapter runs many queries under one schema at once; using one query's predicate in another must be an error, not a silently wrong answer. |
+| D40 | What does `Dispose` do with live children? | **`Dispose` never throws.** It makes the scope unusable at once (`IsDisposed`; `ObjectDisposedException` on use) and kills its class values (D39). Its local rules and engine context are *released* when it has no live children (transient query children included) and no call is in progress in its thread domain on another thread; whichever thread removes the last obstacle releases it. A second call does nothing; the root's `Dispose` does nothing (the root lives as long as the graph, which holds only managed memory and is not disposable). **Why:** the .NET contract (CA1065), `using` blocks that unwind while a child is still alive, and the adapter's retirement of a container's frozen schema while queries still run beneath it on other threads. |
+| D41 | What does a host see of a run, and why a rule fired? | `RunReport` carries per-rule statistics (matches, search time, iterations with matches, and the plan when `EGraphOptions.RecordPlans` is set) and the run's search, merge and rebuild times. `RunOptions.RecordSteps` keeps one `RunStep` per iteration, mirror sync, split step and lift; `RunOptions.Observer` receives each step as it happens and may read the scope. `Scope.CountRows` and `Scope.Rows` read a table's rows; `Scope.Failure` keeps a fault's cause. **Proofs and per-row explanations are out of version 2.** To find why a conjunct was lowered or deleted: run with `RecordSteps` and `RecordPlans`, find the first step in which the lowering or deleting rule matched, read the rule with `Rule.ToString()`, and read the facts it reads with `Rows`. A provenance mode (the first rule and iteration that derived each row) needs per-row write attribution in the engine's merge, which no milestone provides; it is deferred. |
+| D42 | What do run limits bound? | Work a user can reason about. `IterationLimit` (engine iterations in every scope of the run), `TimeLimit`, and `RowLimit` (rows in the own layers of the top-level scope and of the run's live cases, the engine's `TotalSizeEstimate`) replace v2's `ChangeLimit`, which counted table merges. Limits are per top-level `Run`, cases included, and are checked before every iteration and every split step. An engine iteration, or a lift, cannot be interrupted, so a run overshoots a limit or a cancellation by at most one iteration or one lift. |
+| D43 | Which keys does a split consider, and when? | **The split rule's body decides.** `DefineDomainSplit` takes a list of guard relations, and `DefineSplit` any body. The Cosmos theory splits a schema on every present discriminator, and a query only on the present discriminators its predicate mentions (an analysis relation `Mentioned`, derived from comparison terms). A split step should run once the facts its rules read have settled: `Saturate(Saturate(facts…), Split(rule, inCase), rewrites…)`, which `Schedule.Split`'s documentation recommends. **Why:** otherwise every query re-splits every discriminator the frozen schema already split on; and a split made before its domain narrowed opens cases that only later go vacuous, while its record keeps the key until the run ends. |
+| D44 | Two APIs in one package? | **No: the engine's public types become internal** (E11). The conventions say to default to `internal` and make a type public only when a consumer of the engine needs it; `InternalsVisibleTo` covers `Eggnog`, the tests and the benchmarks. `Surface/PublicSurfaceTests` asserts that no public type of another assembly in the package shares a simple name with a public `Eggnog` type. If the engine owner instead keeps `Eggnog.Relations` a supported standalone API, its public types are marked `[EditorBrowsable(EditorBrowsableState.Never)]`, documented as unsupported for `Eggnog` consumers, and the surface test exempts the types so marked. |
+| D45 | What does a contradicted case answer? | A case whose contradiction set its stop flag (D11) has no model, and the engine refuses most operations on it (colors §6.9, §10.3, §10.4). The rule layer checks first: `IsContradictory` and the identity members answer; `Assume` does nothing; `Union` returns `false`; `Run` returns at once with `StopReason = Contradiction`; every other read and write, queries, extraction, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Dispose` works. Only case scopes have the stop flag: any other contradictory scope stays fully usable (contradiction is an ordinary fact there). |
+| D46 | Parallelism | **Opt-in.** `EGraphOptions.DegreeOfParallelism` defaults to 1: serial and deterministic, extraction ties included (decision 4). From R2, `ScopeOptions.DegreeOfParallelism` sets one scope's (`ContextOptions.Parallelism`); children of a frozen scope are serial unless it is set (colors §10.9). |
+| D47 | Threads | Every milestone keeps a **rule-layer guard per thread domain** (`ScopeGuard`, over a `ThreadAffinityGuard`), shared and reassigned on freeze exactly as colors §8.3 shares and reassigns the engine's. Every scope call enters it for the whole call (a host batch, a run, a query), so a second thread fails fast instead of interleaving between engine calls. The rule layer never holds the engine's own domain across calls. User delegates the engine invokes (primitives, lattice merges, filters, cost functions) must not call into a graph, and such a call throws. `Scope.DefineRule` enters the scope's domain; global definitions follow D6. |
+| D48 | When are mirrors brought current? | **Just before use.** Before any iteration, query or split matcher in scope `C` reads `T@t`, the tagged scope `S = resolve(C, t)` runs its copy rules for `t` once if it is writable and has changed since its last sync; and once more when it freezes. This replaces v2's three triggers, covers host queries, and removes the one-iteration lag within the tagged scope. |
+| D49 | Queries and clock ticks | R1 runs a query's rule without merging and without advancing the clock, and a batch that stages nothing does not flush (D30). So queries, reads and writes that change nothing never invalidate an extractor; a `Run` may. A query that fails throws `RuleEvaluationException` without faulting the scope. `Query` is `IDisposable`: define a reusable query once, and dispose one made for a single request, which frees its engine rule and call sites. |
 
 ---
 
-## 1. Overview
+## 2. Overview
 
-### 1.1 The API in one screen
+### 2.1 The API in one screen
 
 ```csharp
-var graph = new EGraph();
+var graph = new EGraph();                                                    // serial by default: deterministic (D46)
 graph.DefineSort<Pred>("Pred");
 var present = graph.DefineRelation<string>("present");
 var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
 var strEq = graph.DefineConstructor<string, string, Pred>("StrEq");
 var horn = graph.DefineRuleset("horn");
-horn.Rule("a domain makes a path present", r =>
+horn.DefineRule("a singleton domain makes a path present", r =>
 {
     var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
     r.When(d.Is(dom.Of(p)));
     r.Where(d, d => d.Count == 1);
     r.Then(present.Of(p));
 });
-graph.Root.Freeze();                                   // empty; containers are its children
-var schema = graph.Root.CreateChild(new ScopeTag("schema"));
+```
+
+In R1 everything runs at the root:
+
+```csharp
+graph.Root.Assume(dom.Of("kind").Is(ValueSet.Of("A")));
+graph.Root.Run(Schedule.Saturate(horn));
+bool known = graph.Root.Check(present.Of("kind"));                           // true
+```
+
+From R2 on, a graph defined the same way, with nothing written at its root, serves an empty frozen root, a frozen
+schema per container, and a layer per query. Tags belong to the graph (D38):
+
+```csharp
+var schemaTag = graph.DefineScopeTag("schema");
+var queryTag = graph.DefineScopeTag("query");
+graph.Root.Freeze();                                                         // empty; containers are its children
+var schema = graph.Root.CreateChild(schemaTag);
 schema.Assume(dom.Of("kind").Is(ValueSet.Of("A")));
 schema.Run(Schedule.Saturate(horn));
 schema.Freeze();
-using var query = schema.CreateChild(new ScopeTag("query"));
-Pred q = query.Make(strEq.Of("kind", "A"));
+using var query = schema.CreateChild(queryTag);
+Pred q = query.Make(strEq.Of("kind", "A"));                                  // q is usable in query and below (D39)
 query.Run(Schedule.Saturate(horn));
-bool known = query.Check(present.Of("kind"));          // reads need a clean scope; Run leaves it clean
+bool inherited = query.Check(present.Of("kind"));                            // true; reads never need a rebuild (D30)
 ```
 
-### 1.2 How the layer maps onto Eggnog.Storage
+### 2.2 Layers
 
-| Rule layer | Storage |
+```
+consumer code (C# only)
+        │
+        ▼
+Eggnog (this spec, public)        EGraph, Scope, ScopeTag, typed handles, Term/Fact, rules, queries, schedules,
+                                  CaseSet, CostModel/Extractor/ExtractedTerm, run reports and steps
+Eggnog (this spec, internal)      RuleCompiler → RuleProgram → RuleLowering, EngineScope, ScopeGuard, ScopeOrigin,
+                                  ScheduleExecutor, HostBatch/TermReader, MirrorRegistry, RuleSplitSource,
+                                  ExtractionCatalog
+        │  InternalsVisibleTo("Eggnog")
+        ▼
+Eggnog.Relations bridge           EGraph, EGraphRuleBuilder, RunRules/IterationReport, EGraphContext (M10.3),
+(internal, E11)                   CaseSet/Lifter/SplitDriver (M10.4), Extractor, BaseValues
+        ▼
+Eggnog.Relations core             Database, tables, Free Join planner and executor, union-find,
+                                  Store/Context/layers (M9–M10)
+```
+
+### 2.3 How the layer maps onto the engine
+
+| Rule layer | Engine |
 |---|---|
-| `EGraph`: definitions, `ValueStore`, the root scope | owns one `Store` |
-| `Scope`: wraps one `Context`, plus engine state (tag, watermarks, local rules, split records) | `Context`, `CreateChild`, `Freeze`, `Dispose`, `Rebuild` |
-| `Relation<…>` / `Function<…,TOut>` / `Constructor<…,TSort>` | `TableSchema.Relation` / `TableSchema.Lattice` (or no merge) / `TableSchema.Constructor` |
-| Column types | `ColumnKind.Id` for sorts, `ColumnKind.Value` for everything else (interned or bit-packed) |
-| Matching | `Scan(since)`, `ScanColumn(since)`, `TryLookup`, `Contains`, `Find`, `LatestStamp`, `ApproximateCount` |
-| Actions | `Insert`, `GetOrAdd`, `Union`, followed by `Rebuild` |
-| Semi-naive bookkeeping | `Store.Clock` and row stamps |
-| Change detection | `Context.Version` |
-| Lift | `ScanOwn`, `ScanMerges`, `IsLocalId`, `Contains`, `TryLookup`, `Find`, `GetOrAdd`, `Union`, `Insert` |
-| Extraction | `ScanColumn` on the output column, `Find`, `Version` (staleness) |
+| `EGraph`: definitions, `ValueStore`, scope tags, the root scope | One bridge `Relations.EGraph`. R1: on a bare `Database`. R2: on a `Store`, with `Root` an `EGraphContext` (colors §10.1). |
+| `Scope` | One `EngineScope`: R1 `RootEngineScope` (bridge root API); R2 `ContextEngineScope` (one `EGraphContext`, colors §10). Plus a `ScopeGuard` per thread domain (D47) and a `ScopeOrigin` (D39). |
+| `ScopeTag`, `In(tag)` (R2) | Rule-layer labels owned by the graph; scoped atoms read mirror tables (§6.8). The engine has no tags. |
+| `ClassId` | A class cell plus the `ScopeOrigin` of the scope that returned it (D39) |
+| `Relation<…>` | Bridge function `[keys…, Unit]`, `DefaultVal.Const(unit)`, `MergeFn.AssertEq` (D27) |
+| `Function<…, TOut>` | Bridge function `[keys…, TOut]`, `DefaultVal.Fail`, lattice merge `MergeFn.Primitive(…).AsLattice()` or `MergeFn.AssertEq` |
+| `Constructor<…, TSort>` | Bridge function `[keys…, Id]`, `DefaultVal.FreshId`, `MergeFn.UnionId` |
+| Value columns, sort columns | `ColumnTy.Base(type)`, `ColumnTy.Id` |
+| A rule | One `CompiledRule` (engine-independent `RuleProgram`) and its engine variants, each one `EGraphRuleBuilder` rule (D36, §6.4) |
+| Body atoms, filters and lets, head writes | `QueryTable`; `QueryPrim`; `Set`, `Lookup`, `Union`, `CallExternalFunc` (§6.4) |
+| Primitives, lattice merges, collectors | Internal `Relations.ExternalFunction` subclasses registered with `EGraph.RegisterExternalFunction` |
+| Semi-naive evaluation, watermarks, inheritance, Id constants | Bridge `RunRules` and `EGraphContext` (colors §10.2, §10.3, X19). R1: the root adapter also re-lowers rules whose Id constants changed (D3). |
+| One iteration | `RunRules(ids)` → `IterationReport` (`Changed`, `RebuildChanged`, `Stopped`, `RuleSetReport`, `RebuildTime`) |
+| Change detection | `IterationReport` flags (decision 11); `Version` = `Database.ChangeStamp` (X30) |
+| Host writes | R1: `ExecutionState` + `TableAction`/`UnionAction`, then `FlushUpdates`. R2: `EGraphContext.FreshId`/`StageRow`/`StageUnion`/`FlushUpdates` (colors §10.4). |
+| Host reads | R1: `LookupId`, `GetCanonInUf`, `TableSize`, `ForEach`. R2: `EGraphContext.TryLookup`, `Find`, `TableSize`, `ForEach` (colors §10.5). |
+| Queries | R1: `Database.ExecuteRuleSet` without a merge (D49). R2: `EGraphContext.RunRules`, in a transient child for a frozen scope (D34). |
+| Freeze, children, dispose (R2) | `EGraphContext.Freeze(planRules)`/`CreateChild`/`Dispose` (colors §8, §10.8; E7, E10) |
+| Case splits and lift (R3) | `SplitDriver`, `ISplitSource`, `ICaseSchedule`, `CaseSet`, `Lifter`, `LiftSpec` (colors §11; E8) |
+| Extraction | `ExtractionSchema`, `Extractor.CreateOnDemand`, `Relations.CostModel` (R2: over a context, E5) |
 
-### 1.3 Object model, lifetime and threading
+### 2.4 Object model, lifetime and threading in brief
 
-- **`EGraph`**: one per process or per family of containers. Definitions are serialised under a lock and published copy-on-write, so they are thread-safe at any time.
-- **`Scope`**:
-  - It is not thread-safe, exactly like `Context`.
-  - Children of a frozen scope may each be used on their own thread. A split's cases run on the same thread as their parent.
-  - Typical tree: `root` (empty, frozen) → `schema#k` (one per container, tag `schema`, frozen after compilation) → `query#n` (tag `query`) → `case#m` (made by splits, disposed when the `Run` ends).
-- **Local rules** belong to the scope they are defined on. They are active in that scope and its descendants, become unreachable when it is disposed, and can only be added before it is frozen.
-- **Cleanliness contract.**
-  - Writes (`Make`, `Assume`, `Union`) are legal while the scope is dirty.
-  - Reads (`Check`, `Get`, `TryGet`, `Find`, `AreEqual`, `Any`, `Count`, `ForEachMatch`, `IsContradictory`, `CreateExtractor`) throw `InvalidOperationException` naming `Rebuild()` unless the scope is clean. They never rebuild implicitly.
-  - Engine operations (`Run`, `Split`, `CaseSet.Lift`) rebuild on entry and leave the scope clean on success.
+- **`EGraph`**: one per process, or one per family of containers. It holds only managed memory and is not disposable.
+  Definitions follow D6 and §6.12.
+- **`Scope`**: one engine context with the rule layer's state for it (local rules, tag, guard, origin, runtime
+  buffers).
+  - Not thread-safe. Scopes that share a thread domain (a writable scope and everything created under it) are used from
+    one thread at a time; a second thread gets `InvalidOperationException` from the rule-layer guard (D47), in every
+    milestone.
+  - Children of a frozen scope each have their own thread domain. Reads of a frozen scope, queries on it, and
+    extractors over it are thread-safe. A split's cases run on their parent's thread.
+  - Typical tree (R2): `root` (empty, frozen) → `schema#k` (one per container, tag `schema`, frozen after compilation) →
+    `query#n` (tag `query`) → `case#m` (made by splits, disposed when the `Run` ends).
+- **Lifetime** (D40). `Dispose` never throws and makes a scope unusable at once; its engine state is released once it
+  has no live children and no call runs in its domain on another thread. A container's frozen schema can therefore be
+  retired while its queries finish.
+- **Local rules** (R2) belong to the scope they are defined on. They are active in it and its descendants, can be added
+  only before it is frozen, and are freed when it is released.
+- **Class values** (D39) are usable in the scope that returned them and its descendants, until that scope is disposed.
+- **Visibility.** Host writes are atomic batches (D30). Reads never fail for want of a rebuild. Engine operations (`Run`,
+  splits, lifts) leave the scope current.
 
-### 1.4 Departures from egglog, stated once
+### 2.5 Departures from egglog, stated once
 
-1. There is no `delete` or `subsume`, because storage has no deletion.
-2. Merges must be associative, commutative and idempotent.
-3. Containers hold values only, never classes.
-4. Actions never read. A function value must be matched in the body; reading `dom` in a head is a definition error.
-5. Scoped atoms and class-value isolation (D1) are additions.
-6. `push`/`pop` become child scopes.
-7. There are no proofs, no function defaults, and no global `let`; a frontend would keep its own table of names.
-
-### 1.5 What changed from the winning design
-
-| Judge's finding against dotnet-idiomatic | Fix |
-|---|---|
-| Id-constant hole | D3, invariant K. |
-| `until` on scans, stamped lookups | Removed (D2). The storage surface is now D16. |
-| Definitions sealed at root freeze; schema is the root | D6. `Schema` is an ordinary tag. |
-| Split memo re-splits on any change of `Version` | D7 persistent cases plus the lift signature memo. |
-| Single live case aliases case-local ids | `IsLocalId` filter (D8). |
-| No deduplication of projected matches | `MatchBuffer` deduplicates projected tuples. |
-| Extraction ties follow scan order | D10. |
-| Arity capped at 4; lambdas print `<lambda>` | D13. |
-| Cross-level class index; thread-safety of `CollectAncestorClasses` | Gone (D1). |
-| `StopOnContradiction` default | Decided and justified (D11). |
-| `Scope.Assert` name clash | D22. |
-| `ValueSet.Of("abc")` trap | No `IEnumerable` overload named `Of`; `ValueSet.From` exists for sequences; a test covers it. |
-| Truncated surface | Every type is given in §2. |
+1. No deletion and no subsumption in the API (D33).
+2. Merges are lattices (associative, commutative, idempotent) or `AssertEq`; there is no `:merge old`/`new`.
+3. Sets hold values only, never classes; sets are base values, not containers (D20).
+4. Actions never read. A function value must be matched in the body; reading `dom` in a head is a definition error
+   (invariant Q).
+5. Scoped atoms (value-only, D1) and erasing rulesets (D12) are additions.
+6. `push`/`pop` become child scopes (R2).
+7. No proofs or explanations (D41), no function defaults (a function lookup without a row fails), no global `let`, no
+   `.egg` frontend (D14), no rule callbacks (D21).
+8. Relations are unit-valued functions, not constructors over a fresh sort (D27); this is invisible to users.
 
 ---
 
-## 2. Files
+## 3. Public types
 
-House style everywhere:
+House style (conventions): one type per file (partial classes may span files), no nested types, `net8.0;net10.0`, C#
+13, nullable enabled, implicit usings disabled, 4-space indent, braces on new lines, `== false` rather than `!`, sealed
+classes unless they are a base for typed handles, XML docs on every public and internal member. All files are in
+namespace `Eggnog`; folders only organise files.
 
-- one type per file; partial classes may span files;
-- `net8.0;net10.0`, `LangVersion` 13, nullable enabled, no implicit usings, explicit usings;
-- 4-space indent, braces on new lines;
-- `x == false` rather than `!x`; sealed classes unless they are a base for typed handles;
-- XML docs on every public member.
+The listings below give every public member with its signature, a one-line summary where the name does not say enough,
+and its milestone in a trailing comment. A member without a milestone comment belongs to its type's milestone, given
+after the file name.
 
-All `src/Eggnog` types are in namespace `Eggnog`. Folders only organise files. `Eggnog.csproj` already has `InternalsVisibleTo("Eggnog.Tests")`.
-
-### 2.1 Eggnog.Storage changes
-
-**New file `MergeAction.cs`**
+### 3.1 Graph/
 
 ```csharp
-/// <summary>Receives an identifier a context merged relative to its parent, and its canonical identifier in the context.</summary>
-public delegate void MergeAction(Id member, Id canonical);
-```
-
-**New partial file `Context.Inspection.cs`**
-
-```csharp
-public sealed partial class Context
-{
-    /// Increases on every effective change to this context's own state: a row slot added (assertion, copy taken by
-    /// marking or sync, row rewritten after a merge), an output changed, a successful merge, a re-key that retired an
-    /// identifier. No-op inserts, equal merges and redundant unions leave it unchanged. Changes an ancestor makes that
-    /// this context reads through without copying do not move it, so compare ancestors' versions too.
-    public long Version { get; }
-
-    /// Visits the live rows this context holds itself, canonical here: its assertions, copies of ancestor rows that
-    /// mention a class merged here or share a key with one of its own rows, and rows rewritten by merges. Rows read
-    /// through from ancestors are not visited. Requires IsClean.
-    public void ScanOwn(Table table, RowAction action);
-
-    /// For every identifier in a class this context merged (its marked set), excluding identifiers this context
-    /// allocated: the identifier, which is canonical in the parent, and its canonical identifier here. A merged class's
-    /// own canonical identifier is reported paired with itself when it is a parent identifier. Requires IsClean.
-    /// Throws InvalidOperationException on the root.
-    public void ScanMerges(MergeAction action);
-
-    /// Whether NewId or GetOrAdd on this context allocated the identifier. Throws InvalidOperationException on the root.
-    public bool IsLocalId(Id id);
-
-    /// An upper bound on the stamp of every row of this context's view of the table. It may over-approximate
-    /// (shadowed rows count). Requires IsClean.
-    public long LatestStamp(Table table);
-
-    /// An upper bound on the number of rows in this context's view of the table: the live rows every level holds.
-    /// Requires IsClean.
-    public long ApproximateCount(Table table);
-}
-```
-
-**How the additions are implemented**
-
-- **`Version`**: a `long version` field, incremented:
-  - in `AddOrMerge` after `set.Add(row, store.Tick())`;
-  - in `MergeInto` when `combined != current`;
-  - in `UnionCore` before `return true`;
-  - in `Rekey` when `retired.Count > 0`.
-- **`IsLocalId`**: a `HashSet<ulong>? localIds` on non-root contexts. It is filled by `NewId` and by `GetOrAdd` when `created` is true.
-- **`ScanMerges`**: iterates `marked`, skips `localIds`, and reports `(m, LocalFind(m))`. When the context is clean, `marked` holds only parent-canonical ids and local ids, because `Rekey` rebuilds it through `parent.FindRaw`. Nested reads inside the action are safe: path compression writes `local`, which is not being enumerated.
-- **`LatestStamp`**: the maximum of `Own(table)?.MaxStamp` over this context and its ancestors.
-- **`ApproximateCount`**: the sum of `Own(table)?.LiveCount` over the same levels.
-
-**Internal changes, with no API change**
-
-1. **`RowSet`**:
-   - `long MaxStamp`, raised in `Add` and `SetOutput`.
-   - `int LiveCount => keys.Count`.
-   - **Change log**: parallel arrays `int[] logSlots`, `long[] logStamps`, `int logCount`, appended by `Add` and `SetOutput`. Stamps increase, because writes to one context are single-threaded and `Tick` is monotone.
-   - `int FirstChangeAfter(long since)` is a binary search. An entry is current iff `alive[slot] && stamps[slot] == logStamps[i]`.
-   - `Compact()` rebuilds the log from live slots sorted by stamp.
-   - When `logCount >= 64 && logCount > 4 * LiveCount`, the log is rebuilt the same way.
-2. **`ScanLevel`**:
-   - Visits own rows only if `set.MaxStamp > since`.
-   - With `since > 0` it walks the change log from `FirstChangeAfter(since)`, delivering current entries only. With `since == 0` it walks slots as today.
-   - **`ScanColumnLevel`** also skips a level when `set.MaxStamp <= since`.
-3. **`TryLookup` / `Contains`**:
-   - Use a `[ThreadStatic] static ulong[]? keyProbe`, sized to the key count, instead of `key.ToArray()`.
-   - `Canonicalize` gains a `Span<ulong>` overload bounded by the span length.
-   - Safe because no user code runs during a lookup.
-4. **`Scan` / `ScanColumn`**: rent the `viewers` list from a `[ThreadStatic]` pool indexed by scan nesting depth, with try/finally, instead of `new List<Context>()`.
-5. **`IsClean` in O(unfrozen ancestors)**:
-   - A field `int settled` counts leading ancestors, from the root, that are frozen and whose log this context has fully consumed.
-   - It is set in the constructor and advanced at the end of `Sync`.
-   - `IsClean` checks only `ancestors[settled..]`.
-   - Correct because frozen ancestors form a prefix (a context freezes only after its parent), their queues are empty, and their `LogEnd` is constant.
-6. **Documentation**:
-   - `RowAction` and `Context` remarks gain a guarantee: *reads of any context (`TryLookup`, `Contains`, `Scan`, `ScanColumn`, `ScanOwn`, `ScanMerges`, `Find`, `AreEqual`, `LatestStamp`, `ApproximateCount`) may be made from inside a `RowAction`; writes may not*.
-   - README "Not yet": lifting reads exist, and `since` scans skip unchanged levels.
-
-**Storage tests to add (`Eggnog.Storage.Tests`)**
-
-- `ContextTests`:
-  - `NullaryRelationsWork`.
-  - `ReadsNestInsideScans`: a lookup, a scan and a column scan of the same context and of an ancestor, from inside a scan.
-  - `VersionIgnoresNoOps`.
-  - `IsLocalIdTracksAllocations`.
-  - `IsCleanSeesAFrozenAncestorsUnreadLog`: write a parent, create a child, freeze the parent, and check the child reports dirty until rebuilt.
-- `DifferentialTests` gains checks at each checkpoint:
-  1. `Scan(t, since)` delivers exactly the rows of the full scan stamped after `since`, plus at most rewritten copies. This compares the change-log path with the slot walk.
-  2. Every `ScanOwn` row is in `Scan`, and every `Scan` row absent from the parent's canonicalized view is in `ScanOwn`.
-  3. `ScanMerges`: for any two parent-visible ids x, y that are equal here and not in the parent, both are reported with one canonical identifier, and no local id is reported.
-  4. `LatestStamp >= max stamp seen` and `ApproximateCount >= rows scanned`.
-
-### 2.2 src/Eggnog public types
-
-#### Graph/
-
-```csharp
-// Graph/EGraph.cs
-/// A theory and its database: column types, tables, rulesets, split rules, queries, a value store, and the root of a
-/// tree of scopes. Definitions may be added at any time, from any thread; a rule defined while a run is in progress
-/// takes part from that run's next iteration.
+// Graph/EGraph.cs  [R1a]
+/// A theory and its database: column types, tables, rulesets, scope tags, split rules, queries, and the root of a tree
+/// of scopes. Holds only managed memory; not disposable.
+/// Threads (§6.12): rule, query, split and tag definitions may be made from any thread at any time and take part from
+/// the next iteration of every run. A table definition may be made from any thread once the root is frozen (R2); while
+/// it is not, it throws InvalidOperationException if another thread is using the root at that moment. From R2, a rule
+/// definition whose first scoped read of a table creates a mirror table counts as a table definition.
 public sealed class EGraph
 {
-    public EGraph();
-    public Store Store { get; }
+    public EGraph(EGraphOptions? options = null);
     public ValueStore Values { get; }
-    /// The root scope (tag ScopeTag.Root). Freeze it empty so that containers can be sibling children.
+    /// The root scope. In R2 and later, freeze it empty so that containers can be sibling children.
     public Scope Root { get; }
-    /// The built-in nullary relation meaning "this scope has no model". Role Fact, never lifted as a row: a lift treats a
-    /// case holding it as vacuous.
+    /// The built-in nullary relation "this scope has no model". Role Fact; a lift never copies it as a row; a case
+    /// holding it is vacuous.
     public Relation Contradiction { get; }
+    /// Every table, in declaration order (snapshot). Mirror tables are not listed.
     public IReadOnlyList<TableHandle> Tables { get; }
     public IReadOnlyList<Ruleset> Rulesets { get; }
-    public IReadOnlyList<SplitRule> SplitRules { get; }
+    /// The root's tag, named "root". Every graph has its own.
+    public ScopeTag RootTag { get; }                                                                         // R2
+    /// Every tag of this graph, the root's first (snapshot).
+    public IReadOnlyList<ScopeTag> ScopeTags { get; }                                                        // R2
+    public IReadOnlyList<SplitRule> SplitRules { get; }                                                      // R3
 
-    /// Registers TSort as an e-class sort (an Id column type). Throws ArgumentException if TSort or name is taken.
+    /// Registers TSort as an e-class sort. ArgumentException if TSort or name is taken.
     public ColumnType<TSort> DefineSort<TSort>(string name) where TSort : struct, ISort<TSort>;
 
-    // Relations. Names are unique per graph (ArgumentException otherwise).
+    // Relations. Names are unique per graph, non-empty, contain no '@' and do not start with '$' (ArgumentException).
     public Relation DefineRelation(string name, TableOptions? options = null);
     public Relation<T1> DefineRelation<T1>(string name, TableOptions? options = null);
     public Relation<T1, T2> DefineRelation<T1, T2>(string name, TableOptions? options = null);
     public Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(string name, TableOptions? options = null);
     public Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(string name, TableOptions? options = null);
-    public RelationHandle DefineRelation(string name, IReadOnlyList<ColumnType> columns, TableOptions? options = null);
 
-    // Functions with a value output. TOut must not be a sort (ArgumentException: "use DefineConstructor").
-    // With no lattice, two different values for one key in one scope are an error.
+    // Functions with a value output. TOut must not be a sort (ArgumentException: "use DefineConstructor"). With no
+    // lattice, two different values for one key are an error (D32 for host writes, D31 for rules).
     public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null);
     public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null);
     public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null);
     public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null);
     public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null);
-    public FunctionHandle DefineFunction(string name, IReadOnlyList<ColumnType> keys, ColumnType output,
-        MergeFunction? merge = null, MergeFunction? caseJoin = null, TableOptions? options = null);
 
-    // Constructors (terms). cost >= 0 (ArgumentOutOfRangeException). TSort must have been defined.
+    // Constructors (terms). cost >= 0 (ArgumentOutOfRangeException). TSort must have been defined with DefineSort.
     public Constructor<TSort> DefineConstructor<TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort>;
     public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort>;
     public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort>;
     public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort>;
     public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort>;
-    public ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType output, long cost = 1, TableOptions? options = null);
 
     /// A named ruleset; names are unique per graph.
     public Ruleset DefineRuleset(string name);
-    /// A split rule; caseTag defaults to new ScopeTag(name). Compiled immediately; throws RuleDefinitionException.
-    public SplitRule DefineSplit(string name, Action<SplitBuilder> define, ScopeTag? caseTag = null);
-    /// The common discriminator split: where candidates(k) and guard(k) hold and domain(k) = d with |d| > 1, one case per
-    /// v in d assuming domain(k) = {v}; key k. Coverage obligation (stated in the docs): domain(k) = S must mean "wherever
-    /// guard(k) holds (always, if guard is null), k's value is one of S".
-    public SplitRule DefineDomainSplit<TKey, TElement>(string name, Relation<TKey> candidates,
-        Function<TKey, ValueSet<TElement>> domain, Relation<TKey>? guard = null, ScopeTag? caseTag = null) where TElement : notnull;
-    /// A compiled conjunctive query for host reads (Scope.Any/Count/ForEachMatch).
-    public Query DefineQuery(string name, Action<QueryBuilder> define);
+    /// A ruleset whose rules are erasing under options.Licence unless they call ReadsOwnFacts (D12).
+    public Ruleset DefineRuleset(string name, RulesetOptions options);                                      // R2
+    /// A compiled conjunctive query for host reads (Scope.Any, Count, ForEachMatch). RuleDefinitionException on errors.
+    /// Define reusable queries once; dispose a query made for one request (D49).
+    public Query DefineQuery(string name, Action<QueryBuilder> define);                                    // R1b
+    /// A scope tag of this graph. Names are unique per graph and non-empty; "root" is the root's (ArgumentException).
+    public ScopeTag DefineScopeTag(string name);                                                            // R2
+    /// A split rule, compiled immediately (RuleDefinitionException). caseTag is the tag of the cases it makes (null:
+    /// untagged); ArgumentException for another graph's tag.
+    public SplitRule DefineSplit(string name, Action<SplitBuilder> define, ScopeTag? caseTag = null);        // R3
+    /// The domain split: where every guard holds of k and domain(k) = d with |d| > 1, one case per v in d assuming
+    /// domain(k) = {v}; key k. At least one guard (ArgumentException). Coverage obligation: domain(k) = S must mean
+    /// "wherever every guard holds of k, k's value is one of S". More guards split less: fewer cases and fewer facts,
+    /// never an unsound one (D43).
+    public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, ValueSet<TElement>> domain,
+        IReadOnlyList<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull;             // R3
 }
 
-// Graph/Scope.cs (partial: identity, tree, lifecycle, local rules)
-/// One context of the graph's store with the engine's state for it. Not thread-safe; children of a frozen scope may be
-/// used concurrently, one thread each.
+// Graph/EGraphOptions.cs  [R1a]
+public sealed class EGraphOptions
+{
+    public static EGraphOptions Default { get; }
+    /// Rule tasks and rebuilds of the root, and of children of writable scopes, which inherit it (D46). 1, the default:
+    /// serial and deterministic, extraction ties included (decision 4). More: facts are equal modulo renaming of classes,
+    /// but fresh ids, and so extraction ties, may differ between runs. Must be >= 1 (ArgumentOutOfRangeException at
+    /// EGraph construction).
+    public int DegreeOfParallelism { get; init; } = 1;
+    /// Records each rule's query plan in RuleStatistics.Plan (the engine's plan report level). Off by default.
+    public bool RecordPlans { get; init; }                                                                   // R1b
+}
+
+// Graph/Scope.cs  [R1a]  (partial: identity and lifetime)
+/// One engine context with the rule layer's state for it. Not thread-safe (§2.4, D47).
 public sealed partial class Scope : IDisposable
 {
     public EGraph Graph { get; }
-    /// The storage context. Direct writes through it are safe for the engine (stamps carry them); creating or disposing
-    /// its children directly is not supported.
-    public Context Context { get; }
-    public Scope? Parent { get; }
-    public ScopeTag? Tag { get; }
-    /// Made by a split or a CaseSet.
-    public bool IsCase { get; }
-    public bool IsFrozen { get; }
+    public bool IsRoot { get; }
+    /// Set after a RuleEvaluationException from a run or a write, or a fault the engine recorded (D18).
+    public bool IsFaulted { get; }
+    /// What faulted the scope; null while it is not faulted. Every later call except Dispose throws
+    /// InvalidOperationException with this as InnerException.
+    public Exception? Failure { get; }
+    /// True once Dispose has been called, even while the release waits for live children (D40). Never true for the root.
     public bool IsDisposed { get; }
-    public bool IsClean { get; }
-    /// "root/schema#2/query#7", for messages.
+    /// The engine's change stamp (X30): moves on every effective change to this scope's own layer, including (R2) the
+    /// catch-up copies that hide an ancestor's rows when one of this scope's classes merges. Queries, reads and writes
+    /// that change nothing never move it.
+    public long Version { get; }
+    /// "root", "root/schema#2/query#7": for messages.
     public string Path { get; }
-    public IReadOnlyList<Scope> Children { get; }
-    /// Rules defined on this scope, in definition order.
-    public IReadOnlyList<Rule> LocalRules { get; }
-    /// A child scope. Thread-safe on a frozen scope.
-    public Scope CreateChild(ScopeTag? tag = null);
-    public void Rebuild();
-    /// Rebuilds and freezes. The parent must be frozen (storage rule). Local rules are fixed from here on.
-    public void Freeze();
-    /// Throws InvalidOperationException if live children remain (a CaseSet left open counts). The root cannot be disposed.
+    /// Never throws (D40). Makes the scope unusable at once and invalidates the class values it returned; releases its
+    /// local rules and engine context when it has no live children and no call runs in its thread domain on another
+    /// thread. A second call does nothing; on the root it does nothing.
     public void Dispose();
-    /// A rule active in this scope and its descendants only, scheduled with ruleset. Throws InvalidOperationException if
-    /// the scope is frozen; RuleDefinitionException on definition errors.
-    public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define);
     public override string ToString();
 }
 
-// Graph/Scope.Writes.cs (partial: host writes; legal while dirty; may leave the scope dirty)
+// Graph/Scope.Tree.cs  [R2]  (partial: the tree and local rules)
 public sealed partial class Scope
 {
-    /// Builds a ground term with get-or-add and returns its class. Constants are interned. Throws ArgumentException if the
-    /// term reads a function (Get it first), uses a computation, or is scoped.
-    public TSort Make<TSort>(Term<TSort> term) where TSort : struct, ISort<TSort>;
-    /// Writes ground facts: a relation row; F.Of(k).Is(v) (merged by F's lattice); C.Of(k).Is(x) (unions outputs);
-    /// a.Is(b) of a sort (union). Value equalities, scoped handles and function reads are rejected.
-    public void Assume(params Fact[] facts);
-    /// Storage Union; true where the classes were distinct.
-    public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
+    public Scope? Parent { get; }
+    public ScopeTag? Tag { get; }
+    public bool IsFrozen { get; }
+    /// Live children made by CreateChild, a CaseSet or a split, in creation order (snapshot). Transient children made
+    /// for queries on a frozen scope are not listed (D34).
+    public IReadOnlyList<Scope> Children { get; }
+    /// Rules defined on this scope, in definition order (snapshot).
+    public IReadOnlyList<Rule> LocalRules { get; }
+    /// A child scope. Thread-safe on a frozen scope. ArgumentException for another graph's tag;
+    /// InvalidOperationException at depth 31 (colors X36).
+    public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null);
+    /// Brings this scope's mirrors current, then freezes it (colors §10.8). The parent must be frozen. Local rules
+    /// are fixed from here on. A second call does nothing.
+    public void Freeze();
+    /// A rule active in this scope and its descendants, scheduled with ruleset, whose licence it takes (D12). Enters
+    /// this scope's thread domain: InvalidOperationException from another thread while that domain is in use, or if
+    /// the scope is frozen; RuleDefinitionException on definition errors.
+    public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define);
 }
 
-// Graph/Scope.Reads.cs (partial: host reads; require IsClean; never create terms, never intern)
+// Graph/Scope.Writes.cs  [R1a]  (partial: host writes; each call is one atomic batch, D30)
 public sealed partial class Scope
 {
-    /// Whether Contradiction holds in this scope.
+    /// Builds a ground term with get-or-add and returns its class, canonical after the batch. Constants are interned.
+    /// ArgumentException if a subterm reads a function (Get it first), uses a computation or a variable, is scoped, or
+    /// holds a class value this scope cannot use (D39).
+    public TSort Make<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>;
+    /// Writes ground facts (§6.6.2): relation rows; F.Of(k).Is(v) (merged by F's lattice); C.Of(k).Is(x) (unions
+    /// outputs); a.Is(b) of a sort (union). FactConflictException when F has no lattice and holds another value (D32);
+    /// ArgumentException for value equalities that are not function writes, scoped handles, filters, function reads and
+    /// computations. Nothing is written when a fact fails.
+    public void Assume(params Fact[] facts);
+    /// true where the classes were distinct before the call.
+    public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
+    /// Several writes as one atomic batch (§6.6.1): each call is checked as it is made, and the batch is staged,
+    /// flushed and rebuilt once, after write returns. If write throws or a call is rejected, nothing is written and the
+    /// class values the batch's Make calls returned are invalid (D39).
+    public void Write(Action<ScopeWriter> write);
+}
+
+// Graph/Scope.Reads.cs  [R1a]  (partial: host reads; never create terms, never intern, D15)
+public sealed partial class Scope
+{
+    /// Whether Contradiction holds here.
     public bool IsContradictory { get; }
-    /// Whether every ground fact holds. Scoped handles read the resolved ancestor; class results compare canonically here.
-    /// A constant never interned makes its fact false.
+    /// Whether every ground fact holds. Scoped handles (R2) read the resolved ancestor directly. A constant never
+    /// interned makes its fact false.
     public bool Check(params Fact[] facts);
-    /// The value of a ground term (a function value, or a class for a sort term). InvalidOperationException if absent.
+    /// The value of a ground term: a function's value, or the class of a constructor term. InvalidOperationException
+    /// if absent.
     public T Get<T>(Term<T> term);
     public bool TryGet<T>(Term<T> term, [MaybeNullWhen(false)] out T value);
+    /// The canonical member of value's class here.
     public TSort Find<TSort>(TSort value) where TSort : struct, ISort<TSort>;
     public bool AreEqual<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
-    /// False if b's term does not exist here.
+    /// false if b's term does not exist here.
     public bool AreEqual<TSort>(TSort a, Term<TSort> b) where TSort : struct, ISort<TSort>;
-    public bool Any(Query query);
+    /// The number of rows of table in this scope's view (its own and inherited ones). Replaces egglog's print-size.
+    public long CountRows(TableHandle table);                                                                 // R1b
+    /// The rows of table in this scope's view, decoded and in content order: for debugging and tests (§6.11).
+    public IReadOnlyList<TableRow> Rows(TableHandle table);                                                   // R1b
+    public bool Any(Query query);                                                                             // R1b
     /// Distinct full bindings.
-    public long Count(Query query);
-    public void ForEachMatch(Query query, QueryCallback callback);
+    public long Count(Query query);                                                                           // R1b
+    /// Matches in content order (§6.6.4); return false from the callback to stop.
+    public void ForEachMatch(Query query, QueryCallback callback);                                            // R1b
 }
 
-// Graph/Scope.Engine.cs (partial: runs, cases, extraction; internal engine state lives here)
+// Graph/Scope.Engine.cs  [R1a]  (partial: runs and extraction)
 public sealed partial class Scope
 {
-    /// Runs a schedule in this scope (§3.7). Rebuilds first; validates that every tag read by a reachable rule resolves;
-    /// leaves the scope clean on success; disposes cases made during the call. Throws InvalidOperationException if
-    /// frozen, OperationCanceledException on cancellation, RuleEvaluationException on an action failure.
+    /// Runs a schedule in this scope (§6.5). Validates first that every tag read by a reachable rule resolves (R2).
+    /// InvalidOperationException if frozen (R2), faulted, or called from a run observer; OperationCanceledException on
+    /// cancellation; RuleEvaluationException on an evaluation failure (the scope is then faulted).
     public RunReport Run(Schedule schedule, RunOptions? options = null, CancellationToken cancellationToken = default);
-    /// Host-driven cases. Obligation: the cases added must cover this scope (every model of it satisfies some case's
-    /// assumptions).
-    public CaseSet OpenCases();
-    /// One case per value (assume writes it), each run with schedule under StopOnContradiction, lifted, disposed.
-    /// ArgumentException when values is empty or exceeds options.CaseLimit. Same coverage obligation.
-    public LiftReport Split<T>(IEnumerable<T> values, Action<Scope, T> assume, Schedule schedule,
-        ScopeTag? caseTag = null, RunOptions? options = null);
+    /// An extractor over this scope as it is now (§6.10).
     public Extractor CreateExtractor(CostModel? costs = null);
     public ExtractedTerm Extract<TSort>(TSort root, CostModel? costs = null) where TSort : struct, ISort<TSort>;
 }
 
-// Graph/ScopeTag.cs
-/// A label a scope carries; a scoped atom names its ancestor by tag. Compared by reference.
+// Graph/Scope.Cases.cs  [R3]  (partial: cases)
+public sealed partial class Scope
+{
+    /// Made by a split or a CaseSet.
+    public bool IsCase { get; }
+    /// Host-driven cases. Obligation: the cases added must cover this scope (every model of it satisfies some case's
+    /// assumptions). InvalidOperationException on a frozen scope (open the cases in a child of it).
+    public CaseSet OpenCases();
+}
+
+// Graph/ScopeWriter.cs  [R1a]
+/// The writes of one Scope.Write batch (D30). Reads are not available. Valid only during the batch
+/// (ObjectDisposedException afterwards).
+public sealed class ScopeWriter
+{
+    public Scope Scope { get; }
+    public void Assume(params Fact[] facts);
+    /// The class of the term: an existing class, or a fresh id that names the new class once the batch commits. Usable
+    /// in later calls of the same batch; use Scope.Find for the canonical member afterwards.
+    public TSort Make<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>;
+    public void Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
+}
+
+// Graph/ScopeTag.cs  [R2]
+/// A label a scope carries; a scoped atom names its ancestor-or-self by tag. Made by EGraph.DefineScopeTag and owned by
+/// that graph (D38); compared by reference.
 public sealed class ScopeTag
 {
-    public ScopeTag(string name);
+    public EGraph Graph { get; }
     public string Name { get; }
-    /// Always resolves to EGraph.Root.
-    public static ScopeTag Root { get; }
     public override string ToString();
 }
 
-// Graph/ISort{TSort}.cs
-/// An e-class sort: a struct wrapping a class Id, e.g. `readonly record struct Pred(Id Id) : ISort<Pred>`.
+// Graph/ScopeOptions.cs  [R2]
+public sealed class ScopeOptions
+{
+    public static ScopeOptions Default { get; }
+    /// The scope's degree of parallelism (ContextOptions.Parallelism, D46). null: serial for a child of a frozen scope,
+    /// the parent's for a child of a writable one (colors §10.9). Must be >= 1.
+    public int? DegreeOfParallelism { get; init; }
+}
+
+// Graph/ISort{TSort}.cs  [R1a]
+/// An e-class sort: a struct wrapping a class, e.g. `readonly record struct Pred(ClassId Id) : ISort<Pred>`. The library
+/// calls FromId only with a ClassId it made.
 public interface ISort<TSort> where TSort : struct, ISort<TSort>
 {
-    Id Id { get; }
-    static abstract TSort FromId(Id id);
+    ClassId Id { get; }
+    static abstract TSort FromId(ClassId id);
+}
+
+// Graph/ClassId.cs  [R1a]
+/// An e-class identifier, as a scope returned it (D39). Only the library makes one: default(ClassId) names no class and
+/// every scope rejects it. Usable in the scope that returned it and that scope's descendants, until that scope is
+/// disposed. Two ClassIds are equal when they belong to one graph and hold the same identifier; members of one class
+/// may differ, so compare classes with Scope.AreEqual. Renders as "#17".
+public readonly struct ClassId : IEquatable<ClassId>
+{
+    /// true for default(ClassId).
+    public bool IsDefault { get; }
+    public bool Equals(ClassId other);
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
+    public static bool operator ==(ClassId left, ClassId right);
+    public static bool operator !=(ClassId left, ClassId right);
+    public override string ToString();
 }
 ```
 
-#### Values/
+### 3.2 Values/
 
 ```csharp
-// Values/ColumnType.cs
-/// The type of a column: how a CLR value is encoded into 64 bits and printed. Invariant V: Encode is injective, so equal
-/// bits mean equal values.
+// Values/ColumnKind.cs  [R1a]
+public enum ColumnKind { Sort, Value }
+
+// Values/ColumnType.cs  [R1a]
+/// The type of a column: a sort (its cells are classes) or a value type (its cells are base values). Invariant V:
+/// equal values have equal cells in every scope.
 public abstract class ColumnType
 {
     private protected ColumnType(string name, ColumnKind kind, Type clrType);
     public string Name { get; }
     public ColumnKind Kind { get; }
     public Type ClrType { get; }
-    /// s-expression literal: "\"kind\"", "42", "true", "(set-of \"a\" \"b\")", "#17".
-    public abstract string Format(ulong bits);
-    /// Content order (strings ordinal, numbers numeric, sets lexicographic, classes by raw id).
-    public abstract int Compare(ulong x, ulong y);
+    /// The s-expression literal: "\"kind\"", "42", "true", "1.5", "(set-of \"a\" \"b\")", "#17".
+    /// ArgumentException if value is not of ClrType.
+    public string Format(object value);
     public override string ToString();
 }
 
-// Values/ColumnType{T}.cs
+// Values/ColumnType{T}.cs  [R1a]
 public abstract class ColumnType<T> : ColumnType
 {
     private protected ColumnType(string name, ColumnKind kind);
-    /// Encodes, interning if needed (thread-safe).
-    public abstract ulong Encode(T value);
-    /// Encodes only if already interned; never grows a pool.
-    public abstract bool TryEncodeExisting(T value, out ulong bits);
-    public abstract T Decode(ulong bits);
+    public string Format(T value);
+    /// Content order: strings ordinal, numbers numeric, sets lexicographic, classes by id.
+    public int Compare(T x, T y);
 }
 
-// Values/IValueCodec{T}.cs
-/// A user encoding for T: injective, thread-safe.
-public interface IValueCodec<T>
-{
-    ulong Encode(T value);
-    bool TryEncodeExisting(T value, out ulong bits);
-    T Decode(ulong bits);
-    int Compare(T x, T y);
-    string Format(T value);
-}
-
-// Values/ValueStore.cs
-/// Column types by CLR type, and the graph's interners. Built in: long "i64", int "i32", bool "bool", double "f64",
-/// string "String", ValueSet<string>, ValueSet<long>, ValueSet<int>. Registration of a taken type throws.
+// Values/ValueStore.cs  [R1a]
+/// Column types by CLR type. Built in: long "i64", int "i32", bool "bool", double "f64", string "String",
+/// ValueSet<string> "Set<String>", ValueSet<long> "Set<i64>", ValueSet<int> "Set<i32>". Thread-safe.
 public sealed class ValueStore
 {
-    /// ArgumentException naming the Register* method when T is unknown.
+    /// ArgumentException naming the Register method to call when T is unknown.
     public ColumnType<T> TypeOf<T>();
     public bool TryGetType<T>([NotNullWhen(true)] out ColumnType<T>? type);
-    public ColumnType<T> Register<T>(string name, IValueCodec<T> codec);
-    public ColumnType<T> RegisterInterned<T>(string name, IEqualityComparer<T>? equality = null, IComparer<T>? order = null) where T : notnull;
-    /// Throws for a sort T (no sets of classes).
+    /// An interned value type over IEquatable<T> (the engine's InternedCodec<T>). order is extraction's tie-break
+    /// order and Compare; it must not depend on the culture. ArgumentException if T or name is taken.
+    public ColumnType<T> Register<T>(string name, IComparer<T>? order = null, Func<T, string>? format = null)
+        where T : notnull, IEquatable<T>;
+    /// "Set<{element name}>". The element type must be registered and must not be a sort (no sets of classes).
     public ColumnType<ValueSet<T>> RegisterSet<T>() where T : notnull;
+    /// Named typeof(TEnum).Name; stored as i64 (D20).
     public ColumnType<TEnum> RegisterEnum<TEnum>() where TEnum : struct, Enum;
-    /// Total handles interned in every pool; pools never shrink.
+    /// Values interned in every pool of the graph; pools never shrink (E1).
     public long InternedCount { get; }
 }
 
-// Values/ValueSet{T}.cs
-/// An immutable set held in ascending element order (ordinal for strings, Comparer<T>.Default otherwise), equal by
+// Values/ValueSet{T}.cs  [R1a]
+/// An immutable set in ascending element order (ordinal for strings, Comparer<T>.Default otherwise), equal by
 /// content. Operations return this instance when nothing changes.
 public sealed class ValueSet<T> : IReadOnlyList<T>, IEquatable<ValueSet<T>> where T : notnull
 {
@@ -485,6 +610,7 @@ public sealed class ValueSet<T> : IReadOnlyList<T>, IEquatable<ValueSet<T>> wher
     public ValueSet<T> Union(ValueSet<T> other);
     public ValueSet<T> Intersect(ValueSet<T> other);
     public ValueSet<T> Except(ValueSet<T> other);
+    public ValueSet<T> Where(Func<T, bool> predicate);
     public bool Equals(ValueSet<T>? other);
     public override bool Equals(object? obj);
     public override int GetHashCode();
@@ -493,7 +619,7 @@ public sealed class ValueSet<T> : IReadOnlyList<T>, IEquatable<ValueSet<T>> wher
     public override string ToString();
 }
 
-// Values/ValueSet.cs
+// Values/ValueSet.cs  [R1a]
 public static class ValueSet
 {
     /// ValueSet.Of("abc") is {"abc"}: there is deliberately no IEnumerable overload named Of.
@@ -501,23 +627,13 @@ public static class ValueSet
     public static ValueSet<T> From<T>(IEnumerable<T> items) where T : notnull;
 }
 
-// Values/ValueLattice{T}.cs
-/// A merge for a function's values, with the case-join a lift uses. Contract: Merge is associative, commutative,
-/// idempotent (storage); Merge(a, CaseJoin(a, b)) == a (absorption: the join claims no more than either case).
-public sealed class ValueLattice<T>
+// Values/ValueLattice.cs  [R1a]
+/// The untyped base of a function's lattice, and the built-in lattices.
+public abstract class ValueLattice
 {
-    public ValueLattice(string name, Func<T, T, T> merge, Func<T, T, T>? caseJoin = null);
+    private protected ValueLattice(string name, Type valueType);
     public string Name { get; }
-    public Func<T, T, T> Merge { get; }
-    /// null: a lift requires every case to agree.
-    public Func<T, T, T>? CaseJoin { get; }
-    /// Checks the laws on every pair and triple of samples; throws InvalidOperationException naming the law and values.
-    public void Verify(IEnumerable<T> samples);
-}
-
-// Values/ValueLattice.cs
-public static class ValueLattice
-{
+    public Type ValueType { get; }
     /// Merge ∩, CaseJoin ∪ (dom, types).
     public static ValueLattice<ValueSet<T>> Intersect<T>() where T : notnull;
     /// Merge ∪, CaseJoin ∩.
@@ -526,168 +642,208 @@ public static class ValueLattice
     public static ValueLattice<T> Max<T>() where T : IComparable<T>;
     /// Merge min, CaseJoin max (an upper bound).
     public static ValueLattice<T> Min<T>() where T : IComparable<T>;
+    public override string ToString();
+}
+
+// Values/ValueLattice{T}.cs  [R1a]
+/// A merge for a function's values, with the case join a lift uses. Contract: Merge is associative, commutative and
+/// idempotent; Merge(a, CaseJoin(a, b)) == a (absorption: the join claims no more than either case). Both must be
+/// pure and thread-safe, and must not call into any graph (D47).
+public sealed class ValueLattice<T> : ValueLattice
+{
+    public ValueLattice(string name, Func<T, T, T> merge, Func<T, T, T>? caseJoin = null);
+    public Func<T, T, T> Merge { get; }
+    /// null: a lift requires every live case to agree.
+    public Func<T, T, T>? CaseJoin { get; }
+    /// Checks the laws on every pair and triple of samples; InvalidOperationException naming the law and the values.
+    public void Verify(IEnumerable<T> samples);
 }
 ```
 
-#### Tables/
+### 3.3 Tables/
 
 ```csharp
-// Tables/TableKind.cs
+// Tables/TableKind.cs  [R1a]
 public enum TableKind { Relation, Function, Constructor }
 
-// Tables/TableRole.cs
-/// What rows mean. Term: constructor rows (terms). Fact: claims (lifted by default; Erasing rules must read them scoped).
+// Tables/TableRole.cs  [R1a]
+/// What rows mean. Term: constructor rows. Fact: claims (lifted by default; erasing rules must read them scoped).
 /// Analysis: derived from terms only (never lifted by default; writers may read only Term and Analysis tables).
 public enum TableRole { Term, Fact, Analysis }
 
-// Tables/TableOptions.cs
+// Tables/TableOptions.cs  [R1a]
 public sealed class TableOptions
 {
-    /// Relations and functions: Fact or Analysis (Term is rejected). Ignored for constructors.
+    /// Relations and functions: Fact or Analysis (Term is rejected). Ignored for constructors, which are Term.
     public TableRole Role { get; init; } = TableRole.Fact;
-    /// Default: Fact true, Analysis false, constructors true (term lift).
+    /// Whether lifts copy this table into the parent. null: Fact true, Analysis false, constructors true (term lift).
     public bool? Lift { get; init; }
-    /// Constructors only.
+    /// Constructors only: false makes extraction skip its rows.
     public bool Extractable { get; init; } = true;
 }
 
-// Tables/TableHandle.cs
+// Tables/TableHandle.cs  [R1a]
 public abstract class TableHandle
 {
     private protected TableHandle();
     public EGraph Graph { get; }
-    public Table Table { get; }
     public string Name { get; }
-    /// Declaration order; extraction tie-break.
+    /// Declaration order; extraction breaks ties by it.
     public int Index { get; }
     public TableKind Kind { get; }
     public TableRole Role { get; }
     public IReadOnlyList<ColumnType> Keys { get; }
+    /// null for a relation.
     public ColumnType? Output { get; }
     public bool Lift { get; }
+    /// Every key, and the output, is a value type: the table may be read scoped (D1).
+    public bool IsValueOnly { get; }
     /// Set on a read-only scoped view made by In(tag); such a handle is rejected in any write.
-    public ScopeTag? ReadScope { get; }
-    /// "dom" or "dom@schema"
+    public ScopeTag? ReadScope { get; }                                                                       // R2
+    /// "dom", or "dom@schema" for a scoped view.
     public override string ToString();
 }
 
-// Tables/RelationHandle.cs
-public class RelationHandle : TableHandle
+// Tables/RelationHandle.cs  [R1a]
+/// The base of the typed relations. Its untyped members are internal (D13).
+public abstract class RelationHandle : TableHandle { private protected RelationHandle(); }
+
+// Tables/FunctionHandle.cs  [R1a]
+public abstract class FunctionHandle : TableHandle
 {
-    internal RelationHandle();
-    /// Untyped fact; argument types checked when the rule compiles.
-    public Fact Apply(params Term[] row);
+    private protected FunctionHandle();
+    /// null when the function has no lattice.
+    public ValueLattice? Lattice { get; }
 }
 
-// Tables/FunctionHandle.cs
-public class FunctionHandle : TableHandle
+// Tables/ConstructorHandle.cs  [R1a]
+public abstract class ConstructorHandle : TableHandle
 {
-    internal FunctionHandle();
-    public MergeFunction? Merge { get; }
-    public MergeFunction? CaseJoin { get; }
-    /// Untyped application; its value is the output.
-    public Term Apply(params Term[] keys);
-}
-
-// Tables/ConstructorHandle.cs
-public class ConstructorHandle : TableHandle
-{
-    internal ConstructorHandle();
+    private protected ConstructorHandle();
     public long Cost { get; }
     public bool Extractable { get; }
-    /// Untyped application; its value is the class.
-    public Term Apply(params Term[] keys);
 }
-
-// Tables/Relation.cs                   (nullary)
-public sealed class Relation : RelationHandle { public Fact Of(); public Relation In(ScopeTag scope); }
-// Tables/Relation{T1}.cs
-public sealed class Relation<T1> : RelationHandle { public Fact Of(Term<T1> a); public Relation<T1> In(ScopeTag scope); }
-// Tables/Relation{T1,T2}.cs
-public sealed class Relation<T1, T2> : RelationHandle { public Fact Of(Term<T1> a, Term<T2> b); public Relation<T1, T2> In(ScopeTag scope); }
-// Tables/Relation{T1,T2,T3}.cs
-public sealed class Relation<T1, T2, T3> : RelationHandle { public Fact Of(Term<T1> a, Term<T2> b, Term<T3> c); public Relation<T1, T2, T3> In(ScopeTag scope); }
-// Tables/Relation{T1,T2,T3,T4}.cs
-public sealed class Relation<T1, T2, T3, T4> : RelationHandle { public Fact Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); public Relation<T1, T2, T3, T4> In(ScopeTag scope); }
-
-// Tables/Function{TOut}.cs ... Function{T1,T2,T3,T4,TOut}.cs (Lattice is null when none was given)
-public sealed class Function<TOut> : FunctionHandle { public ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(); public Function<TOut> In(ScopeTag scope); }
-public sealed class Function<T1, TOut> : FunctionHandle { public ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a); public Function<T1, TOut> In(ScopeTag scope); }
-public sealed class Function<T1, T2, TOut> : FunctionHandle { public ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b); public Function<T1, T2, TOut> In(ScopeTag scope); }
-public sealed class Function<T1, T2, T3, TOut> : FunctionHandle { public ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c); public Function<T1, T2, T3, TOut> In(ScopeTag scope); }
-public sealed class Function<T1, T2, T3, T4, TOut> : FunctionHandle { public ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); public Function<T1, T2, T3, T4, TOut> In(ScopeTag scope); }
-
-// Tables/Constructor{TSort}.cs ... Constructor{T1,T2,T3,T4,TSort}.cs (all: where TSort : struct, ISort<TSort>)
-public sealed class Constructor<TSort> : ConstructorHandle { public Term<TSort> Of(); public Constructor<TSort> In(ScopeTag scope); }
-public sealed class Constructor<T1, TSort> : ConstructorHandle { public Term<TSort> Of(Term<T1> a); public Constructor<T1, TSort> In(ScopeTag scope); }
-public sealed class Constructor<T1, T2, TSort> : ConstructorHandle { public Term<TSort> Of(Term<T1> a, Term<T2> b); public Constructor<T1, T2, TSort> In(ScopeTag scope); }
-public sealed class Constructor<T1, T2, T3, TSort> : ConstructorHandle { public Term<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c); public Constructor<T1, T2, T3, TSort> In(ScopeTag scope); }
-public sealed class Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle { public Term<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); public Constructor<T1, T2, T3, T4, TSort> In(ScopeTag scope); }
 ```
 
-#### Terms/
+Typed handles, one file each. Every relation and function type also has `In(ScopeTag scope)` [R2], the one name for a
+scoped view: it returns the same type with `ReadScope` set (`ArgumentException` unless `IsValueOnly`, or for another
+graph's tag). A scoped view keeps its handle type, so it composes with helpers that take handles; a write through it is
+a `RuleDefinitionException` at definition (§6.3 step 8) or an `ArgumentException` in a host write (§6.6.2). Constructors
+have no `In`: their output is a sort (D1). A constructor's `Of` returns a `ConstructorTerm<TSort>`, which is what `Make`
+takes.
 
 ```csharp
-// Terms/Term.cs
-/// An expression: a variable, a constant, a table application, or a computation. Immutable; renders as an s-expression.
+// Tables/Relation.cs                      [R1a]
+public sealed class Relation : RelationHandle
+{ public Fact Of(); public Relation In(ScopeTag scope); /* R2 */ }
+// Tables/Relation{T1}.cs                  [R1a]
+public sealed class Relation<T1> : RelationHandle
+{ public Fact Of(Term<T1> a); public Relation<T1> In(ScopeTag scope); /* R2 */ }
+// Tables/Relation{T1,T2}.cs               [R1a]
+public sealed class Relation<T1, T2> : RelationHandle
+{ public Fact Of(Term<T1> a, Term<T2> b); public Relation<T1, T2> In(ScopeTag scope); /* R2 */ }
+// Tables/Relation{T1,T2,T3}.cs            [R1a]
+public sealed class Relation<T1, T2, T3> : RelationHandle
+{ public Fact Of(Term<T1> a, Term<T2> b, Term<T3> c); public Relation<T1, T2, T3> In(ScopeTag scope); /* R2 */ }
+// Tables/Relation{T1,T2,T3,T4}.cs         [R1a]
+public sealed class Relation<T1, T2, T3, T4> : RelationHandle
+{ public Fact Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); public Relation<T1, T2, T3, T4> In(ScopeTag scope); /* R2 */ }
+
+// Tables/Function{TOut}.cs                [R1a]
+public sealed class Function<TOut> : FunctionHandle
+{ public new ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(); public Function<TOut> In(ScopeTag scope); /* R2 */ }
+// Tables/Function{T1,TOut}.cs             [R1a]
+public sealed class Function<T1, TOut> : FunctionHandle
+{ public new ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a); public Function<T1, TOut> In(ScopeTag scope); /* R2 */ }
+// Tables/Function{T1,T2,TOut}.cs          [R1a]
+public sealed class Function<T1, T2, TOut> : FunctionHandle
+{ public new ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b); public Function<T1, T2, TOut> In(ScopeTag scope); /* R2 */ }
+// Tables/Function{T1,T2,T3,TOut}.cs       [R1a]
+public sealed class Function<T1, T2, T3, TOut> : FunctionHandle
+{ public new ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c); public Function<T1, T2, T3, TOut> In(ScopeTag scope); /* R2 */ }
+// Tables/Function{T1,T2,T3,T4,TOut}.cs    [R1a]
+public sealed class Function<T1, T2, T3, T4, TOut> : FunctionHandle
+{ public new ValueLattice<TOut>? Lattice { get; } public Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); public Function<T1, T2, T3, T4, TOut> In(ScopeTag scope); /* R2 */ }
+
+// Tables/Constructor{TSort}.cs ... Constructor{T1,T2,T3,T4,TSort}.cs   [R1a]   (all: where TSort : struct, ISort<TSort>)
+public sealed class Constructor<TSort> : ConstructorHandle { public ConstructorTerm<TSort> Of(); }
+public sealed class Constructor<T1, TSort> : ConstructorHandle { public ConstructorTerm<TSort> Of(Term<T1> a); }
+public sealed class Constructor<T1, T2, TSort> : ConstructorHandle { public ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b); }
+public sealed class Constructor<T1, T2, T3, TSort> : ConstructorHandle { public ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c); }
+public sealed class Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle { public ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); }
+```
+
+### 3.4 Terms/
+
+```csharp
+// Terms/Term.cs  [R1a]
+/// An expression: a variable, a constant, a table application, or a computation. Immutable; renders as an
+/// s-expression. The untyped constant (Term.Constant) is internal (D13).
 public abstract class Term
 {
     private protected Term();
     public abstract Type ClrType { get; }
-    /// An untyped constant from already encoded bits (frontends).
-    public static Term Constant(ColumnType type, ulong bits);
     public override string ToString();
 }
 
-// Terms/Term{T}.cs
+// Terms/Term{T}.cs  [R1a]
 public abstract class Term<T> : Term
 {
     private protected Term();
+    /// Equality: a join or a check in a body, a write or a union in a head, a ground fact in a host write or check.
     public Fact Is(Term<T> other);
-    /// A constant; for a sort, a class constant.
+    /// Disequality: a filter, in a body only (RuleDefinitionException in a head; ArgumentException in a host write or
+    /// check).
+    public Fact IsNot(Term<T> other);
+    /// A constant; for a sort, a class constant, checked where it is used (D39).
     public static implicit operator Term<T>(T value);
 }
 
-// Terms/Var{T}.cs
+// Terms/ConstructorTerm{TSort}.cs  [R1a]
+/// An application of a constructor: what Scope.Make, ScopeWriter.Make and RuleBuilder.Make take.
+public sealed class ConstructorTerm<TSort> : Term<TSort> where TSort : struct, ISort<TSort>
+{
+    internal ConstructorTerm(ConstructorHandle head, Term[] arguments);
+    public ConstructorHandle Head { get; }
+}
+
+// Terms/Var{T}.cs  [R1a]
 /// A variable of one builder; using it in another builder is a RuleDefinitionException.
 public sealed class Var<T> : Term<T>
 {
-    internal Var();
+    internal Var(object owner, string name);
     public string Name { get; }
 }
 
-// Terms/Fact.cs
+// Terms/Fact.cs  [R1a]
 public abstract class Fact
 {
     private protected Fact();
-    public static Fact Equal(Term left, Term right);
-    /// A filter. Class values must share a home scope.
-    public static Fact NotEqual(Term left, Term right);
     /// A function or constructor application has a row.
     public static Fact Exists(Term application);
     /// A filter on a boolean computation.
     public static Fact True(Term<bool> condition);
-    /// Scopes every table application inside facts (nested ones included) to the ancestor tagged scope. Nesting, or a
-    /// handle already scoped to a different tag, is a definition error.
-    public static Fact In(ScopeTag scope, params Fact[] facts);
+    /// Scopes every table application inside facts (nested ones included) to the ancestor-or-self tagged scope.
+    /// Nesting, or a handle already scoped to a different tag, is a definition error; so is a constructor inside.
+    /// ArgumentException for another graph's tag.
+    public static Fact In(ScopeTag scope, params Fact[] facts);                                               // R2
     public override string ToString();
 }
 
-// Terms/Compute.cs
+// Terms/Compute.cs  [R1a]
 /// Computed values from C# lambdas (they render as <lambda>); prefer named primitives where rendering matters.
+/// Lambdas must be pure, deterministic and thread-safe, and must not call into any graph.
 public static class Compute
 {
     public static Term<TResult> Of<T1, TResult>(Term<T1> a, Func<T1, TResult> function);
     public static Term<TResult> Of<T1, T2, TResult>(Term<T1> a, Term<T2> b, Func<T1, T2, TResult> function);
     public static Term<TResult> Of<T1, T2, T3, TResult>(Term<T1> a, Term<T2> b, Term<T3> c, Func<T1, T2, T3, TResult> function);
     public static Term<TResult> Of<T1, T2, T3, T4, TResult>(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d, Func<T1, T2, T3, T4, TResult> function);
-    /// Untyped.
-    public static Term Of(Primitive primitive, params Term[] arguments);
 }
 
-// Terms/Primitive.cs
-/// A pure, deterministic, thread-safe function over values (never over classes). Semi-naive matching and lift rely on
-/// purity. An exception thrown by it fails the rule.
+// Terms/Primitive.cs  [R1a]
+/// A pure, deterministic, thread-safe function over values (never over classes). An exception thrown by it fails the
+/// rule (D31); a call into any graph from it throws (D47).
 public abstract class Primitive
 {
     private protected Primitive();
@@ -701,13 +857,13 @@ public abstract class Primitive
     public override string ToString();
 }
 
-// Terms/Primitive{T1,TResult}.cs ... Primitive{T1,T2,T3,T4,TResult}.cs
+// Terms/Primitive{T1,TResult}.cs ... Primitive{T1,T2,T3,T4,TResult}.cs  [R1a]
 public sealed class Primitive<T1, TResult> : Primitive { public Func<T1, TResult> Function { get; } public Term<TResult> Of(Term<T1> a); }
 public sealed class Primitive<T1, T2, TResult> : Primitive { public Func<T1, T2, TResult> Function { get; } public Term<TResult> Of(Term<T1> a, Term<T2> b); }
 public sealed class Primitive<T1, T2, T3, TResult> : Primitive { public Func<T1, T2, T3, TResult> Function { get; } public Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c); }
 public sealed class Primitive<T1, T2, T3, T4, TResult> : Primitive { public Func<T1, T2, T3, T4, TResult> Function { get; } public Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d); }
 
-// Terms/Primitives.cs
+// Terms/Primitives.cs  [R1a]
 /// Named built-ins (egglog names), memoised per T.
 public static class Primitives
 {
@@ -732,40 +888,54 @@ public static class Primitives
 }
 ```
 
-#### Rules/
+### 3.5 Rules/
 
 ```csharp
-// Rules/Ruleset.cs
+// Rules/Ruleset.cs  [R1a]
 public sealed class Ruleset
 {
     public EGraph Graph { get; }
     public string Name { get; }
-    /// Global rules, definition order (snapshot).
+    /// The tag under which the ruleset's rules are erasing (D12); null for none.
+    public ScopeTag? Licence { get; }                                                                         // R2
+    /// Global rules, in definition order (snapshot).
     public IReadOnlyList<Rule> Rules { get; }
-    /// A global rule; compiled immediately (RuleDefinitionException).
-    public Rule Rule(string name, Action<RuleBuilder> define);
+    /// A global rule, compiled immediately (RuleDefinitionException). Any thread, any time (D6).
+    public Rule DefineRule(string name, Action<RuleBuilder> define);
     public static implicit operator Schedule(Ruleset ruleset);
     public override string ToString();
 }
 
-// Rules/Rule.cs
+// Rules/RulesetOptions.cs  [R2]
+public sealed class RulesetOptions
+{
+    /// Every rule of the ruleset is erasing under this tag unless it calls ReadsOwnFacts (D12). ArgumentException for
+    /// another graph's tag.
+    public ScopeTag? Licence { get; init; }
+}
+
+// Rules/Rule.cs  [R1a]
 public sealed class Rule
 {
     public string Name { get; }
     public Ruleset Ruleset { get; }
-    /// null for a global rule.
+    /// null for a global rule (always null in R1).
     public Scope? Owner { get; }
-    public ScopeTag? Licence { get; }
     public bool IsNaive { get; }
-    public bool HasCallback { get; }
-    public IReadOnlyList<ScopeTag> ReadScopes { get; }
-    /// (rule ((= s (inset e p)) (present@schema p) ...) ((union e (PTrue))) :ruleset rewrite :erasing schema)
+    /// The rule's effective licence: its own Erasing tag, else its ruleset's; null when ReadsOwnFacts exempts it.
+    public ScopeTag? Licence { get; }                                                                         // R2
+    /// The reason given to ReadsOwnFacts; null when the rule does not use it.
+    public string? OwnFactsReason { get; }                                                                    // R2
+    /// Distinct tags the rule's scoped atoms read, in first-use order.
+    public IReadOnlyList<ScopeTag> ReadScopes { get; }                                                        // R2
+    /// (rule ((= s (inset e p)) (present@schema p) ...) ((union e (PTrue))) :ruleset rewrite :erasing schema), or
+    /// ... :reads-own-facts "the guard stays in the predicate") for an exempt rule.
     public override string ToString();
 }
 
-// Rules/RuleBuilder.cs
-/// Collects one rule: When/Where make the body, Then/Make/Rewrite the head. Order of calls is free; head facts run in the
-/// order given.
+// Rules/RuleBuilder.cs  [R1a]
+/// Collects one rule: When/Where make the body; Then/Make/Rewrite make the head. Body calls are unordered; head items
+/// are lowered in the order the builder calls were made (§6.3).
 public sealed class RuleBuilder
 {
     public string Name { get; }
@@ -773,8 +943,6 @@ public sealed class RuleBuilder
     public (Var<T1>, Var<T2>) Vars<T1, T2>(string name1, string name2);
     public (Var<T1>, Var<T2>, Var<T3>) Vars<T1, T2, T3>(string name1, string name2, string name3);
     public (Var<T1>, Var<T2>, Var<T3>, Var<T4>) Vars<T1, T2, T3, T4>(string name1, string name2, string name3, string name4);
-    /// An untyped variable (frontends).
-    public Term Var(ColumnType type, string name);
     public void When(params Fact[] facts);
     public void Where<T1>(Term<T1> a, Func<T1, bool> predicate);
     public void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, bool> predicate);
@@ -783,54 +951,105 @@ public sealed class RuleBuilder
     /// e.g. Primitives.Contains<string>().Of(d, v)
     public void Where(Term<bool> condition);
     public void Then(params Fact[] facts);
-    public void Then(RuleCallback callback);
     /// A head variable bound by get-or-add of term; it may not appear in the body.
-    public Var<TSort> Make<TSort>(string name, Term<TSort> term) where TSort : struct, ISort<TSort>;
+    public Var<TSort> Make<TSort>(string name, ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>;
     /// Body: a fresh class variable t with t = left; head: t = right (union).
     public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right) where TSort : struct, ISort<TSort>;
-    /// Opt out of semi-naive matching (always a full run) and of inheritance.
+    /// Every run matches in full (a naive bridge rule; never inherits).
     public void Naive();
-    /// Checked at definition: every atom over a Fact-role table reads scope licence (§3.3).
-    public void Erasing(ScopeTag licence);
+    /// This rule is erasing under licence, whatever its ruleset says (§6.3, step 6). ArgumentException for another
+    /// graph's tag.
+    public void Erasing(ScopeTag licence);                                                                    // R2
+    /// Exempts this rule from its licence: it may read fact tables in the running scope. reason (non-empty) says why
+    /// that is sound, and Rule.ToString renders it. RuleDefinitionException when the rule has no licence.
+    public void ReadsOwnFacts(string reason);                                                                 // R2
 }
 
-// Rules/RuleCallback.cs
-/// Runs once per distinct projected match per iteration, in the apply phase. Must be idempotent (§3.5).
-public delegate void RuleCallback(RuleMatch match, ScopeWriter writer);
-
-// Rules/RuleMatch.cs
-public readonly ref struct RuleMatch
+// Rules/Query.cs  [R1b]
+/// A compiled conjunctive query (D34, D49). Define a reusable query once; dispose one made for a single request.
+public sealed class Query : IDisposable
 {
-    public string RuleName { get; }
-    /// Decoded; a class is canonical in the variable's home scope.
+    public string Name { get; }
+    public IReadOnlyList<Term> Variables { get; }
+    public bool IsDisposed { get; }
+    /// Never throws. Frees the query's engine rule and call sites once no call is using it; later use throws
+    /// ObjectDisposedException.
+    public void Dispose();
+    public override string ToString();
+}
+
+// Rules/QueryBuilder.cs  [R1b]
+public sealed class QueryBuilder
+{
+    public Var<T> Var<T>(string name);
+    public (Var<T1>, Var<T2>) Vars<T1, T2>(string name1, string name2);
+    public (Var<T1>, Var<T2>, Var<T3>) Vars<T1, T2, T3>(string name1, string name2, string name3);
+    public void When(params Fact[] facts);
+    public void Where<T1>(Term<T1> a, Func<T1, bool> predicate);
+    public void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, bool> predicate);
+    public void Where(Term<bool> condition);
+}
+
+// Rules/QueryCallback.cs  [R1b]
+/// Return false to stop receiving matches.
+public delegate bool QueryCallback(QueryMatch match);
+
+// Rules/QueryMatch.cs  [R1b]
+public readonly ref struct QueryMatch
+{
+    /// Decoded; a class is canonical in the queried scope and has that scope as its origin (D39).
     public T Get<T>(Var<T> variable);
-    public ulong GetBits(Term variable);
 }
 
-// Rules/ScopeWriter.cs
-/// Writes available to a callback (the scope is dirty; nothing can be read). Valid only during the callback.
-public sealed class ScopeWriter
+// Rules/RuleDefinitionException.cs  [R1a]
+public sealed class RuleDefinitionException : Exception
 {
-    public Scope Scope { get; }
-    public void Assume(params Fact[] facts);
-    public TSort Make<TSort>(Term<TSort> term) where TSort : struct, ISort<TSort>;
-    public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
+    public RuleDefinitionException(string ruleName, string message, Exception? inner = null);
+    public string RuleName { get; }
 }
 
-// Rules/SplitRule.cs
+// Rules/RuleEvaluationException.cs  [R1a]
+/// An evaluation failure: a primitive, filter or lattice delegate threw, or a function without a lattice received two
+/// values from rules. After a run or a write the scope is faulted (D18); after a query it is not (D49).
+public sealed class RuleEvaluationException : Exception
+{
+    public RuleEvaluationException(string? ruleName, string? bindings, string message, Exception? inner);
+    /// null when the failure happened in a merge, which no single rule owns.
+    public string? RuleName { get; }
+    /// The primitive's arguments, e.g. "d={a, b} v=\"b\""; null for merge failures.
+    public string? Bindings { get; }
+}
+
+// Rules/FactConflictException.cs  [R1a]
+/// A host write that would give a function without a lattice a second value for one key, against the stored value or
+/// another write of the same batch (D32). Nothing is written.
+public sealed class FactConflictException : InvalidOperationException
+{
+    public FactConflictException(TableHandle table, IReadOnlyList<object> key, object storedValue, object newValue);
+    public TableHandle Table { get; }
+    /// Decoded keys.
+    public IReadOnlyList<object> Key { get; }
+    /// The stored value, or the batch's earlier one.
+    public object StoredValue { get; }
+    public object NewValue { get; }
+}
+
+// Rules/SplitRule.cs  [R3]
 public sealed class SplitRule
 {
     public string Name { get; }
-    public ScopeTag CaseTag { get; }
+    /// null: its cases are untagged.
+    public ScopeTag? CaseTag { get; }
     public IReadOnlyList<ScopeTag> ReadScopes { get; }
     public override string ToString();
 }
 
-// Rules/SplitBuilder.cs
-/// Body (When/Where), the element set to split over (Cases), the key (default: every named body variable except the set
-/// variable), and the assumptions written into each case. Obligation: whenever the body matches in a scope C, C entails
-/// "the cases' assumptions for the elements of the set at this match, one of them holds", and that stays true as C grows
-/// (it does for a lattice-meet domain).
+// Rules/SplitBuilder.cs  [R3]
+/// Body (When/Where), the element set to split over (Cases), the key (default: every named body variable except the
+/// set variable), and the assumptions written into each case. Obligation: whenever the body matches in a scope C, C
+/// entails "for the elements of the set at this match, one of the cases' assumptions holds", and that stays true as C
+/// grows (it does for a lattice-meet domain). The body is also the split's demand (D43): keys it does not match are
+/// never split.
 public sealed class SplitBuilder
 {
     public Var<T> Var<T>(string name);
@@ -845,130 +1064,117 @@ public sealed class SplitBuilder
     public void Key(params Term[] variables);
     public void Assume(params Fact[] facts);
 }
-
-// Rules/Query.cs
-public sealed class Query { public string Name { get; } public IReadOnlyList<Term> Variables { get; } public override string ToString(); }
-
-// Rules/QueryBuilder.cs
-public sealed class QueryBuilder
-{
-    public Var<T> Var<T>(string name);
-    public (Var<T1>, Var<T2>) Vars<T1, T2>(string name1, string name2);
-    public (Var<T1>, Var<T2>, Var<T3>) Vars<T1, T2, T3>(string name1, string name2, string name3);
-    public void When(params Fact[] facts);
-    public void Where<T1>(Term<T1> a, Func<T1, bool> predicate);
-    public void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, bool> predicate);
-    public void Where(Term<bool> condition);
-}
-
-// Rules/QueryCallback.cs
-/// Return false to stop receiving matches.
-public delegate bool QueryCallback(QueryMatch match);
-
-// Rules/QueryMatch.cs
-public readonly ref struct QueryMatch { public T Get<T>(Var<T> variable); public ulong GetBits(Term variable); }
-
-// Rules/RuleDefinitionException.cs
-public sealed class RuleDefinitionException : Exception
-{
-    public RuleDefinitionException(string ruleName, string message);
-    public string RuleName { get; }
-}
-
-// Rules/RuleEvaluationException.cs
-public sealed class RuleEvaluationException : Exception
-{
-    public RuleEvaluationException(string ruleName, string bindings, string message, Exception? inner);
-    public string RuleName { get; }
-    /// "e=#17 p=\"kind\""
-    public string Bindings { get; }
-}
 ```
 
-#### Scheduling/
+### 3.6 Scheduling/
 
 ```csharp
-// Scheduling/Schedule.cs
+// Scheduling/Schedule.cs  [R1a]
 /// egglog schedules, plus case splits.
 public abstract class Schedule
 {
     private protected Schedule();
-    /// One iteration over the union of the rulesets' rules.
+    /// One iteration over the union of the rulesets' rules active in the scope.
     public static Schedule Run(params Ruleset[] rulesets);
     /// Up to times passes of Sequence(steps); stops after a pass with no change.
     public static Schedule Repeat(int times, params Schedule[] steps);
     /// Passes of Sequence(steps) until one changes nothing.
     public static Schedule Saturate(params Schedule[] steps);
     public static Schedule Sequence(params Schedule[] steps);
-    public static Schedule Split(SplitRule rule, Schedule inCase);
-    public static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase);
     /// Runs body unless every fact of condition already holds (egglog :until).
-    public static Schedule Until(Schedule body, params Fact[] condition);
+    public static Schedule Until(Schedule body, params Fact[] condition);                                    // R1b
+    /// A split step (§6.9.3). Run it once the facts its rules read have settled, as in
+    /// Saturate(Saturate(horn, lattice), Split(rule, inCase), rewrite): a split made before its domain narrowed opens
+    /// cases that go vacuous later, and its record keeps the key until the Run ends, so later steps do not split it
+    /// again more narrowly (D43).
+    public static Schedule Split(SplitRule rule, Schedule inCase);                                           // R3
+    public static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase);                           // R3
     public override string ToString();
 }
 
-// Scheduling/RunOptions.cs
+// Scheduling/RunOptions.cs  [R1a]
+/// Limits are per top-level Run, cases included, checked before every iteration and split step; a run overshoots a
+/// limit or a cancellation by at most one engine iteration or one lift (D42).
 public sealed class RunOptions
 {
     public static RunOptions Default { get; }
-    /// Rule iterations in every scope, cases included.
+    /// Engine iterations in every scope of the run, cases included; mirror syncs do not count.
     public int IterationLimit { get; init; } = 10_000;
-    public TimeSpan? TimeLimit { get; init; }
-    /// Sum of Version deltas over every scope the run iterates in.
-    public long ChangeLimit { get; init; } = long.MaxValue;
-    /// Top-level scope only; cases always stop.
+    /// Top-level scope only; cases always stop (D11).
     public bool StopOnContradiction { get; init; }
-    /// false: every rule matches in full every iteration (differential tests).
-    public bool SemiNaive { get; init; } = true;
-    public int CaseLimit { get; init; } = 64;
-    public int SplitDepthLimit { get; init; } = 4;
-    public LiftOptions Lift { get; init; } = LiftOptions.Default;
+    public TimeSpan? TimeLimit { get; init; }                                                                // R1b
+    /// Rows in the own layers of the top-level scope and of the run's live cases (the engine's row-count estimate).
+    public long? RowLimit { get; init; }                                                                     // R1b
+    /// Called on the run's thread after every step (§6.11). It may read the scopes of the run; any other scope call
+    /// from it throws InvalidOperationException.
+    public Action<RunStep>? Observer { get; init; }                                                          // R1b
+    /// Keep every step in RunReport.Steps.
+    public bool RecordSteps { get; init; }                                                                   // R1b
+    public int CaseLimit { get; init; } = 64;                                                                // R3
+    public int SplitDepthLimit { get; init; } = 4;                                                           // R3
+    public LiftOptions Lift { get; init; } = LiftOptions.Default;                                            // R3
 }
 
-// Scheduling/RunReport.cs
+// Scheduling/RunReport.cs  [R1a]
 public sealed class RunReport
 {
+    /// Engine iterations in every scope of the run, cases included; mirror syncs do not count.
     public int Iterations { get; }
-    /// The scope's Version moved.
+    /// An iteration, split step or lift of the run changed the top-level scope (the engine's change flags, §6.5.1).
     public bool Changed { get; }
-    /// Completed, and the run's last iteration or split step in this scope changed nothing.
+    /// Completed, and the run's last iteration or split step in the top-level scope changed nothing.
     public bool Saturated { get; }
     public RunStopReason StopReason { get; }
     public TimeSpan Elapsed { get; }
-    public int CasesOpened { get; }
+    /// Every rule that ran, cases included (decision 6: match multiplicity may differ from egglog's).
+    public IReadOnlyDictionary<Rule, RuleStatistics> Rules { get; }
+    /// The engine's search-and-apply, merge and rebuild times, summed over the run.
+    public TimeSpan SearchTime { get; }
+    public TimeSpan MergeTime { get; }
+    public TimeSpan RebuildTime { get; }
+    /// Every step, when RunOptions.RecordSteps is set; otherwise empty.
+    public IReadOnlyList<RunStep> Steps { get; }                                                             // R1b
+    public int CasesOpened { get; }                                                                          // R3
     /// Over CaseLimit, over SplitDepthLimit, or an empty element set (sound: fewer facts).
-    public int SplitsSkipped { get; }
+    public int SplitsSkipped { get; }                                                                        // R3
     /// Lifts computed (not skipped by the memo).
-    public int Lifts { get; }
+    public int Lifts { get; }                                                                                // R3
     /// Lift candidates dropped by CandidateLimit.
-    public long LiftRowsSkipped { get; }
-    /// Distinct projected matches applied, cases included.
-    public IReadOnlyDictionary<Rule, long> Matches { get; }
+    public long LiftRowsSkipped { get; }                                                                     // R3
     public override string ToString();
 }
 
-// Scheduling/RunStopReason.cs
-public enum RunStopReason { Completed, IterationLimit, TimeLimit, ChangeLimit, Contradiction }
+// Scheduling/RunStopReason.cs  [R1a]
+public enum RunStopReason
+{
+    Completed,
+    IterationLimit,
+    Contradiction,
+    TimeLimit,                                                                                               // R1b
+    RowLimit,                                                                                                // R1b
+}
 ```
 
-#### Cases/
+### 3.7 Cases/  [R3]
 
 ```csharp
-// Cases/CaseSet.cs
-/// Host-driven cases under one parent. Obligation: the cases cover the parent. Disposing disposes every case.
+// Cases/CaseSet.cs  [R3]
+/// Host-driven cases under one parent. Obligation: the cases cover the parent.
 public sealed class CaseSet : IDisposable
 {
     public Scope Parent { get; }
+    /// Live cases, in creation order. A case a lift finds contradictory is disposed and leaves the list.
     public IReadOnlyList<Scope> Cases { get; }
-    /// A new case child (IsCase = true).
+    /// A new case child (IsCase = true; it stops on contradiction). ArgumentException for another graph's tag.
     public Scope Add(ScopeTag? tag = null);
-    /// Lifts into Parent what every non-vacuous case proves (§3.9). InvalidOperationException with no cases. May be
-    /// called repeatedly.
-    public LiftReport Lift(LiftOptions? options = null);
+    /// Lifts into Parent what every non-vacuous case proves (§6.9.4), then disposes the vacuous cases.
+    /// InvalidOperationException with no cases. May be called repeatedly. Cancellation is checked between lift rounds.
+    public LiftReport Lift(LiftOptions? options = null, CancellationToken cancellationToken = default);
+    /// Never throws; disposes every case (D40).
     public void Dispose();
 }
 
-// Cases/LiftOptions.cs
+// Cases/LiftOptions.cs  [R3]
 public sealed class LiftOptions
 {
     public static LiftOptions Default { get; }
@@ -977,7 +1183,7 @@ public sealed class LiftOptions
     public int CandidateLimit { get; init; } = 64;
 }
 
-// Cases/LiftReport.cs
+// Cases/LiftReport.cs  [R3]
 public sealed class LiftReport
 {
     public int Rounds { get; }
@@ -994,42 +1200,58 @@ public sealed class LiftReport
     public long Values { get; }
     /// Candidate rows dropped by CandidateLimit.
     public long Skipped { get; }
+    public bool HitRoundLimit { get; }
     /// The parent's Version moved.
     public bool Changed { get; }
     public override string ToString();
 }
+
+// Cases/ScopeContradictedException.cs  [R3]
+/// A read or write that needs a model, on a case whose contradiction stopped it (D45).
+public sealed class ScopeContradictedException : InvalidOperationException
+{
+    public ScopeContradictedException(string scopePath);
+    public string ScopePath { get; }
+}
 ```
 
-#### Extraction/
+### 3.8 Extraction/
 
 ```csharp
-// Extraction/CostModel.cs
-/// Immutable. Head cost per constructor (default its declared Cost), optional per-row cost, value-column cost
-/// (default 1, as egglog's base_value_cost). All costs must be >= 0.
+// Extraction/CostModel.cs  [R1a]
+/// Immutable. Head cost per constructor (default: its declared cost), an optional per-row cost function, value costs
+/// (default 1, egglog's base_value_cost). All costs must be >= 0. Thread-safe.
 public sealed class CostModel
 {
     public static CostModel Default { get; }
     public CostModel With(ConstructorHandle head, long cost);
     public CostModel With(ConstructorHandle head, NodeCostFunction cost);
-    public CostModel WithValueCost(Func<ColumnType, ulong, long> cost);
+    public CostModel WithValueCost(ColumnType type, long cost);
+    public CostModel WithValueCost<T>(ColumnType<T> type, Func<T, long> cost);
+    /// Extraction may not use head's rows under this model.
     public CostModel Unextractable(ConstructorHandle head);
 }
 
-// Extraction/NodeCostFunction.cs
+// Extraction/NodeCostFunction.cs  [R1a]
+/// The cost of one row of a constructor, without its children. Pure; called once per row extraction reads; must not call
+/// into any graph.
 public delegate long NodeCostFunction(NodeView node);
 
-// Extraction/NodeView.cs
+// Extraction/NodeView.cs  [R1a]
 public readonly ref struct NodeView
 {
     public ConstructorHandle Head { get; }
     public int Arity { get; }
+    /// A key column, decoded; for a sort column, the class (origin: the extractor's scope).
     public T Get<T>(int column);
-    public ulong GetBits(int column);
+    public object Get(int column);
 }
 
-// Extraction/Extractor.cs
-/// Cheapest terms in one clean scope snapshot; reusable for many roots. Throws InvalidOperationException once the scope
-/// or any ancestor has changed (Version).
+// Extraction/Extractor.cs  [R1a]
+/// Cheapest terms in one scope as it is now; reusable for many roots. Reads, queries and writes that change nothing
+/// never invalidate it; a write that changes the scope, or a Run in it (or, from R2, in a non-frozen ancestor), may,
+/// and it then throws InvalidOperationException. Not thread-safe on a writable scope; on a frozen scope (R2) any number
+/// may run on any threads.
 public sealed class Extractor
 {
     public Scope Scope { get; }
@@ -1040,13 +1262,13 @@ public sealed class Extractor
     public bool TryGetCost<TSort>(TSort root, out long cost) where TSort : struct, ISort<TSort>;
 }
 
-// Extraction/ExtractedTerm.cs
+// Extraction/ExtractedTerm.cs  [R1a]
 /// One node of an extracted term; shared subterms are the same instance.
 public sealed class ExtractedTerm
 {
     public ConstructorHandle Head { get; }
-    /// Canonical in the extractor's scope.
-    public Id Class { get; }
+    /// Canonical in the extractor's scope, whose origin it carries.
+    public ClassId Class { get; }
     /// Tree cost.
     public long Cost { get; }
     public int Arity { get; }
@@ -1054,63 +1276,340 @@ public sealed class ExtractedTerm
     public bool IsChild(int index);
     public ExtractedTerm Child(int index);
     public T Value<T>(int index);
-    /// ExtractedTerm or the decoded value.
+    /// ExtractedTerm, or the decoded value.
     public object Argument(int index);
     public bool Mentions(ConstructorHandle head);
-    /// (StrEq "kind" "order")
+    /// Whether the head is head, binding its arguments: for translating a term into another language.
+    public bool TryMatch<TSort>(Constructor<TSort> head) where TSort : struct, ISort<TSort>;
+    public bool TryMatch<T1, TSort>(Constructor<T1, TSort> head, out ExtractedArgument<T1> a) where TSort : struct, ISort<TSort>;
+    public bool TryMatch<T1, T2, TSort>(Constructor<T1, T2, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b) where TSort : struct, ISort<TSort>;
+    public bool TryMatch<T1, T2, T3, TSort>(Constructor<T1, T2, T3, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b, out ExtractedArgument<T3> c) where TSort : struct, ISort<TSort>;
+    public bool TryMatch<T1, T2, T3, T4, TSort>(Constructor<T1, T2, T3, T4, TSort> head, out ExtractedArgument<T1> a, out ExtractedArgument<T2> b, out ExtractedArgument<T3> c, out ExtractedArgument<T4> d) where TSort : struct, ISort<TSort>;
+    /// egglog's extraction output: (StrEq "kind" "order")
+    public override string ToString();
+}
+
+// Extraction/ExtractedArgument{T}.cs  [R1a]
+/// One argument of an extracted node: a decoded value, or for a sort column the class and its extracted subterm.
+public readonly struct ExtractedArgument<T>
+{
+    /// The value, or for a sort column the class.
+    public T Value { get; }
+    /// The subterm for a sort column; null for a value column.
+    public ExtractedTerm? Term { get; }
     public override string ToString();
 }
 ```
 
-### 2.3 src/Eggnog internal types (one per file)
+### 3.9 Diagnostics/
 
 ```csharp
-// Values/
-internal sealed class CodecColumnType<T> : ColumnType<T> { public CodecColumnType(string name, IValueCodec<T> codec); }
-internal sealed class SortColumnType<TSort> : ColumnType<TSort> where TSort : struct, ISort<TSort> { public SortColumnType(string name); } // Kind Id
-internal sealed class Int64Codec : IValueCodec<long> { }        // unchecked((ulong)v)
-internal sealed class Int32Codec : IValueCodec<int> { }         // sign-extended
-internal sealed class BooleanCodec : IValueCodec<bool> { }      // 0 / 1
-internal sealed class DoubleCodec : IValueCodec<double> { }     // -0.0 -> +0.0; NaN -> ArgumentException; raw bits
-internal sealed class StringCodec : IValueCodec<string> { }     // ordinal interning
-internal sealed class EnumCodec<TEnum> : IValueCodec<TEnum> where TEnum : struct, Enum { }
-internal sealed class InternedCodec<T> : IValueCodec<T> where T : notnull { public InternedCodec(IEqualityComparer<T>? equality, IComparer<T>? order); }
-internal sealed class ValueSetCodec<T> : IValueCodec<ValueSet<T>> where T : notnull { }
-internal sealed class ValueInterner<T> where T : notnull
+// Diagnostics/RuleStatistics.cs  [R1a]
+/// What one rule did during a run or a step (D41).
+public sealed class RuleStatistics
 {
-    public ValueInterner(IEqualityComparer<T> comparer);
-    public ulong Intern(T value);
-    public bool TryGet(T value, out ulong handle);
-    public T this[ulong handle] { get; }
-    public int Count { get; }
-}
-internal sealed class ChunkedList<T> { public int Count { get; } public T this[int index] { get; } public int Add(T item); } // lock-free reads
-internal static class ValueSetOrder<T> { public static IComparer<T> Comparer { get; } }
-internal static class LatticeAdapter<T>
-{
-    public static MergeFunction Merge(ValueLattice<T> lattice, ColumnType<T> type);
-    public static MergeFunction? CaseJoin(ValueLattice<T> lattice, ColumnType<T> type);
+    public Rule Rule { get; }
+    /// The engine's match count (decision 6).
+    public long Matches { get; }
+    /// The engine's search-and-apply time for the rule's variants.
+    public TimeSpan SearchTime { get; }
+    public int IterationsWithMatches { get; }
+    /// The rule's query plan as the engine reports it; null unless EGraphOptions.RecordPlans is set.
+    public string? Plan { get; }                                                                             // R1b
+    public override string ToString();
 }
 
-// Terms/
+// Diagnostics/RunStepKind.cs  [R1b]
+public enum RunStepKind
+{
+    Iteration,
+    MirrorSync,                                                                                              // R2
+    SplitStep,                                                                                               // R3
+    Lift,                                                                                                    // R3
+}
+
+// Diagnostics/RunStep.cs  [R1b]
+/// One step of a run, delivered to RunOptions.Observer and kept with RunOptions.RecordSteps (§6.11).
+public sealed class RunStep
+{
+    public RunStepKind Kind { get; }
+    /// The scope the step ran in; a case is disposed once the run ends.
+    public Scope Scope { get; }
+    public string ScopePath { get; }
+    /// Position among the run's steps, from 0.
+    public int Index { get; }
+    public bool Changed { get; }
+    public TimeSpan Elapsed { get; }
+    /// For an iteration: the rules that matched in it.
+    public IReadOnlyList<RuleStatistics> Rules { get; }
+    /// For a split step.
+    public int CasesOpened { get; }                                                                          // R3
+    /// "#3 iteration root/schema#1/query#2 changed: lower uuid 1, and commutes 4"
+    public override string ToString();
+}
+
+// Diagnostics/TableRow.cs  [R1b]
+/// One decoded row of a table, from Scope.Rows.
+public sealed class TableRow
+{
+    public TableHandle Table { get; }
+    /// Decoded keys; a sort cell is its ClassId (origin: the scope read).
+    public IReadOnlyList<object> Keys { get; }
+    /// The value or class; null for a relation.
+    public object? Output { get; }
+    /// (present "kind"), (dom "kind") = (set-of "a" "b"), (StrEq "kind" "a") = #17
+    public override string ToString();
+}
+```
+
+---
+
+## 4. Internal types
+
+One type per file, `internal`, namespace `Eggnog`, XML docs on every member (conventions). Engine types are written
+`Relations.X` (D29). Milestones as in §3. A type tagged "R1, deleted in R2" exists only while the root runs on a bare
+`Database`.
+
+### 4.1 Graph/
+
+```csharp
+// Graph/EngineScope.cs  [R1a]
+/// The engine side of one Scope (D28). Every member runs while the scope's ScopeGuard is held, or on a frozen scope.
+internal abstract class EngineScope
+{
+    public abstract long Version { get; }
+    public abstract bool IsContradictory { get; }
+    /// A case whose stop flag is set (D45). Always false in R1.
+    public abstract bool IsStopped { get; }                                                        // R3
+    /// Rows in this scope's own layers (Database.TotalSizeEstimate), for RowLimit.
+    public abstract long OwnRowCount { get; }                                                      // R1b
+    /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current.
+    public abstract void EnsureClean();
+    /// The engine variants to run for these rules in this scope, lowered on demand (§6.4.4).
+    public abstract LoweredRule[] PrepareRules(IReadOnlyList<CompiledRule> rules, bool semiNaive);
+    /// One variant of a program (a rule, a query, a split matcher or a copy rule) for this scope: R1 lowers it with the
+    /// canonical forms of writtenIdConstants (§6.4.5); R2 with the written values.
+    public abstract LoweredRule PrepareVariant(RuleVariants variants, uint[] writtenIdConstants, bool semiNaive);
+    /// One engine iteration (§6.5.1). Lets Relations.PanicException through.
+    public abstract EngineIteration RunRules(ReadOnlySpan<Relations.EGraphRuleId> rules);
+    /// Mints a class id for a new term of a host batch (§6.6.1).
+    public abstract uint FreshId();
+    /// Stages a row (keys then output; relation rows end with the unit value). Sort cells must be canonical or fresh.
+    public abstract void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row);
+    public abstract void StageUnion(uint a, uint b);
+    /// Merges what was staged and rebuilds. Returns whether the scope changed. Lets Relations.PanicException through
+    /// for a failure a merge recorded.
+    public abstract bool Flush();
+    public abstract uint Find(uint id);
+    /// Key sort cells are canonicalized here; the output, if a class, is canonical.
+    public abstract bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output);
+    public abstract long TableSize(Relations.FunctionId function);                                 // R1b
+    public abstract void ForEach(Relations.FunctionId function, Relations.FunctionRowCallback visit); // R1b
+    public abstract Relations.Extractor CreateExtractor(Relations.ExtractionSchema schema, Relations.CostModel costs);
+    /// Runs a query's naive engine rule against the scope's current contents (D34, D49).
+    public abstract void RunQuery(LoweredRule query);                                              // R1b
+    public abstract bool IsFrozen { get; }                                                         // R2
+    public abstract bool IsDisposed { get; }                                                       // R2
+    public abstract EngineScope CreateChild(Relations.ContextOptions options);                     // R2
+    /// Freezes, pre-planning exactly planRules (E10).
+    public abstract void Freeze(IReadOnlyCollection<Relations.EGraphRuleId> planRules);            // R2
+    public abstract void Dispose();                                                                // R2
+}
+
+// Graph/RootEngineScope.cs  [R1a, deleted in R2]
+/// The root over the bridge's egglog-compatible root API on a bare Database (§6.4.5, §6.6.5).
+internal sealed class RootEngineScope : EngineScope
+{
+    public RootEngineScope(EGraph graph, Relations.EGraph engine);
+    // fields: the graph's engine lock (§6.12), Relations.ExecutionState? batch, Relations.TableAction?[] actions
+    // (by FunctionId index), Relations.UnionAction union.
+}
+
+// Graph/ContextEngineScope.cs  [R2]
+/// One EGraphContext (colors §10), for every scope including the root.
+internal sealed class ContextEngineScope : EngineScope
+{
+    public ContextEngineScope(EGraph graph, Relations.EGraphContext context);
+    public Relations.EGraphContext Context { get; }
+}
+
+// Graph/EngineIteration.cs  [R1a]
+internal readonly record struct EngineIteration(bool Changed, bool RebuildChanged, bool Stopped,
+    Relations.RuleSetReport Report, TimeSpan RebuildTime);
+
+// Graph/ScopeGuard.cs  [R1a]
+/// The rule layer's guard of one thread domain (D47): a Relations.ThreadAffinityGuard, the releases deferred until the
+/// domain's current call ends (D40), and whether a run observer is running.
+internal sealed class ScopeGuard
+{
+    /// Re-entrant on the owning thread; InvalidOperationException naming the scope on another thread.
+    public void Enter(Scope scope);
+    /// At depth 0, runs the deferred releases.
+    public void Exit();
+    public bool IsHeldByAnotherThread { get; }
+    public bool InObserver { get; set; }
+    public void DeferRelease(Scope scope);
+}
+
+// Graph/EngineCallMarker.cs  [R1a]
+/// Marks the current thread as running a user delegate ([ThreadStatic] depth): the call sites that invoke primitives,
+/// filters, lattice merges and cost functions set it around each invocation, on whatever thread runs it, so a delegate
+/// that calls into a graph is refused (D47).
+internal static class EngineCallMarker
+{
+    public static bool IsActive { get; }
+    public static void Enter();
+    public static void Exit();
+}
+
+// Graph/ScopeOrigin.cs  [R1a]
+/// Where a class value came from (D39): a scope, or one host batch of a scope.
+internal sealed class ScopeOrigin
+{
+    public ScopeOrigin(EGraph graph, ScopeOrigin? parent, string path, bool isBatch);
+    public EGraph Graph { get; }
+    /// A scope's: its parent scope's origin (null at the root). A batch's: its scope's origin.
+    public ScopeOrigin? Parent { get; }
+    public string Path { get; }
+    public bool IsBatch { get; }
+    /// Batches: set when the batch commits.
+    public bool Committed { get; set; }
+    /// Scopes: set by Dispose.
+    public bool Disposed { get; set; }
+}
+
+// Graph/ClassChecks.cs  [R1a]
+internal static class ClassChecks
+{
+    /// The cell of value, or ArgumentException unless value may be used in scope (§6.6.7).
+    public static uint Require(Scope scope, ClassId value, string parameter, ScopeOrigin? openBatch = null);
+    /// Whether a rule owned by owner (null: global) may hold a class constant of origin (§6.3, step 3).
+    public static bool AllowedInRule(Scope? owner, ScopeOrigin origin);
+}
+
+// Graph/ScopeRuntime.cs  [R1a]
+/// Per-scope buffers that external functions write during engine calls: query and split-matcher tuples, and the first
+/// evaluation failure. Thread-safe (rule tasks may run in parallel). R1: the root's, held by the graph. R2: one per
+/// context, made by the graph's ContextLocalSlot<ScopeRuntime> (colors §10.1); Owner maps the context to its Scope.
+internal sealed class ScopeRuntime
+{
+    /// R1: graph.Root's runtime. R2: (state.View?.Owner.Owner?.Host as EGraphContext)?.GetLocal(graph.RuntimeSlot).
+    public static ScopeRuntime Of(EGraph graph, Relations.ExecutionState state);
+    public Scope? Owner { get; set; }
+    public bool TryRecord(EvaluationFailure failure);     // the first one wins
+    public EvaluationFailure? TakeFailure();
+    public TupleBuffer? QueryMatches { get; set; }        // set by QueryRunner and RuleSplitSource for one engine call
+    public bool StopAtFirstQueryMatch { get; set; }
+}
+
+// Graph/TupleBuffer.cs  [R1a]
+/// A set of fixed-width uint tuples; Add is thread-safe; after SortByContent, indexing is in lexicographic order.
+internal sealed class TupleBuffer
+{
+    public TupleBuffer(int width);
+    public int Width { get; }
+    public int Count { get; }
+    public bool Add(ReadOnlySpan<uint> tuple);            // false if already present
+    public ReadOnlySpan<uint> this[int index] { get; }
+    public void SortByContent();
+    public void Clear();
+}
+
+// Graph/EvaluationFailure.cs  [R1a]
+internal sealed record EvaluationFailure(string? RuleName, string What, string? Bindings, Exception? Exception);
+
+// Graph/NameRules.cs  [R1a]
+internal static class NameRules
+{
+    /// Non-empty; no '@'; not starting with '$'. Uniqueness is checked by the caller under the definition lock.
+    public static void ValidateTableName(string name, string parameter);
+    public static void ValidateName(string name, string parameter);
+}
+
+// Graph/ScopeResolver.cs  [R2]
+internal static class ScopeResolver
+{
+    public static Scope? TryResolve(Scope from, ScopeTag tag);
+    /// InvalidOperationException: "Rule 'declared tautology' reads scope 'schema', but 'root/query#4' has no
+    /// ancestor tagged 'schema'."
+    public static Scope Resolve(Scope from, ScopeTag tag, string reader);
+}
+```
+
+### 4.2 Values/
+
+`ColumnType` gains internal members: `Relations.ColumnTy EngineType`, `Relations.Sort ExtractionSort`,
+`uint EncodeObject(object)`, `bool TryEncodeExistingObject(object, out uint)` and `object DecodeObject(uint, Scope)`
+(a sort cell decodes to a class with the scope as origin). `ColumnType<T>` gains internal abstract members:
+`uint Encode(T)`, `bool TryEncodeExisting(T, out uint)` and `T Decode(uint, Scope)`.
+
+```csharp
+// Values/SortColumnType{TSort}.cs  [R1a]
+/// A sort: cells are class ids (ColumnTy.Id); Encode is ClassChecks.Require in the scope at hand; Decode makes a
+/// ClassId with the scope's origin; the extraction sort is Relations.EqSort(name).
+internal sealed class SortColumnType<TSort> : ColumnType<TSort> where TSort : struct, ISort<TSort>
+{ public SortColumnType(string name); }
+
+// Values/BaseColumnType{TCodec,T}.cs  [R1a]
+/// A value type over an engine codec: Encode = BaseValues.Get<TCodec, T>, Decode = Unwrap, TryEncodeExisting =
+/// BaseValues.TryGetExisting (E1); the extraction sort is Relations.BaseSort<TCodec, T>(name, format, order).
+/// Serves string, bool, long, ValueSet<T> (over InternedCodec<ValueSet<T>>) and registered types (InternedCodec<T>).
+internal sealed class BaseColumnType<TCodec, T> : ColumnType<T>
+    where TCodec : struct, Relations.IBaseValueCodec<T> where T : notnull, IEquatable<T>
+{ public BaseColumnType(string name, Relations.BaseValues values, Func<T, string> format, IComparer<T> order); }
+
+// Values/WidenedColumnType{T}.cs  [R1a]
+/// int and enums, stored as the engine's i64 (Int64Codec) through widen and narrow functions (D20). Its extraction
+/// sort is a Relations.BaseSort<Int64Codec, long> under this type's name, formatting through narrow.
+internal sealed class WidenedColumnType<T> : ColumnType<T> where T : notnull
+{ public WidenedColumnType(string name, Relations.BaseValues values, Func<T, long> widen, Func<long, T> narrow, Func<T, string> format); }
+
+// Values/DoubleColumnType.cs  [R1a]
+/// double over DoubleCodec; Encode maps −0.0 to +0.0 and throws ArgumentException for NaN (D20).
+internal sealed class DoubleColumnType : ColumnType<double> { public DoubleColumnType(Relations.BaseValues values); }
+
+// Values/UnitColumnType.cs  [R1a]
+/// The unit value type of relation outputs (UnitCodec; its single value is 0). Not reachable through ValueStore.TypeOf.
+internal sealed class UnitColumnType : ColumnType<ValueTuple> { public UnitColumnType(Relations.BaseValues values); public uint Unit { get; } }
+
+// Values/LatticeMerge{T}.cs  [R1a]
+/// The merge external of a function with a lattice: [old, new] → Encode(Merge(Decode(old), Decode(new))). An
+/// exception is recorded (D31) and reported with ExecutionState.ReportFailure; the old value is returned.
+internal sealed class LatticeMerge<T> : Relations.ExternalFunction
+{ public LatticeMerge(EGraph graph, string functionName, ValueLattice<T> lattice, ColumnType<T> type); }
+
+// Values/CaseJoinAdapter{T}.cs  [R3]
+internal static class CaseJoinAdapter<T>
+{ public static Func<uint, uint, uint>? Create(ValueLattice<T> lattice, ColumnType<T> type); }
+
+// Values/ValueSetOrder{T}.cs  [R1a]
+/// Ordinal for strings, Comparer<T>.Default otherwise.
+internal static class ValueSetOrder<T> { public static IComparer<T> Comparer { get; } }
+```
+
+### 4.3 Terms/
+
+These are v1's term and fact representations, unchanged except that constants hold CLR values instead of bits and the
+untyped forms are internal (D13). Each is one file (`Terms/TermShapeKind.cs`, `Terms/TermShape.cs`, …).
+
+```csharp
 internal enum TermShapeKind { Variable, Constant, Application, Computation }
 internal readonly struct TermShape
 {
     public TermShapeKind Kind { get; }
     public Type ClrType { get; }
-    public string? Name { get; }
-    public object? Owner { get; }
-    public object? Constant { get; }
+    public string? Name { get; }                // variables
+    public object? Owner { get; }               // variables: the builder
     public ColumnType? ConstantType { get; }
-    public ulong ConstantBits { get; }
-    public TableHandle? Table { get; }
+    public object? Constant { get; }
+    public TableHandle? Table { get; }          // applications (possibly scoped, R2)
     public Primitive? Primitive { get; }
     public Term[] Arguments { get; }
 }
 // every Term overrides: internal abstract TermShape Shape { get; }
 internal sealed class ConstantTerm<T> : Term<T> { public ConstantTerm(T value); }
-internal sealed class BitsConstantTerm : Term { public BitsConstantTerm(ColumnType type, ulong bits); }
-internal sealed class ApplicationTerm<T> : Term<T> { public ApplicationTerm(TableHandle table, Term[] arguments); }
+internal sealed class UntypedConstantTerm : Term { public UntypedConstantTerm(ColumnType type, object value); }
+internal sealed class ApplicationTerm<T> : Term<T> { public ApplicationTerm(TableHandle table, Term[] arguments); }    // functions
 internal sealed class UntypedApplicationTerm : Term { public UntypedApplicationTerm(TableHandle table, Term[] arguments); }
 internal sealed class ComputeTerm<T> : Term<T> { public ComputeTerm(Primitive primitive, Term[] arguments); }
 internal sealed class UntypedComputeTerm : Term { public UntypedComputeTerm(Primitive primitive, Term[] arguments); }
@@ -1122,867 +1621,1863 @@ internal sealed class EqualityFact : Fact { public Term Left { get; } public Ter
 internal sealed class NotEqualFact : Fact { public Term Left { get; } public Term Right { get; } }
 internal sealed class ExistsFact : Fact { public Term Application { get; } }
 internal sealed class FilterFact : Fact { public Term Condition { get; } }
-internal sealed class ScopedFact : Fact { public ScopeTag Scope { get; } public Fact[] Facts { get; } }
+internal sealed class ScopedFact : Fact { public ScopeTag Scope { get; } public Fact[] Facts { get; } }        // R2
 internal static class PrimitiveCache<T> where T : notnull { /* static readonly fields backing Primitives.*<T>() */ }
-// Primitive declares: internal abstract ulong InvokeCore(ReadOnlySpan<ulong> arguments, ColumnType[] parameters, ColumnType result);
+// Primitive declares: internal abstract uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result);
+// and internal bool IsLambda (it renders as <lambda>).
+// Internal members of public types (D13): RelationHandle.Apply, RelationHandle.InScope, FunctionHandle.Apply,
+// FunctionHandle.InScope, ConstructorHandle.Apply, Term.Constant, Fact.Equal, Fact.NotEqual, Compute.Of(Primitive, …),
+// RuleBuilder.Var(ColumnType, …), QueryBuilder.Var(ColumnType, …), QueryMatch.Get(Term), and the untyped
+// EGraph.DefineRelation/DefineFunction/DefineConstructor overloads taking IReadOnlyList<ColumnType>.
+```
 
-// Engine/
-internal sealed class BoundPrimitive
-{
-    public BoundPrimitive(Primitive primitive, ColumnType[] parameters, ColumnType result);
-    public Primitive Primitive { get; }
-    /// Decode, call, encode (interns); a bool result is 0/1.
-    public ulong Invoke(ReadOnlySpan<ulong> arguments);
-}
-internal enum TermRefKind { Register, Constant }
-internal readonly record struct TermRef(TermRefKind Kind, int Index);
-internal readonly record struct ConstantSpec(ColumnType Type, ulong Bits, int Slot); // Id constants canonicalized per run in Slot
-internal sealed class AtomSpec { public int Ordinal; public TableHandle Table; public int Slot; public TermRef[] Columns; }
-internal sealed class ComputeSpec { public BoundPrimitive Primitive; public TermRef[] Arguments; public int Target; } // Target -1: filter
-internal sealed class BodyDraft
-{
-    public BodyDraft(EGraph graph, string name, object owner);
-    public Var<T> AddVariable<T>(string name);
-    public Term AddVariable(ColumnType type, string name);
-    public void AddClauses(IEnumerable<Fact> facts);
-    public void AddFilter(Term condition);
-}
-internal static class BodyCompiler
-{
-    /// Normalises, checks (§3.3), plans (§3.4).
-    public static CompiledBody Compile(BodyDraft draft, ISet<int> headRegisters);
-}
-internal sealed class CompiledBody
+### 4.4 Rules/ (compilation, programs, lowering)
+
+```csharp
+// Rules/RuleDraft.cs  [R1a]
+/// What a RuleBuilder, QueryBuilder or SplitBuilder collected, before any check.
+internal sealed class RuleDraft
 {
     public string Name { get; }
-    public int RegisterCount { get; }
-    public ColumnType[] RegisterTypes { get; }
-    public string[] RegisterNames { get; }
-    public int[] NamedRegisters { get; }
-    public int[] RegisterHomeSlot { get; }         // -1 for value registers
-    public AtomSpec[] Atoms { get; }
-    public ComputeSpec[] Computes { get; }
-    public ConstantSpec[] Constants { get; }
-    public ScopeTag?[] Slots { get; }               // slot 0 = null = the running scope
-    public int[] IdConstantIndexes { get; }
-    public JoinPlan[] Plans { get; }                // Plans[i] focuses Atoms[i]; one plan (FocusAtom -1) when there are no atoms
+    public object Owner { get; }                              // the builder; its variables carry it
+    public List<(string Name, ColumnType Type, Term Variable)> Variables { get; }
+    public List<Fact> Body { get; }                           // When facts and Where filters, in call order
+    public List<HeadItem> Head { get; }                       // in call order
+    public bool Naive { get; set; }
+    public ScopeTag? Erasing { get; set; }                    // R2
+    public string? OwnFactsReason { get; set; }               // R2
 }
-internal enum StepKind { Scan, ScanColumn, Lookup, Contains, Filter, LetBind, LetCheck, NotEqual }
-internal enum ColumnOpKind { Skip, Bind, Check, CheckConstant }
-internal readonly record struct ColumnOp(ColumnOpKind Kind, int Index);
-internal sealed class PlanStep
+
+// Rules/HeadItem.cs  [R1a]
+internal readonly record struct HeadItem(HeadItemKind Kind, Fact? Fact, Term? Variable, Term? Left, Term? Right);
+
+// Rules/HeadItemKind.cs  [R1a]
+internal enum HeadItemKind { Then, Make, Rewrite }
+
+// Rules/RuleCompiler.cs  [R1a]
+/// Checks and normalizes a draft into a RuleProgram (§6.3). Every error is a RuleDefinitionException naming the rule.
+internal static class RuleCompiler
 {
-    public StepKind Kind;
-    public int Atom;
-    public int Slot;
-    public TableHandle? Table;
-    public int IndexColumn;
-    public TermRef IndexSource;
-    public TermRef[] KeySources;
-    public ColumnOp[] Columns;
-    public ColumnOp Output;
-    public ComputeSpec? Compute;
-    public TermRef Left;
-    public TermRef Right;
+    public static CompiledRule Compile(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner);
+    public static CompiledQuery CompileQuery(EGraph graph, RuleDraft draft);                                  // R1b
+    public static SplitProgram CompileSplit(EGraph graph, RuleDraft draft, Term setVariable, Term elementVariable,
+        IReadOnlyList<Term> key, IReadOnlyList<Fact> assumptions);                                              // R3
 }
-internal sealed class JoinPlan { public int FocusAtom { get; } public PlanStep[] Steps { get; } }
-internal static class JoinPlanner { public static JoinPlan[] PlanAll(CompiledBody body); }
-internal sealed class Matcher
+
+// Rules/RuleProgram.cs  [R1a]
+/// The engine-independent normal form of a rule: body registers, atoms, steps, head operations.
+internal sealed class RuleProgram
 {
-    public Matcher(CompiledBody body);  // allocates registers, key/arg buffers, one RowAction per step, once
-    public void Run(JoinPlan plan, Context[] slots, ulong[] constants, long since, MatchSink sink); // since applies to the focus atom
-}
-internal abstract class MatchSink { public abstract void Accept(ReadOnlySpan<ulong> registers); public virtual bool IsSatisfied => false; }
-internal sealed class MatchBuffer : MatchSink
-{
-    public MatchBuffer(int[] projection);   // deduplicates projected tuples
-    public int Count { get; }
-    public ReadOnlySpan<ulong> this[int index] { get; }
-    public void Clear();
-}
-internal sealed class CountingSink : MatchSink { public CountingSink(int[] projection, bool stopAtFirst); public long Count { get; } }
-internal sealed class CallbackSink : MatchSink { public CallbackSink(CompiledBody body, QueryCallback callback); }
-internal sealed class RowArena
-{
-    public RowArena(int width);
-    public int Count { get; }
-    public bool TryAdd(ReadOnlySpan<ulong> row, out int index);
-    public ReadOnlySpan<ulong> this[int index] { get; }
-    public void Clear();
-}
-internal enum ActionKind { Compute, GetOrAdd, Insert, InsertWithOutput, Union, Callback }
-internal sealed class ActionStep
-{
-    public ActionKind Kind;
-    public TableHandle? Table;
-    public TermRef[] Inputs;
-    public int Output;
-    public BoundPrimitive? Primitive;
-    public RuleCallback? Callback;
-}
-internal sealed class ActionProgram
-{
-    public int RegisterCount { get; }
-    public int[] Projection { get; }
-    public ActionStep[] Steps { get; }
-    public bool HasCallback { get; }
+    public string Name { get; }
+    public ProgramRegister[] Registers { get; }               // body registers first, then head registers
+    public ProgramAtom[] Atoms { get; }                       // in flattening order: the engine's variant order
+    public ProgramStep[] Steps { get; }                       // lets, filters and not-equals, in a valid order
+    public HeadOp[] Head { get; }
+    public uint[] WrittenIdConstants { get; }                 // class constants, by IdConstant operand index
+    public ScopeOrigin[] IdConstantOrigins { get; }           // their origins (D39), same indexing
+    public int[] NamedRegisters { get; }                      // declared body variables, then Make variables
+    public IReadOnlyList<ScopeTag> ReadScopes { get; }        // R2
     public bool WritesAnalysis { get; }
-    public void Execute(Scope target, ReadOnlySpan<ulong> match, ulong[] registers, string ruleName);
 }
-internal static class ActionCompiler { public static ActionProgram Compile(CompiledBody body, IReadOnlyList<object> headClauses, string ruleName); }
-internal readonly record struct RuleProgress(long Since, ulong[] Constants);
-internal static class RuleRunner { public static bool RunIteration(ScheduleExecutor executor, Scope scope, IReadOnlyList<Rule> rules); }
-internal static class ScopeResolver
+
+// Rules/ProgramRegister.cs  [R1a]
+internal readonly record struct ProgramRegister(ColumnType Type, string Name, RegisterKind Kind);
+// Rules/RegisterKind.cs  [R1a]
+internal enum RegisterKind { Declared, Fresh, Head }
+// Rules/Operand.cs  [R1a]
+internal readonly record struct Operand(OperandKind Kind, int Index, ColumnType Type, uint Bits);
+// Rules/OperandKind.cs  [R1a]
+internal enum OperandKind { Register, Constant, IdConstant }
+// Rules/ProgramAtom.cs  [R1a]
+/// An atom over table. For a scoped atom (R2), Table is the mirror's internal handle and Scope the tag, kept for
+/// rendering. Columns are the keys then the output; a relation has no output column here (lowering appends the unit
+/// constant).
+internal sealed record ProgramAtom(TableHandle Table, ScopeTag? Scope, Operand[] Columns);
+// Rules/ProgramStep.cs  [R1a]
+internal sealed record ProgramStep(ProgramStepKind Kind, Primitive? Primitive, Operand[] Arguments, Operand Target);
+// Rules/ProgramStepKind.cs  [R1a]
+internal enum ProgramStepKind { Let, Filter, NotEqual }
+// Rules/HeadOp.cs  [R1a]
+internal sealed record HeadOp(HeadOpKind Kind, TableHandle? Table, Operand[] Inputs, int Target, Primitive? Primitive);
+// Rules/HeadOpKind.cs  [R1a]
+internal enum HeadOpKind { Insert, Write, GetOrAdd, Union, Compute, Collect }    // Collect: queries and split matchers
+
+// Rules/CompiledRule.cs  [R1a]
+internal sealed class CompiledRule
 {
-    public static Scope? TryResolve(Scope from, ScopeTag tag);
-    public static Scope Resolve(Scope from, ScopeTag tag, string owner);
+    public Rule Rule { get; }
+    public RuleProgram Program { get; }
+    public RuleVariants Variants { get; }
+    /// Graph-unique, for descriptions.
+    public int Serial { get; }
 }
-internal static class TermEvaluator
+
+// Rules/RuleVariants.cs  [R1a]
+/// The engine variants of one compiled rule, query, split matcher or copy rule (D36). Thread-safe: double-checked under
+/// a per-rule lock.
+internal sealed class RuleVariants
 {
-    public static ulong Write(Scope scope, Term term);
-    public static void Assume(Scope scope, Fact fact);
-    public static bool TryRead(Scope scope, Term term, out ulong bits);  // never creates, never interns; classes canonical in scope
+    /// The variant for the mode, lowered with constants when it does not exist or was lowered with other constants
+    /// (the stale variant is freed first: R1 only, D3).
+    public LoweredRule Get(EGraph graph, bool semiNaive, ReadOnlySpan<uint> constants);
+    public IEnumerable<LoweredRule> All { get; }
+    /// The default variant (semi-naive, or naive for a naive program), for E10's plan list; null before it exists.
+    public LoweredRule? Default { get; }
+    /// Frees every variant (FreeRule, then FreeExternalFunction of its owned functions).
+    public void Free(EGraph graph);
+}
+
+// Rules/LoweredRule.cs  [R1a]
+internal sealed class LoweredRule
+{
+    public Relations.EGraphRuleId Id { get; }
+    /// Unique; keys the engine's statistics (§6.4.3).
+    public string Description { get; }
+    public bool SemiNaive { get; }
+    /// The values IdConstant operands were lowered with.
+    public uint[] Constants { get; }
+    /// Call sites and collectors, freed with the variant.
+    public Relations.ExternalFunctionId[] Owned { get; }
+    /// The rule (null for a query, a split matcher or a copy rule).
+    public Rule? Rule { get; }
+    /// The collector of a query or split matcher.
+    public MatchCollector? Collector { get; }
+}
+
+// Rules/RuleLowering.cs  [R1a]
+/// Builds one engine rule from a program with EGraphRuleBuilder (§6.4.2).
+internal static class RuleLowering
+{
+    public static LoweredRule Lower(EGraph graph, RuleProgram program, Rule? rule, bool semiNaive,
+        ReadOnlySpan<uint> constants, string description);
+}
+
+// Rules/PrimitiveCall.cs  [R1a]
+/// A let or head-compute call site: decode, invoke, encode. On an exception: record, ReportFailure, return false.
+internal sealed class PrimitiveCall : Relations.ExternalFunction
+{ public PrimitiveCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, ColumnType result, string[] argumentNames); }
+
+// Rules/FilterCall.cs  [R1a]
+/// A boolean filter call site: produces the unit value when the primitive returns true, nothing when it returns false.
+internal sealed class FilterCall : Relations.ExternalFunction
+{ public FilterCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, string[] argumentNames); }
+
+// Rules/NotEqualFunction.cs  [R1a]
+/// [a, b] → unit when a != b as raw cells (canonical classes or canonical values), nothing otherwise. One per graph.
+internal sealed class NotEqualFunction : Relations.ExternalFunction { public NotEqualFunction(uint unit); }
+
+// Rules/MatchCollector.cs  [R1b]
+/// The head action of a query or a split matcher: adds its arguments to ScopeRuntime.Of(graph, state).QueryMatches and
+/// produces unit. For a query asked with Any, triggers early stop after the first match. Stages nothing.
+internal sealed class MatchCollector : Relations.ExternalFunction
+{ public MatchCollector(EGraph graph, int width, uint unit); }
+
+// Rules/CompiledQuery.cs  [R1b]
+internal sealed class CompiledQuery
+{
+    public Query Query { get; }
+    public RuleProgram Program { get; }
+    public RuleVariants Variants { get; }                     // the naive variant only
+    /// Calls in progress; Query.Dispose frees the variants when it reaches zero (D49).
+    public int Users { get; }
+    public void Acquire();
+    public void Release();
+}
+```
+
+### 4.5 Host/
+
+```csharp
+// Host/HostBatch.cs  [R1a]
+/// One host write batch (D30): Make, Assume and Union are batches of one call; Scope.Write and ScopeWriter make larger
+/// ones. Each call is planned as it is made (reads only, plus fresh ids); Commit stages and flushes.
+internal sealed class HostBatch
+{
+    public HostBatch(Scope scope);
+    /// The batch's origin (D39): values its Make calls return are valid once it commits.
+    public ScopeOrigin Origin { get; }
+    /// A ground term's class: an existing class (TryLookup), or a fresh id minted now for each new subterm (FreshId),
+    /// memoised by (head, keys). ArgumentException for a term that is not ground or not writable.
+    public uint PlanTerm(Term term);
+    /// The host-write fact table, §6.6.2. Facts that already hold plan nothing.
+    public void PlanFact(Fact fact);
+    /// Plans nothing when the classes are already equal.
+    public void PlanUnion(uint a, uint b);
+    /// Nothing to stage: every fact held already.
+    public bool IsEmpty { get; }
+    /// Stages new terms' rows in post-order, then rows, then unions; flushes; commits Origin. Does nothing when IsEmpty.
+    public bool Commit();
+}
+
+// Host/PendingTerm.cs  [R1a]
+internal sealed record PendingTerm(ConstructorHandle Head, uint[] Keys, uint Id);
+
+// Host/TermReader.cs  [R1a]
+/// Host reads (§6.6.3): never create, never intern. Scoped handles read the resolved scope (R2).
+internal static class TermReader
+{
+    public static bool TryRead(Scope scope, Term term, out uint cell);
     public static bool Check(Scope scope, Fact fact);
 }
+
+// Host/QueryRunner.cs  [R1b]
+internal static class QueryRunner
+{
+    /// Runs the query in scope (D34, D49); returns the distinct full bindings, canonical and sorted by content.
+    public static TupleBuffer Run(Scope scope, CompiledQuery query, bool stopAtFirst);
+}
+
+// Host/RowReader.cs  [R1b]
+/// Scope.CountRows and Scope.Rows (§6.11).
+internal static class RowReader
+{
+    public static long Count(Scope scope, TableHandle table);
+    public static IReadOnlyList<TableRow> Read(Scope scope, TableHandle table);
+}
+```
+
+### 4.6 Scheduling/
+
+```csharp
+// Each schedule node implements
+//   internal abstract bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled);
+//   internal abstract void Collect(ISet<Ruleset> rulesets, ISet<SplitRule> splits);
+// Scheduling/RunSchedule.cs, RepeatSchedule.cs, SaturateSchedule.cs, SequenceSchedule.cs  [R1a]; UntilSchedule.cs  [R1b]
+internal sealed class RunSchedule : Schedule { public Ruleset[] Rulesets { get; } }
+internal sealed class RepeatSchedule : Schedule { public int Times { get; } public Schedule[] Steps { get; } }
+internal sealed class SaturateSchedule : Schedule { public Schedule[] Steps { get; } }
+internal sealed class SequenceSchedule : Schedule { public Schedule[] Steps { get; } }
+internal sealed class UntilSchedule : Schedule { public Schedule Body { get; } public Fact[] Condition { get; } }
+// Scheduling/SplitSchedule.cs  [R3]
+internal sealed class SplitSchedule : Schedule { public SplitRule[] Rules { get; } public Schedule InCase { get; } }
+
+// Scheduling/ScheduleExecutor.cs  [R1a]
+internal sealed class ScheduleExecutor
+{
+    public ScheduleExecutor(Scope top, RunOptions options, CancellationToken cancellationToken);
+    public Scope Top { get; }
+    public RunOptions Options { get; }
+    public RunStatistics Statistics { get; }
+    /// Cases of this run that are alive, for RowLimit (R3).
+    public IReadOnlyCollection<Scope> LiveCases { get; }
+    /// Global rules of the rulesets, then local rules from the root down to scope (R2); deduplicated, in that order.
+    /// Recomputed for every iteration (D6).
+    public IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope);
+    /// Cancellation, then IterationLimit, TimeLimit, RowLimit (ScheduleStopException).
+    public void BeforeStep(Scope scope);
+    /// §6.5.1. Returns whether the iteration changed the scope.
+    public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase);
+    /// Records a step, notifies the observer (§6.11).
+    public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, EngineIteration? iteration);
+    public RunReport Complete(RunStopReason reason, Stopwatch clock);
+}
+
+// Scheduling/RunStatistics.cs  [R1a]
+internal sealed class RunStatistics
+{
+    public int Iterations;
+    public bool TopChanged;
+    public bool LastTopStepChanged;
+    public RunStopReason StopReason;
+    public Dictionary<Rule, RuleStatisticsBuilder> Rules = new();
+    public TimeSpan SearchTime, MergeTime, RebuildTime;
+    public List<RunStep>? Steps;                              // R1b, with RecordSteps
+    public int CasesOpened;                                   // R3
+    public int SplitsSkipped;                                 // R3
+    public int Lifts;                                         // R3
+    public long LiftRowsSkipped;                              // R3
+}
+
+// Scheduling/RuleStatisticsBuilder.cs  [R1a]
+/// Accumulates one rule's RuleStatistics over a run.
+internal sealed class RuleStatisticsBuilder
+{ public void Add(long matches, TimeSpan searchTime, string? plan); public RuleStatistics Build(Rule rule); }
+
+// Scheduling/ScheduleStopException.cs  [R1a]
+internal sealed class ScheduleStopException : Exception
+{ public ScheduleStopException(RunStopReason reason); public RunStopReason Reason { get; } }
+
+// Scheduling/ScheduleCaseRunner.cs  [R3]
+/// Runs a split node's in-case schedule in one case (Relations.ICaseSchedule, E8).
+internal sealed class ScheduleCaseRunner : Relations.ICaseSchedule
+{ public ScheduleCaseRunner(ScheduleExecutor executor, Schedule inCase); }
+```
+
+### 4.7 Scopes/  [R2]
+
+```csharp
+// Scopes/MirrorRegistry.cs  [R2]
+/// The mirror tables and copy rules of scoped reads, and the count of live frozen scopes per tag (§6.8, D38).
+/// Mutated under the graph's definition lock; read lock-free.
+internal sealed class MirrorRegistry
+{
+    /// RuleDefinitionException wording of §6.3, step 2, when FrozenCount(tag) > 0 and the mirror is new.
+    public MirrorTable GetOrCreate(TableHandle table, ScopeTag tag, string reader);
+    public MirrorTable Get(TableHandle table, ScopeTag tag);
+    /// The copy rules of tag's mirrors (copy-on-write snapshot).
+    public IReadOnlyList<CompiledRule> CopyRules(ScopeTag tag);
+    public int FrozenCount(ScopeTag tag);
+    public void AddFrozen(ScopeTag tag);
+    public void RemoveFrozen(ScopeTag tag);
+}
+
+// Scopes/MirrorTable.cs  [R2]
+internal sealed class MirrorTable
+{
+    public TableHandle Source { get; }
+    public ScopeTag Tag { get; }
+    /// An internal handle of Source's kind over the mirror's engine function; never listed in EGraph.Tables.
+    public TableHandle Handle { get; }
+    public Relations.FunctionId Function { get; }
+    /// "{source}@{tag name}": unique, since table names contain no '@' and tag names are unique per graph.
+    public string Name { get; }
+    public CompiledRule CopyRule { get; }
+}
+
+// Scopes/MirrorSync.cs  [R2]
+/// The pre-use sync of D48 (§6.8).
+internal static class MirrorSync
+{
+    /// For each tag, brings resolve(scope, tag)'s mirrors current if that scope is writable and changed since its last
+    /// sync; records a MirrorSync step when executor is given.
+    public static void Ensure(Scope scope, IReadOnlyList<ScopeTag> tags, string reader, ScheduleExecutor? executor);
+}
+```
+
+### 4.8 Cases/  [R3]
+
+```csharp
+// Cases/SplitProgram.cs  [R3]
+/// A split rule's matcher (a naive RuleProgram whose head is one collector of the key, set and assumption registers)
+/// and its assumption template.
+internal sealed class SplitProgram
+{
+    public RuleProgram Matcher { get; }
+    public RuleVariants Variants { get; }
+    /// Positions in the collected tuple.
+    public int[] KeyColumns { get; }
+    public int SetColumn { get; }
+    /// The element variable's position in the assumption bindings.
+    public int ElementColumn { get; }
+    public ColumnType ElementType { get; }
+    /// Ground once a tuple and an element are bound.
+    public Fact[] Assumptions { get; }
+}
+
+// Cases/RuleSplitSource.cs  [R3]
+/// Relations.ISplitSource for one SplitRule (§6.9.2, E8).
+internal sealed class RuleSplitSource : Relations.ISplitSource
+{ public RuleSplitSource(EGraph graph, SplitRule rule, int index); }
+
+// Cases/LiftSpecBuilder.cs  [R3]
+/// Relations.LiftSpec from TableHandle.Lift and the lattices' case joins; mirror tables and Contradiction excluded;
+/// relations listed as functions whose output is unit (§6.9.1).
+internal static class LiftSpecBuilder { public static Relations.LiftSpec Build(EGraph graph); }
+```
+
+### 4.9 Extraction/ and Rendering/
+
+```csharp
+// Extraction/ExtractionCatalog.cs  [R1a]
+/// Declares every constructor in Relations.ExtractionSchemas (one per distinct set of heads a cost model marks
+/// unextractable, cached), maps FunctionId to ConstructorHandle, and converts cost models.
+internal sealed class ExtractionCatalog
+{
+    public ExtractionCatalog(EGraph graph);
+    /// Under the definition lock. Declares the constructor in every cached schema.
+    public void Declare(ConstructorHandle constructor);
+    public Relations.ExtractionSchema SchemaFor(CostModel costs);
+    /// Cached per CostModel instance (a ConditionalWeakTable).
+    public Relations.CostModel EngineCosts(CostModel costs);
+    public ConstructorHandle HeadOf(Relations.FunctionId function);
+    public Relations.Sort SortOf(ColumnType type);
+}
+
+// Rendering/SExpression.cs  [R1a]
 internal static class SExpression
 {
     public static string Render(Term term);
     public static string Render(Fact fact);
     public static string Render(Rule rule);
-    public static string Render(SplitRule rule);
     public static string Render(Schedule schedule);
+    public static string Render(TableRow row);                                                                 // R1b
+    public static string Render(SplitRule rule);                                                               // R3
 }
-
-// Scheduling/ (each node implements:
-//   internal abstract bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase);
-//   internal abstract void Collect(ISet<Ruleset> rulesets, ISet<SplitRule> splits);)
-internal sealed class RunSchedule : Schedule { public Ruleset[] Rulesets { get; } }
-internal sealed class RepeatSchedule : Schedule { public int Times { get; } public Schedule[] Steps { get; } }
-internal sealed class SaturateSchedule : Schedule { public Schedule[] Steps { get; } }
-internal sealed class SequenceSchedule : Schedule { public Schedule[] Steps { get; } }
-internal sealed class SplitSchedule : Schedule { public SplitRule[] Rules { get; } public Schedule InCase { get; } }
-internal sealed class UntilSchedule : Schedule { public Schedule Body { get; } public Fact[] Condition { get; } }
-internal sealed class ScheduleExecutor
-{
-    public ScheduleExecutor(Scope top, RunOptions options, CancellationToken cancellationToken);
-    public RunOptions Options { get; }
-    public RunStatistics Statistics { get; }
-    public Matcher MatcherFor(Rule rule);
-    public MatchBuffer BufferFor(Rule rule);
-    public IReadOnlyList<Rule> RulesFor(Ruleset ruleset, Scope scope);
-    public void BeforeIteration(Scope scope);   // limits; throws ScheduleStopException
-    public void Track(SplitRecord record);
-    public void DisposeSplits();                // depth-first, reverse creation order; resets split progress of their parents
-    public RunReport Complete(RunStopReason reason, Stopwatch clock);
-}
-internal sealed class ScheduleStopException : Exception { public ScheduleStopException(RunStopReason reason); public RunStopReason Reason { get; } }
-internal sealed class RunStatistics
-{
-    public int Iterations;
-    public int CasesOpened;
-    public int SplitsSkipped;
-    public int Lifts;
-    public long LiftRowsSkipped;
-    public long Changes;
-    public bool LastTopStepChanged;
-    public RunStopReason StopReason;
-    public Dictionary<Rule, long> Matches;
-}
-
-// Cases/
-internal readonly struct SplitKey : IEquatable<SplitKey>
-{
-    public SplitKey(int splitRuleIndex, ulong[] values);
-    public bool Equals(SplitKey other);
-    public override bool Equals(object? obj);
-    public override int GetHashCode();
-}
-internal sealed class SplitRecord
-{
-    public SplitRecord(SplitRule rule, SplitKey key, Scope parent, Scope[] cases, int depth);
-    public SplitRule Rule { get; }
-    public SplitKey Key { get; }
-    public Scope Parent { get; }
-    public IReadOnlyList<Scope> Cases { get; }
-    public int Depth { get; }
-    public long[]? LastSignature { get; set; }
-    public void Dispose();
-}
-internal static class SplitRunner { public static bool Execute(ScheduleExecutor executor, SplitSchedule node, Scope scope, int depth); }
-internal sealed class MemberMap
-{
-    public static MemberMap Build(Context @case);
-    public int GroupCount { get; }
-    public IEnumerable<ulong[]> Groups { get; }                // parent ids per case class, groups of size >= 2
-    public ReadOnlySpan<ulong> Members(ulong caseCanonical);   // empty for a case-local class
-}
-internal static class ClassPartition { public static List<ulong[]> Meet(MemberMap reference, IReadOnlyList<Context> others); }
-internal static class Lifter
-{
-    public static LiftReport Lift(Scope parent, IReadOnlyList<Scope> cases, LiftOptions options, long[]? lastSignature, out long[] signature);
-}
-
-// Extraction/
-internal sealed class ExtractionGraph
-{
-    public int Discover(Scope scope, ColumnType rootType, ulong root, CostModel costs);   // returns the root class index
-    public int ClassCount { get; }
-    public int NodeCount { get; }
-    public ulong ClassId(int @class);
-    public int ClassOf(int node);
-    public ConstructorHandle HeadOf(int node);
-    public ReadOnlySpan<ulong> RowOf(int node);
-    public ReadOnlySpan<int> ParentsOf(int @class);
-}
-internal readonly record struct NodeKey(long Cost, int Node);
-internal sealed class NodeOrder : IComparer<NodeKey> { public NodeOrder(ExtractionGraph graph); public int Compare(NodeKey x, NodeKey y); }
 ```
 
-Engine state held in `Scope` (private fields in `Scope.Engine.cs`):
+### 4.10 Internal members of public types
 
-```csharp
-Dictionary<int, RuleProgress> progress;
-Dictionary<int, RuleProgress> splitProgress;
-List<SplitRecord> splitRecords;
-long createdAt;            // Store.Clock read right after Context.CreateChild returns
-Rule[] localRules;         // copy-on-write
-int depth;                 // case nesting
-long serial;
-```
-
-### 2.4 src/Eggnog.Tests files
-
-- `Cosmos/Pred.cs`, `Cosmos/CosmosTheory.cs`, `Cosmos/CosmosSql.cs`, `Cosmos/SweepLinks.cs`
-- `Cosmos/Scenario01DiscriminatedOneOfTests.cs` … `Cosmos/Scenario07SweepLinksTests.cs`
-- `Engine/SemiNaiveDifferentialTests.cs`, `Engine/RandomProgram.cs`, `Engine/ViewSnapshot.cs`
-- `Engine/RuleDefinitionTests.cs`, `Engine/ScopeIsolationTests.cs`, `Engine/IdConstantTests.cs`, `Engine/InheritanceTests.cs`, `Engine/ActionTests.cs`, `Engine/ScheduleTests.cs`, `Engine/LocalRuleTests.cs`, `Engine/CleanlinessTests.cs`, `Engine/RenderingTests.cs`, `Engine/ConcurrencyTests.cs`
-- `Cases/LiftTests.cs`, `Cases/SplitTests.cs`
-- `Extraction/ExtractionTests.cs`
-- `Values/ValueTests.cs`, `Values/LatticeTests.cs`
+| Type | Internal members |
+|---|---|
+| `EGraph` | `Relations.EGraph Engine`; `object DefinitionLock`; `object EngineLock` (R1, deleted in R2); `Relations.BaseValues BaseValues`; `UnitColumnType Unit`; `ExtractionCatalog Extraction`; `Relations.ExternalFunctionId NotEqual`; `ConcurrentDictionary<string, LoweredRule> VariantsByDescription`; `int NextSerial()`; `EGraphOptions Options`; `ScopeOrigin RootOrigin`; `MirrorRegistry Mirrors` (R2); `Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot` (R2); `bool InheritWatermarks` (tests, R2) |
+| `Scope` | `EngineScope Engine`; `ScopeRuntime Runtime`; `ScopeGuard Guard`; `ScopeOrigin Origin`; `void Fault(Exception cause)`; `void ThrowIfNotUsable()` (faulted → InvalidOperationException with `Failure` inner; disposed → ObjectDisposedException); `void ThrowIfNotWritable()` (also frozen, and inside a run observer); `void ThrowIfStopped()` (R3); `List<CompiledRule> LocalCompiled` (R2); `Dictionary<ScopeTag, long> MirrorSyncedVersions` (R2); live and transient child counts and `TryRelease()` (R2, §6.7) |
+| `ScopeTag` | `int Serial` (per graph) |
+| `ClassId` | `internal ClassId(uint cell, ScopeOrigin origin)`; `uint Cell`; `ScopeOrigin? Origin` |
+| `TableHandle` | `Relations.FunctionId Function`; `bool IsRelation`; `ColumnType[] Columns` (keys then output; a relation ends with the unit type) |
+| `Rule` | `CompiledRule Compiled` |
+| `RunOptions` | `bool SemiNaive { get; init; } = true` (differential tests, D36) |
+| `Query` | `CompiledQuery Compiled` |
+| `SplitRule` | `SplitProgram Program`; `RuleSplitSource Source` (R3) |
 
 ---
 
-## 3. Semantics and algorithms
+## 5. The engine contract
 
-### 3.1 Values, interning, primitives, lattices
+### 5.1 Engine members the layer uses
 
-- **Invariant V.** For every column type, `Encode` is injective, so equal bits mean equal values in every context. Value joins compare bits, and that is sound only under V.
-  - Strings and other interned types: one `ValueInterner<T>` per type per graph. Handles are dense and never reused.
-  - `ValueSet<T>`: interned by structural equality. A set's elements are sorted, so equal content gives the same handle.
-- **Interning.**
-  - `Intern`: check the dictionary. On a miss, take the lock, check again, append to the `ChunkedList`, publish, then add to the dictionary.
-  - Decoding is lock-free and does not allocate.
-  - Rule constants are interned when the rule is defined.
-  - **Host reads use `TryEncodeExisting` and never intern.** A constant that was never interned makes its fact false or its term absent.
-- **Primitives.** `BoundPrimitive.Invoke` decodes each argument register with the column type resolved at compile time, calls the delegate, and encodes the result, which interns a new value.
-  - Allocation per candidate is none beyond what the lambda allocates and what a new interned value costs.
-  - A primitive may not take or return a sort (definition error). Classes are compared only with `Fact.Equal` and `Fact.NotEqual`.
-- **Lattice adapters.**
-  - `LatticeAdapter<T>.Merge` gives `(x, y) => type.Encode(lattice.Merge(type.Decode(x), type.Decode(y)))`, passed to `TableSchema.Lattice`. Storage calls it only when `x != y`.
-  - `CaseJoin` is adapted the same way for the lifter.
-  - The laws are documented and checked by `ValueLattice<T>.Verify`.
+All are internal to `Eggnog.Relations` (after E11, without exception) and reached through `InternalsVisibleTo("Eggnog")`.
+"Exists" means present at `5acd00e`.
 
-| Function | `Merge` | `CaseJoin` |
-|---|---|---|
-| `dom`, `types` (`ValueLattice.Intersect`) | ∩ | ∪ |
-| known-set (`ValueLattice.Union`) | ∪ | ∩ |
-| `lo` (`ValueLattice.Max`) | max | min |
-| `hi` (`ValueLattice.Min`) | min | max |
+| Member | Where | Used for | From |
+|---|---|---|---|
+| `EGraph(ParallelHeuristics)`, `ParallelHeuristics(int)`, `ParallelHeuristics.Default` | `Bridge/EGraph.cs`, `Tables/ParallelHeuristics.cs` | Graph construction (`EGraphOptions`) | Exists |
+| `EGraph.AddTable(FunctionConfig)`; `FunctionConfig`, `ColumnTy`, `DefaultVal`, `MergeFn` (`AssertEq`, `UnionId`, `Old`, `New`, `Primitive`, `AsLattice`) | `Bridge/` | Definitions (§6.2) | Exists |
+| `EGraph.BaseValues`: `RegisterType`, `GetTypeId`, `Get`, `Unwrap`; codecs `Int64Codec`, `BooleanCodec`, `DoubleCodec`, `StringCodec`, `UnitCodec`, `InternedCodec<T>` | `BaseValues/` | Values (§6.1) | Exists |
+| `EGraph.RegisterExternalFunction`, `FreeExternalFunction`; `ExternalFunction` | `Bridge/EGraph.Panics.cs`, `Database/ExternalFunction.cs` | Primitives, filters, lattice merges, collectors | Exists |
+| `ExecutionState.ReportFailure`, `TriggerEarlyStop`, `View`; `DatabaseView.Owner` | `Actions/ExecutionState*.cs`, `Database/DatabaseView.cs` | D31, `Any`, `ScopeRuntime.Of` | Exists |
+| `EGraph.NewRule(string, bool)`; `EGraphRuleBuilder.NewVarNamed`, `NewVar`, `QueryTable`, `QueryPrim`, `Lookup`, `Set`, `Union`, `CallExternalFunc`, `Build`; `RuleEntry`, `RuleVariable` | `Bridge/EGraphRuleBuilder.cs` | Lowering (§6.4) | Exists |
+| `EGraph.FreeRule` | `Bridge/EGraph.Rules.cs` | Re-lowering (R1), local rules (R2), disposed queries | Exists |
+| `EGraph.RunRules(ReadOnlySpan<EGraphRuleId>)` → `IterationReport` (`Changed`, `RebuildChanged`, `RebuildTime`, `RuleSetReport`); `RuleSetReport.NumMatches`, `RuleSearchAndApplyTime`, `RuleReports` (`RuleReport.Plan`, `SearchAndApplyTime`), `SearchAndApplyTime`, `MergeTime`; `EGraph.ReportLevel`, `ReportLevel.WithPlan`; `PanicException` | `Bridge/`, `Execution/` | One iteration at the R1 root; statistics and plans (D41) | Exists |
+| `EGraph.GetRuleInfo`, `RuleInfo.CachedPlan`, `RuleInfo.Query`; `BridgeQuery.BuildCachedPlan`, `AddRulesFromCached`; `Database.NewRuleSet`, `RuleSetBuilder.Build`, `Database.ExecuteRuleSet` (without `MergeRuleSet`) | `Bridge/`, `Execution/Database.Execution.cs` | R1 queries without a merge or a clock tick (D49) | Exists |
+| `EGraph.Database`, `Database.CreateExecutionState(uint?)`, `Database.RecordFailure`, `Database.ChangeStamp`, `Database.TotalSizeEstimate`; `ExecutionState.Flush`; `EGraph.NextTimestamp`; `TableAction(EGraph, FunctionId)` (`TryLookup`, `Insert`); `UnionAction(EGraph)`; `EGraph.FreshId`; `EGraph.FlushUpdates`; `EGraph.TryTakePanic`; `EGraph.GetCanonInUf`; `EGraph.LookupId`; `EGraph.TableSize`; `EGraph.ForEach` | `Bridge/`, `Database/`, `Contexts/Database.Contexts.cs` | R1 host batches, reads, `Version`, `RowLimit`, `CountRows`/`Rows` (§6.6.5) | Exists |
+| `ThreadAffinityGuard` | `Concurrency/ThreadAffinityGuard.cs` | `ScopeGuard` (D47) | Exists |
+| `ExtractionSchema`, `FunctionSignature`, `EqSort`, `BaseSort<TCodec, T>`, `Relations.CostModel` (`WithFunctionCost`, `WithNodeCost`, `WithBaseValueCost`), `Extractor.CreateOnDemand`, `ExtractTerm`, `TryExtractTerm`, `TryGetCost`, `Relations.ExtractedTerm`, `ExtractionOptions` | `Extraction/` | Extraction (§6.10) | Exists |
+| `EGraph` on a `Store`; `EGraph.Root` (`EGraphContext`); `EGraphContext.RunRules`, `EnsureClean`, `FlushUpdates`, `FreshId`, `StageRow`, `StageUnion`, `Find`, `TryLookup`, `TableSize`, `ForEach`, `IsContradictory`, `Version`, `IsFrozen`, `IsDisposed`, `IsStopped`, `Freeze`; `IterationReport.Stopped`; `ContextOptions` (`Default`, `Case`, `IsCase`, `StopOnContradiction`, `InheritWatermarks`, `Parallelism`); `ContextLocalSlot<T>`, `GetLocal`; copy-on-write `RuleTable` and definitions (X16) | colors §3.3, §10.1–§10.8 | R2 (`ContextEngineScope`) | M10.3 |
+| `CaseSet`, `Lifter`, `LiftSpec`, `LiftTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `SplitDriver`, `ISplitSource`, `ICaseSchedule`, `SplitRequest`, `SplitKey`, `SplitOptions`, `SplitReport`, `SplitRecord` | colors §11 | R3 | M10.4 |
 
-### 3.2 Scopes, tags, resolution, local rules
+### 5.2 Engine members requested
 
-- **Resolution.** `resolve(S, tag)` is the first scope in `S, S.Parent, …` whose `Tag` is `tag` (by reference). `ScopeTag.Root` always resolves to `EGraph.Root`.
-  - `Run` resolves the read scopes of every rule and split rule reachable from the schedule, from the scope it was called on, before doing any work.
-  - An unresolved tag throws `InvalidOperationException`: *"Rule 'declared tautology' reads scope 'schema', but 'root/query#4' has no ancestor tagged 'schema'."*
-  - A case resolves every tag its parent resolves, unless the case's own tag shadows one; then it resolves to the case.
-- **Rules a run sees.** For each ruleset step, `RulesFor(ruleset, S)` returns:
-  1. the ruleset's global rules (a snapshot, in definition order);
-  2. then, for each scope from the root down to `S`, its local rules belonging to that ruleset.
+Each request names the milestone that should provide it. Where the colors spec already implies a member without naming
+it, the request names it; any one-to-one equivalent is acceptable, and this spec is then updated. §13 lists the matching
+edits to the colors spec.
 
-  Rules are recomputed every iteration, so rules defined concurrently join at the next iteration.
-- **Invariant R (writes are never scoped).**
-  - A scoped handle in `Then`, `Make`, `Rewrite`, `Assume` (split or host) or `ScopeWriter` is a definition error (or an `ArgumentException` for host writes).
-  - Actions write only to the running scope, and an ancestor's view never contains its descendants' rows.
-  - So nothing a rule derives in `S` can change what an atom scoped to a strict ancestor of `S` reads.
+| # | Member | Why | Milestone |
+|---|---|---|---|
+| **E1** | `BaseValues.TryGetExisting<TCodec, T>(T value, out Value boxed)`: inline values succeed without the registry; interned values are looked up without inserting (needs `InternTable<TKey>.TryGetId(TKey, out uint)`). `long BaseValues.InternedCount`: the sum of the intern tables' counts. Tests in `BaseValues/BaseValuesTests`: an unseen value fails and leaves the count unchanged; a seen value round-trips; inline values never touch a table. | D15: host reads never intern. | **With R1a** (a small change in `Eggnog.Relations`, landed first) |
+| ~~E2~~ | **Withdrawn.** A child `Database` sharing the root's `BaseValues` is a defect of colors M9.3 that the rule layer does not depend on (its externals decode with the graph's registry); §13 asks the colors spec to track it. | — | — |
+| ~~E3~~ | **Withdrawn** with callbacks (D21). If callbacks return, their collector overrides `ExternalFunction.ReadsTables => true` (colors §10.2), which already makes `ActionReadAnalysis` refuse inheritance. | — | — |
+| **E4** | `EGraph.DesignateContradiction(FunctionId function)`: the function must be nullary; maps to `Store.DesignateContradiction`; must be called before any child exists. | Colors §10.1 lists `Contradiction` on `EGraph` without a way to set it. The rule layer calls it at graph construction with its `Contradiction` relation. | M10.3 |
+| **E5** | Extraction over a context: `Extractor.CreateOnDemand(ExtractionSchema schema, EGraphContext context, CostModel? costs = null, ExtractionOptions? options = null)`. Discovery reads the context's `TableView`s (output-column lookups per layer, hidden rows filtered). **Staleness** is keyed on changes to the extraction schema's tables and to the union-find, in the context and its non-frozen ancestors (the layered form of today's per-slot table versions), and never on the clock: it replaces today's `NextTimestamp` check. On a frozen context, any number of extractors may run on any threads. | The colors spec does not mention extraction; today's extractor reads only root tables (`Database.GetTable`) and goes stale on any clock tick. Every scoped Cosmos scenario extracts, so E5 gates the **whole** R2 scoped suite, not only the extraction tests. | M10.3 addendum |
+| ~~E6~~ | **Withdrawn.** The rule layer allocates one `ContextLocalSlot<ScopeRuntime>` per graph (colors §10.1) and reaches the running context through `state.View.Owner.Owner.Host` (colors §10.6). If `ContextLocalSlot` cannot construct a `ScopeRuntime` on first use, the only request is a factory parameter (or a setter) on it (§13). | — | — |
+| **E7** | On `EGraphContext`: `EGraphContext CreateChild(ContextOptions? options = null)` and `void Dispose()` with the storage semantics of colors §8.2; `bool IsFaulted`; `EGraphContext? Parent`; `long OwnRowCount` (`context.Database.TotalSizeEstimate`). `RunRules` reports at the graph's `ReportLevel` (colors §10.3's `level`). | Colors §3.5 has the bridge call `Context.CreateChild`/`Dispose` but names no bridge member; the rest serves faults (D18), case wrapping (§6.9.2), `RowLimit` (D42) and plans (D41). | M10.3 |
+| **E8** | The M10.4 split hooks in this shape (any one-to-one equivalent is acceptable):<br>`interface ISplitSource { void FindRequests(EGraphContext scope, List<SplitRequest> requests, SplitReport report); void Assume(EGraphContext @case, in SplitRequest request, int caseIndex); }`<br>`readonly record struct SplitRequest(SplitKey Key, int CaseCount, object? Payload)`<br>`readonly struct SplitKey : IEquatable<SplitKey> { SplitKey(int source, uint[] values); }`<br>`interface ICaseSchedule { bool Run(EGraphContext @case, int depth, bool allowSplits); }`<br>`interface ISplitDemand { bool Wants(EGraphContext scope, in SplitRequest request); }` (the rule layer passes none, D43)<br>`sealed class SplitDriver { SplitDriver(IReadOnlyList<ISplitSource> sources, ICaseSchedule inCase, ISplitDemand? demand, LiftSpec spec, SplitOptions options); bool Step(EGraphContext scope, int depth, SplitReport report); static void DisposeRecords(EGraphContext scope); }`<br>`SplitOptions { int DepthLimit; int CaseLimit; LiftOptions Lift; ContextOptions CaseOptions; }` (`CaseOptions` must have `IsCase` and `StopOnContradiction`; default `ContextOptions.Case`)<br>`SplitReport { int CasesOpened; int SplitsSkipped; int Lifts; long LiftRowsSkipped; }`<br>`CaseSet { CaseSet(EGraphContext parent); EGraphContext AddCase(ContextOptions? options = null); IReadOnlyList<EGraphContext> Cases; LiftReport Lift(LiftSpec spec, LiftOptions options, CancellationToken cancellationToken = default); int DisposeVacuous(); void Dispose(); }`<br>Semantics: `Step` lets exceptions from an `ICaseSchedule` (cancellation, limits, evaluation failures) propagate and leaves the records it opened for `DisposeRecords`; `Step` does not hold the scope's thread domain while it calls an `ISplitSource` or an `ICaseSchedule`, because the schedule creates children (nested splits; colors §8.3 forbids `CreateChild` while the caller holds the domain); `Lift` checks the token between rounds; `DisposeVacuous` disposes the contradictory cases and returns their number. | Colors §11.3 names the types but not their members. `Payload` carries the matched tuple from `FindRequests` to `Assume`; `report` lets a source count the requests it skipped; `CaseOptions` and `AddCase(options)` let `InheritWatermarks` reach cases; `DisposeVacuous` serves host-driven lifts, which never call `RunEach`. | M10.4 |
+| **E9** | `ParallelHeuristics` reachable from the bridge `EGraph` constructor on a `Store` (`Store(ParallelHeuristics?)` exists). | The root of a Store-backed graph honours `EGraphOptions.DegreeOfParallelism` (D46); children of writable scopes inherit it. | M10.3 |
+| **E10** | `EGraphContext.Freeze(IReadOnlyCollection<EGraphRuleId>? planRules = null)`: `null` keeps step 4 of colors §10.8 as written (plan every live rule without a cached plan); a collection plans exactly those rules that have no cached plan. | Plans are made once per rule (decision 7). Step 4 as written plans every live rule, including other containers' local rules, queries and split matchers, on this context's statistics. The rule layer passes the empty set for the root and, for any other scope, the default variants its descendants can run (§6.7). | M10.3 |
+| **E11** | Every public type of `Eggnog.Relations` becomes `internal` (D44). `InternalsVisibleTo` already covers `Eggnog`, `Eggnog.Relations.Tests` and `Eggnog.Relations.Benchmarks`; a public test fixture or benchmark member whose signature mentions an engine type becomes internal or private. | One API in the package: about 95 public engine types include `EGraph`, `Term`, `Sort`, `CostModel`, `Extractor`, `ExtractedTerm` and `NodeCostFunction`, and a file with `using Eggnog; using Eggnog.Relations;` fails with CS0104. | **With R1a** (a mechanical change, landed first) |
 
-### 3.3 Compiling a rule
+Nothing else in the engine changes for this layer. In particular the rule layer needs no planner, matcher or index API:
+every body is planned and executed by the engine.
 
-`Ruleset.Rule`, `Scope.DefineRule`, `EGraph.DefineSplit` and `DefineQuery` run `define` on a fresh builder and compile immediately. Every error is a `RuleDefinitionException` that names the rule.
+---
 
-1. **Variables.**
-   - Each `Var<T>` records its owner builder; a variable from another builder is an error.
-   - Duplicate names are an error.
-   - Each variable gets a register with `ValueStore.TypeOf<T>()`. An unknown T is an error naming `Register*`.
-2. **Read scopes.**
-   - Slot 0 is the running scope.
-   - Each distinct tag, from `handle.In(tag)` or `Fact.In(tag, …)`, gets a slot.
-   - `Fact.In` gives its tag to every application inside it.
-   - Nesting `Fact.In`, or a handle scoped to a different tag inside `Fact.In`, is an error.
-3. **Normalisation.** `flatten(t)` turns a term into an operand:
-   - a variable becomes its register (after unification);
-   - a constant becomes `TermRef.Constant` (encoded, with the slot recorded for class constants);
-   - an application `h(args)` in slot `s` becomes a fresh register `o` plus the atom `h@s(flatten(args)…, o)`. Applications with the same `(h, s, operands)` share `o`: functions are functional, so common subexpressions are shared.
-   - a computation becomes a fresh register bound by a `Let`.
+## 6. Semantics and algorithms
 
-   Facts normalise as follows:
+### 6.1 Values, interning, primitives, lattices
+
+**Invariant V (canonical cells).** Within one graph, equal values of one column type have equal cells in every scope,
+and distinct values distinct cells. The engine's codecs are canonical (`IBaseValueCodec<T>` contract); the rule layer
+adds the normalization the engine lacks: `DoubleColumnType.Encode` maps −0.0 to +0.0 and rejects NaN, because
+`DoubleCodec` treats −0.0 and +0.0 as one value and decodes whichever was interned first. Value joins and
+not-equals compare cells, which is sound only under V.
+
+**Column types.**
+
+| CLR type | `ColumnType` class | Engine codec | Name | Extraction sort | `Format` |
+|---|---|---|---|---|---|
+| sort `TSort` | `SortColumnType<TSort>` | none (`ColumnTy.Id`) | as defined | `EqSort(name)` | `#17` |
+| `long` | `BaseColumnType<Int64Codec, long>` | `Int64Codec` | `i64` | `BaseSort<Int64Codec, long>` | `42` |
+| `int` | `WidenedColumnType<int>` | `Int64Codec` | `i32` | `BaseSort<Int64Codec, long>("i32")` | `42` |
+| `bool` | `BaseColumnType<BooleanCodec, bool>` | `BooleanCodec` | `bool` | `BaseSort<BooleanCodec, bool>` | `true` |
+| `double` | `DoubleColumnType` | `DoubleCodec` | `f64` | `BaseSort<DoubleCodec, double>` | egglog's (`1.5`) |
+| `string` | `BaseColumnType<StringCodec, string>` | `StringCodec` | `String` | `BaseSort<StringCodec, string>` | `"kind"` |
+| `ValueSet<T>` | `BaseColumnType<InternedCodec<ValueSet<T>>, ValueSet<T>>` | `InternedCodec<ValueSet<T>>` | `Set<{T's name}>` | `BaseSort<…>` with the format shown | `(set-of "a" "b")` |
+| enum `TEnum` | `WidenedColumnType<TEnum>` | `Int64Codec` | `typeof(TEnum).Name` | `BaseSort<Int64Codec, long>(name)` | the member name |
+| registered `T` | `BaseColumnType<InternedCodec<T>, T>` | `InternedCodec<T>` | as registered | `BaseSort<InternedCodec<T>, T>` | the given format, else `ToString()` |
+| unit (internal) | `UnitColumnType` | `UnitCodec` | `Unit` | none | `()` |
+
+- Every codec is registered with `BaseValues.RegisterType` when the `ValueStore` is created (built-ins) or when its
+  `Register*` method runs.
+- `int` and enums are stored as `i64` because `Int32Codec` boxes −1 to `Value.StaleRep`, which marks a deleted row
+  when it lands in a table's first column (`BaseValues` remarks). `Int64Codec` boxes `[0, 2^31)` inline and interns
+  the rest with `InternedTag`, never producing `StaleRep`.
+- `ValueSet<T>` is a base value, not a container (D20): its cells are never canonicalized, never rewritten by a
+  rebuild, and lift as values. Equality is element-wise; `GetHashCode` combines element hashes in order; elements are
+  kept sorted by `ValueSetOrder<T>`, so equal sets have one interned cell.
+- Content order (`ColumnType<T>.Compare`, extraction's tie-break): ordinal for strings, numeric for numbers, `false <
+  true`, lexicographic over sorted elements for sets, the given comparer for registered types (else
+  `Comparer<T>.Default` when `T : IComparable<T>`, else the cell), class id for sorts.
+
+**Interning.**
+- `Encode` interns (`BaseValues.Get`, thread-safe, one shard lock on the interned path). `Decode` is lock-free.
+- Rule and query constants are encoded when they are compiled, so they intern at definition.
+- Host reads use `TryEncodeExisting` (`BaseValues.TryGetExisting`, E1) and never intern. A constant that was never
+  interned makes its fact false or its term absent.
+- Pools never shrink (D15); `ValueStore.InternedCount` is `BaseValues.InternedCount` (E1).
+
+**Primitives.**
+- `Primitive.InvokeCore(arguments, parameters, result)` decodes each argument cell with its parameter's column type,
+  calls the delegate and encodes the result (interning a new value). It allocates nothing beyond what the delegate
+  allocates and what interning a new value costs.
+- A primitive may not take or return a sort (definition error). Classes are compared only with `Is` and `IsNot`.
+- Each use of a primitive in a rule is one call site: a `PrimitiveCall` (a let or a head computation) or a `FilterCall`
+  (a boolean filter) registered as an engine external function (§6.4.2).
+- A call site catches any exception from the delegate (D31):
+  1. `ScopeRuntime.Of(graph, state).TryRecord(new EvaluationFailure(rule, "primitive 'p'", bindings, exception))`,
+     where `bindings` renders the decoded arguments with their source names, e.g. `d={a, b} v="b"`;
+  2. `state.ReportFailure($"rule '{rule}': primitive '{p}' threw {exception.GetType().Name}")`, which triggers the
+     engine's early stop;
+  3. `result = 0; return false`.
+- Every call site that invokes a user delegate (`PrimitiveCall`, `FilterCall`, `LatticeMerge<T>`, the extraction cost
+  adapters, and `HostBatch` when it calls a lattice's `Merge`) sets `EngineCallMarker` around the invocation, on
+  whatever thread runs it, pool threads included. Every graph and scope entry point checks `EngineCallMarker.IsActive`
+  first and throws `InvalidOperationException("Not allowed from a primitive, lattice, filter or cost function")`
+  (D47). The cost is one thread-static increment and decrement per invocation.
+
+**Lattices.**
+- A function with a lattice gets one `LatticeMerge<T>` external, registered before its table. Its merge is
+  `MergeFn.Primitive(mergeId, MergeFn.Old, MergeFn.New).AsLattice()`. `LatticeMerge<T>.TryInvoke` decodes `[old, new]`,
+  calls `Merge`, encodes. On an exception it records the failure (rule name `null`), calls `ReportFailure`, and returns
+  `old` (the engine keeps the old value on a failed merge).
+- A function without a lattice has `MergeFn.AssertEq`: a conflicting rule write is an engine panic ("Illegal merge
+  attempted for function f"), surfaced as `RuleEvaluationException` (D31). Host writes check first (D32).
+- `CaseJoin` is adapted to `Func<uint, uint, uint>` by `CaseJoinAdapter<T>` for `LiftTable` (R3).
+- The laws are documented on `ValueLattice<T>` and checked by `Verify` in consumers' tests.
+
+| Lattice | `Merge` | `CaseJoin` | Used by (Cosmos) |
+|---|---|---|---|
+| `ValueLattice.Intersect<T>()` | ∩ | ∪ | `dom`, `types`, `inset`, `admits`, `idom` |
+| `ValueLattice.Union<T>()` | ∪ | ∩ | known-sets |
+| `ValueLattice.Max<T>()` | max | min | `lo` |
+| `ValueLattice.Min<T>()` | min | max | `hi` |
+
+### 6.2 Definitions and their engine layout
+
+Every `Define*` call checks `EngineCallMarker` (D47), takes the graph's definition lock, validates, then (R1) takes the
+engine lock to call the bridge. A failed validation changes nothing. Table definitions follow D6's thread rule: while
+the root is not frozen, the call enters the root's `ScopeGuard` for its duration (re-entrant on the root's thread,
+`InvalidOperationException` from another thread while the root is in use).
+
+**Validation.**
+- Names: `NameRules.ValidateTableName` (non-empty, no `@`, not starting with `$`), unique among tables
+  (`ArgumentException`). Ruleset, query and tag names are unique among their kind; `root` is the root tag's.
+- Column types: `ValueStore.TypeOf<T>()` for every typed parameter; an unknown type is an `ArgumentException` naming
+  the `Register*` method.
+- `DefineFunction` with a sort output: `ArgumentException("… use DefineConstructor")`. `TableOptions.Role = Term` on a
+  relation or function: `ArgumentException`.
+- A constructor's `TSort` must have been defined with `DefineSort`; `cost >= 0`.
+
+**Engine layout** (`FunctionConfig` passed to `Relations.EGraph.AddTable`; `CanSubsume` is always `false`):
+
+| Table | `Schema` | `Default` | `Merge` |
+|---|---|---|---|
+| `Relation(T1..Tn)` | `[ty(T1)..ty(Tn), unit]` | `DefaultVal.Const(unit)` | `MergeFn.AssertEq` |
+| `Function(T1..Tn → TOut)` with lattice | `[ty(T1)..ty(Tn), ty(TOut)]` | `DefaultVal.Fail` | `MergeFn.Primitive(merge, Old, New).AsLattice()` |
+| `Function(T1..Tn → TOut)` without | same | `DefaultVal.Fail` | `MergeFn.AssertEq` |
+| `Constructor(T1..Tn → TSort)` | `[ty(T1)..ty(Tn), ColumnTy.Id]` | `DefaultVal.FreshId` | `MergeFn.UnionId` |
+| mirror `T@tag` (R2) | as `T` | as `T` | as `T` (a lattice function gets its own `LatticeMerge<T>`) |
+
+where `ty(T)` is `ColumnTy.Id` for a sort and `ColumnTy.Base(typeId)` for a value type, and `unit` is
+`ColumnTy.Base(unit type)`. The engine function's name is the table's name; the graph's `Contradiction` is the
+relation named `contradiction`, defined first by the `EGraph` constructor (so users cannot define a table of that
+name).
+
+**Afterwards.**
+- The handle is created with `Index` = the number of tables defined before it, and appended to `Tables`
+  (copy-on-write).
+- A constructor is declared to `ExtractionCatalog`: `FunctionSignature { Inputs = key sorts, Output = EqSort of TSort,
+  IsConstructor = true, Cost = cost, Unextractable = (Extractable == false) }`.
+- R2: at construction, after defining `Contradiction`, the graph calls `Relations.EGraph.DesignateContradiction` (E4),
+  defines the root tag, and allocates `RuntimeSlot`.
+- `DefineScopeTag` (R2) takes the definition lock, checks the name, and appends the tag (serial = count) to
+  `ScopeTags`.
+
+### 6.3 Compiling a rule
+
+`Ruleset.DefineRule`, `Scope.DefineRule` (R2), `EGraph.DefineQuery` (R1b) and `EGraph.DefineSplit` (R3) run `define`
+on a fresh builder, then compile at once under the definition lock. A tag of another graph passed to `In`, `Fact.In`
+or `Erasing` throws `ArgumentException` at that call, inside `define`. Every compilation error is a
+`RuleDefinitionException` naming the rule; the messages below are exact, and `Rules/RuleDefinitionTests` (§8.3) tests
+each one.
+
+1. **Variables.** Each `Var<T>` records its owner builder. A variable from another builder:
+   *"variable 'x' belongs to another rule"*. A duplicate name: *"variable 'x' is declared twice"*. Each variable gets a
+   register typed `ValueStore.TypeOf<T>()`; an unknown `T`: *"type Foo is not registered; call ValueStore.Register"*
+   (with the `ArgumentException` as inner exception).
+2. **Scoped reads** (R2). The read scope of an application is `handle.ReadScope`, or the tag of the enclosing
+   `Fact.In`.
+   - Nested `Fact.In`: *"Fact.In cannot be nested"*.
+   - A handle scoped to tag A inside `Fact.In(B, …)`: *"'dom@A' is inside Fact.In('B')"*.
+   - An application of a table that is not value-only under a read scope:
+     *"scoped reads are limited to tables whose columns are all values; 'And' has a sort column"*.
+   - The first read of `(T, tag)` creates the mirror (`MirrorRegistry.GetOrCreate`, §6.8), which is a table
+     definition (D6). If a live frozen scope tagged `tag` exists in this graph at that moment: *"'dom' is first read in
+     scope 'schema' after a scope tagged 'schema' was frozen; define rules that read it before freezing such scopes"*.
+   - A scoped atom becomes an atom over the mirror's internal handle, with the tag kept for rendering and
+     `ReadScopes`.
+3. **Normalization.** `flatten(t)` turns a term into an operand:
+   - a variable becomes its register, after unification (a union-find over registers; equating registers of different
+     types: *"variables 'a' (i64) and 'b' (String) are equated"*);
+   - a value constant becomes `Operand.Constant(type, Encode(value))`;
+   - a class constant becomes `Operand.IdConstant(k)` with `WrittenIdConstants[k]` its cell and
+     `IdConstantOrigins[k]` its origin (D39). `default(ClassId)`: *"a class constant is default(ClassId), which names no
+     class"*. A class of another graph: *"class #17 belongs to another graph"*. A global or split rule whose constant
+     is not from the root: *"class #17 came from scope 'root/schema#1/query#2'; a global rule may hold only classes from
+     the root; define the rule on that scope"*. A local rule whose constant's origin is not its owner or an ancestor:
+     *"class #17 came from scope 'root/schema#1/query#2', which is not 'root/schema#1/query#3' or an ancestor of it"*.
+     A disposed origin: *"class #17 came from scope 'root/schema#1/query#2', which is disposed"*. A query's constants
+     are checked at each call instead, against the scope it runs in (§6.6.4).
+   - an application `h(args)` with read scope `s` becomes its output register. Applications with the same `(h, s,
+     operands)` share one: functions are functional. On the first occurrence, a fresh register `o` and the atom
+     `(h, s, [flatten(args)…, o])` are created.
+   - a computation `p(args)` becomes a fresh register `t` bound by the step `Let(p, flatten(args), t)`; computations
+     with the same `(p, operands)` share one (primitives are pure).
+
+   Body facts normalize as follows:
 
    | Fact | Becomes |
    |---|---|
-   | relation fact | atom |
-   | `a.Is(b)`, two variables | unify `a` and `b` (a register union-find) |
-   | `x.Is(constant)` | substitute the constant |
-   | `x.Is(h(args))`, either side | atom with output `flatten(x)` |
-   | `h(…).Is(g(…))` | shared output register |
-   | `x.Is(compute)` | `Let` |
-   | `compute.Is(constant)` | equality filter |
-   | `constant.Is(constant)` | evaluated now; false is an error ("never matches") |
-   | `Exists(h(args))` | atom with a fresh, unused output register |
-   | `NotEqual`, `True`, `Where` | filters |
+   | relation fact `R(args)` | atom `(R, s, flatten(args))` (no output column) |
+   | `a.Is(b)`, two variables | unify `a` and `b` |
+   | `x.Is(c)` or `c.Is(x)`, `x` a variable, `c` a constant | substitute `c` for `x` everywhere |
+   | `x.Is(h(args))` either side | atom `(h, s, [flatten(args)…, x])`, or unify `x` with the shared output |
+   | `h(args).Is(c)` either side | atom with the constant as output |
+   | `h(…).Is(g(…))` | flatten both; unify their output registers |
+   | `x.Is(p(args))` either side | `Let(p, args, x)` |
+   | `p(args).Is(c)` either side | `Let(p, args, c)`: a check against the constant |
+   | `p(args).Is(h(…))`, `p(args).Is(q(…))` | flatten the other side to `o`; `Let(p, args, o)` |
+   | `c1.Is(c2)` | evaluated now; false: *"never matches: c1 = c2 is false"*; true: dropped |
+   | `Fact.Exists(h(args))` | atom with a fresh output register that nothing else reads |
+   | `a.IsNot(b)` | `NotEqual(flatten(a), flatten(b))` |
+   | `Fact.True(p(args))`, `Where(p(args))` | `Filter(p, flatten(args))` |
+   | `Fact.True(t)`, `Where(t)`, `t` not a computation | `Filter(is-true, [flatten(t)])`, with the internal named primitive `is-true` |
+   | `Where(a…, lambda)` | `Filter(lambda primitive "<lambda>", flatten(a)…)` |
+   | `Fact.In(tag, facts)` (R2) | each inner fact with read scope `tag` |
+   | `Rewrite(left, right)` | the body fact `t.Is(left)` for a fresh class variable `$rw{n}` (and the head item of step 8) |
 
-4. **Range restriction.** Every register used by a filter, a `Let`, an action, or a split key or set must be bound by an atom or by a `Let` whose inputs are bound. Otherwise: *"variable 'p' is not bound by any When clause"*. `Make` variables may not appear in the body.
-5. **Invariant H (class values stay in their home scope).**
-   - For every Id-typed register, collect the slots of the atoms it appears in. More than one slot is an error: *"variable 'e' (Pred) is read in scope 'schema' and in the running scope; a class value can be joined only within one scope"*.
-   - That slot is the register's home slot.
-   - `Fact.Equal` and `Fact.NotEqual` on classes require the same home slot.
-   - Id constants are canonicalized per run in the slot of the atom that uses them.
+   Substituting two different constants into one register (through unification) is *"never matches: …"*.
+4. **Range restriction and step order.**
+   - Every register in an atom is bound.
+   - Steps are placed in rounds. Each round scans the steps in declaration order and places every step whose inputs
+     are bound: a `Let` whose target register is unbound binds it; a `Let` whose target is bound or constant is a
+     check; a `Filter` or `NotEqual` is placed as soon as its inputs are bound. Rounds repeat until none places a step.
+   - A step never placed: *"variable 'p' is not bound by any When clause"*, naming its first unbound input in
+     declaration order.
+   - The placement order is `RuleProgram.Steps`, which the bridge runs after the join in that order (its `Validate`
+     then never fails).
+5. **Values and sorts.** A primitive whose parameter or result type is a sort:
+   *"primitive 'p' takes or returns a sort; classes are compared only with Is and IsNot"*.
+6. **Erasing** (R2, D12). The rule's licence `L` is its own `Erasing(L)` tag, else its ruleset's `Licence`.
+   - With a licence and no `ReadsOwnFacts`, every atom over a `TableRole.Fact` table (including `Contradiction`) must
+     have read scope `L`: *"rule reads fact table 'form' outside scope 'schema'; read it through In(schema), or call
+     ReadsOwnFacts with the reason that is sound"*. Atoms over Term and Analysis tables are unrestricted, so rules that
+     read only those (boolean simplification, say) are unaffected.
+   - `ReadsOwnFacts(reason)` exempts the rule; `Rule.Licence` is then `null` and `Rule.OwnFactsReason` the reason. An
+     empty reason: *"ReadsOwnFacts needs a reason"*. Without a licence: *"rule calls ReadsOwnFacts but has no
+     licence"*.
+   - With R and S (§7), an erasing rule reads facts only from `L`'s view (through mirrors) and from term and analysis
+     tables. The residue is stated in §11, risk 2.
+7. **Analysis writers** (invariant A). A rule whose head writes an Analysis table may have no atom over a Fact table
+   (*"rule writes analysis table 'inset' and may read only term and analysis tables; it reads 'present'"*) and no
+   scoped atom.
+8. **Head.** Head items are processed in the order the builder calls were made. `eval(t)` turns a head term into an
+   operand:
+   - a variable is its register; it must be bound by the body or by an earlier `Make`
+     (*"head variable 'x' is used before its Make"*, or the range-restriction message);
+   - a constant is a constant or `IdConstant` operand (class constants checked as in step 3);
+   - an unscoped constructor application `C(args)` is `GetOrAdd(C, eval(args))`, a new head register; repeats of the
+     same `(C, operands)` within the head share it;
+   - a computation `p(args)` is `Compute(p, eval(args))`, a new head register;
+   - a function application: *"actions do not read; match 'dom' in When"*;
+   - a scoped application: *"'dom@schema' is read-only"* (invariant R).
 
-   Why H is necessary, the counterexample (also a regression test, §4.3): `C` merges `y1` and `y2`, and `y1` wins. A C-own row `S(y1)` keeps its stamp, and the ancestor row `R(y2)` keeps its stamp. If `R@A(y)` could join `S(y)` through `C`'s equality, the match `R@A(y2) ⋈ S(y1)` would be new, yet no row would have been restamped, so semi-naive matching would miss it. Worse, it would join schema facts through an equality the query derived, which is exactly what "the schema alone" has to exclude.
-6. **Erasing (opt-in).** With `Erasing(L)`, every atom over a `TableRole.Fact` table (including `Contradiction`) must be in a slot tagged `L`. Atoms over `Term` and `Analysis` tables are unrestricted.
-   - Combined with R and H, an erasing rule reads facts only from `L`'s view and from term and analysis tables.
-   - Residue, documented: it can still see class equalities its running scope derived. In the Cosmos theory those equalities are lowerings justified by conjuncts that survive extraction. That is the prototype's argument, now confined to equalities.
-7. **Analysis writers.** A rule whose actions write an `Analysis` table may contain no atoms over `Fact` tables, no scoped atoms, and no callbacks. So analyses depend only on terms.
-8. **Actions.** Evaluating a head term into a register:
-   - a variable or constant is a register or a constant reference;
-   - a constructor application is `GetOrAdd`;
-   - a computation is `Compute`;
-   - a function application is an error (*"actions do not read; match 'dom' in When"*);
-   - a scoped handle is an error (R).
+   Head facts (`Then`):
 
-   Head facts:
-
-   | Fact | Op |
+   | Fact | Operation |
    |---|---|
-   | relation fact | `Insert` |
-   | `F.Of(k).Is(v)`, either side | `InsertWithOutput` (lattice merge) |
-   | `C.Of(k).Is(x)` | `InsertWithOutput` (storage unions the outputs) |
-   | `a.Is(b)` on classes | `Union` |
-   | equality of two values that is not a function write | error |
+   | `R(args)` | `Insert(R, eval(args))` |
+   | `F.Of(k).Is(v)`, either side, `F` a function | `Write(F, eval(k) ++ [eval(v)])` |
+   | `C.Of(k).Is(x)`, either side, `x` not a constructor application | `Write(C, eval(k) ++ [eval(x)])`: the engine's union-id merge unions an existing output with `x` |
+   | `a.Is(b)` of a sort, otherwise | `Union(eval(a), eval(b))` |
+   | `a.Is(b)` of a value type that is not a function write | *"equality of two values that is not a function write: a = b"* |
+   | `a.IsNot(b)`, `Fact.Exists`, `Fact.True` | *"head facts are writes; 'IsNot' is a filter"* |
 
-   Ops run in declaration order, post-order within a fact.
-9. **Projection.**
-   - The buffer stores the registers the actions read.
-   - With a callback it stores every register.
-   - For a query, it stores every named register.
-10. **Plans.** `JoinPlanner.PlanAll` (§3.4).
+   `Make(name, term)`: the variable's register is `eval(term)`. A `Make` variable used in the body: *"head variable 'x'
+   made by Make appears in When"*. `Rewrite(left, right)` adds the head fact `t.Is(right)` (so a constructor on the
+   right is a `Write`, a variable a `Union`).
+9. **Projection.** A query projects its declared variables in declaration order (`NamedRegisters`), through one
+   `Collect` head operation; a split matcher projects its key, set and assumption registers.
+10. **Output.** A `RuleProgram`, and a `CompiledRule` whose `RuleVariants` immediately lowers the default variant
+    (semi-naive, or naive for a `Naive()` rule) with the written constants (§6.4). An engine exception while lowering
+    (which would be a defect of the checks above) becomes a `RuleDefinitionException` wrapping it, and nothing is
+    registered.
 
-### 3.4 Planning and matching
+A body with no atoms is legal; the engine fires a semi-naive rule without atoms once (map §3.4), and a naive one at
+every iteration.
 
-**Plans.**
+### 6.4 Lowering a program to the bridge
 
-- There is one plan per atom: `Plans[i]` starts with `Atoms[i]` as the focus.
-- A body with no atoms gets one plan with `FocusAtom = -1`, and matches once, when `W == 0`.
-- The step order is greedy:
+#### 6.4.1 Entries
 
-```
-B := ∅
-place filters, LetBinds and LetChecks whose inputs are constants
-place focus atom i:
-    Scan, or ScanColumn on its first constant column
-    (preference: Id key column, then Value key column, then the output)
-loop:
-    place every ready compute
-        a filter            -> Filter / NotEqual
-        a Let, target ∉ B   -> LetBind
-        a Let, target ∈ B   -> LetCheck
-    if every atom is placed: break
-    next := argmax over unplaced atoms of
-            (lookupable ? 2 : anyBound ? 1 : 0,
-             bound Id key columns, bound columns, −arity, −ordinal)
-        lookupable: a function or constructor with every key column bound,
-                    or a relation with every column bound
-    access: Lookup (TryLookup, then bind or check the output) or Contains (relation)
-            if lookupable;
-            else ScanColumn on the preferred bound column;
-            else Scan
-    column ops: constant -> CheckConstant; register in B (or earlier in this row) -> Check;
-                new register -> Bind
-```
+For a variant lowered with constants `K` (D36):
 
-**Which plan runs.**
+| Operand | `RuleEntry` |
+|---|---|
+| `Register(r)`, a body register | `RuleEntry.Var(var[r])`, where `var[r] = builder.NewVarNamed(type(r).EngineType, name(r))` was created before the first atom |
+| `Register(r)`, a head register | the `RuleVariable` returned by the `Lookup` or `CallExternalFunc` that defined it |
+| `Constant(type, bits)` | `RuleEntry.Const(new Value(bits), type.EngineType)` |
+| `IdConstant(k)` | `RuleEntry.Const(new Value(K[k]), ColumnTy.Id)` (from R2 the bridge lowers it through `QueryEntry.IdConst`, colors §9.8) |
 
-- A semi-naive variant `i` runs `Plans[i]` with `since = W` on the focus.
-- A full run uses `Plans[argmin est(i)]` with `since = 0`, where `est(i)`:
-  - is `ApproximateCount(slot context, table) / 16` when the atom has a constant column;
-  - is `ApproximateCount` otherwise;
-  - breaks ties by ordinal.
+`unit` is `RuleEntry.Const(new Value(graph.Unit.Unit), graph.Unit.EngineType)`.
 
-**Matcher.** Allocated once per rule per `Run`, and cached by the executor:
-
-- `ulong[] registers`, a key buffer and an argument buffer sized to the maximum arity;
-- `RowAction[] onRow`, with `onRow[k] = row => Step(k, row)`.
+#### 6.4.2 The builder calls
 
 ```
-Run(plan, slots, constants, since, sink):
-    store the arguments in fields; Continue(0)
-
-Continue(k):
-    if k == steps.Length: sink.Accept(registers); return
-    if sink.IsSatisfied: return
-    step := steps[k]; ctx := slots[step.Slot]; s := (step.Atom == plan.FocusAtom) ? since : 0
-    Scan:       ctx.Scan(table, onRow[k], s)
-    ScanColumn: ctx.ScanColumn(table, col, value(IndexSource), onRow[k], s)
-    Lookup:     fill the key buffer; if ctx.TryLookup(table, key, out o): apply the Output op to o; Continue(k+1)
-    Contains:   fill the key buffer; if ctx.Contains(table, key): Continue(k+1)
-    Filter:     if Invoke(args) != 0: Continue(k+1)
-    NotEqual:   if value(Left) != value(Right): Continue(k+1)
-    LetBind:    registers[t] = Invoke(args); Continue(k+1)
-    LetCheck:   if registers[t] == Invoke(args): Continue(k+1)
-
-Step(k, row):
-    for each column op: Bind writes; Check / CheckConstant compare (return on mismatch); Skip does nothing
-    Continue(k+1)
+Lower(graph, P, rule, semiNaive, K, description):
+    b = graph.Engine.NewRule(description, semiNaive)
+    for each body register r used by an atom or a step: var[r] = b.NewVarNamed(...)
+    for a in P.Atoms:                                                       // order = the engine's variant order
+        cols = a.Columns.Select(entry); if a.Table.IsRelation: cols += unit
+        b.QueryTable(a.Table.Function, cols, isSubsumed: false)
+    for s in P.Steps:
+        Let:      f = register(new PrimitiveCall(graph, P.Name, s.Primitive, types(s.Arguments), type(s.Target), names))
+                  b.QueryPrim(f, s.Arguments.Select(entry) ++ [entry(s.Target)], type(s.Target).EngineType)
+        Filter:   f = register(new FilterCall(graph, P.Name, s.Primitive, types(s.Arguments), names))
+                  b.QueryPrim(f, s.Arguments.Select(entry) ++ [RuleEntry.Var(b.NewVar(unitTy))], unitTy)
+        NotEqual: b.QueryPrim(graph.NotEqual, [entry(l), entry(r), RuleEntry.Var(b.NewVar(unitTy))], unitTy)
+    for h in P.Head:
+        Insert:   b.Set(h.Table.Function, h.Inputs.Select(entry) ++ [unit])
+        Write:    b.Set(h.Table.Function, h.Inputs.Select(entry))           // keys, then the value or output
+        GetOrAdd: head[h.Target] = b.Lookup(h.Table.Function, h.Inputs.Select(entry), () => $"rule '{P.Name}': get-or-add of '{h.Table.Name}' failed")
+        Union:    b.Union(entry(h.Inputs[0]), entry(h.Inputs[1]))
+        Compute:  f = register(new PrimitiveCall(...))
+                  head[h.Target] = b.CallExternalFunc(f, h.Inputs.Select(entry), type.EngineType, () => $"rule '{P.Name}': primitive '{p}' failed")
+        Collect:  f = register(new MatchCollector(graph, h.Inputs.Length, graph.Unit.Unit))
+                  b.CallExternalFunc(f, h.Inputs.Select(entry), unitTy, () => $"'{P.Name}': collector failed")
+    id = b.Build()
+    return new LoweredRule(id, description, semiNaive, K, owned = every f registered above, rule, collector)
 ```
 
-- Registers bound at step `k` are read only by later steps, so backtracking needs no undo.
-- Nested reads inside the callbacks rely on the documented storage guarantee.
-- Nothing writes during matching. Path compression in `Find` touches only union-find maps, never a `RowSet` being iterated.
+`register(x)` is `graph.Engine.RegisterExternalFunction(x)`. Notes:
+- `QueryPrim`'s last entry binds a register the join did not bind, or else checks equality (map §3.3), so a `Let` is a
+  binding or a check exactly as §6.3 step 4 placed it. A result of nothing (a filter's false, a failed call) drops the
+  match.
+- The bridge runs every `QueryPrim` after the join, on every match of every variant, in recording order, then the head
+  actions in recording order (decision 12).
+- The contradiction relation is written by an `Insert`; from R2 the bridge appends its early-stop external after every
+  head insert into it (colors §10.6).
+- Every relation atom carries the unit constant in its output column, which the planner treats as an equality
+  constraint.
+- No rule-layer external function reads tables (`ReadsTables == false`), so every semi-naive rule may inherit (D4,
+  invariant Q).
 
-**Invariant C (canonical identifiers).** Every Id written to a register is canonical in its home slot's context, and constants are canonicalized at the start of the run in their slot. So class joins compare bits.
+#### 6.4.3 Descriptions
 
-- Rows of a context's view are canonical in that context: storage invariant 1, plus the fact that unshadowed ancestor rows mention only classes the context left alone.
-- `TryLookup` returns canonical outputs.
-- When a class flows into an action in the running scope `S`, it is a valid identifier there without translation. An id canonical in an ancestor names a class of `S`, and `Insert`, `Union` and `GetOrAdd` canonicalize through `FindRaw`.
+A variant's description is unique in the graph and keys its statistics (`RuleSetReport.NumMatches`,
+`RuleSearchAndApplyTime`, `RuleReports`):
 
-### 3.5 Semi-naive bookkeeping
+| Program | Description |
+|---|---|
+| global rule | `{ruleset}/{name}#{serial}` |
+| local rule (R2) | `{scope path}:{ruleset}/{name}#{serial}` |
+| query | `$query/{name}#{serial}` |
+| split matcher (R3) | `$split/{name}#{serial}` |
+| mirror copy rule (R2) | `$mirror/{mirror name}#{serial}` |
 
-**State.**
+followed by `/naive` for the naive twin of a semi-naive rule, and by `/k{generation}` for an R1 re-lowering (§6.4.5).
+`EGraph.VariantsByDescription` maps each description to its `LoweredRule`.
 
-- `progress[rule.Index] = RuleProgress(Since W, Constants K)` per scope.
-- Split rules use `splitProgress`, which is never inherited.
-- An iteration reads `T = Store.Clock` after `S.Rebuild()` and before any matching.
-
-**Matching rule `r` in clean scope `S`.**
-
-```
-slots[0] = S.Context; slots[k] = resolve(S, tag_k).Context
-K' = canonical Id constants (slots[slot].Find(c))
-P = progress[r] ?? Inherit(S, r) ?? (0, K')
-W = (P.Constants sequence-equals K') ? P.Since : 0          // invariant K
-if (Options.SemiNaive == false || r.IsNaive || W == 0):
-    run the full plan with since 0
-else:
-    for each atom i:
-        if slots[slot_i].LatestStamp(table_i) <= W: continue // nothing new anywhere in that view
-        run Plans[i] with since W                            // focus: changed since W; others: everything
-pending[r] = (T, K')            // committed only after the apply phase and Rebuild succeed
-```
-
-**Inherit(S, r)**, for plain rules that are not naive and have no callback:
+#### 6.4.4 Choosing variants for an iteration
 
 ```
-if S.Parent is null → null
-if S.Tag ≠ null and r.ReadScopes contains S.Tag → null       // a tag would resolve differently
-pp = S.Parent.progress[r] ?? Inherit(S.Parent, r); if pp is null → null
-if pp.Constants ≠ K' → null
-return (min(pp.Since, S.createdAt), K')
+PrepareRules(rules, semiNaive):                     // R1: under the engine lock
+    for each compiled rule r, in order:
+        mode = semiNaive && r.Rule.IsNaive == false   // a Naive() rule always runs naive
+        lowered[i] = PrepareVariant(r.Variants, r.Program.WrittenIdConstants, mode)
+    return lowered
+
+PrepareVariant(variants, written, mode):
+    K = R1 ? map Find over written : written
+    return variants.Get(graph, mode, K)
 ```
 
-**Invariants and why they hold.**
+`RuleVariants.Get` returns the cached variant for the mode when its `Constants` sequence-equal `K`; otherwise it
+lowers one (freeing a stale one first), under the rule's lock.
 
-- **S1 (stamp completeness, from storage).** If context `X` is clean at `t0` and again at `t1 > t0`, every row of `X`'s view at `t1` with stamp ≤ `t0` was in `X`'s view at `t0` with the same content.
-  - Rows enter a view only through `RowSet.Add` or `SetOutput`, each with a fresh `Tick()`. Re-keying kills the row and adds it again.
-  - Shadowing only grows: marks only grow and `Rekey` maps them forward. If an own row with key `k` is killed, `k` mentions a merged loser. That loser is either marked, which keeps the ancestor row shadowed, or local, in which case no ancestor row has it.
-  - Compaction keeps stamps.
-- **K (constants).** If an Id constant's canonical id changed, rows that now match it may be old. Hence the full run.
-- **SN (watermark).** After `progress[r] = (W, K)` is committed, every match of `r` in `S`'s current view whose rows are all stamped ≤ `W` (with `K` unchanged) has been applied in `S` or an ancestor, and its effects are visible in `S`.
-  - *Proof, by induction on runs.* The run that committed `W` searched a clean view at clock `W`. By S1, applied to `S` and to every slot context, a match whose rows are all ≤ `W` existed then with the same rows; Id canonical forms are unchanged because the rows are unchanged and `K` is equal.
-  - That run was either full, and found everything, or ran variants against `W_prev`. In the second case the match either had every row ≤ `W_prev` (applied earlier, by induction) or had some atom `i` with a row > `W_prev`. Variant `i` reads atom `i` since `W_prev` and every other atom in full, so it is complete.
-  - Its actions were applied and `S` was rebuilt before `W` was committed. Contexts are monotone, so the effects persist.
-- **INH (inheritance is sound).** Let `W0 = min(pp.Since, c)`, where `c = S.createdAt`.
-  - Every row of `S`'s view stamped ≤ `c` is not an own row of `S`, because own rows are stamped after `c`. So it is an unshadowed row of the parent's view, with the same content and the same canonical ids.
-  - Scoped slots resolve to the same contexts from the parent (the tag check).
-  - So a match in `S` over rows ≤ `W0` is a match in the parent over rows ≤ `pp.Since`, with the same `K` (checked). By SN in the parent (or recursively up the chain) it was applied there, and the parent's facts are in `S`'s view.
-- **Duplicates.**
-  - A match with several changed rows is found by several variants. `MatchBuffer` deduplicates projected tuples within the iteration, and actions depend only on the projection.
-  - In a later iteration a restamped copy (marking, re-keying) can deliver an old match again. Built-in actions are idempotent; callbacks are documented to be idempotent too (D21).
-- **Concurrency.** Sibling threads tick the shared clock only for rows outside `S`'s view, so `T` remains an upper bound for `S`'s view.
+#### 6.4.5 Id constants in R1 (D3)
 
-### 3.6 One iteration: actions and change detection
+A bare `Database` runs Id constants as written. A rule whose constant `c` has lost a union would then stop matching
+`c`'s class (the egglog defect of colors §19 item 4), and an action writing `c` would store a stale cell that no later
+rebuild rewrites (colors X38). The R1 root adapter prevents both:
+- before every iteration, `PrepareRules` computes `K = [GetCanonInUf(c) for c in WrittenIdConstants]`;
+- if the cached variant was lowered with different constants, it is freed (`FreeRule`, then `FreeExternalFunction` for
+  its owned functions) and the program is lowered again with `K` and description suffix `/k{generation}`;
+- the new engine rule starts at watermark 0, so its first run is the full run D3 requires;
+- `IdConstant` operands are the only place class constants appear, so every query and action constant is covered.
+
+R2 deletes this path: Store-backed contexts canonicalize constants per run and gate watermarks on them (X19, I30).
+R2's `PrepareRules` passes the written constants, and the variant never changes.
+
+#### 6.4.6 Freeing
+
+- Global rules, split matchers and mirror copy rules live as long as the graph.
+- A query lives until it is disposed and no call uses it (D49).
+- A stale R1 variant is freed when it is re-lowered.
+- A local rule's variants are freed when its scope is released (D40, §6.7). No descendant can be running it then,
+  because a scope is released only once it has no live children.
+
+### 6.5 Iterations and schedules
+
+#### 6.5.1 One iteration
 
 ```
-RuleRunner.RunIteration(executor, S, rules):
-    executor.BeforeIteration(S)            // limits, cancellation
-    S.Context.Rebuild(); T = Store.Clock; v0 = S.Context.Version
-    for r in rules (in the order given): clear buffer[r]; match r (§3.5) into buffer[r]
-    for r in rules:
-        for m in buffer[r] (discovery order):
-            r.Actions.Execute(S, m, scratch, r.Name)
-            // a storage InvalidOperationException becomes RuleEvaluationException(r, bindings)
-    S.Context.Rebuild()                    // a conflict found during congruence propagates as storage's InvalidOperationException
-    commit pending progress for every rule; Statistics.Matches[r] += buffer[r].Count
-    Statistics.Changes += S.Context.Version − v0
-    return S.Context.Version != v0
+ScheduleExecutor.RunIteration(S, rules, inCase):
+    BeforeStep(S)                                       // cancellation, then limits (§6.5.4)
+    if rules is empty: return false
+    S.Engine.EnsureClean()
+    R2: MirrorSync.Ensure(S, tags read by rules, reader, this)        // D48, §6.8
+    lowered = S.Engine.PrepareRules(rules, Options.SemiNaive)
+    try:
+        it = S.Engine.RunRules(lowered.Select(v => v.Id))
+    catch Relations.PanicException e:
+        failure = S.Runtime.TakeFailure()
+        ex = new RuleEvaluationException(failure?.RuleName, failure?.Bindings,
+                                         failure?.What ?? e.PanicMessage, failure?.Exception ?? e)
+        S.Fault(ex); throw ex
+    Statistics.Iterations++
+    for v in lowered where v.Rule is not null:
+        Statistics.Rules[v.Rule].Add(it.Report.NumMatches(v.Description), it.Report.RuleSearchAndApplyTime(v.Description),
+                                     plan of v from it.Report.RuleReports when EGraphOptions.RecordPlans)
+    Statistics.SearchTime += it.Report.SearchAndApplyTime; MergeTime += it.Report.MergeTime; RebuildTime += it.RebuildTime
+    changed = it.Changed || it.RebuildChanged
+    if S == Top: Statistics.LastTopStepChanged = changed; Statistics.TopChanged |= changed
+    RecordStep(Iteration, S, changed, elapsed, it)      // §6.11
+    return changed
 ```
 
-- **Order.** Rules, then matches, then ops, in declaration or discovery order, so runs are deterministic. Every built-in action is a monotone insertion: a row, a lattice merge, a union, or a get-or-add. So the facts after `Rebuild` do not depend on order; only fresh ids and representatives do, through storage's min-id winner.
-- **Get-or-add before rebuild** may miss a key that is not yet canonical and create a duplicate class. `Rebuild` merges the two (storage: "late rather than wrong").
-- **Change detection uses `Version`, never `Store.Clock`.** Siblings tick the clock, and no-op writes do not move `Version`.
-- **Failure.** If anything throws, nothing is committed. The scope may be dirty and partly written. Re-running after `Rebuild()` finds the same matches again (D18).
+- **Order.** Rules run in the order `RulesFor` returns them, and the engine's writes are idempotent monotone
+  insertions (rows, lattice merges, unions, get-or-adds), so the facts after the rebuild do not depend on order; only
+  fresh ids and representatives do. A serial graph (`DegreeOfParallelism = 1`, the default) is fully deterministic
+  (decision 4).
+- **Change.** `Changed` is the rule application's own change and `RebuildChanged` the rebuild's (decision 11); both
+  count, because facts a rebuild merges are new to the next iteration. `RunReport.Changed` comes from these flags, not
+  from `Version` deltas, so catch-up copies (D16) never count as the run's changes.
+- **`Stopped`** (R3, `IterationReport.Stopped`) means the case's stop flag is set: the schedule treats the case as
+  contradictory from then on (D45).
 
-### 3.7 Schedules and limits
+#### 6.5.2 Schedule nodes
 
-`Execute(node, S, depth, inCase)` returns "changed in `S`". Changes inside cases count for the parent only through lifts.
+`Execute(node, S, depth, inCase, splitsEnabled)` returns "changed in `S`". Changes inside cases count for their
+parent only through lifts.
 
 | Node | Behaviour |
 |---|---|
-| `Run(rs…)` | If `(inCase or Options.StopOnContradiction) and S.IsContradictory`: return false; at the top level also record `StopReason = Contradiction`. Otherwise one `RunIteration` over the concatenated `RulesFor`. |
-| `Sequence` | Each step in order; the result is the OR of the steps. |
-| `Repeat(n, s…)` | Up to `n` passes of `Sequence`; stop after a pass with no change. |
-| `Saturate(s…)` | Passes until one reports no change. |
-| `Until(b, f)` | If every fact of `f` holds (checked like `Check`), return false; otherwise `b`. |
-| `Split(rules, inCase)` | §3.8. |
+| `Run(rs…)` | If `S.IsContradictory` and (`S` is a case, or `inCase`, or `Options.StopOnContradiction`): return false, and at the top level set `StopReason = Contradiction`. Otherwise one `RunIteration(S, RulesFor(rs, S), inCase)`. A host `Run` called on a case scope (R3) therefore stops on contradiction too (D11). |
+| `Sequence(s…)` | Each step in order; the result is the OR of the steps. |
+| `Repeat(n, s…)` | Up to `n` passes of `Sequence`; stops after a pass with no change. |
+| `Saturate(s…)` | Passes of `Sequence` until one reports no change. |
+| `Until(b, f…)` (R1b) | If `Check(f…)` holds in `S`, return false; otherwise `b`. |
+| `Split(rules, inCase)` (R3) | §6.9.3. |
 
-- **Limits.** `BeforeIteration` checks, in order:
-  1. cancellation, which throws `OperationCanceledException` after cleanup;
-  2. `IterationLimit`, `TimeLimit`, `ChangeLimit`, which throw `ScheduleStopException(reason)`.
+`RulesFor(rulesets, S)` returns, deduplicated by reference: the rulesets' global rules (snapshots, in definition order),
+then each scope's local rules belonging to those rulesets from the root down to `S` (R2). Mirror copy rules are never
+in it; they run only in syncs (D48). It is recomputed for every iteration, so rules defined concurrently join at the
+next one (D6).
 
-  `Scope.Run` catches the stop exception. In `finally`, it calls `DisposeSplits()` and rebuilds the scope, then returns the report. Stopping early is sound: the scope has fewer facts, each of them valid.
-- **Saturated** = `StopReason == Completed && !LastTopStepChanged`. `LastTopStepChanged` is set by every iteration and split step executed in the top-level scope.
-
-### 3.8 Case splits
-
-**Rule-driven: `SplitRunner.Execute(executor, node, S, depth)`.**
+#### 6.5.3 `Scope.Run`
 
 ```
-require S writable; S.Context.Rebuild()
-for each split rule s in node.Rules:
-    match s semi-naively in S with splitProgress (no inheritance) into a deduplicating buffer
-    for each match m:
-        key = SplitKey(s.Index, m[key registers])
-        if S has a live record with key: continue                   // the existing cases still cover S
-        elements = decode(m[set register]), in element order
-        if elements.Count == 0 or elements.Count > CaseLimit or depth >= SplitDepthLimit:
-            SplitsSkipped++; continue
-        cases = for each element v:
-            K = S.CreateChild(s.CaseTag) as a case (depth + 1)
-            registers = m plus the element register := encode(v)
-            execute s.Assumptions in K; K.Rebuild()
-        record = new SplitRecord(s, key, S, cases, depth + 1); S.splitRecords.Add(record); executor.Track(record)
-        CasesOpened += cases.Length
-    commit splitProgress[s] = (T, K')        // no action touches S
-changed = false
-for each record of S, in creation order:
-    for each case K: K.Rebuild(); if K.IsContradictory: continue
-        Execute(node.InCase, K, depth + 1, inCase: true)
-    report = Lifter.Lift(S, record.Cases, Options.Lift, record.LastSignature, out sig)
-    record.LastSignature = sig; changed |= report.Changed
-return changed
+Run(schedule, options, ct):
+    check EngineCallMarker; enter Guard (InvalidOperationException for a second thread)
+    try:
+        ThrowIfNotUsable(); ThrowIfNotWritable()        // faulted, disposed, frozen (R2), inside a run observer
+        R3: if Engine.IsStopped: return a report with no iteration and StopReason = Contradiction   // D45
+        schedule.Collect(rulesets, splits)
+        R2: for each tag t read by a reachable rule or split rule (Rule.ReadScopes, SplitRule.ReadScopes):
+                ScopeResolver.Resolve(this, t, reader)  // throws before any work
+        executor = new ScheduleExecutor(this, options ?? RunOptions.Default, ct); clock = Stopwatch.StartNew()
+        try:
+            schedule.Execute(executor, this, depth: 0, inCase: false, splitsEnabled: true)
+            reason = executor.Statistics.StopReason     // Completed unless a Run node recorded Contradiction
+        catch ScheduleStopException e: reason = e.Reason
+        finally:
+            R3: Relations.SplitDriver.DisposeRecords(this context)   // cases made during the call
+        return executor.Complete(reason, clock)
+    finally: Guard.Exit()                               // runs releases deferred meanwhile (D40)
 ```
 
-- **Coverage** is the split rule's obligation (stated on `SplitBuilder` and `DefineDomainSplit`). For the domain split:
-  - the body establishes "`k` is present and its value ∈ `d`";
-  - domains only narrow, so cases made for an older, wider `d` still cover `S`;
-  - a case for a value since removed becomes vacuous once it syncs, because its domain meets to ∅ and the contradiction rule fires.
-- **Persistence.** A record lives until its `Run` ends. On every later execution of the split step, the in-case schedule takes in the parent's new facts through the case's watermarks, which are inherited lazily from the parent and then the case's own.
-- **Disposal.** `DisposeSplits()` disposes records depth-first in reverse creation order: a case first disposes its own records. It then clears `splitProgress` in each parent, so a later `Run` matches every split again from scratch.
-- **Host-driven.** `OpenCases()` returns a `CaseSet`. `CaseSet.Lift` calls `Lifter.Lift` without a memo. `Scope.Split<T>` is open, add, assume, run with `StopOnContradiction`, lift, dispose. An empty or over-limit `values` throws `ArgumentException`.
+`OperationCanceledException` and `RuleEvaluationException` propagate after the `finally`. Stopping early is sound: the
+scope holds fewer facts, each of them valid.
 
-### 3.9 Lift
+#### 6.5.4 Limits and the report (D42)
 
-**Inputs.**
+- `BeforeStep` runs before every iteration (in any scope of the run) and every split step, and checks, in order:
+  `ct.ThrowIfCancellationRequested()`; `Iterations >= IterationLimit`; elapsed `> TimeLimit`; `Top.Engine.OwnRowCount
+  + Σ OwnRowCount over LiveCases > RowLimit`. The last three throw `ScheduleStopException(reason)`.
+- Limits are per top-level `Run`, across cases. An engine iteration and a lift cannot be interrupted, so a run
+  overshoots a limit or a cancellation by at most one iteration or one lift.
+- `RunReport.Changed` is `Statistics.TopChanged`: an iteration, split step or lift changed the top-level scope.
+- `RunReport.Saturated` is `StopReason == Completed && LastTopStepChanged == false`. `LastTopStepChanged` is set by
+  every iteration and split step executed in the top-level scope.
+- `RunReport.Rules` holds the statistics of every rule that ran, cases included; mirror syncs, queries and split
+  matchers are not rules and are not listed.
 
-- A writable parent `P`.
-- Cases `K1..Kn`, children of `P`, n ≥ 1 (otherwise `InvalidOperationException`: *"a lift needs at least one case; with none, the scope would be declared contradictory — assume Contradiction explicitly if that is meant"*).
-- Options.
+### 6.6 Host writes, host reads and queries
 
-**Precondition (Cov, the caller's obligation).** Every model of `P` satisfies some case's assumptions.
+#### 6.6.1 Host write batches (D30)
 
-**Algorithm.**
-
-```
-rounds = 0
-loop:
-    P.Rebuild(); each K.Rebuild()
-    signature = [P.Version, K1.Version, …]
-    if rounds == 0 and signature == lastSignature: return unchanged
-    Live = { K : ¬K.Contains(Contradiction) }
-    if Live is empty:
-        if ¬P.Contains(Contradiction): P.Insert(Contradiction); P.Rebuild()
-        ParentContradicted = true; break
-    maps = MemberMap.Build(K) for each K in Live:
-        groups: c ↦ sorted { m | K.ScanMerges reports (m, c) }   // local ids are already excluded
-        Members(c) = groups[c] if present; else [c] if ¬K.IsLocalId(c); else []
-    r = the live case with the fewest groups
-    // 1. equalities: a full partition meet
-    blocks = ClassPartition.Meet(maps[r], Live \ {r})
-        // split each group of maps[r] by the signature (Kj.Find(m))_{j≠r}; keep blocks of size ≥ 2
-    pending unions: block[0] with each other member
-    // 2. rows: candidates from r's own rows
-    for each table h with h.Lift, h ≠ Contradiction, in declaration order:
-        copy the rows of r.ScanOwn(h) into an arena
-        for each row: candidate parent rows φ = product over Id columns (keys only for functions and constructors)
-                      of maps[r].Members(column)
-            if some column has no members: skip (it mentions a case-local class)
-            if the product exceeds CandidateLimit: Skipped++, skip
-            deduplicate φ in a RowArena
-        for each candidate φ (key k for functions and constructors):
-            relation:    if ¬P.Contains(h, φ) and ∀ K ∈ Live: K.Contains(h, φ)   → pending Insert(h, φ)
-            constructor: if ¬P.Contains(h, k) and ∀ K ∈ Live: K.Contains(h, k)   → pending GetOrAdd(h, k)
-            function:    if ∀ K ∈ Live: K.TryLookup(h, k, out v_K):
-                             J = h.CaseJoin ? fold(CaseJoin, v_K) : (all v_K equal ? v : skip)
-                             if ¬(P.TryLookup(h, k, out p) and Merge(p, J) == p) → pending Insert(h, k, J)
-    if no pending writes: break
-    apply the unions, then the inserts and get-or-adds; P.Rebuild(); rounds++
-    if rounds == RoundLimit: break
-signature = the final [P.Version, case versions…] after rebuilding
-```
-
-`K.Contains(h, φ)` and `K.TryLookup` canonicalize φ's parent ids in `K` (storage `Canonicalize` through `FindRaw`).
-
-**Why it is right.**
-
-- **L1 (soundness).** A lifted fact holds in every live case. Vacuous cases have no models. By Cov, every model of `P` is a model of a live case, so the fact holds in `P`.
-  - For a case-joined value: the true value satisfies `v_K` in its case, and by absorption `v_K ⊑ J`, so `J` holds in `P`.
-  - If every case is vacuous, `P` has no models.
-  - Creating terms in `P` (`GetOrAdd`) asserts nothing, so it is always sound.
-- **L2 (translation).** `K` entails the parent-level fact `R(Y)` iff `R(Find_K(Y))` is in `K`'s view. A view is closed under congruence and contains `P`'s facts canonicalized. The `IsLocalId` filter keeps classes that exist only in a case out of `P`, even when only one case is live.
-- **L3 (completeness of candidates).** If a parent-level relation fact holds in `r` but not in `P`, then its translation is an own row of `r`.
-  - An unshadowed row of `P` mentions only unmarked classes, whose canonical id is the same in `r`.
-  - For a function key that `r` does not hold, `r`'s value is `P`'s value, and the join adds nothing to it, by absorption.
-  - The candidate limit may lose completeness, never soundness.
-- **L4 (completeness of equalities).** Take parent-canonical `y1 ≠ y2` that are equal in every live case.
-  - In `r`, each is either marked (merged) or the canonical id of a merged class. Both are marked by `UnionCore`.
-  - So both are in one group of `maps[r]`, and they survive refinement.
-  - The partition is fully refined, not tested in representative pairs.
-- **Term lift.** A constructor key present in every case gets a fresh class `x` in `P`.
-  - Each case holds its own row with that key, so when it syncs, `Absorb` sends it to `MergeInto` and congruence merges `x` with the case's output.
-  - In the next round, the meet lifts `x ~ e` iff every case had its output equal to `e`.
-  - Terms nested over case-local classes therefore lift bottom-up, one level per round.
-- **Termination.** Each round adds rows, classes or merges to `P` that come from the cases' finite contents. `RoundLimit` is a backstop.
-
-### 3.10 Extraction
-
-**Discovery** from `r = S.Find(root)`, a breadth-first search over `(class, sort)`:
-
-- For each extractable constructor `h` whose output sort is the class's sort, call `S.ScanColumn(h.Table, outputColumn, x, …)` and copy each row into the arena as a node, keeping its head.
-- Each Id key column of a node names a child class, whose sort is the column's type.
-- Discovery is closed downward, so a later root extends the graph without invalidating classes already final.
-
-**Costs.**
-
-- `head(n)` = `CostModel` head cost (constant or `NodeCostFunction`).
-- `values(n)` = Σ `ValueCost` over the node's value key columns.
-- Saturating addition; `long.MaxValue` means unreachable.
-- A negative cost throws `InvalidOperationException`.
-
-**Knuth's algorithm.**
+`Make`, `Assume` and `Union` each run one batch of one call; `Write` runs one batch of many:
 
 ```
-pending[n] = the number of class-column occurrences of node n
-parents[class] = the occurrences of that class
-queue = a priority queue of NodeKey, ordered by NodeOrder; seed every node with pending == 0 at head + values
-while queue not empty:
-    pop (cost, n); x = class(n); if final[x]: continue
-    final[x] = true; best[x] = n; cost[x] = cost; rank[x] = next++
-    for each occurrence of x as a child of node p:
-        if --pending[p] == 0 and ¬final[class(p)]:
-            push (head(p) + values(p) + Σ cost[child classes of p], p)
+batch(S, body):
+    check EngineCallMarker; enter S.Guard
+    try:
+        S.ThrowIfNotUsable(); S.ThrowIfNotWritable()
+        R3: if S.Engine.IsStopped: Assume → return; Union → return false; Make, Write → throw ScopeContradictedException
+        S.Engine.EnsureClean()
+        b = new HostBatch(S)
+        body(b)        // phase 1, per call as it is made: validate the facts, check class values (D39), encode constants
+                       // (interning), resolve existing terms with TryLookup, mint fresh ids for new terms, record the
+                       // rows and unions that do not hold already, check conflicts (D32). An exception discards the
+                       // batch: nothing is staged, and b.Origin never commits.
+        if b.IsEmpty: return                     // nothing to write: no flush, no clock tick, Version unchanged
+        try: b.Commit()                          // phase 2: stage new terms' rows in post-order, then rows, then unions;
+                                                 // flush; rebuild; commit b.Origin
+        catch Relations.PanicException e: f = S.Runtime.TakeFailure()
+                                          ex = RuleEvaluationException(f?.RuleName, f?.Bindings, f?.What ?? e.PanicMessage,
+                                                                       f?.Exception ?? e)
+                                          S.Fault(ex); throw ex
+    finally: S.Guard.Exit()
 ```
 
-- **Optimal.** Sums of non-negative costs are superior functions (Knuth 1977).
-- **Acyclic, even with zero costs.** A node is pushed only after all its children are final, so the finalization order is a topological order of the chosen nodes.
-- **Cycles.** A class whose only nodes depend on itself never finalizes. `TryExtract` returns false, and `Extract` throws *"class #41 has no finite term in 'root/query#2'"*.
-- **Tie-break (`NodeOrder`).** Compare cost, then `head.Index`, then the columns left to right: class columns by canonical id (older classes first), value columns by `ColumnType.Compare` (content order). Two nodes equal in all of these are the same row.
-  - With positive head costs this yields the lexicographically least spelling among equal-cost alternatives.
-  - With zero head costs it is still deterministic for a given history.
-  - In both 02 and 07, the spelling as written wins over its commuted twins, because the host made its subterms first.
-- **Defaults.** Declared cost, value columns cost 1, tree cost. This is egglog's `TreeAdditiveCostModel` with `base_value_cost = 1`, so `StrEq "a" "b"` costs 3.
-- **Term reconstruction** is iterative and memoised per class into shared `ExtractedTerm` instances.
-- **Staleness.** The extractor records the `Version` of `S` and of each ancestor context. Any later use after a change throws.
+Phase 1 completes before anything is staged, so a rejected fact writes nothing, and every lookup reads committed,
+canonical contents.
 
-### 3.11 Host reads and writes
+What "holds already" means, so that a batch of facts that hold stages nothing:
+- a relation row: `TryLookup` hits;
+- `F.Of(k).Is(v)` with a lattice: the stored `w` satisfies `Merge(w, v) == w` (the lattice's `Merge` runs on the
+  calling thread; an exception from it is wrapped in `RuleEvaluationException` with `RuleName == null`, nothing is
+  written, and the scope is not faulted);
+- `F.Of(k).Is(v)` without a lattice: `w == v` (a different `w` is a `FactConflictException`);
+- `C.Of(k).Is(x)`: the stored output and `x` have one canonical form;
+- a union: `Find(a) == Find(b)`;
+- a new term never holds; a term found by `TryLookup` plans nothing.
 
-`TermEvaluator`:
+Rows and unions repeated within a batch are planned once.
 
-- **Write** works post-order:
-  - a constant is `Encode` (interns);
-  - a constructor application is `GetOrAdd`;
-  - a function application, a computation, or a scoped handle is an `ArgumentException`.
+`PlanTerm(t)`:
+- a value constant: `Encode(value)`;
+- a class constant: `ClassChecks.Require(S, value, …, openBatch: b.Origin)`, then `Find`;
+- an unscoped constructor application `C(args)`: plan the arguments first. If they are all existing and
+  `TryLookup(C, keys)` hits, the term is the (canonical) output. Otherwise it is new: `FreshId()` mints its id now, and
+  `PendingTerm(C, keys, id)` is recorded, memoised by `(C, keys)`, so a batch mints each new term once. Pending terms
+  are recorded children first, which is post-order.
+- a function application (*"host terms do not read; Get 'dom' first"*), a computation, a variable or a scoped
+  application: `ArgumentException`.
 
-  `Assume` follows the head-fact table of §3.3, step 8.
-- **TryRead** never creates and never interns:
-  - a constant is `TryEncodeExisting` (a miss means absent);
-  - a constructor or function application is `TryLookup` on the resolved slot context (`In(tag)` is honoured; the slot is resolved from the reading scope);
-  - a class result is mapped through `S.Context.Find`, which is valid because an id canonical in an ancestor names a class of `S`;
-  - a computation is an `ArgumentException`.
-- **Check**:
-  - a relation fact uses `Contains`;
-  - an equality fact means both sides exist and their bits are equal (classes canonical in `S`);
-  - `Exists(app)` means the application exists;
-  - filters are rejected.
+`Commit()` stages each pending term's row `keys ++ [id]`, then the rows, then the unions, and flushes. `Make` returns
+`Find(id)` after the flush, as a class with `S`'s origin; `ScopeWriter.Make` returns the planned id at once, as a class
+with `b.Origin` (valid in later calls of the batch, and once the batch commits, D39). `Union(a, b)` records
+`distinct = Find(a) != Find(b)` in phase 1 and returns it.
 
-### 3.12 Concurrency
+#### 6.6.2 Host-write facts (`Assume`)
 
-- Definitions are serialised under a lock and published copy-on-write; compiled rules and plans are immutable.
-- `ValueStore` and the interners are thread-safe.
-- `Scope` is single-threaded; executors, matchers and buffers are per `Run`.
-- Lazy inheritance reads a parent's `progress` from a child's thread only when that parent is frozen, and a frozen scope cannot run, so nothing writes it. An unfrozen parent shares its child's thread.
-- Local rules are fixed once a scope is frozen.
-- User lambdas (primitives, lattices, cost functions, callbacks) must be pure and thread-safe. This is documented on every parameter that takes one.
+| Fact | Planned as |
+|---|---|
+| `R(args)`, `R` unscoped | row `R(plan(args) ++ [unit])`, unless it holds |
+| `F.Of(k).Is(v)`, either side, `F` a function, `v` a constant | row `F(plan(k) ++ [plan(v)])`, unless it holds. Without a lattice (D32): when every key exists and `TryLookup(F, keys)` holds `w ≠ v`, `FactConflictException(F, keys, w, v)`; the same for two rows of one batch with one key and different values |
+| `C.Of(k).Is(x)`, either side, `x` a class constant | row `C(plan(k) ++ [Find(x)])` (the union-id merge unions an existing output with `x`), unless it holds |
+| `a.Is(b)` of a sort, otherwise (two constructor applications, or two class constants) | plan both as terms; union, unless equal |
+| `a.Is(b)` of a value type that is not a function write | `ArgumentException("value equality is not a write: a = b")` |
+| scoped handle, `IsNot`, `Fact.Exists`, `Fact.True`, `Fact.In` | `ArgumentException` |
 
-### 3.13 Errors at a glance
+A write into `Contradiction` is a relation row like any other.
+
+#### 6.6.3 Host reads
+
+Reads check `EngineCallMarker`, enter the guard (none on a frozen scope), check `ThrowIfNotUsable` and (R3)
+`ThrowIfStopped` (D45), call `EnsureClean`, and never create terms or intern.
+
+`TryRead(S, t, out cell)`:
+- a value constant: `TryEncodeExisting`; a miss means absent;
+- a class constant: `ClassChecks.Require(S, …)`, then `Find(id)`;
+- an application `h(args)`: read the arguments; a miss means absent. Then `TryLookup(h, args)` in the scope the
+  application reads: `S` itself, or for a scoped handle (R2) `ScopeResolver.Resolve(S, tag)`, read directly (not
+  through a mirror). A class output is mapped through `S`'s `Find`, which is valid because an id canonical in an
+  ancestor names a class of `S`.
+- a computation or a variable: `ArgumentException`.
+
+`Check(S, fact)`:
+
+| Fact | Holds when |
+|---|---|
+| `R(args)` | every argument reads and `TryLookup(R, args)` hits |
+| `x.Is(y)` of a sort | both read and `Find` agrees |
+| `x.Is(y)` of a value type (a function value against a constant, two function values) | both read and the cells are equal |
+| `Fact.Exists(app)` | `app` reads |
+| `IsNot`, `Fact.True` | `ArgumentException` (host checks are ground facts, not filters) |
+| `Fact.In(tag, facts)` (R2) | every inner fact holds, reading in the resolved scope |
+
+`IsContradictory` is `TryLookup(Contradiction, [])` (on a stopped case, the engine's flag). `Get<T>` and `TryGet<T>`
+decode with the term's column type; for a sort they return `TSort.FromId(new ClassId(cell, S.Origin))`. `Find` and
+`AreEqual` check every class argument with `ClassChecks.Require`.
+
+#### 6.6.4 Queries (D34, D49)
+
+`DefineQuery` compiles like a rule body (§6.3 steps 1–7) whose only head item is a collector of the declared
+variables. Its program is lowered once as a naive variant. `QueryRunner.Run(S, query, stopAtFirst)`:
+
+```
+query.Compiled.Acquire()                                    // ObjectDisposedException if disposed
+try:
+    check every class constant against S (ClassChecks.Require, D39)
+    enter S.Guard unless S is frozen; ThrowIfNotUsable; R3: ThrowIfStopped
+    S.Engine.EnsureClean()
+    R2: MirrorSync.Ensure(S, query.ReadScopes, query.Name, executor: null)          // D48
+    target = S.Engine                                       // R1 always; R2 when S is writable
+    R2, S frozen: target = S.Engine.CreateChild(ContextOptions.Default): a transient child with its own guard, counted
+                  in S's transient children and not listed in Children; released in finally (D40)
+    buffer = new TupleBuffer(width); runtime(target).QueryMatches = buffer; runtime(target).StopAtFirstQueryMatch = stopAtFirst
+    try: target.RunQuery(target.PrepareVariant(query.Variants, query.Program.WrittenIdConstants, semiNaive: false))
+    catch Relations.PanicException e: throw new RuleEvaluationException(...)      // no fault: the query wrote nothing
+    finally: runtime(target).QueryMatches = null; release the transient child
+    map every sort column through target.Find; deduplicate; buffer.SortByContent()
+finally: query.Compiled.Release(); exit the guard if entered
+```
+
+- R1 runs the query without merging and without advancing the clock (§6.6.5), so neither `Version` nor any extractor
+  is affected. From R2, in a writable scope the query is an iteration of that scope that writes nothing: it advances the
+  clock, `Version` does not move, and E5's staleness ignores the clock.
+- `Count` is the number of distinct tuples, which are distinct full bindings because the collector projects every
+  declared variable.
+- `Any` sets `stopAtFirst`; the collector triggers the engine's early stop after the first match.
+- `ForEachMatch` delivers tuples in content order and stops when the callback returns false. Classes decode with `S`'s
+  origin.
+- In R1 a query whose class constants lost a union is re-lowered like a rule (§6.4.5), through `PrepareVariant`.
+- `Query.Dispose` marks the query disposed and frees its variants (`RuleVariants.Free`) when `Users` reaches zero.
+
+#### 6.6.5 The R1 root adapter (`RootEngineScope`)
+
+Every member that touches the bridge runs under the graph's engine lock (§6.12), and only while the root's guard is
+held.
+
+| `EngineScope` member | R1 implementation |
+|---|---|
+| `Version` | `engine.Database.ChangeStamp` |
+| `IsContradictory` | `TryLookup(Contradiction, [])` |
+| `IsStopped` | `false` |
+| `OwnRowCount` | `engine.Database.TotalSizeEstimate` |
+| `EnsureClean()` | nothing: the root is rebuilt after every flush and every run |
+| `PrepareRules` | §6.4.4 with `K` from `GetCanonInUf` (§6.4.5) |
+| `RunRules(ids)` | `it = engine.RunRules(ids)` → `EngineIteration(it.Changed, it.RebuildChanged, false, it.RuleSetReport, it.RebuildTime)` |
+| `FreshId()` | `engine.FreshId().Rep` |
+| `StageRow(f, row)` | `batch ??= engine.Database.CreateExecutionState(engine.NextTimestamp)`; map the row's sort cells through `GetCanonInUf` (column types from the table handle); `TableAction(f).Insert(batch, row)` |
+| `StageUnion(a, b)` | `engine.ActionRegistry.UnionAction.Union(batch, a, b)` |
+| `Flush()` | `batch.Flush()`, `engine.Database.RecordFailure(batch)`, `batch = null`. Then `v0 = Version`; `engine.FlushUpdates()`; if `engine.TryTakePanic(out m)`: throw `new Relations.PanicException(m)`. Return `Version != v0`. Never called for an empty batch (§6.6.1). |
+| `Find(id)` | `engine.GetCanonInUf(new Value(id)).Rep` |
+| `TryLookup(f, key)` | map the key's sort cells through `Find`; `engine.LookupId(f, key)`; map a sort output through `Find` |
+| `TableSize(f)` | `engine.TableSize(f)` |
+| `ForEach(f, visit)` | `engine.ForEach(f, visit)` |
+| `RunQuery(variant)` | Without a merge and without a clock tick: `info = engine.GetRuleInfo(variant.Id)`; `info.CachedPlan ??= info.Query.BuildCachedPlan(engine.Database, info.Description)`; `builder = engine.Database.NewRuleSet()`; `info.Query.AddRulesFromCached(builder, lastRunAt: 0, info.CachedPlan)`; `using rs = builder.Build()`; `engine.Database.ExecuteRuleSet(rs, ReportLevel.TimeOnly, engine.NextTimestamp)`; the collector stages nothing (asserted in DEBUG), so no `MergeRuleSet` follows; if `engine.TryTakePanic(out m)`: throw `new Relations.PanicException(m)` |
+| `CreateExtractor(schema, costs)` | `Relations.Extractor.CreateOnDemand(schema, costs, Relations.ExtractionOptions.Default)` |
+
+The batch is the same mechanism as `EGraph.AddValues`/`AddTerm`: rows stamped with the current timestamp, merged by
+`FlushUpdates`, which rebuilds after any union. The difference is that every sort cell is canonical when staged
+(invariant C), which the egglog-compatible API leaves to its caller.
+
+#### 6.6.6 The R2 context adapter (`ContextEngineScope`)
+
+| `EngineScope` member | `EGraphContext` member (colors §10) |
+|---|---|
+| `Version` | `Version` (X30) |
+| `IsContradictory`, `IsStopped` | `IsContradictory`, `IsStopped` (§10.1, §10.5) |
+| `OwnRowCount` | `OwnRowCount` (E7) |
+| `EnsureClean()` | `EnsureClean()` (§10.3) |
+| `PrepareRules` | §6.4.4 with the written constants (X19 canonicalizes them in the engine) |
+| `RunRules(ids)` | `RunRules(ids)` → `EngineIteration(Changed, RebuildChanged, Stopped, RuleSetReport, RebuildTime)` |
+| `FreshId`, `StageRow`, `StageUnion` | `FreshId`, `StageRow`, `StageUnion` (§10.4; Id cells canonicalized by `ReplayInto`) |
+| `Flush()` | `v0 = Version`; `FlushUpdates()`; panics as `PanicException` (§10.4 `ThrowIfFailed`); return `Version != v0` |
+| `Find`, `TryLookup`, `TableSize`, `ForEach` | `Find`, `TryLookup`, `TableSize`, `ForEach` (§10.5) |
+| `RunQuery(variant)` | `RunRules([variant.Id])` |
+| `CreateExtractor` | `Extractor.CreateOnDemand(schema, context, costs)` (E5) |
+| `IsFrozen`, `IsDisposed` | `IsFrozen`, `IsDisposed` |
+| `CreateChild(options)` | `CreateChild(options)` (E7); the child's runtime is `child.GetLocal(graph.RuntimeSlot)` |
+| `Freeze(planRules)` | `Freeze(planRules)` (§10.8, E10) |
+| `Dispose()` | `Dispose()` (E7) |
+
+#### 6.6.7 Class values (D39)
+
+`ClassChecks.Require(S, value, parameter, openBatch)` walks the value's origin:
+1. no origin (`default(ClassId)`): `ArgumentException("default(ClassId) names no class")`;
+2. another graph: `ArgumentException("class #17 belongs to another graph")`;
+3. a batch origin: accepted if it is `openBatch` (a later call of the same batch) or `Committed`; otherwise
+   `ArgumentException("class #17 was made by a Write batch that did not commit")`. The walk continues with the batch's
+   scope origin;
+4. a disposed scope origin: `ArgumentException("class #17 came from scope 'P', which is disposed")`;
+5. the origin must be `S.Origin` or an ancestor of it (at most 32 links); otherwise `ArgumentException("class #17 came
+   from scope 'P', which is not 'S' or an ancestor of it")`.
+
+Then it returns the cell. Every value the library returns carries the origin of the scope that served the call: `Make`,
+`Find`, `Get`/`TryGet` of a sort, `QueryMatch.Get` (the queried scope, even when a transient child ran it),
+`ExtractedTerm.Class`, `ExtractedArgument.Value`, `NodeView.Get` (the extractor's scope), and `TableRow` cells. In R1
+every origin is the root's, so only rules 1 and 2 can fail.
+
+The checks are conservative: a value obtained from a child is refused in its parent even when its class was made in
+the parent, and a value dies when the scope that returned it is disposed, even if an ancestor still holds the class.
+The remedy is to obtain the value again from the scope where it is used (§11, risk 12).
+
+#### 6.6.8 Contradicted cases (D45, R3)
+
+`Scope.ThrowIfStopped()` is `if (Engine.IsStopped) throw new ScopeContradictedException(Path)`. Every scope entry point
+checks it after `ThrowIfNotUsable`, except the members that still answer:
+
+| Member | On a stopped case |
+|---|---|
+| `IsContradictory` | `true` |
+| `Graph`, `IsRoot`, `IsCase`, `Path`, `Parent`, `Tag`, `IsFrozen`, `IsDisposed`, `IsFaulted`, `Failure`, `Version`, `Children`, `LocalRules` | answer as usual |
+| `Assume` | does nothing |
+| `Union` | returns `false` |
+| `Run` | returns at once: no iteration, `StopReason = Contradiction` |
+| `Dispose` | as usual (D40) |
+| every other read and write, `Write`, `Make`, queries, `CountRows`, `Rows`, `CreateExtractor`, `Extract`, `CreateChild`, `OpenCases`, `DefineRule`, `Freeze` | `ScopeContradictedException` |
+
+### 6.7 Scopes, tags and local rules (R2)
+
+- **Creation.** `CreateChild(tag, options)`:
+  1. `ArgumentException` for another graph's tag; `ThrowIfNotUsable`; `ThrowIfStopped` (R3).
+  2. A writable scope enters its guard; a frozen one takes none.
+  3. Under the scope's children lock: `ObjectDisposedException` if it is disposed; then the engine child is created
+     with `new ContextOptions { Parallelism = options?.DegreeOfParallelism is { } n ? new ParallelHeuristics(n) : null,
+     InheritWatermarks = graph.InheritWatermarks }` (E7), and the new `Scope` is added to the live children.
+  4. The child records its parent and tag, `Path = parent.Path + "/" + (tag?.Name ?? "scope") + "#" + serial`,
+     `Origin = new ScopeOrigin(graph, parent.Origin, Path, isBatch: false)`, its runtime (`GetLocal`, with `Owner` set),
+     and its guard: the parent's when the parent is writable, a new one when it is frozen (each child of a frozen scope
+     is its own thread domain, colors §8.3). On a frozen parent this is thread-safe (colors §8.2).
+- **Resolution.** `resolve(S, tag)` is the first scope in `S, S.Parent, …` whose `Tag` is `tag` (by reference);
+  `graph.RootTag` is the root's tag. `Run` resolves every tag read by a reachable rule before any work (§6.5.3).
+- **Local rules.** `DefineRule(ruleset, name, define)`: `ThrowIfNotUsable`; enter the guard; a frozen scope throws
+  `InvalidOperationException("Scope 'root/schema#2' is frozen; its local rules are fixed")`; otherwise compile with
+  `Owner = this` and append to the scope's local rules (copy-on-write, under the definition lock). The engine rule is
+  global; only `RulesFor` makes it local.
+- **Freeze.** `Freeze()`: return if frozen; enter the guard; `ThrowIfNotUsable`; `ThrowIfStopped` (R3); a writable
+  parent throws `InvalidOperationException("A scope can be frozen only once its parent is")` (the engine would throw
+  too). Then:
+  1. if the scope's tag has copy rules, `MirrorSync.Ensure(this, [Tag], …)` (§6.8);
+  2. `Engine.Freeze(planRules)` (E10): the empty set for the root; otherwise the default variants of every global rule,
+     every local rule of this scope and its ancestors, every query, every split matcher and every mirror copy rule
+     (the rules a descendant can run; other containers' local rules are excluded). The engine flushes, rebuilds, plans
+     those rules that have no plan yet on this context's statistics, and freezes storage (colors §10.8);
+  3. `graph.Mirrors.AddFrozen(Tag)` when the scope has a tag;
+  4. each live child subtree gets a new `ScopeGuard`, as colors §8.1 step 7 does for the engine's domains (this thread
+     holds the shared guard, so no descendant is in use).
+- **Dispose and release** (D40). `Dispose()` never throws:
+  1. on the root, or when already disposed: return;
+  2. under the parent's children lock: set `IsDisposed`, set `Origin.Disposed` (the scope's class values die);
+  3. `TryRelease()`.
+
+  `TryRelease()` runs on whichever thread removes the last obstacle (the disposing thread, the thread releasing the last
+  child, or the thread exiting the guard):
+  - if live children or transient children remain: return (the last child's release calls `TryRelease` again);
+  - if the guard is held by another thread: `Guard.DeferRelease(this)` and return (`Guard.Exit` at depth 0 calls
+    `TryRelease`);
+  - otherwise release: free the local rules' variants (§6.4.6); `Engine.Dispose()`; remove the scope from its parent's
+    children; `graph.Mirrors.RemoveFrozen(Tag)` if it was frozen with a tag; then, if the parent is disposed,
+    `parent.TryRelease()`.
+
+  An open `CaseSet` and a split's cases are children, so they defer the release too. A `Dispose` called from a run
+  observer is deferred until the run ends, through the guard.
+- **Faults.** `IsFaulted` is the rule layer's flag or the engine context's (X12); `Failure` is the rule layer's
+  exception, or an `InvalidOperationException` describing the engine's fault. A faulted scope allows only `Dispose`.
+- **Depth.** `CreateChild` at depth 31 throws (colors X36).
+
+### 6.8 Scoped reads and mirror tables (R2)
+
+**What a scoped atom means.** `T.In(tag).Of(…)` in scope `C` reads `resolve(C, tag)`'s view of `T`. `T` must be
+value-only (D1).
+
+**Mirrors.** For each `(T, tag)` some rule, query or split rule reads, `MirrorRegistry.GetOrCreate` defines:
+1. an engine function `T@tag` with `T`'s `FunctionConfig` (for a lattice function, its own `LatticeMerge<T>`), and
+   an internal handle of `T`'s kind over it, never listed in `EGraph.Tables`, never lifted, never declared to
+   extraction;
+2. a copy rule in the internal ruleset `$mirror`: for a relation, `T(x…) → T@tag(x…)`; for a function,
+   `T(x…) = v → T@tag(x…) = v` (merged by `T`'s lattice). It is semi-naive and inheritable.
+
+Creating a mirror is a table definition (D6), and it is refused while a live frozen scope of this graph carries `tag`
+(the count in `MirrorRegistry`, D38; message in §6.3 step 2).
+
+**Sync before use** (D48). Copy rules never run in `RulesFor`. They run only in syncs:
+
+```
+MirrorSync.Ensure(C, tags, reader, executor):
+    for t in tags:
+        S = ScopeResolver.Resolve(C, t, reader)
+        if S.IsFrozen: continue                                  // current since its freeze
+        if S.MirrorSyncedVersions[t] == S.Version: continue      // nothing changed since the last sync
+        lowered = S.Engine.PrepareRules(graph.Mirrors.CopyRules(t), semiNaive: true)
+        S.Engine.RunRules(lowered ids)                           // one iteration of t's copy rules, in S
+        S.MirrorSyncedVersions[t] = S.Version
+        executor?.RecordStep(MirrorSync, S, changed, …)
+```
+
+It is called before every iteration in a scope (with the tags its rules read), before every query (§6.6.4), before
+every split step's matcher (§6.9.2), and at `Freeze` (with the scope's own tag). `S` is `C` or a writable ancestor of
+`C`, so it shares `C`'s thread domain, which the caller holds; nothing else can change `S` until `C`'s engine work
+ends. A copy rule reads no mirror, so one iteration brings a mirror current. Syncs are not counted in
+`RunReport.Iterations`; with `RecordSteps` they appear as `MirrorSync` steps.
+
+**Host reads never use mirrors**: they read the resolved scope directly (§6.6.3).
+
+**Why it is exact.** Invariant M (§7) states that `C`'s view of `T@tag` equals `resolve(C, tag)`'s view of `T` once
+that scope's mirror is current, which the sync guarantees whenever a rule, query or split matcher in `C` reads it.
+Within the tagged scope itself the mirror is synced before each iteration, so a scoped read there no longer lags.
+
+**Inheritance.** Mirror tables are ordinary tables, so watermark inheritance needs no tag check (D4). A child tagged
+`tag` under a parent tagged `tag` sees the parent's mirror rows as old rows of its own view. Its own copy rule inherits
+the parent's watermark and copies only rows newer than it, which the semi-naive variants find.
+
+**Cost.** One copied row per row of `T` in each scope tagged `tag`, and one extra engine iteration per sync, made only
+when the tagged scope is writable and has changed. For Cosmos that is the schema's `present` and `dom` rows, a few
+dozen per container, copied once at the schema's freeze; queries read a frozen schema and never sync.
+
+### 6.9 Case splits and lift (R3)
+
+#### 6.9.1 The lift spec
+
+`LiftSpecBuilder.Build(graph)` lists, in declaration order, every table with `Lift = true` except `Contradiction`:
+- a relation as `LiftTable(f, LiftTableKind.Function, caseJoin: null)`: its output is the unit value, which every live
+  case holds, so "every live case agrees" lifts exactly the rows present in every live case, with their output;
+- a constructor as `LiftTable(f, LiftTableKind.Constructor, null)`;
+- a function as `LiftTable(f, LiftTableKind.Function, CaseJoinAdapter<T>.Create(lattice, type))`, where a missing
+  lattice or case join means "every live case must agree".
+
+Mirror tables and internal tables are never listed. The spec is rebuilt when a table is defined (a version check).
+
+#### 6.9.2 Split rules as split sources
+
+`DefineSplit(name, define, caseTag)` compiles the body like a rule (§6.3 steps 1–7) into a naive **matcher** whose
+only head item is a collector of the key registers, the set register, and every other register an assumption uses.
+`SplitBuilder.Cases(name, set)` names the element variable, bound per case. `Key` defaults to every named body
+variable except the set. Assumptions are checked like host-write facts (§6.6.2) with the element and body variables
+as parameters; a scoped handle or a function read in an assumption is a definition error. Class constants follow the
+global-rule rule (§6.3 step 3). The body is the split's demand (D43): a key the body does not match is never split.
+
+`RuleSplitSource : ISplitSource` (E8):
+- **`FindRequests(context, requests, report)`**: `MirrorSync.Ensure` for the matcher's read scopes, then run the
+  matcher in the scope (as a query, §6.6.4) and take its tuples in content order. For each tuple, decode the set, with
+  elements in `ValueSetOrder` order. An empty set is skipped and counted in `report.SplitsSkipped`. Otherwise add
+  `SplitRequest(new SplitKey(index, key cells), elements.Count, payload: (tuple, elements))`.
+- **`Assume(case, request, i)`**: wrap the case context in a `Scope` (`IsCase = true`, `Tag = rule.CaseTag`, parent =
+  the scope of `case.Parent`, found through its runtime's `Owner`; origin and guard as in §6.7), set the case runtime's
+  `Owner`, bind the element variable to `elements[i]` and the other variables from the tuple, instantiate the
+  assumptions as ground facts, and run them as one host batch in the case (§6.6.1).
+
+`DefineDomainSplit(name, domain, guards, caseTag)` is a convenience. It builds the split whose body is
+`g1(k), …, gn(k), d = domain(k), |d| > 1` (the last with the named primitives `set-length` and `>`), whose cases range
+over `d`, whose key is `k`, and whose assumption is `domain(k) = {v}` (with `Primitives.Singleton`).
+
+#### 6.9.3 The split schedule node
+
+```
+SplitSchedule.Execute(executor, S, depth, inCase, splitsEnabled):
+    if splitsEnabled == false: return false                         // phase A of an enclosing split
+    if S.IsContradictory: return false                              // every case would be vacuous
+    executor.BeforeStep(S)
+    driver = executor.DriverFor(this)          // cached per node: new SplitDriver(Rules.Select(r => r.Source),
+                                               //   new ScheduleCaseRunner(executor, InCase), demand: null,
+                                               //   LiftSpecBuilder.Build(graph),
+                                               //   new SplitOptions { DepthLimit = SplitDepthLimit, CaseLimit = CaseLimit,
+                                               //       Lift = Options.Lift, CaseOptions = new ContextOptions { IsCase = true,
+                                               //       StopOnContradiction = true, InheritWatermarks = graph.InheritWatermarks } })
+    report = new SplitReport()
+    changed = driver.Step(context of S, depth, report)
+    Statistics.CasesOpened += report.CasesOpened; SplitsSkipped += …; Lifts += …; LiftRowsSkipped += …
+    if S == Top: Statistics.LastTopStepChanged = changed; Statistics.TopChanged |= changed
+    RecordStep(SplitStep, S, changed, …)
+    return changed
+```
+
+`ScheduleCaseRunner.Run(case, depth, allowSplits)` finds the case's `Scope` (its runtime's `Owner`), registers it in
+`executor.LiveCases`, and executes `InCase` in it with `inCase: true` and `splitsEnabled: allowSplits`. This maps the
+colors spec's two phases onto schedules (colors §11.3): phase A runs the in-case schedule with nested split nodes
+disabled, then lifts; phase B runs it again in each live case with nested splits enabled (which recurses into `Step` at
+`depth + 1`), then lifts again if anything changed. The driver does not hold the scope's thread domain while it calls
+the source or the schedule (E8), so cases can be created.
+
+The driver keeps a case's record until the top-level `Run` ends: later executions of the split step skip keys already
+covered by a live record in the scope or an ancestor (B6). The cases take in the parent's new facts through their
+inherited watermarks. `Run`'s `finally` calls `SplitDriver.DisposeRecords`, which disposes depth-first in reverse
+creation order. The rule-layer case scopes then report `IsDisposed`, and their parent's `Children` no longer lists
+them.
+
+Because a record keeps its key until the run ends, the split step should come after the facts it reads have settled
+(D43): `Saturate(Saturate(facts…), Split(rule, inCase), rewrites…)`. A split taken earlier opens cases for values the
+facts later exclude; they go vacuous and are dropped, but their in-case work is done once per extra case.
+
+#### 6.9.4 Host-driven cases
+
+- `Scope.OpenCases()`: `ThrowIfNotUsable`; `ThrowIfStopped`; a frozen scope throws `InvalidOperationException("Scope
+  'root/schema#2' is frozen; open cases in a child of it")`; then it wraps `new Relations.CaseSet(context)`.
+- `CaseSet.Add(tag)` checks the tag's graph, calls `AddCase(new ContextOptions { IsCase = true, StopOnContradiction =
+  true, InheritWatermarks = graph.InheritWatermarks })` (E8) and wraps it as a case `Scope` (origin and guard as in
+  §6.7).
+- `CaseSet.Lift(options, ct)` calls the engine's `Lift(LiftSpecBuilder.Build(graph), options, ct)`, then
+  `DisposeVacuous()`, which disposes the contradictory cases (their `Scope`s report `IsDisposed` and leave `Cases`),
+  and maps the report to the public `LiftReport`. With no cases it throws `InvalidOperationException("A lift needs at
+  least one case; with none, the scope would be declared contradictory. Assume Contradiction explicitly if that is
+  meant.")` (D9).
+- `Dispose` never throws; it disposes the engine set, and so every case.
+
+#### 6.9.5 Coverage
+
+Coverage is the caller's obligation, stated on `SplitBuilder`, `DefineDomainSplit`, `OpenCases` and `CaseSet`. For the
+domain split:
+- the body establishes "`k` satisfies every guard and its value is in `d`";
+- domains only narrow, so cases made for an older, wider `d` still cover the scope;
+- a case for a value that has since been removed becomes vacuous once it catches up: its domain meets to ∅, and the
+  theory's contradiction rule fires.
+
+Extra guards only remove splits, so they never break coverage (D43). Lift soundness and completeness are the engine's
+(I33).
+
+### 6.10 Extraction
+
+- **Schema.** `ExtractionCatalog` keeps one `Relations.ExtractionSchema` per distinct set of heads that a cost model
+  marks with `Unextractable` (the empty set is the common case). Every schema declares every constructor (§6.2), with
+  `Unextractable = true` for the constructor's own `Extractable == false` or the model's set. Relations, functions and
+  mirrors are never declared.
+- **Costs.** `EngineCosts(model)` starts from `Relations.CostModel.Default` and applies:
+  - `With(head, cost)` → `WithFunctionCost(head.Function, cost)`;
+  - `With(head, NodeCostFunction f)` → `WithNodeCost(head.Function, (fn, row) => f(new NodeView(head, row)))`;
+  - `WithValueCost(type, cost)` → `WithBaseValueCost(catalog.SortOf(type), cost)`;
+  - `WithValueCost<T>(type, f)` → `WithBaseValueCost(sort, (s, v) => f(type.Decode(v.Rep, scope)))`.
+
+  Defaults: the declared constructor cost, and 1 per value (egglog's `TreeAdditiveCostModel` with `base_value_cost =
+  1`), so `StrEq "a" "b"` costs 3. Negative costs throw `InvalidOperationException` (`CostMath`).
+- **Creating.** `Scope.CreateExtractor(costs)`: `ThrowIfNotUsable`, `ThrowIfStopped` (R3), the guard on a writable
+  scope, `EnsureClean`, then `Engine.CreateExtractor(SchemaFor(costs), EngineCosts(costs))`. R1 uses
+  `CreateOnDemand(schema, costs)` over the root; R2 uses the context form (E5).
+- **Extracting.** `Extract<TSort>(root)`: `ClassChecks.Require(scope, root.Id, …)`, then the engine's
+  `ExtractTerm(catalog.SortOf(TSort), new Value(Find(root)))`. The result is wrapped into `ExtractedTerm`:
+  - `Head` is `catalog.HeadOf(Function)` and `Class` the node's class (the extractor scope's origin);
+  - children of kind `Node` become `ExtractedTerm`s, shared through a per-extractor map from engine terms;
+  - children of kind `Base` become decoded values (`Value<T>(i)`, `Argument(i)`, `ExtractedArgument<T>.Value`).
+
+  `ToString()` is the engine term's rendering: egglog's extraction output, with literals formatted by each column
+  type's extraction sort. No finite term: `InvalidOperationException` (`TryExtract` returns false). `TryMatch` compares
+  `Head` by reference and fills each `ExtractedArgument<T>` with the decoded value, or the child's class and term.
+- **Ties** are the engine's content ties (D10).
+- **Staleness.** The engine throws `InvalidOperationException("The e-graph changed since the extractor was created;
+  create a new one.")` once the scope changed. In R1 that check includes the clock, so the rule layer never ticks it
+  without a change outside a `Run`: queries run without a merge (§6.6.5) and empty batches do not flush (§6.6.1). A
+  `Run` ticks the clock even when it changes nothing, so it may invalidate an extractor in R1. E5 keys R2's staleness on
+  the extraction tables and the union-find instead. The public contract covers both: reads, queries and writes that
+  change nothing never invalidate an extractor; a changing write or a `Run` may.
+
+### 6.11 Diagnostics (D41)
+
+- **Per-rule statistics.** Every iteration adds, for each rule-layer rule it ran, the engine's match count and
+  search-and-apply time for the rule's variant (by description), and, with `EGraphOptions.RecordPlans` (which sets the
+  engine's report level to `WithPlan` at graph construction), the plan text from `RuleSetReport.RuleReports`. The run's
+  search, merge and rebuild times sum `RuleSetReport.SearchAndApplyTime`, `MergeTime` and `IterationReport.RebuildTime`.
+- **Steps.** `ScheduleExecutor.RecordStep` builds a `RunStep` for every iteration, mirror sync (R2), split step and lift
+  (R3), in any scope of the run. With `RecordSteps` it is appended to `RunReport.Steps`; with an `Observer` it is passed
+  to it at once, on the run's thread, between engine calls. While the observer runs, the guard's `InObserver` flag is
+  set: reads of the run's scopes are allowed (the guard is re-entrant), and every other scope call throws
+  `InvalidOperationException("Not allowed inside a run observer")`, except `Dispose`, which is deferred. An exception
+  thrown by the observer propagates out of `Run` after the `finally` and does not fault the scope.
+- **Rows.** `CountRows(table)` is `Engine.TableSize(table.Function)`. `Rows(table)` visits `Engine.ForEach`, decodes
+  each row (sort cells as classes with the scope's origin), and sorts by content. Both take the guard on a writable
+  scope, check `ThrowIfStopped` (R3), and reject mirror handles (never reachable) and handles of another graph
+  (`ArgumentException`).
+- **Failures.** `Scope.Fault(cause)` sets `IsFaulted` and `Failure`; `ThrowIfNotUsable` throws
+  `InvalidOperationException($"Scope '{Path}' is faulted: {Failure.Message}", Failure)`.
+- **Explaining a rewrite** (the recipe of D41). With `RecordSteps = true` and `EGraphOptions.RecordPlans = true`, the
+  first step whose `Rules` contains the deleting or lowering rule is the iteration that first applied it;
+  `Rule.ToString()` gives its body and head, `Rows` the facts it can have read, and `RuleStatistics.Plan` how the engine
+  joined them.
+
+### 6.12 Concurrency
+
+- **Guards** (D47).
+  - Each thread domain has one rule-layer `ScopeGuard`. A writable scope's children share its guard; each child of a
+    frozen scope gets a new one; freezing a scope gives each live child subtree a new one. This mirrors colors §8.3.
+  - Every `Scope` member except the identity members, the reads of a frozen scope, and `Dispose` enters the guard for
+    the whole call: a host batch, a run, a query on a writable scope, a definition of a local rule. A second thread
+    gets `InvalidOperationException("Scope 'root/schema#2' is in use on another thread; only children of a frozen
+    scope may run concurrently")`. The root has the same guard in every milestone.
+  - The rule layer never holds an engine thread domain across calls; each engine call enters the domain itself. So a
+    split may create cases (colors §8.3 forbids `CreateChild` while the caller holds the domain), and E8 asks
+    `SplitDriver.Step` not to hold it while calling sources and schedules.
+- **Definitions.**
+  - Every `Define*`, `Ruleset.DefineRule` and `Scope.DefineRule` call takes the graph's definition lock. Rule-layer
+    collections (`Tables`, `Rulesets`, `ScopeTags`, `Ruleset.Rules`, local rules, mirror rules, queries) are published
+    copy-on-write, and runs read snapshots without locks.
+  - Rule, query, split and tag definitions: any thread, any time; they join the next iteration (D6).
+  - Table definitions, and from R2 rule definitions whose first scoped read creates a mirror: while the root is not
+    frozen, they enter the root's guard (re-entrant on the thread using the root; `InvalidOperationException` from
+    another thread while the root is in use). This is what `Store.AddTable` does in R2 (colors §4.3), and R1 enforces
+    it the same way. Once the root is frozen, any thread.
+  - **R1**: bridge mutations (tables, external functions, rules) also take the graph's engine lock, which root engine
+    calls hold one call at a time. A rule definition made during a run waits for the current engine call and joins the
+    next iteration. Lock order: definition lock, then engine lock. No user code runs while the engine lock is held
+    except the delegates the engine invokes, which may not call into a graph (below); observers run between engine
+    calls, outside the lock. So no lock cycle exists.
+  - **R2**: the engine lock is gone. The bridge's definitions are concurrent (X16, copy-on-write `RuleTable`,
+    external-function registry).
+- **Engine-invoked delegates.** Primitives, lattice merges, filters and cost functions run inside engine calls, possibly
+  on pool threads. A call from one into any graph or scope throws `InvalidOperationException` (`EngineCallMarker`,
+  §6.1).
+- **Frozen scopes.** Reads take no guard. Queries run in transient children (D34), and extractors may run on any
+  threads (E5), so a frozen schema can be read, queried and extracted from many threads.
+- **Disposal.** `Dispose` may be called from any thread; the release waits for live children and for a call in
+  progress on another thread (D40).
+- **Values.** `BaseValues` interning is thread-safe. `ValueSet<T>` is immutable.
+- **External functions** (call sites, lattice merges, collectors) may run on several rule tasks at once. Their state
+  is immutable except the scope runtime's buffers, which lock.
+- **Cases** run on their parent's thread (D17).
+
+### 6.13 Errors at a glance
 
 | Condition | Result |
 |---|---|
-| Read while not clean | `InvalidOperationException` naming `Rebuild()` and `Scope.Path` |
-| Write, `Run`, split or lift on a frozen scope; `DefineRule` on a frozen scope | `InvalidOperationException` |
-| Unresolved tag at `Run` | `InvalidOperationException` (before any work) |
-| Definition errors (§3.3) | `RuleDefinitionException` (rule name) |
-| Merge conflict or primitive exception in an action | `RuleEvaluationException` (rule name, bindings) |
-| Merge conflict found during the congruence pass | storage `InvalidOperationException` |
-| Lift with no cases; `Split` with no values or over the limit | `InvalidOperationException` / `ArgumentException` |
+| A definition error (§6.3) | `RuleDefinitionException` (rule name, exact message) |
+| A tag, handle or class value of another graph; `default(ClassId)`; a class value from a scope that is not this one or an ancestor, or is disposed, or from an uncommitted batch (D38, D39) | `ArgumentException` |
+| Bad host write or read (non-ground term, function read, scoped write, filter as a host fact, value equality that is not a write) | `ArgumentException`; nothing written |
+| A host write giving a function without a lattice a second value (D32) | `FactConflictException`; nothing written |
+| Unknown CLR type | `ArgumentException` naming the `Register*` method |
+| A primitive or lattice merge throws, or a rule's write conflicts on a function without a lattice, during a run or a write | `RuleEvaluationException`; the scope is faulted (D18) |
+| The same during a query | `RuleEvaluationException`; the scope is not faulted (D49) |
+| Any use of a faulted scope except `Dispose` | `InvalidOperationException` with `Failure` as `InnerException` |
+| Use of a disposed scope or query | `ObjectDisposedException` |
+| `Dispose` of anything | never throws (D40) |
+| Two threads on one thread domain | `InvalidOperationException` (rule-layer guard, D47) |
+| A table definition from another thread while the root is writable and in use | `InvalidOperationException` |
+| A call into a graph from a primitive, lattice, filter or cost function | `InvalidOperationException` |
+| A write, run or structural call from a run observer | `InvalidOperationException` |
+| `Run`, a host write or `DefineRule` on a frozen scope (R2) | `InvalidOperationException` |
+| Freezing under a writable parent; `OpenCases` on a frozen scope (R2, R3) | `InvalidOperationException` |
+| An unresolved tag at `Run` or at a query (R2) | `InvalidOperationException`, before any work |
+| A first scoped read after a scope of this graph with its tag was frozen (R2) | `RuleDefinitionException` |
+| A read or write needing a model on a contradicted case (R3, D45) | `ScopeContradictedException` |
+| A lift with no cases (R3) | `InvalidOperationException` |
 | No finite term | `InvalidOperationException` (`TryExtract` returns false) |
-
-### 3.14 Mapping a future `.egg` frontend (not in v1)
-
-| egglog | Eggnog |
-|---|---|
-| `sort` / `datatype` | `DefineSort` (a frontend-generated `ISort`), `DefineConstructor` (untyped) |
-| `relation`, `function :merge` | untyped `Define*` with `MergeFunction` |
-| `rule`, `rewrite` | `RuleBuilder` with `Var(ColumnType, name)`, `Fact.Equal`, `RelationHandle.Apply`, `Compute.Of(Primitive, …)`, `Rewrite` |
-| `run` / `run-schedule` | `Schedule.*` |
-| `check`, `fail (check …)` | `Scope.Check` |
-| `push` / `pop` | `CreateChild` / `Dispose` |
-| `extract` | `Extract` |
-
-Proposed extensions: `(in tag facts…)` maps to `Fact.In`; `:case-join` maps to `caseJoin`; `split-rule` maps to `DefineSplit`. `delete` and `subsume` are rejected.
+| A stale extractor | `InvalidOperationException` (the engine's) |
+| Cancellation | `OperationCanceledException` after cleanup |
+| A limit | not an exception: `RunReport.StopReason` |
 
 ---
 
-## 4. Test plan
+## 7. Invariants
 
-### 4.1 Prototype ports (`Cosmos/`)
+### 7.1 Invariants this layer owns
 
-Every `check` becomes an `Assert.True`, and every `(fail (check …))` an `Assert.False`. Each container is compiled with `SweepLinks.Compile` or with a helper like the one in §5:
+- **V (canonical cells).** Within one graph, equal values of a column type have equal cells everywhere, and distinct
+  values distinct cells (§6.1). Value joins, constants and not-equals compare cells.
+- **C (canonical writes).** Every sort cell the layer stages is canonical in the target scope or freshly minted.
+  - R1: `RootEngineScope.StageRow` maps every sort cell through `GetCanonInUf`.
+  - R2: `EGraphContext.ReplayInto` canonicalizes (colors §10.4), and children canonicalize again at the merge (X38).
+  - With the engine's guarantee that a clean context's rows are canonical (colors I13, I35), class joins compare cells.
+  - v1's invariant C (canonical identifiers in registers) is the engine's executor's, over canonical rows.
+- **R (writes are never scoped).** No head operation, host write or split assumption targets a scoped handle (§6.3
+  step 8, §6.6.2); mirror tables are written only by their copy rules. Actions write only to the running scope, and an
+  ancestor's view never contains its descendants' rows. So nothing a rule derives in `S` changes what an atom scoped to
+  a strict ancestor of `S` reads.
+- **S (scoped reads are value-only).** Every scoped atom reads a table with no sort column (§6.3 step 2). No class
+  register is ever bound by a scoped atom, so v1's invariant H ("a class value is joined within one scope") holds
+  without a per-variable check, and no class identifier crosses a scope boundary inside a rule.
+- **M (mirrors are exact).** Let `T` be value-only, `t` a tag, `C` a scope and `S = resolve(C, t)`. Call `S`'s mirror
+  *current* when no row of `S`'s view of `T` is newer than `S`'s last run of the copy rule. Then
+  `view_C(T@t) = view_S(T)`, as row sets for a relation and as key-to-value maps for a function.
 
-1. `new EGraph()`, then `new CosmosTheory(graph)`;
-2. `graph.Root.Freeze()`;
-3. `schema = Root.CreateChild(Schema)`;
-4. `Assume` the schema facts and `DeclareBranch` its rules;
-5. `schema.Run(c.Facts)`, then `schema.Freeze()`.
+  *Proof sketch.*
+  1. `T@t` is written only by copy rules, which run only in syncs of scopes tagged `t` (a sync of `t` runs in
+     `resolve(·, t)`, which carries `t`). No scope strictly between `S` and `C` carries `t` (`S` is the nearest), so no
+     layer below `S` on the path to `C` writes `T@t`.
+  2. A descendant copies an ancestor row into its own layer only when the row mentions one of its own losers, or
+     shares a key with one of its own rows (colors §7.2 branches (a) and (b), §7.3 step 4). `T@t` has no sort cell,
+     and descendants below `S` hold no rows of it, so neither applies. Re-stamping (c′) changes no content. Hence
+     `view_C(T@t) = view_S(T@t)`.
+  3. In `S`, every row of `T@t` was copied, in `S` or in an ancestor `A` tagged `t`, from a row of `view_S(T)` or
+     `view_A(T)`. Contexts see their ancestors' facts (colors I20), so `A`'s values are above `S`'s in the lattice
+     order. Currency means `S`'s copy rule has matched every row of `view_S(T)` (the semi-naive variants find every row
+     newer than the rule's watermark, I31). For a relation the row sets are therefore equal. For a function the
+     mirror's value is the meet of `S`'s value with values above it, which is `S`'s value, by idempotence and
+     absorption.
 
-Each query runs in its own `schema.CreateChild(Query)`.
+  The sync of D48 makes the mirror current whenever a rule, query or split matcher in `C` reads it: a writable `S`
+  shares `C`'s thread domain, is synced when its `Version` moved since its last sync, and cannot change during `C`'s
+  engine work; a frozen `S` was synced at its freeze and never changes. ∎
+- **Q (actions are query-determined).** Rule-layer actions never read a table that can change:
+  - `GetOrAdd` lowers to the bridge's `Lookup` on a constructor (`LookupOrInsertDefault` with `UnionIdMerge`);
+  - lets, filters, head computations and collectors are external functions with `ReadsTables == false`;
+  - function reads in heads are definition errors.
 
-**`Scenario01DiscriminatedOneOfTests`**
+  So `ActionReadAnalysis.IsQueryDetermined` holds for every rule-layer rule (colors §10.2), and I31's precondition is
+  met by construction.
+- **E (erasing).** A rule whose effective licence is `L` (its own, or its ruleset's, D12) reads fact tables only
+  through `L` (§6.3 step 6); an exemption is explicit (`ReadsOwnFacts`) and visible in `Rule.ToString`. With R, S and M,
+  an erasing rule reads facts only from `L`'s view and from term and analysis tables.
+- **A (analysis writers).** A rule that writes an analysis table reads no fact table and no scoped atom (§6.3 step 7),
+  so analyses depend only on terms.
+- **O (class values are scope-checked).** Every class cell the layer passes to the engine from a host call, a rule
+  constant or a query constant came from a `ClassId` whose origin is of the same graph, not disposed, committed (for a
+  batch), and the scope or an ancestor of it (§6.6.7). An id visible in an ancestor names a class of every descendant
+  (colors I20), so every such cell is meaningful where it is used.
 
-- `ADeclaredStoredFormPutsTheComparisonInTheStatement`: branch rule kind = B ⇒ `form(ref)`. Run `Saturate(Horn, Rewrite)`. Assert `form(ref)`, `AreEqual(q, And(StrEq(kind,B), StrEq(ref,R)))`, and the extracted string.
-- `WithoutTheDiscriminatorNothingIsProvenAndNothingLowers`: `q = UuidEq(ref,R)` with `Saturation`. Assert no `form`, and that the extraction mentions `UuidEq`.
+### 7.2 Invariants delegated to the engine
 
-**`Scenario02QueryDisjunctionTests`**: §5.
-
-**`Scenario03CombiningClaimsTests.ADomainLessARefusedValueProvesTheGuard`**: `Saturate(Horn, Rewrite)` gives no `form`. `Saturate(Horn, Lattice, Rewrite)` gives `Get(dom kind) == {order}`, `form`, and `AreEqual`.
-
-**`Scenario04UndiscriminatedAnyOfTests`**
-
-- `WithoutTheSplitTheBranchesNeverMeet`: schema compiled with `Saturate(Horn, Lattice)`. Assert `¬schema.Check(dom(status) = {active, archived, draft})` and `¬AreEqual(q, PFalse)`.
-- `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains`: schema compiled with `Facts`. Assert `schema.Get(dom status) == {active, archived, draft}`, no `present(legacyId)`, and no `present(id2)`. For the query with `Saturation`: `IsContradictory`, `AreEqual(q, PFalse)`, and `Extract(q)` is `"(PFalse)"`.
-
-**`Scenario05IntervalsTests`**
-
-- `AComparisonBeyondADeclaredBoundIsFalse`: `IsContradictory`, `AreEqual(q, PFalse)`.
-- `ABoundInsideTheRangeIsLeftAlone`: `¬IsContradictory`, `Get(lo n) == 51`.
-
-**`Scenario06GuardDeletionTests`**
-
-- `ADeclaredTypeMakesAnOrderingComparisonExact`: `AreEqual(q, StrGe)`, cost 3.
-- `WithoutADeclaredTypeTheComparisonIsStillWeakened`.
-- `ADeclaredTautologyIsNotAsked`: `AreEqual(q, StrEq(id,x))`, extracted string.
-- `WithoutAPresenceClaimTheComparisonStays`: `query.Check(present kind)`, `¬schema.Check(present kind)`, `¬AreEqual(q, StrEq(id,x))`.
-
-**`Scenario07SweepLinksTests`**
-
-- `SweepLinks.Compile` asserts 3 schema cases.
-- `TheMapQueryLowers`.
-- `ParkAndMapWrittenInLowerTheParkId`: `form`, `AreEqual`.
-- `ParkAndMapSpeltPerKindLowerTheParkId`: `Get(dom data.type) == {map, park}`, `CasesOpened == 2`, `form`, `AreEqual`, cost 15, the rendered SQL and the s-expression, `query.Children` empty.
-- `TheOfflineRefreshLowersEverything`: `AreEqual` with `StrGt` on `changeUtcTime`.
-- `TheFacadeFilterDropsTheWholeEnum`: `AreEqual(q, StrEq(type, Link))`.
-- `ASpotMayBeAmongTheRowsSoNothingLowers`: dom `{park, spot}`, no `form`, extraction mentions `UuidEq`.
-
-### 4.2 Differential test: semi-naive against naive (`Engine/SemiNaiveDifferentialTests.cs`)
-
-`RandomProgram` generates, from a seed:
-
-- **Tables**: 2–4 relations, 1–2 constructors over sort `Node`, and 1–2 functions with `ValueLattice.Max<long>` or `Intersect<int>`. Small pools: 6 strings, 8 longs.
-- **Rules (5–12)**: joins of 1–4 atoms; value-keyed scoped atoms (`In(tagA)`); class variables that respect H; Id constants taken from host `Make`; filters and lets (lambdas and named primitives); rewrites; occasional `Naive()`; local rules on random scopes.
-- **Scopes**: up to 4 deep with tags; ancestors written between child runs; frozen prefixes; nested `Run` calls with `Saturate` and `Repeat`.
-
-Each program runs three times:
-
-1. `SemiNaive = true`;
-2. `SemiNaive = false`;
-3. `SemiNaive = true` with the internal `InheritProgress = false`.
-
-After every run, every scope's `ViewSnapshot` is compared: relation rows, function values, and the equalities among all visible ids, modulo canonical id choice. 300 seeds run by default; `EGGNOG_SEEDS` sets more. A failing program prints itself.
-
-### 4.3 Targeted tests
-
-- **`ScopeIsolationTests`**
-  - `ACrossScopeClassJoinIsRejected`: the H counterexample `R@A(y) ⋈ S(y)` fails at definition, naming `y`.
-  - `AScopedJoinUsesTheAncestorsEqualities`: `R@A(y), T@A(y)` with `C` merging `a` and `b` does not match. The unscoped rule does.
-  - `ValueKeyedScopedAtomsRunIncrementally`: watermarks advance, and variants over a frozen ancestor are skipped (a counter on `LatestStamp` skips).
-  - `WritesToAScopedHandleAreRejected`.
-- **`IdConstantTests.AConstantThatLosesAUnionSeesTheWinnersOldRows`**: invariant K.
-- **`InheritanceTests`**
-  - `ChildRowsWrittenBeforeTheParentRunsAgainAreNotSkipped`: the regression for the bug judges found in consumer-first's inheritance.
-  - `AChildTaggedWithAReadScopeStartsAfresh`.
-  - `CallbackRulesDoNotInherit`.
-  - `InheritanceChainsThroughUnrunAncestors`.
-- **`RuleDefinitionTests`**: one test per error message. Unbound variable; another builder's variable; scoped write; function read in a head; primitive over a sort; `Erasing` violation; analysis writer violation; cross-scope class join; never-matching constant equality; `Make` variable in `When`; unknown CLR type; `Fact.In` nested.
-- **`ActionTests`**
-  - Get-or-add duplicates merged by rebuild.
-  - `C.Of(k).Is(x)` unions.
-  - Lattice writes merge.
-  - A merge conflict raises `RuleEvaluationException` with the rule name and bindings.
-  - Callbacks see full matches and are deduplicated within an iteration.
-  - A failed run commits no progress, and a re-run finds the matches again.
-- **`ScheduleTests`**: `Repeat` early stop; `Saturate`; `Sequence`; `Until`; `Saturated`; `IterationLimit`, `TimeLimit` and `ChangeLimit` stop reasons; cancellation; `StopOnContradiction` at top level and forced in cases; tags validated before work.
-- **`LocalRuleTests`**: a rule local to container A never fires in sibling B; it is gone after disposal; `DefineRule` on a frozen scope throws; one `CosmosTheory` serves two containers.
-- **`CleanlinessTests`**: every read throws after a union and names `Rebuild()`; `Run` leaves the scope clean; reads never rebuild.
-- **`RenderingTests`**: the tautology rule's `ToString` includes `present@schema` and `:erasing schema`; named primitives render by name, lambdas as `<lambda>`.
-- **`ConcurrencyTests`**: 32 queries under one frozen container on parallel threads give the same extractions as sequential runs.
-- **`LiftTests`**
-  - `PartitionMeetIsFull`: `b ~ c` in all cases while `a` separates in one, so `b ~ c` lifts.
-  - Case-joins.
-  - Absorption skip.
-  - Vacuous cases skipped.
-  - All vacuous means the parent is contradicted.
-  - Zero cases throw.
-  - `OneLiveCaseDoesNotAliasCaseLocalClasses`.
-  - `TermsMadeOnlyInCasesLiftInRounds`.
-  - `CandidateLimitSkipsSoundly`.
-  - Lift memo skips when nothing changed.
-- **`SplitTests`**
-  - `PersistentCasesAbsorbLaterParentFacts`.
-  - `NarrowingMakesAStaleCaseVacuous`.
-  - `SplitProgressResetsAfterTheRun`: a second `Run` splits again.
-  - `CaseLimitAndDepthLimitSkip`.
-  - `EmptyElementSetSkips`.
-  - `DefineDomainSplitMatchesTheHandWrittenRule`.
-  - `NestedSplits`.
-  - `CasesAreDisposedWhenARunStopsEarly`.
-- **`ExtractionTests`**: no finite term; zero-cost nodes with children; ties keep the spelling as written; per-row costs; unextractable heads; value costs; DAG sharing; stale extractor throws; `Mentions`.
-- **`ValueTests`**: codec round trips; double normalisation (−0.0, NaN throws); `ValueSet` operations and order; `ValueSet.Of("abc")` is `{"abc"}`; concurrent interning; `Check` with an unseen string leaves `InternedCount` unchanged.
-- **`LatticeTests`**: `Verify` accepts the built-ins and rejects a mismatched case-join (for example ∩ with ∩).
+| v1 invariant | Now | Where |
+|---|---|---|
+| K (Id constants) | Executed constants equal the canonical forms in the running context; a watermark is used only with equal constants | Colors I30, X19 (R2+); §6.4.5 in R1 |
+| S1 (stamp completeness) | Rows visible with `ts < W` were visible to the run at `W`, unchanged | Colors I19–I21 |
+| SN (watermark) | After a run at `W`, every match over rows older than `W` has been applied | Colors I31, Case 1 |
+| INH (inheritance is sound) | A seeded watermark `min(W_A, CreatedAt)` misses no match | Colors I31, Case 2 (preconditions met by Q) |
+| Deduplication | Variants partition the matches of an iteration | Colors I27, Lemma 1 of I31 |
+| L1–L4 (lift) | Soundness; completeness of facts (with the L1 winner probe) and of equalities; termination | Colors I33, I32 |
+| Stop in cases | A contradicted case answers only `IsContradictory` and is skipped and disposed | Colors I25, L4; the rule layer's answers are D45's |
+| Extraction | Optimal, acyclic, content ties | `Extraction/Extractor.cs` (D10) |
 
 ---
 
-## 5. Scenario 02 against the final API
+## 8. Test plan
+
+All tests are in `src/Eggnog.Tests`, xunit v3, one type per file (partial classes may span files), namespace
+`Eggnog.Tests` (subfolders only organise). Golden and differential tests use `new EGraph()`, which is serial
+(DegreeOfParallelism 1, D46). Every `check` of a prototype becomes `Assert.True`, and every `(fail (check …))` an
+`Assert.False`. Milestones are in brackets.
+
+### 8.1 Cosmos conformance
+
+#### 8.1.1 The literal suite [R1a, R1b]
+
+`Cosmos/Literal/` ports `prelude.egg` and the seven scenario files as written: contexts as data (`Ctx` with `Schema`,
+`Query`, `Assume`), inheritance by `horn` rules, and splits and lifts written as rules in the `split` ruleset. It runs
+entirely at the root on today's engine and needs no engine case split. Each `(push)`…`(pop)` block is a fresh graph
+built from the prelude plus the file's top-level commands before the block. Files 01–03 land in R1a; 04–07 in R1b.
+
+Files:
+- `Cosmos/Pred.cs` (shared with the scoped suite: `readonly record struct Pred(ClassId Id) : ISort<Pred>`);
+- `Cosmos/Literal/Ctx.cs` (`readonly record struct Ctx(ClassId Id) : ISort<Ctx>`);
+- `Cosmos/Literal/PrototypeTheory.cs`, the prelude: every relation, function, constructor and rule of `prelude.egg`,
+  with the rulesets `Horn`, `Lattice`, `Split` and `Rewrite`, and a helper `Ground(EGraph)` that makes `(parent (Query)
+  (Schema))`;
+- `Cosmos/Literal/Literal01DiscriminatedOneOfTests.cs` … `Literal07SweepLinksTests.cs`.
+
+Translation choices, which the porting table in §12 generalizes:
+- `(relation contradiction (Ctx))` becomes `Relation<Ctx> Contradicts` named `contradicts`, because the graph's own
+  `Contradiction` (nullary) owns the name `contradiction`.
+- Sets are `ValueSet<string>`. `(set-of v)` is `Primitives.Singleton<string>()`, `set-union`/`set-diff`/`set-remove`/
+  `set-contains`/`set-length` the named primitives, and `(= 0 (set-length (set-diff d s)))` is
+  `Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L)`.
+- A head that mentions `(Assume c p v)` is a constructor application in the head, which is a get-or-add.
+- `(present (Query) p)` in a head writes through the get-or-add of `Query.Of()`.
+- The literal suite keeps the prototype's schedules as written, `(saturate horn lattice split rewrite)` included, so
+  its figures are egglog's.
+
+For example, the split rule and one lift rule of the prelude:
 
 ```csharp
-// src/Eggnog.Tests/Cosmos/Pred.cs
-using Eggnog.Storage;
+Split.DefineRule("split on a discriminator", r =>
+{
+    var (p, v, c, d) = r.Vars<string, string, Ctx, ValueSet<string>>("p", "v", "c", "d");
+    r.When(Discriminator.Of(p, v), Present.Of(c, p), d.Is(Dom.Of(c, p)));
+    r.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
+    r.Where(Primitives.Contains<string>().Of(d, v));
+    r.Then(
+        Parent.Of(Assume.Of(c, p, v), c),
+        Present.Of(Assume.Of(c, p, v), p),
+        Dom.Of(Assume.Of(c, p, v), p).Is(Primitives.Singleton<string>().Of(v)));
+});
+Split.DefineRule("lift a stored form", r =>
+{
+    var (c, p, q, f) = r.Vars<Ctx, string, string, string>("c", "p", "q", "f");
+    var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+    r.When(s.Is(FormCases.Of(c, p, q, f)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
+    r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
+    r.Then(Form.Of(c, q, f));
+});
+```
 
+Tests (`R` is `"123e4567-e89b-12d3-a456-426614174000"`; `Q` is the class of `Query.Of()`, `S` of `Schema.Of()`):
+
+| Class | Test | Assertions |
+|---|---|---|
+| `Literal01…` [R1a] | `ADeclaredStoredFormPutsTheComparisonInTheStatement` | `Saturate(Horn, Rewrite)`; `form(Q, "ref", "uuid-lower")`; `AreEqual(q, And(StrEq(kind,B), StrEq(ref,R)))`; extraction `(And (StrEq "kind" "B") (StrEq "ref" "R"))`, cost 7 |
+| | `WithoutTheDiscriminatorNothingIsProvenAndNothingLowers` | `Saturate(Horn, Lattice, Split, Rewrite)`; no `form(Q, ref, …)`; extraction `(UuidEq "ref" "R")`, cost 1002 |
+| `Literal02…` [R1a] | `TwoKindsNamedTogetherLowerTheReference` | `Saturate(Horn, Lattice, Rewrite)`: no `form(Q, ref)`. Then `Saturate(Horn, Lattice, Split, Rewrite)`: `form(Q, ref)`; `AreEqual(q, And(Or(StrEq kind order, StrEq kind invoice), StrEq(ref,R)))`; no `form(S, ref)`; extraction cost 11 and the string of §10 |
+| `Literal03…` [R1a] | `ADomainLessARefusedValueProvesTheGuard` | `Saturate(Horn, Rewrite)`: no `form`. `Saturate(Horn, Lattice, Rewrite)`: `Get(dom(Q, kind)) == {order}`, `form(Q, ref)`, `AreEqual` |
+| `Literal04…` [R1b] | `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains` | `Saturate(Horn, Lattice, Rewrite)`: not `dom(S, status) = {active, archived, draft}`, not `AreEqual(q, PFalse)`. With `Split`: `dom(S, status) = {active, archived, draft}`; `contradicts(Q)`; `AreEqual(q, PFalse)`; no `present(S, legacyId)`; no `present(S, id2)`; extraction `(PFalse)`, cost 0 |
+| `Literal05…` [R1b] | `AComparisonBeyondADeclaredBoundIsFalse` | `contradicts(Q)`; `AreEqual(q, PFalse)` |
+| | `ABoundInsideTheRangeIsLeftAlone` | not `contradicts(Q)`; `Get(lo(Q, n)) == 51`; extraction `(NumGt "n" 50)` |
+| `Literal06…` [R1b] | `ADeclaredTypeMakesAnOrderingComparisonExact` | `AreEqual(q, StrGe(at, …))`; extraction cost 3 |
+| | `WithoutADeclaredTypeTheComparisonIsStillWeakened` | not `AreEqual(q, StrGe(at, …))` |
+| | `ADeclaredTautologyIsNotAsked` | `AreEqual(q, StrEq(id, x))`; extraction `(StrEq "id" "x")` |
+| | `WithoutAPresenceClaimTheComparisonStays` | not `AreEqual(q, StrEq(id, x))` |
+| `Literal07…` [R1b] | `TheMapQueryLowers` | `AreEqual` with `StrEq "data.data.mapId"` |
+| | `ParkAndMapWrittenInLowerTheParkId` | `form(Q, data.data.parkId, uuid-lower)`; `AreEqual` |
+| | `ParkAndMapSpeltPerKindLowerTheParkId` | `Get(dom(Q, data.type)) == {map, park}`; `form`; `AreEqual`; extraction cost 15 |
+| | `TheOfflineRefreshLowersEverything` | `AreEqual` with `StrGt "data.metadata.changeUtcTime"`; `CountRows(Assume) == 6`, `CountRows(Parent) == 7`, `CountRows(Form) == 40` (the prototype's `print-size` figures: three cases under `(Schema)` and three under `(Query)`) |
+| | `TheFacadeFilterDropsTheWholeEnum` | `AreEqual(q, StrEq(type, Link))` |
+| | `ASpotMayBeAmongTheRowsSoNothingLowers` | no `form(Q, parkId)`; extraction mentions `UuidEq` |
+
+The expected figures and strings were confirmed with the egglog CLI built from the vendored `ext/egglog` at commit
+`5e655cae`: every file exits 0, `print-size` prints `Assume` 6, `parent` 7 and `form` 40 for the offline-refresh block,
+and every extracted string matches this table and §10 (including the per-kind 07 term, cost 15, and
+`(UuidEq "ref" …)` for 01's second block). `Literal07SweepLinksTests` names that commit in its class comment. Eggnog
+breaks ties by content (D10) where egglog breaks them by scan order; should a future egglog revision extract a
+different spelling of equal cost, the test keeps Eggnog's answer and says so in a comment.
+
+#### 8.1.2 The scoped suite [R2, R3]
+
+`Cosmos/Scoped/` ports the same scenarios with scopes as contexts: `CosmosTheory` (§10; `CosmosTheory.cs` [R2] and the
+partial `CosmosTheory.Cases.cs` [R3]), `SweepLinks` (compiles sweep's `links` container), and one class per scenario,
+split into a base file [R2] and a `.Cases.cs` partial [R3] where it has split tests. Each container is compiled with an
+empty frozen root, a schema scope tagged `c.Schema` with its facts assumed and branch rules declared, a run, and a
+freeze. Each query runs in its own child tagged `c.Query`.
+
+| Class | Tests | Milestone |
+|---|---|---|
+| `Scenario01DiscriminatedOneOfTests` | `ADeclaredStoredFormPutsTheComparisonInTheStatement`, `WithoutTheDiscriminatorNothingIsProvenAndNothingLowers` | R2 |
+| `Scenario02QueryDisjunctionTests` | `HornAndLatticesAloneDoNotLower` (R2, schema compiled without the split); `TwoKindsNamedTogetherLowerTheReference` (`CasesOpened == 2`), `TheSameSplitDrivenByTheHost`, `AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit` (`CasesOpened == 0`) (R3); code in §10 | R2, R3 |
+| `Scenario03CombiningClaimsTests` | `ADomainLessARefusedValueProvesTheGuard` | R2 |
+| `Scenario04UndiscriminatedAnyOfTests` | `WithoutTheSplitTheBranchesNeverMeet` (R2); `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains` (R3): the schema's run opens 2 cases on `$anyOf/0`; `schema.Get(dom status) == {active, archived, draft}`, no `present(legacyId)`, no `present(id2)`; the query (which mentions `status`, not `$anyOf/0`) opens 0 cases, `IsContradictory`, `AreEqual(q, PFalse)`, `Extract(q)` is `(PFalse)` | R2, R3 |
+| `Scenario05IntervalsTests` | `AComparisonBeyondADeclaredBoundIsFalse`, `ABoundInsideTheRangeIsLeftAlone` | R2 |
+| `Scenario06GuardDeletionTests` | the four tests of 06, with `WithoutAPresenceClaimTheComparisonStays` asserting `query.Check(present kind)` and `schema.Check(present kind) == false`: the conjunct's own consequence in the query never deletes it (D12) | R2 |
+| `Scenario07SweepLinksTests` | `TheMapQueryLowers`, `TheFacadeFilterDropsTheWholeEnum`, `ASpotMayBeAmongTheRowsSoNothingLowers` (R2, without the split); `SweepLinks.Compile` asserts 3 schema cases; `ParkAndMapWrittenInLowerTheParkId` (`CasesOpened == 2`); `ParkAndMapSpeltPerKindLowerTheParkId` (`CasesOpened == 2`, cost 15, the rendered s-expression, `query.Children` empty); `TheOfflineRefreshLowersEverything` (R3) | R2, R3 |
+| `Scenario08IntegerDomainTests` (gap 5, D37) | `AnIntegerOutsideADeclaredDomainIsFalse`: schema `present(n)`, `idom(n) = {100, 200, 300}`; query `And(NumGt(n, 499), NumLt(n, 501))`; `IsContradictory`, `AreEqual(q, PFalse)`. `AnIntegerInsideTheDomainIsLeftAlone`: `idom(n) = {100, 500}`; not contradictory; `Get(idom(n)) == {500}` | R2 |
+
+The scoped suite's case counts follow `CosmosTheory.Saturation`, which settles facts before its split step (D43); the
+literal suite's interleaved schedule opens the third case that later goes vacuous, as the prototype does.
+
+Gap mapping (the adapter's `CosmosDeclaredFactPlanningTests.Gaps.cs`): Gap1 → scenarios 02 and 07, Gap2 → 03, Gap3 →
+04, Gap4 → 05, Gap5 → 08.
+
+### 8.2 Differential tests
+
+**`Differential/RuleLayerDifferentialTests` [R1b].**
+- `RandomProgram` generates, from a seed, through the internal untyped layer (D13):
+  - **tables**: 2–4 relations over `i64` and `String`; 1–2 constructors over a sort `Node` with value and `Node` keys;
+    1–2 functions with `ValueLattice.Max<long>()` or `ValueLattice.Intersect<int>()`, and one without a lattice,
+    written only by host `Assume` with unique values;
+  - **rules** (5–12): joins of 1–4 atoms; named primitives and lambdas as filters and lets; rewrites; unions; `Make`;
+    class constants from host `Make`; `Naive()`;
+  - **schedules**: `Saturate`, `Repeat(1..3)`, `Sequence`, `Until`, with host writes and queries between runs.
+- Each program runs three ways: Eggnog with `SemiNaive = true`; Eggnog with the internal `SemiNaive = false`; and
+  `ReferenceInterpreter`, which evaluates the same program naively over decoded values with its own union-find and
+  congruence closure, Jacobi-style, with the same schedule semantics.
+- After every `Run`, every table's rows (`Scope.Rows`) are compared: value cells decoded, and sort cells replaced by
+  `TermNamer` names. A class's name is its least ground term, by size, then head name (ordinal), then arguments in
+  content order. The same algorithm runs on both sides, so equal facts give equal names whatever the ids.
+- 300 seeds by default (`EGGNOG_SEEDS` raises it). A failing program prints itself as C# source.
+
+**`Differential/ScopeDifferentialTests` [R2].**
+- Random scope trees, up to 4 deep, with tags, frozen prefixes, host writes into writable ancestors between child runs,
+  and host queries with scoped atoms from tagged scopes and their descendants. Programs are from the value-only family:
+  relations and functions over values, scoped atoms, local rules, no constructors in children.
+- The oracle is the program translated into the literal encoding and run at one root:
+  - every table gains a leading `Ctx` key, and every scope becomes a `Ctx` constant;
+  - inheritance rules `parent(k, c), T(c, x…) → T(k, x…)` are added;
+  - every rule active in a scope is instantiated for that scope, with its scoped atoms resolved statically to the
+    tagged scope's constant.
+- Each scope's view, and every query's answer, must equal the oracle's facts for its constant. 300 seeds.
+
+**`Differential/InheritanceOffEquivalenceTests` [R2].** Scoped programs with constructors in children, run with
+`graph.InheritWatermarks = false` and with `true` (which reaches cases too, §6.9). Every scope's view must be equal at
+every checkpoint, and the seeded match totals must be at most the unseeded ones.
+
+**`Differential/SplitOracleTests` [R3].**
+- Random discriminated schemas: 1–2 discriminators with 2–4 values; branch rules declaring presence, forms and domains;
+  queries with `IN` lists and disequalities.
+- Each runs in the scoped encoding with engine splits (the unguarded schema split for both schema and query, so both
+  encodings split the same keys), and in the literal encoding with the prototype's split rules.
+- In the query, `present`, `form`, `dom` and contradiction must agree for every path mentioned. Those are the kinds the
+  prototype lifts; the engine lifts a superset.
+- 300 seeds.
+
+### 8.3 Targeted tests
+
+| Class | Content | Milestone |
+|---|---|---|
+| `Values/ValueTests` | Codec round trips for every built-in type; −0.0 normalized, NaN throws; `int` −1 and `int.MinValue` as the first column of a relation round-trip (stored as `i64`); enum round trip; `ValueSet` operations and order; `ValueSet.Of("abc")` is `{"abc"}`; concurrent interning; `Check` with an unseen string leaves `InternedCount` unchanged (E1) | R1a |
+| `Values/LatticeTests` | `Verify` accepts the built-ins and rejects a mismatched case join (∩ with ∩); a lattice delegate that throws during a rule's merge gives `RuleEvaluationException` with `RuleName == null` | R1a |
+| `Definitions/DefinitionTests` | Duplicate names, `@`, `$`, `contradiction`; unknown types; a sort output to `DefineFunction`; `Role = Term` on a relation; the engine layout per kind (§6.2), read through `Relations.EGraph.GetFunctionInfo`; a table defined from another thread while the root runs throws; a rule defined from another thread during a run joins the next iteration | R1a |
+| `Graph/ClassIdTests` | `default(ClassId)` is refused by `Find`, `AreEqual`, `Union`, `Make`, `Assume`, `Extract` and a rule constant; another graph's class is refused; a `Write` that throws leaves the values its `Make` returned unusable, and one that commits leaves them usable. R2: a sibling query's class is refused; a query's class is refused after the query is disposed; a global rule holding a non-root class is a `RuleDefinitionException`; a local rule may hold its owner's class. R3: a case's class is refused after the run that made the case | R1a, R2, R3 |
+| `Rules/RuleDefinitionTests` | One test per message of §6.3: another builder's variable; duplicate name; unknown type; variables of different types equated; never-matching constants; unbound variable; primitive over a sort; analysis writer reading a fact table; head function read; head value equality; head filter; `Make` variable in the body; head variable before its `Make`; class constants (default, another graph). R2 adds: nested `Fact.In`; a handle scoped to another tag inside `Fact.In`; a scoped read of a table with a sort column; a scoped write; an erasing violation; `ReadsOwnFacts` without a licence or a reason; a first scoped read after a tagged scope froze; class constants from other scopes | R1a, R2 |
+| `Rules/LoweringTests` | The engine rule of a lowered program (through `Relations.BridgeQuery`): atom order; relation atoms end with the unit constant; steps as `QueryPrim` in placement order; head operations in call order; descriptions (§6.4.3); the naive twin lowered only when `SemiNaive = false` is first used | R1a |
+| `Rules/ActionTests` | Get-or-add duplicates merged by the rebuild; `C.Of(k).Is(x)` unions; lattice writes merge; `Rewrite` with a variable right side unions; `Make` variables in heads; a rule's write conflicting on a function without a lattice gives `RuleEvaluationException`, after which the scope `IsFaulted`, `Failure` is that exception, and `Run` throws `InvalidOperationException` with it as `InnerException`; a primitive throwing in a filter and in a head gives `RuleEvaluationException` with the rule name and bindings | R1a |
+| `Rules/IdConstantTests` | Behaviour only: a rule with a class constant matches the class after the constant loses a union; an action writing such a constant writes the canonical cell. Runs unchanged in R2 | R1a, R2 |
+| `Rules/RootRelowerTests` | R1's mechanism: the re-lowered variant's description ends with `/k1` and it runs in full; deleted with `RootEngineScope` | R1a (deleted in R2) |
+| `Rules/ErasingTests` | A ruleset licence makes every rule erasing; a rewrite reading unscoped `present` without an exemption is rejected; `ReadsOwnFacts` exempts and renders; `Erasing` on one rule of a ruleset without a licence; rules reading only term and analysis tables are unaffected | R2 |
+| `Rules/QueryTests` | `Any`, `Count`, `ForEachMatch`; early stop; distinct full bindings; `Version` unchanged by queries; an extractor created before `Count`, `Any` or `ForEachMatch` still extracts after it; a query whose filter throws gives `RuleEvaluationException` and leaves the scope usable; `Query.Dispose` frees the rule and later use throws `ObjectDisposedException`; disposal during a call on another thread waits for it. R2: queries on a frozen scope from 8 threads; a query with scoped atoms after a host write into a writable tagged scope, from that scope and from a descendant | R1b, R2 |
+| `Scheduling/ScheduleTests` | `Repeat` stops early; `Saturate`; `Sequence`; `Saturated`; `IterationLimit`; cancellation; `StopOnContradiction` at the top level; an empty ruleset does not iterate (R1a). `Until`; `TimeLimit` overshoots by at most one iteration; `RowLimit` stops a growing program (R1b). Limits count case iterations and case rows (R3) | R1a, R1b, R3 |
+| `Diagnostics/DiagnosticsTests` | `RunReport.Rules` matches and search times; merge and rebuild times (R1a). Plans with `RecordPlans`; `RecordSteps` lists every iteration in order; the observer sees the same steps, may call `Check` and `CountRows`, and gets `InvalidOperationException` for `Assume` and `Run`; `CountRows` and `Rows` match the prototype's `print-size` on Literal07; `Rows` renders s-expressions (R1b). `MirrorSync` steps (R2); split and lift steps (R3) | R1a, R1b, R2, R3 |
+| `Host/HostWriteTests` | Atomicity (a rejected fact writes nothing); `Make` returns canonical classes and mints each new term once per batch; `Write` batches several calls with one flush, and a throw inside it writes nothing; no-lattice conflicts against the store and within a batch give `FactConflictException` with table, key and both values; `Union` returns distinctness; a class constant that lost a union, written in a row, lands canonical; writing facts that hold already leaves `Version` unchanged and a live extractor usable | R1a |
+| `Host/HostReadTests` | Every row of the `Check` table (§6.6.3); `Get`/`TryGet`; `AreEqual` with an absent term; reads never intern; reads never throw for want of a rebuild (R1a). `CountRows`, `Rows` (R1b) | R1a, R1b |
+| `Extraction/ExtractionTests` | No finite term; zero-cost nodes with children; ties keep the as-written spelling; per-row costs; unextractable heads (by definition and by cost model); value costs; DAG sharing; a stale extractor throws after a changing write; `Mentions`; `TryMatch` at every arity, with value and class arguments; `ToString` matches egglog's format for every built-in literal type | R1a |
+| `Rendering/RenderingTests` | Rules render as s-expressions; named primitives by name, lambdas as `<lambda>`. R2: `present@schema`, `:erasing schema`, `:reads-own-facts "…"` | R1a, R2 |
+| `Concurrency/RootThreadingTests` | Two threads on the root throw; a rule defined from another thread during a run joins the next iteration; a table defined from another thread during a run throws; a primitive, a lattice merge and a cost function that call into the graph get `InvalidOperationException` (also from a pool thread with `DegreeOfParallelism = 4`) | R1a |
+| `Surface/PublicSurfaceTests` | By reflection: no public or protected member of `Eggnog` mentions a type of `Eggnog.Relations` or `Eggnog.Storage` (D29); no public type of another assembly in the package shares a simple name with a public `Eggnog` type (D44); `Eggnog` references no `Eggnog.Storage` assembly | R1a |
+| `Scopes/ScopeTreeTests` | `CreateChild`, `Path`, `Children` (transient query children not listed), `Freeze` under a writable parent throws, depth 31, tags resolve to the nearest ancestor-or-self, `ScopeOptions.DegreeOfParallelism` reaches the context | R2 |
+| `Scopes/ScopeTagTests` | `DefineScopeTag` names are unique per graph and `root` is reserved; `RootTag`; another graph's tag is refused by `CreateChild`, `In`, `Fact.In`, `Erasing`, `RulesetOptions.Licence`, `DefineSplit` and `CaseSet.Add`; `TwoGraphsShareNoTagState`: two graphs in one process each build `CosmosTheory` and freeze schemas, in both orders and on parallel threads, and every theory compiles and every scenario query passes | R2 |
+| `Scopes/DisposeTests` | `Dispose` never throws; a second call does nothing; the root's does nothing; `IsDisposed` is true at once and use throws `ObjectDisposedException`; a frozen schema disposed while 8 queries run beneath it on other threads is released after the last query, and its local rules are freed then; a frozen scope disposed during a query on another thread (a transient child) is released after the query; an open `CaseSet` defers its parent's release; a writable scope disposed from another thread while its domain is busy is released when that call ends | R2 |
+| `Scopes/LocalRuleTests` | A rule local to container A never fires in sibling B; it is gone after A is released; `DefineRule` on a frozen scope throws; `DefineRule` from another thread while the scope runs throws; one `CosmosTheory` serves two containers | R2 |
+| `Scopes/ScopedReadTests` | A mirror equals the tagged scope's view (relations and lattice functions); a writable tagged ancestor is synced before a descendant's run and before a query; a scoped read within the tagged scope sees the scope's own facts of the previous iteration with no lag, also under `Repeat(1)`; a frozen tagged scope is never synced; host reads of scoped facts read the resolved scope directly | R2 |
+| `Scopes/ScopeIsolationTests` | A query's derived facts are visible neither in its schema nor in its siblings; `ConstantLosesRootUnionBeforeChildRuns` (a child that asserts nothing sees what its parent sees) | R2 |
+| `Scopes/InheritanceTests` | A child's first run of a rule its frozen parent saturated matches only through new rows (fewer matches than a full run); naive rules never inherit | R2 |
+| `Scopes/FaultTests` | A child is faulted after a `RuleEvaluationException` and only `Dispose` works; `Failure` and `InnerException`; its parent and siblings are unaffected | R2 |
+| `Concurrency/ConcurrencyTests` | 32 queries under one frozen container on parallel threads give the extractions of serial runs; queries and extractors on a frozen schema from 8 threads | R2 |
+| `Concurrency/ParallelEquivalenceTests` | The scoped Cosmos programs with `DegreeOfParallelism = 4` on the graph and on query scopes: every scope's facts equal the serial run's modulo renaming (`TermNamer`); extraction is compared at 1 only | R2 |
+| `Extraction/ContextExtractionTests` | Extraction in a child sees inherited and own rows and the child's equalities; a parent change makes a child's extractor stale; a query in the child does not | R2 |
+| `Cases/LiftTests` | Case joins come from `ValueLattice.CaseJoin`; relation rows lift through the function kind with a unit output; `Lift = false` tables are not lifted; mirror tables and `Contradiction` are never lifted as rows; vacuous cases are disposed after `CaseSet.Lift` and leave `Cases`; zero cases throw; cancellation between rounds | R3 |
+| `Cases/SplitTests` | Persistent cases absorb later parent facts within one `Run`; records are disposed when the `Run` ends and a second `Run` splits again; `CaseLimit` and `SplitDepthLimit` skip; an empty element set skips and is counted; a guarded split opens no case when the guard fails; a split step on a contradictory scope does nothing; `DefineDomainSplit` equals the hand-written rule; nested splits (phase A, then phase B); cases are disposed when a run stops early or throws; `Children` is empty after every `Run`; `OpenCases` on a frozen scope throws; `InheritWatermarks = false` reaches cases | R3 |
+| `Cases/ContradictedCaseTests` | After a case derives `Contradiction`: `IsContradictory` is true; `Check`, `Get`, `Find`, `Count`, `Extract`, `Make`, `Write`, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Assume` does nothing; `Union` returns false; `Run` returns `Contradiction` with no iteration; `Dispose` works | R3 |
+
+### 8.4 Running
+
+```
+dotnet build src/Eggnog.Tests -f net10.0
+src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.exe                 # add -class <FullName> to filter
+```
+
+---
+
+## 9. Milestones
+
+Every milestone has the same baseline definition of done:
+- `dotnet build src/Eggnog.Tests -f net10.0` and `-f net8.0` have no errors, and no warnings in new files;
+- every new test passes, and every existing suite (`Eggnog.Tests`, `Eggnog.Relations.Tests`, `Eggnog.Storage.Tests`)
+  passes unchanged, except for the additions the milestone lists;
+- the conventions hold: one type per file, no nested types, XML docs on every public and internal member, `== false`,
+  no `using Eggnog.Relations;` in `src/Eggnog` (D29);
+- `Surface/PublicSurfaceTests` passes;
+- the only engine changes are the requests the milestone lists (§5.2).
+
+### R1a: the library lands
+
+The first rule-layer change, kept small so that `src/Eggnog` is a real library on main as soon as possible.
+
+**Depends on:** the engine at `5acd00e`, plus E1 and E11, landed in `Eggnog.Relations` as the first changes of R1a.
+
+**Project changes.**
+- `src/Eggnog/Eggnog.csproj`: add `<ProjectReference Include="..\Eggnog.Relations\Eggnog.Relations.csproj" />` and
+  remove the `Eggnog.Storage` reference (nothing in `src/Eggnog` uses it).
+- `src/dist-nuget/dist-nuget.csproj`: remove the `Eggnog.Storage` `PackageProjectReference`, so that the package
+  neither depends on nor ships the spike.
+- `src/Eggnog.Relations/Eggnog.Relations.csproj`: add `<InternalsVisibleTo Include="Eggnog.Tests" />` (lowering and
+  layout tests read bridge internals).
+- `.github/workflows/Eggnog.yml`: add `Eggnog.Tests` to the test matrix (`src/dist-tests` already packs it).
+- `README.md`: describe `Eggnog` as the library and `Eggnog.Relations` as its engine; `src/Eggnog.Storage` and
+  `src/Eggnog.Storage.Tests` stay while `Eggnog.Relations.Tests` uses the spike as a second oracle (colors X32), and
+  deleting them is a separate decision.
+
+**Content.**
+- Public: `EGraph` (definitions of sorts, relations, functions, constructors and rulesets; `Root`, `Contradiction`,
+  `Tables`, `Rulesets`, `Values`), `EGraphOptions.DegreeOfParallelism`; `Scope` identity and lifetime (`Failure`,
+  `Version`, `Path`, `Dispose`), writes (`Make`, `Assume`, `Union`, `Write`), reads (`IsContradictory`, `Check`, `Get`,
+  `TryGet`, `Find`, `AreEqual`), `Run`, `CreateExtractor`, `Extract`; `ScopeWriter`; `ISort`, `ClassId`; every
+  `Values/` type; every `Tables/` type without `In`/`ReadScope`; every `Terms/` type without `Fact.In`; `Ruleset`,
+  `Rule`, `RuleBuilder` without `Erasing`/`ReadsOwnFacts`, `RuleDefinitionException`, `RuleEvaluationException`,
+  `FactConflictException`; `Schedule.Run/Repeat/Saturate/Sequence`, `RunOptions` (`IterationLimit`,
+  `StopOnContradiction`), `RunReport` (without `Steps` and the R3 members), `RunStopReason` (`Completed`,
+  `IterationLimit`, `Contradiction`), `RuleStatistics` without `Plan`; every `Extraction/` type.
+- Internal: every type tagged R1a in §4, `RootEngineScope` with the Id-constant re-lowering of §6.4.5 included.
+- §6.1–§6.5, §6.6.1–§6.6.3, §6.6.5, §6.6.7, §6.10 and §6.12–§6.13 for the root.
+- `Scope` and `EGraph` already have their final shape for these members: later milestones only add (D28).
+
+**Tests.**
+- The R1a rows of §8.3.
+- Literal 01–03 (§8.1.1).
+- E1's tests in `Eggnog.Relations.Tests/BaseValues/BaseValuesTests`; E11 leaves every `Eggnog.Relations.Tests` test and
+  the benchmarks building and passing.
+
+**Done when** the baseline holds; Literal 01–03 are green; `dist-nuget` packs `Eggnog` and `Eggnog.Relations` only, and
+the `Eggnog` package's only Eggnog dependency is `Eggnog.Relations`; a text search finds no `Eggnog.Storage` in
+`src/Eggnog`, `src/Eggnog.Tests` or `src/dist-nuget`; `RootEngineScope` is the only file in `src/Eggnog` that calls the
+bridge's root-only members (`Database.CreateExecutionState`, `GetCanonInUf`, `LookupId`, `TableAction`, `UnionAction`,
+`FlushUpdates`, `TryTakePanic`); and the work is merged to main.
+
+### R1b: queries, limits, diagnostics, the rest of the literal suite
+
+**Depends on:** R1a.
+
+**Content.**
+- `Query`, `QueryBuilder`, `QueryCallback`, `QueryMatch`; `EGraph.DefineQuery`; `Scope.Any`, `Count`, `ForEachMatch`;
+  `QueryRunner`, `MatchCollector`, `CompiledQuery`, and R1's query path without a merge or a clock tick (§6.6.5).
+- `Schedule.Until`; `RunOptions.TimeLimit`, `RowLimit`, `Observer`, `RecordSteps`; `RunStopReason.TimeLimit`,
+  `RowLimit`; `RunReport.Steps`; `RunStep`, `RunStepKind`; `RuleStatistics.Plan`, `EGraphOptions.RecordPlans`.
+- `Scope.CountRows`, `Scope.Rows`, `TableRow`, `RowReader`.
+- §6.6.4 and §6.11.
+
+**Tests.**
+- The R1b rows of §8.3.
+- Literal 04–07 (§8.1.1).
+- `Differential/RuleLayerDifferentialTests` at 300 seeds.
+
+**Done when** the baseline holds, the literal suite is green in full, and the differential is green at 300 seeds with a
+5000-seed run recorded with the change.
+
+### R2: scopes, frozen bases, per-query layers, local rules, concurrency
+
+**Depends on:** colors M10.3 (the bridge on a `Store`, `EGraphContext`, watermarks, X19), plus E4, E5, E7, E9 and E10.
+
+**Content.**
+- `ContextEngineScope` for every scope, the root included. `RootEngineScope`, the engine lock, the re-lowering path of
+  §6.4.5 and `Rules/RootRelowerTests` are deleted.
+- `Scope.Tree` (`Parent`, `Tag`, `IsFrozen`, `Children`, `LocalRules`, `CreateChild`, `Freeze`, `DefineRule`), the
+  deferred release of `Dispose` (D40), `ScopeOptions`; `ScopeTag`, `EGraph.DefineScopeTag`, `RootTag`, `ScopeTags`;
+  `In(tag)`, `Fact.In`, `TableHandle.ReadScope`; `RulesetOptions`, the `DefineRuleset` overload, `Ruleset.Licence`,
+  `Rule.Licence`, `Rule.OwnFactsReason`, `Rule.ReadScopes`, `RuleBuilder.Erasing`, `RuleBuilder.ReadsOwnFacts`.
+- `MirrorRegistry` (with the per-tag frozen counts), `MirrorTable`, `MirrorSync`, `ScopeResolver`; the frozen-tag
+  check (§6.8).
+- Local rules (§6.7); queries on frozen scopes through transient children (D34); context extraction (E5); the origin
+  checks of other scopes (D39); per-thread-domain guards beyond the root (D47).
+- `Relations.EGraph.DesignateContradiction` at graph construction (E4); the per-graph `ContextLocalSlot<ScopeRuntime>`;
+  the internal `EGraph.InheritWatermarks` switch.
+
+**Tests.**
+- The R2 rows of §8.3.
+- The scoped suite's R2 tests: 01, 03, 05, 06, 08, and the R2 tests of 02, 04 and 07 (§8.1.2). In R2, `CosmosTheory`
+  has no split members; `CosmosTheory.Cases.cs` adds them in R3.
+- `ScopeDifferentialTests` and `InheritanceOffEquivalenceTests` at 300 seeds.
+- Every R1 suite, now running on the Store-backed root, including the literal suite and `IdConstantTests`.
+
+**Done when** the baseline holds; all of the above is green with the default `DegreeOfParallelism` of 1;
+`ConcurrencyTests` is green on 8 threads and `ParallelEquivalenceTests` at 4; and the R1 suites pass unchanged in
+source.
+
+### R3: case splits and lift
+
+**Depends on:** colors M10.4, plus E8.
+
+**Content.**
+- `SplitRule`, `SplitBuilder`, `EGraph.DefineSplit`, `EGraph.DefineDomainSplit`, `EGraph.SplitRules`,
+  `Schedule.Split`, `SplitSchedule`.
+- `SplitProgram`, `RuleSplitSource`, `ScheduleCaseRunner`, `LiftSpecBuilder`, `CaseJoinAdapter<T>`.
+- `Scope.Cases` (`IsCase`, `OpenCases`), `CaseSet`, `LiftOptions`, `LiftReport`, `ScopeContradictedException` and the
+  contradicted-case semantics (D45, §6.6.8).
+- The R3 members of `RunOptions`, `RunReport`, `RunStep` and `RunStepKind`.
+- `CosmosTheory.Cases.cs`: `Case`, `Mentioned`, `SchemaSplit`, `QuerySplit`, `Facts` and `Saturation` (§10).
+
+**Tests.**
+- The R3 rows of §8.3.
+- The scoped suite's R3 tests of 02, 04 and 07, including `TheSameSplitDrivenByTheHost` and
+  `AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit`.
+- `SplitOracleTests` at 300 seeds.
+
+**Done when** the baseline holds, all of the above is green, and every scoped Cosmos test asserts that the query scope
+has no children after its `Run`.
+
+Version 1's R4 (retiring the spike reference) is folded into R1a; there is no R4.
+
+---
+
+## 10. Scenario 02 against the v2 API
+
+The shared sort, the theory and the scenario-02 tests. `CosmosTheory.cs` and `Scenario02QueryDisjunctionTests.cs` are
+the R2 files; the partials `CosmosTheory.Cases.cs` and `Scenario02QueryDisjunctionTests.Cases.cs` are added in R3. At
+R2 the partial method `DefineCases` has no implementation and its call compiles away.
+
+```csharp
+// src/Eggnog.Tests/Cosmos/Pred.cs  [R1a]
 namespace Eggnog.Tests.Cosmos
 {
 
@@ -1990,11 +3485,11 @@ namespace Eggnog.Tests.Cosmos
     /// A predicate over a document: the e-class sort of the pushdown theory.
     /// </summary>
     /// <param name="Id">The class.</param>
-    public readonly record struct Pred(Id Id) : ISort<Pred>
+    public readonly record struct Pred(ClassId Id) : ISort<Pred>
     {
 
         /// <inheritdoc />
-        public static Pred FromId(Id id) => new(id);
+        public static Pred FromId(ClassId id) => new(id);
 
     }
 
@@ -2002,32 +3497,23 @@ namespace Eggnog.Tests.Cosmos
 ```
 
 ```csharp
-// src/Eggnog.Tests/Cosmos/CosmosTheory.cs
-using System;
-
-namespace Eggnog.Tests.Cosmos
+// src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.cs  [R2]
+namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
     /// The theory of prototypes/cosmos-facts/prelude.egg, defined once per graph and shared by every container compiled
-    /// into it. The prototype's context argument and its inheritance rules are gone: scopes are the contexts.
+    /// into it. The prototype's context argument and its inheritance rules are gone: scopes are the contexts. One theory
+    /// per graph: it defines the graph's scope tags.
     /// </summary>
-    public sealed class CosmosTheory
+    public sealed partial class CosmosTheory
     {
-
-        /// <summary>Tags a container's schema scope.</summary>
-        public static readonly ScopeTag Schema = new("schema");
-
-        /// <summary>Tags a query scope.</summary>
-        public static readonly ScopeTag Query = new("query");
-
-        /// <summary>Tags one case of a discriminator split.</summary>
-        public static readonly ScopeTag Case = new("case");
 
         static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
 
         /// <summary>
-        /// Defines the theory in a graph.
+        /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen
+        /// (§6.8).
         /// </summary>
         /// <param name="graph">The graph.</param>
         public CosmosTheory(EGraph graph)
@@ -2035,7 +3521,11 @@ namespace Eggnog.Tests.Cosmos
             Graph = graph;
             graph.DefineSort<Pred>("Pred");
 
-            // Claims about a path.
+            // The graph's own tags (D38): a container's schema scope, and a query scope.
+            Schema = graph.DefineScopeTag("schema");
+            Query = graph.DefineScopeTag("query");
+
+            // Claims about a path. Value-only, so the schema's view of each can be read from a query (D1).
             Present = graph.DefineRelation<string>("present");
             Form = graph.DefineRelation<string, string>("form");
             Ne = graph.DefineRelation<string, string>("ne");
@@ -2044,6 +3534,7 @@ namespace Eggnog.Tests.Cosmos
             Types = graph.DefineFunction<string, ValueSet<string>>("types", ValueLattice.Intersect<string>());
             Lo = graph.DefineFunction<string, long>("lo", ValueLattice.Max<long>());
             Hi = graph.DefineFunction<string, long>("hi", ValueLattice.Min<long>());
+            IDom = graph.DefineFunction<string, ValueSet<long>>("idom", ValueLattice.Intersect<long>());
 
             // Predicates, costed as in the prototype.
             PTrue = graph.DefineConstructor<Pred>("PTrue", cost: 0);
@@ -2056,6 +3547,7 @@ namespace Eggnog.Tests.Cosmos
             StrGt = graph.DefineConstructor<string, string, Pred>("StrGt");
             BoolTrue = graph.DefineConstructor<string, Pred>("BoolTrue");
             NumGt = graph.DefineConstructor<string, long, Pred>("NumGt");
+            NumLt = graph.DefineConstructor<string, long, Pred>("NumLt");
             IsDefined = graph.DefineConstructor<string, Pred>("IsDefined");
             IsString = graph.DefineConstructor<string, Pred>("IsString");
             UuidEq = graph.DefineConstructor<string, string, Pred>("UuidEq", cost: 1000);
@@ -2071,21 +3563,25 @@ namespace Eggnog.Tests.Cosmos
 
             Horn = graph.DefineRuleset("horn");
             Lattice = graph.DefineRuleset("lattice");
-            Rewrite = graph.DefineRuleset("rewrite");
+            // Every rewrite reads facts only from the schema, unless it says why it may read the query's (D12).
+            Rewrite = graph.DefineRuleset("rewrite", new RulesetOptions { Licence = Schema });
             DefineHorn();
             DefineLattice();
             DefineRewrite();
-
-            // One case per value a present discriminator can still hold: the cases cover the scope.
-            DiscriminatorSplit = graph.DefineDomainSplit("discriminator", Discriminator, Dom, guard: Present, caseTag: Case);
-
-            var split = Schedule.Split(DiscriminatorSplit, Schedule.Saturate(Horn, Lattice));
-            Facts = Schedule.Saturate(Horn, Lattice, split);
-            Saturation = Schedule.Saturate(Horn, Lattice, split, Rewrite);
+            DefineCases();
         }
+
+        /// <summary>Defines the split members; implemented from R3 on (CosmosTheory.Cases.cs).</summary>
+        partial void DefineCases();
 
         /// <summary>Gets the graph.</summary>
         public EGraph Graph { get; }
+
+        /// <summary>Gets the tag of a container's schema scope.</summary>
+        public ScopeTag Schema { get; }
+
+        /// <summary>Gets the tag of a query scope.</summary>
+        public ScopeTag Query { get; }
 
         /// <summary>Gets the relation "the path is present".</summary>
         public Relation<string> Present { get; }
@@ -2110,6 +3606,9 @@ namespace Eggnog.Tests.Cosmos
 
         /// <summary>Gets an upper bound on a numeric path.</summary>
         public Function<string, long> Hi { get; }
+
+        /// <summary>Gets the integers a numeric path can hold, if present (gap 5).</summary>
+        public Function<string, ValueSet<long>> IDom { get; }
 
         /// <summary>Gets the true predicate.</summary>
         public Constructor<Pred> PTrue { get; }
@@ -2141,6 +3640,9 @@ namespace Eggnog.Tests.Cosmos
         /// <summary>Gets c.p &gt; n.</summary>
         public Constructor<string, long, Pred> NumGt { get; }
 
+        /// <summary>Gets c.p &lt; n.</summary>
+        public Constructor<string, long, Pred> NumLt { get; }
+
         /// <summary>Gets IS_DEFINED(c.p).</summary>
         public Constructor<string, Pred> IsDefined { get; }
 
@@ -2171,17 +3673,8 @@ namespace Eggnog.Tests.Cosmos
         /// <summary>Gets the lattice ruleset.</summary>
         public Ruleset Lattice { get; }
 
-        /// <summary>Gets the rewrite ruleset.</summary>
+        /// <summary>Gets the rewrite ruleset, erasing under <see cref="Schema"/>.</summary>
         public Ruleset Rewrite { get; }
-
-        /// <summary>Gets the discriminator split.</summary>
-        public SplitRule DiscriminatorSplit { get; }
-
-        /// <summary>Gets the schedule a schema is compiled with: facts and splits, no rewrites.</summary>
-        public Schedule Facts { get; }
-
-        /// <summary>Gets the schedule a query runs: everything, interleaved, as the prototype's (saturate horn lattice split rewrite).</summary>
-        public Schedule Saturation { get; }
 
         /// <summary>
         /// What a schema compiler emits for one discriminated branch: under path = value, the consequences hold. The rule
@@ -2201,32 +3694,32 @@ namespace Eggnog.Tests.Cosmos
 
         void DefineHorn()
         {
-            Horn.Rule("a where clause is a conjunct", r =>
+            Horn.DefineRule("a where clause is a conjunct", r =>
             {
                 var e = r.Var<Pred>("e");
                 r.When(WhereClause.Of(e));
                 r.Then(Conjunct.Of(e));
             });
-            Horn.Rule("conjuncts of and", r =>
+            Horn.DefineRule("conjuncts of and", r =>
             {
                 var (a, b) = r.Vars<Pred, Pred>("a", "b");
                 r.When(Conjunct.Of(And.Of(a, b)));
                 r.Then(Conjunct.Of(a), Conjunct.Of(b));
             });
-            Horn.Rule("inset of equality", r =>
+            Horn.DefineRule("inset of equality", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
                 r.When(e.Is(StrEq.Of(p, v)));
                 r.Then(InSet.Of(e, p).Is(Primitives.Singleton<string>().Of(v)));
             });
-            Horn.Rule("inset of or", r =>
+            Horn.DefineRule("inset of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(InSet.Of(a, p)), sb.Is(InSet.Of(b, p)));
                 r.Then(InSet.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
             });
-            Horn.Rule("inset admits", r =>
+            Horn.DefineRule("inset admits", r =>
             {
                 var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
                 r.When(s.Is(InSet.Of(e, p)));
@@ -2234,7 +3727,7 @@ namespace Eggnog.Tests.Cosmos
             });
             foreach (var left in new[] { true, false })
             {
-                Horn.Rule(left ? "and admits left" : "and admits right", r =>
+                Horn.DefineRule(left ? "and admits left" : "and admits right", r =>
                 {
                     var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                     var s = r.Var<ValueSet<string>>("s");
@@ -2242,7 +3735,7 @@ namespace Eggnog.Tests.Cosmos
                     r.Then(Admits.Of(e, p).Is(s));
                 });
             }
-            Horn.Rule("admits of or", r =>
+            Horn.DefineRule("admits of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
@@ -2251,13 +3744,13 @@ namespace Eggnog.Tests.Cosmos
             });
 
             // What a conjunct establishes, written to the running scope: the query.
-            Horn.Rule("a conjunct admits", r =>
+            Horn.DefineRule("a conjunct admits", r =>
             {
                 var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
                 r.When(Conjunct.Of(e), s.Is(Admits.Of(e, p)));
                 r.Then(Present.Of(p), Dom.Of(p).Is(s));
             });
-            Horn.Rule("a negated equality", r =>
+            Horn.DefineRule("a negated equality", r =>
             {
                 var (p, v) = r.Vars<string, string>("p", "v");
                 r.When(Conjunct.Of(Not.Of(StrEq.Of(p, v))));
@@ -2265,57 +3758,82 @@ namespace Eggnog.Tests.Cosmos
             });
             foreach (var comparison in new[] { UuidEq, StrGe, InstantGt })
             {
-                Horn.Rule($"{comparison.Name} proves presence", r =>
+                Horn.DefineRule($"{comparison.Name} proves presence", r =>
                 {
                     var (p, v) = r.Vars<string, string>("p", "v");
                     r.When(Conjunct.Of(comparison.Of(p, v)));
                     r.Then(Present.Of(p));
                 });
             }
-            Horn.Rule("a numeric bound", r =>
+            Horn.DefineRule("a numeric lower bound", r =>
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumGt.Of(p, n)));
                 r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(ValueSet.Of("number")));
             });
+            Horn.DefineRule("a numeric upper bound", r =>
+            {
+                var (p, n) = r.Vars<string, long>("p", "n");
+                r.When(Conjunct.Of(NumLt.Of(p, n)));
+                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(ValueSet.Of("number")));
+            });
         }
 
         void DefineLattice()
         {
-            Lattice.Rule("a domain settles the type", r =>
+            Lattice.DefineRule("a domain settles the type", r =>
             {
                 var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
                 r.When(d.Is(Dom.Of(p)));
                 r.Then(Types.Of(p).Is(ValueSet.Of("string")));
             });
-            Lattice.Rule("a form describes strings", r =>
+            Lattice.DefineRule("a form describes strings", r =>
             {
                 var (p, f) = r.Vars<string, string>("p", "f");
                 r.When(Form.Of(p, f));
                 r.Then(Types.Of(p).Is(StringOrNull));
             });
-            Lattice.Rule("a disequality narrows a domain", r =>
+            Lattice.DefineRule("a disequality narrows a domain", r =>
             {
                 var (p, v, d) = r.Vars<string, string, ValueSet<string>>("p", "v", "d");
                 r.When(Ne.Of(p, v), d.Is(Dom.Of(p)));
                 r.Where(Primitives.Contains<string>().Of(d, v));
                 r.Then(Dom.Of(p).Is(Primitives.Remove<string>().Of(d, v)));
             });
-            Lattice.Rule("an empty domain", r =>
+            Lattice.DefineRule("a lower bound narrows an integer domain", r =>
+            {
+                var (p, d, l) = r.Vars<string, ValueSet<long>, long>("p", "d", "l");
+                r.When(d.Is(IDom.Of(p)), l.Is(Lo.Of(p)));
+                r.Then(IDom.Of(p).Is(Compute.Of(d, l, (d, l) => d.Where(x => x >= l))));
+            });
+            Lattice.DefineRule("an upper bound narrows an integer domain", r =>
+            {
+                var (p, d, h) = r.Vars<string, ValueSet<long>, long>("p", "d", "h");
+                r.When(d.Is(IDom.Of(p)), h.Is(Hi.Of(p)));
+                r.Then(IDom.Of(p).Is(Compute.Of(d, h, (d, h) => d.Where(x => x <= h))));
+            });
+            Lattice.DefineRule("an empty domain", r =>
             {
                 var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
                 r.When(Present.Of(p), d.Is(Dom.Of(p)));
                 r.Where(Primitives.IsEmpty<string>().Of(d));
                 r.Then(Graph.Contradiction.Of());
             });
-            Lattice.Rule("no possible type", r =>
+            Lattice.DefineRule("an empty integer domain", r =>
+            {
+                var (p, d) = r.Vars<string, ValueSet<long>>("p", "d");
+                r.When(Present.Of(p), d.Is(IDom.Of(p)));
+                r.Where(Primitives.IsEmpty<long>().Of(d));
+                r.Then(Graph.Contradiction.Of());
+            });
+            Lattice.DefineRule("no possible type", r =>
             {
                 var (p, t) = r.Vars<string, ValueSet<string>>("p", "t");
                 r.When(Present.Of(p), t.Is(Types.Of(p)));
                 r.Where(Primitives.IsEmpty<string>().Of(t));
                 r.Then(Graph.Contradiction.Of());
             });
-            Lattice.Rule("crossed bounds", r =>
+            Lattice.DefineRule("crossed bounds", r =>
             {
                 var (p, l, h) = r.Vars<string, long, long>("p", "l", "h");
                 r.When(Present.Of(p), l.Is(Lo.Of(p)), h.Is(Hi.Of(p)));
@@ -2326,61 +3844,65 @@ namespace Eggnog.Tests.Cosmos
 
         void DefineRewrite()
         {
-            // Judged in the running scope: the guard that proved the form is a conjunct that stays in the predicate.
-            Rewrite.Rule("lower uuid", r =>
+            // These four judge on the query's own facts, and say why that is sound (D12).
+            Rewrite.DefineRule("lower uuid", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
+                r.ReadsOwnFacts("the guard that proved the form is a conjunct that stays in the predicate");
                 r.When(e.Is(UuidEq.Of(p, v)), Form.Of(p, "uuid-lower"));
                 r.Then(e.Is(StrEq.Of(p, v)));
             });
-            Rewrite.Rule("lower instant", r =>
+            Rewrite.DefineRule("lower instant", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
+                r.ReadsOwnFacts("the guard that proved the form is a conjunct that stays in the predicate");
                 r.When(e.Is(InstantGt.Of(p, v)), Form.Of(p, "instant-ms"));
                 r.Then(e.Is(StrGt.Of(p, v)));
             });
-            Rewrite.Rule("contradicted predicate", r =>
+            Rewrite.DefineRule("contradicted predicate", r =>
             {
                 var e = r.Var<Pred>("e");
+                r.ReadsOwnFacts("a query with no documents makes every predicate equivalent to false");
                 r.When(WhereClause.Of(e), Graph.Contradiction.Of());
                 r.Then(e.Is(PFalse.Of()));
             });
-
-            // Deletions read facts only from the schema, and the definition checks it: a conjunct's own consequences in
-            // the query (present(kind) from kind = 'A') can never delete it.
-            Rewrite.Rule("declared tautology", r =>
-            {
-                var (e, p) = r.Vars<Pred, string>("e", "p");
-                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
-                r.Erasing(Schema);
-                r.When(s.Is(InSet.Of(e, p)), Present.In(Schema).Of(p), d.Is(Dom.In(Schema).Of(p)));
-                r.Where(Primitives.IsSubsetOf<string>().Of(d, s));
-                r.Then(e.Is(PTrue.Of()));
-            });
-            Rewrite.Rule("declared presence", r =>
-            {
-                var (e, p) = r.Vars<Pred, string>("e", "p");
-                r.Erasing(Schema);
-                r.When(e.Is(IsDefined.Of(p)), Present.In(Schema).Of(p));
-                r.Then(e.Is(PTrue.Of()));
-            });
-
             // NOT IS_STRING admits nothing a present string-or-null path holds: it is NOT IS_DEFINED.
-            Rewrite.Rule("a string path's NOT IS_STRING", r =>
+            Rewrite.DefineRule("a string path's NOT IS_STRING", r =>
             {
                 var (e, p, t) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "t");
+                r.ReadsOwnFacts("an equivalence under type facts whose conjuncts stay in the predicate");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(p)));
                 r.Where(t, t => t.IsSubsetOf(StringOrNull));
                 r.Then(e.Is(Not.Of(IsDefined.Of(p))));
             });
-            Rewrite.Rule("a definedness test absorbs its negation", r =>
+
+            // Deletions read facts only from the schema, and the ruleset's licence checks it: a conjunct's own
+            // consequences in the query (present(kind) from kind = 'A') can never delete it. present@schema and
+            // dom@schema are mirrors.
+            Rewrite.DefineRule("declared tautology", r =>
+            {
+                var (e, p) = r.Vars<Pred, string>("e", "p");
+                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+                r.When(s.Is(InSet.Of(e, p)), Present.In(Schema).Of(p), d.Is(Dom.In(Schema).Of(p)));
+                r.Where(Primitives.IsSubsetOf<string>().Of(d, s));
+                r.Then(e.Is(PTrue.Of()));
+            });
+            Rewrite.DefineRule("declared presence", r =>
+            {
+                var (e, p) = r.Vars<Pred, string>("e", "p");
+                r.When(e.Is(IsDefined.Of(p)), Present.In(Schema).Of(p));
+                r.Then(e.Is(PTrue.Of()));
+            });
+
+            // These read terms only, so the licence does not constrain them.
+            Rewrite.DefineRule("a definedness test absorbs its negation", r =>
             {
                 var (p, x) = r.Vars<string, Pred>("p", "x");
                 r.Rewrite(And.Of(IsDefined.Of(p), Or.Of(Not.Of(IsDefined.Of(p)), x)), And.Of(IsDefined.Of(p), x));
             });
             foreach (var comparison in new[] { StrGe, StrEq })
             {
-                Rewrite.Rule($"{comparison.Name} implies defined", r =>
+                Rewrite.DefineRule($"{comparison.Name} implies defined", r =>
                 {
                     var (p, v) = r.Vars<string, string>("p", "v");
                     r.Rewrite(And.Of(IsDefined.Of(p), comparison.Of(p, v)), comparison.Of(p, v));
@@ -2388,12 +3910,12 @@ namespace Eggnog.Tests.Cosmos
             }
 
             // Boolean simplification.
-            Rewrite.Rule("and commutes", r => { var (a, b) = r.Vars<Pred, Pred>("a", "b"); r.Rewrite(And.Of(a, b), And.Of(b, a)); });
-            Rewrite.Rule("or commutes", r => { var (a, b) = r.Vars<Pred, Pred>("a", "b"); r.Rewrite(Or.Of(a, b), Or.Of(b, a)); });
-            Rewrite.Rule("true and", r => { var a = r.Var<Pred>("a"); r.Rewrite(And.Of(PTrue.Of(), a), a); });
-            Rewrite.Rule("false and", r => { var a = r.Var<Pred>("a"); r.Rewrite(And.Of(PFalse.Of(), a), PFalse.Of()); });
-            Rewrite.Rule("false or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PFalse.Of(), a), a); });
-            Rewrite.Rule("true or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PTrue.Of(), a), PTrue.Of()); });
+            Rewrite.DefineRule("and commutes", r => { var (a, b) = r.Vars<Pred, Pred>("a", "b"); r.Rewrite(And.Of(a, b), And.Of(b, a)); });
+            Rewrite.DefineRule("or commutes", r => { var (a, b) = r.Vars<Pred, Pred>("a", "b"); r.Rewrite(Or.Of(a, b), Or.Of(b, a)); });
+            Rewrite.DefineRule("true and", r => { var a = r.Var<Pred>("a"); r.Rewrite(And.Of(PTrue.Of(), a), a); });
+            Rewrite.DefineRule("false and", r => { var a = r.Var<Pred>("a"); r.Rewrite(And.Of(PFalse.Of(), a), PFalse.Of()); });
+            Rewrite.DefineRule("false or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PFalse.Of(), a), a); });
+            Rewrite.DefineRule("true or", r => { var a = r.Var<Pred>("a"); r.Rewrite(Or.Of(PTrue.Of(), a), PTrue.Of()); });
         }
 
     }
@@ -2402,44 +3924,127 @@ namespace Eggnog.Tests.Cosmos
 ```
 
 ```csharp
-// src/Eggnog.Tests/Cosmos/Scenario02QueryDisjunctionTests.cs
+// src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.Cases.cs  [R3]
+namespace Eggnog.Tests.Cosmos.Scoped
+{
+
+    public sealed partial class CosmosTheory
+    {
+
+        /// <summary>Gets the tag of a discriminator split's cases.</summary>
+        public ScopeTag Case { get; private set; } = null!;
+
+        /// <summary>Gets the paths the running scope's predicate terms mention: an analysis, derived from terms alone.</summary>
+        public Relation<string> Mentioned { get; private set; } = null!;
+
+        /// <summary>Gets the split a schema is compiled with: every present discriminator.</summary>
+        public SplitRule SchemaSplit { get; private set; } = null!;
+
+        /// <summary>Gets the split a query runs: the present discriminators its predicate mentions (D43).</summary>
+        public SplitRule QuerySplit { get; private set; } = null!;
+
+        /// <summary>Gets the schedule a schema is compiled with: facts and splits, no rewrites.</summary>
+        public Schedule Facts { get; private set; } = null!;
+
+        /// <summary>
+        /// Gets the schedule a query runs: the prototype's (saturate horn lattice split rewrite), with the facts settled
+        /// before each split step, so that the split sees the narrowest domain (D43).
+        /// </summary>
+        public Schedule Saturation { get; private set; } = null!;
+
+        partial void DefineCases()
+        {
+            Case = Graph.DefineScopeTag("case");
+
+            // A path is mentioned when a comparison or test over it is a term of the running scope.
+            Mentioned = Graph.DefineRelation<string>("mentioned", new TableOptions { Role = TableRole.Analysis });
+            foreach (var comparison in new[] { StrEq, StrGe, StrGt, UuidEq, InstantGt })
+            {
+                Horn.DefineRule($"{comparison.Name} mentions its path", r =>
+                {
+                    var (p, v) = r.Vars<string, string>("p", "v");
+                    r.When(Fact.Exists(comparison.Of(p, v)));
+                    r.Then(Mentioned.Of(p));
+                });
+            }
+            foreach (var test in new[] { BoolTrue, IsDefined, IsString })
+            {
+                Horn.DefineRule($"{test.Name} mentions its path", r =>
+                {
+                    var p = r.Var<string>("p");
+                    r.When(Fact.Exists(test.Of(p)));
+                    r.Then(Mentioned.Of(p));
+                });
+            }
+            foreach (var bound in new[] { NumGt, NumLt })
+            {
+                Horn.DefineRule($"{bound.Name} mentions its path", r =>
+                {
+                    var (p, n) = r.Vars<string, long>("p", "n");
+                    r.When(Fact.Exists(bound.Of(p, n)));
+                    r.Then(Mentioned.Of(p));
+                });
+            }
+
+            // One case per value a present discriminator can still hold: the cases cover the scope. A query splits only
+            // what it mentions; the schema's own split has already lifted what the schema alone implies.
+            SchemaSplit = Graph.DefineDomainSplit("discriminator", Dom, [Discriminator, Present], Case);
+            QuerySplit = Graph.DefineDomainSplit("mentioned discriminator", Dom, [Discriminator, Present, Mentioned], Case);
+
+            var settle = Schedule.Saturate(Horn, Lattice);
+            Facts = Schedule.Saturate(settle, Schedule.Split(SchemaSplit, settle));
+            Saturation = Schedule.Saturate(settle, Schedule.Split(QuerySplit, settle), Rewrite);
+        }
+
+    }
+
+}
+```
+
+```csharp
+// src/Eggnog.Tests/Cosmos/Scoped/Scenario02QueryDisjunctionTests.cs  [R2]
 using Xunit;
 
-namespace Eggnog.Tests.Cosmos
+namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
     /// prototypes/cosmos-facts/02-query-disjunction.egg: kind IN ('order', 'invoice') lowers the UUID comparison on ref
     /// only through a case split, and the schema alone still proves nothing about ref, because a note carries none.
     /// </summary>
-    public sealed class Scenario02QueryDisjunctionTests
+    public sealed partial class Scenario02QueryDisjunctionTests
     {
 
         const string Ref = "123e4567-e89b-12d3-a456-426614174000";
 
         /// <summary>
-        /// Compiles the container: kind is required and one of order, invoice, note; order and invoice declare ref a
-        /// canonical lowercase UUID.
+        /// The container: kind is required and one of order, invoice, note; order and invoice declare ref a canonical
+        /// lowercase UUID.
         /// </summary>
-        static (CosmosTheory C, Scope Schema) CompileContainer()
+        static void DeclareContainer(CosmosTheory c, Scope schema)
         {
-            var graph = new EGraph();
-            var c = new CosmosTheory(graph);
-            graph.Root.Freeze();                                    // empty and frozen: containers are siblings beneath it
-
-            var schema = graph.Root.CreateChild(CosmosTheory.Schema);
             schema.Assume(
                 c.Present.Of("kind"),
                 c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice", "note")),
                 c.Discriminator.Of("kind"));
             c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(schema, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));
+        }
 
-            var compiled = schema.Run(c.Facts);
+        /// <summary>
+        /// Compiles the container with horn and lattice rules only: what R2 can do.
+        /// </summary>
+        static (CosmosTheory C, Scope Schema) CompileContainerWithoutSplit()
+        {
+            var graph = new EGraph();                               // serial: deterministic (D46)
+            var c = new CosmosTheory(graph);
+            graph.Root.Freeze();                                    // empty and frozen: containers are siblings beneath it
+
+            var schema = graph.Root.CreateChild(c.Schema);
+            DeclareContainer(c, schema);
+            var compiled = schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
             Assert.True(compiled.Saturated);
-            Assert.Equal(3, compiled.CasesOpened);                  // the schema's own split: order, invoice, note
             Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));
-            Assert.Empty(schema.Children);
             schema.Freeze();
             return (c, schema);
         }
@@ -2463,28 +4068,62 @@ namespace Eggnog.Tests.Cosmos
         [Fact]
         public void HornAndLatticesAloneDoNotLower()
         {
-            var (c, schema) = CompileContainer();
-            using var query = schema.CreateChild(CosmosTheory.Query);
+            var (c, schema) = CompileContainerWithoutSplit();
+            using var query = schema.CreateChild(c.Query);
             var q = AssertQuery(c, query);
 
             // (run-schedule (saturate horn lattice rewrite))
             var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
 
             Assert.True(report.Saturated);
-            Assert.Equal(0, report.CasesOpened);
             Assert.Equal(ValueSet.Of("invoice", "order"), query.Get(c.Dom.Of("kind")));   // the domain narrows...
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));                     // ...but no single fact proves a guard
             Assert.False(query.AreEqual(q, Lowered(c)));
+        }
+
+    }
+
+}
+```
+
+```csharp
+// src/Eggnog.Tests/Cosmos/Scoped/Scenario02QueryDisjunctionTests.Cases.cs  [R3]
+using Xunit;
+
+namespace Eggnog.Tests.Cosmos.Scoped
+{
+
+    public sealed partial class Scenario02QueryDisjunctionTests
+    {
+
+        /// <summary>
+        /// Compiles the container with its own split: the schema's cases are order, invoice and note.
+        /// </summary>
+        static (CosmosTheory C, Scope Schema) CompileContainer()
+        {
+            var graph = new EGraph();
+            var c = new CosmosTheory(graph);
+            graph.Root.Freeze();
+
+            var schema = graph.Root.CreateChild(c.Schema);
+            DeclareContainer(c, schema);
+            var compiled = schema.Run(c.Facts);
+            Assert.True(compiled.Saturated);
+            Assert.Equal(3, compiled.CasesOpened);                  // order, invoice, note
+            Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));   // a note carries no ref
+            Assert.Empty(schema.Children);
+            schema.Freeze();
+            return (c, schema);
         }
 
         [Fact]
         public void TwoKindsNamedTogetherLowerTheReference()
         {
             var (c, schema) = CompileContainer();
-            using var query = schema.CreateChild(CosmosTheory.Query);
+            using var query = schema.CreateChild(c.Query);
             var q = AssertQuery(c, query);
 
-            // (run-schedule (saturate horn lattice split rewrite))
+            // The prototype's (run-schedule (saturate horn lattice split rewrite)), facts settled before the split.
             var report = query.Run(c.Saturation);
 
             Assert.Equal(RunStopReason.Completed, report.StopReason);
@@ -2498,7 +4137,7 @@ namespace Eggnog.Tests.Cosmos
 
             // (fail (check (form (Schema) "ref" "uuid-lower"))): read from the schema, and through the scoped handle.
             Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));
-            Assert.False(query.Check(c.Form.In(CosmosTheory.Schema).Of("ref", "uuid-lower")));
+            Assert.False(query.Check(c.Form.In(c.Schema).Of("ref", "uuid-lower")));
 
             // (extract $q)
             var best = query.Extract(q);
@@ -2513,7 +4152,7 @@ namespace Eggnog.Tests.Cosmos
         public void TheSameSplitDrivenByTheHost()
         {
             var (c, schema) = CompileContainer();
-            using var query = schema.CreateChild(CosmosTheory.Query);
+            using var query = schema.CreateChild(c.Query);
             var q = AssertQuery(c, query);
             query.Run(Schedule.Saturate(c.Horn, c.Lattice));
 
@@ -2527,9 +4166,10 @@ namespace Eggnog.Tests.Cosmos
             {
                 foreach (var kind in kinds)
                 {
-                    var k = cases.Add(CosmosTheory.Case);
+                    var k = cases.Add(c.Case);
                     k.Assume(c.Dom.Of("kind").Is(ValueSet.Of(kind)));
-                    k.Run(Schedule.Saturate(c.Horn, c.Lattice), new RunOptions { StopOnContradiction = true });
+                    k.Run(Schedule.Saturate(c.Horn, c.Lattice));    // a case always stops on contradiction (D11)
+                    Assert.False(k.IsContradictory);                // reads below would throw on a stopped case (D45)
                     Assert.True(k.Check(c.Form.Of("ref", "uuid-lower")));
                 }
 
@@ -2548,34 +4188,224 @@ namespace Eggnog.Tests.Cosmos
             Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));
         }
 
+        [Fact]
+        public void AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit()
+        {
+            var (c, schema) = CompileContainer();
+            using var query = schema.CreateChild(c.Query);
+            var q = query.Make(c.UuidEq.Of("ref", Ref));
+            query.Assume(c.WhereClause.Of(q));
+
+            var report = query.Run(c.Saturation);
+
+            Assert.True(report.Saturated);
+            Assert.Equal(0, report.CasesOpened);                    // kind is not mentioned (D43)
+            Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));
+            Assert.Equal($"(UuidEq \"ref\" \"{Ref}\")", query.Extract(q).ToString());
+            Assert.Equal(1002, query.Extract(q).Cost);
+        }
+
     }
 
 }
 ```
 
 **What happens when the scenario runs.**
-
-1. **Schema compilation.** It splits three ways. The note case lacks `form(ref)`, so nothing about `ref` lifts. The domain join `{order} ∪ {invoice} ∪ {note}` equals the schema's own domain, so the lift is skipped by absorption. The three cases are disposed when `Run` returns, and the schema's split progress is reset.
-2. **Query without the split.** `admits` sees through `And` and `Or`, so `dom(kind)` narrows to `{order, invoice}` in the query. The branch rules need a singleton domain, so neither fires, and `lower uuid` has no `form` to match.
-3. **Query with the split.**
-   - The domain split matches `(kind)`, which yields two persistent cases.
-   - Each case asserts its singleton domain, inherits the query's watermarks, and fires its branch rule, which is local to the schema and active in every descendant. Each therefore derives `form(ref, uuid-lower)` and `types(ref) = {string, null}`.
-   - The lift writes both rows into the query.
-   - `lower uuid` then unions `UuidEq(ref, R)` with `StrEq(ref, R)`.
-   - The next pass changes nothing: the lift memo skips, so the run is saturated.
-4. **Extraction.** Ties among the commuted `And` and `Or` spellings go to the lower canonical child id. The host's `Make` built the subterms in post-order, so the spelling as written wins. In the `UuidEq` class, `StrEq` costs 3 against 1002 for `UuidEq`.
+1. **Theory.** `CosmosTheory` defines the graph's tags (`schema`, `query`, and in R3 `case`), every table and every
+   rule before any scope exists. The two deletion rules read `present` and `dom` in `schema`, so the graph creates the
+   mirrors `present@schema` and `dom@schema` and their copy rules. The rewrite ruleset is erasing under `schema`; its
+   four rules that judge on the query's facts say why (`ReadsOwnFacts`), and `Rule.ToString` shows it.
+2. **Schema compilation** (`Facts`).
+   - The inner saturation runs the global rules and the two local branch rules. No branch fires: `dom(kind)` has three
+     values.
+   - The split step (`SchemaSplit`) finds one request: key `kind`, set `{order, invoice, note}`. The `SplitDriver`
+     opens three cases, each assuming its singleton domain.
+   - In each case the branch rules (local to the schema, so active in its descendants) fire for order and invoice.
+     They inherit the schema's watermarks (colors §10.2), so each case matches only the rows its assumption added.
+   - The lift finds `form(ref, uuid-lower)` missing in the note case, so it is not lifted. The case join of `dom`,
+     `{order} ∪ {invoice} ∪ {note}`, is the schema's own domain, so absorption writes nothing. The next pass skips the
+     covered key (B6) and changes nothing.
+   - The records are disposed when `Run` returns. `Freeze` syncs the schema's mirrors (one copy iteration, D48) and
+     freezes it, pre-planning the rules its descendants can run on the schema's statistics (E10).
+3. **Query without the split** (R2). `admits` sees through `And` and `Or`, so `dom(kind)` narrows to
+   `{order, invoice}` in the query. The branch rules need a singleton domain, so neither fires, and `lower uuid` has no
+   `form` to match.
+4. **Query with the split** (`Saturation`).
+   - The inner saturation narrows `dom(kind)` to `{order, invoice}` (`admits` needs several iterations), and derives
+     `mentioned(kind)` and `mentioned(ref)` from the comparison terms.
+   - Only then does the split step run: `QuerySplit` matches `kind` (present, a discriminator, mentioned) with
+     `{invoice, order}`, giving two cases tagged `case`. A split taken after a single iteration would still have seen
+     `{order, invoice, note}` and opened a third case that later goes vacuous.
+   - Each case derives `form(ref, uuid-lower)` and `types(ref) = {string, null}`; the lift writes both into the query.
+   - The rewrite step's `lower uuid` unions `UuidEq(ref, R)` with `StrEq(ref, R)`. Later passes absorb the lifted facts
+     and the commuted spellings; the split step skips the covered key (B6). A pass changes nothing, so the run is
+     saturated with `CasesOpened == 2`.
+   - A query that mentions only `ref` derives no `mentioned(kind)`, and its split step opens nothing.
+5. **Extraction.** Ties among the commuted `And` and `Or` spellings go to the lower class id (D10). The host's `Make`
+   built the subterms in post-order, so the spelling as written wins. In the `UuidEq` class, `StrEq` costs 3 against
+   1002 for `UuidEq`.
 
 ---
 
-## 6. Residual risks
+## 11. Residual risks
 
-These are accepted for v1. None is an open question: each has a decision above.
+These are accepted. None is an open question: each has a decision above.
 
-1. **Coverage cannot be checked.** It is stated on `SplitBuilder`, `DefineDomainSplit`, `OpenCases`, `CaseSet` and `Scope.Split`, and a lift with no cases throws. A wrong domain encoding in a schema compiler is still a silent soundness bug in that theory.
-2. **The erasing guarantee does not cover equalities.** It covers facts (§3.3, step 6). Equalities the running scope derived through lowerings rest on the justifying conjuncts surviving into the extracted predicate. A debug auditor could check this later: re-extract the predicate and compare it on sample documents.
-3. **Pools only grow** (D15). A long-lived service should recycle its `EGraph` once `InternedCount` passes a threshold. Recompiling a container is cheap.
-4. **Static planning has no statistics** beyond the first atom of a full run (D26). A pathological body may need its atoms reordered by hand, since ties follow rule order.
-5. **Term lift costs rounds.** It costs one round per nesting level, and `CandidateLimit` bounds the product of member lists. Cosmos lifts only value-keyed facts, so term lift is exercised only by `LiftTests`.
-6. **Termination.** A lattice with infinite descending chains, such as i64 bounds combined with arithmetic rules, never saturates. `IterationLimit`, `TimeLimit` and `ChangeLimit` stop the run soundly, and the report says why. The host should then decide with what has been proven so far.
-7. **Purity cannot be enforced.** Primitives, lattices, cost functions and callbacks must be pure and thread-safe, and callbacks idempotent. This is documented on every parameter that takes one, and `ValueLattice<T>.Verify` covers the lattice laws in tests.
-8. **No rollback** (D18). After an exception the scope's contents are unspecified, but no watermark was committed. The guidance is to call `Rebuild()` and run again, or to dispose the scope.
+1. **Coverage cannot be checked.** It is stated on every split and case API, and a lift with no cases throws. A wrong
+   domain encoding in a schema compiler is still a silent soundness bug in that theory.
+2. **The erasing guarantee does not cover equalities.** It covers facts (§6.3 step 6), now by default for a ruleset
+   with a licence. Equalities the running scope derived through lowerings rest on the justifying conjuncts surviving
+   into the extracted predicate (the prototype's argument), and every rule that relies on that names it with
+   `ReadsOwnFacts`. A debug auditor could re-extract the predicate and compare it on sample documents.
+3. **Pools only grow** (D15). A long-lived service should recycle its `EGraph` once `InternedCount` passes a threshold;
+   recompiling a container is cheap. Set-valued primitives intern a new set per distinct result, and so do the
+   constants of per-request queries.
+4. **Plans are made once per rule**, on the statistics of the first context that runs or pre-plans it (decision 7,
+   colors §9.7), and per-context replanning is deferred (colors §19). With E10 the empty root plans nothing, and a
+   container's freeze plans the rules its descendants can run on that container's statistics; later containers reuse
+   those plans, which may suit them less well.
+5. **Term lift costs rounds**, one per nesting level, and `CandidateLimit` bounds the product of member lists. Cosmos
+   lifts value-keyed facts only, so term lift is exercised by `LiftTests` and the engine's own tests.
+6. **Termination.** A lattice with infinite descending chains (i64 bounds combined with arithmetic rules) never
+   saturates. The limits stop the run soundly (`RowLimit` bounds its size), and the report says why; the host decides
+   with what has been proven.
+7. **Purity cannot be enforced.** Primitives, lattices, cost functions and filters must be pure and thread-safe. This
+   is documented on every parameter that takes one; calls back into a graph are refused (D47), and
+   `ValueLattice<T>.Verify` covers the lattice laws in tests.
+8. **No rollback** (D18). After a `RuleEvaluationException` from a run or a write the scope is faulted. A faulted root
+   makes the graph unusable; the remedy is a new graph.
+9. **Scoped reads must be defined before tagged scopes of the same graph freeze** (§6.8). A late first read is rejected
+   with a message that says so. Theories that define all their global rules up front, as `CosmosTheory` does, never
+   meet it.
+10. **R1 re-lowering** (§6.4.5) re-plans a rule whenever one of its class constants loses a union. This is rare (class
+    constants come from host `Make`s), and it ends with R2.
+11. **Split demand trades completeness for cost** (D43). A query that constrains a path a discriminator's branches
+    govern, without mentioning the discriminator, gets no case split on it, so facts only that split would prove are
+    missed (soundly). The schema's own split has already lifted everything the schema alone implies. A theory that
+    needs more can add a `governs(k, p)` fact per branch path and guard the query split on "mentions k, or mentions a
+    path k governs".
+12. **Class-origin checks are conservative** (D39). A value obtained from a child is refused in its parent even when its
+    class was made in the parent, and a value dies with the scope that returned it. The remedy is to obtain the value
+    again from the scope where it is used.
+13. **Deferred release keeps memory alive** (D40). A retired frozen schema lives until its last query ends, and a child
+    that is never disposed keeps its ancestors' engine state alive.
+
+---
+
+## 12. Appendix: porting an egglog program by hand
+
+The Cosmos tests port `.egg` files by hand, with this correspondence. There is no parser (D14).
+
+| egglog | Eggnog |
+|---|---|
+| `(datatype S (C … :cost n) …)`, `(sort S)` | `DefineSort<S>("S")`, then `DefineConstructor<…, S>("C", cost: n)` |
+| `(constructor C (A B) S :cost n)` | `DefineConstructor<A, B, S>("C", cost: n)` |
+| `(relation R (A B))` | `DefineRelation<A, B>("R")` |
+| `(function f (A) T :merge (set-intersect old new))` | `DefineFunction<A, T>("f", ValueLattice.Intersect<…>())` |
+| `:merge (max old new)`, `(min old new)`, `(set-union old new)` | `ValueLattice.Max<T>()`, `Min<T>()`, `Union<T>()` |
+| `(function f (A) T)` (no merge) | `DefineFunction<A, T>("f")`: conflicting values are an error |
+| `(sort Strs (Set String))` | `ValueSet<string>`, built in |
+| `(ruleset r)` | `var r = graph.DefineRuleset("r")` |
+| `(rule (facts…) (actions…) :ruleset r)` | `r.DefineRule("name", b => { b.When(…); b.Then(…); })` |
+| `(rewrite l r :ruleset rs)` | `rs.DefineRule("name", b => b.Rewrite(l, r))` |
+| `(= x (f a))` in a body | `x.Is(F.Of(a))` |
+| `(= (f a) (set-of "B"))` in a body | `F.Of(a).Is(ValueSet.Of("B"))` |
+| `(!= a b)` in a body | `a.IsNot(b)` |
+| `(set-contains d v)`, `(> a b)` in a body | `b.Where(Primitives.Contains<string>().Of(d, v))`, `b.Where(Primitives.Greater.Of(a, b))` |
+| `(= 0 (set-length s))` in a body | `Primitives.Count<…>().Of(s).Is(0L)`, or `b.Where(Primitives.IsEmpty<…>().Of(s))` |
+| `(set (f a) v)` in a head | `F.Of(a).Is(v)` |
+| `(R a)` in a head | `R.Of(a)` |
+| `(union a b)` | `a.Is(b)` |
+| `(+ n 1)`, `(set-of v)`, `(set-remove d v)` | `Primitives.Add.Of(n, 1L)`, `Primitives.Singleton<…>().Of(v)`, `Primitives.Remove<…>().Of(d, v)` |
+| `(let $q term)` | `var q = scope.Make(term)` |
+| a top-level fact or `set` | `scope.Assume(…)` |
+| `(run-schedule (saturate a b))`, `(run r n)`, `(seq …)` | `scope.Run(Schedule.Saturate(a, b))`, `Schedule.Repeat(n, r)`, `Schedule.Sequence(…)` |
+| `(check fact)`, `(fail (check fact))` | `Assert.True(scope.Check(fact))`, `Assert.False(…)` |
+| `(check (= $q term))` | `scope.AreEqual(q, term)` |
+| `(extract $q)` | `scope.Extract(q)` |
+| `(push)` … `(pop)` | a fresh graph (R1), or a child scope disposed afterwards (R2) |
+| `(print-size f)` | `scope.CountRows(f)`; `scope.Rows(f)` lists them |
+| `(include "prelude.egg")` | a C# theory class |
+| `delete`, `subsume`, `:merge old`/`new` | not supported (D33, §2.5) |
+
+---
+
+## 13. Edits this spec asks of the colored-contexts spec
+
+None changes a colors decision; they align its text with what the rule layer now does and asks.
+
+1. **Citations.** The rule-layer decisions the header cites keep their numbers. D20 no longer registers a container,
+   and D21 (callbacks) is deferred, so the "callback rules" of X41, §10.2 and I31 have no rule-layer instance in version
+   2 (the text can stay). §5.7 cites "rule-layer §2.1" and I33 "rule-layer §3.9": those are version 1's section
+   numbers; cite D8 and §6.9 instead.
+2. **§10.7.** Drop "the rule layer's built-in `ValueSet<T>` (rule-layer D20) is one, registered by that layer": the
+   rule layer registers no container; `ValueSet<T>` is an interned base value.
+3. **§3.4 / M9.3.** A child `Database` should share the root's `BaseValues` by reference, as it shares counters and
+   external functions (former E2). Engine code that reads base values through `ExecutionState.BaseValues` in a child
+   would otherwise see an empty registry. Track it as an M9.3 defect; the rule layer does not depend on it.
+4. **§10.1 `ContextLocalSlot<T>`.** The rule layer keeps one `ContextLocalSlot<ScopeRuntime>` per graph (former E6). If
+   `GetLocal` cannot construct a value on first use, add a factory parameter (or a setter).
+5. **§10.1 and §3.5.** `EGraph.DesignateContradiction` (E4); `EGraphContext.CreateChild`, `Dispose`, `IsFaulted`,
+   `Parent` and `OwnRowCount`, and `RunRules` reporting at the graph's `ReportLevel` (E7); `ParallelHeuristics` on the
+   Store-backed `EGraph` constructor (E9).
+6. **§10.8 step 4.** Plan exactly the given rules when `Freeze(planRules)` receives a collection (E10).
+7. **An extraction section** (E5): extraction over an `EGraphContext`, with staleness keyed on the extraction tables
+   and the union-find of the context and its non-frozen ancestors, not on the clock.
+8. **§11.2 `CaseSet`.** `AddCase(ContextOptions?)`, `DisposeVacuous()`, and `Lift` with a cancellation token checked
+   between rounds (E8). The rule layer lifts its relations as `LiftTableKind.Function` with a unit output, so no change
+   to `LiftTableKind.Relation` is needed.
+9. **§11.3 split hooks.** `ISplitSource.FindRequests` receives the `SplitReport`; `SplitOptions.CaseOptions`;
+   `SplitDriver.Step` does not hold the scope's thread domain while it calls sources and schedules (E8).
+
+---
+
+## 14. Review responses
+
+Two reviews were answered. Every finding was accepted. Where a reviewer offered alternatives, the table says which was
+taken and why.
+
+**First review**
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| A1 | critical | `ScopeTag.FrozenCount` was process-wide and the Cosmos tags static, so every scoped test after the first failed; tags compared by reference never resolved across instances | Tags belong to a graph: `EGraph.DefineScopeTag`, `EGraph.RootTag`, no public constructor, unique names per graph; another graph's tag is refused everywhere a tag is taken; frozen counts live in the graph's `MirrorRegistry`; `CosmosTheory` holds instance tags. D38, §3.1, §6.7, §6.8, §10, `ScopeTagTests.TwoGraphsShareNoTagState` (both orders and parallel). |
+| A2 | major | The split ran after one horn iteration, so `CasesOpened` was 3, not 2, in 02 and 07 | Facts settle before each split step: `Facts = Saturate(Saturate(Horn, Lattice), Split(...))`, `Saturation = Saturate(Saturate(Horn, Lattice), Split(...), Rewrite)`; `Schedule.Split`'s docs recommend it; narrative step 4 corrected; the literal suite keeps egglog's schedule and figures. D43, §3.6, §6.9.3, §8.1.2, §10. |
+| A3 | major | No way to split only on what a query touches | Demand is the split rule's body: `DefineDomainSplit` takes a list of guards. `CosmosTheory` derives the analysis relation `Mentioned` from comparison terms, splits schemas unguarded and queries guarded by `Mentioned`. Tests: a query that does not mention the discriminator opens 0 cases (02, 04). Guards were taken over a delegate demand because they stay in the rule language, render, and are covered by the split oracle; the rule layer passes no `ISplitDemand`. D43, §3.1, §6.9.2, §10, §11 risk 11. |
+| A4 | major | `Dispose` threw on the root and with live children; no way to retire a schema while queries run; transient children unspecified | `Dispose` never throws; deferred release when children (transient ones included) or a call on another thread remain; a second call and the root's do nothing; transient children are not listed but defer the release. The deferred release was taken over a cascade because a cascade would dispose queries running on other threads. D40, §3.1, §6.7, `DisposeTests`. |
+| A5 | major | Class values unchecked: fabricable, `default` meaningful, mixable across queries and graphs | `ClassId` has no public constructor and carries its origin scope; `default` has none and is refused; every host entry point, rule and query checks graph, ancestry, disposal and batch commit; global rules hold only root classes. An origin was used instead of an offset-by-one cell: it rejects `default` the same way and also catches cross-scope use. D39, §3.1, §6.6.7, invariant O, `ClassIdTests`. |
+| A6 | major | Thin diagnostics; explanations not decided; faults lose their cause | Per-rule statistics with search time and plans, merge and rebuild times; `RunStep`s with `RecordSteps` and an observer; `CountRows`, `Rows`; `Scope.Failure` as `InnerException`; explanations recorded as out of version 2 with a recipe, provenance deferred. D41, §3.6, §3.9, §6.11, `DiagnosticsTests`. |
+| A7 | major | `ChangeLimit` counted table merges and bounded no size | `RowLimit` (own-layer rows of the top scope and live cases) replaces it, with `RunStopReason.RowLimit`; overshoot of at most one iteration or lift documented; limits per top-level `Run` across cases. D42, §3.6, §6.5.4. |
+| A8 | major | "A conjunct never proves itself redundant" was opt-in | A ruleset licence makes every rule erasing; `ReadsOwnFacts(reason)` opts out explicitly and renders; the four query-judged Cosmos rewrites opt out; term-only rules are unaffected. D12, §3.5, §6.3 step 6, invariant E, §10, `ErasingTests`. |
+| A9 | major | Nothing appears in `src/Eggnog` until all of R1 is done | R1 split: R1a lands the library (project reference, spike removal, values, definitions, handles, terms, compilation and lowering, `Run` with `Saturate`/`Repeat`/`Sequence`, host writes and reads, extraction, Literal 01–03, `PublicSurfaceTests`) and merges to main first; R1b adds queries, `Until`, limits, diagnostics, Literal 04–07 and the differential; callbacks are deferred. §9, status note. |
+| A10 | major | The spike reference stayed until R4 and the package shipped it | Both removals moved into R1a (`src/Eggnog/Eggnog.csproj`, `src/dist-nuget/dist-nuget.csproj`); the README update too; R4 is gone. §9. |
+| A11 | major | The engine's public look-alike types clash with the facade's (CS0104) | The engine's public types become internal (E11), as the conventions prescribe; `PublicSurfaceTests` asserts no simple-name clash across the package's assemblies; the `EditorBrowsable` fallback is recorded if the engine owner keeps a standalone API. D29, D44, E11. |
+| A12 | minor | The threading contract of definitions changed between milestones; `DefineRule` thread rules unspecified | The R2 table rule is stated now and enforced by R1's root guard; rule definitions creating mirrors count as table definitions; `Scope.DefineRule` enters the scope's domain; global rule definitions any thread. D6, D47, §3.1, §6.12. |
+| A13 | minor | `DegreeOfParallelism` default made ties nondeterministic in R1 and did nothing in R2 | Default 1; `ScopeOptions.DegreeOfParallelism` per scope from R2 (`ContextOptions.Parallelism`); E9 narrowed to the root; R2's done-when tests parallel equivalence explicitly. D46, §3.1, §9. |
+| A14 | minor | Over-engineering: write callbacks, public `SemiNaive`, public untyped layer, `Scope.Split<T>` | Callbacks deferred (E3 withdrawn); `SemiNaive` internal; the untyped layer internal; `Scope.Split<T>` dropped in favour of `CaseSet`. D13, D21, D36, §3. |
+| A15 | minor | Per-request queries leaked engine rules; no parameters | `Query : IDisposable`, freeing its rule once no call uses it; "define once" documented. Parameters were not added: the bridge runs primitive bindings after the join, so a per-call parameter would filter matches instead of restricting the join, and would hide that cost. D49, §3.5, §6.6.4. |
+| A16 | minor | `In`/`InScope` names, write-through-scoped-handle typing, untyped `NotEqual`, `Rule` vs `DefineRule`, `Make` accepting any term | One name, `In` (the untyped `InScope` is internal); scoped views keep their type so they compose with helpers, and writes through them fail at definition with an exact message; `Term<T>.IsNot`; one verb, `DefineRule`; `Constructor.Of` returns `ConstructorTerm<TSort>`, which `Make` takes. §3.3–§3.5. |
+| A17 | minor | Adapter tasks clumsy: one rebuild per `Make`, untyped term translation, counting needs a query | `Scope.Write(Action<ScopeWriter>)` batches with one flush; `ExtractedTerm.TryMatch` overloads with `ExtractedArgument<T>`; `Scope.CountRows`. §3.1, §3.8, §6.6.1. |
+| A18 | minor | Conflicts reported as `ArgumentException`; no tokens on `Split`/`Lift`; `OpenCases` on frozen unspecified; splits of contradictory scopes | `FactConflictException : InvalidOperationException` with table, key and both values; a token on `CaseSet.Lift` (`Scope.Split` is gone); `OpenCases` throws on a frozen scope; the split node skips a contradictory scope. D32, §3.5, §3.7, §6.9.3, §6.9.4. |
+| A19 | minor | The R2 Scenario02 test used R3 members | Partial classes: `Scenario02QueryDisjunctionTests.cs` (R2, with `CompileContainerWithoutSplit`) and `.Cases.cs` (R3); the same for `CosmosTheory` with a partial `DefineCases`. §10. |
+| A20 | minor | (Informational) the unverified figures are correct at `ext/egglog` 5e655cae | Caveat dropped; the commit is named in `Literal07SweepLinksTests` and in §8.1.1; `CountRows(Parent) == 7` added. §8.1.1. |
+
+**Second review**
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| B1 | major | R1 queries and no-op writes advanced the clock, making extractors stale | R1 queries run through `ExecuteRuleSet` without a merge or a clock tick; batches that stage nothing do not flush, and facts that hold stage nothing; the extractor contract says what may invalidate it; E5 states that context staleness ignores the clock and gates the whole R2 scoped suite; tests extract after queries and after no-op writes. D30, D49, §3.8, §6.6.1, §6.6.5, §6.10, E5. |
+| B2 | major | Host queries over scoped atoms read mirrors that were never synced | Mirrors sync just before any iteration, query or split matcher reads them (the querying scope included), and at freeze; invariant M covers queries; `ScopedReadTests` and `QueryTests` cover host writes followed by queries. D48, §6.6.4, §6.8, §7.1. |
+| B3 | major | Contradicted (stopped) cases were unmapped | Rule-layer semantics defined and checked first in every entry point: identity and `IsContradictory` answer, `Assume` no-op, `Union` false, `Run` returns `Contradiction`, the rest throw `ScopeContradictedException`; `TheSameSplitDrivenByTheHost` checks `IsContradictory` first; `ContradictedCaseTests`. D45, §6.6.8, §6.13. |
+| B4 | minor | E6 duplicated `ContextLocalSlot` | E6 withdrawn: one `ContextLocalSlot<ScopeRuntime>` per graph, reached through `state.View.Owner.Owner.Host`; only a factory or setter is asked for if needed. §4.1, §5.2, §13. |
+| B5 | minor | E3 duplicated `ReadsTables` | E3 withdrawn with callbacks; if they return, the collector overrides `ReadsTables`. D21, §5.2. |
+| B6 | minor | E10's switch did not stop other containers' rules being planned on the wrong statistics | E10 restated as `Freeze(planRules)`; the rule layer passes nothing for the root and the rules a scope's descendants can run otherwise; the row-count heuristic is gone. E10, §6.7, §11 risk 4. |
+| B7 | minor | Vacuous host-driven cases were never disposed; `InheritWatermarks` did not reach cases | `CaseSet.DisposeVacuous` after each lift; `AddCase(ContextOptions?)` and `SplitOptions.CaseOptions` carry `InheritWatermarks`. E8, §6.9.3, §6.9.4. |
+| B8 | minor | `LiftTableKind.Relation` did not say which output to stage | Relations lift as `LiftTableKind.Function` with no case join: every live case holds unit, so agreement lifts the row with its output. §6.9.1. |
+| B9 | minor | R2 relied on per-call engine domains; batches and runs could interleave; the engine domain cannot be held across a run | A rule-layer `ScopeGuard` per thread domain in every milestone, entered for whole calls and reassigned on freeze; the rule layer never holds an engine domain across calls; E8 asks `Step` not to hold the domain while calling sources and schedules. D47, §6.12, E8. |
+| B10 | minor | A callback defining a rule could deadlock against a concurrent definition | Callbacks are deferred; no user code runs under the R1 engine lock except engine-invoked delegates, which may not call into a graph (enforced); observers run between engine calls. §6.12. |
+| B11 | minor | Rule definitions creating mirrors enter the root's domain in R2 | Such rule definitions count as table definitions, documented on `EGraph`, `Ruleset.DefineRule` and in D6, and enforced the same way in R1. D6, §3.1, §6.3 step 2, §6.12. |
+| B12 | minor | Catch-up copies move a child's `Version`; `Changed` and `ChangeLimit` saw them | `Version` reworded to include them; `RunReport.Changed` comes from iteration and lift flags; `ChangeLimit` replaced by `RowLimit`. D16, D42, §3.1, §6.5.1. |
+| B13 | minor | `FindRequests` could not count skipped requests | `FindRequests` receives the `SplitReport`. E8, §6.9.2. |
+| B14 | minor | The colors spec's §10.7 contradicts D20 | §13 lists the cross-spec edits, §10.7 and the former E2 among them. §13. |
+| B15 | minor | R2 depended on E2, which it does not need | E2 withdrawn from this spec and tracked as a colors M9.3 defect; R2 depends on E4, E5, E7, E9 and E10. §5.2, §9, §13. |
+| B16 | minor | `IdConstantTests` could not hold both in R1 (`/k1`) and unchanged in R2 | `IdConstantTests` asserts behaviour only; the `/k1` check moved to `RootRelowerTests`, deleted with `RootEngineScope` in R2. §8.3, §9. |
