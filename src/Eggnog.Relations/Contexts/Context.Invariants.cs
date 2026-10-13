@@ -57,12 +57,28 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException("Invariants are checked on a clean context; call Rebuild() first.");
 
             var violations = new List<string>();
-            CheckUnionFindInvariants(violations);
-            tables?.CheckInvariants(violations);
-            CheckEqContainerElements(violations);
-            ExecutorInvariants.Check(this, violations);
+            CollectInvariantViolations(violations, eqContainers: true);
             if (violations.Count > 0)
                 throw new InvalidOperationException($"The context at depth {Depth} violates {violations.Count} invariant(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
+        }
+
+        /// <summary>
+        /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without throwing:
+        /// the union-find part, the tables part, the executor part and, with <paramref name="eqContainers"/>, the
+        /// eq-container part (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
+        /// (<c>EGraphContext.CheckInvariants</c>, §12.7), reporting the eq-container part as its C6. The caller holds the
+        /// domain of a context that is not frozen, and the context is clean.
+        /// </summary>
+        /// <param name="violations">Receives one line per violation.</param>
+        /// <param name="eqContainers">Whether to include the eq-container part.</param>
+        internal void CollectInvariantViolations(List<string> violations, bool eqContainers)
+        {
+            CheckUnionFindInvariants(violations);
+            tables?.CheckInvariants(violations);
+            if (eqContainers)
+                CheckEqContainerElements(violations);
+
+            ExecutorInvariants.Check(this, violations);
         }
 
         /// <summary>
@@ -112,7 +128,7 @@ namespace Eggnog.Relations
         /// G-b, decision 9; the storage half of the bridge's check C6, §12.7): what the eq-container guard refuses. Nothing
         /// at the root or without a container type holding ids. O(journal × container types) probes.
         /// </summary>
-        void CheckEqContainerElements(List<string> violations)
+        internal void CheckEqContainerElements(List<string> violations)
         {
             if (containers is not { HasEqContainers: true } values)
                 return;

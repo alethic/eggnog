@@ -25,18 +25,27 @@ namespace Eggnog.Relations
         /// (<see cref="UnionContainerMerge"/>, stamped with the current timestamp). egglog's <c>register_container_ty</c>
         /// (lib.rs:238-257). Registering a type again does nothing.
         /// </summary>
+        /// <remarks>
+        /// <paramref name="holdsIds"/> (colored-contexts spec §10.7, decision 9, C13) says whether the containers hold
+        /// e-class ids. Such eq-sort containers cannot be interned in a child context (G-a: interning one there throws
+        /// <see cref="InvalidOperationException"/>), and a child whose own displacement an eq-sort container holds is
+        /// refused at its next rebuild (G-b). Containers over base values register with <c>holdsIds: false</c> and work
+        /// in every context.
+        /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <param name="holdsIds">Whether the containers hold e-class ids.</param>
         /// <returns>The type's id.</returns>
-        internal ContainerTypeId RegisterContainerType<TContainer>()
+        internal ContainerTypeId RegisterContainerType<TContainer>(bool holdsIds = true)
             where TContainer : struct, IContainerValue<TContainer>
         {
-            return db.Containers.RegisterType<TContainer>(idCounter, containerMerge);
+            return db.Containers.RegisterType<TContainer>(idCounter, containerMerge, holdsIds);
         }
 
         /// <summary>
-        /// Interns <paramref name="container"/>, registering its type first if needed, and returns its id: a fresh id the
-        /// first time its contents are seen. egglog's <c>get_container_value</c> (lib.rs:231-236). Interning is immediate
-        /// and global (map §2.10). The contents are not canonicalized.
+        /// Interns <paramref name="container"/> at the root, registering its type first if needed (as one holding ids), and
+        /// returns its id: a fresh id the first time its contents are seen. egglog's <c>get_container_value</c>
+        /// (lib.rs:231-236). Interning is immediate and global (map §2.10); a child interns through
+        /// <see cref="EGraphContext.GetContainerValue{TContainer}"/>. The contents are not canonicalized.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="container">The container; it must not change afterwards.</param>
@@ -56,16 +65,15 @@ namespace Eggnog.Relations
         /// Runs <paramref name="action"/> with a fresh execution state over the e-graph's database, stamped with the
         /// current timestamp, and flushes what it staged; the writes land at the next <see cref="FlushUpdates"/>. egglog's
         /// <c>with_execution_state</c> (lib.rs:928-944): a raw escape for one-shot manipulation from outside any rule,
-        /// with <see cref="TableAction"/>s and <see cref="UnionAction"/>s, say.
+        /// with <see cref="TableAction"/>s and <see cref="UnionAction"/>s, say. Rows and unions the root staged earlier
+        /// through the <see cref="EGraphContext"/> API are flushed first, so writes land in the order the host issued them
+        /// (colored-contexts spec §10.4; <see cref="EGraphContext.WithExecutionStateAtRoot{TResult}"/>).
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="action">The action.</param>
         /// <returns>The action's result.</returns>
-        internal TResult WithExecutionState<TResult>(Func<ExecutionState, TResult> action)
-        {
-            ArgumentNullException.ThrowIfNull(action);
-            return db.WithExecutionState(action, NextTimestamp);
-        }
+        /// <exception cref="InvalidOperationException">The root's domain is held by another thread.</exception>
+        internal TResult WithExecutionState<TResult>(Func<ExecutionState, TResult> action) => root.WithExecutionStateAtRoot(action);
 
     }
 

@@ -44,7 +44,7 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(sort);
             ArgumentNullException.ThrowIfNull(dag);
             ArgumentOutOfRangeException.ThrowIfNegative(count);
-            Enter(sort);
+            using var scope = Enter(sort);
 
             var results = new List<ExtractionResult>();
             if (sort.Kind != SortKind.Eq)
@@ -57,7 +57,7 @@ namespace Eggnog.Relations
             }
 
             var index = SortIndexOf(sort);
-            var canonical = egraph.GetCanonInUf(value).Rep;
+            var canonical = Canonical(value.Rep);
             var owner = onDemand ? GetOrAddClass(index, canonical) : FindClass(index, canonical);
             if (onDemand)
                 Settle();

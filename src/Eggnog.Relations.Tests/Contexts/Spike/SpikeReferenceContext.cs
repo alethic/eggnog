@@ -90,6 +90,16 @@ namespace Eggnog.Relations.Tests
         public void Clear(SpikeTable table) => ops.Add(new SpikeReferenceOp(SpikeReferenceOpKind.Clear, table, null, 0, 0));
 
         /// <summary>
+        /// Records a row a rule run derived (§17 M10.3).
+        /// </summary>
+        public void Derive(SpikeTable table, ulong[] row) => ops.Add(new SpikeReferenceOp(SpikeReferenceOpKind.Derived, table, (ulong[])row.Clone(), 0, 0));
+
+        /// <summary>
+        /// Records a union a rule run derived (§17 M10.3).
+        /// </summary>
+        public void DeriveUnion(ulong a, ulong b) => ops.Add(new SpikeReferenceOp(SpikeReferenceOpKind.Derived, null, null, a, b));
+
+        /// <summary>
         /// Gets the assertions of the chain from the root to this context, in replay order.
         /// </summary>
         public List<SpikeReferenceOp> ChainOps()
@@ -116,9 +126,11 @@ namespace Eggnog.Relations.Tests
                 switch (op.Kind)
                 {
                     case SpikeReferenceOpKind.Union:
+                    case SpikeReferenceOpKind.Derived when op.Table is null:
                         view.Union(op.A, op.B);
                         break;
                     case SpikeReferenceOpKind.Insert:
+                    case SpikeReferenceOpKind.Derived:
                         view.Add(op.Table!, op.Row!);
                         break;
                     case SpikeReferenceOpKind.Delete:

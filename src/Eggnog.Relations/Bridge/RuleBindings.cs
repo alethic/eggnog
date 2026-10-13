@@ -22,6 +22,9 @@ namespace Eggnog.Relations
         readonly FixedBitSet grounded;
         QueryEntry nextTimestamp;
         bool hasNextTimestamp;
+        TableId stopTable;
+        ExternalFunctionId stopFunction;
+        bool hasStop;
 
         /// <summary>
         /// Initializes an environment for a rule with <paramref name="variableCount"/> variables, all unmapped.
@@ -73,8 +76,41 @@ namespace Eggnog.Relations
         public void Ground(VariableId variable) => grounded.Insert(variable.Index);
 
         /// <summary>
-        /// Translates <paramref name="entry"/> into a core entry. egglog's <c>convert</c>.
+        /// Sets the early stop of colored-contexts spec §10.6: every head insert into <paramref name="table"/>, the
+        /// e-graph's contradiction function, is followed by a call to <paramref name="stop"/>
+        /// (<see cref="StopOnContradictionFunction"/>, <see cref="TryGetStop"/>).
         /// </summary>
+        /// <param name="table">The contradiction function's table.</param>
+        /// <param name="stop">The early-stop function.</param>
+        public void SetStopOnContradiction(TableId table, ExternalFunctionId stop)
+        {
+            stopTable = table;
+            stopFunction = stop;
+            hasStop = true;
+        }
+
+        /// <summary>
+        /// Gets the early-stop function to call after a head insert into <paramref name="table"/> (§10.6).
+        /// </summary>
+        /// <param name="table">The table inserted into.</param>
+        /// <param name="stop">The early-stop function.</param>
+        /// <returns><c>true</c> if <paramref name="table"/> is the contradiction function's table.</returns>
+        public bool TryGetStop(TableId table, out ExternalFunctionId stop)
+        {
+            stop = stopFunction;
+            return hasStop && table == stopTable;
+        }
+
+        /// <summary>
+        /// Translates <paramref name="entry"/> into a core entry for a table column. egglog's <c>convert</c>.
+        /// </summary>
+        /// <remarks>
+        /// A constant stays a plain constant: whether it is an e-class id is decided by the column it lands in, which the
+        /// core reads from the table (<see cref="Database.GetIdColumns"/>, colored-contexts spec §9.8), so a store-backed
+        /// context runs a constant of an id column in its canonical form there (X19) and a value column's constant as
+        /// written. A constant's <see cref="ColumnTy"/> is a diagnostic only, as in egglog, and is not relied on here.
+        /// Operands without a table column go through <see cref="ConvertLoose"/>.
+        /// </remarks>
         /// <param name="entry">The entry.</param>
         /// <returns>The variable's current core entry, or the constant.</returns>
         public QueryEntry Convert(RuleEntry entry)
@@ -85,6 +121,37 @@ namespace Eggnog.Relations
             var mapped = mapping[entry.Variable.Id.Index];
             Debug.Assert(mapped.IsVariable, "every rule variable is mapped to a core variable before the rule is lowered");
             return mapped;
+        }
+
+        /// <summary>
+        /// Translates <paramref name="entry"/> into a core entry for an operand that lands in no table column: an
+        /// external function's argument, a comparison's operand, a lookup's default. A constant written as an e-class id
+        /// (<see cref="ColumnTy.Id"/>) is flagged so (<see cref="QueryEntry.IdConst"/>, colored-contexts spec §9.8, X19),
+        /// since no column says it is one: a store-backed context then runs it in its canonical form, as the table columns'
+        /// constants are run.
+        /// </summary>
+        /// <param name="entry">The entry.</param>
+        /// <returns>The variable's current core entry, or the constant, flagged when it is an id.</returns>
+        public QueryEntry ConvertLoose(RuleEntry entry)
+        {
+            if (entry.IsVariable)
+                return Convert(entry);
+
+            return entry.ConstantType.IsId ? QueryEntry.IdConst(entry.Constant) : QueryEntry.Const(entry.Constant);
+        }
+
+        /// <summary>
+        /// Translates every entry of <paramref name="entries"/> with <see cref="ConvertLoose"/>.
+        /// </summary>
+        /// <param name="entries">The entries.</param>
+        /// <returns>A new array of core entries.</returns>
+        public QueryEntry[] ConvertAllLoose(ReadOnlySpan<RuleEntry> entries)
+        {
+            var result = new QueryEntry[entries.Length];
+            for (var i = 0; i < entries.Length; i++)
+                result[i] = ConvertLoose(entries[i]);
+
+            return result;
         }
 
         /// <summary>

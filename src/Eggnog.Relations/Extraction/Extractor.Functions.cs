@@ -106,17 +106,20 @@ namespace Eggnog.Relations
             var outputs = includeOutput ? new List<TermId>(rows.Count) : null;
             var memo = new Dictionary<ulong, TermId>();
             var children = new TermId[inputSorts.Length];
-            extractor.Enter();
-            foreach (var row in rows)
+            using (extractor.Enter())
             {
-                for (var i = 0; i < inputSorts.Length; i++)
-                    children[i] = ExtractOrPlaceholder(extractor, inputSorts[i], row[i], dag, memo);
+                foreach (var row in rows)
+                {
+                    for (var i = 0; i < inputSorts.Length; i++)
+                        children[i] = ExtractOrPlaceholder(extractor, inputSorts[i], row[i], dag, memo);
 
-                inputs.Add(dag.App(declared.Name, children));
-                outputs?.Add(ExtractOrPlaceholder(extractor, declared.Output, row[^1], dag, memo));
+                    inputs.Add(dag.App(declared.Name, children));
+                    outputs?.Add(ExtractOrPlaceholder(extractor, declared.Output, row[^1], dag, memo));
+                }
+
+                extractor.Exit();
             }
 
-            extractor.Exit();
             return new FunctionDag(dag, inputs, outputs);
         }
 

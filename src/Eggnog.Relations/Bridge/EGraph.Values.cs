@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -16,58 +17,27 @@ namespace Eggnog.Relations
         const int ScanBatchSize = 32;
 
         /// <summary>
-        /// Loads rows into functions and merges them. egglog's <c>add_values</c> (lib.rs:322-356).
+        /// Loads rows into functions at the root and merges them. egglog's <c>add_values</c> (lib.rs:322-356), on
+        /// <see cref="Root"/>.
         /// </summary>
         /// <remarks>
         /// Each row holds the function's keys and output, which are not canonicalized. The rows are stamped with the
         /// current timestamp, staged one buffer per table, and merged by <see cref="FlushUpdates"/>, so conflicts go
-        /// through the functions' merges and a rebuild follows any union. If a row is malformed nothing is merged.
+        /// through the functions' merges and a rebuild follows any union. If a row is malformed nothing is merged. Nothing
+        /// of the batch is kept bridge-side (<see cref="EGraphContext.AddValuesAtRoot"/>).
         /// </remarks>
         /// <param name="values">The rows, each with its function.</param>
         /// <exception cref="ArgumentException">A function is not declared, or a row does not have one value per schema
         /// column.</exception>
         public void AddValues(IEnumerable<(FunctionId Function, Value[] Row)> values)
         {
-            ArgumentNullException.ThrowIfNull(values);
-
-            var timestamp = NextTimestamp;
-            var buffers = new DenseIdMap<TableId, MutationBuffer>();
-            var scratch = new uint[8];
-            foreach (var (function, row) in values)
-            {
-                ArgumentNullException.ThrowIfNull(row, nameof(values));
-                var info = GetFunctionInfo(function);
-                var math = info.Math;
-                if (row.Length != math.FunctionColumns)
-                    throw new ArgumentException($"A row of {info.Name} has {math.FunctionColumns} values, not {row.Length}.", nameof(values));
-
-                if (scratch.Length < math.TableColumns)
-                    scratch = new uint[math.TableColumns];
-
-                var full = scratch.AsSpan(0, math.TableColumns);
-                MemoryMarshal.Cast<Value, uint>(row.AsSpan()).CopyTo(full);
-                math.WriteTail(full, timestamp);
-
-                if (buffers.TryGetValue(info.Table, out var buffer) == false)
-                {
-                    buffer = db.NewBuffer(info.Table);
-                    buffers.Insert(info.Table, buffer);
-                }
-
-                buffer.StageInsert(full);
-            }
-
-            // Publish the staged rows (egglog drops the buffers) only once every row was accepted.
-            foreach (var (_, buffer) in buffers)
-                buffer.Flush();
-
-            FlushUpdates();
+            root.AddValuesAtRoot(values);
         }
 
         /// <summary>
-        /// Adds the term <paramref name="function"/>(<paramref name="inputs"/>) and returns its canonical id: a fresh id
-        /// for a new term, or the id of the existing one, which the function's merge (the union-id merge, for a
-        /// constructor) reconciles with the fresh id. egglog's <c>add_term</c> (lib.rs:358-385).
+        /// Adds the term <paramref name="function"/>(<paramref name="inputs"/>) at the root and returns its canonical id:
+        /// a fresh id for a new term, or the id of the existing one, which the function's merge (the union-id merge, for a
+        /// constructor) reconciles with the fresh id. egglog's <c>add_term</c> (lib.rs:358-385), on <see cref="Root"/>.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="inputs">The keys; not canonicalized.</param>
@@ -76,23 +46,7 @@ namespace Eggnog.Relations
         /// keys.</exception>
         public Value AddTerm(FunctionId function, ReadOnlySpan<Value> inputs)
         {
-            var info = GetFunctionInfo(function);
-            var math = info.Math;
-            if (inputs.Length != math.KeyCount)
-                throw new ArgumentException($"{info.Name} takes {math.KeyCount} keys, not {inputs.Length}.", nameof(inputs));
-
-            var result = FreshId();
-            var columns = math.TableColumns;
-            Span<uint> row = columns <= 32 ? stackalloc uint[32] : new uint[columns];
-            row = row.Slice(0, columns);
-            MemoryMarshal.Cast<Value, uint>(inputs).CopyTo(row);
-            row[math.OutputColumn] = result.Rep;
-            math.WriteTail(row, NextTimestamp);
-
-            var buffer = db.NewBuffer(info.Table);
-            buffer.StageInsert(row);
-            buffer.Flush();
-            FlushUpdates();
+            var result = root.AddTermAtRoot(function, inputs);
             return GetCanonInUf(result);
         }
 
@@ -133,12 +87,13 @@ namespace Eggnog.Relations
         public int TableSize(FunctionId function) => db.GetTable(GetTable(function)).Count;
 
         /// <summary>
-        /// Removes every row of <paramref name="function"/>, and every write staged for it. egglog's <c>clear_table</c>
-        /// (lib.rs:409-424): the table clears in bulk and moves to a new generation, so cached subsets and indexes are
-        /// rebuilt on their next use. Writes staged for other tables are not flushed first.
+        /// Removes every row of <paramref name="function"/>, and every write staged for it, raw or on the root's bridge side
+        /// (<see cref="EGraphContext.ClearTable"/>). egglog's <c>clear_table</c> (lib.rs:409-424): the table clears in bulk
+        /// and moves to a new generation, so cached subsets and indexes are rebuilt on their next use. Writes staged for
+        /// other tables are not flushed first.
         /// </summary>
         /// <param name="function">The function.</param>
-        public void ClearTable(FunctionId function) => db.ClearTable(GetTable(function));
+        public void ClearTable(FunctionId function) => root.ClearTable(function);
 
         /// <summary>
         /// Visits every row of <paramref name="function"/>. egglog's <c>for_each</c> (lib.rs:426-434).
@@ -201,8 +156,11 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(writer);
             writer.WriteLine("=== View Tables ===");
-            foreach (var (id, info) in funcs)
+            var current = Volatile.Read(ref functions);
+            for (var f = 0; f < current.Length; f++)
             {
+                var id = new FunctionId(f);
+                var info = current[f];
                 var table = db.GetTable(info.Table);
                 var all = table.All();
                 using var rows = table.Scan(all.AsRef());

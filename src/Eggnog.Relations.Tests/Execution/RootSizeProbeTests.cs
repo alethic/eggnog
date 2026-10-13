@@ -11,6 +11,7 @@ namespace Eggnog.Relations.Tests
     /// Review probes (root cost): sizes of the executor's per-node, per-prober and per-entry types, written to a report
     /// file so the same source can be compared between builds of the engine.
     /// </summary>
+    [Collection(ExecutorStressCollection.Name)]
     public class RootSizeProbeTests
     {
 

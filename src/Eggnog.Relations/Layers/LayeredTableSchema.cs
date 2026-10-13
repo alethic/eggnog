@@ -109,10 +109,24 @@ namespace Eggnog.Relations
         public bool IsLattice => Root.MergeFunction.IsLattice;
 
         /// <summary>
-        /// Gets whether the table is a constructor (its merge is a <see cref="UnionIdMerge"/>), for the action read
-        /// analysis of §10.2.
+        /// Gets whether the table is a constructor, for the action read analysis of §10.2: its merge resolves a conflict
+        /// only by a union of ids, so a row's value changes only through unions, which descendants see through their find.
+        /// A core <see cref="UnionIdMerge"/>, or a bridge function's <see cref="FunctionTableMerge"/> whose output merge
+        /// is <see cref="MergeFnKind.UnionId"/> (egglog's constructors; the bridge wraps every function's merge, so the
+        /// core type alone would make no bridge table a constructor).
         /// </summary>
-        public bool IsConstructor => Root.MergeFunction is UnionIdMerge;
+        public bool IsConstructor => ConstructorValueColumn >= 0;
+
+        /// <summary>
+        /// Gets the column a constructor's merge unions (<see cref="UnionIdMerge.ValueColumn"/>, or a bridge
+        /// function's output column), or -1 when the table is not a constructor (<see cref="IsConstructor"/>).
+        /// </summary>
+        public int ConstructorValueColumn => Root.MergeFunction switch
+        {
+            UnionIdMerge union => union.ValueColumn,
+            FunctionTableMerge { Output.Kind: MergeFnKind.UnionId } function => function.Math.OutputColumn,
+            _ => -1,
+        };
 
         /// <summary>
         /// Marks the table as the store's contradiction table.

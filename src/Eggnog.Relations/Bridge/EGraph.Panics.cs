@@ -8,53 +8,72 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The panic side channel every panic function of this e-graph records its message in (lib.rs:122).
+        /// The root's panic side channel (lib.rs:122): the first message a panic function recorded for a root state since
+        /// the last root run reported one. A child's panic never reaches it; children report through their database's
+        /// failure (colored-contexts spec §10.6).
         /// </summary>
         readonly SideChannel<string> panicMessage = new();
 
         /// <summary>
+        /// Serializes the registration of panic functions, so that <see cref="NewPanic"/> is thread-safe (§10.6).
+        /// </summary>
+        readonly object registrationGate = new();
+
+        /// <summary>
         /// The eager panic functions, by message, so that repeated messages share one external function (lib.rs:123-128).
+        /// Under <see cref="registrationGate"/>.
         /// </summary>
         readonly Dictionary<string, ExternalFunctionId> panicFuncs = new(StringComparer.Ordinal);
 
         /// <summary>
         /// The inverse of <see cref="panicFuncs"/>: the message of each interned eager panic function, by id, so that
-        /// <see cref="FreeExternalFunction"/> forgets a freed panic in constant time.
+        /// <see cref="FreeExternalFunction"/> forgets a freed panic in constant time. Under <see cref="registrationGate"/>.
         /// </summary>
         readonly DenseIdMap<ExternalFunctionId, string> panicFuncMessages = new();
 
         /// <summary>
-        /// Gets the panic side channel: the first message recorded by a panic function since the last run reported one.
+        /// Gets the root's panic side channel: the first message a panic function recorded for a root state since the last
+        /// root run reported one.
         /// </summary>
         internal SideChannel<string> PanicChannel => panicMessage;
 
         /// <summary>
         /// Gets the number of interned eager panic functions.
         /// </summary>
-        internal int PanicFunctionCount => panicFuncs.Count;
+        internal int PanicFunctionCount
+        {
+            get
+            {
+                lock (registrationGate)
+                    return panicFuncs.Count;
+            }
+        }
 
         /// <summary>
         /// Gets the external function that panics with <paramref name="message"/>, creating it the first time the message
-        /// is used. egglog's <c>new_panic</c> (lib.rs:1482-1491).
+        /// is used. egglog's <c>new_panic</c> (lib.rs:1482-1491). Thread-safe (§10.6).
         /// </summary>
         /// <param name="message">The panic message.</param>
         /// <returns>The function's id; the same for the same message.</returns>
         public ExternalFunctionId NewPanic(string message)
         {
             ArgumentNullException.ThrowIfNull(message);
-            if (panicFuncs.TryGetValue(message, out var id))
-                return id;
+            lock (registrationGate)
+            {
+                if (panicFuncs.TryGetValue(message, out var id))
+                    return id;
 
-            id = db.AddExternalFunction(new PanicFunction(message, panicMessage));
-            panicFuncs.Add(message, id);
-            panicFuncMessages.Insert(id, message);
-            return id;
+                id = db.AddExternalFunction(new PanicFunction(message, panicMessage));
+                panicFuncs.Add(message, id);
+                panicFuncMessages.Insert(id, message);
+                return id;
+            }
         }
 
         /// <summary>
         /// Creates an external function that panics with the message <paramref name="message"/> builds, which runs only
         /// when it first panics. egglog's <c>new_panic_lazy</c> (lib.rs:1493-1500). Not interned: every call creates a
-        /// function.
+        /// function. Thread-safe.
         /// </summary>
         /// <param name="message">Builds the panic message.</param>
         /// <returns>The function's id.</returns>
@@ -67,6 +86,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Registers a low-level external function, which receives the raw execution state. egglog's
         /// <c>register_external_func</c> (lib.rs:275-291): a trust boundary, since the function has unrestricted access.
+        /// A function that reads tables must say so (<see cref="ExternalFunction.ReadsTables"/>), so its rules never
+        /// inherit watermarks (colored-contexts spec §10.2). Thread-safe.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <returns>Its id; freed ids are reused.</returns>
@@ -88,15 +109,18 @@ namespace Eggnog.Relations
         /// <param name="function">The function's id.</param>
         public void FreeExternalFunction(ExternalFunctionId function)
         {
-            db.FreeExternalFunction(function);
-            if (panicFuncMessages.TryTake(function, out var message))
-                panicFuncs.Remove(message);
+            lock (registrationGate)
+            {
+                db.FreeExternalFunction(function);
+                if (panicFuncMessages.TryTake(function, out var message))
+                    panicFuncs.Remove(message);
+            }
         }
 
         /// <summary>
-        /// Takes the first panic recorded since the last call, if any: the panic side channel's message, or else a failure
-        /// the database collected from a state through <see cref="ExecutionState.ReportFailure"/> (the engine's own
-        /// failure channel, which core merge functions and external functions may use).
+        /// Takes the first panic the root recorded since the last call, if any: the root side channel's message, or else
+        /// a failure the root database collected from a state through <see cref="ExecutionState.ReportFailure"/> (panic
+        /// functions report there too, and so do core merge functions and external functions).
         /// </summary>
         /// <param name="message">The message.</param>
         /// <returns><c>true</c> if a panic was recorded.</returns>
@@ -116,7 +140,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws the recorded panic, if any: what egglog's <c>run_rules</c> does after the rule set and after the
+        /// Throws the recorded root panic, if any: what egglog's <c>run_rules</c> does after the rule set and after the
         /// rebuild (lib.rs:597-599, 619-621).
         /// </summary>
         /// <exception cref="PanicException">A panic was recorded.</exception>

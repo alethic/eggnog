@@ -219,6 +219,27 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Discards every write staged in the layers created during the search that just failed, which still wait on the
+        /// deferred list (X37) and so are not in the database's table map that <see cref="Database.ExecuteRuleSet"/>'s
+        /// rollback walks (the failed-run decision of colored-contexts spec §21.9, M10.3). Called on the domain thread
+        /// after every task of the search has finished; the layers stay deferred, empty. O(deferred layers).
+        /// </summary>
+        internal void DiscardDeferredStaged()
+        {
+            if (Volatile.Read(ref deferred) is null)
+                return;
+
+            lock (layerLock)
+            {
+                if (deferred is not { } pending)
+                    return;
+
+                foreach (var layer in pending)
+                    layer.Own.Pending.DiscardSince(null);
+            }
+        }
+
+        /// <summary>
         /// Registers a hidden set that just gained a hide while sealed, for the next <see cref="SealHidden"/>. Domain
         /// thread only.
         /// </summary>

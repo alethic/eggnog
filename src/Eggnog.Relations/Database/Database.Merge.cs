@@ -73,7 +73,8 @@ namespace Eggnog.Relations
         /// carries; <c>null</c> for the store clock's current value, or zero for a database without a store (writes made
         /// outside any run, loading data).</param>
         /// <returns><c>true</c> if any merge added rows or staged writes.</returns>
-        /// <exception cref="InvalidOperationException">The database is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The database is frozen, or it is a faulted child context's: an
+        /// operation of the child failed, and nothing it staged may merge (X12, the failed-run decision of §21.9).</exception>
         public bool MergeAll(uint? timestamp = null)
         {
             ThrowIfFrozen();
@@ -94,7 +95,19 @@ namespace Eggnog.Relations
         bool MergeAllCore(uint timestamp)
         {
             var everChanged = false;
-            var parallel = layers is null && parallelism.ParallelizeDbLevelOp(totalSizeEstimate);
+            bool parallel;
+            if (layers is { } l)
+            {
+                // The failed-run decision (§21.9, M10.3): a faulted child never merges again, so nothing a failed
+                // operation staged can land. Tested inside the root's existing null test: zero root cost.
+                l.Owner.ThrowIfFaulted();
+                parallel = false;
+            }
+            else
+            {
+                parallel = parallelism.ParallelizeDbLevelOp(totalSizeEstimate);
+            }
+
             var count = 0;
             try
             {
@@ -143,12 +156,19 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The epoch captured for the run or pass being merged, which the merge state carries
         /// (see <see cref="MergeAll"/>); <c>null</c> for the store clock's current value, or zero without a store.</param>
         /// <returns><c>true</c> if the merge added rows.</returns>
-        /// <exception cref="InvalidOperationException">The database is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The database is frozen, or it is a faulted child context's
+        /// (see <see cref="MergeAll"/>).</exception>
         public bool MergeTable(TableId table, uint? timestamp = null)
         {
             ThrowIfFrozen();
             var resolved = ResolveTimestamp(timestamp);
-            layers?.AdoptDeferred();
+            if (layers is { } l)
+            {
+                // A faulted child never merges again (the failed-run decision, §21.9, M10.3).
+                l.Owner.ThrowIfFaulted();
+                l.AdoptDeferred();
+            }
+
             var info = TakeOut(table);
             var before = info.Table.Count;
             try

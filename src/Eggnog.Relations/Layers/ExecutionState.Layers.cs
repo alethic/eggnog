@@ -85,6 +85,29 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Looks up column <paramref name="column"/> of the row of <paramref name="table"/> with key <paramref name="key"/>
+        /// that the state's context sees, without inserting: the committed table's row at a root (one hash probe, as
+        /// <c>GetTable(table).TryGetRowColumn</c>), the write-phase visible row in a child (§6.5: one probe per layer and a
+        /// sealed-set test on a hit; for the union-find, the child's view-level lookup). The bridge's
+        /// <c>TableAction.lookup</c> reads through it, so merge functions and primitives look rows up in their own
+        /// context.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="key">The key: one cell per key column, taken as given.</param>
+        /// <param name="column">The column to read.</param>
+        /// <param name="value">The column's value, or zero.</param>
+        /// <returns><c>true</c> if the context sees a row with the key.</returns>
+        /// <exception cref="InvalidOperationException">The state is not attached to a database.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryLookupColumn(TableId table, ReadOnlySpan<uint> key, ColumnId column, out uint value)
+        {
+            if (layers is { } l)
+                return TryGetVisibleColumn(l, table, key, column, out value);
+
+            return ReadRootTable(table).TryGetRowColumn(key, column, out value);
+        }
+
+        /// <summary>
         /// Gets the view a child reads <paramref name="table"/> through in the search phase (§6.5): the rule set's pinned
         /// view when the state belongs to a rule run that reads the table, otherwise the context's cached view.
         /// </summary>

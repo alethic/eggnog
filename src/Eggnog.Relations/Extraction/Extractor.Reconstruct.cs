@@ -129,7 +129,7 @@ namespace Eggnog.Relations
             if (TryGetCost(sort, value, out _) == false)
                 return false;
 
-            var owner = FindClass(SortIndexOf(sort), egraph.GetCanonInUf(value).Rep);
+            var owner = FindClass(SortIndexOf(sort), Canonical(value.Rep));
             var node = classBest[owner];
             var slot = nodeSlot[node];
             function = slots[slot].Id;

@@ -7,7 +7,8 @@ namespace Eggnog.Relations
     /// <summary>
     /// Adds the physical rows an index probe yields to an <see cref="Extractor"/>'s graph, skipping subsumed rows: the
     /// row sink of on-demand discovery, which finds a class's nodes through the cached index on its function's output
-    /// column (rule-layer spec §3.10). The table's scan has already dropped deleted rows.
+    /// column (rule-layer spec §3.10). The table's scan has already dropped deleted rows and, in a child context, the rows
+    /// its view hides (colored-contexts spec §10.10).
     /// </summary>
     internal readonly struct ExtractionRowSink : IRowSink
     {

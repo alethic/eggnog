@@ -81,7 +81,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Looks up the output for <paramref name="key"/> in the committed table: egglog's <c>lookup</c>, a pure read
-        /// that never inserts, whatever the function's default. One hash probe.
+        /// that never inserts, whatever the function's default. One hash probe at a root; in a child context, the row the
+        /// child sees (colored-contexts spec §6.5, <see cref="ExecutionState.TryLookupColumn"/>): one probe per layer.
         /// </summary>
         /// <param name="state">The execution state.</param>
         /// <param name="key">The key; one cell per key column.</param>
@@ -90,15 +91,17 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryLookup(ExecutionState state, ReadOnlySpan<uint> key, out uint value)
         {
-            return state.GetTable(table).TryGetRowColumn(key, new ColumnId(math.OutputColumn), out value);
+            return state.TryLookupColumn(table, key, new ColumnId(math.OutputColumn), out value);
         }
 
         /// <summary>
-        /// Gets the number of live rows of the table. egglog's <c>row_count</c>.
+        /// Gets the number of live rows of the table the state's context sees. egglog's <c>row_count</c>
+        /// (<see cref="ExecutionState.VisibleRowCount"/>: the table's live rows at a root, the view's visible rows in a
+        /// child).
         /// </summary>
         /// <param name="state">The execution state.</param>
         /// <returns>The row count.</returns>
-        public int RowCount(ExecutionState state) => state.GetTable(table).Count;
+        public int RowCount(ExecutionState state) => checked((int)state.VisibleRowCount(table));
 
         /// <summary>
         /// Looks up the output for <paramref name="key"/>, inserting the function's default when the key is missing:

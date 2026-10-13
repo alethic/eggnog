@@ -105,7 +105,7 @@ namespace Eggnog.Relations.Tests
                 var e = entries[c];
                 if (e.IsVar == false || bound[e.Var])
                 {
-                    candidates = Candidates(f, c, e.IsVar ? binding[e.Var] : Constant(e));
+                    candidates = Candidates(f, c, e.IsVar ? binding[e.Var] : RuleConstant(e));
                     break;
                 }
             }
@@ -126,7 +126,7 @@ namespace Eggnog.Relations.Tests
                     var e = entries[c];
                     if (e.IsVar == false)
                     {
-                        ok = cells[c] == Constant(e);
+                        ok = cells[c] == RuleConstant(e);
                     }
                     else if (bound[e.Var])
                     {
@@ -151,6 +151,14 @@ namespace Eggnog.Relations.Tests
 
             return true;
         }
+
+        /// <summary>
+        /// Gets the cell a rule's constant runs as: an eq-sort constant in its canonical form in the snapshot, as a
+        /// store-backed e-graph runs every Id constant of a rule (colored-contexts spec X19, §19 item 4: a constant that
+        /// lost a union keeps matching its class, where egglog's cached plan stops matching); any other constant as
+        /// written.
+        /// </summary>
+        uint RuleConstant(BridgeDiffEntry entry) => BridgeDiffSort.IsEq(entry.Sort) ? Find(entry.Value) : Constant(entry);
 
         /// <summary>
         /// Gets the rows of function <paramref name="f"/> whose column <paramref name="column"/> holds
@@ -185,7 +193,7 @@ namespace Eggnog.Relations.Tests
         /// <exception cref="BridgeDiffPanicException">An action panicked.</exception>
         void Fire(BridgeDiffRule rule, uint[] binding, bool[] bound)
         {
-            uint Value(BridgeDiffEntry e) => e.IsVar ? binding[e.Var] : Constant(e);
+            uint Value(BridgeDiffEntry e) => e.IsVar ? binding[e.Var] : RuleConstant(e);
 
             foreach (var prim in rule.Prims)
             {

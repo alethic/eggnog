@@ -13,8 +13,8 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// One e-graph rule becomes one core rule, planned once (<see cref="BuildCachedPlan"/>), which every run instantiates
-    /// as several core rules, its semi-naive variants (<see cref="AddRulesFromCached"/>): each variant constrains the
+    /// One e-graph rule becomes one core rule, planned once (<see cref="BuildCachedPlan(Database, string, ValueTuple{TableId, ExternalFunctionId}?)"/>), which every run instantiates
+    /// as several core rules, its semi-naive variants (<see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo, uint[])"/>): each variant constrains the
     /// timestamp columns of some atoms, so that together they visit exactly the matches that involve at least one row
     /// new since the rule's last run (map §3.4).
     /// </para>
@@ -24,7 +24,7 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Mutable while its builder records it, then immutable: a built rule's query may be planned and instantiated from
-    /// any number of threads. Cold path, except <see cref="AddRulesFromCached"/>, which runs once per rule per run and
+    /// any number of threads. Cold path, except <see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo, uint[])"/>, which runs once per rule per run and
     /// allocates only what the core rule set keeps.
     /// </para>
     /// </remarks>
@@ -201,7 +201,26 @@ namespace Eggnog.Relations
         /// <param name="description">The rule's description.</param>
         /// <returns>The plan.</returns>
         /// <exception cref="QueryException">The core rejects the rule.</exception>
-        public CachedPlanInfo BuildCachedPlan(Database db, string description)
+        public CachedPlanInfo BuildCachedPlan(Database db, string description) => BuildCachedPlan(db, description, null);
+
+        /// <summary>
+        /// <see cref="BuildCachedPlan(Database, string)"/>, with the early stop of colored-contexts spec §10.6: when
+        /// <paramref name="stopOnContradiction"/> is given, every head insert into its table (the e-graph's contradiction
+        /// function) is followed by a call to its function (<see cref="StopOnContradictionFunction"/>).
+        /// </summary>
+        /// <remarks>
+        /// Constants of table columns are e-class ids exactly where the column is one, which the core reads from the
+        /// table; constants without a column (external arguments, comparisons) written as ids are lowered through
+        /// <see cref="QueryEntry.IdConst"/> (<see cref="RuleBindings.ConvertLoose"/>, colored-contexts spec §9.8, X19). A
+        /// store-backed context runs every one of them in its canonical form.
+        /// </remarks>
+        /// <param name="db">The database.</param>
+        /// <param name="description">The rule's description.</param>
+        /// <param name="stopOnContradiction">The contradiction function's table and the early-stop function, or
+        /// <c>null</c>.</param>
+        /// <returns>The plan.</returns>
+        /// <exception cref="QueryException">The core rejects the rule.</exception>
+        public CachedPlanInfo BuildCachedPlan(Database db, string description, (TableId Table, ExternalFunctionId Stop)? stopOnContradiction)
         {
             ArgumentNullException.ThrowIfNull(db);
             ArgumentNullException.ThrowIfNull(description);
@@ -215,6 +234,9 @@ namespace Eggnog.Relations
             var bindings = new RuleBindings(vars.Count);
             for (var i = 0; i < vars.Count; i++)
                 bindings.Bind(new VariableId(i), query.NewVariable(vars[i].Name));
+
+            if (stopOnContradiction is { } stop)
+                bindings.SetStopOnContradiction(stop.Table, stop.Stop);
 
             var atomMapping = new AtomId[atoms.Count];
             for (var i = 0; i < atoms.Count; i++)
@@ -263,14 +285,26 @@ namespace Eggnog.Relations
         /// <param name="ruleSet">The rule set being built for the run.</param>
         /// <param name="lastRunAt">The rule's watermark: the timestamp of its last run, zero if it never ran.</param>
         /// <param name="cached">The rule's plan.</param>
-        public void AddRulesFromCached(RuleSetBuilder ruleSet, uint lastRunAt, CachedPlanInfo cached)
+        public void AddRulesFromCached(RuleSetBuilder ruleSet, uint lastRunAt, CachedPlanInfo cached) => AddRulesFromCached(ruleSet, lastRunAt, cached, null);
+
+        /// <summary>
+        /// <see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo)"/> with the rule's executed Id constants
+        /// <paramref name="canonical"/> (K, colored-contexts spec §9.8) computed once for every variant; <c>null</c>
+        /// lets the builder compute them per variant (<see cref="RuleSetBuilder.AddRuleFromCachedPlan"/>).
+        /// </summary>
+        /// <param name="ruleSet">The rule set being built for the run.</param>
+        /// <param name="lastRunAt">The rule's watermark: the timestamp of its last run, zero if it never ran.</param>
+        /// <param name="cached">The rule's plan.</param>
+        /// <param name="canonical">K, from <see cref="CanonicalConstants.Compute"/> on the running context's view, or
+        /// <c>null</c>.</param>
+        public void AddRulesFromCached(RuleSetBuilder ruleSet, uint lastRunAt, CachedPlanInfo cached, uint[]? canonical)
         {
             ArgumentNullException.ThrowIfNull(ruleSet);
             ArgumentNullException.ThrowIfNull(cached);
 
             if (SemiNaive == false || (atoms.Count == 0 && lastRunAt == 0))
             {
-                ruleSet.AddRuleFromCachedPlan(cached.Plan);
+                ruleSet.AddRuleFromCachedPlan(cached.Plan, default, canonical);
                 return;
             }
 
@@ -280,7 +314,7 @@ namespace Eggnog.Relations
             {
                 // A single focus atom constrained to new rows.
                 var focus = (mapping[SoleFocus], Constraint.GeConst(new ColumnId(atoms[SoleFocus].Math.TimestampColumn), mid));
-                ruleSet.AddRuleFromCachedPlan(cached.Plan, new ReadOnlySpan<(AtomId, Constraint)>(in focus));
+                ruleSet.AddRuleFromCachedPlan(cached.Plan, new ReadOnlySpan<(AtomId, Constraint)>(in focus), canonical);
                 return;
             }
 
@@ -296,7 +330,7 @@ namespace Eggnog.Relations
                 for (var i = 0; i < focus; i++)
                     buffer[i + 1] = (mapping[i], Constraint.LtConst(new ColumnId(atoms[i].Math.TimestampColumn), mid));
 
-                ruleSet.AddRuleFromCachedPlan(cached.Plan, buffer.AsSpan(0, focus + 1));
+                ruleSet.AddRuleFromCachedPlan(cached.Plan, buffer.AsSpan(0, focus + 1), canonical);
             }
 
             ArrayPool<(AtomId Atom, Constraint Constraint)>.Shared.Return(buffer);

@@ -8,39 +8,29 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Merges every staged write, advances the timestamp, and rebuilds if the merge unioned anything. egglog's
-        /// <c>flush_updates</c> (lib.rs:946-959).
+        /// Merges every write staged at the root, advances the timestamp, and rebuilds if the merge unioned anything.
+        /// egglog's <c>flush_updates</c> (lib.rs:946-959), on <see cref="Root"/>.
         /// </summary>
         /// <remarks>
         /// The merge runs at the current timestamp: rows and unions merge functions write carry it. A panic recorded by a
         /// merge (an <see cref="MergeFn.AssertEq"/> conflict, say) is not thrown here; the next run reports it, as in
-        /// egglog.
+        /// egglog. (The context API's <see cref="EGraphContext.FlushUpdates"/> throws it instead.)
         /// </remarks>
         /// <returns>Whether the merge changed the database; changes made by the rebuild are not reported.</returns>
-        public bool FlushUpdates()
-        {
-            var unionsBefore = UnionCount;
-            var updated = db.MergeAll(NextTimestamp);
-            IncrementTimestamp();
-            if (UnionCount != unionsBefore)
-                Rebuild();
-
-            return updated;
-        }
+        public bool FlushUpdates() => root.FlushCore(throwOnFailure: false);
 
         /// <summary>
-        /// Runs one iteration: <paramref name="runRuleSet"/> at the current timestamp, then either advancing the timestamp
-        /// (no effective union) or the rebuild loop, then the panic check. egglog's
-        /// <c>run_rules_inner</c> (lib.rs:591-624), with the rule set's execution supplied by the caller (the rule
-        /// layer's cached plans and seminaive variants, or a core <see cref="RuleSet"/>).
+        /// Runs one iteration at the root: <paramref name="runRuleSet"/> at the current timestamp, then either advancing
+        /// the timestamp (no effective union) or the rebuild loop, then the panic check. egglog's
+        /// <c>run_rules_inner</c> (lib.rs:591-624), with the rule set's execution supplied by the caller (a core
+        /// <see cref="RuleSet"/>, say).
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <paramref name="runRuleSet"/> receives the run's timestamp <c>T</c>, which every row the run writes must carry
-        /// and which rules record as their last run; the counter does not move while it runs. Afterwards, if the union-find
-        /// recorded no new union, no row can have become non-canonical: the counter advances to <c>T + 1</c> and the
-        /// iteration ends. Otherwise the rebuild loop runs, its first pass at <c>T</c> (lib.rs:667), so rebuilt rows count
-        /// as new for the rules just run.
+        /// <paramref name="runRuleSet"/> receives the run's timestamp <c>T</c>, which every row the run writes must carry;
+        /// the clock does not move while it runs. Afterwards, if the union-find recorded no new union, no row can have
+        /// become non-canonical: the clock advances to <c>T + 1</c> and the iteration ends. Otherwise the rebuild loop
+        /// runs, its first pass at <c>T</c> (lib.rs:667, X4), so rebuilt rows count as new for the rules just run.
         /// </para>
         /// <para>
         /// A panic recorded during the rule set or the rebuild is thrown at the end, with the writes made before the stop
@@ -51,15 +41,30 @@ namespace Eggnog.Relations
         /// throws the first panic; a panic the rebuild records afterwards belongs to the same failed iteration and is
         /// dropped.
         /// </para>
+        /// <para>
+        /// A raw write path (colored-contexts spec §10.4): rows and unions the root staged earlier through the
+        /// <see cref="EGraphContext"/> API are flushed first, in an epoch of their own
+        /// (<see cref="EGraphContext.FlushStagedFirst"/>), so writes land in the order the host issued them. Under egglog's
+        /// API alone that is one emptiness test and the timestamp sequence is egglog's. Refused from inside a callback of
+        /// the root's domain (a raw escape's action, a visitor, §8.3).
+        /// </para>
         /// </remarks>
-        /// <param name="runRuleSet">Runs the rule set against the database at the given timestamp and merges its writes.</param>
+        /// <param name="runRuleSet">Runs the rule set against the root database at the given timestamp and merges its
+        /// writes.</param>
         /// <returns>The report.</returns>
+        /// <exception cref="InvalidOperationException">The root is frozen, faulted or contradicted; its domain is held by
+        /// another thread; or the call comes from inside a callback of the root's domain.</exception>
         /// <exception cref="PanicException">A panic was recorded.</exception>
         internal IterationReport RunIteration(Func<uint, RuleSetReport> runRuleSet)
         {
             ArgumentNullException.ThrowIfNull(runRuleSet);
-
-            var timestamp = NextTimestamp;
+            var context = store.Root;
+            context.ThrowIfNotWritable();
+            var domain = context.Domain;
+            using var scope = domain.Enter();
+            Context.ThrowIfInCallback(domain, nameof(RunIteration));
+            root.FlushStagedFirst();
+            var timestamp = context.BeginEpoch();
             var unionsBefore = UnionCount;
             var report = runRuleSet(timestamp) ?? throw new InvalidOperationException("The rule set runner returned no report.");
             var panicked = TryTakePanic(out var message);
@@ -68,7 +73,7 @@ namespace Eggnog.Relations
             {
                 // No new unions: skip the rebuild but still advance the timestamp, so seminaive evaluation sees a fresh
                 // epoch (lib.rs:606-613).
-                IncrementTimestamp();
+                context.EndEpoch();
                 if (panicked)
                     throw new PanicException(message);
 
@@ -76,7 +81,7 @@ namespace Eggnog.Relations
             }
 
             var start = Stopwatch.GetTimestamp();
-            var rebuildChanged = Rebuild();
+            var rebuildChanged = context.Rebuild();
             var rebuildTime = Stopwatch.GetElapsedTime(start);
             if (panicked)
             {
@@ -85,15 +90,15 @@ namespace Eggnog.Relations
             }
 
             ThrowIfPanicked();
-            return new IterationReport(report, rebuildTime, rebuildChanged);
+            return new IterationReport(report, rebuildTime, rebuildChanged, context.LastRebuildPasses, false);
         }
 
         /// <summary>
-        /// Runs a core rule set as one iteration (<see cref="RunIteration"/>): the rules run at the current timestamp
-        /// (<see cref="ExecutionState.Timestamp"/>; actions that stamp rows read the timestamp counter, which holds the
-        /// same value) and their writes merge, then the e-graph rebuilds if they unioned anything.
+        /// Runs a core rule set at the root as one iteration (<see cref="RunIteration"/>): the rules run at the current
+        /// timestamp (<see cref="ExecutionState.Timestamp"/>; actions that stamp rows read the timestamp counter, which
+        /// holds the same value) and their writes merge, then the e-graph rebuilds if they unioned anything.
         /// </summary>
-        /// <param name="ruleSet">The rules, built against the database as it is now.</param>
+        /// <param name="ruleSet">The rules, built against the root database as it is now.</param>
         /// <returns>The report.</returns>
         /// <exception cref="PanicException">A panic was recorded.</exception>
         internal IterationReport RunRuleSet(RuleSet ruleSet)
@@ -103,19 +108,20 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Rebuilds to a fixpoint: each pass rebuilds the containers, then every function table against the union-find
-        /// (merging, so collisions union their outputs), then re-stamps rows mentioning containers whose meaning changed
-        /// in place, all at the pass's timestamp, which advances after it; passes repeat until one changes nothing.
-        /// egglog's native <c>rebuild</c> loop (lib.rs:626-682, through <see cref="Database.Rebuild"/>); egglog's
+        /// Rebuilds the root to a fixpoint: each pass rebuilds the containers, then every function table against the
+        /// union-find (merging, so collisions union their outputs), then re-stamps rows mentioning containers whose
+        /// meaning changed in place, all at the pass's timestamp, which advances after it; passes repeat until one changes
+        /// nothing. egglog's native <c>rebuild</c> loop (lib.rs:626-682), through <see cref="Context.Rebuild"/>, which
+        /// runs passes only when the union-find grew since the last rebuild or writes are pending (X42); egglog's
         /// rule-based fallback is unreachable and not ported (decision 10).
         /// </summary>
         /// <returns>Whether any pass changed a table or container.</returns>
-        internal bool Rebuild() => db.Rebuild(ufTable, FunctionTables, timestampCounter) > 1;
+        internal bool Rebuild() => store.Root.Rebuild();
 
         /// <summary>
         /// Advances the timestamp counter. egglog's <c>inc_ts</c>.
         /// </summary>
-        internal void IncrementTimestamp() => db.IncrementCounter(timestampCounter);
+        internal void IncrementTimestamp() => store.AdvanceClock();
 
     }
 

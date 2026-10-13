@@ -211,7 +211,7 @@ namespace Eggnog.Relations.Tests
             var writes = new List<(int Function, uint[] Row)>();
             var unions = new List<(uint, uint)>();
             foreach (var rule in rules)
-                rule.Evaluate(snapshot, writes, unions);
+                rule.Evaluate(snapshot, writes, unions, reference.Find);
 
             foreach (var (function, row) in writes)
                 reference.Add(tables[function], row);

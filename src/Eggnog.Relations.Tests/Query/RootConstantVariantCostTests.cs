@@ -12,6 +12,7 @@ namespace Eggnog.Relations.Tests
     /// O(constants) finds and one compare). A store-backed root has one current K per rule at a time, so a rule whose
     /// constant changes its canonical form must keep paying O(constants) per run, however many times it changed.
     /// </summary>
+    [Collection(ExecutorStressCollection.Name)]
     public class RootConstantVariantCostTests
     {
 

@@ -172,15 +172,37 @@ namespace Eggnog.Relations.Tests
         /// Evaluates the rule over the closed <paramref name="rows"/> (a snapshot of the reference), collecting the rows
         /// and unions its matches write.
         /// </summary>
+        /// <remarks>
+        /// The rule's constants in id columns run in their canonical form in the snapshot (<paramref name="find"/>), as a
+        /// store-backed e-graph runs every Id constant of a rule (colored-contexts spec X19, §19 item 4); value constants
+        /// run as written.
+        /// </remarks>
         /// <param name="rows">The rows of each function.</param>
         /// <param name="writes">Receives the rows to add, by function.</param>
         /// <param name="unions">Receives the unions.</param>
-        public void Evaluate(IReadOnlyList<uint[]>[] rows, List<(int Function, uint[] Row)> writes, List<(uint, uint)> unions)
+        /// <param name="find">The snapshot's canonical id of an id.</param>
+        public void Evaluate(IReadOnlyList<uint[]>[] rows, List<(int Function, uint[] Row)> writes, List<(uint, uint)> unions, Func<uint, uint> find)
         {
             var binding = new uint[VarIsId.Count];
             var bound = new bool[VarIsId.Count];
+            this.find = find;
             Match(rows, 0, binding, bound, writes, unions);
         }
+
+        /// <summary>
+        /// The canonical id of an id in the snapshot being evaluated.
+        /// </summary>
+        Func<uint, uint> find = static id => id;
+
+        /// <summary>
+        /// Gets whether column <paramref name="column"/> of function <paramref name="function"/> holds ids.
+        /// </summary>
+        static bool IsIdColumn(int function, int column) => column < KeyCounts[function] || OutputKinds[function] == 'I';
+
+        /// <summary>
+        /// Gets the cell a constant entry of an id column (when <paramref name="isId"/>) or a value column runs as.
+        /// </summary>
+        uint ConstantCell(long entry, bool isId) => isId ? find(Decode(entry)) : Decode(entry);
 
         /// <inheritdoc />
         public override string ToString()
@@ -227,13 +249,13 @@ namespace Eggnog.Relations.Tests
                     if (binding[x] == binding[y])
                         return;
 
-                uint Value(long e) => e >= 0 ? binding[e] : Decode(e);
+                uint Value(long e, bool isId) => e >= 0 ? binding[e] : ConstantCell(e, isId);
                 foreach (var (kind, function, args) in Actions)
                 {
                     if (kind == 0)
-                        unions.Add((Value(args[0]), Value(args[1])));
+                        unions.Add((Value(args[0], true), Value(args[1], true)));
                     else if (kind == 1)
-                        writes.Add((function, args.Select(Value).ToArray()));
+                        writes.Add((function, args.Select((a, c) => Value(a, IsIdColumn(function, c))).ToArray()));
                     else
                         throw new NotSupportedException("The reference does not mint ids.");
                 }
@@ -251,7 +273,7 @@ namespace Eggnog.Relations.Tests
                     var e = entries[c];
                     if (e < 0)
                     {
-                        ok = row[c] == Decode(e);
+                        ok = row[c] == ConstantCell(e, IsIdColumn(f, c));
                     }
                     else if (bound[e])
                     {

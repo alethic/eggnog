@@ -419,8 +419,12 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(a, egraph.GetCanonInUf(b));
         }
 
+        /// <summary>
+        /// A panic is thrown after the run merged and rebuilt, and the rule's watermark is not committed (colored-contexts
+        /// spec X18, §19 item 4: egglog advances it), so the next run finds the match again.
+        /// </summary>
         [Fact]
-        public void APanicIsThrownAfterTheRunWithTheWatermarkAdvanced()
+        public void APanicIsThrownAfterTheRunWithoutCommittingTheWatermark()
         {
             var fx = new RunFixture();
             var egraph = fx.EGraph;
@@ -441,13 +445,15 @@ namespace Eggnog.Relations.Tests
             var error = Assert.Throws<PanicException>(() => egraph.RunRules(rule));
             Assert.Equal("boom", error.PanicMessage);
             Assert.Equal(fx.Canon(n1), fx.Canon(n2));
-            Assert.Equal(t, egraph.GetRuleInfo(rule).LastRunAt);
+            Assert.Equal(0u, egraph.GetRuleInfo(rule).LastRunAt);
             Assert.True(egraph.NextTimestamp > t);
 
-            // The rebuild re-stamped same(n1, n2) as same(n1, n1): new, so the rule matches and panics again; after
-            // that the match is old.
+            // No progress was committed, so every later run matches same(n1, n1) again and panics again; the union it
+            // repeats changes nothing.
+            var again = Assert.Throws<PanicException>(() => egraph.RunRules(rule));
+            Assert.Equal("boom", again.PanicMessage);
+            Assert.Equal(0u, egraph.GetRuleInfo(rule).LastRunAt);
             Assert.Throws<PanicException>(() => egraph.RunRules(rule));
-            Assert.False(egraph.RunRules(rule).Changed);
         }
 
         [Fact]

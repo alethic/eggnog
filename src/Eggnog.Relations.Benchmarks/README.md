@@ -346,15 +346,17 @@ drops or misstores a merge function's output fails the run.
 
 The classes in `Contexts/` measure what a colored context costs (milestone M9.4 of
 `docs/design/colored-contexts-spec.md`, L6 and B4): unlike the root set, they have no baseline to stay within, but a
-shape to keep. All three build a root (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
+shape to keep. The first three build a root (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
 a fixed set of ids touches a fixed number of root rows), frozen except in `PerChildCostBenchmarks`' writable-root cases,
-from the fixed seed `0x5EED`, and check their results in the setup or in every invocation.
+from the fixed seed `0x5EED`, and check their results in the setup or in every invocation. `ContextExtractionBenchmarks`
+builds its own term graph instead.
 
 | Class | What it measures | The shape to keep |
 | --- | --- | --- |
 | `PerChildCostBenchmarks` | One child of a root of 20,000, 200,000 or 2,000,000 rows, frozen or not (`FrozenRoot`): creation, 100 unions in one batch, a rebuild, disposal (the storage half; M10.4 adds a rule run). A root that is not frozen brings its rebuild indexes up to date when it creates a child; the setup's first child absorbs that root work. | Time and allocated bytes flat within 1.5× from 20k to 2M rows; the setup checks that the child examines and copies exactly the 300 root rows naming its losers. |
 | `ManyChildrenBenchmarks` | A thousand single-union children of a 200,000-row frozen root, in parallel and serially; one child with no layer and with one empty layer. | The spike took about 100 ms for the parallel case. `ChildWithOneEmptyLayer` minus `ChildOnly` in the allocated column is the bytes per empty layer (the spec estimates 1–2 KB). |
 | `ChildFindBenchmarks` | `find` at a frozen root, in a child at depth 1 and 3 over an explicit chain (raw and through `Context.Find`), and under a frozen, flattened chain. | One probe per non-empty level over the root's find; a flattened chain costs one map read whatever its depth. |
+| `ContextExtractionBenchmarks` | On-demand extraction of 4,000 classes from a fresh extractor (colored-contexts spec §10.10): through the root API (the baseline), through the context form at the root, and in a child of a 40,000-term frozen root that made 4,000 terms and 400 unions of its own, frozen or not. | `RootContext` within noise of `RootApi` (one branch per discovery round, none per node); `Child` pays one index probe per present layer per producing function on top. |
 
 Run them like any other class, for example `--filter *PerChildCostBenchmarks*`; the 2M-row root takes some seconds to
 build in the setup.

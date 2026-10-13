@@ -19,6 +19,8 @@ namespace Eggnog.Relations.Tests
             SpikeReferenceOpKind.Union => $"union {A} {B}",
             SpikeReferenceOpKind.Insert => $"{Table}({string.Join(",", Row!)})",
             SpikeReferenceOpKind.Delete => $"delete {Table}({string.Join(",", Row!)})",
+            SpikeReferenceOpKind.Derived when Table is null => $"derived union {A} {B}",
+            SpikeReferenceOpKind.Derived => $"derived {Table}({string.Join(",", Row!)})",
             _ => $"clear {Table}",
         };
 

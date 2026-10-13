@@ -58,18 +58,29 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Runs <paramref name="body"/> to warm the pools, then returns the bytes the next <paramref name="runs"/> calls
-        /// allocate on this thread.
+        /// allocate on this thread: the least of up to three such windows, stopping at the first that allocates nothing.
         /// </summary>
+        /// <remarks>
+        /// The pooled buffers come from the shared array pool, which the runtime trims after a full collection under
+        /// memory pressure; on a loaded machine one window can then rent fresh buffers. An allocation of the code under
+        /// test happens in every window, so the least of three still catches it.
+        /// </remarks>
         static long Allocated(Action body, int runs = 200)
         {
             for (var i = 0; i < 10; i++)
                 body();
 
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < runs; i++)
-                body();
+            var least = long.MaxValue;
+            for (var attempt = 0; attempt < 3 && least > 0; attempt++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                for (var i = 0; i < runs; i++)
+                    body();
 
-            return GC.GetAllocatedBytesForCurrentThread() - before;
+                least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
+            }
+
+            return least;
         }
 
         /// <summary>

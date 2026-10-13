@@ -172,6 +172,11 @@ namespace Eggnog.Relations
         uint semiNaiveFloor;
 
         /// <summary>
+        /// The number of passes the last <see cref="Rebuild"/> ran (<see cref="LastRebuildPasses"/>). Domain thread only.
+        /// </summary>
+        int lastRebuildPasses;
+
+        /// <summary>
         /// The largest epoch the context captured (<see cref="BeginEpoch"/>) or ran rules at (<see cref="UseEpoch"/>):
         /// with <see cref="semiNaiveFloor"/>, the floor of a rule run's timestamp (I3). Domain thread only.
         /// </summary>

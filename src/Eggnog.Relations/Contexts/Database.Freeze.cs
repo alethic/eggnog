@@ -37,8 +37,20 @@ namespace Eggnog.Relations
                 if (info.Table.HasPendingWrites)
                     throw new InvalidOperationException($"Table {info.Name ?? "<unnamed>"} has staged writes that are not merged; merge them before freezing.");
 
+            // A table's freeze may compact it (ForceRehash), which renumbers its rows without a merge and starts a new
+            // generation. An index refreshed since the last merge reset the catalogs (by planning, a search that merged
+            // nothing, or an extraction) would keep the old row ids, and a frozen catalog is never reset again, so the
+            // warm-up and every descendant would take an index that lags the frozen table. Every table whose generation
+            // the freeze moved has its indexes re-armed here, and their next use rebuilds them; a table the freeze did
+            // not compact keeps its indexes. Found by the M10.3 rule and extraction differentials (FreezeIndexWarmupTests,
+            // ContextExtractionTests.AnIndexReadBeforeTheFreezeIsRebuiltWhenTheFreezeCompacts). O(indexes).
             foreach (var (_, info) in tables)
+            {
+                var generation = info.Table.Version.Major;
                 info.Table.Freeze();
+                if (info.Table.Version.Major != generation)
+                    info.ResetIndexes();
+            }
 
             if (warmup is not null)
             {

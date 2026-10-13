@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -9,38 +10,49 @@ namespace Eggnog.Relations
     /// <summary>
     /// An e-graph: functions with functional dependencies, default values and merge functions, subsumption, a
     /// union-find with congruence closure by rebuilding, and the timestamps seminaive evaluation runs on, all lowered onto
-    /// a <see cref="Relations.Database"/>. egglog-bridge's <c>EGraph</c> (egglog-bridge/src/lib.rs:113-964), the engine's
-    /// main entry point.
+    /// a <see cref="Relations.Store"/>. egglog-bridge's <c>EGraph</c> (egglog-bridge/src/lib.rs:113-964), the engine's
+    /// main entry point, extended with colored contexts (colored-contexts spec §10).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Layout. The union-find is the database's first table, <c>$uf</c>, a <see cref="DisplacedTable"/>. Each function
-    /// is a <see cref="SortedWritesTable"/> laid out as <c>[keys..., output, timestamp, subsumed?]</c>
-    /// (<see cref="SchemaMath"/>), sorted by the timestamp, rebuilding its id-typed key and output columns, whose merge is
-    /// the function's <see cref="MergeFn"/> on the output and the maximum on the subsumption cell
-    /// (<see cref="FunctionTableMerge"/>). Fresh ids come from one counter starting at 0, timestamps from another starting
-    /// at 1 (lib.rs:140-189).
+    /// Layout. The e-graph builds a <see cref="Relations.Store"/>: the union-find is its table 0, <c>$uf</c>, fresh ids
+    /// come from its counter 0 and timestamps from its clock, counter 1, which starts at 1 (lib.rs:140-189). Each
+    /// function is a <see cref="SortedWritesTable"/> registered with the store, laid out as
+    /// <c>[keys..., output, timestamp, subsumed?]</c> (<see cref="SchemaMath"/>), sorted by the timestamp, rebuilding its
+    /// id-typed key and output columns, whose merge is the function's <see cref="MergeFn"/> on the output and the maximum
+    /// on the subsumption cell (<see cref="FunctionTableMerge"/>).
     /// </para>
     /// <para>
-    /// Timestamps. Every row written in a run, a flush or a rebuild pass is stamped with the timestamp counter's value
-    /// when it started, and the counter advances once after it (map §1.3, §4.2 C1). Rows newer than a rule's last run are
-    /// what seminaive evaluation looks at.
+    /// Definitions and contexts (§10.1). The e-graph holds the definitions: functions, rules (a <see cref="RuleTable"/>),
+    /// panic functions, the contradiction function, and context-local slots. Everything a context runs, writes and reads
+    /// lives in an <see cref="EGraphContext"/>: <see cref="Root"/>, and the children created from it. The root-only
+    /// egglog API of this type (<see cref="RunRules"/>, <see cref="FlushUpdates"/>, <see cref="AddValues"/>,
+    /// <see cref="AddTerm"/>, <see cref="LookupId"/>, <see cref="TableSize"/>, <see cref="ForEach(FunctionId, FunctionRowCallback)"/>,
+    /// <see cref="WithExecutionState{TResult}"/>, <see cref="FreshId"/>, <see cref="ClearTable"/>, <see cref="Rebuild"/>)
+    /// runs on <see cref="Root"/> with egglog's semantics: rows are written as given and read as committed, and a panic a
+    /// flush records is reported by the next run. Two deviations from egglog bind it (colored-contexts spec §19 item 4):
+    /// a rule's semi-naive progress is not committed after a run that recorded a failure (X18), and every Id constant of a
+    /// rule runs in its canonical form (X19), so a rule whose constant lost a union keeps matching its class.
     /// </para>
     /// <para>
-    /// Writes outside rules (<see cref="AddValues"/>, <see cref="AddTerm"/>, <see cref="WithExecutionState{TResult}"/>
-    /// followed by <see cref="FlushUpdates"/>) are staged and merged by <see cref="FlushUpdates"/>, which rebuilds when
-    /// they unioned anything. Nothing canonicalizes its inputs: callers pass canonical ids (<see cref="GetCanonRepr"/>)
-    /// when they need canonical rows.
+    /// Timestamps. Every row written in a run, a flush or a rebuild pass is stamped with the clock's value when it
+    /// started, and the clock advances once after it (map §1.3, §4.2 C1; colored-contexts §4.1). Rows newer than a
+    /// rule's last run are what seminaive evaluation looks at. A program that creates no child and never freezes gets
+    /// egglog's timestamps exactly.
     /// </para>
     /// <para>
     /// Panics. A conflict in a function without a merge, a failed lookup or primitive, or an explicit panic calls a
-    /// panic function (<see cref="NewPanic"/>), which requests early stopping and records its message in the panic side
-    /// channel; the run that observed it then throws <see cref="PanicException"/> after merging what it wrote. A panic
-    /// recorded while flushing is reported by the next run, as in egglog.
+    /// panic function (<see cref="NewPanic"/>), which reports its message as the calling state's failure and stops the
+    /// run early; the context whose run observed it throws <see cref="PanicException"/> after merging what it wrote.
     /// </para>
     /// <para>
-    /// Not thread-safe: every method needs exclusive access (egglog's <c>&amp;mut self</c>); the parallelism is inside
-    /// the database's operations.
+    /// Threading. Definitions (<see cref="AddTable"/>, <see cref="NewRule"/>, <see cref="NewPanic"/>,
+    /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>) may be made from any thread (rule-layer D6;
+    /// a table, once the root is frozen or while no other thread uses it, colored-contexts §4.3): they publish
+    /// copy-on-write. A context and every descendant created under it while it is not frozen form one thread domain
+    /// (§8.3); children of a frozen context may run concurrently (<see cref="ConcurrentChildren"/>, within
+    /// <see cref="ParallelismBudget"/>, §10.9). The parallelism of a single operation is inside the database's
+    /// operations.
     /// </para>
     /// </remarks>
     internal sealed partial class EGraph
@@ -49,22 +61,38 @@ namespace Eggnog.Relations
         /// <summary>
         /// The name of the union-find table.
         /// </summary>
-        internal const string UnionFindName = "$uf";
+        internal const string UnionFindName = Store.UnionFindName;
 
         /// <summary>
         /// The message of the default panic function (lib.rs:160).
         /// </summary>
         internal const string DefaultPanicMessage = "primitive panicked";
 
+        readonly Store store;
         readonly Database db;
         readonly TableId ufTable;
         readonly DisplacedTable unionFind;
         readonly CounterId idCounter;
         readonly CounterId timestampCounter;
-        readonly DenseIdMap<FunctionId, FunctionInfo> funcs;
-        readonly List<TableId> functionTables;
         readonly ActionRegistry actionRegistry;
         readonly UnionContainerMerge containerMerge;
+        readonly EGraphContext root;
+        readonly ParallelismBudget parallelismBudget;
+
+        /// <summary>
+        /// Serializes definitions: functions and the contradiction function.
+        /// </summary>
+        readonly object definitionGate = new();
+
+        /// <summary>
+        /// The declared functions, by id, published copy-on-write: readers on any thread see a complete array.
+        /// </summary>
+        FunctionInfo[] functions = Array.Empty<FunctionInfo>();
+
+        /// <summary>
+        /// The tables of every function, in function order, published copy-on-write with <see cref="functions"/>.
+        /// </summary>
+        TableId[] functionTables = Array.Empty<TableId>();
 
         /// <summary>
         /// Initializes an empty e-graph. egglog's <c>EGraph::default</c>.
@@ -76,34 +104,45 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes an empty e-graph whose database and tables use <paramref name="parallelism"/>.
+        /// Initializes an empty e-graph whose store and tables use <paramref name="parallelism"/> (rule-layer E9: the
+        /// root of a store-backed e-graph honours the host's degree of parallelism, and children of writable contexts
+        /// inherit it, colored-contexts §10.9).
         /// </summary>
         /// <param name="parallelism">When operations go parallel.</param>
         internal EGraph(ParallelHeuristics parallelism)
         {
             ArgumentNullException.ThrowIfNull(parallelism);
 
-            db = new Database(parallelism);
-            unionFind = new DisplacedTable();
-            ufTable = db.AddTable(unionFind, name: UnionFindName);
-            idCounter = db.AddCounter();
-            timestampCounter = db.AddCounter();
-
-            // Start the timestamp counter at 1 (lib.rs:151-152), so that a rule's initial last run, 0, sees every row.
-            db.IncrementCounter(timestampCounter);
-
-            funcs = new DenseIdMap<FunctionId, FunctionInfo>();
-            functionTables = new List<TableId>();
+            // §10.1: the store lays out the union-find and the two counters (lib.rs:140-152): table 0, counter 0 for
+            // ids, counter 1 for timestamps, started at 1 so that a rule's initial last run, 0, sees every row.
+            store = new Store(parallelism);
+            parallelismBudget = new ParallelismBudget(parallelism.DegreeOfParallelism);
+            db = store.Root.Database;
+            ufTable = store.UnionFindTable;
+            unionFind = store.RootUnionFind;
+            idCounter = store.IdCounter;
+            timestampCounter = store.ClockCounter;
             containerMerge = new UnionContainerMerge(ufTable, timestampCounter);
 
             // A default panic function, so that the frontend's panic action has an id to call; interning it also lets a
             // later NewPanic with the same message reuse it (lib.rs:154-165).
             var defaultPanicId = NewPanic(DefaultPanicMessage);
             actionRegistry = new ActionRegistry(new UnionAction(ufTable, timestampCounter), defaultPanicId);
+            root = new EGraphContext(this, null, store.Root);
         }
 
         /// <summary>
-        /// Gets the database the e-graph is lowered onto.
+        /// Gets the store the e-graph is lowered onto.
+        /// </summary>
+        internal Store Store => store;
+
+        /// <summary>
+        /// Gets the root context: what is true unconditionally. The egglog-compatible API of this type runs on it.
+        /// </summary>
+        internal EGraphContext Root => root;
+
+        /// <summary>
+        /// Gets the root context's database, egglog's database.
         /// </summary>
         internal Database Database => db;
 
@@ -118,7 +157,7 @@ namespace Eggnog.Relations
         internal CounterId IdCounter => idCounter;
 
         /// <summary>
-        /// Gets the timestamp counter.
+        /// Gets the timestamp counter: the store's clock.
         /// </summary>
         internal CounterId TimestampCounter => timestampCounter;
 
@@ -128,37 +167,38 @@ namespace Eggnog.Relations
         internal ActionRegistry ActionRegistry => actionRegistry;
 
         /// <summary>
-        /// Gets or sets how much rule set reports record. egglog's <c>set_report_level</c>.
+        /// Gets or sets how much rule set reports record, in every context. egglog's <c>set_report_level</c>.
         /// </summary>
         internal ReportLevel ReportLevel { get; set; }
 
         /// <summary>
         /// Gets the number of declared functions; their ids are <c>[0, FunctionCount)</c>.
         /// </summary>
-        public int FunctionCount => funcs.IdCount;
+        public int FunctionCount => Volatile.Read(ref functions).Length;
 
         /// <summary>
         /// Gets the current timestamp: what rows written now are stamped with. egglog's <c>next_ts</c>.
         /// </summary>
-        /// <exception cref="OverflowException">The counter no longer fits in 32 bits.</exception>
-        internal uint NextTimestamp => checked((uint)db.ReadCounter(timestampCounter));
+        /// <exception cref="OverflowException">The clock no longer fits in 32 bits.</exception>
+        internal uint NextTimestamp => store.ReadClock();
 
         /// <summary>
-        /// Gets the number of effective unions the union-find has recorded: a run or flush that leaves it unchanged
-        /// needs no rebuild (lib.rs:594-613, 949-957).
+        /// Gets the number of effective unions the root's union-find has recorded: a run or flush that leaves it
+        /// unchanged needs no rebuild (lib.rs:594-613, 949-957).
         /// </summary>
         internal int UnionCount => unionFind.Count;
 
         /// <summary>
-        /// Gets what the e-graph keeps about <paramref name="function"/>.
+        /// Gets what the e-graph keeps about <paramref name="function"/>. Lock-free; any thread.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <returns>The function's information.</returns>
         /// <exception cref="ArgumentException">No such function.</exception>
         internal FunctionInfo GetFunctionInfo(FunctionId function)
         {
-            if (funcs.TryGetValue(function, out var info))
-                return info;
+            var current = Volatile.Read(ref functions);
+            if ((uint)function.Index < (uint)current.Length)
+                return current[function.Index];
 
             throw new ArgumentException($"Function {function} has not been declared in this e-graph.", nameof(function));
         }
@@ -180,28 +220,29 @@ namespace Eggnog.Relations
         public string GetFunctionName(FunctionId function) => GetFunctionInfo(function).Name;
 
         /// <summary>
-        /// Gets the tables of every function, in function order: what a rebuild rewrites.
+        /// Gets the tables of every function, in function order: what a rebuild rewrites. A snapshot.
         /// </summary>
-        internal ReadOnlySpan<TableId> FunctionTables => CollectionsMarshal.AsSpan(functionTables);
+        internal ReadOnlySpan<TableId> FunctionTables => Volatile.Read(ref functionTables);
 
         /// <summary>
-        /// Mints a fresh e-class id. egglog's <c>fresh_id</c>.
+        /// Mints a fresh e-class id at the root. egglog's <c>fresh_id</c>.
         /// </summary>
         /// <returns>The id.</returns>
         /// <exception cref="OverflowException">The id counter no longer fits in 32 bits.</exception>
         public Value FreshId() => new(checked((uint)db.IncrementCounter(idCounter)));
 
         /// <summary>
-        /// Gets the canonical id of <paramref name="value"/> in the union-find; an id never unioned is its own canonical
-        /// id. egglog's <c>get_canon_in_uf</c> (lib.rs:302-309). O(find), without writes.
+        /// Gets the canonical id of <paramref name="value"/> in the root's union-find; an id never unioned is its own
+        /// canonical id. egglog's <c>get_canon_in_uf</c> (lib.rs:302-309). O(find), without writes.
         /// </summary>
         /// <param name="value">The id.</param>
         /// <returns>The canonical id: the smallest member of its class.</returns>
         internal Value GetCanonInUf(Value value) => new(unionFind.FindNaive(value.Rep));
 
         /// <summary>
-        /// Gets the canonical representation of <paramref name="value"/> in a column of type <paramref name="type"/>: its
-        /// canonical id for an id column, the value itself for a base value column. egglog's <c>get_canon_repr</c>.
+        /// Gets the canonical representation of <paramref name="value"/> in a column of type <paramref name="type"/> at the
+        /// root: its canonical id for an id column, the value itself for a base value column. egglog's
+        /// <c>get_canon_repr</c>.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="type">The column type.</param>
@@ -221,14 +262,22 @@ namespace Eggnog.Relations
         /// merges first; a union-id or primitive merge writes the union-find (<c>fill_deps</c>, lib.rs:1033-1057).
         /// </para>
         /// <para>
+        /// The table is added to the store (<see cref="Relations.Store.AddTable"/>, colored-contexts §4.3): at any time,
+        /// children or not; while the root is not frozen, not while another thread uses it. A child sees the new
+        /// function as an empty table it may write once it has caught up. Only lattice merges may be written in a
+        /// child (decision 2).
+        /// </para>
+        /// <para>
         /// The function is registered in the <see cref="ActionRegistry"/> under its name. The rule-based rebuild rules
-        /// egglog creates here are not created: rebuild is the native path only (decision 10).
+        /// egglog creates here are not created: rebuild is the native path only (decision 10). Thread-safe: definitions
+        /// serialize, and the function list is published copy-on-write.
         /// </para>
         /// </remarks>
         /// <param name="config">The declaration.</param>
         /// <returns>The function's id.</returns>
         /// <exception cref="ArgumentException">The schema is empty, or a function merge names an undeclared function or
         /// passes it the wrong number of keys.</exception>
+        /// <exception cref="InvalidOperationException">The root's thread domain is held by another thread.</exception>
         public FunctionId AddTable(FunctionConfig config)
         {
             ArgumentNullException.ThrowIfNull(config);
@@ -243,29 +292,40 @@ namespace Eggnog.Relations
             if (schema.Length == 0)
                 throw new ArgumentException("must have at least one column in schema", nameof(config));
 
-            // Validate before creating anything, so that a bad declaration leaves the e-graph unchanged.
-            CheckMerge(config.Merge, config.Name);
+            lock (definitionGate)
+            {
+                // Validate before creating anything, so that a bad declaration leaves the e-graph unchanged.
+                CheckMerge(config.Merge, config.Name);
 
-            var math = new SchemaMath(schema.Length, config.CanSubsume);
-            var toRebuild = new List<ColumnId>(schema.Length);
-            for (var i = 0; i < schema.Length; i++)
-                if (schema[i].IsId)
-                    toRebuild.Add(new ColumnId(i));
+                var math = new SchemaMath(schema.Length, config.CanSubsume);
+                var toRebuild = new List<ColumnId>(schema.Length);
+                for (var i = 0; i < schema.Length; i++)
+                    if (schema[i].IsId)
+                        toRebuild.Add(new ColumnId(i));
 
-            var readDeps = new List<TableId>();
-            var writeDeps = new List<TableId>();
-            FillDeps(config.Merge, readDeps, writeDeps);
+                var readDeps = new List<TableId>();
+                var writeDeps = new List<TableId>();
+                FillDeps(config.Merge, readDeps, writeDeps);
 
-            var merge = new FunctionTableMerge(math, Resolve(config.Merge, config.Name), config.Merge.IsLattice);
-            var table = new SortedWritesTable(math.KeyCount, math.TableColumns, new ColumnId(math.TimestampColumn), CollectionsMarshal.AsSpan(toRebuild), merge, db.Parallelism);
-            var tableId = db.AddTable(table, CollectionsMarshal.AsSpan(readDeps), CollectionsMarshal.AsSpan(writeDeps), config.Name);
+                var merge = new FunctionTableMerge(math, Resolve(config.Merge, config.Name), config.Merge.IsLattice);
+                var table = new SortedWritesTable(math.KeyCount, math.TableColumns, new ColumnId(math.TimestampColumn), CollectionsMarshal.AsSpan(toRebuild), merge, db.Parallelism);
+                var tableId = store.AddTable(table, CollectionsMarshal.AsSpan(readDeps), CollectionsMarshal.AsSpan(writeDeps), config.Name);
 
-            var next = funcs.NextId;
-            var id = funcs.Push(new FunctionInfo(tableId, schema, config.Default, config.Merge, config.CanSubsume, config.Name));
-            Debug.Assert(id == next, "function ids are dense");
-            functionTables.Add(tableId);
-            actionRegistry.RegisterTable(config.Name, new TableAction(this, id));
-            return id;
+                var current = functions;
+                var id = new FunctionId(current.Length);
+                var info = new FunctionInfo(tableId, schema, config.Default, config.Merge, config.CanSubsume, config.Name);
+                var nextFunctions = new FunctionInfo[current.Length + 1];
+                Array.Copy(current, nextFunctions, current.Length);
+                nextFunctions[^1] = info;
+                var nextTables = new TableId[nextFunctions.Length];
+                Array.Copy(functionTables, nextTables, functionTables.Length);
+                nextTables[^1] = tableId;
+                Volatile.Write(ref functionTables, nextTables);
+                Volatile.Write(ref functions, nextFunctions);
+                Debug.Assert(id.Index == nextFunctions.Length - 1, "function ids are dense");
+                actionRegistry.RegisterTable(config.Name, new TableAction(this, id));
+                return id;
+            }
         }
 
         /// <summary>
@@ -276,9 +336,11 @@ namespace Eggnog.Relations
         {
             if (merge.Kind == MergeFnKind.Function)
             {
-                if (funcs.TryGetValue(merge.FunctionId, out var target) == false)
+                var current = functions;
+                if ((uint)merge.FunctionId.Index >= (uint)current.Length)
                     throw new ArgumentException($"The merge function for {functionName} refers to {merge.FunctionId}, which has not been declared.", "config");
 
+                var target = current[merge.FunctionId.Index];
                 if (target.Schema.Length != merge.Args.Length + 1)
                     throw new ArgumentException($"Merge function for {functionName} must match function arity for {target.Name}: {target.Schema.Length - 1} arguments, not {merge.Args.Length}.", "config");
             }
@@ -305,7 +367,7 @@ namespace Eggnog.Relations
                     writeDeps.Add(ufTable);
                     break;
                 case MergeFnKind.Function:
-                    var table = funcs[merge.FunctionId].Table;
+                    var table = functions[merge.FunctionId.Index].Table;
                     readDeps.Add(table);
                     writeDeps.Add(table);
                     foreach (var arg in merge.Args)
@@ -344,7 +406,7 @@ namespace Eggnog.Relations
                 }
                 default:
                 {
-                    var target = funcs[merge.FunctionId];
+                    var target = functions[merge.FunctionId.Index];
                     var action = new TableAction(this, merge.FunctionId);
                     var panic = NewPanic($"Lookup on {target.Name} failed in the merge function for {functionName}");
                     return ResolvedMergeFn.Function(action, ResolveArgs(merge, functionName), panic);

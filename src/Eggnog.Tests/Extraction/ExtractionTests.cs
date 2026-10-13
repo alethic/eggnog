@@ -141,7 +141,11 @@ namespace Eggnog.Tests.Extraction
             var a = t.Root.Make(t.A.Of());
             var extractor = t.Root.CreateExtractor();
             Assert.Equal("(A)", extractor.Extract(a).ToString());
+
+            // A write to a table extraction does not read keeps the extractor current (engine E5); a term does not.
             t.Root.Assume(t.Num.Of(1L));
+            Assert.Equal("(A)", extractor.Extract(a).ToString());
+            t.Root.Make(t.B.Of());
             Assert.Contains("changed", Assert.Throws<InvalidOperationException>(() => extractor.Extract(a)).Message);
             Assert.Equal("(A)", t.Root.CreateExtractor().Extract(a).ToString());
         }

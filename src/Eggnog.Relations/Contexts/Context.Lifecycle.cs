@@ -200,6 +200,7 @@ namespace Eggnog.Relations
             var current = Domain;
             using var scope = current.Enter();
             ThrowIfFaulted();
+            lastRebuildPasses = 0;
             if (parent is { IsFrozen: false } p)
             {
                 p.Rebuild();
@@ -254,6 +255,7 @@ namespace Eggnog.Relations
 
                     changed |= pass;
                     first = false;
+                    lastRebuildPasses++;
                     if (pass == false || contradicted)
                         break;
                 }
@@ -279,6 +281,13 @@ namespace Eggnog.Relations
 #endif
             return changed;
         }
+
+        /// <summary>
+        /// Gets the number of passes the context's last <see cref="Rebuild"/> ran: 0 when it found nothing to do (or the
+        /// context is frozen or stopped), otherwise every pass, the last one, which changed nothing, included. The bridge
+        /// reports it as <c>IterationReport.RebuildPasses</c> (§10.3). Domain thread only.
+        /// </summary>
+        internal int LastRebuildPasses => lastRebuildPasses;
 
         /// <summary>
         /// Makes the context read-only and shareable across threads (§8.1). Its parent must be frozen already.
@@ -561,6 +570,16 @@ namespace Eggnog.Relations
                 for (var i = 0; i <= Depth; i++)
                     ancestors[i].gate.EndChange();
             }
+        }
+
+        /// <summary>
+        /// Gets the live children, as a snapshot taken under their lock: for the bridge's tree check (§12.7, C7).
+        /// </summary>
+        /// <returns>A new array.</returns>
+        internal Context[] SnapshotChildren()
+        {
+            lock (children)
+                return children.ToArray();
         }
 
         /// <summary>

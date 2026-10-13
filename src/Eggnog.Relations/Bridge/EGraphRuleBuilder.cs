@@ -42,6 +42,7 @@ namespace Eggnog.Relations
         readonly EGraph egraph;
         readonly string description;
         readonly BridgeQuery query;
+        readonly int generation;
         bool built;
 
         /// <summary>
@@ -50,7 +51,8 @@ namespace Eggnog.Relations
         /// <param name="egraph">The e-graph.</param>
         /// <param name="description">The rule's description.</param>
         /// <param name="query">The empty rule.</param>
-        internal EGraphRuleBuilder(EGraph egraph, string description, BridgeQuery query)
+        /// <param name="generation">The generation of the rule's reserved id (colored-contexts spec §10.2).</param>
+        internal EGraphRuleBuilder(EGraph egraph, string description, BridgeQuery query, int generation)
         {
             ArgumentNullException.ThrowIfNull(egraph);
             ArgumentNullException.ThrowIfNull(description);
@@ -58,6 +60,7 @@ namespace Eggnog.Relations
             this.egraph = egraph;
             this.description = description;
             this.query = query;
+            this.generation = generation;
         }
 
         /// <summary>
@@ -361,7 +364,7 @@ namespace Eggnog.Relations
                 query.Strategy = PlanStrategy.MinCover;
 
             built = true;
-            egraph.InsertRule(query.RuleId, new RuleInfo(query, description));
+            egraph.InsertRule(query, description, generation);
             return query.RuleId;
         }
 

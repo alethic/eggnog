@@ -35,17 +35,29 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Two ways to create one. <see cref="ComputeCostsFromRootSorts"/> is egglog's: it reads every row of every
-    /// constructor reachable from the root sorts and costs every class at once. <see cref="CreateOnDemand"/> reads only
-    /// the classes reachable from the values it is asked about (D10: Knuth's algorithm over the classes reachable from
-    /// the root), finding each class's nodes through the cached index on its constructors' output columns, and extends
-    /// its graph as later queries reach further; classes already costed stay final, because each discovery is closed
+    /// constructor reachable from the root sorts and costs every class at once.
+    /// <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> reads only the classes reachable
+    /// from the values it is asked about (D10: Knuth's algorithm over the classes reachable from the root), finding each
+    /// class's nodes through the cached index on its constructors' output columns, and extends its graph as later
+    /// queries reach further; classes already costed stay final, because each discovery is closed
     /// downward, and the finalizations of earlier queries that decide ties among newly discovered nodes are replayed in
     /// order (Extractor.Replay.cs), so each query's run is a from-scratch run's over everything discovered. Both give
     /// the same choice for every class they cost, whatever was asked before.
     /// </para>
     /// <para>
+    /// Contexts (colored-contexts spec §10.10, rule-layer E5). <see cref="CreateOnDemand(ExtractionSchema, EGraphContext,
+    /// CostModel?, ExtractionOptions?)"/> extracts in an <see cref="EGraphContext"/>: classes are canonical in the
+    /// context, and a class's nodes are the rows the context sees, found through each layer's cached index on the output
+    /// column with the rows the context hides filtered out, never through the root's tables alone. The root forms read
+    /// the root as before, at no extra cost per node.
+    /// </para>
+    /// <para>
     /// The extractor reads the e-graph as it was when created, which must be rebuilt (canonical), as it is after every
-    /// flush and run. Using it after the e-graph changed throws. Not thread-safe: queries extend its caches.
+    /// flush and run. Using it after what it reads changed throws: the rows of its functions' tables, or the union-find,
+    /// at any level of its context's chain that was not frozen when it was created (<see cref="ExtractionWatch"/>). The
+    /// clock is not consulted, so rule runs, queries and write batches that change none of that keep it current
+    /// (rule-layer D49). Not thread-safe: queries extend its caches. Extractors over a frozen context share nothing
+    /// mutable, so any number of them may run at once, each on its own thread.
     /// </para>
     /// </remarks>
     internal sealed partial class Extractor
@@ -53,6 +65,24 @@ namespace Eggnog.Relations
 
         readonly ExtractionSchema schema;
         readonly EGraph egraph;
+
+        /// <summary>
+        /// The context of an extractor made through <see cref="CreateOnDemand(ExtractionSchema, EGraphContext, CostModel?,
+        /// ExtractionOptions?)"/>, whose thread domain each query enters; <c>null</c> for one made through the root API,
+        /// which reads the root as egglog does.
+        /// </summary>
+        readonly EGraphContext? host;
+
+        /// <summary>
+        /// The layers of a child context, through whose views discovery reads; <c>null</c> at the root.
+        /// </summary>
+        readonly ContextTables? layers;
+
+        /// <summary>
+        /// The find of a child context; <c>null</c> at the root, which canonicalizes through the root's union-find.
+        /// </summary>
+        readonly LayeredUnionFind? finder;
+
         readonly CostModel costs;
         readonly ExtractionOptions options;
         readonly bool onDemand;
@@ -63,8 +93,10 @@ namespace Eggnog.Relations
         readonly long[] slotHeadCost;
         readonly NodeCostFunction?[] slotHeadCostFunction;
 
-        readonly uint createdAt;
-        readonly TableVersion[] slotVersions;
+        /// <summary>
+        /// The staleness check: the versions of the slots' tables and of the union-find at the watched levels.
+        /// </summary>
+        readonly ExtractionWatch watch;
 
         readonly List<Sort> sorts;
         readonly Dictionary<Sort, int> sortIndex;
@@ -83,21 +115,32 @@ namespace Eggnog.Relations
         /// <summary>
         /// Initializes a new instance over the functions <paramref name="functions"/> and scans or prepares to discover.
         /// </summary>
+        /// <param name="schema">The extraction schema.</param>
+        /// <param name="costs">The cost model.</param>
+        /// <param name="options">Which functions to use.</param>
+        /// <param name="onDemand">Whether to discover classes on demand rather than scan.</param>
+        /// <param name="functions">The functions to read, in declaration order.</param>
+        /// <param name="rootSorts">The root sorts of a scanning extractor.</param>
+        /// <param name="host">The context, for the context form; <c>null</c> for the root API. When it is not frozen, the
+        /// caller holds its thread domain.</param>
         Extractor(
             ExtractionSchema schema,
             CostModel costs,
             ExtractionOptions options,
             bool onDemand,
             List<ExtractionFunction> functions,
-            List<Sort> rootSorts)
+            List<Sort> rootSorts,
+            EGraphContext? host)
         {
             this.schema = schema;
             this.costs = costs;
             this.options = options;
             this.onDemand = onDemand;
             this.rootSorts = rootSorts.ToArray();
+            this.host = host;
             egraph = schema.EGraph;
-            createdAt = egraph.NextTimestamp;
+            layers = host?.Context.Tables;
+            finder = layers is null ? null : host!.Context.UnionFind;
 
             sorts = new List<Sort>();
             sortIndex = new Dictionary<Sort, int>(ReferenceEqualityComparer.Instance);
@@ -117,7 +160,7 @@ namespace Eggnog.Relations
             slotColumnSorts = new int[slots.Length][];
             slotHeadCost = new long[slots.Length];
             slotHeadCostFunction = new NodeCostFunction?[slots.Length];
-            slotVersions = new TableVersion[slots.Length];
+            var slotTables = new TableId[slots.Length];
             for (var slot = 0; slot < slots.Length; slot++)
             {
                 var function = slots[slot];
@@ -129,10 +172,11 @@ namespace Eggnog.Relations
                 slotColumnSorts[slot] = columnSorts;
                 slotHeadCostFunction[slot] = costs.GetNodeCost(function.Id);
                 slotHeadCost[slot] = HeadCost(function);
-                slotVersions[slot] = egraph.Database.GetTable(function.Table).Version;
+                slotTables[slot] = function.Table;
                 sortProducers[columnSorts[function.OutputIndex]].Add(slot);
             }
 
+            watch = new ExtractionWatch((host ?? egraph.Root).Context, slotTables);
             InitializeGraph();
             if (onDemand == false)
             {
@@ -224,7 +268,7 @@ namespace Eggnog.Relations
                 }
             }
 
-            return new Extractor(schema, costs ?? CostModel.Default, options, false, functions, roots);
+            return new Extractor(schema, costs ?? CostModel.Default, options, false, functions, roots, null);
         }
 
         /// <summary>
@@ -242,13 +286,64 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(schema);
             options ??= ExtractionOptions.Default;
+            return new Extractor(schema, costs ?? CostModel.Default, options, true, UsableFunctions(schema, options), new List<Sort>(), null);
+        }
 
+        /// <summary>
+        /// Creates an extractor over <paramref name="context"/> that costs only the classes reachable from the values it is
+        /// asked about, as <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> does at the root
+        /// (colored-contexts spec §10.10, rule-layer E5): classes are canonical in the context, and a class's nodes are the
+        /// rows the context sees whose output column holds it, found by probing, in each layer of the context's view of
+        /// each producing function, the layer's cached index on the output column, with the rows the context hides
+        /// skipped. At the root it reads what the root API's extractor reads and chooses the same terms.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The context must be clean (<see cref="EGraphContext.IsClean"/>; call <see cref="EGraphContext.EnsureClean"/>
+        /// first). Each query enters the context's thread domain while it is not frozen, and refuses to run once the rows
+        /// of an extractable function's table or the union-find changed in the context or in an ancestor that was not
+        /// frozen at the creation (<see cref="ExtractionWatch"/>); the clock is not consulted.
+        /// </para>
+        /// <para>
+        /// On a frozen context any number of extractors may run at once, one per thread: a frozen chain never changes, its
+        /// views and its finds are safe to read from any thread, and the cached indexes of its layers are built
+        /// thread-safely on first use.
+        /// </para>
+        /// </remarks>
+        /// <param name="schema">The e-graph's extraction schema.</param>
+        /// <param name="context">A context of the schema's e-graph.</param>
+        /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
+        /// <param name="options">Which functions to use; <c>null</c> for <see cref="ExtractionOptions.Default"/>.</param>
+        /// <returns>The extractor.</returns>
+        /// <exception cref="ArgumentException">The context belongs to another e-graph.</exception>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is held
+        /// by another thread.</exception>
+        public static Extractor CreateOnDemand(ExtractionSchema schema, EGraphContext context, CostModel? costs = null, ExtractionOptions? options = null)
+        {
+            ArgumentNullException.ThrowIfNull(schema);
+            ArgumentNullException.ThrowIfNull(context);
+            if (ReferenceEquals(context.Owner, schema.EGraph) == false)
+                throw new ArgumentException("The context belongs to another e-graph than the extraction schema.", nameof(context));
+
+            options ??= ExtractionOptions.Default;
+            var functions = UsableFunctions(schema, options);
+            using var scope = context.EnterExtraction(requireClean: true);
+            return new Extractor(schema, costs ?? CostModel.Default, options, true, functions, new List<Sort>(), context);
+        }
+
+        /// <summary>
+        /// Lists the functions of <paramref name="schema"/> an extractor may use under <paramref name="options"/>, in
+        /// declaration order.
+        /// </summary>
+        static List<ExtractionFunction> UsableFunctions(ExtractionSchema schema, ExtractionOptions options)
+        {
             var functions = new List<ExtractionFunction>();
             foreach (var function in schema.Functions)
                 if (IsUsable(function, options))
                     functions.Add(function);
 
-            return new Extractor(schema, costs ?? CostModel.Default, options, true, functions, new List<Sort>());
+            return functions;
         }
 
         /// <summary>
@@ -262,6 +357,11 @@ namespace Eggnog.Relations
         public EGraph EGraph => egraph;
 
         /// <summary>
+        /// Gets the context the extractor reads: the one it was created over, or the e-graph's root.
+        /// </summary>
+        public EGraphContext Context => host ?? egraph.Root;
+
+        /// <summary>
         /// Gets the cost model.
         /// </summary>
         public CostModel Costs => costs;
@@ -272,8 +372,8 @@ namespace Eggnog.Relations
         public ExtractionOptions Options => options;
 
         /// <summary>
-        /// Gets whether the extractor discovers classes on demand (<see cref="CreateOnDemand"/>) rather than costing every
-        /// class of its root sorts up front.
+        /// Gets whether the extractor discovers classes on demand (<see cref="CreateOnDemand(ExtractionSchema, CostModel?,
+        /// ExtractionOptions?)"/>, or its context form) rather than costing every class of its root sorts up front.
         /// </summary>
         public bool IsOnDemand => onDemand;
 
@@ -308,7 +408,7 @@ namespace Eggnog.Relations
         public bool TryGetCost(Sort sort, Value value, out long cost)
         {
             ArgumentNullException.ThrowIfNull(sort);
-            Enter(sort);
+            using var scope = Enter(sort);
             var found = TryResolve(sort, value, out _, out _, out cost);
             Exit();
             return found;
@@ -330,7 +430,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(sort);
             ArgumentNullException.ThrowIfNull(dag);
-            Enter(sort);
+            using var scope = Enter(sort);
             var found = TryExtractBestCore(sort, value, dag, null, out result);
             Exit();
             return found;
@@ -365,7 +465,7 @@ namespace Eggnog.Relations
         public bool TryExtractTerm(Sort sort, Value value, [NotNullWhen(true)] out ExtractedTerm? term)
         {
             ArgumentNullException.ThrowIfNull(sort);
-            Enter(sort);
+            using var scope = Enter(sort);
             term = null;
             if (TryResolve(sort, value, out var index, out var canonical, out _))
             {
@@ -508,33 +608,44 @@ namespace Eggnog.Relations
         /// <summary>
         /// Starts a query about values of <paramref name="sort"/>: checks the sort, then as <see cref="Enter()"/>.
         /// </summary>
+        /// <returns>The query's hold on the context's thread domain, to dispose when the query ends.</returns>
         /// <exception cref="ArgumentException">A different sort of the same name is registered.</exception>
         /// <exception cref="InvalidOperationException">The extractor is stale or broken.</exception>
-        void Enter(Sort sort)
+        ExtractionQueryScope Enter(Sort sort)
         {
             SortIndexOf(sort);
-            Enter();
+            return Enter();
         }
 
         /// <summary>
-        /// Starts a query: checks that the e-graph has not changed and that no earlier query failed midway.
+        /// Starts a query: enters the context's thread domain (context form, context not frozen), and checks that no
+        /// earlier query failed midway and that nothing the extractor reads changed (<see cref="ExtractionWatch"/>).
+        /// O(watched levels × slots).
         /// </summary>
-        /// <exception cref="InvalidOperationException">The extractor is stale or broken.</exception>
-        void Enter()
+        /// <returns>The query's hold on the context's thread domain, to dispose when the query ends.</returns>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The extractor is stale or broken, the context is faulted or stopped,
+        /// or its domain is held by another thread.</exception>
+        ExtractionQueryScope Enter()
         {
             if (busy)
                 throw new InvalidOperationException(
                     "An earlier query of this extractor failed midway, leaving it unusable; create a new one.");
 
-            if (egraph.NextTimestamp != createdAt)
-                throw new InvalidOperationException("The e-graph changed since the extractor was created; create a new one.");
+            var scope = host is null ? default : host.EnterExtraction(requireClean: false);
+            var change = watch.FindChange();
+            if (change != ExtractionWatch.NoChange)
+            {
+                scope.Dispose();
+                if (change == ExtractionWatch.UnionFindChanged)
+                    throw new InvalidOperationException("The e-graph changed since the extractor was created; create a new one.");
 
-            for (var slot = 0; slot < slots.Length; slot++)
-                if (egraph.Database.GetTable(slots[slot].Table).Version != slotVersions[slot])
-                    throw new InvalidOperationException(
-                        $"Function {slots[slot].Name} changed since the extractor was created; create a new one.");
+                throw new InvalidOperationException(
+                    $"Function {slots[change].Name} changed since the extractor was created; create a new one.");
+            }
 
             busy = true;
+            return scope;
         }
 
         /// <summary>
@@ -557,7 +668,7 @@ namespace Eggnog.Relations
         bool TryResolve(Sort sort, Value value, out int index, out uint canonical, out long cost)
         {
             index = SortIndexOf(sort);
-            canonical = sort.Kind == SortKind.Base ? value.Rep : egraph.GetCanonInUf(value).Rep;
+            canonical = sort.Kind == SortKind.Base ? value.Rep : Canonical(value.Rep);
             switch (sort.Kind)
             {
                 case SortKind.Base:
@@ -588,6 +699,12 @@ namespace Eggnog.Relations
                 }
             }
         }
+
+        /// <summary>
+        /// Gets the canonical id of <paramref name="id"/> in the context the extractor reads: the root's union-find, or the
+        /// child's find. Once per query value, never per node.
+        /// </summary>
+        uint Canonical(uint id) => finder is { } layered ? layered.Find(id) : egraph.GetCanonInUf(new Value(id)).Rep;
 
         /// <summary>
         /// Extracts the cheapest term of a value into a DAG, sharing <paramref name="memo"/> when given.

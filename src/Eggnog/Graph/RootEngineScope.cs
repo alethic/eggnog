@@ -250,9 +250,9 @@ namespace Eggnog
             lock (graph.EngineLock)
             {
                 var info = engine.GetRuleInfo(query.Id);
-                info.CachedPlan ??= info.Query.BuildCachedPlan(engine.Database, info.Description);
+                var plan = info.GetOrBuildCachedPlan(engine.Database);
                 var builder = engine.Database.NewRuleSet();
-                info.Query.AddRulesFromCached(builder, 0, info.CachedPlan);
+                info.Query.AddRulesFromCached(builder, 0, plan);
                 using (var ruleSet = builder.Build())
                     engine.Database.ExecuteRuleSet(ruleSet, Relations.ReportLevel.TimeOnly, engine.NextTimestamp);
 

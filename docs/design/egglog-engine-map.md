@@ -1880,6 +1880,7 @@ raw speed, since Rust is already monomorphized, but Eggnog's rule layer could no
 | 23 | Container unions reach the union-find only after the table rebuild has canonicalized rows | `eb/lib.rs:666-668`, `cr/free_join/mod.rs:357-388` | Test: the `:no-merge` scenario in egglog's own comment (`eb/lib.rs:634-665`) still reports an illegal merge | Merge the container unions into the union-find before the table rebuild |
 | 24 | `free_external_func` leaves a freed panic in `panic_funcs` | `eb/lib.rs:293-295`, `1482-1491` | Code reading: freed ids are reused, so `new_panic` can return an unrelated function's id | Forget the message when the function is freed |
 | 25 | Cached plans bake Id constants: after a constant loses a union, the rule silently stops matching | `eb/lib.rs:1397-1420`, `cr/query.rs` constant entries | Code reading (colored-contexts spec X19) | Canonicalize every Id constant per run in the context that runs it (colors M10.2) |
+| 26 | `run_rule_set` returns before `merge_all` when the rule set is empty, yet `run_rules` records the run's timestamp as every rule's `last_run_at` | `cr/free_join/execute.rs:349`, `eb/lib.rs:591-624` | Test (colors M10.3 review): a row staged raw before two runs whose every variant was pruned merges later with its staging stamp, below every watermark, and no rule ever matches it | Merge what is staged at the run's timestamp also when the rule set is empty (colors §10.3) |
 
 ### 8.2 Design risks
 

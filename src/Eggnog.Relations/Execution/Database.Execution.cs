@@ -198,6 +198,15 @@ namespace Eggnog.Relations
         /// callback of the context's thread domain and runs with <see cref="ContextTables.InSearch"/> set; an exception
         /// faults the context.
         /// </summary>
+        /// <remarks>
+        /// The failed-run decision (colored-contexts spec §21.9, decided in M10.3): an exception escaping a child's
+        /// <see cref="RunRuleSet"/> or <see cref="ExecuteRuleSet"/> (an action, an external or a merge function throwing)
+        /// keeps faulting the child (X12), the rule layer's direct <see cref="ExecuteRuleSet"/> calls included. In addition
+        /// every write the failed search staged is discarded, in the layers it created as well (they wait on the deferred
+        /// list, outside the table map that the rollback walks, <see cref="ContextTables.DiscardDeferredStaged"/>), and
+        /// <see cref="MergeAll"/> and <see cref="MergeTable"/> refuse a faulted child, so nothing a failed run staged can
+        /// ever merge. Both additions are child-only and cost the root nothing on its paths.
+        /// </remarks>
         RuleSetReport RunInChild(ContextTables tables, RuleSet ruleSet, ViewSnapshot views, ReportLevel reportLevel, uint timestamp, bool merge)
         {
             var context = owner!;
@@ -269,8 +278,12 @@ namespace Eggnog.Relations
             }
             catch
             {
-                // Every task has finished (WorkScope.Wait returns only then), so nothing flushes any more.
+                // Every task has finished (WorkScope.Wait returns only then), so nothing flushes any more. In a child the
+                // layers the search created wait on the deferred list, outside the table map: their writes are dropped
+                // too, so nothing the failed run staged can ever merge (the failed-run decision, §21.9). One null test at
+                // the root, on the exception path only.
                 DiscardStagedWritesSince(marks);
+                layers?.DiscardDeferredStaged();
                 throw;
             }
 

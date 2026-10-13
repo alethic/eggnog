@@ -222,7 +222,10 @@ namespace Eggnog.Tests.Concurrency
                 {
                     refusals[thread] = Record.Exception(() => t.Root.Check(t.Num.Of(1L)));
                     poolThreads[thread] = Thread.CurrentThread.IsThreadPoolThread;
-                    Thread.Sleep(20);
+
+                    // Hold this shard until a second thread merges one. Under load the pool may otherwise leave every
+                    // shard to the calling thread, and the test would not observe a pool thread at all.
+                    SpinWait.SpinUntil(() => poolThreads.Count >= 2, TimeSpan.FromSeconds(10));
                 }
 
                 return Math.Max(a, b);

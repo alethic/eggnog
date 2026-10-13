@@ -23,7 +23,7 @@
 
 **Revision.** This revision answers two design reviews. §20 maps every finding to the section that fixes it.
 
-**Implementation.** M9.0–M10.2 are implemented. §21 records, per milestone, where the code departs from this text and why, which departures were corrected in the text above, and what is still deferred.
+**Implementation.** M9.0–M10.3 are implemented. §21 records, per milestone, where the code departs from this text and why, which departures were corrected in the text above, and what is still deferred.
 
 ---
 
@@ -134,8 +134,8 @@ Abbreviations: UF = unionfind-ids, TB = tables-merge-rebuild, QE = query-executi
 | X38 | **Canonical and stamped writes** (R2-4, R1-6). Incoming rows were not canonicalized, a clean child could hold stale ids, and I19/I21 relied on callers stamping the sort cell. | **Children:** `InsertLayered` canonicalizes every incoming row's rebuild columns through `Owner.UnionFind.Find` and sets its sort cell to `state.Timestamp` before it probes (child-only code; zero root cost). **Root:** egglog's semantics for raw writes (written as given, rewritten by the next rebuild). Before the root is shared, `Context.Settle()` canonicalizes the rows written since its last rebuild (§7.6), and a non-frozen root's later stale appends are copied and hidden by each child's catch-up branch (a). DEBUG builds assert stamps in `Context.Write` at the root. | Children stay canonical whenever clean, at the cost of one `find` per incoming id cell. The root keeps egglog's numbering and contents for every program that creates no child. |
 | X39 | **Schema and planning in a child** (R2-1). Rule building and planning read `Database.tables`, which in a child holds only own layers and `$uf`. | A layered `Database` answers schema questions (`GetTableSpec`, `GetTableName`, `GetIdColumns`, `IQuerySchema`) from `LayeredSchema`, and statistics, header evaluation and size estimates from its `ContextView`. `RuleBuilder.GetSpec`, `RuleQueryBuilder.AddAtom`, `SymbolMap.Create`, `RuleSetBuilder` and `PlanQuery` switch to these members. The full member list is in §3.4. | Rules are then built and planned in any context with that context's statistics (§9.7). |
 | X40 | **Unsealed hides** (R1-1, critical). New hides went into a set's unsorted tail, readers used the sealed state only, and only `Rebuild` sealed. | Every layered `MergeAll` and `MergeTable` seals, in its `finally` epilogue, every set that gained a hide since the last seal (`ContextTables.AfterMerge`). `Rebuild`, `ClearTable` and `Freeze` seal too. A context is never readable with an unsealed set (I18), which `ThrowIfNotReadable` asserts in DEBUG. `HiddenSet.Union` and `HiddenRows` require sealed inputs. | Hides are added only inside `MergeAll` (`InsertLayered`, `DeleteLayered`) or right before the `MergeAll` of the same pass (catch-up, step 4), so the epilogue covers every path. |
-| X41 | **Which rules may inherit, and which oracle governs** (R1-4, R1-5). | `RuleInfo.AllowInheritance` is computed from the rule's compiled actions (`ActionReadAnalysis`): false when any instruction reads a table whose contents can change (`Lookup`, `LookupWithDefault`, `LookupWithFallback`, `LookupOrInsertDefault` on a table whose merge is not `UnionIdMerge`, or an external function flagged `ReadsTables`), and for naive, split and callback rules. Oracles: seeded == unseeded governs every rule; the operational `ReferenceRuleContext` governs every rule; the fresh-root copy property governs monotone programs only; egglog push/pop governs programs whose rules all inherit. | I31's precondition "actions are query-determined" is then enforced, not assumed. A fresh-root replay is not an oracle for non-monotone bodies or for deletes, because facts derived earlier in an ancestor persist (correct operational semantics). |
-| X42 | **Root cleanliness and egglog parity** (R2 minor). `EnsureClean` rebuilt the root whenever writes were staged, shifting every timestamp, and root reads threw on pending writes. | At the root, `IsClean` ignores pending notifications (staged writes are invisible until merged, as in egglog), and the bridge's `EnsureClean` rebuilds the root only when its journal mark is behind. `Context.Rebuild()` at the root runs passes when the journal mark is behind or writes are pending. | Root host writes staged through `WithExecutionState` merge inside the run's `MergeAll` at T, as in egglog. |
+| X41 | **Which rules may inherit, and which oracle governs** (R1-4, R1-5). | `RuleInfo.AllowInheritance` is computed from the rule's compiled actions (`ActionReadAnalysis`): false when any instruction reads a table whose contents can change (`Lookup`, `LookupWithDefault`, `LookupWithFallback`, `LookupOrInsertDefault` on a table whose merge is not `UnionIdMerge`, or an external function flagged `ReadsTables`), and for naive, split and callback rules. Oracles: seeded == unseeded governs every rule in programs whose retractions touch only tables no rule writes; the operational `ReferenceRuleContext` governs every rule; the fresh-root copy property governs monotone programs only; egglog push/pop governs programs whose rules all inherit. | I31's precondition "actions are query-determined" is then enforced, not assumed. A fresh-root replay is not an oracle for non-monotone bodies or for deletes, because facts derived earlier in an ancestor persist (correct operational semantics). Under retraction, inheritance gives egglog's push semantics: a child that deletes a fact an ancestor's run derived, or hides a constructor row that a lookup-or-insert read, does not re-derive it, whereas an unseeded child does; the two schedules then differ by design (§21.9). |
+| X42 | **Root cleanliness and egglog parity** (R2 minor). `EnsureClean` rebuilt the root whenever writes were staged, shifting every timestamp, and root reads threw on pending writes. | At the root, `IsClean` ignores pending notifications (staged writes are invisible until merged, as in egglog), and the bridge's `EnsureClean` rebuilds the root only when its journal mark is behind. `Context.Rebuild()` at the root runs passes when the journal mark is behind or writes are pending. | Root host writes staged through `WithExecutionState` merge inside the run's `MergeAll` at T, as in egglog, also when every rule of the run was pruned: egglog's `run_rule_set` then skips its `merge_all` (map §8.1 row 26), and the bridge merges at T itself (§10.3). |
 | X43 | **Frozen contexts and tables added later** (R1-7, R2 minor). | A frozen context never grows or writes its arrays. For a table id beyond them, `GetView` returns the parent's view (or `RootView`) without caching, and `TryGetLayer` returns `null`. `Store.AddTable` publishes the new table's `RootView`. | A frozen context has no layer and no hides for a table added after its freeze, so its view of that table is its parent's. No shared array is resized by concurrent readers. |
 
 ---
@@ -320,7 +320,8 @@ Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` �
 | Staging (`ExecutionState.CreateBuffer`) | `TableCatalog.GetForStaging` → `ContextTables.ResolveForStaging` | Thread-safe; may create an empty layer (X37, I34). |
 | Tables (`ContextTables`) | `Context.UnionFind.Find`, `Context.IsOwnDisplacement`, `OverlayDisplacedTable` (rebuilder table), journal rows `[journalMark, Count)` | The union-find is current before any row work (§7.1). |
 | `Context.Rebuild` | `CatchUpUnionFind(e)` → `ContextTables.CatchUpRows(e)` → `ContextTables.RebuildPass(e)` | In this order, first pass only for the first two (§7.1). |
-| Bridge (`EGraphContext`) | `Context.BeginEpoch/EndEpoch/NoteRuleRun/Rebuild/Write/Freeze/CreateChild/Dispose`, `Database.RunRuleSet(rs, level, T)` | The bridge flushes its own `HostWrites` up the chain before calling storage (§10.4). |
+| Bridge (`EGraphContext`) | `Context.BeginEpoch/EndEpoch/NoteRuleRun/PrepareForWrite/Rebuild/ClearTable/Freeze/CreateChild/Dispose`; `Database.CreateExecutionState` and `MergeAll` (host writes, §10.4); `Database.ExecuteRuleSet` and `MergeRuleSet` at T (§10.3; only the internal raw iteration calls `RunRuleSet`) | The bridge flushes its own `HostWrites` up the chain before calling storage (§10.4). `EGraphContext.CreateChild` and `Dispose` (rule-layer E7) wrap §8.2's calls: a parent that is not frozen is flushed and made clean first, and a failure recorded meanwhile is taken at once (§10.1). |
+| Extraction (`Extractor`, context form) | `ContextTables.GetView` → each present `LayerView`'s cached index and hidden-aware scan; `Context.UnionFind.Find`; `ExtractionWatch` over the table and union-find versions of the context and its non-frozen ancestors | Created on a clean context; each query enters the context's domain as a callback (§8.3, §10.10). |
 | Lift (`Cases/`) | `Context.ScanOwn`, `ScanMerges`, `IsLocalId`, `ScanAncestorsMentioning`, `UnionFindOverlay` (via `MemberMap`) | The context is clean. |
 
 ---
@@ -346,7 +347,7 @@ Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` �
   So `ReadCounterInstr` (`next_ts`), `UnionContainerMerge` (`TimestampCounter`), `UnionIdMerge` (`state.Timestamp`) and the bridge's `TableAction`/`UnionAction` all stamp with the captured epoch, even when a concurrent sibling advances the clock.
 - **Timestamp parameters.** `Database.MergeAll`, `MergeTable`, `RunRuleSet`, `CreateExecutionState`, `WithExecutionState` and `RebuildPass` change their timestamp parameter to `uint? timestamp = null`. `null` resolves to `ClockCounterRep < 0 ? 0 : checked((uint)ReadCounter(clock))`. This is source-compatible, and a bare `Database` behaves as before. `RebuildContainers` with a `null` timestamp also resolves to the store clock on a Store-backed database; a bare `Database` keeps egglog's newest-union timestamp there. Under the pin, a clock-reading `UnionContainerMerge` would otherwise stamp the newest union's timestamp instead of the clock value egglog's merge reads.
 - **Per-context order.** Epochs of one context never decrease (I3). After a context's `EndEpoch` the clock is at least e+1, and nothing decreases it.
-- **Root equivalence.** A root that is not frozen runs sequentially with all its descendants, and nothing else increments the clock during its run. The pinned value therefore equals the live value at every read. With X4 and X42, `run → (no advance) → pass(T) → advance` reproduces `run_rules_inner` exactly. The root departs from egglog only (a) when a rule's Id constant has lost a union (X19), and (b) in operations egglog does not have (`CreateChild`, `Freeze`, which settle, §7.6).
+- **Root equivalence.** A root that is not frozen runs sequentially with all its descendants, and nothing else increments the clock during its run. The pinned value therefore equals the live value at every read. With X4 and X42, `run → (no advance) → pass(T) → advance` reproduces `run_rules_inner` exactly. The root departs from egglog only (a) when a rule's Id constant has lost a union (X19), (b) in operations egglog does not have (`CreateChild`, `Freeze`, which settle, §7.6), (c) on the panic path (X18, map §8.1 row 22), and (d) when every rule of a run was pruned, where the bridge still merges what is staged at T (§10.3, map §8.1 row 26).
 
 ### 4.2 Id blocks and `IsLocalId`
 
@@ -1319,6 +1320,8 @@ Store.HasHadChildren = true
 
 **Nested writes.** A write batch's action, a `ScanMerges`, `ScanOwn` or `ScanAncestorsMentioning` visitor or sink, and a child's rule search (§9.1) run as callbacks of the domain (`ThreadAffinityGuard.EnterCallback`, `ExitCallback`, `InCallback`). Inside a callback, `Write` and `Union` on any context of the domain, and a `Rebuild` that would run a pass, throw `InvalidOperationException` before anything is staged or faulted. Otherwise a nested rebuild would run an epoch inside the batch's epoch (breaking I3, and faulting the child through the journal's order check), a nested ancestor write would change the parent the batch caught up with, and a write inside a visitor would change the partition being scanned. Reads, and rebuilds with nothing to do, stay allowed.
 
+The bridge (§10) follows the same rule. The raw escape's action (`EGraph.WithExecutionState`, `EGraphContext.WithExecutionState`), an `EGraphContext.ForEach` visitor and an extraction over a context run as callbacks too (the root's egglog-compatible `EGraph.ForEach` takes no domain, as before), and inside a callback every bridge call that writes or changes a context of the domain throws before anything is staged: `StageRow`, `StageTerm`, `StageUnion`, `AddValues`, `AddTerm`, `FlushUpdates`, `RunRules`, `ClearTable`, and the root's egglog-compatible `AddValues`, `AddTerm`, `FlushUpdates`, `RunRules`, `ClearTable` and `RunIteration`. Reads, `FreshId` and a nested raw escape stay allowed, as egglog's `with_execution_state` borrows the e-graph shared and its `&mut self` calls cannot be made inside the closure. Without the refusal, a raw action's rows (stamped with the clock read before the action, and merged when the next flush runs) would merge after a context-API write the action issued before them, or below the watermark a run inside the action committed, so no later run matched them (I31). `GetContainerValue` is not refused: interning is keyed by contents and order-independent.
+
 **Domains:**
 - A context that is not frozen shares its domain with every descendant created under it.
 - Freezing gives each child subtree a new guard. Reassignment happens on the domain's thread, so no descendant is in use.
@@ -1576,38 +1579,47 @@ This section names M8 types as egglog-bridge's: `EGraph`, `RuleInfo`, `FunctionI
 **`EGraph`** keeps the definitions:
 - `funcs`, a copy-on-write `functionTables` snapshot, and `RuleTable rules`;
 - `panicFunctions` (a `ConcurrentDictionary`, with registration under `registrationGate`);
-- `StopOnContradiction` (an `ExternalFunctionId`) and `Contradiction` (a `FunctionId?` → `Store.DesignateContradiction`);
-- `ContextLocalSlot<object>[]` and the `ParallelismBudget`;
+- `StopOnContradiction` (an `ExternalFunctionId`) and `Contradiction` (a `FunctionId?`), set by **`DesignateContradiction(FunctionId)`** (rule-layer E4): the function must be nullary, once per e-graph, and the call is refused once the store has had a child. The refusal and `Store.DesignateContradiction` run under the store's definition lock, under which the first child notes itself before its constructor reads the contradiction table, so a designation and a first `CreateChild` on another thread never interleave;
+- the context-local slots, made by **`NewLocalSlot<T>(Func<EGraphContext, T> factory)`** (rule-layer §13 item 4), and the `ParallelismBudget` (§10.9);
 - `Root` (an `EGraphContext`).
 
-Its constructor builds a `Store`; `$uf` and the counters come from it. The root-only egglog API (`RunRules`, `FlushUpdates`, `AddValues`, `AddTerm`, `LookupId`, `TableSize`, `ForEach`, `WithExecutionState`, `FreshId`, `ClearTable`, `Rebuild`) delegates to `Root`, so every M8 test keeps its meaning.
+Its constructor, **`EGraph(ParallelHeuristics)`** (rule-layer E9; `EGraph()` passes `ParallelHeuristics.Default`), builds a `Store` with those heuristics; `$uf`, the id counter and the clock come from it, and functions are added through `Store.AddTable`. The root-only egglog API (`RunRules`, `FlushUpdates`, `AddValues`, `AddTerm`, `LookupId`, `TableSize`, `ForEach`, `WithExecutionState`, `FreshId`, `ClearTable`, `Rebuild`, `RunIteration`) runs on `Root` with egglog's semantics, so every M8 test keeps its meaning:
+- `EGraph.RunRules` flushes the root's bridge-side host writes and does not rebuild first (egglog's `run_rules` never does); `EGraph.FlushUpdates` leaves a recorded failure for the next run;
+- `EGraph.AddValues` and `AddTerm` stage straight into database buffers stamped with the current clock, as M8 and egglog's `add_values` do, then flush: rows replayed as given need no catch-up at the root, so nothing of the batch is kept bridge-side (§10.4, §14.1);
+- `EGraph.ClearTable` is the root context's `ClearTable`, which also drops the rows of the function staged on the root's bridge side (§10.4).
 
-**`EGraphContext`** (`Bridge/EGraphContext.cs`, partials `.Run.cs`, `.Watermarks.cs`, `.Writes.cs`, `.Reads.cs`, `.Freeze.cs`, `.Lift.cs`, `.Locals.cs`, `.Invariants.cs`) holds:
+Only the `EGraphContext` API flushes, ensures clean and throws `PanicException` itself.
+
+**`EGraphContext`** (`Bridge/EGraphContext.cs`, partials `.Run.cs`, `.Watermarks.cs`, `.Writes.cs`, `.Reads.cs`, `.Freeze.cs`, `.Locals.cs`, `.Invariants.cs`, `.Extraction.cs` (§10.10), and `.Lift.cs` in M10.4) holds:
 - `owner`, `parent` and `context` (the storage `Context`);
-- `RuleProgress[] progress`, `HostWrites hostWrites` (`Bridge/HostWrites.cs`) and `object?[] locals`;
-- `List<SplitRecord>? splitRecords`, and `memberMap` / `memberMapVersion`.
+- the rule progress map (§10.2), `HostWrites hostWrites` (`Bridge/HostWrites.cs`) and `object?[] locals`;
+- in M10.4, `List<SplitRecord>? splitRecords`, and `memberMap` / `memberMapVersion`.
 
-Its properties forward to storage: `Version`, `CreatedAt`, `IsFrozen`, `IsStopped` (= `context.IsContradicted`) and `IsDisposed`.
+Its properties forward to storage: `Version`, `CreatedAt`, `IsFrozen`, `IsStopped` (= `context.IsContradicted`), `IsDisposed`, `IsFaulted`, `Parallelism` (the context database's heuristics, §10.9) and `OwnRowCount` (`context.Database.TotalSizeEstimate`, rule-layer D42). `Parent` is the parent's bridge context, `null` at the root. **`CreateChild(ContextOptions?)`** and **`Dispose()`** (rule-layer E7) have the storage semantics of §8.2: `CreateChild` of a context that is not frozen ensures it clean first (§10.3), and a failure recorded on this context by that flush, the rebuild or the root's settle, or before the call, is taken right after: the new child is disposed and `PanicException` is thrown. `Dispose` releases the host writes, the progress and the locals. `RunRules` reports at the e-graph's `ReportLevel` (E7).
 
 **Other bridge types:**
 - `ContextState` is dropped (storage flags suffice).
-- `ContextLocalSlot<T>` (`Bridge/ContextLocalSlot.cs`): `GetLocal<T>(slot)` installs with `CompareExchange`. Scheduler collect-matches buffers live there (map §8.1 row 10).
+- `ContextLocalSlot<T>` (`Bridge/ContextLocalSlot.cs`): `GetLocal<T>(slot)` builds the context's value with the slot's factory on first use and installs it under the context's locals gate, so concurrent first calls keep one value. Scheduler collect-matches buffers live there (map §8.1 row 10).
 
 ### 10.2 Watermarks (C7, D3, D4, D18, X41)
 
 ```csharp
 internal readonly struct RuleProgress { public RuleProgress(uint lastRunAt, uint[]? constants, int generation); uint LastRunAt; uint[]? Constants; int Generation; }   // Bridge/RuleProgress.cs
-internal sealed class RuleTable { RuleId Add(Func<RuleId,int,RuleInfo> create); void Remove(RuleId id); bool TryGet(RuleId id, out RuleInfo info); }   // copy-on-write, Bridge/RuleTable.cs
+internal sealed class RuleTable { RuleId Add(Func<RuleId,int,RuleInfo> create); void Remove(RuleId id); bool TryGet(RuleId id, out RuleInfo info); }   // Bridge/RuleTable.cs
 ```
+
+- **`RuleTable`** is written under a lock and read lock-free: its slot array is copied only when it grows, slot writes are volatile, and reusing an id bumps the rule's generation. Copying on every change would cost O(n²) when the rule layer defines one rule per query.
+- **Progress per context** is a small open-addressed map from rule index to `RuleProgress` (`EGraphContext.Watermarks.cs`: parallel key and value arrays, a power-of-two capacity of at least 8, at most half full), not an array indexed by rule id: a context pays for the rules it ran, not for every rule the e-graph defines (§14.2). It is written on the domain thread only (`SetProgress`, which `Commit` calls) and read by descendants, which share the domain or read it frozen.
 
 **`RuleInfo` changes:**
 - drop `LastRunAt`;
 - add `int Generation`, `planGate`, a volatile `cachedPlan`, and `GetOrBuildCachedPlan(Database db)`, double-checked under the gate;
-- add `bool AllowInheritance`, computed once with the cached plan: false for naive, split and callback rules (D4, D21), and false unless `ActionReadAnalysis.IsQueryDetermined(cached.Actions, store.Schema, externals)` holds.
+- add `bool AllowInheritance`, computed once with the cached plan: false for naive, split and callback rules (D4, D21), and false unless `ActionReadAnalysis.IsQueryDetermined(cached.Actions, store.Schema, externals)` holds;
+- keep a read-only `LastRunAt`, which reads the root context's committed progress, and a getter-only `CachedPlan`, so M8's tests that read root watermarks keep their meaning.
 
 **`ActionReadAnalysis`** (`Query/ActionReadAnalysis.cs`, static). An action program is *query-determined* when what it writes depends only on the match and the context's equalities, not on table contents that can change in a descendant. It is query-determined iff every instruction is one of:
 - `Insert`, `InsertIfEq`, `Remove`, `AssertEq`, `AssertNe`, `AssertAnyNe`, `ReadCounter`;
-- `LookupOrInsertDefault` on a table whose merge function is `UnionIdMerge` (a constructor: the row exists after the ancestor's run, and its value changes only by unions, which descendants see through `find`);
+- `LookupOrInsertDefault` on a table whose merge function is `UnionIdMerge`, or a bridge constructor (a `FunctionTableMerge` over a union-id merge, `LayeredTableSchema.IsConstructor`), when the instruction reads a key column or the union column, not a subsumption or timestamp cell (a constructor: the row exists after the ancestor's run, and its value changes only by unions, which descendants see through `find`);
 - any lookup on the union-find table (`lookup_uf` is canonicalization);
 - `External` or `ExternalWithFallback` whose function has `ReadsTables == false`.
 
@@ -1626,7 +1638,7 @@ GetWatermark(r, info, K):
   return 0
 ```
 
-- `TryOwn` returns false when the slot is beyond `progress.Length` or the generation differs.
+- `TryOwn` returns false when the map holds no progress for the rule, or holds another generation's.
 - Reading an ancestor's `progress` is safe: the ancestor is frozen (immutable) or shares this domain.
 - **Commit (X18):** `(T, K, generation)` is staged per rule at instantiation and committed when `RunRuleSet` returns and `Database.TakeFailure()` is `null`.
 - An inherited watermark is at most `this.CreatedAt` (the first `bound`), which `SemiNaiveFloor` relies on (§7.2).
@@ -1636,22 +1648,32 @@ GetWatermark(r, info, K):
 ```text
 using context.Domain.Enter(); ThrowIfNotWritable()
 if IsStopped: return IterationReport.Stopped
-EnsureClean()
+EnsureClean()                                           // EGraph.RunRules: flush the root's host writes only (§10.1)
 if IsStopped: return Stopped
+plans = [rules.TryGet(r).GetOrBuildCachedPlan(database) for r]   // before the epoch: a bad id changes nothing
 T = context.BeginEpoch(); context.NoteRuleRun(T); ufBefore = context.DisplacedCount
 rsb = database.NewRuleSet(); staged = []
-for r: info = rules.TryGet(r); cached = info.GetOrBuildCachedPlan(database)
-       K = CanonicalConstants.Compute(database.View, cached.IdConstants, cached.Actions.IdConstants)
-       W = GetWatermark(r, info, K); info.Query.AddRulesFromCached(rsb, W, cached, K); staged.Add((r, T, K))
+for r: K = CanonicalConstants.Compute(database.View, cached.IdConstants, cached.Actions.IdConstants)
+       W = r listed earlier in this run ? (same K ? T : 0) : GetWatermark(r, info, K)   // O(1) per rule
+       info.Query.AddRulesFromCached(rsb, W, cached, K); staged.Add((r, T, K))
 using rs = rsb.Build()                                  // snapshots the views (§9.1)
-rep = database.RunRuleSet(rs, level, T)                 // merges at T; a child fault is X12
-if database.TakeFailure() is { } m: throw new PanicException(m)   // egglog: after the merge, no rebuild, no clock advance
-commit staged progress
-if IsStopped: context.EndEpoch(); return Stopped report
-if context.DisplacedCount == ufBefore: context.EndEpoch(); return (rep, RebuildChanged: false)
+rep = database.ExecuteRuleSet(rs, level, T)             // an exception: nothing staged survives, nothing committed;
+                                                        // a child is faulted (X12)
+rep = rs.IsEmpty && IsRoot ? MergeAll(T) : database.MergeRuleSet(rs, rep, T)   // merges at T (see below)
+failed = TakeFailure(out m)
+if !failed: commit staged progress                      // X18
+if IsStopped: context.EndEpoch(); if failed: throw PanicException(m); return Stopped report
+if context.DisplacedCount == ufBefore: context.EndEpoch(); if failed: throw PanicException(m); return (rep, RebuildChanged: false)
 rb = context.Rebuild()                                   // the first pass reads the clock again (X4)
+if failed: TakeFailure(); throw PanicException(m)       // a failure the rebuild records belongs to the same iteration
+if TakeFailure(out m2): throw PanicException(m2)
 return (rep, RebuildChanged: rb, Stopped: IsStopped)
 ```
+
+- **Panics** are thrown after the iteration's bookkeeping (the clock advance, or the rebuild), not right after the merge as in egglog: map §8.1 row 22, which M8 fixed and the bridge keeps. No progress is committed after a recorded failure.
+- **An exception while the run's writes merge** cannot be undone: progress is committed unless a failure was recorded, so no match is applied twice; a child is faulted anyway (X12). An exception in the execute phase commits nothing and does not advance the clock.
+- **An empty rule set at the root** (every variant pruned: no visible row at or after any rule's watermark) still merges what is staged and not merged at T. egglog's `run_rule_set` returns before its `merge_all` in that case (`core-relations/src/free_join/execute.rs:349`), yet `run_rules` records T as every rule's `last_run_at`; a raw row staged before two such runs then lies below every watermark when it finally merges, and no rule ever matches it, at the root (I31 Case 1) or in a child that inherits the root's watermarks (Case 2). Map §8.1 row 26. A child needs none of this: it is clean before it runs and stamps rows at the merge (X38).
+- **A rule listed twice** runs its second listing with T. The earlier listing is found by scanning back over at most 16 listings, or through a dictionary for longer lists, so a run stays O(rules).
 
 **`EnsureClean()`** (X42):
 ```text
@@ -1661,31 +1683,35 @@ if IsRoot: if context.DisplacedCount != context.journalMark: context.Rebuild()  
 else: context.Rebuild()
 ```
 
-- At the root, writes staged through `WithExecutionState` or `Database.NewBuffer` and not flushed stay pending into the run and merge in `RunRuleSet`'s `MergeAll` at T, exactly as in egglog's `run_rule_set`. At rest the root's journal mark is always current (every root operation that grows the union-find rebuilds), so `EnsureClean` adds no pass and no epoch at the root.
-- `IterationReport` gains `bool RebuildChanged`, `bool Stopped` and `int RebuildPasses`. `Changed` stays the rule application's own change (decision 11).
+- At the root, writes staged through `WithExecutionState` or `Database.NewBuffer` and not flushed stay pending into the run and merge in its `MergeAll` at T, as in egglog's `run_rule_set`, and also when the run's rule set is empty (above). At rest the root's journal mark is always current (every root operation that grows the union-find rebuilds), so `EnsureClean` adds no pass and no epoch at the root. The one way left to stamp such a row below a later watermark is the internal `EGraph.IncrementTimestamp` (egglog's `inc_ts`), which advances the clock without merging; only a test uses it.
+- `IterationReport` gains `bool RebuildChanged`, `bool Stopped` and `int RebuildPasses`. `Changed` stays the rule application's own change (decision 11), which includes what an empty run's merge changed.
 - `Saturate(rules, max)` loops until `Changed`, `RebuildChanged` and `Stopped` are all false, or the limit is reached. It returns `SaturateReport { Iterations, Stopped, HitLimit }` (`Bridge/SaturateReport.cs`).
 
 ### 10.4 Host writes (X24, X38)
 
-- **`HostWrites`** keeps logical rows per table (`uint[]` arenas without the ts and subsume cells), union pairs, and per row whether it came through the context API or the egglog-compatible root API.
-- **Staging:**
+- **`HostWrites`** keeps logical rows per table (`uint[]` arenas without the ts and subsume cells), union pairs, and per row whether its id cells are canonicalized at the replay. Arenas up to 4096 cells and 1024 rows or unions are kept across flushes, so a warm context stages its usual batches without allocating; larger ones are released when the flush clears them, so a long-lived context keeps nothing proportional to its largest batch.
+- **Staging** (the `EGraphContext` API):
   - `StageRow(f, row)` appends the row;
   - `StageTerm(f, key)` mints `id = (uint)database.IncrementCounter(IdCounter)`, which comes from a block in a child, then stages the row and returns id;
   - `StageUnion(a, b)` stages the pair;
-  - `FreshId()` mints directly.
+  - `FreshId()` mints directly;
+  - `AddValues(rows)` stages each row as it validates it and, when one is malformed or refused (decision 2), drops the rows the call staged (`HostWrites.TruncateRows`), so nothing is staged; then `FlushUpdates()`. `AddTerm(f, inputs)` is `id = StageTerm(...)`, `FlushUpdates()`, then returns `Find(id)`.
+  - Decision 2 is checked when a row is staged, so a refused write never faults the child at the merge.
+- **`ClearTable(f)`** clears first (refusals per §6.7 change nothing), then drops the rows of `f` staged here (`HostWrites.RemoveRows`): the operations take effect in the order issued, as egglog's `clear_table` drops what in-flight buffers staged for the table. Rows of other functions and staged unions are kept.
 - **`FlushUpdates()`:**
   ```text
-  using Domain.Enter(); ThrowIfNotWritable(); if IsStopped: return false
+  using Domain.Enter(); ThrowIfNotWritable(); if IsStopped: hostWrites.Clear(); return false
   if Parent is not null && !Parent.IsFrozen: Parent.EnsureClean()
   context.PrepareForWrite()                 // catch-up BEFORE anything is staged
   T = context.BeginEpoch(); ufBefore = DisplacedCount
-  st = database.CreateExecutionState(T); hostWrites.ReplayInto(st, T, context.UnionFind)   // ts cell = T, subsume cell = NOT_SUBSUMED
+  st = database.CreateExecutionState(T); hostWrites.ReplayInto(st, T, context.UnionFind); hostWrites.Clear()   // ts cell = T, subsume cell = NOT_SUBSUMED
   st.Flush(); database.RecordFailure(st); changed = database.MergeAll(T); context.EndEpoch()   // egglog flush_updates
   if DisplacedCount != ufBefore: context.Rebuild()
   ThrowIfFailed(); return changed
   ```
-- `ReplayInto` canonicalizes the Id columns of rows staged through the `EGraphContext` API at every level (`UnionFind.Find` is current after `PrepareForWrite`); this gives the rule layer the spike's canonicalizing `Insert` (rule-layer invariant C). Rows staged through the egglog-compatible `EGraph` root API are replayed as given, so the root matches egglog; in a child they are canonicalized at the merge anyway (X38).
-- `AddValues(rows)` stages each row, then `FlushUpdates()`. `AddTerm(f, inputs)` is `id = StageTerm(...)`, `FlushUpdates()`, then returns `Find(id)`.
+  An exception escaping a child's flush faults it (X12). The state is created only when something is staged.
+- `ReplayInto` canonicalizes the Id columns of rows staged through the `EGraphContext` API at every level (`UnionFind.Find` is current after `PrepareForWrite`); this gives the rule layer the spike's canonicalizing `Insert` (rule-layer invariant C). The egglog-compatible `EGraph` root API does not stage here at all (§10.1): its rows go straight into database buffers as given, so the root matches egglog; in a child, rows are canonicalized at the merge anyway (X38).
+- **Order of the staged and the raw write paths.** Writes land in the order the host issued them. Before a raw path stages into database buffers of its own (`EGraph.AddValues`, `EGraph.AddTerm`, `EGraph.WithExecutionState`, the internal raw iteration `EGraph.RunIteration` and `EGraph.RunRuleSet` over it, and `EGraphContext.WithExecutionState` in any context), the context flushes whatever it staged earlier through the `EGraphContext` API (rows, terms and unions in `HostWrites`), in an epoch of its own, so an order-dependent merge (`:merge new`, `:merge old`) sees the earlier write first; a raw row staged before a context-API write already merges first, since the flush replays `HostWrites` after the pending buffers. When nothing is staged bridge-side, as under egglog's API alone, this is one emptiness test and the timestamp sequence is egglog's; mixing the two paths costs one extra epoch per switch. The flush comes before the raw path reads its own input, so an `EGraph.AddValues` refused because a row is malformed has still merged what was staged before it, while nothing of the refused batch is published; the next flush would have merged those writes anyway, and checking the batch first would take a second pass over it. In a child the flush is the child's own `FlushUpdates` (catch-up first, X24); only context-private tables can have an order-dependent merge there (decision 2), so for the rest it changes epochs, not results. Writes issued from inside a raw escape's action are refused rather than ordered (§8.3): the action's rows reach the pending buffers only when it returns, after anything the action staged through the context API.
 
 ### 10.5 Reads
 
@@ -1698,8 +1724,8 @@ Bridge `IsClean` is `context.IsClean && hostWrites.IsEmpty && (Parent?.IsClean ?
 ### 10.6 Contradiction early stop and panics
 
 - **`StopOnContradictionFunction`** (`Bridge/StopOnContradictionFunction.cs`): if `state.View?.Owner.Owner is { Options.StopOnContradiction: true }`, it calls `state.TriggerEarlyStop()`.
-- The bridge rule builder appends `External(StopOnContradiction, [])` after every head insert into the contradiction function. The storage flag is set when that row merges (§6.9).
-- `PanicFunction` calls `state.ReportFailure(message)`, never a field closed over the `EGraph`, so failures stay per context.
+- The bridge appends `External(StopOnContradiction, [])` after every head insert into the contradiction function when the rule is lowered (planned), not when the builder records it: a rule planned before `DesignateContradiction` keeps its plan without the early stop, and its insert still sets the stop flag when it merges. The serial executor runs actions in 128-lane batches, so the early stop cuts a search only once a batch has run. The storage flag is set when that row merges (§6.9).
+- `PanicFunction` and `LazyPanicFunction` call `state.ReportFailure(message)`, never a field closed over the `EGraph`, so failures stay per context. For a root or bare state (`InChildContext` false) they also set the e-graph's panic side channel, which M8's tests read; a child's panic never reaches it.
 - `EGraph.NewPanic` is thread-safe.
 
 ### 10.7 Containers (decision 9, C13)
@@ -1707,26 +1733,98 @@ Bridge `IsClean` is `context.IsClean && hostWrites.IsEmpty && (Parent?.IsClean ?
 - **Registration:** `ContainerValues.RegisterType<T>(CounterId, ContainerMergeFunction, bool holdsIds = true)`. `ContainerEnvBase.HoldsIds`. Containers over base values register with `holdsIds: false`.
 - **New members:** `ContainerValues.HasEqContainers`, `ContainerValues.AnyEqContainerMentions(uint)`, `ContainerValues.EqVersion`, `ContainerEnvBase.AnyContainerMentions(uint)`, `ContainerEnvBase.EqVersionCounter` and `ContainerValueIndex.ContainsElement(uint)`. The storage members exist since M9.4, because G-a and G-b are M9.4 content; the bridge sets `holdsIds` when it registers containers.
 - **G-a:** `ContainerEnv.GetOrInsert` throws `InvalidOperationException` when `HoldsIds && state.InChildContext` (§6.5). `TryGetId` stays allowed.
+- `EGraphContext.GetContainerValue` registers the container type on first use only at the root; a child requires it registered first, since registration is a definition of the e-graph.
 - **G-b, G-c:** §7.4.
 
 ### 10.8 Freeze (bridge part)
 
-`EGraphContext.Freeze()`:
-1. `FlushUpdates()`.
+`EGraphContext.Freeze(IReadOnlyCollection<EGraphRuleId>? planRules = null)` (rule-layer E10):
+1. `FlushUpdates()`, when host writes are staged (an empty flush would only spend an epoch; raw pending writes are merged by the storage freeze's rebuild).
 2. `Rebuild()`.
-3. Throw if `database.Failure` is not null.
-4. Plan every live rule without a cached plan, on this context's statistics (§9.7).
-5. `context.Freeze(FreezeWarmup.From(cached plans))`.
+3. Take a recorded failure and throw it as `PanicException`; the context stays unfrozen and may be frozen again.
+4. Plan, on this context's statistics (§9.7), every live rule without a cached plan when `planRules` is `null`, or exactly the given rules that have none.
+5. `context.Freeze(FreezeWarmup.From(cached plans, schema))`.
 
 ### 10.9 Concurrent children and the parallelism budget (C9, M11 parts the colors need)
 
 - **Default parallelism:** a child of a frozen context uses `ParallelHeuristics.Serial`. A child of a non-frozen context inherits its parent's heuristics, since they never run concurrently. `ContextOptions.Parallelism` overrides both. Under inherited heuristics a child's rule set can go parallel once its own rows pass `DbLevelThreshold`; layer creation from those tasks is safe (X37).
-- **`ParallelismBudget`** (`Concurrency/ParallelismBudget.cs`): `Total`, `Available`, `Lease(int)` (blocks), `TryLease`, `Release`.
-- **`ParallelismLease`** (`Concurrency/ParallelismLease.cs`): `IDisposable` struct.
-- **`ConcurrentChildren.Run(children, body)`** (`Bridge/ConcurrentChildren.cs`):
-  - requires every child's parent to be frozen and no child to be an ancestor of another;
-  - runs `Parallel.For` with `degree = max(1, Total / max child DOP)`, each body under a lease;
-  - rethrows a single inner exception unwrapped.
+- **`ParallelismBudget`** (`Concurrency/ParallelismBudget.cs`): `Total`, `Available`, `Lease(int)` (blocks), `TryLease`, `Release`; `0 ≤ Available ≤ Total`. A request outside `[1, Total]` can never be granted and throws `ArgumentOutOfRangeException` instead of blocking; releasing more than was leased throws `InvalidOperationException`. One private lock with `Monitor.Wait`/`PulseAll`; waiters are not served in arrival order (a cold path: one lease per child body). `EGraph.ParallelismBudget` has the root's degree of parallelism.
+- **`ParallelismLease`** (`Concurrency/ParallelismLease.cs`): `IDisposable` readonly struct; `default` holds nothing.
+- **`ConcurrentChildren.Run(children, body)`** (`Bridge/ConcurrentChildren.cs`), with a `body(child)` and a `body(child, index)` overload:
+  - before running anything, requires every child's parent to be frozen and no child to be an ancestor of another, and refuses a null, repeated, disposed or root child and a child of another e-graph;
+  - runs `Parallel.For` with `degree = max(1, Total / widest)`, each body under a lease of `min(child DOP, Total)`, where `widest` is the largest such lease;
+  - a run nested in a body (the thread holds a lease already, tracked per thread) runs its children serially under that lease: leasing again could block forever on a budget the outer run holds;
+  - rethrows a single inner exception unwrapped; several stay aggregated.
+
+### 10.10 Extraction over a context (rule-layer E5)
+
+The M8 extractor (`Extraction/Extractor*.cs`, Knuth's algorithm with D10's content ties) reads the root only: discovery probes `Database.GetTableInfo(t)`, and an extractor goes stale on any clock tick. Rule-layer E5 asks for extraction in a context, with staleness keyed on what the extractor reads. Every scoped Cosmos scenario extracts, so E5 gates the whole R2 scoped suite.
+
+```csharp
+public static Extractor CreateOnDemand(ExtractionSchema schema, EGraphContext context, CostModel? costs = null, ExtractionOptions? options = null);   // Extraction/Extractor.cs
+public EGraphContext Extractor.Context { get; }            // the context it reads; the root for the root forms
+internal ExtractionQueryScope EGraphContext.EnterExtraction(bool requireClean);   // Bridge/EGraphContext.Extraction.cs
+internal sealed class ExtractionWatch { ExtractionWatch(Context context, ReadOnlySpan<TableId> tables); int LevelCount { get; } int FindChange(); }   // Extraction/ExtractionWatch.cs
+internal readonly record struct ExtractionTableMark(int Generation, int Rows, int Live, int Structure);   // Extraction/ExtractionTableMark.cs
+internal readonly struct ExtractionQueryScope : IDisposable;   // Extraction/ExtractionQueryScope.cs
+```
+
+**Semantics.** The context's extraction is the extraction of the context's view: classes are canonical in the context, and a class's nodes are the rows of its producing functions that the context sees (I12). Costs, ties and variants are the root extractor's, so a child's extraction equals that of a fresh root holding the child's view, up to the renaming of ids, and, where costs tie, up to D10's id-dependent order. The root forms (`CreateOnDemand(schema)`, `ComputeCostsFromRootSorts`) are unchanged in result; at the root the context form reads what they read and chooses the same terms.
+
+**Creation.**
+- The context must belong to the schema's e-graph (`ArgumentException`).
+- `EnterExtraction(requireClean: true)` enters the context's domain unless it is frozen and calls `ThrowIfNotReadable` (§10.5): disposed, faulted, stopped or not clean throws. A clean view is canonical (I35), which discovery relies on.
+- The extractor records `host` (the context), `layers` (`Context.Tables`, null at the root) and `finder` (`Context.UnionFind` in a child), and builds an `ExtractionWatch` over its slots' tables.
+
+**Canonical values.** A queried value is canonicalized once per query: `finder.Find` in a child, the root's `FindNaive` at the root. Nodes are never canonicalized: a clean view's rows already are.
+
+**Discovery** (`Extractor.Discovery.cs`). `Settle` tests `layers` once and calls one of two loops:
+
+```text
+DiscoverAtRoot:     for each queued class (v, sort), each producing slot f:
+                        rows = rootDb.GetTableInfo(f.Table).GetColumnIndex(f.Output).TryGetSubset(v)
+                        f.Table.ScanGeneric(rows, sink)                                  // as in M8
+DiscoverInLayers:   for each queued class (v, sort), each producing slot f:
+                        tv = layers.GetView(f.Table)                                     // never Database.GetTable in a child
+                        for each present layer lv of tv:
+                            rows = lv.Info.GetColumnIndex(f.Output).TryGetSubset(v)      // the layer's own cached index
+                            lv.Table.ScanGeneric(rows, lv.Hidden, sink)                  // hidden-aware scan (§9.3)
+```
+
+- Lemma F does not apply here: discovery looks rows up by their output column, not by their key, so every layer is probed and hidden rows are filtered row by row. A hidden ancestor row carries information the view holds elsewhere or retracted (I14), in the layer of the level that hid it: a row that level replaced, subsumed or re-stamped (`KeyHeld`, `Restamped`: the replacement, subsumed if it was), one it deleted (`Retracted`: nothing replaces it), or one that names one of its losers (`Mentions`: the canonical copy). Skipping hidden rows reads each visible row exactly once.
+- A frozen layer's cached index is shared and built lock-free on first use (§9.5, X14); a writable ancestor's is refreshed on the domain thread, as a rule run refreshes it.
+- Container elements and base values are read from the store-wide `ContainerValues` and `BaseValues` (§1 item 1). G-a and G-b keep every eq-sort container's elements canonical in a clean child.
+
+**Staleness** (`ExtractionWatch`). Keyed on the extraction tables and the union-find of the context and its non-frozen ancestors, never on the clock:
+
+```text
+levels = the context, then its ancestors up to the first frozen one       // frozen levels are a prefix of the chain (§8.1)
+for each level L, each slot table t:
+    root:  mark = (t.Version.Major, t.Version.Minor, t.Count, 0)
+    child: layer = L.Tables.TryGetLayer(t); mark = layer is null ? default
+                 : (layer.Own.Version.Major, layer.Own.Version.Minor, layer.Own.Count, layer.Version)
+for each level L: uf = L.UnionFindTable.Version                             // root DisplacedTable, child journal
+FindChange (each query): the first level whose uf or one of whose marks moved → stale
+```
+
+- **Why it suffices.** Within a generation a table's rows only grow and lose rows only to tombstones, so an insert, merge, rewrite or delete moves `Rows` or `Live`; compaction and clear move `Generation`; a hide or a clear of ancestor rows moves the layer's `Version`. Every union moves the level's union-find (the root's row count, a child's journal, which also takes the parent displacements it imports). Frozen levels never change. So any change to the rows the extractor reads, or to their canonical form, moves a mark of a watched level.
+- **What does not invalidate.** Writes to other tables, at any level; host writes staged and not merged; flushes with nothing staged; batches that restate rows already there (an empty layer that a no-op write created marks as `default`, as an absent one); rule runs, queries and `EnsureClean` that change none of the above, although they tick the clock (rule-layer D49). Queries therefore do not require the context clean again: a non-frozen ancestor's write to an unrelated table leaves the child behind its parent, yet the rows the extractor reads, and their canonical form, are as they were.
+- **Conservative cases.** A compaction (a merge's, or a freeze's) renumbers rows without changing them and still counts as a change. A watched level that freezes later stays watched; its marks no longer move.
+- **Messages.** A union-find change throws `InvalidOperationException("The e-graph changed since the extractor was created; create a new one.")`; a table change names the function.
+
+**Threading.**
+- Each query (`Enter`) of the context form enters the context's domain while it is not frozen, and marks it as running a caller's code (`EnterCallback`): a second thread fails fast, and a cost function may read the context but its writes, rebuilds and structural calls are refused (§8.3). `ExtractionQueryScope` exits the callback and the domain also when the query throws. The root forms hold nothing, as egglog's root does not.
+- On a frozen context the watch is empty, finds are read-only (§5.4), views are cached thread-safely (§6.3) and layer indexes are built thread-safely. Any number of extractors may run at once, one per thread; a single extractor stays single-threaded, because queries extend its caches.
+
+**What the root pays.** Per query, the watch reads O(slots) table versions and one union-find version, where M8 read the slots' versions and the clock. Per node, nothing: discovery tests `layers` once per `Settle`, and canonicalization tests `finder` once per queried value.
+
+**What a child pays.** Per class discovered, one index probe per present layer of each producing function's view, plus the rows found; per query, O(watched levels × slots) version reads. The first probe of a layer's column builds that layer's index.
+
+**Freeze and cached indexes** (engine defect fixed). `Database.Freeze` compacts every table with tombstones (`ForceRehash`) after the last merge has reset the indexes, but a search that merged nothing, or an extraction, may have refreshed an index since. That index kept the old row ids, and a frozen catalog is never reset again, so a descendant's probe (a rule's, or a child's extraction) read renumbered rows; DEBUG builds caught it as "a refreshed index lags its table". `Database.Freeze` now re-arms the indexes of every table whose generation the freeze moved, before the warm-up.
+
+**Tests** (`Extraction/`):
+- `ContextExtractionTests`: a child sees its parent's terms, under a frozen or a writable parent; child-only terms are seen in the child and below, not at the root or in a sibling; a class merged in the child extracts the child's cheapest member, whichever side wins; rows a child subsumes or deletes under a frozen parent are not extracted; staleness (unrelated tables and no-op batches and runs keep an extractor current; a relevant write, union or subsumption in the context or in a non-frozen ancestor makes it stale; frozen ancestors are not watched; a clear in a child invalidates); creation and query checks (other e-graph, not clean, another thread, a cost function that writes, disposal); the context form at the root matches the root API on random graphs; the freeze-compaction index regression; and eight threads extracting from a frozen context and a frozen root at once.
+- `ContextExtractionDifferentialTests` (with `ContextExtractionProgram`, `ContextExtractionWorld`, `ContextExtractionStep` and `ContextExtractionStepKind`): 400 random programs over chains of depth 1 to 3, with frozen and writable parents, writes to a writable parent after its child was created, unions and saturating rules. The deepest context's extraction equals that of a fresh root replaying the chain: classes correspond one to one through the program's terms, costs are equal, and each side's term, rebuilt in the other e-graph, is a term of the matching class.
 
 ---
 
@@ -1991,7 +2089,7 @@ Multiplicity may exceed the flat executor's only for keys that the own layer sha
 
 - **Lemma 1 (the variants partition the view).** By I19, `GeConst(ts, W)` and `LtConst(ts, W)` split each layer into a suffix and a prefix (one binary search per layer). By I26, invisible rows are on neither side. For a match m, take the smallest atom index i whose row has `ts ≥ W`. Variant i finds m by I27.
 - **Lemma 2 (old rows are stable).** Rows appended to C's layer or any ancestor's after C's run at W have `ts ≥ W` (I21). A row now visible with `ts < W` was appended earlier, and by I20 it was visible then, with the same content.
-- **Case 1 (own W).** A match made only of rows with `ts < W` existed at C's previous run, with equal K (I30). By induction over runs it was applied, and contexts are monotone, so its effects persist. Matches with a new row are found by Lemma 1.
+- **Case 1 (own W).** A match made only of rows with `ts < W` existed at C's previous run, with equal K (I30). By induction over runs it was applied, and contexts are monotone, so its effects persist. Matches with a new row are found by Lemma 1. (Under retraction, an effect the context or an ancestor retracts after the match was applied is not re-derived while the match's rows are unchanged: egglog's semi-naive semantics, which the history-family reference shares.)
 - **Case 2 (inherited W0).** Let A be the nearest ancestor with `(W_A, K_A)`, A′ its child on the path, and `W0 = min(W_A, A′.CreatedAt)` (§10.2). Take a row visible in C with `ts < W0`:
   1. By I19 it is not owned by A′ or below, so it lies in A's layer or an ancestor's.
   2. It is hidden at no level between its layer and C, so it is visible in A.
@@ -2156,6 +2254,13 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Settle | Per `CreateChild` of the root, and at its freeze | O(rows written since the last rebuild) |
 | Rebuild-index refresh | Per `CreateChild` of a writable root | O(tables) plus the appends since each index's last refresh (§8.2) |
 | Freeze | Once | O(IdCount + rows) |
+| Bridge on a `Store` (M10.3) | Per egglog-compatible root call (`RunRules`, `FlushUpdates`, `AddValues`, `AddTerm`, `ClearTable`, `RunIteration`, `WithExecutionState`) | One thread-domain entry (an `Interlocked.CompareExchange`); for the raw write paths (`AddValues`, `AddTerm`, `RunIteration`, `WithExecutionState`) also one emptiness test of the root's `HostWrites`; for `AddValues`, `AddTerm` and `RunIteration` one in-callback test (`RunRules`, `FlushUpdates` and `ClearTable` already had it); for `WithExecutionState` two callback-counter updates around the action |
+| Root rows of the `EGraphContext` API | Per staged row; per flush with staged rows | A copy into `HostWrites` and a replay (the rule layer's canonicalizing insert, invariant C); one `ExecutionState` per such flush. The egglog-compatible `AddValues` and `AddTerm` bypass `HostWrites` and stage as M8 did (§10.4) |
+| Rule progress (§10.2) | Per rule per run | One staging and one commit (an O(1) map probe); per run, three arrays of the run's length, plus a dictionary for lists longer than 16 rules |
+| Empty rule set at the root (§10.3) | Per run whose every variant was pruned | One `MergeAll`: one pass over the notification list when nothing is staged |
+| Contradiction early stop (§10.6) | Per head insert into the designated contradiction function | One external call (nothing when no function is designated) |
+| Extraction staleness (§10.10) | Per extraction query | O(slots) table versions and one union-find version read, where M8 read the slots' versions and the clock |
+| `ParallelismBudget` (§10.9) | Per `EGraph` | One small object |
 
 `Canonicalizer` is identical after JIT specialization. Nothing is added per scanned row, per staged insert, or per find; a staged removal at a Store's root pays the guard read above.
 
@@ -2166,7 +2271,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Operation | Cost |
 |---|---|
 | Creation | O(tables + depth) small objects; nothing is allocated for the union-find or a table before first use. Measured in M9.4 dry runs: about 7.4–9 KB for a bare child |
-| Layer creation | One empty single-shard table and `TableInfo` plus an O(tables) catalog copy, once per touched table. Estimated at 1–2 KB; measured in M9.4 dry runs of `ManyChildrenBenchmarks` (`ChildWithOneEmptyLayer` minus `ChildOnly`) at about 2.7–3.0 KB, mostly `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the catalog copy. Reducing it is M10.4 work (§21.9) |
+| Layer creation | One empty single-shard table and `TableInfo` plus an O(tables) catalog copy, once per touched table. Estimated at 1–2 KB; measured in M9.4 dry runs of `ManyChildrenBenchmarks` (`ChildWithOneEmptyLayer` minus `ChildOnly`) at about 2.7–3.0 KB, mostly `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the catalog copy. Reducing it is M10.4 work (§21.10) |
 | Rebuild-index refresh | At creation under a writable parent: root work, §8.2. Afterwards step 4 and the lift reads refresh a writable ancestor's index from that ancestor's appends since the child's creation: per-child work of the same order as the catch-up's reading of those appends |
 | `find` | Root `FindNaive` (one hop when frozen) + at most one dense load + one probe per non-empty level below the prefix |
 | Own union | 2 parent finds + 2 probes + O(1) or O(smaller class) |
@@ -2178,6 +2283,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | View build | O(depth) per touched table + O(Σ live sets) |
 | Executor | Ancestor dynamic-index work ≤ `|rows with ts ≥ W| + |probe results|`; dense ancestor pieces use shared indexes at zero build cost |
 | Memory | ~8 B per overlay member + 4 B per member-list entry + ~40 B per class + 8+8 B per journal row; 4 B per hidden row (or n/8 B as a bitset); tables and views at 8 B × tables |
+| Bridge state (M10.3) | One `EGraphContext` and one `HostWrites` object, empty arrays until the first staged write; the locals array and its gate on first use; rule progress at 20 B per slot (a 4 B key and a 16 B `RuleProgress`), 8 slots once a rule ran, and beyond that fewer than four times the rules the context ran (the map doubles when an insert would fill more than half of it), never the rules the e-graph defines |
 
 **Guidance to the rule layer:** saturate, or run every rule once after the last change, before `Freeze`. Otherwise every child re-matches the parent's last delta.
 
@@ -2244,7 +2350,16 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Tests: `Planning/PlanInstantiationTests`, `Execution/DecomposedExecutionTests`, `Planning/PlanTestDatabase`, `Query/DatabaseQueryTests` | Compile unchanged through the kept `Instantiate` overload |
 | Tests: `Execution/JoinPathTests`, `Execution/ExecutorVisibilityTests` | No source change (root `GetTableInfo` calls remain valid); re-run as executor regression |
 | `src/Eggnog.Relations.Tests/Eggnog.Relations.Tests.csproj` | `ProjectReference` to `../Eggnog.Storage/Eggnog.Storage.csproj` (second oracle), used only through `using Spike = Eggnog.Storage;` (X32) |
-| `Bridge/*` (M8) | `EGraph`, `RuleInfo`, `PanicFunction`, the rule builder (lowers Id-typed constants through `QueryEntry.IdConst`), `IterationReport`, scheduler hooks, per §10 |
+| `Bridge/*` (M8) | `EGraph` (on a `Store`; `.Containers`, `.Contexts`, `.Panics`, `.Rules`, `.Run`, `.Values`), `RuleInfo`, `PanicFunction`, `LazyPanicFunction`, `RuleAction`, `RuleBindings`, `BridgeQuery`, the rule builder (lowers Id-typed constants that land in no table column through `QueryEntry.IdConst`, and appends the early stop, §10.6), `TableAction` (`TryLookupColumn` and `VisibleRowCount` in the running context), `IterationReport`, scheduler hooks, per §10 |
+| `Layers/LayeredTableSchema.cs` | `IsConstructor` recognizes bridge constructors; `ConstructorValueColumn` (§10.2) |
+| `Layers/ExecutionState.Layers.cs` | `TryLookupColumn`, `VisibleRowCount` for bridge actions in a child |
+| `Layers/ContextTables.cs` | `DiscardDeferredStaged` (the failed-run decision, §21.9) |
+| `Contexts/Context.cs`, `Context.Lifecycle.cs`, `Context.Invariants.cs` | `Host`; `LastRebuildPasses`; `Report` shared with the bridge checker |
+| `Contexts/Database.Freeze.cs` | Re-arms the indexes of every table whose generation the freeze moved, before the warm-up (§10.10) |
+| `Database/Database.Merge.cs` | `MergeAll` and `MergeTable` refuse a faulted child, inside the existing layers test |
+| `Execution/Database.Execution.cs` | The failed-run decision: deferred layers' staged writes are discarded when a child's search throws |
+| `Extraction/Extractor.cs`, `.Discovery.cs`, `.Functions.cs`, `.Reconstruct.cs`, `.Variants.cs`, `ExtractionRowSink.cs` | Extraction over a context (§10.10) |
+| `src/Eggnog/Graph/RootEngineScope.cs` | Calls `RuleInfo.GetOrBuildCachedPlan`; the library's public API is unchanged |
 
 ---
 
@@ -2267,7 +2382,8 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Query/` | `CanonicalConstants`, `ConstantSubstitution`, `TemplateSubstituter`, `ActionSubstituter`, `ConstantVariant`, `ActionIdConstant`, `ActionReadAnalysis` |
 | `Concurrency/` | `ThreadAffinityGuard`, `ThreadAffinityScope`, `ParallelismBudget`, `ParallelismLease` |
 | `Containers/` | `ContainerDirtyLog` |
-| `Bridge/` | `EGraphContext` (+ 8 partials), `RuleProgress`, `RuleTable`, `HostWrites`, `ContextLocalSlot`, `StopOnContradictionFunction`, `SaturateReport`, `ConcurrentChildren`, `ContextInvariantException` |
+| `Bridge/` | `EGraphContext` (+ 9 partials: `.Run`, `.Watermarks`, `.Writes`, `.Reads`, `.Freeze`, `.Locals`, `.Invariants`, `.Extraction`, and `.Lift` in M10.4), `RuleProgress`, `RuleTable`, `HostWrites`, `ContextLocalSlot`, `StopOnContradictionFunction`, `SaturateReport`, `ConcurrentChildren`, `ContextInvariantException` |
+| `Extraction/` | `ExtractionWatch`, `ExtractionTableMark`, `ExtractionQueryScope` (§10.10) |
 | `Cases/` | `MemberMap`, `ClassPartition`, `LiftSpec`, `LiftTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `LiftSignature`, `LiftCandidates`, `LiftKeySink`, `LiftWrites`, `Lifter` (+ `.Equalities`, `.Facts`), `CaseSet`, `SplitDriver`, `SplitRequest`, `SplitKey`, `SplitRecord`, `SplitOptions`, `SplitReport`, `ISplitSource`, `ISplitDemand`, `ICaseSchedule` |
 
 Tests and benchmarks are listed with their milestones in §17.
@@ -2496,16 +2612,16 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - `FreezeTests` (bridge), `ContainerContextTests` (bridge), `ContradictionTests` (bridge).
 - `RuleTableTests`, `ParallelismBudgetTests`, `ConcurrentChildrenTests` (budget cap, unwrapped exceptions, two threads on one domain throw).
 
-**Differential tests** (`Colors/`). Program families: **monotone** (no `AssertNe`/`AssertAnyNe` on Id columns, no primitives that depend on id order, no deletes, no table reads in actions) and **history** (all of those allowed, deletes only where §6.7 allows).
-- `ReferenceRuleContext` (with `TermNamer`) is operational: it extends `SpikeReferenceContext` with rule checkpoints. At each rule run in context X it computes X's reference view from the ordered ops of X's chain, runs `NaiveRuleRunner` with the engine's iteration schedule (one Jacobi iteration then closure, repeated as `Saturate` does), and appends the newly derived facts to X's ordered ops as `Derived` assertions. Descendants inherit them like any assertion, so facts derived in an ancestor under fewer equalities, or before a child's delete, persist as they do in the engine.
-- `ContextRuleDifferentialTests`: both families against `ReferenceRuleContext`; family A (no minting) compared modulo renaming, family B (constructor minting) compared by term names; 400 seeds.
+**Differential tests** (`Colors/`). Program families: **monotone** (no `AssertNe`/`AssertAnyNe` on Id columns, no primitives that depend on id order, no deletes, no table reads in actions, and no rule body that reads a lattice function's output: a body atom over a lattice function binds its output to a variable nothing else reads) and **history** (all of those allowed, deletes only where §6.7 allows). A body that joins on a lattice output is not monotone: once a write lowers the value, facts derived from the old value persist, at a plain root too, while a fresh root that replays every write before saturating never sees the old value.
+- `ReferenceRuleContext` (with `TermNamer`) is operational: it wraps `SpikeReferenceContext` (sealed) with rule checkpoints, each op stamped by a shared clock so a view can be computed at any past tick. At each rule run in context X it computes X's reference view from the ordered ops of X's chain, runs one Jacobi iteration of its own evaluator over the closed view (`ReferenceRuleEvaluator` over the programs' rule IR, `ColorRule`, which is also built into the engine through `EGraphRuleBuilder`; `NaiveRuleRunner` runs core rule sets, and would run the bridge's rules through the same planner and action interpreter as the code under test), and appends the newly derived facts to X's ordered ops as `Derived` assertions. Descendants inherit them like any assertion, so facts derived in an ancestor under fewer equalities, or before a child's delete, persist as they do in the engine. The reference selects matches semi-naively by row content: a match fires only when one of its rows is unseen at the rule's watermark (its canonical content was absent at the watermark, or after a delete or clear since), with the watermark of §10.2. A naive reference disagrees with egglog's semi-naive semantics in the history family (a child that deletes a derived fact whose premises are unchanged does not re-derive it; an action's table read sees the row as of the iteration that fired it). Whether inheriting is sound is checked by the seeded-versus-unseeded property, and the reference decides `AllowInheritance` from the rule itself, not from `ActionReadAnalysis`.
+- `ContextRuleDifferentialTests`: both families against `ReferenceRuleContext`; family A (no minting) compared cell for cell (both sides make a class's least id canonical, which is stronger than modulo renaming), family B (constructor minting) compared by term names; 400 seeds. Family B leaves out the id-order primitive, never deletes or clears constructor tables (a term minted again would share the old class's name), and generates its rules in strata so minting terminates.
 - `ContextRuleCopyTests` (monotone family only): a child's view after saturation equals a fresh root replaying the chain's assertions and running the same rules; random conjunctive queries agree; includes **`ConstantLosesRootUnionBeforeChildRuns`** (R1-3: rule `R(x, 7) → S(x)`, root `R(1,3)` and `union(7,3)`, root run, freeze; a child that asserts nothing has the same view as its parent).
-- `SeededWatermarkDifferentialTests` (both families): `InheritWatermarks = false` gives equal views at every checkpoint, and seeded match totals are ≤ unseeded; includes R1-4's counterexample (`(set (g x) (f x))` with `f` raised in the child) as a regression.
+- `SeededWatermarkDifferentialTests` (both families): `InheritWatermarks = false` gives equal views at every checkpoint, and seeded match totals are ≤ unseeded; includes R1-4's counterexample (`(set (g x) (f x))` with `f` raised in the child) as a regression, through a lookup and through a primitive that reads tables. Its programs delete and clear only tables no rule writes: a child that retracts a derived fact re-derives it unseeded and not seeded (egglog's push semantics, X41). Every seeded program carries a no-op primitive over every body variable, so match counts are counts of distinct full bindings in both runs (a semi-naive run otherwise sums over its variants).
 - `IdConstantContextTests`.
 - `ConcurrentChildRulesTests`: 16 children on 8 threads equal serial replays.
-- `EggPushPopTests`: once a `.egg` reader exists, for programs whose rules all have `AllowInheritance` (egglog's push copies `last_run_at`, which then coincides with inheritance); other programs are reported, not compared. The M10 gate per map §6.
+- `EggPushPopTests` (and `EggPushPopWebDemoTests`): for programs whose rules all have `AllowInheritance` (egglog's push copies `last_run_at`, which then coincides with inheritance); other programs are reported, not compared. The M10 gate per map §6. There is no `.egg` reader (rule-layer D14): the programs are translated by hand through `EggPushPopProgram` (push is `CreateChild`, pop is `Dispose`), and only sizes, iteration counts and check results are compared, against values from the egglog 2.0.0 CLI. Compared: `calc.egg`, `tricky-type-checking.egg` blocks 1–6, a program written to make a push inherit progress, and the web demo's `bdd`, `push-pop`, `array` and `cyk`. Reported, not compared: programs that intern eq-sort containers in a child (decision 9) or need sorts the bridge lacks (§21.10).
 
-**Done when:** the baseline holds; every differential is green at 400 seeds; I31 is exercised by the seeded-versus-unseeded property over both families (map §8.2 risk retired); `RestampedCopies == 0` throughout.
+**Done when:** the baseline holds; every differential is green at 400 seeds; I31 is exercised by the seeded-versus-unseeded property over both families (map §8.2 risk retired), in programs whose retractions touch only tables no rule writes (X41); `RestampedCopies == 0` throughout.
 
 ### M10.4: Lift primitives and split hooks
 
@@ -2595,7 +2711,8 @@ B6 is in the split driver; B7 in the overlay.
 4. **The root deviates from egglog** only:
    - on the panic path (X18): progress is not committed after a recorded failure;
    - for Id constants that have lost a union (X19): a Store-backed root matches and writes the class's canonical id. Added to map §8.1 as row 25: "Cached plans bake Id constants; after a constant loses a union the rule silently stops matching (`eb/lib.rs:1397-1420`, `cr/query.rs` constant entries). Eggnog: canonicalize every Id constant per run in the running context."
-   - in operations egglog lacks: `CreateChild` and `Freeze` settle the rows written since the last rebuild (§7.6).
+   - in operations egglog lacks: `CreateChild` and `Freeze` settle the rows written since the last rebuild (§7.6);
+   - when every rule of a run was pruned (M10.3): the bridge still merges what is staged at the run's T, which egglog's `run_rule_set` skips while `run_rules` still records T as every rule's watermark. Added to map §8.1 as row 26.
 5. **Inheritance is narrower than egglog's push** (X41): rules whose actions read tables never inherit a watermark, whereas egglog's push copies `last_run_at` for every rule. egglog push/pop is therefore an oracle only for programs whose rules all inherit.
 6. **Host writes at the root** (X38): the egglog-compatible `EGraph` API writes as given; the `EGraphContext` API canonicalizes Id cells at every level, which is what the rule layer's invariant C assumes.
 7. **G2 ranking** (parent-visible ids first) is deferred until the L7 report exists.
@@ -2651,19 +2768,19 @@ Two reviews were answered. Every finding was accepted. One fix uses the second o
 
 ---
 
-## 21. Implementation notes (M9.0–M10.2)
+## 21. Implementation notes (M9.0–M10.3)
 
-M9.0 through M10.2 are implemented. This section records, per milestone, where the code departs from the text above: what the text said, what was built, and why. Each departure is listed once, under the milestone that made it; when a later milestone changed the same thing again, the later entry says so.
+M9.0 through M10.3 are implemented. This section records, per milestone, where the code departs from the text above: what the text said, what was built, and why. Each departure is listed once, under the milestone that made it; when a later milestone changed the same thing again, the later entry says so.
 
 The last column says what happened to the text:
 - **Corrected (§…)**: the text above now says what was built; the sections named were changed in this revision.
 - **Note**: the text is unchanged. The entry records interim behaviour that a later milestone replaced, work done earlier than planned (*placement*), or detail below the level of this document.
 
-Reports that only confirmed the text are not listed; for example, `Context.NewId` does not enter the thread domain, as §5.7 says, and a root `Context.Write` asserts the sort cells of every registered table, as §6.6 says. §21.8 lists the edits that rule-layer spec v2 asked of this document, and §21.9 lists what is still deferred.
+Reports that only confirmed the text are not listed; for example, `Context.NewId` does not enter the thread domain, as §5.7 says, and a root `Context.Write` asserts the sort cells of every registered table, as §6.6 says. §21.8 lists the edits that rule-layer spec v2 asked of this document, §21.9 records M10.3, and §21.10 lists what is still deferred.
 
 ### 21.1 M9.0: Root benchmark baseline
 
-No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.9).
+No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.10).
 
 ### 21.2 M9.1: Store, contexts, clock and ids
 
@@ -2741,7 +2858,7 @@ No departure was reported. The baseline classes are in `src/Eggnog.Relations.Ben
 | §7.6, §8.2, §10.8 | What `CreateChild` does with a failure: not stated. | A failure that the parent's rebuild or the root's settle records during `CreateChild` stays recorded on the parent, as for `Write` and `Rebuild`, which also record failures without throwing. The child, which has its own failure slot, is still created. Taking that failure right after `CreateChild` is the bridge's job (M10.3). | Corrected (§8.2, §13 edge 24) |
 | §6.6, §8.2, §14.2 | Rebuild indexes are refreshed when read. | `CreateChild` of a context that is not frozen brings the rebuild indexes of that context and of its non-frozen ancestors up to date (`RefreshRebuildIndexesForChildren`, `ContextTables.RefreshOwnRebuildIndexes`), as root work at child creation (§1 item 11): O(tables) plus the appends since each index's last refresh, all rows the first time or after a compaction between child lifetimes. Afterwards a child's step 4 and its lift reads refresh a writable ancestor's index only from that ancestor's appends since the child's creation. That is per-child work of the same order as its catch-up's reading of those appends, which §14.2 did not list. | Corrected (§7.3, §8.2, §14.1, §14.2) |
 | §14.1 | (Root costs.) | Rows the table omitted: interning a new eq-sort container (only on a miss: one frozen check and one `Interlocked` increment); new content in a root container rebuild (one `Interlocked` increment); the G-a test (one field load at the root, as `InChildContext` is tested before `HoldsIds`); one `layer is not null` test per table rebuild in `SortedWritesTable.RebuildWith`; one `DirtyCount` compare per pass in `Database.RebuildPass`; the stores of `LastRebuildRows` and `LastRebuildWasIncremental` per rebuild; one bool per table for the pass result; the rebuild-index refresh at `CreateChild` of a writable root. | Corrected (§14.1) |
-| X37, §14.2 | An empty layer costs about 1–2 KB. | Dry runs measure a bare child at about 7.4–9 KB and an empty layer at about 2.7–3.0 KB (`ManyChildrenBenchmarks`: `ChildWithOneEmptyLayer` minus `ChildOnly`). Most of the layer cost is `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the O(tables) catalog copy. Reducing it means changing root hot paths (the pending queues), so it is left to M10.4 (§21.9). | Corrected (X37, §14.2) with the measured figures |
+| X37, §14.2 | An empty layer costs about 1–2 KB. | Dry runs measure a bare child at about 7.4–9 KB and an empty layer at about 2.7–3.0 KB (`ManyChildrenBenchmarks`: `ChildWithOneEmptyLayer` minus `ChildOnly`). Most of the layer cost is `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the O(tables) catalog copy. Reducing it means changing root hot paths (the pending queues), so it is left to M10.4 (§21.10). | Corrected (X37, §14.2) with the measured figures |
 | §15 | `Database/Database.Rebuild.cs`: no change in code. | `RunWithTakenOut`, `RunOnTables`, `RunOnTablesCore` and `RunOnTablesParallel` return whether any table reported a change (each such table is still notified); `RefreshDirtyContainerIds` (§7.4) needs the result. Root cost: one bool per table. | Corrected (§7.4, §15) |
 | §7.6, §15 | `SettleAppends` calls `MarkRebuilt`. | `Settle` moves every function table's rebuild mark after its `MergeAll`, past the merged rewrites, so the next `CreateChild` does not settle the same rows again. `HasRowsSinceRebuild` is false for tables without rebuild columns. `RebuildFull` was refactored into `RebuildRange`, which `SettleAppends` shares, and the internal diagnostics `LastRebuildRows` and `LastRebuildWasIncremental` were added; the root path is unchanged. | Corrected (§7.6, §15) |
 | §6.2, §6.6 | `HasRetractions` is set when `DeleteLayered` hides an ancestor row. | It means that the context retracted rows of the table: `RetractionGuard` also marks the layer when it allows a delete or a subsume. The I14 checker needs this. | Corrected (§6.2) |
@@ -2749,7 +2866,7 @@ No departure was reported. The baseline classes are in `src/Eggnog.Relations.Ben
 | §6.10 | `ScanOwn` and `ScanAncestorsMentioning` require `IsClean` and throw on the root. | They follow M9.2's rules for `ScanMerges`: they enter the domain of a context that is not frozen, run the sink as a callback, and count as running scans. `ScanAncestorsMentioning` returns nothing for context-private tables and delivers each row once. | Corrected (§6.10) |
 | §12.7 | The tables checker covers I12–I18. | Its cost is proportional to the context. I12 and I15 are checked over own rows and own hides; the ancestor part of I13 through the ancestors' rebuild indexes and the rows appended since creation; I14 by `Find` for constructors, by key for relations, and otherwise by the table's merge on a scratch catalog. I35 is a separate `CheckRootSettled`, run in DEBUG at `CreateChild` and `Freeze` of the root. | Corrected (§8.2, §12.7) |
 | §7.1 | `Rebuild` returns whether any pass changed something. | It returns false when the catch-up only moved cursors and copied nothing. The settled depth advances only when a rebuild runs passes. | Corrected (§7.1) |
-| §10.7, §17 | Container registration with `holdsIds` is an M10.3 item. | `ContainerValues.RegisterType` gained `holdsIds`, and `ContainerEnvBase` gained `HoldsIds`, `AnyContainerMentions` and `EqVersionCounter`, in M9.4, because G-a and G-b are M9.4 content. The bridge still has to pass `holdsIds` when it registers containers (§21.9). | Corrected (§10.7); placement |
+| §10.7, §17 | Container registration with `holdsIds` is an M10.3 item. | `ContainerValues.RegisterType` gained `holdsIds`, and `ContainerEnvBase` gained `HoldsIds`, `AnyContainerMentions` and `EqVersionCounter`, in M9.4, because G-a and G-b are M9.4 content. The bridge passes `holdsIds` when it registers containers since M10.3 (§21.9). | Corrected (§10.7); placement |
 | §17 M9.4 | The facade canonicalizes Id cells through `Context.Find` before every write. | On spike seeds it canonicalizes through `Context.UnionFind` inside the batch, as the spike requires. On spike-free seeds of `ContextDifferentialTests` and odd seeds of `ContextCopyTests` it has a raw-write mode (`RawWrites`, `RawChildWrites`): child writes pass id cells as given with timestamp 0, so X38's canonicalization and stamping are exercised. Root writes stay canonical, because a stale raw root write is legitimately invisible until the next rebuild (X42). Adopted from review. | Corrected (§17) |
 | §17 M9.4 | Gate harness as listed. | Strengthened in review and adopted unchanged: `SpikeTestSchema` has a `bits` table with `OrMerge`, a lattice join that differs from both inputs, so a merge that stores the incoming row instead of the output is caught; `SpikePair.Check` compares `ScanColumn` with the visible rows as exact multisets, not only for completeness; the spike is the second oracle on even seeds, which retract nothing; `ContextCopyTests` runs 400 seeds. | Corrected (§17) |
 | Tests | — | `InterimRowWorkTests` was deleted; its case `AnAncestorFoldThatOnlyTombstonesIsSeenAsItIs` still holds and is restored verbatim in `Layers/CatchUpTests`. `SoundnessReviewTests` asserts the catch-up instead of the refusal. The `ChildDatabaseTests` container uses `holdsIds: false`. | Note |
@@ -2780,7 +2897,7 @@ No departure was reported. The baseline classes are in `src/Eggnog.Relations.Ben
 | §9.4 | With no present layer, `Evaluate` splits and returns `Empty`. | It classifies the constraints on the root's entry of the table, or on the database's own entry for synthetic layers. When layers classify a constraint differently, it counts as fast overall, and the layers where it was slow refine by it with `RefineOne`, as the text says. | Corrected (§9.4) |
 | §9.5 | `TrieNodePool` owns a `SubsetArrayPool`. | `TrieNodePool.Layers` is `null` for one-layer runs, so a root run allocates no array pool. | Corrected (§9.5) |
 | §9.5, §16 | `TrieNode`'s `Subset subset` becomes `LayeredSubset rows`. | A single-layer node, which includes every root node, keeps a plain `Subset` plus a layer byte inline. A multi-layer node's rows, and the spare indexes of a recycled node, live in a new type, `TrieNodeSideState`, created on first use and kept through the pool, so a warm serial run allocates none; a concurrent multi-layer child node allocates one. `IsMultiLayer` is one flag test. Cache arrays are sized from the rows' highest layer, and growth copies the old entries. Why: §1 item 11, because a parallel root run allocates a node per frame at positions 0 and 1, and the inline `LayeredSubset` grew the node from 64 B to 80 B (found in review). It is 64 B again. | Corrected (§9.5, §14.1, §16) |
-| §9.5, §14.1 | The prober's size is not stated. | A `Prober` is 72 B (48 B in M10.1), because a `ProberPiece` carries `Layer` and `View` and the prober carries `Rest` and `RestCount`. It is per-position scratch, allocated once per join task, not per frame or row; a parallel root run therefore pays it per morsel. The `LayerHits` per-position array is now allocated on first use, so a root run never allocates it. Measured against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%); parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%). Shrinking the prober would mean moving `View` and `Rest` out of the piece in every kernel; that is left to the idle-machine gate (§21.9). | Corrected (§9.5, §14.1) |
+| §9.5, §14.1 | The prober's size is not stated. | A `Prober` is 72 B (48 B in M10.1), because a `ProberPiece` carries `Layer` and `View` and the prober carries `Rest` and `RestCount`. It is per-position scratch, allocated once per join task, not per frame or row; a parallel root run therefore pays it per morsel. The `LayerHits` per-position array is now allocated on first use, so a root run never allocates it. Measured against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%); parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%). Shrinking the prober would mean moving `View` and `Rest` out of the piece in every kernel; that is left to the idle-machine gate (§21.10). | Corrected (§9.5, §14.1) |
 | §9.8 | `CachedPlan` keeps at most 16 variants. | When the cache is full, a new K's variant replaces the oldest (copy-on-write, under the lock). A first version stopped caching once full, which made a Store-backed root rebuild its variant on every run after 16 canonical changes (found in review). | Corrected (§9.8) |
 | §9.8 | `RuleBuilder` records an `ActionIdConstant` for every constant Id operand. | They are recorded once, in `RuleBuilder.Build`, by scanning the program through `ActionSubstituter.Operands`, so the operand order is defined in one place. A substituted `ActionInfo` keeps the written `IdConstants`. `QueryEntry` equality ignores the `IsIdConstant` flag, since a flagged and an unflagged constant of one value are the same operand; `WithConstant` keeps the flag. | Corrected (§9.8, §15) |
 | §9.1, §9.5 | `Build` collects the atom and lookup tables; `CloneForMorsel` copies `views`. | A child's snapshot leaves out `$uf` lookups, because a child reads `$uf` through its overlay table (X23). The tables a rule set reads are collected by `ContextView.Snapshot(rules, actions, skip)` through `RuleSet.LookupTable`, without a list; `RuleSet.ReadTables` was removed. `JoinRun.CloneForMorsel` copies the roots array, which M10.1 allocated anew; tasks only compare against it, for counter attribution. | Corrected (§9.1, §9.5) |
@@ -2788,7 +2905,7 @@ No departure was reported. The baseline classes are in `src/Eggnog.Relations.Ben
 | §17 M10.2 | Done when, with `EGGNOG_COUNTERS`, ancestor-layer scanned rows and dynamic-index rows are 0 once `W ≥` every root stamp. | Counters are kept per database (`Database.ExecutorCounts`), behind a static readonly switch set from `EGGNOG_COUNTERS`, which the JIT folds away when off; the test project's module initializer turns counting on for the suite, and `EGGNOG_COUNTERS=0` turns it off (the counter tests then skip). Ancestor rows are counted in two kinds: rows of root nodes, narrowed by headers only, and rows of refined nodes (probe results). The 0 is read on the root-node counters, which measure the work that grows with the root; refined rows are bounded by §14.2's probe-results term. It holds for size-ordered plans (Gj, the default, and PureSize); MinCover deliberately covers with the widest atom, so its plan scans the old side, and a test documents this. | Corrected (§14.1, §17) |
 | §3.4 | Child schema and planning members (carried over from M9.1 and M9.3). | Final form: `IQuerySchema.SplitConstraints` uses `ConstraintProcessor.Split` on the root's entry; `IPlanStatistics` and `PlanQuery` go through `View`; the single-table members (`ProcessConstraints`, the instance `ColumnCardEstimator`) refuse every table in a child with `NotSupportedException`, with the X23 message for `$uf`. | Corrected (§3.4, §15) |
 | §9.2, §9.5, §15 | Mechanical test updates. | `ProberTests` constructs `new ProberPiece { ... }`, and `Prober.TryGetSubset` forwards to its first piece. `LayeredSubset` gained `TakeSingle` and a single-layer `GetEnumerator`, so `PlanInstantiationTests` and `NaiveRuleRunner` compile unchanged over `LayeredSubset` headers. | Corrected (§9.2, §9.5) |
-| M10.1 finding | (M10.1 recorded a hazard: a child run that throws leaves writes staged in layers its search created, because `MarkStagedWrites` and `DiscardStagedWritesSince` visit only `Database.tables`, and the next `MergeAll` would adopt and merge them, against D18 and X18.) | Both `RunRuleSet` and `ExecuteRuleSet` set `InSearch` in a child, as the finding asked, and an exception escaping either faults the child (X12). Every later call except `Dispose` is then refused, including the run members, so those writes are never merged through the context. `DiscardStagedWritesSince` still visits only adopted tables, and `Database.MergeAll` and `MergeTable` do not test the fault flag. | Note; open item in §21.9 |
+| M10.1 finding | (M10.1 recorded a hazard: a child run that throws leaves writes staged in layers its search created, because `MarkStagedWrites` and `DiscardStagedWritesSince` visit only `Database.tables`, and the next `MergeAll` would adopt and merge them, against D18 and X18.) | Both `RunRuleSet` and `ExecuteRuleSet` set `InSearch` in a child, as the finding asked, and an exception escaping either faults the child (X12). Every later call except `Dispose` is then refused, including the run members, so those writes are never merged through the context. `DiscardStagedWritesSince` still visits only adopted tables, and `Database.MergeAll` and `MergeTable` do not test the fault flag. | Note; decided in M10.3 (§21.9) |
 | §3.3, §9.1, §16 | — | Helper members not named in §3 or §9: `Context.ViewStamp`, `IsViewCurrent`, `ThrowIfViewNotCurrent`, `UseEpoch` and the `lastEpoch` field (`BeginEpoch` now records the largest epoch it returns); `ContextView.Stamp`, `Source`, `CanCanonicalize` and the internal `Snapshot(rules, actions, skip)`; `RuleSet.View`, `ViewStamp` and `LookupTable`, and an internal `RuleSet` constructor that takes the stamp; `ViewSnapshot.Wraps`, `Count` and `Require`; `TrieNode.Initialize(int, Subset, bool)`; `CachedPlan.WrittenConstants` and `CanonicalConstants.Written`. | Corrected (§3.3, §9.1, §9.5, §15) |
 | §17 M10.2 | Tests as listed. | `ChildDatabaseTests`' M9.1 interim assertions now expect M10.2 behaviour: a rule set built at the root is refused in the child with `ArgumentException`, and an empty rule set returns `Empty`. `DiffSemiNaiveStep` gained a `Split` helper so that T9 shares its variants; T9 inserts a layered step before every semi-naive step of the generated programs, and the programs of the existing profiles are unchanged. The review probes `ParallelRootMathAllocationProbe` and `RootConstantVariantCostTests` write their report file to the test binary directory (`AppContext.BaseDirectory`), as the other review probes do, instead of the current directory, so a run from the repository root leaves no `rootcost.txt` in the working tree; `RC_OUT` still overrides it, and the assertions are unchanged. Every other review test was copied unchanged. | Corrected (§17) for T9; note for the rest |
 
@@ -2800,30 +2917,112 @@ Rule-layer spec v2 §13 asks nine edits of this document. Three need no new code
 2. **§10.7.** The sentence saying that the rule layer registers its `ValueSet<T>` as a container is dropped: the rule layer registers no container, and `ValueSet<T>` is an interned base value.
 3. **`BaseValues`** in a child: §21.6.
 
-Items 4–9 change bridge and lift APIs; they are listed in §21.9 with M10.3 and M10.4.
+Items 4–9 change bridge and lift APIs. Items 4–7 are applied with M10.3 (§3.5, §10.1, §10.8, §10.10; §21.9); items 8–9 are listed in §21.10 with M10.4.
 
-### 21.9 Still deferred
+### 21.9 M10.3: Per-context rules in the bridge, including concurrent children
 
-The spec-text updates that the M9.1–M10.2 stages left for this document, and rule-layer v2 §13 items 1–3, are applied in this revision. Everything below is still open.
+M10.3 was built in four parts (the bridge on a store; the differential oracles; concurrent children and push/pop conformance; extraction over a context, rule-layer E5), merged, reviewed for soundness, root cost, oracle strength and completeness, and fixed in four rounds, the last three answering verification probes. The rows below record every departure the parts, the merge and the fixes reported. Rule-layer v2 §13 items 4–7 are applied: item 4 (`NewLocalSlot` with a factory) and item 5 (E4, E7, E9) in §10.1 and §3.5, item 6 (E10) in §10.8, and item 7 (E5) in §10.10.
+
+**The bridge on a store (§10.1–§10.8)**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §10.3 | `RunRules` throws `PanicException` right after the run, before any rebuild or clock advance (egglog). | M8's fix of map §8.1 row 22 is kept: the iteration finishes its bookkeeping (the clock advance or the rebuild), then throws the first failure; a failure the rebuild records belongs to the same failed iteration and is dropped. M8's tests encode the fix. | Corrected (§10.3) |
+| §10.3, X18 | Progress is committed when the run returns without a recorded failure. | When the merge itself throws, progress is committed unless a failure was recorded: a merge cannot be undone, so the matches must not be applied twice (M8's `AnExceptionWhileMergingKeepsTheWatermarks`); a child is faulted anyway. An exception in the execute phase commits nothing and does not advance the clock. | Corrected (§10.3) |
+| §10.3, X42 | Writes staged raw at the root merge in the run's `MergeAll` at T, as in egglog. | Not when every rule was pruned: egglog's `run_rule_set` then returns before `merge_all`, yet the run's T becomes every rule's watermark, so after two such runs a raw row merged later lies below the watermark and is never matched, at the root and in children that inherit (found in review). The bridge merges at T itself when the rule set is empty at the root (map §8.1 row 26). The internal `EGraph.IncrementTimestamp` can still stamp a raw row below a later watermark, as egglog's `inc_ts` can; only a test uses it. | Corrected (§10.3, X42) |
+| §10.3 | A rule listed twice uses T. | As written, but the earlier listing is found in O(1) per rule (a scan back over at most 16 listings, a dictionary beyond): the first form scanned every earlier listing, n(n−1)/2 compares per run for n rules, where egglog and M8 are linear (found in review). | Corrected (§10.3) |
+| §10.1, §10.3 | The root-only egglog API delegates to `Root`. | `EGraph.RunRules` only flushes the root's bridge-side host writes; it does not rebuild first, because M8's tests merge unions raw and then run rules on tables left non-canonical, as egglog allows. `EGraph.FlushUpdates` does not throw a recorded failure; the next run reports it, as in egglog. Only the `EGraphContext` API flushes, ensures clean and throws. | Corrected (§10.1) |
+| §10.4, §14.1 | `AddValues(rows)` stages each row into `HostWrites`, then flushes; every root write goes through `HostWrites`. | The egglog-compatible `EGraph.AddValues` and `AddTerm` stage straight into database buffers stamped with the clock, as M8 did, then flush. The first form kept the root's arenas, sized to its largest batch, for the e-graph's lifetime (about 6.5 MB after a 200,000-row load) and copied every row into a temporary list (33 B per row), against §14.1's "nothing per staged insert" (found in review). `HostWrites` now keeps at most 4096 cells and 1024 rows or unions across a flush. The context API's `AddValues` stages each row as it validates it and truncates on a refusal. The bypass first published the batch's buffers and only then replayed the rows the root had staged earlier through the context API, so the earlier write merged last and an order-dependent merge kept the wrong value (found in verification); `AddValues` and `AddTerm` now flush the root's host writes first when any are staged (§10.4). The raw escape had the same defect: `EGraph.WithExecutionState` and `EGraphContext.WithExecutionState` staged into pending buffers while earlier context-API writes waited in `HostWrites` until a later flush replayed them after the raw rows, so `StageRow` then a raw write then `FlushUpdates` (or `RunRules`, or `AddValues`) merged the earlier write last (found in the second verification). Both now flush the context's host writes first too, through the same test; `EGraph.WithExecutionState` enters the root's domain, as `AddValues` does. The third verification found three gaps around that. The raw escape did not mark its action as a callback of the domain, so a `RunRules` issued inside it committed a watermark above the action's rows, which then merged below it and were never matched (I31); and a `StageRow` issued inside it, before a raw row for the same key, merged after that row. The action now runs as a callback (as `Context.Write`'s batch does), and every bridge write and run refuses inside a callback (§8.3). And the internal raw iteration (`EGraph.RunIteration`, `RunRuleSet`) did not flush earlier context-API writes first; it now does, through the same test, and refuses inside a callback. | Corrected (§8.3, §10.4, §14.1) |
+| §10.4 | Before a raw path stages, the context flushes what it staged earlier through the context API. | The flush comes before the raw path reads its input. `EGraph.AddValues` takes an `IEnumerable` and stages each row as it reads it, so a batch refused because a row is malformed has already merged the earlier context-API writes, while nothing of the batch is published. Those writes would have merged at the next flush anyway; checking the batch first would take a second pass over it, or a copy, which the bypass exists to avoid. | Corrected (§10.4) |
+| §3.5 | The bridge calls `Context.Write` and `Database.RunRuleSet(rs, level, T)`. | Host writes replay into an `ExecutionState` after `PrepareForWrite` and merge with `MergeAll` (§10.4). A run calls `ExecuteRuleSet` and `MergeRuleSet` separately, as §10.3's outline does, so progress is staged between the two and an exception while merging is told apart from one in the execute phase (X18); an empty rule set at the root merges with `MergeAll`. Only the internal raw iteration calls `RunRuleSet`. `CreateChild` and `Dispose` are bridge members (E7). | Corrected (§3.5) |
+| §10.4, §6.7 | `ClearTable` maps to `Context.ClearTable`. | It also drops the rows of the function staged here and not flushed, after the clear succeeds; `EGraph.ClearTable` goes through the root context. Without this a clear issued after a staged row took effect before it, against egglog's `clear_table` and `EGraph.ClearTable`'s own documentation (found in review). | Corrected (§10.4) |
+| §10.2, §14.2 | `RuleProgress[] progress`, indexed by rule id. | A small open-addressed map from rule index to progress. An array made a context pay O(highest rule index) whatever it ran: a child's first commit grew it to the rule table's capacity, 16 B per defined rule (64 KB for 4001 rules, found in review). The rule layer defines one rule per query. | Corrected (§10.1, §10.2, §14.2) |
+| §10.2 | `RuleTable` is copy-on-write. | Written under a lock; the slot array is copied only when it grows, slot writes are volatile, and readers are lock-free. Copying on every change costs O(n²) when one rule is defined per query. | Corrected (§10.2) |
+| §10.2 | `RuleInfo` drops `LastRunAt`. | A read-only `LastRunAt` reads the root context's committed progress, and `CachedPlan` is getter-only; the stored field is gone. M8's tests read root watermarks. | Corrected (§10.2) |
+| §10.2, §6.1 | `LookupOrInsertDefault` is query-determined on a table whose merge is `UnionIdMerge`. | `LayeredTableSchema.IsConstructor` also recognizes bridge constructors (a `FunctionTableMerge` over a union-id merge) and gains `ConstructorValueColumn`; a lookup-or-insert is query-determined only when it reads a key column or the union column, not a subsumption or timestamp cell. Otherwise `ActionReadAnalysis` refused inheritance to every term-creating rule. | Corrected (§10.2) |
+| §10.6 | The bridge rule builder appends the early stop. | It is appended when the rule is lowered (planned): a rule planned before `DesignateContradiction` keeps its plan without it, and its insert still sets the stop flag when it merges. The serial executor runs actions in 128-lane batches, so the stop cuts a search once a batch has run. | Corrected (§10.6) |
+| §10.6 | `PanicFunction` reports through `state.ReportFailure`. | `PanicFunction` and `LazyPanicFunction` do, and also set the e-graph's side channel for root or bare states only, a root-only compatibility path for M8's tests; a child's panic never reaches it. | Corrected (§10.6) |
+| §10.1, E4 | `DesignateContradiction` must be called before any child exists. | Refused once the store has ever had a child (`Store.HasHadChildren`), stricter than "while a child exists". The check and the designation run under the store's definition lock, under which the first child notes itself before its constructor reads the contradiction table; the first form checked under the bridge's gate only, so a first `CreateChild` on another thread could interleave and miss the designation (found in review). | Corrected (§10.1) |
+| §9.8, §15 | The bridge lowers Id-typed constants through `QueryEntry.IdConst`. | Only constants that land in no table column (external arguments, `AssertEq`/`AssertAnyNe` operands, the default of a union-find lookup), and only when typed `ColumnTy.Id`. Table-column constants are canonicalized by the core through the table's id columns. Bridge constant types are diagnostic only (egglog's constants are untyped), and the semi-naive differential types value constants as Id, which a type-based flag canonicalized wrongly. | Corrected (§15) |
+| §10.7 | `GetContainerValue` registers as needed. | Registers the type on first use only at the root; a child needs it registered, since registration is a definition of the e-graph. | Corrected (§10.7) |
+| §10.8, E10 | `FlushUpdates()`; `Rebuild()`; throw on a failure; plan every live rule. | The flush runs only when host writes are staged (raw pending writes are merged by the storage freeze's rebuild, which the review probe `FreezeMergesARowStagedRawAtTheRoot` confirms); a recorded failure is thrown as `PanicException` and the context stays unfrozen; `Freeze(planRules)` plans exactly the given rules (E10). | Corrected (§10.8) |
+| §8.2, §21.10 | Taking a failure recorded during `CreateChild` is the bridge's job. | `EGraphContext.CreateChild` takes it right after: the new child is disposed and `PanicException` is thrown; the parent stays usable. | Corrected (§10.1) |
+| §21.7 (M10.1 finding) | Decide whether an exception in a child's `ExecuteRuleSet` keeps faulting it. | It does (X12). The writes the failed search staged into deferred layers are discarded (`ContextTables.DiscardDeferredStaged`), and `Database.MergeAll` and `MergeTable` refuse a faulted child, inside the existing layers test (zero root cost). Documented in `Database.Execution.cs`. | Corrected (§15) |
+| §12.7 | C2 reports host writes held by a frozen context. | `CheckInvariants` refused any unclean context before checking, so that item could never be reported (found in review); host writes held by a frozen context are now exempt from the precondition and reported as C2. C4 (member maps) needs `MemberMap` and moves to M10.4. | Note |
+| §10.1 | — | Members the text did not list: `EGraphContext.Parallelism` (the context's heuristics, used by `ConcurrentChildren`), `Owner`, `Depth`, `Options`, `IsClean`, `SetProgress` and `CommittedLastRunAt`; `Context.Host` and `LastRebuildPasses`; `ExecutionState.TryLookupColumn` and `VisibleRowCount`, through which `TableAction` reads the running context's view (it read `state.GetTable`, which throws in a child). | Corrected (§10.1, §15) |
+
+**Concurrent children (§10.9)**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §10.9 | Each body runs under a lease. | A lease is `min(child DOP, Total)`, and the degree uses the same capped value. `Lease` and `TryLease` refuse a request outside `[1, Total]`, which could never be granted, with `ArgumentOutOfRangeException`; over-release throws `InvalidOperationException`. Waiters are not served in arrival order. | Corrected (§10.9) |
+| §10.9 | — | A run nested inside a body runs its children serially under the lease the thread holds (a per-thread count): the outer run holds the whole budget, so leasing again would block forever. Two overloads (`body(child)`, `body(child, index)`); a null, repeated, disposed or root child and a child of another e-graph are refused before anything runs; a one-child run, or a run on a thread that holds a lease, does not go through `Parallel.For`. | Corrected (§10.9) |
+
+**Extraction over a context (§10.10)**
+
+§10.10 is new in this revision: it was written with the code, for rule-layer v2 §13 item 7 (E5). The rows record where the built design departs from E5's wording; rule-layer N44 records the same from that side.
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §10.10, E5 | Staleness is keyed on the extraction schema's tables and the union-find of the context and its non-frozen ancestors, never on the clock. | Keyed on the tables of the extractor's slots (the schema functions it can use under its options), not on every function the schema declares: a write to a function the extractor never reads cannot change its answers. A compaction renumbers rows without changing them and still counts as a change; an empty layer that a no-op write created marks as an absent one. | Corrected (§10.10) |
+| §10.10, §10.5 | — | Only creation requires the context clean; each query checks the watch instead. A non-frozen ancestor's write to an unrelated table leaves the child behind its parent, yet the rows the extractor reads, and their canonical form, are as they were. | Corrected (§10.10) |
+| §10.10, §8.3, E5 | On a frozen context, any number of extractors run on any threads; a writable one is not discussed. | A context-form query enters the context's domain while it is not frozen and runs as a callback, so a second thread fails fast and a cost function may read the context but not write it. The root forms hold nothing, as egglog's root does not. A single extractor stays single-threaded, because queries extend its caches. | Corrected (§8.3, §10.10) |
+| §10.10, §16 | — | Members E5 did not list: `Extractor.Context`; the internal `EGraphContext.EnterExtraction`, `ExtractionWatch`, `ExtractionTableMark` and `ExtractionQueryScope`. `ComputeCostsFromRootSorts` and `FunctionToDag` stay root-only (§21.10). | Corrected (§10.10, §16) |
+
+**Differential oracles (§17 M10.3)**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §17 | `ReferenceRuleContext` runs `NaiveRuleRunner` naively, and extends `SpikeReferenceContext`. | It evaluates the programs' own rule IR (`ColorRule`, `ReferenceRuleEvaluator`) semi-naively by row content, with §10.2's watermarks, and wraps the sealed `SpikeReferenceContext` (which gained `Derive`, `DeriveUnion` and the `Derived` op kind). `NaiveRuleRunner` would run bridge rules through the planner and action interpreter under test, and a naive reference disagrees with egglog's semi-naive semantics in the history family (family A seeds 5, 11, 45 and 73 failed against one). The reference is therefore not independent of the watermark rule; inheritance soundness rests on the seeded-versus-unseeded property, and the reference decides `AllowInheritance` from the rule itself. | Corrected (§17) |
+| §17, X41, I31 | Seeded == unseeded holds at every checkpoint for both families. | Only in programs whose deletes and clears touch tables no rule writes (`ColorFamily.DeletesOnlyUnwritten`): a child that retracts a derived fact re-derives it unseeded and not seeded, as egglog after a push. Likewise X41's "the row exists after the ancestor's run" fails once a child hides a constructor row. Under retraction, inheritance gives egglog's push semantics. | Corrected (§17, X41, I31) |
+| §17 | Seeded match totals are ≤ unseeded. | Engine match counts depend on the plan (a full run counts distinct bindings of the variables the actions use; a semi-naive run sums over its variants; seed Bh:3 counted 11 seeded against 10 unseeded with equal views). Seeded programs add a no-op primitive over every body variable (`ColorSchema.Keep`), which makes both counts distinct full bindings. | Corrected (§17) |
+| §17 | Family A modulo renaming; family B by term names. | Family A is compared cell for cell (stronger: both sides make the least id canonical). Family B leaves out the id-order primitive, never deletes or clears constructor tables, and generates rules in strata so minting terminates. | Corrected (§17) |
+| §17 | The monotone family excludes `AssertNe`, id-order primitives, deletes and table reads in actions. | Also rule bodies that read a lattice function's output. Such a body is not monotone once a write lowers the value: a soak found seed 7000246, where a grandchild derives from `low = 3` before `low` drops to 0 and the fresh root never sees 3 (found in review); a plain root gives the context's result, so the engine is right and the oracle was not. Monotone bodies bind `low`'s output to a variable nothing else reads; the history family keeps such joins, under the operational reference. | Corrected (§17) |
+| §17 | `EggPushPopTests` once a `.egg` reader exists. | There is no reader (rule-layer D14); the programs are translated by hand (`EggPushPopProgram`), with expected values from the egglog 2.0.0 CLI. One program was written so that a push inherits progress (the egglog test files never run rules at the root before a push); the review added the web demo's `bdd`, `push-pop`, `array` and `cyk` (`EggPushPopWebDemoTests`). | Corrected (§17) |
+| §17 | — | `ContextRuleCopyTests` runs without the reference (the fresh-root copy is the oracle there). Every write is flushed as it is made, so CreateChild's flush of a parent's staged writes is covered by `ContextOracleReviewTests` instead. Test classes named in §17 as `FreezeTests`, `ContainerContextTests` and `ContradictionTests` are `BridgeFreezeTests`, `BridgeContainerContextTests` and `BridgeContradictionTests`, because storage classes of those names exist in the shared test namespace. | Note |
+
+**Engine defects fixed**
+
+| § | Defect | Fix | Text |
+|---|---|---|---|
+| §8.1, §10.10 | `Database.Freeze` compacted tables (`ForceRehash`) after the last merge had re-armed the index catalogs, so an index refreshed since (by a search that merged nothing, or an extraction) kept old row ids, and a frozen catalog is never reset again: children's probes read renumbered rows. Found independently by the differential (`row mark(#3); union(#1, #3); freeze`) and by the extraction differential (seed 13). | The freeze re-arms the indexes of every table whose generation it moved, before the warm-up; every compaction bumps the generation and `Index.Refresh` rebuilds fully on a generation change, so a table the freeze did not compact keeps its warm indexes. Tests: `FreezeIndexWarmupTests`, `ContextExtractionTests.AnIndexReadBeforeTheFreezeIsRebuiltWhenTheFreezeCompacts`. | Corrected (§10.10) |
+| §10.5, §6.5 | `TableAction.TryLookup` and `RowCount` used `state.GetTable`, which throws in a child, so bridge merge functions and primitives failed there. | They read the running context's view (`ExecutionState.TryLookupColumn`, `VisibleRowCount`). | Corrected (§15) |
+| §10.3 | Raw root rows stamped below the watermark after empty runs (above). | Map §8.1 row 26. | Corrected (§10.3) |
+
+**Tests changed**
+
+| Test | Change | Why |
+|---|---|---|
+| `EGraphRulesTests.APanicIsThrownAfterTheRunWithTheWatermarkAdvanced` | Renamed `…WithoutCommittingTheWatermark`; `LastRunAt` stays 0 and later runs panic again | X18 (egglog advances the watermark) |
+| `SemiNaiveDifferentialTests`, `RandomRule.Evaluate`, `BridgeDiffOracle.Rules` | The reference oracles run Id constants of rules in their canonical form | X19: a store-backed root keeps matching a constant that lost a union |
+| `Eggnog.Tests` `ExtractionTests.AStaleExtractorThrowsAfterAChangingWrite` | An unrelated relation write keeps the extractor current; a term write makes it stale | E5 and rule-layer D49 drop the clock from staleness |
+| `RootThreadingTests.LatticeMergesOnPoolThreadsAreRefusedToo` (`Eggnog.Tests`), `HiddenRootCostReviewTests.Allocated` | The first waits for a second thread to enter; the second keeps the least of three measured windows | Both failed on a loaded machine, where the merge ran on the calling thread or a pool trim showed as an allocation; the checks keep their strength |
+| `ContextOracleReviewTests` (two C1 cases), `EGraphContextInvariantsTests.C1CatchesCorruptProgress` | Corrupt progress through `EGraphContext.SetProgress` instead of writing the private array by reflection | The progress is a map now |
+| `ActionReadAnalysisTests` | Its nested fixture became `ActionReadAnalysisSetup` | Conventions: one type per file |
+| `RootSizeProbeTests`, `RootConstantVariantCostTests` | Joined `ExecutorStressCollection` | They append to the report file the other probes of that collection write, and failed with a sharing violation when run beside them |
+| `RuleContextSoundnessReviewTests` | Re-encoded as UTF-8; the two `§` that were already UTF-8 and the re-encoding had mangled were repaired in verification | It was saved partly as Latin-1, which mangled `§` |
+| `ContextFixReverifyTests` (from the second verification) | Added as written; its four ordering cases failed until the raw escape flushed staged writes first | §10.4 |
+| `RawEscapeReverifyTests` (from the third verification) | Added as written; three cases failed until the raw escape's action ran as a callback, the bridge's writes refused inside callbacks, and the raw iteration flushed staged writes first. Each case accepts either a refusal or the ordered result; `RawEscapeCallbackTests` asserts the refusals | §8.3, §10.4 |
+| `BridgeRootCostReviewTests.RootAddValuesAllocatesNoMoreThanStagingTheRowsDirectly` | Measures the two paths in interleaved windows and keeps the least of up to ten windows each, stopping once the bound holds | It failed once in a full suite, where every window of one path was inflated by a pool trim; the bound is unchanged |
+
+### 21.10 Still deferred
+
+The spec-text updates that the M9.1–M10.3 stages left for this document, and rule-layer v2 §13 items 1–7, are applied in this revision. Everything below is still open.
 
 | Item | Recorded in | Target |
 |---|---|---|
-| §10 in full on the bridge: `EGraph` on a `Store`; `EGraphContext` and its partials; `RuleTable` and `RuleProgress` (watermarks, seeding, inheritance); `ActionReadAnalysis` and `ExternalFunction.ReadsTables`; `RunRules` (calling `NoteRuleRun`, and running at T within `UseEpoch`'s floor through `RunRuleSet`), `EnsureClean`, `Saturate`, `FlushUpdates`, `HostWrites` and the reads; `IterationReport`'s new fields; `ContextLocalSlot`; `StopOnContradictionFunction`; panics per context | M10.2 | M10.3 |
-| The bridge lowering Id-typed constants through `QueryEntry.IdConst`, and its freeze passing `FreezeWarmup.From(cached plans, schema)` | M10.2 | M10.3 |
-| Container registration in the bridge (passing `holdsIds`), and G-a on the bridge's paths | M9.4, M10.2 | M10.3 |
-| `EGraphContext` freeze and failure handling, including taking a failure that the parent's rebuild or the root's settle recorded during `CreateChild` (§8.2) | M9.4 | M10.3 |
-| The rest of `EGraphContext.CheckInvariants`: C1 (including per-rule watermark bounds, which `ExecutorInvariants` leaves to the bridge), C2, C4, C5, C7, and the C6 wrapper over `CheckEqContainerElements` | M9.4, M10.2 | M10.3 |
-| `ParallelismBudget`, `ParallelismLease` and `ConcurrentChildren` | M10.2 | M10.3 |
-| Every M10.3 unit and differential test of §17, including `ContextRuleDifferentialTests`, `ContextRuleCopyTests`, `SeededWatermarkDifferentialTests`, `IdConstantContextTests` and `ConcurrentChildRulesTests` | M10.2 | M10.3 |
-| Rule-layer v2 §13 items 4–7, in this text and in code: a factory (or setter) for `ContextLocalSlot`; `EGraph.DesignateContradiction`, the `EGraphContext` members `CreateChild`, `Dispose`, `IsFaulted`, `Parent` and `OwnRowCount`, `RunRules` reporting at the graph's `ReportLevel`, and `ParallelHeuristics` on the Store-backed `EGraph` constructor; `Freeze(planRules)` planning exactly the given rules; an extraction section (extraction over an `EGraphContext`, with staleness keyed on the extraction tables and the union-find of the context and its non-frozen ancestors, not on the clock) | M10.1 | M10.3 |
-| Failed child runs (§21.7, M10.1 finding): decide whether an exception in a child's `ExecuteRuleSet`, which the rule layer's queries call directly, must keep faulting the child. If it must not, discard the writes staged in deferred layers as well (`AdoptDeferred` before `MarkStagedWrites`, or mark and discard the deferred layers), and have `Database.MergeAll` and `MergeTable` refuse a faulted child | M10.1 | M10.3 |
-| §11 in full: lift primitives and split hooks (`MemberMap`, `ClassPartition`, `Lifter`, `CaseSet`, `SplitDriver` and the rest), and `EGraphContext.Lift.cs` | M10.2 | M10.4 |
+| C4 (member maps) in `EGraphContext.CheckInvariants` | M10.2, M10.3 | M10.4 (needs `MemberMap`) |
+| §11 in full: lift primitives and split hooks (`MemberMap`, `ClassPartition`, `Lifter`, `CaseSet`, `SplitDriver` and the rest), and `EGraphContext.Lift.cs` (`ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` by `FunctionId`; M10.3 tests reach these through the storage `Context`) | M10.2, M10.3 | M10.4 |
 | Rule-layer v2 §13 items 8–9: `CaseSet.AddCase(ContextOptions?)`, `DisposeVacuous`, and `Lift` with a cancellation token checked between rounds; `ISplitSource.FindRequests` receiving the `SplitReport`, `SplitOptions.CaseOptions`, and `SplitDriver.Step` not holding the scope's domain while it calls sources and schedules | M10.1 | M10.4 |
 | `PerChildCostBenchmarks`' full workload (100 merges plus one rule run) | M9.4 | M10.4 |
 | The L6 and L7 reports; `CaseSplitMemoryBenchmarks`, `CopyVolumeBenchmarks` and `LateParentMintBenchmarks` | M9.4, M10.2 | M10.4 |
 | Reducing a bare child (about 7.4–9 KB) and an empty layer (about 2.7–3.0 KB) toward §14.2's estimate: lazy `PendingState` queue segments and lazy `IndexCatalog`s. These touch root hot paths, so the M9.0 gates apply | M9.4 | M10.4 |
-| The ≤2% root gates against the M9.0 baseline, which need an idle machine (only Release builds and dry runs were done): M9.1 (`ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks`); M9.2 (`DisplacedRebuildBenchmarks`, `UnionFind/*`); M9.3 (`WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks`); M9.4 (`DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks`); M10.1 (`ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks`); M10.2 (`RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks`) | M9.1–M10.2 | No milestone: an idle-machine run |
+| The ≤2% root gates against the M9.0 baseline, which need an idle machine (only Release builds and dry runs were done): M9.1 (`ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks`); M9.2 (`DisplacedRebuildBenchmarks`, `UnionFind/*`); M9.3 (`WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks`); M9.4 (`DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks`); M10.1 (`ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks`); M10.2 (`RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks`); M10.3 (`RuleSetRunBenchmarks` and the M8 bridge workloads `BridgeMath` and `BridgeAc`, which now run on a store-backed root and pay §14.1's M10.3 rows; the cost of building an `EGraph`; `ContextExtractionBenchmarks` `RootContext` against `RootApi`). Allocation-only dry runs: `BridgeMath` 9.80 GB → 9.61 GB, `BridgeAc` 15.47 GB → 15.57 GB (+0.6%), `RootContext`/`RootApi` 612.5 KB / 608.6 KB | M9.1–M10.3 | No milestone: an idle-machine run |
 | M9.4's done-when: per-child time and bytes flat within 1.5× from 20k to 2M rows (L6, B4). Dry runs show per-child bytes flat at about 98–101 KB across 20k, 200k and 2M rows, for frozen and writable roots; time is not measured | M9.4 | No milestone: an idle-machine run |
 | Whether the `Prober`'s growth (+24 B per prober) stays within the `RuleSetRunBenchmarks` Parallel gate. If it does not, shrink `ProberPiece` by moving `View` and `Rest` out of line | M10.2 | Idle-machine run; an M10.2 follow-up if the gate fails |
-| §19 item 9: turn a nonzero `RestampedCopies` into a `Debug.Assert` once I21 is proven over M10 workloads | §19 | After M10.3 |
+| §19 item 9: turn a nonzero `RestampedCopies` into a `Debug.Assert` once I21 is proven over M10 workloads. Every M10.3 differential asserts `RestampedCopies == 0` throughout, and it held | §19 | M10.4, once its workloads (the lift) have run under the same assertion |
+| Exercising a child's internal parallel rule set under `ConcurrentChildren` with more than `DbLevelThreshold` rows of its own (`ChildParallelRuleSetReviewTests` covers forced parallel rule sets in one child, under writable and frozen roots) | M10.3 | M10.4 `PerChildCostBenchmarks`, or an idle-machine run |
+| Push/pop programs that intern eq-sort containers in a child (`container-rebuild.egg`, `container-fail.egg`, `vec.egg`) | M10.3 | After M10, with eq containers in children (decision 9, §19 item 8) |
+| Push/pop programs that need sorts the bridge lacks (`UnstableFn`, `Map`: `python_array_optimize.egg`, `stresstest_large_expr.egg`, the issue #113 blocks of `tricky-type-checking.egg`), and the web demo programs out of reach for the same reasons. The web demo's `math.egg` needs only `f64` and strings, which the bridge has, but is not translated (74 rules, 21 push blocks) | M10.3 | No milestone: there is no `.egg` reader (rule-layer D14); `math.egg` when a reader exists, or by hand if R2 needs more push/pop coverage |
+| `ComputeCostsFromRootSorts` and `FunctionToDag` over an `EGraphContext` (only the on-demand extractor takes a context, as E5 asks) | M10.3 | No milestone; R2 if it needs them |
 | Left open by design (§19 items 7 and 8): G2 ranking (after the L7 report), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |

@@ -235,17 +235,17 @@ namespace Eggnog.Relations
                 {
                     // Column 1 of the union-find is the canonical id; an id never displaced is its own (rule.rs:209).
                     var id = bindings.Convert(Entry);
-                    var canonical = rule.LookupWithDefault(Table, [id], id, new ColumnId(1));
+                    var canonical = rule.LookupWithDefault(Table, [id], bindings.ConvertLoose(Entry), new ColumnId(1));
                     bindings.Bind(Result, canonical);
                     break;
                 }
                 case RuleActionKind.AssertAnyNe:
-                    rule.AssertAnyNe(bindings.ConvertAll(entries), bindings.ConvertAll(others));
+                    rule.AssertAnyNe(bindings.ConvertAllLoose(entries), bindings.ConvertAllLoose(others));
                     break;
                 case RuleActionKind.CallExternal:
                 {
                     // External functions that fail on the right-hand side panic (rule.rs:396-400).
-                    var result = rule.CallExternalWithFallback(Function, bindings.ConvertAll(entries), Fallback, ReadOnlySpan<QueryEntry>.Empty);
+                    var result = rule.CallExternalWithFallback(Function, bindings.ConvertAllLoose(entries), Fallback, ReadOnlySpan<QueryEntry>.Empty);
                     bindings.Bind(Result, result);
                     break;
                 }
@@ -269,6 +269,11 @@ namespace Eggnog.Relations
                     break;
                 case RuleActionKind.Insert:
                     rule.Insert(Table, BuildRow(bindings, entries, Math, default, Entry, hasOutput: false));
+
+                    // §10.6: a head insert into the contradiction function stops a case's search early.
+                    if (bindings.TryGetStop(Table, out var stop))
+                        rule.CallExternal(stop, ReadOnlySpan<QueryEntry>.Empty);
+
                     break;
                 case RuleActionKind.Remove:
                     rule.Remove(Table, bindings.ConvertAll(entries));
@@ -413,7 +418,7 @@ namespace Eggnog.Relations
         /// </summary>
         void LowerQueryPrim(RuleBindings bindings, RuleBuilder rule)
         {
-            var converted = bindings.ConvertAll(entries);
+            var converted = bindings.ConvertAllLoose(entries);
             var expected = converted[^1];
             var result = rule.CallExternal(Function, converted.AsSpan(0, converted.Length - 1));
             var last = entries[^1];

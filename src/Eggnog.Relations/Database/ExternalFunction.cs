@@ -38,6 +38,23 @@ namespace Eggnog.Relations
         public static ExternalFunction Create(ExternalFunctionCallback callback) => new DelegateExternalFunction(callback);
 
         /// <summary>
+        /// Creates an external function from a callback, saying whether it reads tables (<see cref="ReadsTables"/>).
+        /// </summary>
+        /// <param name="callback">The implementation.</param>
+        /// <param name="readsTables">Whether the callback reads table contents.</param>
+        /// <returns>The function.</returns>
+        public static ExternalFunction Create(ExternalFunctionCallback callback, bool readsTables) => new DelegateExternalFunction(callback, readsTables);
+
+        /// <summary>
+        /// Gets whether the function reads table contents through its execution state (a lookup, a scan, a row count):
+        /// what it returns or writes may then depend on rows a descendant context can add or change, not only on its
+        /// arguments and the context's equalities (colored-contexts spec §10.2, X41). A rule whose actions call such a
+        /// function never inherits a semi-naive watermark from an ancestor (<see cref="ActionReadAnalysis"/>). Default
+        /// <c>false</c>: a pure function of its arguments, as primitives are. Read once per rule, when it is planned.
+        /// </summary>
+        public virtual bool ReadsTables => false;
+
+        /// <summary>
         /// Invokes the function. egglog's <c>invoke</c>.
         /// </summary>
         /// <param name="state">The calling execution state.</param>

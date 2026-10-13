@@ -27,6 +27,12 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         Clear,
 
+        /// <summary>
+        /// A fact a rule run derived (colored-contexts spec §17 M10.3, <c>ReferenceRuleContext</c>): a row, or a union when
+        /// the op has no table. It holds like an <see cref="Insert"/> or a <see cref="Union"/>, and descendants inherit it.
+        /// </summary>
+        Derived,
+
     }
 
 }
