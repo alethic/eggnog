@@ -7,7 +7,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Renders terms, facts, rules and schedules as egglog s-expressions, for <c>ToString</c> and messages. Constants are
+    /// Renders terms, facts, rules, split rules and schedules as egglog s-expressions, for <c>ToString</c> and messages.
+    /// Constants are
     /// formatted by their column type where the context gives one (a table's argument), and with the built-in literal
     /// syntax otherwise; named primitives render by name, lambdas as <c>&lt;lambda&gt;</c>.
     /// </summary>
@@ -123,6 +124,61 @@ namespace Eggnog
             }
 
             return builder.Append("))").ToString();
+        }
+
+        /// <summary>
+        /// Renders a split rule as written (§6.9.2): <c>(split (body…) (cases v d) (key k) (assume…))</c>, then
+        /// <c>:case-tag tag</c> when its cases are tagged; the assumptions render as actions.
+        /// </summary>
+        /// <param name="rule">The split rule.</param>
+        /// <returns>The rendering.</returns>
+        public static string Render(SplitRule rule)
+        {
+            var builder = rule.Builder;
+            var draft = builder.Draft;
+            var text = new StringBuilder("(split (");
+            for (var i = 0; i < draft.Body.Count; i++)
+            {
+                if (i > 0)
+                    text.Append(' ');
+
+                Append(text, draft.Body[i]);
+            }
+
+            text.Append(") (cases ");
+            Append(text, builder.Element!, null);
+            text.Append(' ');
+            Append(text, builder.Set!, null);
+            text.Append(") (key");
+            if (builder.KeyTerms is { } key)
+            {
+                foreach (var term in key)
+                {
+                    text.Append(' ');
+                    Append(text, term, null);
+                }
+            }
+            else
+            {
+                foreach (var (name, _, variable) in draft.Variables)
+                    if (ReferenceEquals(variable, builder.Set) == false)
+                        text.Append(' ').Append(name);
+            }
+
+            text.Append(") (");
+            for (var i = 0; i < builder.Assumptions.Count; i++)
+            {
+                if (i > 0)
+                    text.Append(' ');
+
+                AppendAction(text, builder.Assumptions[i]);
+            }
+
+            text.Append(')');
+            if (rule.CaseTag is { } tag)
+                text.Append(" :case-tag ").Append(tag.Name);
+
+            return text.Append(')').ToString();
         }
 
         /// <summary>
@@ -336,6 +392,20 @@ namespace Eggnog
                         Append(builder, fact);
                     }
 
+                    builder.Append(')');
+                    break;
+                case SplitSchedule split:
+                    builder.Append("(split (");
+                    for (var i = 0; i < split.Rules.Length; i++)
+                    {
+                        if (i > 0)
+                            builder.Append(' ');
+
+                        builder.Append(split.Rules[i].Name);
+                    }
+
+                    builder.Append(") ");
+                    Append(builder, split.InCase);
                     builder.Append(')');
                     break;
                 default:

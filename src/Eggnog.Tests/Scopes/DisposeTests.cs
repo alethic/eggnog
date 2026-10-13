@@ -238,6 +238,32 @@ namespace Eggnog.Tests.Scopes
             Assert.True(child.Engine.IsDisposed);
             Assert.Empty(t.Root.Children);
         }
+
+        /// <summary>
+        /// R3: an open <see cref="CaseSet"/> defers its parent's release (D40): its cases are children of the parent.
+        /// </summary>
+        [Fact]
+        public void AnOpenCaseSetDefersItsParentsRelease()
+        {
+            var t = new ScopeTheory();
+            var parent = t.Root.CreateChild();
+            var cases = parent.OpenCases();
+            var @case = cases.Add();
+            @case.Assume(t.Fact.Of("a"));
+
+            parent.Dispose();
+            Assert.True(parent.IsDisposed);
+            Assert.False(parent.Engine.IsDisposed);
+            Assert.True(@case.Check(t.Fact.Of("a")));                       // the case still works
+            Assert.Throws<ObjectDisposedException>(() => cases.Lift());      // its parent cannot be lifted into
+
+            cases.Dispose();
+            Assert.True(@case.IsDisposed);
+            Assert.True(@case.Engine.IsDisposed);
+            Assert.True(parent.Engine.IsDisposed);
+            Assert.Empty(t.Root.Children);
+            Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
+        }
     }
 
 }

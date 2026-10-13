@@ -28,10 +28,10 @@ namespace Eggnog
             ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled);
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits)
         {
             foreach (var step in Steps)
-                step.Collect(rulesets, conditions);
+                step.Collect(rulesets, conditions, splits);
         }
 
         /// <summary>

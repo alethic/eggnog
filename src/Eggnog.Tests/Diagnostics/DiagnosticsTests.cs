@@ -313,6 +313,66 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Single(inner.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true }).Steps, s => s.Kind == RunStepKind.MirrorSync);
             Assert.DoesNotContain(inner.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true }).Steps, s => s.Kind == RunStepKind.MirrorSync);
         }
+
+        /// <summary>
+        /// R3: a split step is a step, recorded after the iterations of its cases and the lifts it made; each lift is a
+        /// step of the split scope, recorded between the cases' iterations. The observer sees the same steps and may read a
+        /// case while it runs.
+        /// </summary>
+        [Fact]
+        public void SplitStepsAndLiftsAreSteps()
+        {
+            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            c.Graph.Root.Freeze();
+            var scope = c.Graph.Root.CreateChild(c.Schema);
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
+            c.DeclareBranch(scope, "kind", "a", c.Form.Of("ref", "uuid-lower"));
+            c.DeclareBranch(scope, "kind", "b", c.Form.Of("ref", "uuid-lower"));
+            var observed = new List<RunStep>();
+            var readInCase = 0;
+
+            var report = scope.Run(Schedule.Saturate(Schedule.Saturate(c.Horn, c.Lattice), Schedule.Split(c.SchemaSplit, Schedule.Saturate(c.Horn, c.Lattice))),
+                new RunOptions
+                {
+                    RecordSteps = true,
+                    Observer = step =>
+                    {
+                        observed.Add(step);
+                        if (step.Kind == RunStepKind.Iteration && step.Scope.IsCase && step.Scope.Check(c.Present.Of("kind")))
+                            readInCase++;
+                    },
+                });
+
+            Assert.Equal(report.Steps, observed);
+            Assert.True(readInCase > 0);
+            var splitSteps = report.Steps.Where(s => s.Kind == RunStepKind.SplitStep).ToArray();
+            Assert.True(splitSteps.Length >= 2);                                  // the first opens, a later one finds nothing new
+            var first = splitSteps[0];
+            Assert.Same(scope, first.Scope);
+            Assert.Equal(2, first.CasesOpened);
+            Assert.True(first.Changed);
+            Assert.Empty(first.Rules);
+            Assert.Equal($"#{first.Index} split-step {scope.Path} changed: 2 cases", first.ToString());
+            Assert.All(splitSteps.Skip(1), s => Assert.Equal(0, s.CasesOpened));
+            Assert.False(splitSteps[^1].Changed);
+
+            var lifts = report.Steps.Where(s => s.Kind == RunStepKind.Lift).ToArray();
+            Assert.Equal(report.Lifts, lifts.Length);
+            Assert.All(lifts, l => Assert.Same(scope, l.Scope));
+            Assert.Contains(lifts, l => l.Changed);
+            Assert.StartsWith($"#{lifts[0].Index} lift {scope.Path} changed", lifts[0].ToString(), StringComparison.Ordinal);
+
+            // Within the first split step: the cases' iterations without nested splits (phase A), its lift, the cases'
+            // iterations with nested splits (phase B, which changed nothing, so no second lift), then the step itself.
+            var caseIterations = report.Steps.Where(s => s.Kind == RunStepKind.Iteration && s.Scope.IsCase && s.Index < first.Index).ToArray();
+            Assert.NotEmpty(caseIterations);
+            Assert.All(caseIterations, s => Assert.Contains("/case#", s.ScopePath, StringComparison.Ordinal));
+            Assert.True(lifts[0].Index > caseIterations[0].Index && lifts[0].Index < first.Index);
+            Assert.Contains(caseIterations, s => s.Index > lifts[0].Index);
+            Assert.DoesNotContain(lifts, l => l.Index > lifts[0].Index && l.Index < first.Index);
+            Assert.All(caseIterations, s => Assert.True(s.Scope.IsDisposed));       // the run ended: its cases are gone
+            Assert.Equal(report.Iterations, report.Steps.Count(s => s.Kind == RunStepKind.Iteration));
+        }
     }
 
 }

@@ -1,3 +1,5 @@
+using System;
+
 namespace Eggnog
 {
 
@@ -19,6 +21,14 @@ namespace Eggnog
         /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error.
         /// </summary>
         public ValueLattice? Lattice { get; internal set; }
+
+        /// <summary>
+        /// Gets the case join a lift uses for the function's values (§6.9.1, R3), over cells: its lattice's
+        /// (<see cref="ValueLattice{T}.CaseJoin"/>), made once when the function is defined, so every lift spec built later
+        /// holds the same delegate and the engine's lift memo, which compares specs by content, still hits; <c>null</c>
+        /// when the function has no lattice or its lattice no case join, and a lift then requires every live case to agree.
+        /// </summary>
+        internal Func<uint, uint, uint>? CaseJoin { get; set; }
 
         /// <summary>
         /// The untyped application: the function's value at <paramref name="arguments"/> (D13).

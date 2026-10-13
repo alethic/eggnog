@@ -9,8 +9,11 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Gets whether <see cref="EGraph.Contradiction"/> holds here.
+        /// Gets whether <see cref="EGraph.Contradiction"/> holds here. Always answers, on a stopped case and on a scope
+        /// under one too (D45, N104): <c>true</c> there.
         /// </summary>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
         public bool IsContradictory
         {
             get
@@ -18,7 +21,9 @@ namespace Eggnog
                 var held = EnterRead();
                 try
                 {
-                    return Engine.IsContradictory;
+                    // A stopped case, and a scope under one, answer this one read (D45, N104): the stop flag says it is
+                    // contradictory.
+                    return IsStopped || Engine.IsContradictory;
                 }
                 finally
                 {
@@ -38,12 +43,16 @@ namespace Eggnog
         /// nested, or a handle scoped to one tag is inside a <see cref="Fact.In"/> of another.</exception>
         /// <exception cref="InvalidOperationException">A tag read does not resolve from this scope: no ancestor-or-self
         /// carries it.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public bool Check(params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(facts);
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 foreach (var fact in facts)
                     if (TermReader.Check(this, fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null.")) == false)
                         return false;
@@ -66,6 +75,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The term has no value here, or a tag it reads does not resolve from
         /// this scope.</exception>
         /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot use (D39).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public T Get<T>(Term<T> term)
         {
             if (TryGet(term, out var value))
@@ -84,12 +96,16 @@ namespace Eggnog
         /// <remarks>A scoped view in the term reads the nearest ancestor-or-self carrying its tag directly (R2).</remarks>
         /// <exception cref="InvalidOperationException">A tag the term reads does not resolve from this scope.</exception>
         /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot use (D39).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public bool TryGet<T>(Term<T> term, [MaybeNullWhen(false)] out T value)
         {
             ArgumentNullException.ThrowIfNull(term);
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 if (TermReader.TryRead(this, term, out var cell))
                 {
                     value = Graph.Values.TypeOf<T>().Decode(cell, this);
@@ -112,11 +128,15 @@ namespace Eggnog
         /// <param name="value">The class.</param>
         /// <returns>The canonical member, usable in this scope.</returns>
         /// <exception cref="ArgumentException">The class value is not usable in this scope (D39).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public TSort Find<TSort>(TSort value) where TSort : struct, ISort<TSort>
         {
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 var cell = ClassChecks.Require(this, value.Id, nameof(value));
                 return TSort.FromId(new ClassId(Engine.Find(cell), Origin));
             }
@@ -134,11 +154,15 @@ namespace Eggnog
         /// <param name="b">The other class.</param>
         /// <returns>Whether they are one class.</returns>
         /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public bool AreEqual<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
                 var y = ClassChecks.Require(this, b.Id, nameof(b));
                 return Engine.Find(x) == Engine.Find(y);
@@ -157,12 +181,16 @@ namespace Eggnog
         /// <param name="b">The term.</param>
         /// <returns>Whether the term exists and is in the class.</returns>
         /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public bool AreEqual<TSort>(TSort a, Term<TSort> b) where TSort : struct, ISort<TSort>
         {
             ArgumentNullException.ThrowIfNull(b);
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
                 return TermReader.TryRead(this, b, out var y) && Engine.Find(x) == y;
             }
@@ -180,12 +208,16 @@ namespace Eggnog
         /// <returns>The row count.</returns>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public long CountRows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 return RowReader.Count(this, table);
             }
             finally
@@ -203,12 +235,16 @@ namespace Eggnog
         /// <returns>The rows.</returns>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public IReadOnlyList<TableRow> Rows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 return RowReader.Read(this, table);
             }
             finally
@@ -230,7 +266,9 @@ namespace Eggnog
         /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
-        /// (D49).</exception>
+        /// (D49). Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor (N113): that
+        /// is a merge into the layer, so the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public bool Any(Query query)
         {
             using var matches = RunQuery(query, true);
@@ -248,7 +286,9 @@ namespace Eggnog
         /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
-        /// (D49).</exception>
+        /// (D49). Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor (N113): that
+        /// is a merge into the layer, so the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public long Count(Query query)
         {
             using var matches = RunQuery(query, false);
@@ -270,7 +310,9 @@ namespace Eggnog
         /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
-        /// (D49).</exception>
+        /// (D49). Or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor (N113): that
+        /// is a merge into the layer, so the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public void ForEachMatch(Query query, QueryCallback callback)
         {
             ArgumentNullException.ThrowIfNull(query);
@@ -279,6 +321,7 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 var compiled = query.Compiled;
                 compiled.Acquire();
                 try
@@ -309,6 +352,7 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
+                ThrowIfStopped();
                 return QueryRunner.Run(this, query.Compiled, stopAtFirst, false);
             }
             finally

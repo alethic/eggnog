@@ -36,7 +36,11 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
         {
+            // A stopped case answers no read and runs nothing (D45): the body would do nothing either.
             scope.Engine.EnsureClean();
+            if (scope.Engine.IsStopped)
+                return false;
+
             foreach (var fact in Condition)
                 if (TermReader.Check(scope, fact) == false)
                     return Body.Execute(executor, scope, depth, inCase, splitsEnabled);
@@ -45,12 +49,12 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits)
         {
             foreach (var fact in Condition)
                 conditions.Add(fact);
 
-            Body.Collect(rulesets, conditions);
+            Body.Collect(rulesets, conditions, splits);
         }
 
     }

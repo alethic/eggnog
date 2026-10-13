@@ -194,6 +194,43 @@ namespace Eggnog.Tests.Graph
 
             Assert.True(schema.Check(hit.Of(1L), hit.Of(2L)));
         }
+
+        /// <summary>
+        /// R3: a class a case returned dies with the case, which the run that made it disposes when it ends (D39); the same
+        /// class obtained from the scope itself stays usable.
+        /// </summary>
+        [Fact]
+        public void ACasesClassIsRefusedAfterTheRunThatMadeTheCase()
+        {
+            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            c.Graph.Root.Freeze();
+            var scope = c.Graph.Root.CreateChild(c.Schema);
+            scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
+            var q = scope.Make(c.StrEq.Of("kind", "a"));
+            Cosmos.Pred? fromCase = null;
+            string? casePath = null;
+
+            scope.Run(Schedule.Split(c.SchemaSplit, c.Horn), new RunOptions
+            {
+                Observer = step =>
+                {
+                    if (step.Scope.IsCase && fromCase is null)
+                    {
+                        // A read from the observer: the class carries the case's origin.
+                        fromCase = step.Scope.Find(q);
+                        casePath = step.Scope.Path;
+                        Assert.True(step.Scope.AreEqual(fromCase.Value, q));
+                    }
+                },
+            });
+
+            Assert.NotNull(fromCase);
+            Assert.Empty(scope.Children);
+            var refused = Assert.Throws<ArgumentException>(() => scope.Find(fromCase.Value));
+            Assert.Contains($"came from scope '{casePath}', which is disposed", refused.Message, StringComparison.Ordinal);
+            Assert.Throws<ArgumentException>(() => scope.Union(fromCase.Value, q));
+            Assert.True(scope.AreEqual(q, scope.Find(q)));
+        }
     }
 
 }

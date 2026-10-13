@@ -66,6 +66,9 @@ namespace Eggnog
         public override bool IsContradictory => Context.IsContradictory;
 
         /// <inheritdoc />
+        public override bool IsStopped => Context.IsStopped;
+
+        /// <inheritdoc />
         public override long OwnRowCount => Context.OwnRowCount;
 
         /// <inheritdoc />
@@ -79,6 +82,18 @@ namespace Eggnog
 
         /// <inheritdoc />
         public override void EnsureClean() => Context.EnsureClean();
+
+        /// <inheritdoc />
+        public override bool TryTakeRecordedFailure(out string message)
+        {
+            if (Context.Context.Database.Failure is null)
+            {
+                message = string.Empty;
+                return false;
+            }
+
+            return Context.TakeFailure(out message);
+        }
 
         /// <inheritdoc />
         public override LoweredRule[] PrepareRules(IReadOnlyList<CompiledRule> rules, bool semiNaive)

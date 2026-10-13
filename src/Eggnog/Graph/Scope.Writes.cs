@@ -18,15 +18,21 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, before the call
+        /// or through it, or lies under one (D45, N104).</exception>
         public TSort Make<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
         {
             ArgumentNullException.ThrowIfNull(term);
             EnterWrite();
             try
             {
+                ThrowIfStopped();
                 var batch = new HostBatch(this);
                 var id = batch.PlanTerm(term);
                 Commit(batch);
+
+                // A case whose write made it contradictory stopped (D11): the class names nothing in a scope with no model.
+                ThrowIfStopped();
                 return TSort.FromId(new ClassId(Engine.Find(id), Origin));
             }
             finally
@@ -38,7 +44,8 @@ namespace Eggnog
         /// <summary>
         /// Writes ground facts as one atomic batch (§6.6.2): relation rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice);
         /// <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a sort (a union). Facts that hold already write
-        /// nothing, so they move neither <see cref="Version"/> nor any extractor. Nothing is written when a fact fails.
+        /// nothing, so they move neither <see cref="Version"/> nor any extractor. Nothing is written when a fact fails. On a
+        /// case whose contradiction stopped it, or a scope under one, the call does nothing (D45, N104).
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
@@ -49,13 +56,18 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (nothing is written,
-        /// the scope is not faulted) or while merging (the scope is faulted).</exception>
+        /// the scope is not faulted) or while merging, the catch-up the call makes first included (the scope is faulted,
+        /// N113).</exception>
         public void Assume(params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(facts);
             EnterWrite();
             try
             {
+                // A stopped case, or a scope under one, has no model: a fact more changes nothing (D45, N104).
+                if (IsStopped)
+                    return;
+
                 var batch = new HostBatch(this);
                 foreach (var fact in facts)
                     batch.PlanFact(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
@@ -74,17 +86,25 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="a">One class.</param>
         /// <param name="b">The other class.</param>
-        /// <returns><c>true</c> where the classes were distinct before the call.</returns>
+        /// <returns><c>true</c> where the classes were distinct before the call; <c>false</c> on a case whose contradiction
+        /// stopped it, or a scope under one (D45, N104).</returns>
         /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
         /// hold different values, directly or through the congruences it causes (D32); nothing is written.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed (the scope is faulted); or a lattice merge threw in the
+        /// catch-up the call makes first, here or in a writable ancestor (N113): the scope is faulted, and so is the
+        /// ancestor.</exception>
         public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
             EnterWrite();
             try
             {
+                // A stopped case, or a scope under one, has no model: no two of its classes are distinct there (D45, N104).
+                if (IsStopped)
+                    return false;
+
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
                 var y = ClassChecks.Require(this, b.Id, nameof(b));
                 var distinct = Engine.Find(x) != Engine.Find(y);
@@ -119,12 +139,14 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public void Write(Action<ScopeWriter> write)
         {
             ArgumentNullException.ThrowIfNull(write);
             EnterWrite();
             try
             {
+                ThrowIfStopped();
                 var batch = new HostBatch(this);
                 var writer = new ScopeWriter(this, batch);
                 openBatch = batch;

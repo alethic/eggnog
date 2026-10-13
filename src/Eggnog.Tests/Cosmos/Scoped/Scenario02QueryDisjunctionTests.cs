@@ -71,6 +71,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
 
             Assert.True(report.Saturated);
+            Assert.Empty(query.Children);
             Assert.Equal(ValueSet.Of("invoice", "order"), query.Get(c.Dom.Of("kind")));   // the domain narrows...
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));                     // ...but no single fact proves a guard
             Assert.False(query.AreEqual(q, Lowered(c)));

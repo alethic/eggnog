@@ -57,9 +57,10 @@ namespace Eggnog.Tests.Surface
         }
 
         /// <summary>
-        /// The public surface is exactly R1a's and R1b's (§3, §9): every public type and member the spec tags R1a or R1b,
-        /// and none it tags R2 or R3. After a reviewed change of the surface, set <c>EGGNOG_SURFACE</c> to a file path to
-        /// write the listing there, and replace <c>Surface/PublicSurface.txt</c> with it.
+        /// The public surface is exactly the milestones' so far (§3, §9): every public type and member the spec tags R1a,
+        /// R1b, R2 or R3, and nothing else; each milestone only added to the listing (D28). After a reviewed change of the
+        /// surface, set <c>EGGNOG_SURFACE</c> to a file path to write the listing there, and replace
+        /// <c>Surface/PublicSurface.txt</c> with it.
         /// </summary>
         [Fact]
         public void TheSurfaceIsExactlyR1aAndR1b()

@@ -26,8 +26,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         public const string Since = "2026-08-02T12:00:00.000Z";
 
         /// <summary>
-        /// Compiles the container under the graph's frozen root with horn and lattice rules (R2; R3 adds the schema's
-        /// split), and freezes it.
+        /// Compiles the container under the graph's frozen root with the theory's <see cref="CosmosTheory.Facts"/>: horn
+        /// and lattice rules, and the schema's split on its discriminator <c>data.type</c> (R3), which opens three cases
+        /// (park, map, spot); then freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
         /// <returns>The frozen schema scope.</returns>
@@ -35,8 +36,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         {
             var schema = c.Graph.Root.CreateChild(c.Schema);
             Declare(c, schema);
-            var compiled = schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            var compiled = schema.Run(c.Facts);
             Assert.True(compiled.Saturated);
+            Assert.Equal(3, compiled.CasesOpened);
             Assert.Empty(schema.Children);
             schema.Freeze();
             return schema;

@@ -5,12 +5,14 @@ namespace Eggnog
 
     /// <summary>
     /// How a <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/> runs. Limits are per
-    /// top-level run and checked before every iteration; a run overshoots a limit or a cancellation by at most one engine
-    /// iteration (D42). A limit is not an error: the run stops soundly, with fewer facts, and
-    /// <see cref="RunReport.StopReason"/> says why.
+    /// top-level run, cases included, and checked before every iteration (the first included) and every split step; a run
+    /// overshoots a limit or a cancellation by at most one engine iteration or one lift (D42). A limit is not an error:
+    /// the run stops soundly, with fewer facts, and <see cref="RunReport.StopReason"/> says why.
     /// </summary>
     public sealed class RunOptions
     {
+
+        readonly LiftOptions lift = LiftOptions.Default;
 
         /// <summary>
         /// Gets the default options.
@@ -18,13 +20,15 @@ namespace Eggnog
         public static RunOptions Default { get; } = new();
 
         /// <summary>
-        /// Gets the most engine iterations the run may make; must be at least 0. The default is 10,000.
+        /// Gets the most engine iterations the run may make, in every scope of the run, cases included (mirror syncs do not
+        /// count); must be at least 0. The default is 10,000.
         /// </summary>
         public int IterationLimit { get; init; } = 10_000;
 
         /// <summary>
         /// Gets whether the run stops once the scope is contradictory (<see cref="EGraph.Contradiction"/> holds): every
-        /// later run step is skipped and the report says <see cref="RunStopReason.Contradiction"/>. Off by default (D11).
+        /// later run step is skipped and the report says <see cref="RunStopReason.Contradiction"/>. Off by default (D11);
+        /// it governs the top-level scope only, since a case always stops on contradiction.
         /// </summary>
         public bool StopOnContradiction { get; init; }
 
@@ -55,6 +59,31 @@ namespace Eggnog
         /// Gets whether the run keeps every step in <see cref="RunReport.Steps"/> (§6.11). Off by default.
         /// </summary>
         public bool RecordSteps { get; init; }
+
+        /// <summary>
+        /// Gets the most cases one split may open (R3): a split request with more elements is skipped and counted in
+        /// <see cref="RunReport.SplitsSkipped"/> (sound: fewer facts). Default 64; at least 1, or <c>Run</c> throws
+        /// <see cref="ArgumentOutOfRangeException"/> before any work.
+        /// </summary>
+        public int CaseLimit { get; init; } = 64;
+
+        /// <summary>
+        /// Gets the number of split levels (R3): a split step at depth <c>d</c> opens cases only while <c>d</c> is below it,
+        /// and deepens into them (the nested split steps of its in-case schedule) only while <c>d + 1</c> is. The top-level
+        /// scope is at depth 0. Default 4; at least 1, or <c>Run</c> throws <see cref="ArgumentOutOfRangeException"/> before
+        /// any work.
+        /// </summary>
+        public int SplitDepthLimit { get; init; } = 4;
+
+        /// <summary>
+        /// Gets the limits of the lifts split steps make (R3). Default <see cref="LiftOptions.Default"/>.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">The value is <c>null</c>.</exception>
+        public LiftOptions Lift
+        {
+            get => lift;
+            init => lift = value ?? throw new ArgumentNullException(nameof(value));
+        }
 
         /// <summary>
         /// Gets whether rules run semi-naive (the default) or, for differential tests, each in a naive twin (D36).

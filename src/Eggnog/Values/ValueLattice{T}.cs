@@ -94,6 +94,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        internal override Func<uint, uint, uint>? CreateCaseJoin(ColumnType type, string functionName) =>
+            CaseJoinAdapter<T>.Create(this, (ColumnType<T>)type, functionName);
+
+        /// <inheritdoc />
         internal override Relations.ExternalFunction CreateMerge(EGraph graph, string functionName, ColumnType type) =>
             new LatticeMerge<T>(graph, functionName, this, (ColumnType<T>)type);
 

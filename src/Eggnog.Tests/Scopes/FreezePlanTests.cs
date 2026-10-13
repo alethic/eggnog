@@ -67,6 +67,26 @@ namespace Eggnog.Tests.Scopes
             Assert.Null(t.Graph.Engine.GetRuleInfo(unplanned.Id).CachedPlan);
         }
 
+        /// <summary>
+        /// R3: a split matcher is a rule a descendant can run (a split step in a query beneath the frozen schema), so the
+        /// schema's freeze plans it too (§6.7 step 2).
+        /// </summary>
+        [Fact]
+        public void AFreezePlansTheSplitMatchers()
+        {
+            var t = new ScopeTheory();
+            var dom = t.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var split = t.Graph.DefineDomainSplit("facts", dom, [t.Fact]);
+            t.Root.Freeze();
+            var matcher = split.Program.Variants.Default!;
+            Assert.StartsWith("$split/facts#", matcher.Description, System.StringComparison.Ordinal);
+            Assert.Null(t.Graph.Engine.GetRuleInfo(matcher.Id).CachedPlan);
+
+            t.Root.CreateChild().Freeze();
+
+            Assert.NotNull(t.Graph.Engine.GetRuleInfo(matcher.Id).CachedPlan);
+        }
+
         [Fact]
         public void TheRootsFreezePlansNothing()
         {

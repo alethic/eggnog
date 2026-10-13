@@ -31,6 +31,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 
             // Horn alone: the guard never fires.
             Assert.True(query.Run(Schedule.Saturate(c.Horn, c.Rewrite)).Saturated);
+            Assert.Empty(query.Children);
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));
 
             // With the lattice: the domain narrows to {order} in the query, the guard fires, the comparison lowers.

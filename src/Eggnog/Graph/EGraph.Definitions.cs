@@ -404,7 +404,10 @@ namespace Eggnog
                 handle.Function = function;
                 handle.Columns = columns;
                 if (handle is FunctionHandle functionHandle)
+                {
                     functionHandle.Lattice = lattice;
+                    functionHandle.CaseJoin = lattice?.CreateCaseJoin(output!, name);
+                }
 
                 if (handle is ConstructorHandle constructor)
                 {

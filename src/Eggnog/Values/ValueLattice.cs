@@ -88,6 +88,15 @@ namespace Eggnog
         /// <returns>The external function.</returns>
         internal abstract Relations.ExternalFunction CreateMerge(EGraph graph, string functionName, ColumnType type);
 
+        /// <summary>
+        /// Creates the case join a lift uses for a function with this lattice (§6.9.1, R3), over cells; <c>null</c> when the
+        /// lattice has none, so that a lift requires every live case to agree.
+        /// </summary>
+        /// <param name="type">The function's output type.</param>
+        /// <param name="functionName">The function's name, for messages.</param>
+        /// <returns>The case join, or <c>null</c>.</returns>
+        internal abstract Func<uint, uint, uint>? CreateCaseJoin(ColumnType type, string functionName);
+
     }
 
 }

@@ -1,3 +1,9 @@
+sealed class Eggnog.CaseSet : IDisposable
+    IReadOnlyList<Scope> Cases { get }
+    LiftReport Lift(LiftOptions options = null, CancellationToken cancellationToken = null)
+    Scope Add(ScopeTag tag = null)
+    Scope Parent { get }
+    Void Dispose()
 struct Eggnog.ClassId : IEquatable<ClassId>
     Boolean Equals(ClassId other)
     Boolean IsDefault { get }
@@ -59,6 +65,7 @@ sealed class Eggnog.EGraph
     Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     IReadOnlyList<Ruleset> Rulesets { get }
     IReadOnlyList<ScopeTag> ScopeTags { get }
+    IReadOnlyList<SplitRule> SplitRules { get }
     IReadOnlyList<TableHandle> Tables { get }
     Query DefineQuery(String name, Action<QueryBuilder> define)
     Relation Contradiction { get }
@@ -72,6 +79,8 @@ sealed class Eggnog.EGraph
     Scope Root { get }
     ScopeTag DefineScopeTag(String name)
     ScopeTag RootTag { get }
+    SplitRule DefineDomainSplit<TKey, TElement>(String name, Function<TKey, ValueSet<TElement>> domain, IReadOnlyList<Relation<TKey>> guards, ScopeTag caseTag = null)
+    SplitRule DefineSplit(String name, Action<SplitBuilder> define, ScopeTag caseTag = null)
     ValueStore Values { get }
     ctor(EGraphOptions options = null)
 sealed class Eggnog.EGraphOptions
@@ -142,6 +151,24 @@ sealed class Eggnog.Function<T1, T2, T3, T4, TOut> : FunctionHandle
 interface Eggnog.ISort<TSort>
     ClassId Id { get }
     static abstract TSort FromId(ClassId id)
+sealed class Eggnog.LiftOptions
+    Int32 CandidateLimit { get; init }
+    Int32 RoundLimit { get; init }
+    ctor()
+    static LiftOptions Default { get }
+sealed class Eggnog.LiftReport
+    Boolean Changed { get }
+    Boolean HitRoundLimit { get }
+    Boolean ParentContradicted { get }
+    Int32 LiveCases { get }
+    Int32 Rounds { get }
+    Int32 VacuousCases { get }
+    Int64 Rows { get }
+    Int64 Skipped { get }
+    Int64 Terms { get }
+    Int64 Unions { get }
+    Int64 Values { get }
+    override String ToString()
 delegate Eggnog.NodeCostFunction
     Int64 Invoke(NodeView node)
 ref struct Eggnog.NodeView
@@ -279,8 +306,11 @@ sealed class Eggnog.RunOptions
     Action<RunStep> Observer { get; init }
     Boolean RecordSteps { get; init }
     Boolean StopOnContradiction { get; init }
+    Int32 CaseLimit { get; init }
     Int32 IterationLimit { get; init }
+    Int32 SplitDepthLimit { get; init }
     Int64? RowLimit { get; init }
+    LiftOptions Lift { get; init }
     TimeSpan? TimeLimit { get; init }
     ctor()
     static RunOptions Default { get }
@@ -289,7 +319,11 @@ sealed class Eggnog.RunReport
     Boolean Saturated { get }
     IReadOnlyDictionary<Rule, RuleStatistics> Rules { get }
     IReadOnlyList<RunStep> Steps { get }
+    Int32 CasesOpened { get }
     Int32 Iterations { get }
+    Int32 Lifts { get }
+    Int32 SplitsSkipped { get }
+    Int64 LiftRowsSkipped { get }
     RunStopReason StopReason { get }
     TimeSpan Elapsed { get }
     TimeSpan MergeTime { get }
@@ -299,6 +333,7 @@ sealed class Eggnog.RunReport
 sealed class Eggnog.RunStep
     Boolean Changed { get }
     IReadOnlyList<RuleStatistics> Rules { get }
+    Int32 CasesOpened { get }
     Int32 Index { get }
     RunStepKind Kind { get }
     Scope Scope { get }
@@ -308,6 +343,8 @@ sealed class Eggnog.RunStep
 enum Eggnog.RunStepKind
     Iteration
     MirrorSync
+    SplitStep
+    Lift
 enum Eggnog.RunStopReason
     Completed
     IterationLimit
@@ -320,12 +357,15 @@ abstract class Eggnog.Schedule
     static Schedule Run(params Ruleset[] rulesets)
     static Schedule Saturate(params Schedule[] steps)
     static Schedule Sequence(params Schedule[] steps)
+    static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase)
+    static Schedule Split(SplitRule rule, Schedule inCase)
     static Schedule Until(Schedule body, params Fact[] condition)
 sealed class Eggnog.Scope : IDisposable
     Boolean Any(Query query)
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, TSort b)
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, Term<TSort> b)
     Boolean Check(params Fact[] facts)
+    Boolean IsCase { get }
     Boolean IsContradictory { get }
     Boolean IsDisposed { get }
     Boolean IsFaulted { get }
@@ -333,6 +373,7 @@ sealed class Eggnog.Scope : IDisposable
     Boolean IsRoot { get }
     Boolean TryGet<T>(Term<T> term, out T value)
     Boolean Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+    CaseSet OpenCases()
     EGraph Graph { get }
     Exception Failure { get }
     ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root, CostModel costs = null)
@@ -358,6 +399,9 @@ sealed class Eggnog.Scope : IDisposable
     Void Freeze()
     Void Write(Action<ScopeWriter> write)
     override String ToString()
+sealed class Eggnog.ScopeContradictedException : InvalidOperationException
+    String ScopePath { get }
+    ctor(String scopePath)
 sealed class Eggnog.ScopeOptions
     Int32? DegreeOfParallelism { get; init }
     ctor()
@@ -371,6 +415,22 @@ sealed class Eggnog.ScopeWriter
     TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Assume(params Fact[] facts)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+sealed class Eggnog.SplitBuilder
+    ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
+    ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
+    Var<T> Cases<T>(String name, Var<ValueSet<T>> set)
+    Var<T> Var<T>(String name)
+    Void Assume(params Fact[] facts)
+    Void Key(params Term[] variables)
+    Void When(params Fact[] facts)
+    Void Where(Term<Boolean> condition)
+    Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
+    Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
+sealed class Eggnog.SplitRule
+    IReadOnlyList<ScopeTag> ReadScopes { get }
+    ScopeTag CaseTag { get }
+    String Name { get }
+    override String ToString()
 abstract class Eggnog.TableHandle
     Boolean IsValueOnly { get }
     Boolean Lift { get }

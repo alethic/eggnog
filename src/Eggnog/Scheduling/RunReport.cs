@@ -24,11 +24,19 @@ namespace Eggnog
         /// <param name="mergeTime">The engine's merge time.</param>
         /// <param name="rebuildTime">The engine's rebuild time.</param>
         /// <param name="steps">Every step of the run, with <see cref="RunOptions.RecordSteps"/>; otherwise empty.</param>
+        /// <param name="casesOpened">The cases split steps opened.</param>
+        /// <param name="splitsSkipped">The split requests not taken.</param>
+        /// <param name="lifts">The lifts split steps ran.</param>
+        /// <param name="liftRowsSkipped">The candidate rows those lifts skipped.</param>
         internal RunReport(int iterations, bool changed, bool saturated, RunStopReason stopReason, TimeSpan elapsed,
             IReadOnlyDictionary<Rule, RuleStatistics> rules, TimeSpan searchTime, TimeSpan mergeTime, TimeSpan rebuildTime,
-            IReadOnlyList<RunStep> steps)
+            IReadOnlyList<RunStep> steps, int casesOpened = 0, int splitsSkipped = 0, int lifts = 0, long liftRowsSkipped = 0)
         {
             Steps = steps;
+            CasesOpened = casesOpened;
+            SplitsSkipped = splitsSkipped;
+            Lifts = lifts;
+            LiftRowsSkipped = liftRowsSkipped;
             Iterations = iterations;
             Changed = changed;
             Saturated = saturated;
@@ -41,17 +49,21 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of engine iterations the run made.
+        /// Gets the number of engine iterations the run made, in every scope of the run, cases included; mirror syncs and
+        /// split matchers do not count.
         /// </summary>
         public int Iterations { get; }
 
         /// <summary>
-        /// Gets whether an iteration of the run changed the scope (the engine's change flags, §6.5.1).
+        /// Gets whether an iteration, split step or lift of the run changed the scope (the engine's change flags, §6.5.1;
+        /// for a split step, whether its lifts moved the scope's <see cref="Scope.Version"/>: cases opened and dropped
+        /// change nothing there, N106).
         /// </summary>
         public bool Changed { get; }
 
         /// <summary>
-        /// Gets whether the run completed and its last iteration in the scope changed nothing.
+        /// Gets whether the run completed and its last iteration or split step in the scope made no progress: the iteration
+        /// changed nothing, or the split step opened no case and its lifts changed nothing (N106).
         /// </summary>
         public bool Saturated { get; }
 
@@ -92,11 +104,38 @@ namespace Eggnog
         public IReadOnlyList<RunStep> Steps { get; }
 
         /// <summary>
-        /// Renders the report: <c>Completed after 5 iterations, saturated, changed, 3 rules, 1.2 ms</c>.
+        /// Gets the cases the run's split steps opened, in every scope of the run (R3).
+        /// </summary>
+        public int CasesOpened { get; }
+
+        /// <summary>
+        /// Gets the split requests the run's split steps found and did not take (R3): over
+        /// <see cref="RunOptions.CaseLimit"/>, covered by a live split of the same rule at the same position in the scope or
+        /// an ancestor (B6; counted at each execution of the step that finds it covered), or an empty element set. Sound:
+        /// fewer facts. A split below <see cref="RunOptions.SplitDepthLimit"/> is never looked for, so it is not counted
+        /// (N107).
+        /// </summary>
+        public int SplitsSkipped { get; }
+
+        /// <summary>
+        /// Gets the lifts the run's split steps ran (R3), including those the engine's memo answered at once because
+        /// nothing they read had changed.
+        /// </summary>
+        public int Lifts { get; }
+
+        /// <summary>
+        /// Gets the candidate rows those lifts did not examine because they stood for more than
+        /// <see cref="LiftOptions.CandidateLimit"/> parent keys (R3).
+        /// </summary>
+        public long LiftRowsSkipped { get; }
+
+        /// <summary>
+        /// Renders the report: <c>Completed after 5 iterations, saturated, changed, 3 rules, 1.2 ms</c>, with
+        /// <c>, 2 cases</c> after the rules when split steps opened cases.
         /// </summary>
         /// <returns>The rendering.</returns>
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
-            $"{StopReason} after {Iterations} iterations{(Saturated ? ", saturated" : "")}{(Changed ? ", changed" : "")}, {Rules.Count} rules, {Elapsed.TotalMilliseconds:0.###} ms");
+            $"{StopReason} after {Iterations} iterations{(Saturated ? ", saturated" : "")}{(Changed ? ", changed" : "")}, {Rules.Count} rules{(CasesOpened > 0 ? $", {CasesOpened} cases" : "")}, {Elapsed.TotalMilliseconds:0.###} ms");
 
     }
 

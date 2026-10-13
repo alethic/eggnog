@@ -27,6 +27,13 @@ namespace Eggnog
         public abstract bool IsContradictory { get; }
 
         /// <summary>
+        /// Gets whether the scope is a case whose contradiction set its stop flag (D11, D45; colors §6.9, X11): it has no
+        /// model, the engine refuses every read but whether it is contradictory, and its writes and runs are no-ops. Only
+        /// a case can stop. One volatile read.
+        /// </summary>
+        public abstract bool IsStopped { get; }
+
+        /// <summary>
         /// Gets the number of rows in the scope's own layers, the engine's row-count estimate (the context database's
         /// <c>TotalSizeEstimate</c>): what <see cref="RunOptions.RowLimit"/> bounds (D42). O(1).
         /// </summary>
@@ -52,6 +59,16 @@ namespace Eggnog
         /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current or frozen.
         /// </summary>
         public abstract void EnsureClean();
+
+        /// <summary>
+        /// Takes a failure a merge recorded on the context outside an engine call that reports it: the rebuild of
+        /// <see cref="EnsureClean"/>, which records a lattice merge that throws (D31) and does not throw itself (N113).
+        /// Called only for a scope that is not the root, right after its catch-up. Cost: one volatile read when nothing is
+        /// recorded; one interlocked exchange when something is.
+        /// </summary>
+        /// <param name="message">The engine's failure message, when the result is <c>true</c>.</param>
+        /// <returns>Whether a failure was recorded.</returns>
+        public abstract bool TryTakeRecordedFailure(out string message);
 
         /// <summary>
         /// Gets the engine variants to run for <paramref name="rules"/> in this scope, lowering them on demand (§6.4.4). A

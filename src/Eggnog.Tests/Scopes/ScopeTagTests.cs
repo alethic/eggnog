@@ -61,9 +61,20 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Fact.Of("a"));
             }));
 
+            // R3: the tag of a split's cases, and of a host-driven case.
+            Assert.Throws<ArgumentException>(() => t.Graph.DefineSplit("foreign cases", s => { }, foreign));
+            var parent = t.Root.CreateChild();
+            using (var cases = parent.OpenCases())
+            {
+                Assert.Throws<ArgumentException>(() => cases.Add(foreign));
+                Assert.Throws<ArgumentException>(() => cases.Add(t.Graph.RootTag));
+                Assert.Empty(cases.Cases);
+            }
+
             // Nothing was defined by the refusals.
             Assert.DoesNotContain(t.Graph.Rulesets, r => r.Name == "licensed");
             Assert.Empty(t.Rules.Rules);
+            Assert.Empty(t.Graph.SplitRules);
         }
 
         [Fact]

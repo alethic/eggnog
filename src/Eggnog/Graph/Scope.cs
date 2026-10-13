@@ -18,8 +18,10 @@ namespace Eggnog
     /// </para>
     /// <para>
     /// After a <see cref="RuleEvaluationException"/> from a run or a write the scope is faulted (D18), and every later call
-    /// except <see cref="Dispose"/> throws; a faulted root makes its graph unusable. <see cref="Dispose"/> never throws
-    /// (D40): it makes the scope unusable at once, and releases its engine state once nothing defers it.
+    /// except <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that
+    /// throws in the catch-up a call makes first, a read's, query's or extraction's included (N113).
+    /// <see cref="Dispose"/> never throws (D40): it makes the scope unusable at once, and releases its engine state once
+    /// nothing defers it.
     /// </para>
     /// </remarks>
     public sealed partial class Scope : IDisposable
@@ -33,6 +35,7 @@ namespace Eggnog
         HostBatch? openBatch;
         int batchesBelow;
         volatile ScopeGuard guard;
+        volatile bool ownedByCases;
 
         /// <summary>
         /// Initializes the root scope of <paramref name="graph"/>.
@@ -60,12 +63,16 @@ namespace Eggnog
         /// <param name="engine">The engine child.</param>
         /// <param name="guard">The parent's guard when the parent is writable, a new one when it is frozen.</param>
         /// <param name="path">The child's path.</param>
-        internal Scope(Scope parent, ScopeTag? tag, ContextEngineScope engine, ScopeGuard guard, string path)
+        /// <param name="isCase">Whether the child is a case (R3): made by a split or a <see cref="CaseSet"/>, whose engine
+        /// set owns its context until it releases it (<see cref="ReleaseCase"/>).</param>
+        internal Scope(Scope parent, ScopeTag? tag, ContextEngineScope engine, ScopeGuard guard, string path, bool isCase = false)
         {
             Graph = parent.Graph;
             Parent = parent;
             Tag = tag;
             Path = path;
+            IsCase = isCase;
+            ownedByCases = isCase;
             Origin = new ScopeOrigin(Graph, parent.Origin, path, false);
             this.guard = guard;
             Engine = engine;
@@ -85,7 +92,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> from a run or a write
-        /// (D18), or after the engine faulted the scope's context (X12).
+        /// (D18), or from a lattice merge that threw in the catch-up of any call into this scope or a descendant (N113), or
+        /// after the engine faulted the scope's context (X12).
         /// </summary>
         public bool IsFaulted => Failure is not null;
 
@@ -116,7 +124,11 @@ namespace Eggnog
         /// Gets whether <see cref="Dispose"/> has been called (D40), even while the release waits for live children or a
         /// call in progress. Never true for the root.
         /// </summary>
-        public bool IsDisposed => Volatile.Read(ref disposed) != 0;
+        /// <remarks>
+        /// A case (R3) is also disposed once the engine set that owns it disposed its context: a vacuous case a lift or a
+        /// split step dropped (L4), or every case of a split when the run that made them ends.
+        /// </remarks>
+        public bool IsDisposed => Volatile.Read(ref disposed) != 0 || (ownedByCases && Engine.IsDisposed);
 
         /// <summary>
         /// Gets the scope's change stamp: the engine's (X30) without the moves of its upkeep (N62, N87). It moves on every
@@ -144,7 +156,8 @@ namespace Eggnog
         /// returned (D39). Its local rules and engine context are released once it has no live children (transient query
         /// children included) and no call is in progress in it or, on another thread, in its thread domain; whichever thread
         /// removes the last obstacle releases it. A second call does nothing; on the root it does nothing, because the root
-        /// lives as long as the graph.
+        /// lives as long as the graph. A case (R3) belongs to the set that made it: disposing it marks it disposed at once,
+        /// and its release waits for its <see cref="CaseSet"/> to be disposed, or for the run whose split made it to end.
         /// </summary>
         public void Dispose()
         {
@@ -211,6 +224,84 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets the stopped case this scope is or lies under (D45, §6.6.8, N104): this scope when it is a case whose
+        /// contradiction stopped it, else the nearest writable ancestor that is one; <c>null</c> when there is none. A scope
+        /// under a stopped case has no model either, and the engine refuses to catch it up with its stopped ancestor (colors
+        /// §6.9), so it answers as the stopped case does. Current once the scope has caught up (<see cref="CatchUp"/>).
+        /// </summary>
+        /// <remarks>
+        /// Cost: one volatile read per scope from here up to the first frozen one or the root; one at the root, and at a
+        /// child of a frozen scope. A frozen scope is never under a case: a case's parent is writable, and only a scope whose
+        /// parent is frozen can freeze.
+        /// </remarks>
+        internal Scope? StoppedCase
+        {
+            get
+            {
+                for (var scope = this; ;)
+                {
+                    if (scope.Engine.IsStopped)
+                        return scope;
+
+                    if (scope.Parent is not { IsFrozen: false } parent)
+                        return null;
+
+                    scope = parent;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the scope has no model because it is, or lies under, a stopped case (<see cref="StoppedCase"/>).
+        /// </summary>
+        internal bool IsStopped => StoppedCase is not null;
+
+        /// <summary>
+        /// Throws <see cref="ScopeContradictedException"/> when the scope is a case whose contradiction stopped it, or lies
+        /// under one (D45, §6.6.8, N104): every entry point that needs a model checks it after
+        /// <see cref="ThrowIfNotUsable"/> and the catch-up of its entry. One volatile read per writable scope up to the first
+        /// frozen one (<see cref="StoppedCase"/>).
+        /// </summary>
+        /// <exception cref="ScopeContradictedException">The scope is a stopped case, or lies under one.</exception>
+        internal void ThrowIfStopped()
+        {
+            if (StoppedCase is { } stopped)
+                throw ReferenceEquals(stopped, this) ? new ScopeContradictedException(Path) : new ScopeContradictedException(Path, stopped.Path);
+        }
+
+        /// <summary>
+        /// Brings the scope up to date, then throws <see cref="ScopeContradictedException"/> when that left it stopped
+        /// (D45): for the entry points that enter without a catch-up (<see cref="OpenCases"/>, <see cref="DefineRule"/>,
+        /// <see cref="Freeze"/>, <see cref="CaseSet.Add"/>, and the queries of an <see cref="Extractor"/> of a writable
+        /// scope, N112), so that a case contradicted through its parent since its last call answers as stopped (I25). A
+        /// scope whose parent is frozen, or the root, is never under a case and is not caught up here. Called on the
+        /// domain's thread, with its guard held.
+        /// </summary>
+        /// <exception cref="ScopeContradictedException">The scope is a stopped case, or lies under one.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge the catch-up ran threw, in this scope or a writable
+        /// ancestor (N113), or a failure the catch-up's flush recorded; the scope is faulted.</exception>
+        internal void CatchUpAndThrowIfStopped()
+        {
+            if (Parent is not { IsFrozen: false })
+            {
+                ThrowIfStopped();
+                return;
+            }
+
+            Runtime.TakeFailure();
+            try
+            {
+                CatchUp();
+            }
+            catch (Relations.PanicException panic)
+            {
+                throw FaultWith(panic);
+            }
+
+            ThrowIfStopped();
+        }
+
+        /// <summary>
         /// Throws when the scope may not be written or run: inside a run observer, or frozen.
         /// </summary>
         /// <exception cref="InvalidOperationException">The scope may not be written.</exception>
@@ -240,26 +331,71 @@ namespace Eggnog
         /// catch-up is left out of its own <see cref="Version"/>; then this scope's staged writes are flushed (there are
         /// none between calls: every batch flushes before it returns, D30) and its layer is rebuilt against its ancestors.
         /// The root is brought up to date as before, its stamp untouched (colors §14.1). Called on the domain's thread,
-        /// with its guard held. Cost: two reads of the change stamp per writable scope from here up to the first frozen one
-        /// or the root, beyond the engine's own catch-up, which this call makes in the order the engine would.
+        /// with its guard held. Cost: two reads of the change stamp and one volatile read of the recorded failure per writable
+        /// scope from here up to the first frozen one or the root, beyond the engine's own catch-up, which this call makes in
+        /// the order the engine would.
         /// </summary>
         /// <exception cref="Relations.PanicException">The flush of host writes recorded a failure.</exception>
-        internal void CatchUp()
+        /// <exception cref="RuleEvaluationException">A merge of a scope's catch-up recorded a failure: a lattice delegate that
+        /// threw while the rebuild merged an ancestor's rows into that scope's layer, which the engine records and does not
+        /// throw (N113). The scope whose catch-up failed and this scope are faulted with it, as a failure in a case faults
+        /// the case and the scope <c>Run</c> was called on (N94); the walk stops there.</exception>
+        /// <remarks>
+        /// A scope under a stopped case is not caught up (N104): the engine refuses to catch a context up with a stopped
+        /// parent unless it stops too (colors §6.9), and such a scope has no model anyway, so it answers as stopped
+        /// (<see cref="StoppedCase"/>). The walk stops at the first stopped ancestor.
+        /// </remarks>
+        internal void CatchUp() => CatchUpCore(this);
+
+        /// <summary>
+        /// Brings the scope up to date as <see cref="CatchUp"/> describes.
+        /// </summary>
+        /// <param name="called">The scope the call was made on: this scope or a descendant in its thread domain.</param>
+        /// <returns>Whether the scope is a stopped case or lies under one, once caught up.</returns>
+        /// <exception cref="RuleEvaluationException">A merge of this scope's catch-up, or of an ancestor's, recorded a
+        /// failure (N113); the scope where it happened and <paramref name="called"/> are faulted.</exception>
+        bool CatchUpCore(Scope called)
         {
+            // The root is never behind its own writes: every flush there rebuilds and takes what its merges recorded, so its
+            // catch-up records nothing and is not checked (colors §14.1).
             if (IsRoot)
             {
                 Engine.EnsureClean();
-                return;
+                return false;
             }
 
-            if (Parent is { IsFrozen: false } parent)
-                parent.CatchUp();
+            // A stopped ancestor cannot be caught up with, and leaves this scope without a model (N104).
+            if (Parent is { IsFrozen: false } parent && parent.CatchUpCore(called))
+                return true;
 
             var before = Engine.Version;
             Engine.EnsureClean();
             var moved = Engine.Version - before;
             if (moved != 0)
                 Interlocked.Add(ref upkeepStamps, moved);
+
+            // The rebuild records a lattice merge that throws and goes on (D31): the layer kept the old value, so the
+            // failure is taken here, at the call that ran the merge, rather than left for the scope's next write (N113).
+            if (Engine.TryTakeRecordedFailure(out var message))
+                throw FaultCatchUp(message, called);
+
+            return Engine.IsStopped;
+        }
+
+        /// <summary>
+        /// Turns a failure this scope's catch-up recorded into a <see cref="RuleEvaluationException"/>, with the runtime's
+        /// record of it when there is one, and faults this scope and <paramref name="called"/> with it (D18, N113).
+        /// </summary>
+        /// <param name="message">The engine's failure message.</param>
+        /// <param name="called">The scope the call was made on.</param>
+        /// <returns>The exception, to throw.</returns>
+        RuleEvaluationException FaultCatchUp(string message, Scope called)
+        {
+            var exception = FaultWith(new Relations.PanicException(message));
+            if (ReferenceEquals(called, this) == false)
+                called.Fault(exception);
+
+            return exception;
         }
 
         /// <summary>
@@ -417,7 +553,7 @@ namespace Eggnog
         /// it may have a <see cref="Write"/> batch open (N88). The caller ends it with <see cref="Exit"/>(<c>true</c>).
         /// </summary>
         /// <exception cref="InvalidOperationException">The scope may not be written or run now.</exception>
-        void EnterWrite()
+        internal void EnterWrite()
         {
             if (Engine.IsFrozen)
             {

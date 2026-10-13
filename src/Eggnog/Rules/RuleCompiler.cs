@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -83,6 +84,127 @@ namespace Eggnog
             }
 
             return compiled;
+        }
+
+        /// <summary>
+        /// Compiles a split rule (§6.9.2): checks its shape (one <see cref="SplitBuilder.Cases{T}"/> over a declared set
+        /// variable; a key of declared variables, by default every one but the set) and its assumptions, then compiles the
+        /// body as a rule's (§6.3 steps 1 to 7) into a naive matcher whose head collects the key, the set and every other
+        /// variable an assumption uses (step 9), and lowers its one variant. Class constants follow the global-rule rule:
+        /// only classes from the root. Called under the graph's definition lock.
+        /// </summary>
+        /// <param name="graph">The graph.</param>
+        /// <param name="builder">What the split rule's builder collected.</param>
+        /// <param name="caseTag">The tag of its cases; <c>null</c> for none.</param>
+        /// <returns>The split rule, with its program.</returns>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid split rule, or the engine rejected its matcher;
+        /// nothing is registered then.</exception>
+        public static SplitRule CompileSplit(EGraph graph, SplitBuilder builder, ScopeTag? caseTag)
+        {
+            var draft = builder.Draft;
+            RuleDefinitionException Error(string message, Exception? inner = null) => new(draft.Name, message, inner);
+
+            if (builder.CasesCalls == 0)
+                throw Error("a split rule needs Cases: the set whose elements make the cases");
+
+            if (builder.CasesCalls > 1)
+                throw Error("Cases is called more than once; a split rule splits over one set");
+
+            var set = builder.Set!;
+            var element = builder.Element!;
+            var declared = new HashSet<Term>(ReferenceEqualityComparer.Instance);
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (name, _, variable) in draft.Variables)
+            {
+                declared.Add(variable);
+                names.Add(name);
+            }
+
+            var elementName = element.Shape.Name!;
+            if (names.Contains(elementName))
+                throw Error($"variable '{elementName}' is declared twice");
+
+            if (ReferenceEquals(set.Shape.Owner, builder) == false || declared.Contains(set) == false)
+                throw Error($"the set of Cases, '{set.Shape.Name}', is not a variable declared in this split rule");
+
+            ColumnType elementType;
+            try
+            {
+                elementType = graph.Values.TypeOf(builder.ElementType!);
+            }
+            catch (ArgumentException exception)
+            {
+                throw Error($"type {ValueStore.DisplayName(builder.ElementType!)} is not registered; call {ValueStore.RegisterMethod(builder.ElementType!)}", exception);
+            }
+
+            // The key: what B6 compares. Declared variables of this split rule, never the case variable.
+            var key = new List<Term>();
+            if (builder.KeyTerms is { } explicitKey)
+            {
+                foreach (var term in explicitKey)
+                {
+                    if (ReferenceEquals(term, element))
+                        throw Error($"case variable '{elementName}' cannot be part of the key; the key is what all of a split's cases share");
+
+                    if (term.Shape.Kind != TermShapeKind.Variable || ReferenceEquals(term.Shape.Owner, builder) == false || declared.Contains(term) == false)
+                        throw Error($"the key holds {term}, which is not a variable declared in this split rule");
+
+                    if (key.Contains(term) == false)
+                        key.Add(term);
+                }
+            }
+            else
+            {
+                foreach (var (_, _, variable) in draft.Variables)
+                    if (ReferenceEquals(variable, set) == false)
+                        key.Add(variable);
+            }
+
+            var parameters = new List<Term>();
+            var assumptions = SplitAssumptions.Compile(graph, draft.Name, builder, builder.Assumptions, declared, element, elementType, parameters);
+
+            // The matcher's columns: the key, the set, then the other variables the assumptions use.
+            var columns = new List<Term>(key);
+            var keyColumns = new int[key.Count];
+            for (var i = 0; i < keyColumns.Length; i++)
+                keyColumns[i] = i;
+
+            var setColumn = columns.IndexOf(set);
+            if (setColumn < 0)
+            {
+                setColumn = columns.Count;
+                columns.Add(set);
+            }
+
+            foreach (var parameter in parameters)
+                if (columns.Contains(parameter) == false)
+                    columns.Add(parameter);
+
+            var program = new ProgramBuilder(graph, draft, null, caseVariable: element).BuildSplit(columns);
+            var types = new ColumnType[columns.Count];
+            for (var i = 0; i < types.Length; i++)
+                types[i] = program.Head[0].Inputs[i].Type;
+
+            assumptions.Bind(columns, types);
+            var serial = graph.NextSerial();
+            var variants = new RuleVariants(program, null, "$split/" + draft.Name + "#" + serial, true);
+            var rule = new SplitRule(graph, builder, caseTag)
+            {
+                ReadScopes = Array.AsReadOnly(program.ReadScopes),
+                Program = new SplitProgram(program, variants, types, keyColumns, setColumn, elementType, builder.CountOf!, builder.ElementAt!, assumptions),
+            };
+
+            try
+            {
+                variants.Get(graph, false);
+            }
+            catch (Exception exception) when (exception is not RuleDefinitionException)
+            {
+                variants.Free(graph);
+                throw new RuleDefinitionException(draft.Name, "the engine rejected the split rule: " + exception.Message, exception);
+            }
+
+            return rule;
         }
 
     }

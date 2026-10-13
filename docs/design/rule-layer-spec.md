@@ -19,11 +19,13 @@
 > spike from the project and from the package, and merges to main before any other rule-layer work.
 >
 > **Implemented (2026-10-13).** R1a is on main (`edd1fa9`, merged with colors M9.3–M9.4), and so are R1b (`80675d8`,
-> merged with colors M10.1–M10.2 at `3b9dda1`) and R2, merged with colors M10.4. R2 runs every scope, the root
+> merged with colors M10.1–M10.2 at `3b9dda1`), R2, merged with colors M10.4, and R3. R2 runs every scope, the root
 > included, on colors M10.3's `EGraphContext`, with no engine change. Colors M10.3 and M10.4 delivered the engine
-> requests R2 and R3 depend on (E4, E5, E7–E10; §15.6, §15.7); R3 is next. Where the implementation found the better
-> design, the text below now says what was built. §15 records every deviation from the earlier text (what it said,
-> what was built, and why) and every item still deferred, with its milestone.
+> requests R2 and R3 depend on (E4, E5, E7–E10; §15.6, §15.7). R3 (case splits and lift) was built on R2 merged with
+> colors M10.4, with no engine change; it was reviewed and verified (N104–N114 fix what the reviews and the
+> verifications found) and merged to main (§9 R3, §15.9). Where the implementation found the better design, the text
+> below now says what was built. §15 records every deviation from the earlier text (what it said, what was
+> built, and why) and every item still deferred, with its milestone.
 
 **Binding inputs.**
 - `docs/design/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
@@ -72,7 +74,7 @@
 12. [Appendix: porting an egglog program by hand](#12-appendix-porting-an-egglog-program-by-hand)
 13. [Edits this spec asks of the colored-contexts spec](#13-edits-this-spec-asks-of-the-colored-contexts-spec)
 14. [Review responses](#14-review-responses)
-15. [Implementation notes (R1a-R1b, the engine requests of colors M10.3, and R2)](#15-implementation-notes-r1a-r1b-the-engine-requests-of-colors-m103-and-r2)
+15. [Implementation notes (R1a-R1b, the engine requests of colors M10.3-M10.4, R2 and R3)](#15-implementation-notes-r1a-r1b-the-engine-requests-of-colors-m103-m104-r2-and-r3)
 
 ---
 
@@ -105,7 +107,7 @@
 | D15 | Interner growth | **Kept** | Pools are permanent per `EGraph` (the engine's `BaseValues` is append-only). Constants used only for reading never intern: host reads use `BaseValues.TryGetExisting` (E1). `ValueStore.InternedCount` reports growth (E1) so a host can recycle a graph. Constants of rules and queries intern at definition. |
 | D16 | Storage surface | **Changed** | No storage surface is public. What v1 added to the spike exists in the engine and stays internal: `Version` is `Database.ChangeStamp` (X30). It moves on every effective change a call of the scope makes to its own layer, including (R2) the catch-up copies that hide an ancestor's rows when one of the scope's own classes merges in that call; queries, reads and writes that change nothing never move it. The upkeep a call makes first is left out (R2): the sync of the internal mirror tables (N62), and the catch-up that brings the scope's layer, and each writable ancestor's, in line with what an ancestor wrote since, which a descendant makes lazily at its next call (N87); a write into an ancestor therefore never moves a descendant's `Version`. `ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` come with M9.2–M9.4 and M10.4. `LatestStamp` and `ApproximateCount` are not needed, because the engine plans. |
 | D17 | Parallel cases | **Kept** (**Engine**-enforced) | Sequential. A writable parent shares its thread domain with every case under it (colors §8.3). Children of a frozen scope may run concurrently. |
-| D18 | Rollback | **Changed** | No rollback, and no re-run guarantee. In Store-backed contexts the engine commits watermarks only after a run without a recorded failure (X18), and a child that throws is faulted (X12). The rule layer **faults the scope** after any `RuleEvaluationException` from a run or a write, the root included. `Scope.Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as `InnerException`; a faulted root makes the graph unusable. A failed query is the exception: it wrote nothing, so it throws without faulting (D49). Limits and cancellation stop between iterations and are not failures. |
+| D18 | Rollback | **Changed** | No rollback, and no re-run guarantee. In Store-backed contexts the engine commits watermarks only after a run without a recorded failure (X18), and a child that throws is faulted (X12). The rule layer **faults the scope** after any `RuleEvaluationException` from a run or a write, the root included, and after one from a lattice merge that throws in the catch-up any call makes first (a read's, query's and extraction's included), where it also faults the writable ancestor whose catch-up ran the merge (N113), and after one from a lattice merge that throws while a split step of a run catches a case up, where it also faults the case (N114). `Scope.Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as `InnerException`; a faulted root makes the graph unusable. A failed query is the exception: it wrote nothing, so it throws without faulting (D49). Limits and cancellation stop between iterations and are not failures. |
 | D19 | Cost type | **Engine** | `long`, saturating addition, negative costs rejected (`Extraction/CostMath.cs`). |
 | D20 | Built-in value types | **Changed** | Values are the engine's 32-bit base values (`Value`, `IBaseValueCodec<T>`). Built in: `long` (`Int64Codec`), `int` (stored as `i64`), `bool`, `double` (`DoubleCodec`, with −0.0 normalized to +0.0 and NaN rejected by the rule layer before encoding), `string`, registered enums (stored as `i64`), and `ValueSet<T>` (an **interned base value**, not a container; the rule layer registers no container, §13). User types use `ValueStore.Register<T>` over `InternedCodec<T>`. v1's `IValueCodec<T>` is dropped, because engine codecs are static struct types. There are no sets of classes. `int` and enums are stored as `i64` because `Int32Codec` boxes −1 to `Value.StaleRep`, which must never appear in a table's first column. |
 | D21 | Callbacks | **Deferred** | Version 2 has no rule callbacks. Observation after a run is a read or a query (D34, D49); a run observer (D41) sees progress during a run but cannot write. Callbacks that write return only when a consumer needs them; they would then opt out of watermark inheritance by overriding `ExternalFunction.ReadsTables` (colors §10.2) on their collector, which needs no new engine member. |
@@ -142,7 +144,7 @@
 | D42 | What do run limits bound? | Work a user can reason about. `IterationLimit` (engine iterations in every scope of the run), `TimeLimit`, and `RowLimit` (rows in the own layers of the top-level scope and of the run's live cases, the engine's `TotalSizeEstimate`) replace v2's `ChangeLimit`, which counted table merges. Limits are per top-level `Run`, cases included, and are checked before every iteration and every split step. An engine iteration, or a lift, cannot be interrupted, so a run overshoots a limit or a cancellation by at most one iteration or one lift. |
 | D43 | Which keys does a split consider, and when? | **The split rule's body decides.** `DefineDomainSplit` takes a list of guard relations, and `DefineSplit` any body. The Cosmos theory splits a schema on every present discriminator, and a query only on the present discriminators its predicate mentions (an analysis relation `Mentioned`, derived from comparison terms). A split step should run once the facts its rules read have settled: `Saturate(Saturate(facts…), Split(rule, inCase), rewrites…)`, which `Schedule.Split`'s documentation recommends. **Why:** otherwise every query re-splits every discriminator the frozen schema already split on; and a split made before its domain narrowed opens cases that only later go vacuous, while its record keeps the key until the run ends. |
 | D44 | Two APIs in one package? | **No: the engine's public types become internal** (E11). The conventions say to default to `internal` and make a type public only when a consumer of the engine needs it; `InternalsVisibleTo` covers `Eggnog`, the tests and the benchmarks. `Surface/PublicSurfaceTests` asserts that no public type of another assembly in the package shares a simple name with a public `Eggnog` type. If the engine owner instead keeps `Eggnog.Relations` a supported standalone API, its public types are marked `[EditorBrowsable(EditorBrowsableState.Never)]`, documented as unsupported for `Eggnog` consumers, and the surface test exempts the types so marked. |
-| D45 | What does a contradicted case answer? | A case whose contradiction set its stop flag (D11) has no model, and the engine refuses most operations on it (colors §6.9, §10.3, §10.4). The rule layer checks first: `IsContradictory` and the identity members answer; `Assume` does nothing; `Union` returns `false`; `Run` returns at once with `StopReason = Contradiction`; every other read and write, queries, extraction, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Dispose` works. Only case scopes have the stop flag: any other contradictory scope stays fully usable (contradiction is an ordinary fact there). |
+| D45 | What does a contradicted case answer? | A case whose contradiction set its stop flag (D11) has no model, and the engine refuses most operations on it (colors §6.9, §10.3, §10.4). The rule layer checks first: `IsContradictory` and the identity members answer; `Assume` does nothing; `Union` returns `false`; `Run` returns at once with `StopReason = Contradiction`; every other read and write, queries, extraction, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Dispose` works. Only case scopes have the stop flag: any other contradictory scope stays fully usable (contradiction is an ordinary fact there), unless it lies under a stopped case. Such a scope (a plain child of a stopped case, or a case below that child) has no model either, and the engine refuses to catch it up with its stopped ancestor (colors §6.9); it answers as the stopped case does (N104). |
 | D46 | Parallelism | **Opt-in.** `EGraphOptions.DegreeOfParallelism` defaults to 1: serial and deterministic, extraction ties included (decision 4). From R2, `ScopeOptions.DegreeOfParallelism` sets one scope's (`ContextOptions.Parallelism`); children of a frozen scope are serial unless it is set (colors §10.9). |
 | D47 | Threads | Every milestone keeps a **rule-layer guard per thread domain** (`ScopeGuard`, over a `ThreadAffinityGuard`), shared and reassigned on freeze exactly as colors §8.3 shares and reassigns the engine's. Every scope call enters it for the whole call (a host batch, a run, a query), so a second thread fails fast instead of interleaving between engine calls. Every `ScopeWriter` call enters its scope's guard too; a call refused there, like any rejected call, rejects the whole batch. The rule layer never holds the engine's own domain across calls. User delegates the engine invokes (primitives, lattice merges, filters, cost functions) must not call into a graph, and such a call throws. `Scope.DefineRule` enters the scope's domain; global definitions follow D6. |
 | D48 | When are mirrors brought current? | **Just before use.** Before any iteration, query or split matcher in scope `C` reads `T@t`, the tagged scope `S = resolve(C, t)` runs its copy rules for `t` once if it is writable and has changed since its last sync; and once more when it freezes. This replaces v2's three triggers, covers host queries, and removes the one-iteration lag within the tagged scope. |
@@ -353,13 +355,15 @@ public sealed class EGraph
     public Query DefineQuery(string name, Action<QueryBuilder> define);                                    // R1b
     /// A scope tag of this graph. Names are unique per graph and non-empty; "root" is the root's (ArgumentException).
     public ScopeTag DefineScopeTag(string name);                                                            // R2
-    /// A split rule, compiled immediately (RuleDefinitionException). caseTag is the tag of the cases it makes (null:
-    /// untagged); ArgumentException for another graph's tag.
+    /// A split rule, compiled immediately (RuleDefinitionException, with the messages of N99). caseTag is the tag of
+    /// the cases it makes (null: untagged). ArgumentException for a name another split rule has, or for another graph's
+    /// tag or RootTag.
     public SplitRule DefineSplit(string name, Action<SplitBuilder> define, ScopeTag? caseTag = null);        // R3
     /// The domain split: where every guard holds of k and domain(k) = d with |d| > 1, one case per v in d assuming
     /// domain(k) = {v}; key k. At least one guard (ArgumentException). Coverage obligation: domain(k) = S must mean
     /// "wherever every guard holds of k, k's value is one of S". More guards split less: fewer cases and fewer facts,
-    /// never an unsound one (D43).
+    /// never an unsound one (D43). The domain must have a lattice and not be a scoped view, since each case writes it;
+    /// a guard may be a scoped view, read as in DefineSplit (ArgumentException otherwise; N105).
     public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, ValueSet<TElement>> domain,
         IReadOnlyList<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull;             // R3
 }
@@ -383,7 +387,8 @@ public sealed partial class Scope : IDisposable
 {
     public EGraph Graph { get; }
     public bool IsRoot { get; }
-    /// Set after a RuleEvaluationException from a run or a write, or a fault the engine recorded (D18).
+    /// Set after a RuleEvaluationException from a run or a write, or from a lattice merge in the catch-up of any call
+    /// into this scope or a descendant (N113), or a fault the engine recorded (D18).
     public bool IsFaulted { get; }
     /// What faulted the scope; null while it is not faulted. Every later call except Dispose throws
     /// InvalidOperationException with this as InnerException.
@@ -399,7 +404,9 @@ public sealed partial class Scope : IDisposable
     public string Path { get; }
     /// Never throws (D40). Makes the scope unusable at once and invalidates the class values it returned; releases its
     /// local rules and engine context when it has no live children and no call runs in its thread domain on another
-    /// thread. A second call does nothing; on the root it does nothing.
+    /// thread. A second call does nothing; on the root it does nothing. A case (R3) belongs to the set that made it:
+    /// disposing it marks it disposed at once, and its release waits for its CaseSet's Dispose, or for the end of the
+    /// run whose split made it (N96).
     public void Dispose();
     public override string ToString();
 }
@@ -491,8 +498,12 @@ public sealed partial class Scope
     /// negative IterationLimit, TimeLimit or RowLimit; ArgumentException for a ruleset of another graph, or an Until
     /// fact this scope cannot read (a table or column type of another graph, a class it cannot use, D39); and (R2) that
     /// every tag read by a reachable rule resolves. InvalidOperationException if frozen (R2), faulted, or called from a
-    /// run observer; OperationCanceledException on cancellation; RuleEvaluationException on an evaluation failure (the
-    /// scope is then faulted).
+    /// run observer; OperationCanceledException on cancellation, checked between iterations and split steps (a lift
+    /// already started runs to its end, D42, N108); RuleEvaluationException on an evaluation failure (the scope is then
+    /// faulted), a case's included (R3: a split assumption that gives a function without a lattice a second value,
+    /// N105; a lattice merge that throws while a split step catches a case up, N114). Like every call, it also throws
+    /// RuleEvaluationException when a lattice merge throws in the catch-up it makes first, faulting this scope and the
+    /// writable ancestor whose catch-up ran the merge (N113): so do Union, Extract and CaseSet.Lift.
     public RunReport Run(Schedule schedule, RunOptions? options = null, CancellationToken cancellationToken = default);
     /// An extractor over this scope as it is now (§6.10).
     public Extractor CreateExtractor(CostModel? costs = null);
@@ -502,10 +513,13 @@ public sealed partial class Scope
 // Graph/Scope.Cases.cs  [R3]  (partial: cases)
 public sealed partial class Scope
 {
-    /// Made by a split or a CaseSet.
+    /// Made by a split or a CaseSet. A case stops on contradiction (D11), and then answers as D45 says.
     public bool IsCase { get; }
     /// Host-driven cases. Obligation: the cases added must cover this scope (every model of it satisfies some case's
-    /// assumptions). InvalidOperationException on a frozen scope (open the cases in a child of it).
+    /// assumptions). The cases share this scope's thread domain, and the open set defers its release (D40). A
+    /// structural call: it catches up first, then ScopeContradictedException if this scope is a stopped case or lies
+    /// under one (N104); InvalidOperationException on a frozen scope (open the cases in a child of it), from a run
+    /// observer, or while a Write batch is open on this scope.
     public CaseSet OpenCases();
 }
 
@@ -1048,7 +1062,8 @@ public sealed class RuleDefinitionException : Exception
 
 // Rules/RuleEvaluationException.cs  [R1a]
 /// An evaluation failure: a primitive, filter or lattice delegate threw, or a function without a lattice received two
-/// values from rules. After a run or a write the scope is faulted (D18); after a query it is not (D49). For a
+/// values from rules. After a run or a write the scope is faulted (D18); after a query it is not (D49), unless the
+/// failure came from the catch-up the call made first, which faults the scope whatever the call (N113). For a
 /// primitive, Message is "rule 'r': primitive 'p' threw {exception type}: {its message}".
 public sealed class RuleEvaluationException : Exception
 {
@@ -1078,10 +1093,12 @@ public sealed class FactConflictException : InvalidOperationException
 // Rules/SplitRule.cs  [R3]
 public sealed class SplitRule
 {
+    /// Unique among the graph's split rules.
     public string Name { get; }
     /// null: its cases are untagged.
     public ScopeTag? CaseTag { get; }
     public IReadOnlyList<ScopeTag> ReadScopes { get; }
+    /// (split (body…) (cases v d) (key k) (assume…) :case-tag case)
     public override string ToString();
 }
 
@@ -1090,7 +1107,10 @@ public sealed class SplitRule
 /// set variable), and the assumptions written into each case. Obligation: whenever the body matches in a scope C, C
 /// entails "for the elements of the set at this match, one of the cases' assumptions holds", and that stays true as C
 /// grows (it does for a lattice-meet domain). The body is also the split's demand (D43): keys it does not match are
-/// never split.
+/// never split. Cases is called once, with a declared variable; the case variable appears only in Assume; Key calls
+/// add to the key, and name declared variables. Assumptions are ground host-write facts once a match and an element
+/// are bound: they may compute (evaluated per case), but not read a function, write a scoped view, or hold a class
+/// constant not from the root. Each error is a RuleDefinitionException naming the split rule (N99).
 public sealed class SplitBuilder
 {
     public Var<T> Var<T>(string name);
@@ -1132,14 +1152,17 @@ public abstract class Schedule
     /// cases that go vacuous later, and its record keeps the key until the Run ends, so later steps do not split it
     /// again more narrowly (D43).
     public static Schedule Split(SplitRule rule, Schedule inCase);                                           // R3
+    /// The requests of every rule, in order. A live split covers a later request for the same key only when both come
+    /// from the same rule at the same position of a split step's rules (B6, N91). ArgumentException for no rule, or a
+    /// rule listed twice.
     public static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase);                           // R3
     public override string ToString();
 }
 
 // Scheduling/RunOptions.cs  [R1a]
 /// Limits are per top-level Run, cases included, checked before every iteration (the first included) and split step;
-/// a run overshoots a limit or a cancellation by at most one engine iteration or one lift (D42). A negative limit is an
-/// ArgumentOutOfRangeException from Run, before any work.
+/// a run overshoots a limit or a cancellation by at most one engine iteration or one lift (D42). A negative limit, or
+/// (R3) a CaseLimit or SplitDepthLimit below 1, is an ArgumentOutOfRangeException from Run, before any work (N100).
 public sealed class RunOptions
 {
     public static RunOptions Default { get; }
@@ -1156,8 +1179,12 @@ public sealed class RunOptions
     public Action<RunStep>? Observer { get; init; }                                                          // R1b
     /// Keep every step in RunReport.Steps.
     public bool RecordSteps { get; init; }                                                                   // R1b
+    /// The most cases one split may open; a split with more is skipped (SplitsSkipped). At least 1 (N100).
     public int CaseLimit { get; init; } = 64;                                                                // R3
+    /// A split step at depth d opens cases only while d is below it, and deepens into them only while d + 1 is; the
+    /// top-level scope is at depth 0. At least 1 (N100).
     public int SplitDepthLimit { get; init; } = 4;                                                           // R3
+    /// The limits of the lifts split steps make. ArgumentNullException for null (N100).
     public LiftOptions Lift { get; init; } = LiftOptions.Default;                                            // R3
 }
 
@@ -1166,9 +1193,11 @@ public sealed class RunReport
 {
     /// Engine iterations in every scope of the run, cases included; mirror syncs do not count.
     public int Iterations { get; }
-    /// An iteration, split step or lift of the run changed the top-level scope (the engine's change flags, §6.5.1).
+    /// An iteration, split step or lift of the run changed the top-level scope (the engine's change flags, §6.5.1; for
+    /// a split step, its lifts moved the scope's Version: opening cases alone is no change, N106).
     public bool Changed { get; }
-    /// Completed, and the run's last iteration or split step in the top-level scope changed nothing.
+    /// Completed, and the run's last iteration or split step in the top-level scope made no progress (an iteration
+    /// changed nothing; a split step opened no case and its lifts changed nothing, N106).
     public bool Saturated { get; }
     public RunStopReason StopReason { get; }
     public TimeSpan Elapsed { get; }
@@ -1181,9 +1210,11 @@ public sealed class RunReport
     /// Every step, when RunOptions.RecordSteps is set; otherwise empty.
     public IReadOnlyList<RunStep> Steps { get; }                                                             // R1b
     public int CasesOpened { get; }                                                                          // R3
-    /// Over CaseLimit, over SplitDepthLimit, or an empty element set (sound: fewer facts).
+    /// Requests a split step found and did not take: over CaseLimit, covered by a live split of the run (B6; counted at
+    /// each execution of the step that finds it covered), or an empty element set (sound: fewer facts). A split below
+    /// SplitDepthLimit is never looked for, so it is not counted (N107).
     public int SplitsSkipped { get; }                                                                        // R3
-    /// Lifts computed (not skipped by the memo).
+    /// Lifts run by split steps, the memo's answers included (N92).
     public int Lifts { get; }                                                                                // R3
     /// Lift candidates dropped by CandidateLimit.
     public long LiftRowsSkipped { get; }                                                                     // R3
@@ -1205,27 +1236,44 @@ public enum RunStopReason
 
 ```csharp
 // Cases/CaseSet.cs  [R3]
-/// Host-driven cases under one parent. Obligation: the cases cover the parent.
+/// Host-driven cases under one parent. Obligation: the cases cover the parent. The set owns its cases: disposing a case
+/// directly marks it disposed, its release waits for the set, and Lift then refuses to lift over cases that no longer
+/// cover the parent (N96). Add and Lift enter the parent's thread domain (D47); Dispose may be called from any thread.
 public sealed class CaseSet : IDisposable
 {
     public Scope Parent { get; }
-    /// Live cases, in creation order. A case a lift finds contradictory is disposed and leaves the list.
+    /// Live cases, in creation order. A case a lift finds contradictory is disposed and leaves the list; so does a case
+    /// disposed directly.
     public IReadOnlyList<Scope> Cases { get; }
-    /// A new case child (IsCase = true; it stops on contradiction). ArgumentException for another graph's tag.
+    /// A new case child (IsCase = true; it stops on contradiction), starting as a copy of the parent. A structural
+    /// call, like CreateChild (N101): ArgumentException for another graph's tag or RootTag; ObjectDisposedException
+    /// once the set or the parent is disposed; ScopeContradictedException on a stopped parent, after its catch-up
+    /// (N104); InvalidOperationException on a frozen parent, at depth 31, or from a run observer.
     public Scope Add(ScopeTag? tag = null);
     /// Lifts into Parent what every non-vacuous case proves (§6.9.4), then disposes the vacuous cases.
-    /// InvalidOperationException with no cases. May be called repeatedly. Cancellation is checked between lift rounds.
+    /// InvalidOperationException with no cases, for a case disposed directly (N96), while a Write batch is open on
+    /// Parent or below it (N88), or from a run observer; ScopeContradictedException on a stopped Parent;
+    /// ObjectDisposedException once the set or Parent is disposed (N101). May be called repeatedly; a lift over cases
+    /// and a parent that have not changed since the last one costs one check (the engine's memo). Cancellation is
+    /// checked between lift rounds. A faulted case is lifted as any other (N110). RuleEvaluationException when a merge
+    /// of the lifted writes fails (Parent is faulted), or when a case join throws (nothing of that round is written;
+    /// nothing is faulted, N94). A lattice merge that throws when the lift catches a case up faults that case, not
+    /// Parent (N113, N114).
     public LiftReport Lift(LiftOptions? options = null, CancellationToken cancellationToken = default);
-    /// Never throws; disposes every case (D40).
+    /// Never throws; disposes every case (D40), one an Add in progress on another thread makes included (that Add then
+    /// throws ObjectDisposedException; N111).
     public void Dispose();
 }
 
 // Cases/LiftOptions.cs  [R3]
+/// The limits of a lift: of CaseSet.Lift, and of the lifts a split step makes (RunOptions.Lift). A lift cut short by a
+/// limit is sound, with fewer facts, and leaves no memo (N53).
 public sealed class LiftOptions
 {
     public static LiftOptions Default { get; }
+    /// At least 1 (ArgumentOutOfRangeException, N100).
     public int RoundLimit { get; init; } = 16;
-    /// Parent-level candidates per case row (product over class columns).
+    /// Parent-level candidates per case row (product over class columns). At least 1 (N100).
     public int CandidateLimit { get; init; } = 64;
 }
 
@@ -1238,7 +1286,8 @@ public sealed class LiftReport
     /// Every case was vacuous.
     public bool ParentContradicted { get; }
     public long Unions { get; }
-    /// Relation rows.
+    /// Rows written with an existing output: relation rows (N90), and constructor rows whose class one parent class
+    /// stands for in every case.
     public long Rows { get; }
     /// Constructor keys made in the parent.
     public long Terms { get; }
@@ -1253,7 +1302,8 @@ public sealed class LiftReport
 }
 
 // Cases/ScopeContradictedException.cs  [R3]
-/// A read or write that needs a model, on a case whose contradiction stopped it (D45).
+/// A read or write that needs a model, on a case whose contradiction stopped it, or on a scope under one (D45, N104).
+/// ScopePath is the scope the call was made on.
 public sealed class ScopeContradictedException : InvalidOperationException
 {
     public ScopeContradictedException(string scopePath);
@@ -1372,7 +1422,9 @@ public enum RunStepKind
 {
     Iteration,
     MirrorSync,                                                                                              // R2
+    /// Recorded once the split step ends, after the iterations of its cases and its lifts (N93).
     SplitStep,                                                                                               // R3
+    /// A lift a split step made, as a step of the split scope, recorded between the iterations of the cases (N93).
     Lift,                                                                                                    // R3
 }
 
@@ -1386,14 +1438,17 @@ public sealed class RunStep
     public string ScopePath { get; }
     /// Position among the run's steps, from 0.
     public int Index { get; }
+    /// The step changed its scope. For a split step: it made progress, opening cases or changing the scope by a lift
+    /// (N106); for a lift: the split scope's Version moved (N93).
     public bool Changed { get; }
     public TimeSpan Elapsed { get; }
     /// For an iteration: the rules that matched in it, in the order they ran, each with that iteration's figures
     /// (IterationsWithMatches = 1); a read-only copy. Empty for other kinds.
     public IReadOnlyList<RuleStatistics> Rules { get; }
-    /// For a split step.
+    /// For a split step, the cases it opened; 0 for any other step.
     public int CasesOpened { get; }                                                                          // R3
-    /// "#3 iteration root/schema#1/query#2 changed: lower uuid 1, and commutes 4"; "unchanged" when nothing changed.
+    /// "#3 iteration root/schema#1/query#2 changed: lower uuid 1, and commutes 4"; "unchanged" when nothing changed; a
+    /// split step adds its cases: "#7 split-step root/query#2 changed: 2 cases".
     public override string ToString();
 }
 
@@ -1428,12 +1483,18 @@ internal abstract class EngineScope
 {
     public abstract long Version { get; }
     public abstract bool IsContradictory { get; }
-    /// A case whose stop flag is set (D45). Always false in R1.
+    /// A case whose stop flag is set (D11, D45; colors §6.9): the engine refuses every read but IsContradictory. Only a
+    /// case can stop. One volatile read. Always false in R1.
     public abstract bool IsStopped { get; }                                                        // R3
     /// Rows in this scope's own layers (Database.TotalSizeEstimate), for RowLimit.
     public abstract long OwnRowCount { get; }                                                      // R1b
     /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current.
     public abstract void EnsureClean();
+    /// Takes a failure a merge recorded on the context outside an engine call that reports it: the rebuild of
+    /// EnsureClean, which records a lattice merge that throws (D31) and does not throw itself. Called only for a scope
+    /// that is not the root, right after its catch-up (N113), and for a split's case on entry and at a step's end
+    /// (N114). One volatile read when nothing is recorded.
+    public abstract bool TryTakeRecordedFailure(out string message);                               // R3
     /// The engine variants to run for these rules in this scope, lowered on demand (§6.4.4).
     public abstract LoweredRule[] PrepareRules(IReadOnlyList<CompiledRule> rules, bool semiNaive);
     /// One variant of a program (a rule, a query, a split matcher or a copy rule) for this scope: R1 lowers it with the
@@ -1667,8 +1728,11 @@ internal sealed class LatticeMerge<T> : Relations.ExternalFunction
 { public LatticeMerge(EGraph graph, string functionName, ValueLattice<T> lattice, ColumnType<T> type); }
 
 // Values/CaseJoinAdapter{T}.cs  [R3]
+/// The lattice's case join as the engine's Func<uint, uint, uint> (null without one). The delegate runs under
+/// EngineCallMarker; an exception becomes a RuleEvaluationException naming the lattice and the function (N95). Made
+/// once per function, at its definition (FunctionHandle.CaseJoin, through ValueLattice.CreateCaseJoin).
 internal static class CaseJoinAdapter<T>
-{ public static Func<uint, uint, uint>? Create(ValueLattice<T> lattice, ColumnType<T> type); }
+{ public static Func<uint, uint, uint>? Create(ValueLattice<T> lattice, ColumnType<T> type, string functionName); }
 
 // Values/ValueSetOrder{T}.cs  [R1a]
 /// Ordinal for strings, Comparer<T>.Default otherwise.
@@ -1753,8 +1817,9 @@ internal static class RuleCompiler
 {
     public static CompiledRule Compile(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner);
     public static CompiledQuery CompileQuery(EGraph graph, RuleDraft draft);                                  // R1b
-    public static SplitProgram CompileSplit(EGraph graph, RuleDraft draft, Term setVariable, Term elementVariable,
-        IReadOnlyList<Term> key, IReadOnlyList<Fact> assumptions);                                              // R3
+    /// Checks the split's shape and assumptions (N99), compiles the body into a naive matcher, lowers its one variant;
+    /// under the graph's definition lock.
+    public static SplitRule CompileSplit(EGraph graph, SplitBuilder builder, ScopeTag? caseTag);              // R3
 }
 
 // Rules/ProgramBuilder.cs  [R1a]
@@ -1969,8 +2034,8 @@ internal static class RowReader
 ```csharp
 // Each schedule node implements
 //   internal abstract bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled);
-//   internal abstract void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions);   // Until facts (R1b)
-// R3 adds the split rules to Collect (ISet<SplitRule> splits).
+//   internal abstract void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions,    // Until facts (R1b)
+//       ISet<SplitRule> splits);                                                           // split rules (R3)
 // Scheduling/RunSchedule.cs, RepeatSchedule.cs, SaturateSchedule.cs, SequenceSchedule.cs  [R1a]; UntilSchedule.cs  [R1b]
 internal sealed class RunSchedule : Schedule { public Ruleset[] Rulesets { get; } }
 internal sealed class RepeatSchedule : Schedule { public int Times { get; } public Schedule[] Steps { get; } }
@@ -1989,8 +2054,26 @@ internal sealed class ScheduleExecutor
     public RunStatistics Statistics { get; }
     /// The run's stopwatch, started with the executor: TimeLimit and RunReport.Elapsed read it.
     public Stopwatch Clock { get; }
-    /// Cases of this run that are alive, for RowLimit (R3).
+    /// Cases of this run that are alive, for RowLimit (R3): a snapshot, in the order they first ran. A case leaves once
+    /// its engine set disposed it.
     public IReadOnlyCollection<Scope> LiveCases { get; }
+    /// The run observer threw: its exception propagates without faulting the scope (§6.11).
+    public bool ObserverFailed { get; }                                                            // R3
+    /// The run's driver of a split node, made on first use and kept for the run (§6.9.3).
+    public Relations.SplitDriver DriverFor(SplitSchedule node);                                    // R3
+    /// Syncs the mirrors a split step's matchers read, recording MirrorSync steps (D48).
+    public void SyncSplitMirrors(Scope scope, SplitRule[] rules);                                  // R3
+    /// The split-step frames from which lifts are recorded as steps (N93): BeginSplitStep pushes one; ObserveLifts
+    /// records the lifts made since the last case ran; CaseRunEnded starts the next window; EndSplitStep records the
+    /// rest, pops the frame and adds the step's report to Statistics, also when the step threw.
+    public void BeginSplitStep(Scope scope, Relations.SplitReport report);                         // R3
+    public void ObserveLifts();                                                                    // R3
+    public void CaseRunEnded();                                                                    // R3
+    public void EndSplitStep();                                                                    // R3
+    /// Registers a case of the run, once, among LiveCases.
+    public void AddCase(Scope @case);                                                              // R3
+    /// The first failure the engine's catch-up recorded in a case of this run under scope (N114); the case is faulted.
+    public RuleEvaluationException? TakeCaseCatchUpFailure(Scope scope);                           // R3
     /// Global rules of the rulesets, then local rules from the root down to scope (R2); deduplicated, in that order.
     /// Recomputed for every iteration (D6).
     public IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope);
@@ -1999,7 +2082,8 @@ internal sealed class ScheduleExecutor
     /// §6.5.1. Returns whether the iteration changed the scope.
     public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase);
     /// Records a step, notifies the observer (§6.11). rules: for an iteration, the rules that matched in it.
-    public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics>? rules);
+    public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed,
+        IReadOnlyList<RuleStatistics>? rules, int casesOpened = 0);                                // casesOpened: R3
     public RunReport Complete(RunStopReason reason, Stopwatch clock);
 }
 
@@ -2029,9 +2113,24 @@ internal sealed class ScheduleStopException : Exception
 { public ScheduleStopException(RunStopReason reason); public RunStopReason Reason { get; } }
 
 // Scheduling/ScheduleCaseRunner.cs  [R3]
-/// Runs a split node's in-case schedule in one case (Relations.ICaseSchedule, E8).
+/// Runs a split node's in-case schedule in one case (Relations.ICaseSchedule, E8). Each entry records the lifts made
+/// since the previous case ran (N93), registers the case among LiveCases, and takes a failure the engine's catch-up of
+/// the case recorded (N114). One per split node and run.
 internal sealed class ScheduleCaseRunner : Relations.ICaseSchedule
 { public ScheduleCaseRunner(ScheduleExecutor executor, Schedule inCase); }
+
+// Scheduling/SplitStepFrame.cs  [R3]
+/// One split step in progress, on the run's stack of them (N93): its scope and report, the lifts already recorded, and
+/// the scope's Version and the time when the last of its cases finished running.
+internal sealed class SplitStepFrame
+{
+    public SplitStepFrame(Scope scope, Relations.SplitReport report, long version, long timestamp);
+    public Scope Scope { get; }
+    public Relations.SplitReport Report { get; }
+    public int LiftsSeen { get; set; }
+    public long Version { get; set; }
+    public long Timestamp { get; set; }
+}
 ```
 
 ### 4.7 Scopes/  [R2]
@@ -2084,30 +2183,60 @@ internal static class MirrorSync
 
 ```csharp
 // Cases/SplitProgram.cs  [R3]
-/// A split rule's matcher (a naive RuleProgram whose head is one collector of the key, set and assumption registers)
-/// and its assumption template.
+/// A split rule's matcher (a naive RuleProgram whose head is one collector of the key, set and assumption registers,
+/// lowered once as $split/{name}#{serial}) and its assumption template. Immutable; thread-safe.
 internal sealed class SplitProgram
 {
     public RuleProgram Matcher { get; }
     public RuleVariants Variants { get; }
-    /// Positions in the collected tuple.
+    /// A match's column types: the key's, the set's, then the other assumption variables'; Width is their count.
+    public ColumnType[] Columns { get; }
+    public int Width { get; }
+    /// The class columns, on which a match is canonicalized (§6.6.4).
+    public int[] SortColumns { get; }
+    /// Positions in the collected tuple: the cells of a request's SplitKey.
     public int[] KeyColumns { get; }
     public int SetColumn { get; }
-    /// The element variable's position in the assumption bindings.
+    /// The element variable's position in the assumption bindings: after a match's columns.
     public int ElementColumn { get; }
     public ColumnType ElementType { get; }
-    /// Ground once a tuple and an element are bound.
+    /// The number of elements of a set cell, without decoding them; and case i's element, in ValueSetOrder (N99).
+    public Func<ColumnType, uint, int> CountOf { get; }
+    public Func<ColumnType, uint, int, object> ElementAt { get; }
+    /// The assumptions as written, and the template that grounds them for one case.
     public Fact[] Assumptions { get; }
+    public SplitAssumptions Template { get; }
 }
 
+// Cases/SplitAssumptions.cs  [R3]
+/// A split rule's assumptions, checked at definition like host-write facts (§6.6.2) with the declared variables and the
+/// case variable as parameters (by a SplitAssumptionChecker), and grounded per case: a variable becomes the constant a
+/// match or the element binds, a computation the constant it evaluates to (RuleEvaluationException if its primitive
+/// throws). Allocation is per case opened, never per row.
+internal sealed class SplitAssumptions
+{
+    public Fact[] Facts { get; }
+    /// parameters receives the declared variables the facts use, in first-use order: the matcher collects them.
+    public static SplitAssumptions Compile(EGraph graph, string name, object owner, IReadOnlyList<Fact> facts,
+        ISet<Term> declared, Term element, ColumnType elementType, List<Term> parameters);
+    public void Bind(IReadOnlyList<Term> tupleColumns, ColumnType[] types);
+    public Fact[] Instantiate(ReadOnlySpan<uint> tuple, object value, Scope parent);
+}
+
+// Cases/SplitAssumptionChecker.cs  [R3]
+/// The definition-time checks of one split rule's assumptions (N99). One instance per definition; not thread-safe.
+internal sealed class SplitAssumptionChecker { public void CheckFact(Fact fact); }
+
 // Cases/RuleSplitSource.cs  [R3]
-/// Relations.ISplitSource for one SplitRule (§6.9.2, E8).
+/// Relations.ISplitSource for one SplitRule at one position of a split step's rules (§6.9.2, E8, N91): made by
+/// SplitRule.SourceAt(index) and kept for the graph's life. Stateless beyond its rule and position.
 internal sealed class RuleSplitSource : Relations.ISplitSource
-{ public RuleSplitSource(EGraph graph, SplitRule rule, int index); }
+{ public RuleSplitSource(EGraph graph, SplitRule rule, int index); public SplitRule Rule { get; } }
 
 // Cases/LiftSpecBuilder.cs  [R3]
 /// Relations.LiftSpec from TableHandle.Lift and the lattices' case joins; mirror tables and Contradiction excluded;
-/// relations listed as functions whose output is unit (§6.9.1).
+/// relations listed with the Relation kind over their unit output (§6.9.1, N90). Cached on the graph
+/// (EGraph.LiftSpecCache), rebuilt when a table is defined.
 internal static class LiftSpecBuilder { public static Relations.LiftSpec Build(EGraph graph); }
 ```
 
@@ -2145,16 +2274,20 @@ internal static class SExpression
 
 | Type | Internal members |
 |---|---|
-| `EGraph` | `Relations.EGraph Engine`; `object DefinitionLock`; `object EngineLock` (R1, deleted in R2); `Relations.BaseValues BaseValues`; `UnitColumnType Unit`; `ExtractionCatalog Extraction`; `Relations.ExternalFunctionId NotEqual`; `ConcurrentDictionary<string, LoweredRule> VariantsByDescription`; `int NextSerial()`; `EGraphOptions Options`; `ScopeOrigin RootOrigin`; `TableHandle TableOf(Relations.FunctionId)`; `IReadOnlyCollection<Query> Queries` (live, R1b); `void ForgetQuery(Query)` (frees a disposed query's name, R1b); `void DeferFree(RuleVariants)` and `void FreeDeferred()` (variants a disposal could not free at once: R1b's root adapter freed them under the engine lock before it next prepared an iteration or a query; from R2 `ContextEngineScope.PrepareRules` and `PrepareVariant` free them, §6.4.6); `MirrorRegistry Mirrors` (R2); `Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot` (R2); `bool InheritWatermarks` (tests, R2); `Relations.ExternalFunctionId Equal` (the `Equal` step's `EqualFunction`, R2, N63); `int ActiveEngineCalls`, `EnterEngineCall()`, `ExitEngineCall()` (engine calls that may run user delegates, which defer a disposed query's free, R2, N69); `void CheckTag(ScopeTag, string)` and `void CheckFactTags(Fact, string)` (another graph's tag, `Fact.In` included, R2, N65); `TableHandle DefineMirrorTable(TableHandle, ScopeTag, int)` (R2, §6.8); `int NextScopeSerial()` (scope paths, R2) |
-| `Scope` | `ContextEngineScope Engine` (an `EngineScope` in R1); `ScopeRuntime Runtime`; `ScopeGuard Guard` and `ScopeGuard EnterGuard()` (reads the guard again once entered, R2, N60); `ScopeOrigin Origin`; `void Fault(Exception cause)`; `void ThrowIfNotUsable()` (faulted → InvalidOperationException with `Failure` inner; disposed → ObjectDisposedException); `void ThrowIfNotWritable()` (also frozen, and inside a run observer); `Enter()`, `EnterRead()`, `EnterExtraction()` and `Exit(bool held)` (a call's entry and exit: the guard on a writable scope, the call count, and from R2 the catch-up of `CatchUp`); the open `Write` batch, which makes the scope's own members throw InvalidOperationException (D30), and the count of open batches below it, which makes its writes and runs throw (R2, N88); `void ThrowIfStopped()` (R3); `CompiledRule[] LocalCompiled` (R2); `void BeginCall()` and `void EndCall()` (calls in progress, which defer the release, R2, N71); `void CatchUp()` (brings the scope and each writable ancestor up to date, left out of `Version`, R2, N87); `void ExcludeMirrorSync(long)` (R2, N62); `bool IsMirrorCurrent(ScopeTag, int)` and `void MarkMirrorSynced(ScopeTag, int)` (the sync key: the view stamp and the tag's copy-rule count, R2, N61); `ContextEngineScope CreateTransient()` and `void ReleaseTransient(ContextEngineScope)` (a query's child of a frozen scope, R2, D34); live and transient child counts (R2, §6.7); `TryRelease()` (a no-op in R1, where only the root exists; R2, §6.7); `RuleEvaluationException FaultWith(Relations.PanicException)` (R2) |
+| `EGraph` | `Relations.EGraph Engine`; `object DefinitionLock`; `object EngineLock` (R1, deleted in R2); `Relations.BaseValues BaseValues`; `UnitColumnType Unit`; `ExtractionCatalog Extraction`; `Relations.ExternalFunctionId NotEqual`; `ConcurrentDictionary<string, LoweredRule> VariantsByDescription`; `int NextSerial()`; `EGraphOptions Options`; `ScopeOrigin RootOrigin`; `TableHandle TableOf(Relations.FunctionId)`; `IReadOnlyCollection<Query> Queries` (live, R1b); `void ForgetQuery(Query)` (frees a disposed query's name, R1b); `void DeferFree(RuleVariants)` and `void FreeDeferred()` (variants a disposal could not free at once: R1b's root adapter freed them under the engine lock before it next prepared an iteration or a query; from R2 `ContextEngineScope.PrepareRules` and `PrepareVariant` free them, §6.4.6); `MirrorRegistry Mirrors` (R2); `Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot` (R2); `bool InheritWatermarks` (tests, R2); `Relations.ExternalFunctionId Equal` (the `Equal` step's `EqualFunction`, R2, N63); `int ActiveEngineCalls`, `EnterEngineCall()`, `ExitEngineCall()` (engine calls that may run user delegates, which defer a disposed query's free, R2, N69); `void CheckTag(ScopeTag, string)` and `void CheckFactTags(Fact, string)` (another graph's tag, `Fact.In` included, R2, N65); `TableHandle DefineMirrorTable(TableHandle, ScopeTag, int)` (R2, §6.8); `int NextScopeSerial()` (scope paths, R2); `Tuple<int, Relations.LiftSpec>? LiftSpecCache` (the lift spec and the table count it was built for, R3, §6.9.1) |
+| `Scope` | `ContextEngineScope Engine` (an `EngineScope` in R1); `ScopeRuntime Runtime`; `ScopeGuard Guard` and `ScopeGuard EnterGuard()` (reads the guard again once entered, R2, N60); `ScopeOrigin Origin`; `void Fault(Exception cause)`; `void ThrowIfNotUsable()` (faulted → InvalidOperationException with `Failure` inner; disposed → ObjectDisposedException); `void ThrowIfNotWritable()` (also frozen, and inside a run observer); `Enter()`, `EnterRead()`, `EnterExtraction()` and `Exit(bool held)` (a call's entry and exit: the guard on a writable scope, the call count, and from R2 the catch-up of `CatchUp`); the open `Write` batch, which makes the scope's own members throw InvalidOperationException (D30), and the count of open batches below it, which makes its writes and runs throw (R2, N88); `void ThrowIfStopped()` (R3); `CompiledRule[] LocalCompiled` (R2); `void BeginCall()` and `void EndCall()` (calls in progress, which defer the release, R2, N71); `void CatchUp()` (brings the scope and each writable ancestor up to date, left out of `Version`, R2, N87); `void ExcludeMirrorSync(long)` (R2, N62); `bool IsMirrorCurrent(ScopeTag, int)` and `void MarkMirrorSynced(ScopeTag, int)` (the sync key: the view stamp and the tag's copy-rule count, R2, N61); `ContextEngineScope CreateTransient()` and `void ReleaseTransient(ContextEngineScope)` (a query's child of a frozen scope, R2, D34); live and transient child counts (R2, §6.7); `TryRelease()` (a no-op in R1, where only the root exists; R2, §6.7); `RuleEvaluationException FaultWith(Relations.PanicException)` (R2); `Scope? StoppedCase` and `bool IsStopped` (the stopped case this scope is or lies under, R3, N104); `void CatchUpAndThrowIfStopped()` (the structural calls' and extractor queries' entry, R3, N104, N112); `Scope AdoptCase(ContextEngineScope, ScopeTag?)`, `void ReleaseCase()`, `void ReleaseDisposedCases()` and `void DisposeVacuous()` (cases the engine set owns, R3, N96); `RuleEvaluationException? TakeCaseCatchUpFailure(IReadOnlySet<Scope>)` (R3, N114); `bool HasChildren`; `int Depth()` and `MaxDepth = 31` (R3) |
 | `ScopeTag` | `int Serial` (per graph) |
 | `ClassId` | `internal ClassId(uint cell, ScopeOrigin origin)`; `uint Cell`; `ScopeOrigin? Origin` |
 | `TableHandle` | `Relations.FunctionId Function`; `bool IsRelation`; `ColumnType[] Columns` (keys then output; a relation ends with the unit type); the public properties' internal setters, which the graph sets once at definition |
+| `FunctionHandle` | `Func<uint, uint, uint>? CaseJoin` (made once at definition, R3, N95) |
+| `ValueLattice` | `Func<uint, uint, uint>? CreateCaseJoin(ColumnType, string functionName)` (R3, N95) |
 | `Primitive` | `InvokeCore`, `IsLambda`, `IsPartial` (§4.3) |
 | `Rule` | `CompiledRule Compiled` |
 | `RunOptions` | `bool SemiNaive { get; init; } = true` (differential tests, D36) |
 | `Query` | `CompiledQuery Compiled` |
-| `SplitRule` | `SplitProgram Program`; `RuleSplitSource Source` (R3) |
+| `SplitRule` | `EGraph Graph`; `SplitProgram Program`; `RuleSplitSource SourceAt(int index)` (one source per rule and position, N91); `SplitBuilder Builder` (rendering) (R3) |
+| `SplitBuilder` | What it collected, for compilation and rendering: `RuleDraft Draft`, `Term? Set`, `Term? Element`, `Type? ElementType`, `CountOf`, `ElementAt`, `int CasesCalls`, `IReadOnlyList<Term>? KeyTerms`, `IReadOnlyList<Fact> Assumptions`; `void Close()` (unusable after the callback) (R3) |
+| `ScopeContradictedException` | `internal ScopeContradictedException(string scopePath, string stoppedCasePath)` (a call on a scope under a stopped case, R3, N104) |
 
 ---
 
@@ -2647,11 +2780,11 @@ parent only through lifts.
 
 | Node | Behaviour |
 |---|---|
-| `Run(rs…)` | If `S.IsContradictory` and (`S` is a case, or `inCase`, or `Options.StopOnContradiction`): return false, and at the top level set `StopReason = Contradiction`. Otherwise one `RunIteration(S, RulesFor(rs, S), inCase)`. A host `Run` called on a case scope (R3) therefore stops on contradiction too (D11). |
+| `Run(rs…)` | If `S` is a case, or `inCase`, or `Options.StopOnContradiction`: bring `S` up to date (`EnsureClean`), and if it is then contradictory (or stopped), return false, and at the top level set `StopReason = Contradiction` (R3, N97: between a split's phases a case's parent changed by a lift, and the engine reads a context's contradiction only when it is clean; the iteration would make the same rebuild). Otherwise one `RunIteration(S, RulesFor(rs, S), inCase)`. A host `Run` called on a case scope (R3) therefore stops on contradiction too (D11). |
 | `Sequence(s…)` | Each step in order; the result is the OR of the steps. |
 | `Repeat(n, s…)` | Up to `n` passes of `Sequence`; stops after a pass with no change. |
 | `Saturate(s…)` | Passes of `Sequence` until one reports no change. |
-| `Until(b, f…)` (R1b) | `EnsureClean`; if every fact of `f…` holds in `S` (`TermReader.Check`, §6.6.3), return false; otherwise `b`. The check is made each time the node executes, so `Saturate(Until(b, f…))` runs `b` until the facts hold or a pass changes nothing. The node takes no step of its own (no `BeforeStep`, no `RunStep`). |
+| `Until(b, f…)` (R1b) | `EnsureClean`; in a stopped case (R3) return false, since `b` would do nothing either (N102); if every fact of `f…` holds in `S` (`TermReader.Check`, §6.6.3), return false; otherwise `b`. The check is made each time the node executes, so `Saturate(Until(b, f…))` runs `b` until the facts hold or a pass changes nothing. The node takes no step of its own (no `BeforeStep`, no `RunStep`). |
 | `Split(rules, inCase)` (R3) | §6.9.3. |
 
 `RulesFor(rulesets, S)` returns, deduplicated by reference: the rulesets' global rules (snapshots, in definition order),
@@ -2670,7 +2803,8 @@ Run(schedule, options, ct):
         ThrowIfNotUsable(); ThrowIfNotWritable()        // faulted, disposed, open Write batch, frozen (R2), observer,
                                                         // and (N88) an open Write batch in a descendant
         R2: CatchUp()                                   // each writable ancestor, then this scope; no Version move (N87)
-        R3: if Engine.IsStopped: return a report with no iteration and StopReason = Contradiction   // D45
+        R3: if IsStopped: return a report with no iteration and StopReason = Contradiction   // D45; this scope or a
+                                                        // writable ancestor is a stopped case (N104)
         schedule.Collect(rulesets, conditions)          // R3: and splits
         a ruleset of another graph: ArgumentException   // before any work
         each Until fact: TermReader.Validate(this, fact), ArgumentException on an error   // before any work
@@ -2678,6 +2812,8 @@ Run(schedule, options, ct):
                 ScopeResolver.Resolve(this, t, reader)  // throws before any work
             a rule defined on another thread during the run (D6) that reads a tag an iteration's scope cannot resolve
             is left out of that iteration (N67)
+            R3: a tag only a split's cases carry (an in-case rule or nested split matcher reading T.In(caseTag)) does
+            not resolve here, so it is refused too (N109)
         executor = new ScheduleExecutor(this, options, ct)   // starts executor.Clock
         try:
             schedule.Execute(executor, this, depth: 0, inCase: false, splitsEnabled: true)
@@ -2703,9 +2839,11 @@ scope holds fewer facts, each of them valid.
   + Σ OwnRowCount over LiveCases > RowLimit`. The last three throw `ScheduleStopException(reason)`.
 - Limits are per top-level `Run`, across cases. An engine iteration and a lift cannot be interrupted, so a run
   overshoots a limit or a cancellation by at most one iteration or one lift.
-- `RunReport.Changed` is `Statistics.TopChanged`: an iteration, split step or lift changed the top-level scope.
+- `RunReport.Changed` is `Statistics.TopChanged`: an iteration, split step or lift changed the top-level scope. For a
+  split step, that is whether the scope's `Version` moved over the step (N106).
 - `RunReport.Saturated` is `StopReason == Completed && LastTopStepChanged == false`. `LastTopStepChanged` is set by
-  every iteration and split step executed in the top-level scope.
+  every iteration and split step executed in the top-level scope; for a split step it is the driver's progress flag
+  (cases opened, or a lift changed the scope), which a `Saturate` around the step needs to end (N106).
 - `RunReport.Rules` holds the statistics of every rule that ran, cases included; mirror syncs, queries and split
   matchers are not rules and are not listed.
 
@@ -2723,7 +2861,8 @@ batch(S, body):
                                                           // while a descendant of S has one (S.batchesBelow > 0)
         R3: if S.Engine.IsStopped: Assume → return; Union → return false; Make, Write → throw ScopeContradictedException
         S.CatchUp()    // R1: S.Engine.EnsureClean(). R2: each writable ancestor outermost first, then S, every catch-up
-                       // left out of its own Version (N87)
+                       // left out of its own Version (N87); a lattice merge one of them records →
+                       // RuleEvaluationException, that scope and S faulted (N113)
         b = new HostBatch(S)
         body(b)        // phase 1, per call as it is made: validate the facts, check class values (D39), encode constants
                        // (interning), resolve existing terms with TryLookup, mint fresh ids for new terms, record the
@@ -2807,11 +2946,15 @@ A write into `Contradiction` is a relation row like any other.
 
 #### 6.6.3 Host reads
 
-Reads check `EngineCallMarker`, enter the guard (none on a frozen scope), check `ThrowIfNotUsable` (which also refuses
-a read while the scope's `Write` batch is open, D30) and (R3) `ThrowIfStopped` (D45), bring a writable scope up to date
-(`EnsureClean`; from R2 `Scope.CatchUp`, which brings each writable ancestor up to date first and leaves every
-catch-up out of `Version`, N87), and never create terms or intern. A call in progress is counted on the scope
-(`BeginCall`/`EndCall`), so a release waits for it (D40, N71).
+Reads check `EngineCallMarker`, enter the guard (none on a frozen scope), check `ThrowIfNotUsable` (which also refuses a
+read while the scope's `Write` batch is open, D30) and (R3) `ThrowIfStopped` (D45), bring a writable scope up to date
+(`EnsureClean`; from R2 `Scope.CatchUp`, which brings each writable ancestor up to date first and leaves every catch-up
+out of `Version`, N87), and never create terms or intern. A call in progress is counted on the scope
+(`BeginCall`/`EndCall`), so a release waits for it (D40, N71). The catch-up is a merge into the layers it brings up to
+date: when a lattice merge throws there, the engine's rebuild records the failure and goes on, keeping the old value,
+and `Scope.CatchUp` takes it right after that scope's rebuild and throws `RuleEvaluationException`, faulting that scope
+and the scope read (N113). A read, a query or an extraction therefore fails and faults its scope when its own catch-up
+does; a query's own failure still faults nothing (D49).
 
 `TryRead(S, t, out cell)`:
 - a value constant: `TryEncodeExisting`; a miss means absent;
@@ -2969,18 +3112,29 @@ The remedy is to obtain the value again from the scope where it is used (§11, r
 
 #### 6.6.8 Contradicted cases (D45, R3)
 
-`Scope.ThrowIfStopped()` is `if (Engine.IsStopped) throw new ScopeContradictedException(Path)`. Every scope entry point
-checks it after `ThrowIfNotUsable`, except the members that still answer:
+`Scope.ThrowIfStopped()` throws `ScopeContradictedException(Path)` when the scope's engine stop flag is set, or when a
+writable ancestor's is (N104: `Scope.StoppedCase` walks the scope and its writable ancestors up to the first frozen one;
+one read at the root). Every scope entry point checks it after `ThrowIfNotUsable` and its catch-up, except the members
+that still answer. The structural calls that enter without a catch-up (`OpenCases`, `DefineRule`, `Freeze`,
+`CaseSet.Add`), and each query of an extractor of a writable scope (`Extract`, `TryExtract`, `TryGetCost`; N112), catch
+up first (`CatchUpAndThrowIfStopped`), so that a case its parent's contradiction reached since its last call answers as
+stopped (I25), whichever of its scopes or extractors is asked first. A scope under a stopped case is never caught up
+(`CatchUp` stops at the stopped ancestor; colors §6.9 refuses it) and answers as this table says:
 
-| Member | On a stopped case |
+| Member | On a stopped case, or a scope under one |
 |---|---|
 | `IsContradictory` | `true` |
 | `Graph`, `IsRoot`, `IsCase`, `Path`, `Parent`, `Tag`, `IsFrozen`, `IsDisposed`, `IsFaulted`, `Failure`, `Version`, `Children`, `LocalRules` | answer as usual |
 | `Assume` | does nothing |
 | `Union` | returns `false` |
-| `Run` | returns at once: no iteration, `StopReason = Contradiction` |
+| `Run` | returns at once: no iteration, `StopReason = Contradiction`; an `Until` node in a stopped case runs nothing (N102) |
 | `Dispose` | as usual (D40) |
-| every other read and write, `Write`, `Make`, queries, `CountRows`, `Rows`, `CreateExtractor`, `Extract`, `CreateChild`, `OpenCases`, `DefineRule`, `Freeze` | `ScopeContradictedException` |
+| every other read and write, `Write`, `Make`, queries, `CountRows`, `Rows`, `CreateExtractor`, `Extract`, `CreateChild`, `OpenCases`, `DefineRule`, `Freeze`, and `CaseSet.Add` and `CaseSet.Lift` on a stopped parent (N101) | `ScopeContradictedException`, whose `ScopePath` is the scope called and whose message names the stopped case (N104) |
+| an extractor made before its case stopped | `ScopeContradictedException` from each query, also when the contradiction reached the case through its parent and nothing caught the case up first (N102, N112) |
+
+A call that stops its own case finishes first (N102): a `Write` that stops its case commits and returns; a `Make` whose
+batch stops its case commits, then throws `ScopeContradictedException` (the write stays; its class names nothing in a
+scope with no model).
 
 ### 6.7 Scopes, tags and local rules (R2)
 
@@ -2999,14 +3153,15 @@ checks it after `ThrowIfNotUsable`, except the members that still answer:
 - **Resolution.** `resolve(S, tag)` is the first scope in `S, S.Parent, …` whose `Tag` is `tag` (by reference);
   `graph.RootTag` is the root's tag. `Run` resolves every tag read by a reachable rule before any work (§6.5.3).
 - **Local rules.** `DefineRule(ruleset, name, define)`: `ThrowIfNotUsable`; enter the guard; a frozen scope throws
-  `InvalidOperationException("Scope 'root/schema#2' is frozen; its local rules are fixed")`; otherwise compile with
-  `Owner = this` and append to the scope's local rules (copy-on-write, under the definition lock). The engine rule is
-  global; only `RulesFor` makes it local.
+  `InvalidOperationException("Scope 'root/schema#2' is frozen; its local rules are fixed")`; catch up, then
+  `ThrowIfStopped` (R3, N104); otherwise compile with `Owner = this` and append to the scope's local rules
+  (copy-on-write, under the definition lock). The engine rule is global; only `RulesFor` makes it local.
 - **Freeze.** `Freeze()`: return if frozen; refuse a call from inside another call of the scope's thread domain (from
   a run observer: `"Not allowed inside a run observer"`; otherwise naming the scope), since step 4 reassigns guards
-  that outer call holds; enter the guard; `ThrowIfNotUsable`; `ThrowIfStopped` (R3); a writable parent throws
-  `InvalidOperationException("A scope can be frozen only once its parent is")` (the engine would throw too). Then,
-  under the definition lock (so that no first scoped read of the tag can create a mirror between steps 1 and 3):
+  that outer call holds; enter the guard; `ThrowIfNotUsable`; catch up, then `ThrowIfStopped` (R3, N104); a writable
+  parent throws `InvalidOperationException("A scope can be frozen only once its parent is")` (the engine would throw
+  too). Then, under the definition lock (so that no first scoped read of the tag can create a mirror between steps 1
+  and 3):
   1. if the scope's tag has copy rules, `MirrorSync.Ensure(this, [Tag], …)` (§6.8);
   2. `Engine.Freeze(planRules)` (E10): the empty set for the root; otherwise the default variants of every global rule,
      every local rule of this scope and its ancestors, every live query, every split matcher and every mirror copy
@@ -3112,8 +3267,8 @@ dozen per container, copied once at the schema's freeze; queries read a frozen s
 #### 6.9.1 The lift spec
 
 `LiftSpecBuilder.Build(graph)` lists, in declaration order, every table with `Lift = true` except `Contradiction`:
-- a relation as `LiftTable(f, LiftTableKind.Function, caseJoin: null)`: its output is the unit value, which every live
-  case holds, so "every live case agrees" lifts exactly the rows present in every live case, with their output;
+- a relation as `LiftTable(f, LiftTableKind.Relation, caseJoin: null)`: its output is the unit value, which every live
+  case holds, so the rows present in every live case lift, with their output, and count as `LiftReport.Rows` (N90);
 - a constructor as `LiftTable(f, LiftTableKind.Constructor, null)`;
 - a function as `LiftTable(f, LiftTableKind.Function, CaseJoinAdapter<T>.Create(lattice, type))`, where a missing
   lattice or case join means "every live case must agree".
@@ -3123,49 +3278,79 @@ Mirror tables and internal tables are never listed. The spec is rebuilt when a t
 #### 6.9.2 Split rules as split sources
 
 `DefineSplit(name, define, caseTag)` compiles the body like a rule (§6.3 steps 1–7) into a naive **matcher** whose
-only head item is a collector of the key registers, the set register, and every other register an assumption uses.
-`SplitBuilder.Cases(name, set)` names the element variable, bound per case. `Key` defaults to every named body
-variable except the set. Assumptions are checked like host-write facts (§6.6.2) with the element and body variables
-as parameters; a scoped handle or a function read in an assumption is a definition error. Class constants follow the
-global-rule rule (§6.3 step 3). The body is the split's demand (D43): a key the body does not match is never split.
+only head item is a collector of the key registers, the set register, and every other register an assumption uses,
+in that order. `SplitBuilder.Cases(name, set)` names the element variable, bound per case; it is called once, over a
+declared variable, and the element variable may appear only in assumptions. `Key` defaults to every named body
+variable except the set; `Key` calls add to it. Assumptions are checked like host-write facts (§6.6.2) with the
+element and body variables as parameters (`SplitAssumptions`, `SplitAssumptionChecker`): each must be a write; a
+function read, a scoped handle, or a class constant not from the root is a definition error. An assumption may
+compute (the domain split's `set-of`): the computation is evaluated per case on its ground arguments. Class constants
+in the body follow the global-rule rule (§6.3 step 3). Split rule names are unique among the graph's split rules, and
+a case tag may not be the root's. Each error names the split rule (N99). The body is the split's demand (D43): a key
+the body does not match is never split.
 
-`RuleSplitSource : ISplitSource` (E8):
+`RuleSplitSource : ISplitSource` (E8) exists once per rule and position among a split step's rules
+(`SplitRule.SourceAt(index)`, made on first use and kept for the graph's life, N91): a request's `SplitKey` carries the
+index, which the driver resolves in its own source list, and two split steps that list the rule at the same position
+share the source, so that a live split one opened covers the other's request for the same key (B6 compares sources by
+reference).
 - **`FindRequests(context, requests, report)`**: `MirrorSync.Ensure` for the matcher's read scopes, then run the
-  matcher in the scope (as a query, §6.6.4) and take its tuples in content order. For each tuple, decode the set, with
-  elements in `ValueSetOrder` order. An empty set is skipped and counted in `report.SplitsSkipped`. Otherwise add
-  `SplitRequest(new SplitKey(index, key cells), elements.Count, payload: (tuple, elements))`.
+  matcher in the scope (as a query, §6.6.4), canonicalize its tuples' class columns, deduplicate, and take them in
+  content order, so that the cases, and so the run, do not depend on the engine's scan order (decision 4). For each
+  tuple, count the set's elements without decoding them. An empty set is skipped and counted in
+  `report.SplitsSkipped`. Otherwise add `SplitRequest(new SplitKey(index, key cells), count, payload: the tuple)`. A
+  primitive or filter of the matcher that throws is a `RuleEvaluationException` and faults the scope. Allocation is per
+  request and per case, never per row the matcher reads.
 - **`Assume(case, request, i)`**: wrap the case context in a `Scope` (`IsCase = true`, `Tag = rule.CaseTag`, parent =
-  the scope of `case.Parent`, found through its runtime's `Owner`; origin and guard as in §6.7), set the case runtime's
-  `Owner`, bind the element variable to `elements[i]` and the other variables from the tuple, instantiate the
-  assumptions as ground facts, and run them as one host batch in the case (§6.6.1).
+  the scope of `case.Parent`, found through its runtime's `Owner`; origin and guard as in §6.7; `Scope.AdoptCase`), set
+  the case runtime's `Owner`, decode the set's element `i` in `ValueSetOrder` order, bind the element variable to it
+  and the other variables from the tuple, instantiate the assumptions as ground facts, and run them as one host batch
+  in the case (§6.6.1).
 
-`DefineDomainSplit(name, domain, guards, caseTag)` is a convenience. It builds the split whose body is
-`g1(k), …, gn(k), d = domain(k), |d| > 1` (the last with the named primitives `set-length` and `>`), whose cases range
-over `d`, whose key is `k`, and whose assumption is `domain(k) = {v}` (with `Primitives.Singleton`).
+`DefineDomainSplit(name, domain, guards, caseTag)` is a convenience. It builds the split whose body is `g1(k), …, gn(k),
+d = domain(k), |d| > 1` (the last with the named primitives `set-length` and `>`), whose cases range over `d`, whose key
+is `k`, and whose assumption is `domain(k) = {v}` (with `Primitives.Singleton`). It refuses a domain without a lattice
+(each case's assumption would conflict with the wider domain, D32) and a scoped domain (the cases write it); a guard may
+be a scoped view (N105).
+
+An assumption that gives a function without a lattice a second value in a case (D32), or that cannot be written, is a
+write conflict during a run (§6.13): `Assume` throws a `RuleEvaluationException` naming the split rule, with the
+`FactConflictException` as its inner exception, and faults the case; `Run` faults its own scope too (N94, N105).
 
 #### 6.9.3 The split schedule node
 
 ```
 SplitSchedule.Execute(executor, S, depth, inCase, splitsEnabled):
     if splitsEnabled == false: return false                         // phase A of an enclosing split
-    if S.IsContradictory: return false                              // every case would be vacuous
+    S.Engine.EnsureClean()
+    if S is stopped or S.IsContradictory: return false              // every case would be vacuous
     executor.BeforeStep(S)
-    driver = executor.DriverFor(this)          // cached per node: new SplitDriver(Rules.Select(r => r.Source),
+    executor.SyncSplitMirrors(S, Rules)                             // D48, recorded as MirrorSync steps
+    driver = executor.DriverFor(this)          // cached per node and run: new SplitDriver(
+                                               //   Rules.Select((r, i) => r.SourceAt(i)),              // N91
                                                //   new ScheduleCaseRunner(executor, InCase), demand: null,
                                                //   LiftSpecBuilder.Build(graph),
                                                //   new SplitOptions { DepthLimit = SplitDepthLimit, CaseLimit = CaseLimit,
                                                //       Lift = Options.Lift, CaseOptions = new ContextOptions { IsCase = true,
                                                //       StopOnContradiction = true, InheritWatermarks = graph.InheritWatermarks } })
     report = new SplitReport()
-    changed = driver.Step(context of S, depth, report)
-    Statistics.CasesOpened += report.CasesOpened; SplitsSkipped += …; Lifts += …; LiftRowsSkipped += …
-    if S == Top: Statistics.LastTopStepChanged = changed; Statistics.TopChanged |= changed
-    RecordStep(SplitStep, S, changed, …)
+    executor.BeginSplitStep(S, report)                              // a frame for its lift steps (N93)
+    try: changed = driver.Step(context of S, depth, report)
+    catch PanicException: throw S.FaultWith(panic)                  // a lift's flush recorded a failure in S
+    finally: executor.EndSplitStep()        // records the remaining lifts; Statistics.CasesOpened +=
+                                            // report.CasesOpened, SplitsSkipped += …, Lifts += …,
+                                            // LiftRowsSkipped += …, also when Step threw
+    if a case of the run under S recorded a failure:                // N114
+        fault it; throw RuleEvaluationException                     // Run faults Top (N94)
+    if S == Top: Statistics.LastTopStepChanged = changed                    // progress: ends a Saturate
+                 Statistics.TopChanged |= S.Version moved over the step       // a change of S (N106)
+    RecordStep(SplitStep, S, changed, elapsed, rules: null, report.CasesOpened)
     return changed
 ```
 
-`ScheduleCaseRunner.Run(case, depth, allowSplits)` finds the case's `Scope` (its runtime's `Owner`), registers it in
-`executor.LiveCases`, and executes `InCase` in it with `inCase: true` and `splitsEnabled: allowSplits`. This maps the
+`ScheduleCaseRunner.Run(case, depth, allowSplits)` records the lifts the driver made since the previous case ran
+(N93), finds the case's `Scope` (its runtime's `Owner`), registers it in `executor.LiveCases`, takes a failure the case
+recorded (N114, below), and executes `InCase` in it with `inCase: true` and `splitsEnabled: allowSplits`. This maps the
 colors spec's two phases onto schedules (colors §11.3): phase A runs the in-case schedule with nested split nodes
 disabled, then lifts; phase B runs it again in each live case with nested splits enabled (which recurses into `Step` at
 `depth + 1`), then lifts again if anything changed. The driver does not hold the scope's thread domain while it calls
@@ -3180,23 +3365,42 @@ parent's new facts through their inherited watermarks. `Run`'s `finally` calls `
 disposes depth-first in reverse creation order. The rule-layer case scopes then report `IsDisposed`, and their parent's
 `Children` no longer lists them.
 
+The engine catches the cases up inside a step without the rule layer: the case set's `RunEach` before each case runs,
+the lift's catch-up of every case before it reads it, and the vacuity check after a lift. A lattice merge that throws
+there is recorded in the case, which keeps its old value (D31), and nothing in the engine throws it; a later iteration
+in the case would take it, but a step may run none (`SplitDepthLimit = 1`, or an in-case schedule that runs no
+iteration after the lift), and the cases are disposed when the run ends. So the run takes it (N114): the case runner on
+entry to a case, and the split node when `Step` returns, over the run's cases under `S`, a vacuous case its set disposed
+meanwhile included (its database outlives its disposal). The first one found faults its case and is thrown as
+`RuleEvaluationException`, which faults the run's scope as any failure in a case does (N94). Cost: one volatile read per
+case run and per case of `S` at each step's end; nothing at the root and nothing in a run without split steps.
+
 Because a record keeps its key until the run ends, the split step should come after the facts it reads have settled
 (D43): `Saturate(Saturate(facts…), Split(rule, inCase), rewrites…)`. A split taken earlier opens cases for values the
 facts later exclude; they go vacuous and are dropped, but their in-case work is done once per extra case.
 
 #### 6.9.4 Host-driven cases
 
-- `Scope.OpenCases()`: `ThrowIfNotUsable`; `ThrowIfStopped`; a frozen scope throws `InvalidOperationException("Scope
-  'root/schema#2' is frozen; open cases in a child of it")`; then it wraps `new Relations.CaseSet(context)`.
-- `CaseSet.Add(tag)` checks the tag's graph, calls `AddCase(new ContextOptions { IsCase = true, StopOnContradiction =
-  true, InheritWatermarks = graph.InheritWatermarks })` (E8) and wraps it as a case `Scope` (origin and guard as in
-  §6.7).
+- `Scope.OpenCases()`: `ThrowIfNotUsable`; catch up, then `ThrowIfStopped` (N104); a frozen scope throws
+  `InvalidOperationException("Scope 'root/schema#2' is frozen; open cases in a child of it")`; then it wraps
+  `new Relations.CaseSet(context)`.
+- `CaseSet.Add(tag)` checks the tag's graph, catches the parent up and checks `ThrowIfStopped` (N104), calls
+  `AddCase(new ContextOptions { IsCase = true, StopOnContradiction = true, InheritWatermarks = graph.InheritWatermarks
+  })` (E8) and wraps it as a case `Scope` (origin and guard as in §6.7). It is a structural call, refused as
+  `CreateChild` is (N101).
 - `CaseSet.Lift(options, ct)` calls the engine's `Lift(LiftSpecBuilder.Build(graph), options, ct)`, then
   `DisposeVacuous()`, which disposes the contradictory cases (their `Scope`s report `IsDisposed` and leave `Cases`),
   and maps the report to the public `LiftReport`. With no cases it throws `InvalidOperationException("A lift needs at
   least one case; with none, the scope would be declared contradictory. Assume Contradiction explicitly if that is
   meant.")` (D9).
-- `Dispose` never throws; it disposes the engine set, and so every case.
+- `Dispose` never throws; it releases every case through the rule layer (N96). The disposed flag and the list change
+  under one lock, so an `Add` in progress on another thread releases its own case and throws `ObjectDisposedException`
+  (N111).
+- A faulted case (D18) does not stop a lift: the lift reads what it holds, which is sound (N110). The engine's lift
+  catches every case up with the parent before it reads the case; a lattice merge that throws in that catch-up is
+  recorded in the case, which keeps its old value, and the lift reads that value. The found-vacuous check after the lift
+  takes the record (its own catch-up of the case would too) and faults that case, not the parent (N113, N114), and the
+  lift goes on. Only a failure of the lift's own writes into the parent faults the parent, as before.
 
 #### 6.9.5 Coverage
 
@@ -3228,8 +3432,13 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
   scope, `EnsureClean` (from R2 `Scope.CatchUp` on a writable scope, N87), then
   `Engine.CreateExtractor(SchemaFor(costs), EngineCosts(costs))`. R1 uses `CreateOnDemand(schema, costs)` over the root;
   R2 uses the context form (E5). Each extraction through the extractor takes the guard on a writable scope and none on a
-  frozen one, is counted so that a release waits for it (N71), and holds the extractor's own lock (N73); it does not
-  catch up, since a scope that changed makes the extractor stale.
+  frozen one, is counted so that a release waits for it (N71), and holds the extractor's own lock (N73). On a writable
+  scope it catches up first and then checks `ThrowIfStopped` (`CatchUpAndThrowIfStopped`, N112), so that an extractor
+  made before its case was contradicted through the case's parent refuses as on a stopped case instead of extracting
+  from a scope with no model; the catch-up is left out of `Version` (N87), and a catch-up that changed what the
+  extractor reads makes it stale (`InvalidOperationException`), as a run in a writable ancestor does. A lattice merge
+  that throws in that catch-up fails the query with `RuleEvaluationException` and faults the scope (and the writable
+  ancestor whose catch-up ran it), as at any other call's entry (N113). A frozen scope is only checked.
 - **Extracting.** `Extract<TSort>(root)`: `ClassChecks.Require(scope, root.Id, …)`, then the engine's
   `ExtractTerm(catalog.SortOf(TSort), new Value(Find(root)))`, through `EngineScope.TryExtract` (and `TryGetCost`),
   which canonicalize the class and extract in one engine call. The result is wrapped into `ExtractedTerm`:
@@ -3256,15 +3465,21 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
   `RuleStatistics.Plan` keeps the latest one recorded. The run's search, merge and rebuild times sum
   `RuleSetReport.SearchAndApplyTime`, `MergeTime` and `IterationReport.RebuildTime`.
 - **Steps.** `ScheduleExecutor.RecordStep` builds a `RunStep` for every iteration, mirror sync (R2), split step and lift
-  (R3), in any scope of the run. Every step takes an index, recorded or not. An iteration's `Rules` are the rules that
-  matched in it, each with that iteration's figures (`IterationsWithMatches = 1`), copied into a read-only list. With
-  `RecordSteps` the step is appended to `RunReport.Steps`; with an `Observer` it is passed to it at once, on the run's
-  thread, between engine calls. While the observer runs, the guard's `InObserver` flag is set. Reads of the run's scopes
-  are allowed, since the guard is re-entrant (`Check`, `Get`, `Find`, queries, `CountRows`, `Rows` and extraction).
-  Writes, `Run` and every other call that changes a scope (`CreateChild`, `Freeze` and `DefineRule` included) throw
-  `InvalidOperationException("Not allowed inside a run observer")`, except `Dispose`, whose release waits for any call
-  in progress on the scope (§6.7). An exception thrown by the observer propagates out of `Run` after the `finally` and
-  does not fault the scope.
+  (R3), in any scope of the run. A split step is recorded once it ends, after the iterations of its cases; its `Changed`
+  is its progress (cases opened, or a lift changed the scope, N106). The driver lifts inside its step, between the runs
+  of its cases, and no engine hook reports a lift as it happens, so the executor keeps a frame per split step in
+  progress (`SplitStepFrame`) and records, when the step next runs a case and when it ends, one `Lift` step of the split
+  scope per lift its report gained since; a lift is changed when the scope's `Version` moved since the last case ran,
+  and takes its share of the time since then (N93). Every step takes an index, recorded or not. An iteration's `Rules`
+  are the rules that matched in it, each with that iteration's figures (`IterationsWithMatches = 1`), copied into a
+  read-only list. With `RecordSteps` the step is appended to `RunReport.Steps`; with an `Observer` it is passed to it at
+  once, on the run's thread, between engine calls. While the observer runs, the guard's `InObserver` flag is set. Reads
+  of the run's scopes are allowed, since the guard is re-entrant (`Check`, `Get`, `Find`, queries, `CountRows`, `Rows`
+  and extraction). Writes, `Run` and every other call that changes a scope (`CreateChild`, `Freeze` and `DefineRule`
+  included, and from R3 `OpenCases`, `CaseSet.Add` and `CaseSet.Lift`) throw `InvalidOperationException("Not allowed
+  inside a run observer")`, except `Dispose`, whose release waits for any call in progress on the scope (§6.7). An
+  exception thrown by the observer propagates out of `Run` after the `finally` and does not fault the scope, even a
+  `RuleEvaluationException` it throws itself (`ScheduleExecutor.ObserverFailed`, N94).
 - **Rows.** `CountRows(table)` is `Engine.TableSize(table.Function)`. `Rows(table)` visits `Engine.ForEach`, decodes
   each row (sort cells as classes with the scope's origin), and sorts by content. Both take the guard on a writable
   scope, check `ThrowIfStopped` (R3), and reject mirror handles (never reachable) and handles of another graph
@@ -3342,25 +3557,36 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
 | Unknown CLR type; `Register` of `ClassId`, a sort or a set; `RegisterSet` of an element type without an order | `ArgumentException` (naming the `Register*` method to call, where there is one) |
 | A ruleset of another graph, or an `Until` fact the scope cannot read (an unresolved tag in it included), at `Run` | `ArgumentException`, before any work |
 | `Schedule.Until` with no fact, or with a filter, a variable or a computation | `ArgumentException` |
-| A negative `IterationLimit`, `TimeLimit` or `RowLimit` | `ArgumentOutOfRangeException` from `Run`, before any work |
+| A negative `IterationLimit`, `TimeLimit` or `RowLimit`; (R3) a `CaseLimit` or `SplitDepthLimit` below 1 (N100) | `ArgumentOutOfRangeException` from `Run`, before any work |
+| A `LiftOptions` limit below 1; `RunOptions.Lift = null` (R3, N100) | `ArgumentOutOfRangeException`; `ArgumentNullException` |
+| `Schedule.Split` with no rule, or a rule listed twice (R3) | `ArgumentException` |
+| A split rule name another split rule has; a case tag that is the root's (R3, N99) | `ArgumentException` |
 | A query name a live query has | `ArgumentException` |
 | A primitive or lattice merge throws, or a rule's write conflicts on a function without a lattice, during a run or a write | `RuleEvaluationException`; the scope is faulted (D18) |
 | A built-in partial primitive (`+`, `-`) overflows in a body let | not an error: the match is dropped (D31) |
 | The same during a query | `RuleEvaluationException`; the scope is not faulted (D49) |
+| A lattice merge throws in the catch-up a call makes first, in the scope called or a writable ancestor of it: any read, query, extraction, structural call, write or run (N113) | `RuleEvaluationException` from that call; the scope called and the ancestor whose catch-up ran the merge are faulted (D18) |
+| A lattice merge throws while `CaseSet.Lift` catches a case up (the engine's lift catches every case up before it reads it) | recorded in the case, which keeps its old value and is read so (N110); the found-vacuous check faults that case, not the parent, and the lift goes on (N113, N114) |
+| A lattice merge throws while a split step of a run catches a case up (the lift's catch-up of every case, the vacuity check after it, the catch-up before a case runs) | `RuleEvaluationException` from `Run`, when the case is about to run again or at the latest when the step ends; the case and the run's scope are faulted (N94, N114) |
 | Any use of a faulted scope except `Dispose` | `InvalidOperationException` with `Failure` as `InnerException` |
 | Use of a disposed scope or query | `ObjectDisposedException` |
 | `Dispose` of anything | never throws (D40) |
 | Two threads on one thread domain | `InvalidOperationException` (rule-layer guard, D47) |
 | A table definition from another thread while the root is writable and in use | `InvalidOperationException` |
 | A call into a graph from a primitive, lattice, filter or cost function | `InvalidOperationException` |
-| A write, run or structural call (`CreateChild`, `Freeze`, `DefineRule`; R3 `OpenCases`) from a run observer | `InvalidOperationException("Not allowed inside a run observer")` |
+| A write, run or structural call (`CreateChild`, `Freeze`, `DefineRule`; R3 `OpenCases`, `CaseSet.Add`, `CaseSet.Lift`) from a run observer | `InvalidOperationException("Not allowed inside a run observer")` |
 | `Run`, a host write or `DefineRule` on a frozen scope (R2) | `InvalidOperationException` |
 | Freezing under a writable parent, or from inside another call of the scope's thread domain (N79); `OpenCases` on a frozen scope (R2, R3) | `InvalidOperationException` |
 | `CreateChild(graph.RootTag)` (R2, N72) | `ArgumentException` |
 | An unresolved tag at `Run` or at a query (R2) | `InvalidOperationException`, before any work; a rule defined during the run whose tag the iteration's scope cannot resolve takes no part in it (N67) |
 | A first scoped read after a scope of this graph with its tag was frozen (R2) | `RuleDefinitionException` |
-| A read or write needing a model on a contradicted case (R3, D45) | `ScopeContradictedException` |
-| A lift with no cases (R3) | `InvalidOperationException` |
+| A read or write needing a model on a contradicted case, or on a scope under one (R3, D45, N104) | `ScopeContradictedException` |
+| A split assumption that gives a function without a lattice a second value, or cannot be written, during a run (R3) | `RuleEvaluationException` naming the split rule, the `FactConflictException` inner; the case and the scope `Run` was called on are faulted (N105) |
+| `DefineDomainSplit` over a domain without a lattice, or a scoped domain (R3) | `ArgumentException` (N105) |
+| A lift with no cases, or over a set one of whose cases was disposed directly (R3, N96) | `InvalidOperationException` |
+| `CaseSet.Add` or `CaseSet.Lift` once the set or its parent is disposed; an `Add` that loses a race with `Dispose` (R3, N101, N111) | `ObjectDisposedException` |
+| A case join that throws in `CaseSet.Lift` (R3) | `RuleEvaluationException` naming the lattice and the function; nothing of that round is written and nothing is faulted (N94, N95) |
+| A failure in a case of a run, in a split matcher, or in a lift's case join during a run (R3) | `RuleEvaluationException`; the case where it happened and the scope `Run` was called on are faulted (N94) |
 | No finite term | `InvalidOperationException` (`TryExtract` returns false) |
 | A stale extractor | `InvalidOperationException` (the engine's) |
 | Cancellation | `OperationCanceledException` after cleanup |
@@ -3551,11 +3777,13 @@ freeze. Each query runs in its own child tagged `c.Query`.
 | `Scenario04UndiscriminatedAnyOfTests` | `WithoutTheSplitTheBranchesNeverMeet` (R2); `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains` (R3): the schema's run opens 2 cases on `$anyOf/0`; `schema.Get(dom status) == {active, archived, draft}`, no `present(legacyId)`, no `present(id2)`; the query (which mentions `status`, not `$anyOf/0`) opens 0 cases, `IsContradictory`, `AreEqual(q, PFalse)`, `Extract(q)` is `(PFalse)` | R2, R3 |
 | `Scenario05IntervalsTests` | `AComparisonBeyondADeclaredBoundIsFalse`, `ABoundInsideTheRangeIsLeftAlone` | R2 |
 | `Scenario06GuardDeletionTests` | the four tests of 06, with `WithoutAPresenceClaimTheComparisonStays` asserting `query.Check(present kind)` and `schema.Check(present kind) == false`: the conjunct's own consequence in the query never deletes it (D12) | R2 |
-| `Scenario07SweepLinksTests` | `TheMapQueryLowers`, `TheFacadeFilterDropsTheWholeEnum`, `ASpotMayBeAmongTheRowsSoNothingLowers` (R2, without the split); `SweepLinks.Compile` asserts 3 schema cases; `ParkAndMapWrittenInLowerTheParkId` (`CasesOpened == 2`); `ParkAndMapSpeltPerKindLowerTheParkId` (`CasesOpened == 2`, cost 15, the rendered s-expression: Eggnog's spelling, as in §8.1.1, `query.Children` empty); `TheOfflineRefreshLowersEverything` (R3) | R2, R3 |
+| `Scenario07SweepLinksTests` | `TheMapQueryLowers`, `TheFacadeFilterDropsTheWholeEnum`, `ASpotMayBeAmongTheRowsSoNothingLowers`, `OneSchemaServesEveryQuery` (R2; from R3 they run unchanged on the schema `SweepLinks.Compile` compiles with the theory's `Facts`, its split included, N103); `SweepLinks.Compile` asserts 3 schema cases; `ParkAndMapWrittenInLowerTheParkId` (`CasesOpened == 2`); `ParkAndMapSpeltPerKindLowerTheParkId` (`CasesOpened == 2`, cost 15, the rendered s-expression: Eggnog's spelling, as in §8.1.1, `query.Children` empty); `TheOfflineRefreshLowersEverything` (R3: the lowered term, its extraction at cost 18 and the lifted form, not the literal suite's `print-size` figures, which count the prototype's contexts as data, N103) | R2, R3 |
 | `Scenario08IntegerDomainTests` (gap 5, D37) | `AnIntegerOutsideADeclaredDomainIsFalse`: schema `present(n)`, `idom(n) = {100, 200, 300}`; query `And(NumGt(n, 499), NumLt(n, 501))`; `IsContradictory`, `AreEqual(q, PFalse)`. `AnIntegerInsideTheDomainIsLeftAlone`: `idom(n) = {100, 500}`; not contradictory; `Get(idom(n)) == {500}` | R2 |
 
 The scoped suite's case counts follow `CosmosTheory.Saturation`, which settles facts before its split step (D43); the
-literal suite's interleaved schedule opens the third case that later goes vacuous, as the prototype does.
+literal suite's interleaved schedule opens the third case that later goes vacuous, as the prototype does. Every scoped
+test asserts that its query scope has no children after each `Run` (§9 R3); the R2 tests of 02 and 03 gained that
+assertion in R3 (N103).
 
 Gap mapping (the adapter's `CosmosDeclaredFactPlanningTests.Gaps.cs`): Gap1 → scenarios 02 and 07, Gap2 → 03, Gap3 →
 04, Gap4 → 05, Gap5 → 08.
@@ -3608,9 +3836,15 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
   queries with `IN` lists and disequalities.
 - Each runs in the scoped encoding with engine splits (the unguarded schema split for both schema and query, so both
   encodings split the same keys), and in the literal encoding with the prototype's split rules.
-- In the query, `present`, `form`, `dom` and contradiction must agree for every path mentioned. Those are the kinds the
-  prototype lifts; the engine lifts a superset.
+- In the query, `present`, `form` and contradiction must agree for every path mentioned, and so must which paths have a
+  `dom`; each `dom` the engine lifts must lie within the prototype's, and equal it where no conjunct of the query
+  narrows the path's governing discriminator (no `IN` list that omits a domain value, no disequality on one), where no
+  case of either encoding can be vacuous (N98). Those are the kinds the prototype lifts; the engine lifts a superset.
 - 300 seeds.
+- `Review/R3SplitModelOracleTests` checks lifts from below: it enumerates the models of the oracle programs without UUID
+  conjuncts, and every lifted `present`, `form` and `dom` must hold in each model, a contradiction only where there is
+  none (400 seeds; 3000 green). `Review/R3SplitOracleDomainProbeTests` keeps the equality of domains for seeds with no
+  contradicted context.
 
 ### 8.3 Targeted tests
 
@@ -3632,12 +3866,12 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
 | `Host/HostWriteTests` | Atomicity (a rejected fact writes nothing); `Make` returns canonical classes and mints each new term once per batch; `Write` batches several calls with one flush, and a throw inside it writes nothing; no-lattice conflicts against the store, within a batch, and through a merge of the batch give `FactConflictException` with table, key and both values; a rejection the `Write` callback caught writes nothing and `Write` returns; a `ScopeWriter` call from another thread is refused and rejects the batch; `Union` returns distinctness; a class constant that lost a union, written in a row, lands canonical; writing facts that hold already leaves `Version` unchanged and a live extractor usable | R1a |
 | `Host/HostReadTests` | Every row of the `Check` table (§6.6.3); `Get`/`TryGet`; `AreEqual` with an absent term; reads never intern; reads never throw for want of a rebuild (R1a). `CountRows`, `Rows` (R1b) | R1a, R1b |
 | `Extraction/ExtractionTests` | No finite term; zero-cost nodes with children; ties keep the as-written spelling; per-row costs; unextractable heads (by definition and by cost model); value costs; DAG sharing; a stale extractor throws after a changing write; `Mentions`; `TryMatch` at every arity, with value and class arguments; `ToString` matches egglog's format for every built-in literal type | R1a |
-| `Rendering/RenderingTests` | Rules render as s-expressions; named primitives by name, lambdas as `<lambda>`. R2: `present@schema`, `:erasing schema`, `:reads-own-facts "…"` | R1a, R2 |
+| `Rendering/RenderingTests` | Rules render as s-expressions; named primitives by name, lambdas as `<lambda>`. R2: `present@schema`, `:erasing schema`, `:reads-own-facts "…"`. R3: split rules (`(split (body…) (cases v d) (key k) (assume…) :case-tag case)`) and split steps | R1a, R2, R3 |
 | `Concurrency/RootThreadingTests` | Two threads on the root throw; a rule defined from another thread during a run joins the next iteration; a table defined from another thread during a run throws; a primitive, a lattice merge and a cost function that call into the graph get `InvalidOperationException` (also from a pool thread with `DegreeOfParallelism = 4`) | R1a |
 | `Surface/PublicSurfaceTests` | By reflection: no public or protected member of `Eggnog` mentions a type of `Eggnog.Relations` or `Eggnog.Storage` (D29); no public type of another assembly in the package shares a simple name with a public `Eggnog` type (D44); `Eggnog` references no `Eggnog.Storage` assembly (R1a). The public surface is exactly the members the milestones so far tag, compared with the embedded listing `Surface/PublicSurface.txt` that `SurfaceListing` renders (R1b; each later milestone updates the listing). The spike's name is assembled from its parts, so a text search of the test project finds none | R1a, R1b |
 | `Scopes/ScopeTreeTests` | `CreateChild`, `Path`, `Children` (transient query children not listed), `Freeze` under a writable parent throws, depth 31, tags resolve to the nearest ancestor-or-self, `ScopeOptions.DegreeOfParallelism` reaches the context | R2 |
-| `Scopes/ScopeTagTests` | `DefineScopeTag` names are unique per graph and `root` is reserved; `RootTag`; another graph's tag is refused by `CreateChild`, `In`, `Fact.In`, `Erasing`, `RulesetOptions.Licence`, `DefineSplit` and `CaseSet.Add`; `TwoGraphsShareNoTagState`: two graphs in one process each build `CosmosTheory` and freeze schemas, in both orders and on parallel threads, and every theory compiles and every scenario query passes | R2 |
-| `Scopes/DisposeTests` | `Dispose` never throws; a second call does nothing; the root's does nothing; `IsDisposed` is true at once and use throws `ObjectDisposedException`; a frozen schema disposed while 8 queries run beneath it on other threads is released after the last query, and its local rules are freed then; a frozen scope disposed during a query on another thread (a transient child) is released after the query; an open `CaseSet` defers its parent's release; a writable scope disposed from another thread while its domain is busy is released when that call ends | R2 |
+| `Scopes/ScopeTagTests` | `DefineScopeTag` names are unique per graph and `root` is reserved; `RootTag`; another graph's tag is refused by `CreateChild`, `In`, `Fact.In`, `Erasing`, `RulesetOptions.Licence`, `DefineSplit` and `CaseSet.Add`; `TwoGraphsShareNoTagState`: two graphs in one process each build `CosmosTheory` and freeze schemas, in both orders and on parallel threads, and every theory compiles and every scenario query passes | R2, R3 |
+| `Scopes/DisposeTests` | `Dispose` never throws; a second call does nothing; the root's does nothing; `IsDisposed` is true at once and use throws `ObjectDisposedException`; a frozen schema disposed while 8 queries run beneath it on other threads is released after the last query, and its local rules are freed then; a frozen scope disposed during a query on another thread (a transient child) is released after the query; an open `CaseSet` defers its parent's release (R3); a writable scope disposed from another thread while its domain is busy is released when that call ends | R2, R3 |
 | `Scopes/LocalRuleTests` | A rule local to container A never fires in sibling B; it is gone after A is released; `DefineRule` on a frozen scope throws; `DefineRule` from another thread while the scope runs throws; one `CosmosTheory` serves two containers | R2 |
 | `Scopes/ScopedReadTests` | A mirror equals the tagged scope's view (relations and lattice functions); a writable tagged ancestor is synced before a descendant's run and before a query; a scoped read within the tagged scope sees the scope's own facts of the previous iteration with no lag, also under `Repeat(1)`; a frozen tagged scope is never synced; host reads of scoped facts read the resolved scope directly | R2 |
 | `Scopes/ScopeIsolationTests` | A query's derived facts are visible neither in its schema nor in its siblings; `ConstantLosesRootUnionBeforeChildRuns` (a child that asserts nothing sees what its parent sees) | R2 |
@@ -3647,7 +3881,7 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
 | `Concurrency/ParallelEquivalenceTests` | The scoped Cosmos programs with `DegreeOfParallelism = 4` on the graph and on query scopes: every scope's facts equal the serial run's modulo renaming (`TermNamer`); extraction is compared at 1 only | R2 |
 | `Extraction/ContextExtractionTests` | Extraction in a child sees inherited and own rows and the child's equalities; a parent change makes a child's extractor stale; a query in the child does not | R2 |
 | `Scopes/MirrorSyncTests` | A host write into an ancestor of the tagged scope is synced before the next run and before the next query (the view-stamp key); a mirror created after the tag's last sync, by a rule or by a query, is synced before its first read (the copy-rule-count key, N61) | R2 |
-| `Scopes/FreezePlanTests` | A `Freeze` plans every rule a descendant can run, and no other container's local rules; the root's `Freeze` plans nothing | R2 |
+| `Scopes/FreezePlanTests` | A `Freeze` plans every rule a descendant can run, and no other container's local rules; the root's `Freeze` plans nothing (R2). A `Freeze` plans the split matchers (R3) | R2, R3 |
 | `Scopes/LocalRuleScheduleTests` | A local rule runs only when its own ruleset is scheduled, in its owner and in a descendant | R2 |
 | `Scopes/RunTagResolutionTests` | A run whose later step, or a local rule it reaches, reads a tag that does not resolve throws before its first step: the earlier steps write nothing, `Version` is unchanged and the scope is not faulted (§6.5.3, §6.7) | R2 |
 | `Scopes/DeferredReleaseTests` | A frozen scope disposed during an extraction is released after the extraction (D40) | R2 |
@@ -3655,23 +3889,34 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
 | `Scopes/DisposedChildListingTests` | A disposed child waiting for its release is not listed in `Children` | R2 |
 | `Scopes/ScopeDepthTests` | The scope layer refuses a child below depth 31 with its own message | R2 |
 | `Scopes/CatchUpVersionTests` | The catch-up a call makes first moves no `Version` (N87): a read in the innermost of two writable children after a root write moves neither child's; a write that changes nothing, a run with nothing to do, and a child's `Freeze` after its parent wrote and froze keep it; a scope's own union over an ancestor's rows still moves it | R2 |
+| `Scopes/CatchUpFaultTests` | A lattice merge that throws in the catch-up a call makes first fails that call with `RuleEvaluationException` and faults the scope called and the writable ancestor whose catch-up ran it, never the ancestor's parent or a sibling (N113): a read (`Check`, `CountRows`), a query (`Count`), an extractor query, and a write, which writes nothing; a merge that succeeds faults nothing; a lift goes on when the merge throws in the engine's lift's catch-up of its cases and its found-vacuous check faults them | R3 |
+| `Scopes/SplitStepCatchUpFaultTests` | A lattice merge that throws while a split step of a run catches a case up fails the run with `RuleEvaluationException` carrying the lattice's record and faults the run's scope, at split depth limits 1 and 4 and with in-case schedules that do or do not run an iteration after the lift; the same run without the refusal completes and lifts the join (N114) | R3 |
 | `Scopes/OpenBatchDomainTests` | While a `Write` batch is open (N88), its writable ancestors, the root included, refuse writes, runs and nested batches, so an ancestor write that would conflict with the batch's plan is refused and the batch commits; the ancestors accept writes again once the batch ends, even after its callback threw; writes into a descendant, into a sibling and a nested batch in a descendant are allowed; an ancestor's query between the batch's calls (a mirror sync) leaves the writer usable and moves `Version` exactly as the same query before the batch | R2 |
 | `Extraction/ExtractedClassOriginTests` | An extracted term's classes carry the extracting scope's origin (D39) | R2 |
 | `Concurrency/FrozenScopeOverlapTests` | While an extraction is held inside its cost function, or a query inside its filter, on another thread, the same frozen scope serves reads, queries and extractions on this thread (no guard on a frozen scope, D47) | R2 |
-| `Cases/LiftTests` | Case joins come from `ValueLattice.CaseJoin`; relation rows lift through the function kind with a unit output; `Lift = false` tables are not lifted; mirror tables and `Contradiction` are never lifted as rows; vacuous cases are disposed after `CaseSet.Lift` and leave `Cases`; zero cases throw; cancellation between rounds | R3 |
-| `Cases/SplitTests` | Persistent cases absorb later parent facts within one `Run`; records are disposed when the `Run` ends and a second `Run` splits again; `CaseLimit` and `SplitDepthLimit` skip; an empty element set skips and is counted; a guarded split opens no case when the guard fails; a split step on a contradictory scope does nothing; `DefineDomainSplit` equals the hand-written rule; nested splits (phase A, then phase B); cases are disposed when a run stops early or throws; `Children` is empty after every `Run`; `OpenCases` on a frozen scope throws; `InheritWatermarks = false` reaches cases | R3 |
-| `Cases/ContradictedCaseTests` | After a case derives `Contradiction`: `IsContradictory` is true; `Check`, `Get`, `Find`, `Count`, `Extract`, `Make`, `Write`, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Assume` does nothing; `Union` returns false; `Run` returns `Contradiction` with no iteration; `Dispose` works | R3 |
+| `Cases/LiftTests` | Case joins come from `ValueLattice.CaseJoin`; relation rows lift where every live case holds them, through the relation kind with a unit output (N90); `Lift = false` tables are not lifted; mirror tables and `Contradiction` are never lifted as rows; vacuous cases are disposed after `CaseSet.Lift` and leave `Cases`; every case vacuous contradicts the parent; zero cases throw; cancellation between rounds; terms and equalities lift; a repeated lift lifts what the cases learned since; a case disposed directly stops the set from lifting (N96); a case join that throws writes nothing (N94) | R3 |
+| `Cases/SplitTests` | Persistent cases absorb later parent facts within one `Run`; records are disposed when the `Run` ends and a second `Run` splits again; `CaseLimit` skips and is counted; `SplitDepthLimit` stops deepening, and a split below it is not counted (N107); an empty element set skips and is counted; a guarded split opens no case when the guard fails; a split step on a contradictory scope does nothing; `DefineDomainSplit` equals the hand-written rule; nested splits (phase A, then phase B); cases are disposed when a run stops early or throws; `Children` is empty after every `Run`; `OpenCases` on a frozen scope throws; `InheritWatermarks = false` reaches cases; `DefineDomainSplit` refuses a domain without a lattice or a scoped one and reads a scoped guard (N105) | R3 |
+| `Cases/ContradictedCaseTests` | After a case derives `Contradiction`: `IsContradictory` is true; `Check`, `Get`, `Find`, `Count`, `Extract`, `Make`, `Write`, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Assume` does nothing; `Union` returns false; `Run` returns `Contradiction` with no iteration; `Dispose` works; a plain child of a stopped case, and a case under that child, answer as the stopped case, and the lift that drops it disposes them (N104); a case contradicted through its parent refuses `Freeze` as stopped; an extractor of that case, or of a plain child of it, made before the contradiction refuses as stopped, whichever is asked first (N112) | R3 |
 
 Beside these classes, `src/Eggnog.Tests/Review/` keeps the tests the R1a and R1b reviews added (API, semantics, batch
 atomicity, partial primitives, extraction and the literal suite's `print-size` figures; for example
 `R1bApiCoverageTests.TheRowLimitIsCheckedBeforeTheFirstIteration`) and the R2 reviews' probes (`R2ApiReviewTests`,
 `R2CompletenessReviewTests`, `R2ConcurrencyReviewTests`, `R2SoundnessProbeTests`, and `R2FixVerificationTests`, which
 pins N86: class constants equated in a body match in a child that unions them, whether or not the root is busy, and
-`R2FixVerification2Tests`, which pins N86 under semi-naive runs and N87: a descendant's lazy catch-up moves no `Version`,
-and `R2FixVerification3Tests`, which pins N88: an ancestor's write inside a descendant's batch is refused and moves no
-`Version`), and
-`src/Eggnog.Tests/Support/` the small theories
-they share (`NodeTheory`, `BlockingRun`, …). Both follow the same conventions and run in every milestone's baseline.
+`R2FixVerification2Tests`, which pins N86 under semi-naive runs and N87: a descendant's lazy catch-up moves no
+`Version`, and `R2FixVerification3Tests`, which pins N88: an ancestor's write inside a descendant's batch is refused and
+moves no `Version`), and the R3 reviews' probes (`R3ApiReviewTests`, `R3CompletenessReviewTests`,
+`R3SoundnessProbeTests`, `R3OracleReviewTests` with its `ChooseSplitTheory`, `R3SplitModelOracleTests` and
+`R3SplitOracleDomainProbeTests`: among them splitting queries on parallel threads under one frozen schema, a split
+matcher reading a scoped view through its mirror (D48), `Run`'s R3 refusals before any work, the case tag of a split's
+cases, limits and cancellation before a split step, the release of a nested split's cases when the run ends, the content
+order of cases, and the N104–N111 fixes), the verifications' probes (`R3FixVerifyTests`: scopes and extractors under a
+case contradicted through its parent, N104, N112; `R3FixVerify2Tests`: the extractor's catch-up and staleness for scopes
+that are not cases, the root's extractor, and a lattice merge that throws in the catch-up of an extraction or a read,
+N112, N113; `R3FixVerify3Tests`: the structural calls' and `Union`'s, `Extract`'s and `CaseSet.Lift`'s catch-up
+failures, an ancestor's record, where a case's catch-up runs in a host lift, and a case's catch-up failure inside a
+split step, N113, N114), and `src/Eggnog.Tests/Support/` the small theories they share (`NodeTheory`, `BlockingRun`, …).
+Both follow the same conventions and run in every milestone's baseline.
 
 ### 8.4 Running
 
@@ -3814,7 +4059,8 @@ an idle-machine run (§15.5).
 **Content.**
 - `SplitRule`, `SplitBuilder`, `EGraph.DefineSplit`, `EGraph.DefineDomainSplit`, `EGraph.SplitRules`,
   `Schedule.Split`, `SplitSchedule`.
-- `SplitProgram`, `RuleSplitSource`, `ScheduleCaseRunner`, `LiftSpecBuilder`, `CaseJoinAdapter<T>`.
+- `SplitProgram`, `RuleSplitSource`, `ScheduleCaseRunner`, `LiftSpecBuilder`, `CaseJoinAdapter<T>`; as built, also
+  `SplitAssumptions`, `SplitAssumptionChecker` and `SplitStepFrame` (N115).
 - `Scope.Cases` (`IsCase`, `OpenCases`), `CaseSet`, `LiftOptions`, `LiftReport`, `ScopeContradictedException` and the
   contradicted-case semantics (D45, §6.6.8).
 - The R3 members of `RunOptions`, `RunReport`, `RunStep` and `RunStepKind`.
@@ -3828,6 +4074,18 @@ an idle-machine run (§15.5).
 
 **Done when** the baseline holds, all of the above is green, and every scoped Cosmos test asserts that the query scope
 has no children after its `Run`.
+
+**Status:** done; built on R2 merged with colors M10.4, reviewed and verified, and merged to main. No engine file
+changed. §15.9 records how it was built (N90–N103), the fixes of its four reviews (N104–N111) and of its three
+verification rounds (N112–N114), and the members §3 and §4 now list (N115). At the merge `Eggnog.Tests` (636
+tests), `Eggnog.Relations.Tests` (11,811 tests, 10 of them opt-in and skipped) and `Eggnog.Storage.Tests` (816) pass on
+net10.0 and net8.0, so the baseline holds. Every R3 row of §8.3, the scoped suite's R3 tests of 02, 04 and 07, the
+reviews' and verifications' probes, and `SplitOracleTests` at 300 seeds pass (a 5000-seed run was green too, and 1000
+seeds after the review fixes, with the model oracle); every scoped Cosmos test asserts that its query scope has no
+children after each `Run`. The R1 and R2 suites pass with additions only: the R3 rows of §8.3 and N103's assertions;
+`SweepLinks.Compile` now compiles with the schema split. The public surface only gained members
+(`Surface/PublicSurface.txt` has additions only). The benchmark project's Release build is clean. Not timed: the cost
+of R3's paths (§15.5).
 
 Version 1's R4 (retiring the spike reference) is folded into R1a; there is no R4.
 
@@ -4315,6 +4573,10 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// </summary>
         public Schedule Saturation { get; private set; } = null!;
 
+        /// <summary>
+        /// Defines the split members (R3): the case tag, the analysis <see cref="Mentioned"/> and the rules that derive it,
+        /// the schema's and the query's domain splits, and the schedules that take them.
+        /// </summary>
         partial void DefineCases()
         {
             Case = Graph.DefineScopeTag("case");
@@ -4439,6 +4701,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             var report = query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
 
             Assert.True(report.Saturated);
+            Assert.Empty(query.Children);
             Assert.Equal(ValueSet.Of("invoice", "order"), query.Get(c.Dom.Of("kind")));   // the domain narrows...
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));                     // ...but no single fact proves a guard
             Assert.False(query.AreEqual(q, Lowered(c)));
@@ -4518,6 +4781,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             using var query = schema.CreateChild(c.Query);
             var q = AssertQuery(c, query);
             query.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            Assert.Empty(query.Children);
 
             // The caller's coverage obligation: kind is present in the query and holds one of dom(kind).
             Assert.True(query.Check(c.Present.Of("kind")));
@@ -4530,12 +4794,14 @@ namespace Eggnog.Tests.Cosmos.Scoped
                 foreach (var kind in kinds)
                 {
                     var k = cases.Add(c.Case);
+                    Assert.True(k.IsCase);
                     k.Assume(c.Dom.Of("kind").Is(ValueSet.Of(kind)));
                     k.Run(Schedule.Saturate(c.Horn, c.Lattice));    // a case always stops on contradiction (D11)
                     Assert.False(k.IsContradictory);                // reads below would throw on a stopped case (D45)
                     Assert.True(k.Check(c.Form.Of("ref", "uuid-lower")));
                 }
 
+                Assert.Equal(2, query.Children.Count);
                 lifted = cases.Lift();
             }
 
@@ -4546,6 +4812,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             Assert.Empty(query.Children);
 
             query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+            Assert.Empty(query.Children);
             Assert.True(query.Check(c.Form.Of("ref", "uuid-lower")));
             Assert.True(query.AreEqual(q, Lowered(c)));
             Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));
@@ -4563,6 +4830,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 
             Assert.True(report.Saturated);
             Assert.Equal(0, report.CasesOpened);                    // kind is not mentioned (D43)
+            Assert.Empty(query.Children);
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));
             Assert.Equal($"(UuidEq \"ref\" \"{Ref}\")", query.Extract(q).ToString());
             Assert.Equal(1002, query.Extract(q).Cost);
@@ -4731,8 +4999,9 @@ None changes a colors decision; they align its text with what the rule layer now
 7. **An extraction section** (E5): extraction over an `EGraphContext`, with staleness keyed on the extraction tables
    and the union-find of the context and its non-frozen ancestors, not on the clock.
 8. **§11.2 `CaseSet`.** `AddCase(ContextOptions?)`, `DisposeVacuous()`, and `Lift` with a cancellation token checked
-   between rounds (E8). The rule layer lifts its relations as `LiftTableKind.Function` with a unit output, so no change
-   to `LiftTableKind.Relation` is needed.
+   between rounds (E8). The rule layer lifts its relations as `LiftTableKind.Relation` over their unit output (N90);
+   colors N55 already lifts a relation row where every live case holds it, so no change to `LiftTableKind.Relation` is
+   needed.
 9. **§11.3 split hooks.** `ISplitSource.FindRequests` receives the `SplitReport`; `SplitOptions.CaseOptions`;
    `SplitDriver.Step` does not hold the scope's thread domain while it calls sources and schedules (E8).
 
@@ -4796,13 +5065,13 @@ taken and why.
 
 ---
 
-## 15. Implementation notes (R1a-R1b, the engine requests of colors M10.3-M10.4, and R2)
+## 15. Implementation notes (R1a-R1b, the engine requests of colors M10.3-M10.4, R2 and R3)
 
-This section records how R1a, R1b and R2 were built against this spec, how colors M10.3 delivered this spec's engine
-requests E4, E5, E7, E9 and E10 and §13 items 4–7, and how colors M10.4 delivered E8 and §13 items 8–9. Each note
-says what the spec said, what was built, and why. Where the built design is the better one, the sections in the last
-column now state it, and the note is the record of the change; where the spec was silent, those sections now fill the
-gap. Notes are numbered **N1–N89**; what is still deferred, with its milestone, is in §15.5.
+This section records how R1a, R1b, R2 and R3 were built against this spec, how colors M10.3 delivered this spec's
+engine requests E4, E5, E7, E9 and E10 and §13 items 4–7, and how colors M10.4 delivered E8 and §13 items 8–9. Each
+note says what the spec said, what was built, and why. Where the built design is the better one, the sections in the
+last column now state it, and the note is the record of the change; where the spec was silent, those sections now fill
+the gap. Notes are numbered **N1–N115**; what is still deferred, with its milestone, is in §15.5.
 
 ### 15.1 Where the work stands
 
@@ -4820,6 +5089,10 @@ gap. Notes are numbered **N1–N89**; what is still deferred, with its milestone
 - **R2** is on main, merged with colors M10.4 (§9 R2, §15.8). It changes no engine file. At the merge, `Eggnog.Tests`
   (498 tests), `Eggnog.Relations.Tests` (11,811 tests, 10 of them opt-in and skipped) and `Eggnog.Storage.Tests`
   (816) are green on net10.0 and net8.0.
+- **R3** is on main, built on R2 merged with colors M10.4 (§9 R3, §15.9), with no engine change. Four reviews and three
+  verification rounds followed; their fixes are N104–N114. At the merge, `Eggnog.Tests` (636 tests),
+  `Eggnog.Relations.Tests` (11,811 tests, 10 of them opt-in and skipped) and `Eggnog.Storage.Tests` (816) are green on
+  net10.0 and net8.0.
 
 ### 15.2 Engine changes
 
@@ -4892,7 +5165,17 @@ gap. Notes are numbered **N1–N89**; what is still deferred, with its milestone
 | The R1 adapter's new members on contexts: `CanonicalizeColumns`, `TryExtract`, `TryGetCost`, `ForEach` for the merge check, and the deferred free of disposed queries | Done in R2 | `ContextEngineScope` (§6.6.6); N8 compares a local rule's constants in its owner; N6's merge check reads the scope's view, inherited rows included |
 | `RunStepKind.MirrorSync` | Done in R2 | — |
 | Engine request E8 and §13 items 8–9 (`CaseSet`, `SplitDriver` and the split hooks) | Done in colors M10.4 (§15.7) | R3 calls them (§9 R3) |
-| `RunStepKind.SplitStep` and `Lift`; `RunStep.CasesOpened`; `EngineScope.IsStopped`, `ScopeContradictedException` and the D45 answers; the split and lift steps of `DiagnosticsTests`; `ScopeTagTests`' refusals of another graph's tag by `DefineSplit` and `CaseSet.Add`; `DisposeTests`' "an open `CaseSet` defers its parent's release"; `ClassIdTests`' "a case's class is refused after the run that made the case"; the scoped Cosmos R3 tests (02 `TwoKindsNamedTogetherLowerTheReference`, `TheSameSplitDrivenByTheHost`, `AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit`; 04 `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains`; 07 `ParkAndMapWrittenInLowerTheParkId`, `ParkAndMapSpeltPerKindLowerTheParkId`, `TheOfflineRefreshLowersEverything`; `SweepLinks.Compile` asserting 3 schema cases) and `CosmosTheory.Cases.cs` | R3 | As tagged in §3.9, §6.6.8 and §8 |
+| `RunStepKind.SplitStep` and `Lift`; `RunStep.CasesOpened`; `EngineScope.IsStopped`, `ScopeContradictedException` and the D45 answers; the split and lift steps of `DiagnosticsTests`; `ScopeTagTests`' refusals of another graph's tag by `DefineSplit` and `CaseSet.Add`; `DisposeTests`' "an open `CaseSet` defers its parent's release"; `ClassIdTests`' "a case's class is refused after the run that made the case"; the scoped Cosmos R3 tests (02 `TwoKindsNamedTogetherLowerTheReference`, `TheSameSplitDrivenByTheHost`, `AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit`; 04 `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains`; 07 `ParkAndMapWrittenInLowerTheParkId`, `ParkAndMapSpeltPerKindLowerTheParkId`, `TheOfflineRefreshLowersEverything`; `SweepLinks.Compile` asserting 3 schema cases) and `CosmosTheory.Cases.cs` | Done in R3 | §15.9 |
+| Library use of the split hooks: `RuleSplitSource`, `SplitSchedule` with one cached driver per split node, the host-driven `CaseSet` wrapper | Done in R3 | §15.9; colors §21.11's row is closed |
+| A `LiftReport.MemoHit` (or an equivalent flag) on the engine's lift report, so that `RunReport.Lifts` counts only the lifts computed, as §3.6 first said | No milestone: an engine change (N92) | `RunReport.Lifts` counts every lift a split step ran, the memo's answers included |
+| An engine hook that reports each lift of a split step as it happens, with its own figures | No milestone: an engine change (N93) | The rule layer records lift steps from the step's report between case runs |
+| A rule-layer benchmark of R3's paths: a split step's request search (the matcher run, the request copies), the case wrappers, the in-case schedule run again in each live case at every step (phase A, then B), the lift's memo check, the extractor-query catch-up (N112), the read of each catch-up's recorded failure (N113), and the read of each case's recorded failure on entry to the case and at each split step's end (N114) | No milestone | As for R2's paths, the benchmark project references only the engine |
+| Timed gates of R3: the cost of a split step that finds nothing new in a saturation pass, and of a host lift | No milestone: an idle-machine run | Nothing was timed (the machine was shared) |
+| A cancellation token on `SplitOptions` (or `SplitDriver.Step`), so that a split step's lifts check the run's token between rounds | No milestone: an engine change (N108) | `Run` documents cancellation between iterations and split steps; a lift already started runs to its end (D42) |
+| Tags a split node's cases supply: let an in-case rule or nested split matcher read `T.In(caseTag)` of its split's case tag | No milestone: additive (N109) | `Run` refuses such a read before any work, since the tag does not resolve at the top-level scope |
+| Counting the splits `SplitDepthLimit` keeps from being looked for in `RunReport.SplitsSkipped` | No milestone (N107) | It would run every nested matcher in the deepest cases only for a statistic; the documentation now says such splits are not counted |
+| In `EGraphContext.RunRulesCore`, take a failure the run's own `EnsureClean` recorded together with the run's own failure | No milestone: an engine change, not needed for soundness | The rule layer takes such failures first: at a host call's entry (N113), and on entry to a split's case and at each split step's end (N114) |
+| Merge R3 to main | Done: merged to main | Reviewed and verified three times; its fixes are N104–N114. At the merge every suite is green on net10.0 and net8.0 (§15.1) |
 | A rule-layer benchmark of R2's paths: queries on a frozen scope, transient children, mirror syncs, the `Equal` step's cost per match (N86), the catch-up each call makes first (N87), and the catch-up of each `ScopeWriter` call (N88) | No milestone | The benchmark project references only the engine, which R2 did not change; its Release build is clean |
 | Timed gates: R2's per-iteration cost at the root (the call and engine-call counters, the deferred-free check, the local-rule path walk, the late-rule tag check of N67) and per write or run (N88's read of the open-batch count) | No milestone: an idle-machine run | R2 built the benchmarks in Release only and timed nothing. The colors gates are listed in colors §21.11 |
 | A benchmark dry run after R1a's last engine fix | Done with colors M10.3 | That fix only removed an uncalled member (N3). Colors M10.3 dry-ran the benchmark project after it (colors §21.9) |
@@ -4979,3 +5262,47 @@ N86, the second's N87, the third's N88. N89 records the internal members §4 now
 | N87 | D16, D49: `Version` moves on every effective change to the scope's own layer, catch-up copies included, and never on a query, a read or a write that changes nothing | `Scope.Version` also leaves out the catch-up each call makes first (`Scope.CatchUp`, used by every read, query, write, run, `CreateChild`, `CreateExtractor` and a child's `Freeze`): each writable scope from the first frozen ancestor or the root down to the called scope is brought up to date outermost first, and the stamp moves of its rebuild are subtracted from its own `Version`. The copies a scope's own union makes over rows already there (in that call's flush or run) still move it. The root is not measured and its catch-up is as before | A descendant catches up with a writable ancestor lazily, so when its own union came first and the ancestor's write later, the copies were made at its next call, even a read or a query, and moved its `Version` there; both halves of D16 could not hold in that order. Leaving that catch-up out keeps every read and query from moving `Version` and makes `Version` count only what the scope's own calls change: an ancestor's write never moves it, as it never did when no copies were needed. An eager catch-up at the ancestor's write was rejected: the ancestor would pay for every descendant (a child costs in proportion to what it touches). Cost: two reads of the change stamp per writable scope on the path, none at the root. `R2FixVerification2Tests.Q05`/`Q06` and `CatchUpVersionTests` pin this | D16, §2.3, §3.1 `Version`, §6.5.3, §6.6.1, §6.6.3, §6.6.4, §6.6.6, §6.10 |
 | N88 | N15, §6.6.1, §6.13: silent on calls into other scopes of the thread domain while a `Write` batch is open; N87: the catch-up each call makes first is left out of `Version` | While a batch is open on `S`, every writable ancestor of `S` (they share its guard) refuses writes and runs with *"Scope 'X' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch."*: `Write` counts its batch in each writable ancestor (`Scope.CountOpenBatch`) and `EnterWrite` reads that count. A refused call writes nothing and does not reject the batch. Every other call of the domain is allowed (reads, queries, `CreateChild`, extractors and `DefineRule` on the ancestors; writes, runs and nested batches in descendants and siblings), and each `ScopeWriter` call, and `Write` before it commits, brings `S` up to date first (`Scope.CatchUp`), left out of `Version` as at a call's entry | The batch's calls are checked against `S` as it stands when each is made, ancestors' rows included: which facts hold already, and the conflicts of D32, merges included. An ancestor write between them could make the plan wrong (a function without a lattice given another value would fault `S` at the commit instead of throwing `FactConflictException`), and its catch-up at the commit moved `S.Version` (`R2FixVerification3Tests.V03`), or a later `ScopeWriter` call failed with the engine's "call EnsureClean() first" (`V02`). Catching up per call cannot repair the plan; refusing only the writes that change what the batch read keeps everything else usable. An ancestor's query may still sync its mirrors, which writes only internal tables the batch cannot plan into: the per-call catch-up covers it. Cost: one read of a field per write or run, one increment per writable ancestor per `Write`, and two stamp reads per writable scope on the path per `ScopeWriter` call; none at the root beyond the field read. `R2FixVerification3Tests.V02`/`V03` asserted the ancestor write was allowed and now assert its refusal; `OpenBatchDomainTests` pins the rest | D30, §2.4, §3.1 `Write`, §6.5.3, §6.6.1, §6.12, §6.13, §11 risk 16 |
 | N89 | §4.1, §4.4, §4.7, §4.10: the internal members | `EngineScope` adds `IsFaulted` (the context's fault flag, E7), and its `CreateChild` returns a `ContextEngineScope`, which adds `Runtime` and `ViewStamp`. `ScopeGuard` adds `TryEnter`, `TryEnterForRelease`, `ExitAfterRelease` and `Depth`. `RuleVariants.Get` takes no constants. `ProgramStepKind.Equal` and `EqualFunction` are new. `MirrorRegistry.CopyRules` returns an array, and `AllCopyRules` lists every copy rule for a freeze. `EGraph` and `Scope` gain the internal members §4.10 lists (among them `Equal`, `ActiveEngineCalls`, `CheckFactTags`, `CatchUp`, `EnterGuard`, `BeginCall`/`EndCall`, the count of open batches below a scope and the mirror-sync key), and from R2 the bridge root API rows of §5.1 have no caller | Implementation structure that N60–N88 call for; no behaviour beyond theirs | §4.1, §4.4, §4.7, §4.10, §5.1 |
+
+### 15.9 R3: case splits and lift
+
+R3 was built on R2 merged with colors M10.4, with no engine change: it changes no file under `src/Eggnog.Relations`. It
+adds split rules (`SplitRule`, `SplitBuilder`, `EGraph.DefineSplit`, `DefineDomainSplit`, `SplitRules`), the split step
+(`Schedule.Split`, `SplitSchedule`, `ScheduleCaseRunner`, one cached `SplitDriver` per split node and run), the split
+source (`RuleSplitSource`, with the assumption template `SplitAssumptions` and its checker), host-driven cases
+(`Scope.OpenCases`, `CaseSet`, `LiftOptions`, `LiftReport`), the lift spec (`LiftSpecBuilder`, `CaseJoinAdapter<T>`),
+the contradicted-case answers of D45 (`EngineScope.IsStopped`, `Scope.ThrowIfStopped`, `ScopeContradictedException`),
+the R3 members of `RunOptions`, `RunReport`, `RunStep` and `RunStepKind`, and `CosmosTheory.Cases.cs`. The public types
+only gained members (`Surface/PublicSurface.txt` has additions only), and no file of `src/Eggnog` imports
+`Eggnog.Relations`. Four reviews (soundness, API, an oracle review that planted mutants, completeness) added probes and
+a model-based split oracle (`R3SplitModelOracleTests`); the fixes they called for are N104–N111. Three verification
+rounds followed: the first's fix is N112, the second's N113, the third's N114. N115 records the members §3 and §4 now
+list.
+
+| # | The spec said | What was built | Why | Spec now |
+|---|---|---|---|---|
+| N90 | §6.9.1: a relation lifts as `LiftTableKind.Function` with a unit output and no case join | It lifts as `LiftTableKind.Relation` over its unit output. The engine writes the same rows (a row present in every live case, with the output they all hold, colors N55), and counts them in `LiftReport.Rows` | With the function kind relation rows counted as `Values`, against §3.7, which documents `Rows` as relation rows and `Values` as function values; `TheSameSplitDrivenByTheHost` asserts `Rows >= 1` for `form(ref, uuid-lower)` | §4.8, §6.9.1 |
+| N91 | §4.8, §4.10: `SplitRule.Source`, one `RuleSplitSource(graph, rule, index)` per rule | `SplitRule.SourceAt(index)`: one source per rule and position among a split step's rules, made on first use and kept for the graph's life | A request's `SplitKey` carries the source's index in its driver's list, which the driver resolves in its own list; a source shared by two nodes at different positions could not say which index to use (nor could a per-call index, since two runs on two threads may use one rule). B6 coverage across split nodes compares source objects by reference (colors N58), so it holds between nodes that list the rule at the same position, the common case | §4.8, §4.10, §3.6 `Schedule.Split` |
+| N92 | §3.6: `RunReport.Lifts` counts the lifts computed, not skipped by the memo | It counts every lift a split step ran, the memo's answers included: the engine's `SplitReport.Lifts` | A lift the memo answered and a lift that wrote nothing report alike (no rounds, unchanged); telling them apart needs an engine flag (§15.5) | §3.6 |
+| N93 | §6.11: a `RunStep` per lift | The driver lifts inside its step, between the runs of its cases. The rule layer keeps a frame per split step in progress and records, when the step next runs a case and when it ends, one `Lift` step of the split scope per lift its report gained since; a lift is changed when the scope's `Version` moved since the last case ran, and takes its share of the time since then. The split step's own step follows its cases' iterations and lifts | No engine hook reports a lift as it happens, and E8 lists none; this records every lift in order without an engine change (§15.5) | §3.9, §4.6, §6.9.3, §6.11 |
+| N94 | D18, §3.1: a `RuleEvaluationException` from a run faults the scope | A failure in a case of the run, in a split matcher, or in a lift's case join also faults the scope `Run` was called on, with the same cause; the case where it happened is faulted too. An exception from the run observer, a `RuleEvaluationException` included, does not fault (§6.11). A case join that throws in `CaseSet.Lift` faults nothing: the lift stages a round's writes only after every case join of the round ran | §3.1's contract for `Run`; a failed host lift wrote only rounds that were sound | §3.1, §3.7, §6.11, §6.13 |
+| N95 | §4.2: `CaseJoinAdapter<T>.Create(lattice, type)` | `Create(lattice, type, functionName)`; the delegate runs under `EngineCallMarker`, and an exception becomes a `RuleEvaluationException` naming the lattice and the function. Each function's case join is made once, at its definition (`FunctionHandle.CaseJoin`), and the graph caches its lift spec, rebuilt when a table is defined | The function's name makes the failure readable; one delegate per function keeps the engine's lift memo, which compares specs by content, hitting across rebuilt specs | §4.2, §4.10, §6.13 |
+| N96 | §3.7, §6.9.3, §6.9.4: a case is disposed by its set; `Dispose` never throws (D40) | A case's engine set owns its context: `Dispose` of a case marks it disposed at once, and its release waits for the set (`CaseSet.Dispose`) or, for a split's case, the end of the run. A host case disposed directly makes `CaseSet.Lift` throw `InvalidOperationException`, as the engine refuses a set with a case disposed outside it (colors N54). A vacuous case is disposed with its descendants before the engine set disposes it; when a call in progress keeps a descendant alive, the case stays with the engine set, disposed in the rule layer, until a later lift or the set's disposal. `CaseSet.Dispose` releases each case through the rule layer, so a case whose child is still alive is released with that child (D40), where the engine set's `Dispose` would throw | A user `Dispose` must not break the engine set's ownership; a rule-layer `Dispose` must never throw | §3.1 `Dispose`, §3.7 |
+| N97 | §6.5.2: a `Run` node checks `S.IsContradictory` first | The node brings the scope up to date first when it checks (in a case, or with `StopOnContradiction`) | In phase B the driver runs the in-case schedule again after phase A's lift changed the parent, without a rebuild, and the engine reads a context's contradiction only when it is clean (found by `SplitOracleTests`). The iteration that follows makes the same rebuild, so this costs nothing more, and a run that does not stop on contradiction pays nothing. A split node brings its scope up to date before its own check, for the same reason | §6.5.2, §6.9.3 |
+| N98 | §8.2: in the split oracle, `present`, `form`, `dom` and contradiction agree for every path the query mentions | Presence, stored forms, contradiction and the set of paths with a domain agree; each domain the engine lifts lies within the prototype's | The prototype's "lift a domain" joins the domains every case reported, a vacuous one's included, and its interleaved schedule splits before an `IN` list or a disequality narrowed the discriminator's domain, so it opens cases that go vacuous; the engine leaves vacuous cases out (I33), and the scoped schedule settles first (D43). Seed 374 at 3000 seeds: the query `k0 IN ('a', 'c')` over {a, b, c}; the prototype's vacuous `b` case adds its domain of `g00`. 5000 seeds are green | §8.2 |
+| N99 | §3.5, §6.9.2: `SplitBuilder` and its checks | The definition errors, each a `RuleDefinitionException` naming the split rule: no `Cases`, `Cases` twice, a set that is not a declared variable, the case variable in the body (*"case variable 'v' is bound per case; use it only in Assume"*) or in the key, a key that is not a declared variable; assumptions that are not writes (*"assumptions are writes; 'IsNot' is a filter"*), that read a function (*"assumptions do not read; match 'dom' in When"*), that write a scoped view, or that hold a class constant not from the root. An assumption may compute (the domain split's `set-of`): a computation is evaluated per case on its ground arguments, and a primitive that throws is a `RuleEvaluationException`. `Key` calls add to the key. Split rule names are unique among the graph's split rules, and a case tag may not be the root's. The matcher collects the key, the set, then the other variables the assumptions use; its matches are canonicalized and taken in content order; a set is counted without decoding its elements, and a case decodes its own element | The messages the spec left open; content order makes the cases, and so the run, deterministic (decision 4); allocation is per request and per case, never per row | §3.1, §3.5, §4.8, §6.9.2, §6.13 |
+| N100 | §3.6: `CaseLimit`, `SplitDepthLimit`, `Lift` | `Run` refuses a case or split depth limit below 1 with `ArgumentOutOfRangeException`, before any work; `RunOptions.Lift` refuses `null`; `LiftOptions` refuses limits below 1 | The engine's `SplitOptions` and `LiftOptions` require at least 1 | §3.6, §3.7, §6.13 |
+| N101 | §3.7, §6.9.4: `CaseSet` | `CaseSet.Add` is a structural call, like `CreateChild`: refused from a run observer, on a frozen or stopped parent, at depth 31, and with another graph's tag or the root tag; allowed while a `Write` batch below the parent is open. `CaseSet.Lift` writes the parent: refused from a run observer, while a `Write` batch below the parent is open (N88), on a stopped parent (`ScopeContradictedException`) and once the set or the parent is disposed (`ObjectDisposedException`). `CaseSet` has no `ToString` (§3.7 lists none). The parent's catch-up before `Add` and `Lift` is left out of its `Version` (N87) | The rules of the R2 calls they resemble | §3.7, §6.9.4, §6.13 |
+| N102 | §6.6.8: the D45 table | As tabled. Also: a `Make` whose batch stops its case throws `ScopeContradictedException` after the commit (the write stays; its class names nothing in a scope with no model); a `Write` that stops its case commits and returns; an `Until` node in a stopped case runs nothing; an extractor made before its case stopped throws `ScopeContradictedException`, also when the contradiction reached the case through its parent and nothing caught the case up first (N112) | The table's rows for calls that stop the case, and for objects made before | §6.6.8 |
+| N103 | §8.1.2, §9 R3: every scoped Cosmos test asserts that the query has no children after its `Run` | `SweepLinks.Compile` compiles with the theory's `Facts` (the schema split, three cases), which every 07 test and `ScopedScenarioCases` use; the R2 tests of 02 and 03 gained `Assert.Empty(query.Children)` after each run. `TheOfflineRefreshLowersEverything` asserts the lowered term, its extraction (cost 18) and the lifted form, not the literal suite's `print-size` figures, which count the prototype's contexts as data | The done-when; the R2 tests of 07 pass unchanged on the split-compiled schema | §8.1.2, §10 |
+| N104 | D45, §6.6.8: only a case has the stop flag, and any other contradictory scope stays fully usable | A scope under a stopped case (a plain child made before the case stopped, a case of a set opened under that child, and so on) answers as the stopped case: `IsContradictory` is true, `Assume` does nothing, `Union` returns false, `Run` returns `Contradiction` with no iteration, `Dispose` works, and every other member throws `ScopeContradictedException`, whose `ScopePath` is the scope called and whose message names the stopped case. `Scope.StoppedCase` walks the scope and its writable ancestors up to the first frozen one; `CatchUp` stops at a stopped ancestor and never catches a scope up with it. The structural calls that enter without a catch-up (`OpenCases`, `DefineRule`, `Freeze`, `CaseSet.Add`) now catch up before they check, so a case its parent's contradiction reached since its last call answers as stopped instead of being checked on a stale flag. The lift that drops a vacuous case disposes everything under it, as before | Colors §6.9 refuses to catch a context that does not stop on contradiction up with a stopped parent, so such a scope threw the engine's bare `InvalidOperationException` from every member, `IsContradictory` included, and it has no model anyway (the contradiction row is in its ancestor). `CaseSet.Add` threw the engine's "only IsContradictory may be read" and `OpenCases`/`DefineRule` passed a stale check (`R3SoundnessProbeTests` P03, P08a-c; `R3ApiReviewTests.AChildOfAStoppedCaseAnswersAsDocumented`). Cost: one volatile read per writable scope up to the first frozen one; one at the root, which is never a case | D45, §3.1, §3.7, §6.5.3, §6.6.8, §6.7, §6.9.4, §6.13 |
+| N105 | §6.13: a write that conflicts on a function without a lattice during a run is a `RuleEvaluationException` that faults the scope; §6.9.2 grounds a split's assumptions as a host batch; §3.1: `DefineDomainSplit` refuses a scoped guard or domain | An assumption that gives a function without a lattice a second value in a case, or that the host batch refuses, is a `RuleEvaluationException` naming the split rule and the case, with the `FactConflictException` (or `ArgumentException`) as its inner exception; the case is faulted and `Run` faults its own scope (N94). `DefineDomainSplit` refuses a domain without a lattice, and a scoped domain with its own message; it accepts a guard read through a scoped view, as `DefineSplit` does | The host batch's `FactConflictException` escaped `Run` undocumented and unfaulted, its message saying nothing was written although the run had written (`R3SoundnessProbeTests.P01`, `R3ApiReviewTests.AnAssumptionConflictInASplitIsAnEvaluationFailureOfTheRun`). Over a domain without a lattice the domain split's assumption conflicts in every case of every split (`P09`). A guard is only read, and extra guards only remove splits (D43); its refusal was an unrecorded restriction with a misleading message | §3.1, §6.9.2, §6.13 |
+| N106 | §3.6: `RunReport.Changed` says an iteration, split step or lift changed the top-level scope | A split step changes the top-level scope when its lifts moved the scope's `Version`. Its progress flag (cases opened, or a lift changed the scope) still ends a `Saturate` around it, sets `LastTopStepChanged` for `Saturated`, and is the `Changed` of its `RunStep` | `TopChanged` took the driver's flag, so a split whose cases proved nothing new reported `Changed` with the scope's `Version` and facts unchanged (`R3SoundnessProbeTests.P10`) | §3.6, §3.9, §6.5.4, §6.9.3, §6.11 |
+| N107 | §3.6: `SplitsSkipped` counts splits over `CaseLimit`, over `SplitDepthLimit`, or with an empty element set | It counts the requests a split step found and did not take: over `CaseLimit`, covered by a live split of the run (B6, at each execution of the step that finds the key covered), or an empty element set. A split below `SplitDepthLimit` is never looked for (the driver returns at the limit and skips phase B before it; phase A disables nested splits), so it is not counted | Counting depth-limited splits would run every nested matcher in the deepest cases only for a statistic; the B6 count was already built and tested (`SplitTests.TheRunsRecordsDieWithItSoTheNextRunSplitsAgain`). `R3SoundnessProbeTests.P11` and `R3CompletenessReviewTests.P01` asserted a count and now assert none, as `R3ApiReviewTests.SplitsSkippedCountsCoveredKeysButNeverADepthLimitedSplit` does | §3.6, §8.3 |
+| N108 | `Scope.Run`'s token doc: cancels "between iterations, split steps and lift rounds" | Between iterations and split steps; a lift already started runs to its end (D42) | The driver lifts with no token (E8's `SplitOptions` carries none); only `CaseSet.Lift` checks its token between rounds. A token for split-step lifts is an engine change (§15.5) | §3.1 |
+| N109 | §6.5.3: every tag a reachable rule or split rule reads must resolve before any work | Unchanged, and stated: a tag that only a split's cases carry (an in-case rule or a nested split matcher reading `T.In(caseTag)`) does not resolve at the top-level scope, so `Run` refuses it before any work | An over-refusal, not a soundness hole: allowing it needs a resolution per split node (§15.5) | §6.5.3 |
+| N110 | §6.9.4 is silent on lifting over a faulted case (D18) | `CaseSet.Lift` lifts over a faulted case as over any other | Sound: a failed iteration's writes are consequences of the rules, and a lattice merge that throws keeps the value it had (less information); only what every live case holds is lifted (`R3SoundnessProbeTests.P02`). A split never lifts over a faulted case: a case's failure faults the run's scope and ends the run (N94) | §6.9.4 |
+| N111 | §3.7: `CaseSet.Dispose` may be called from any thread and disposes every case | The disposed flag and the list of cases change together under the set's lock: `Dispose` sets one and drains the other, and `Add` checks the flag in the same lock before it lists its new case; an `Add` that lost the race releases its case and throws `ObjectDisposedException` | A case added while another thread disposed the set stayed listed in a disposed set, and kept its parent's engine context alive for the life of the graph (`R3ApiReviewTests.ACaseAddedWhileTheSetIsDisposedOnAnotherThreadIsDisposedWithIt`) | §3.7, §6.9.4 |
+| N112 | N102, N104, §6.6.8, §6.10: an extractor made before its case stopped throws `ScopeContradictedException`; an extraction does not catch up | Each query of an extractor of a writable scope (`Extract`, `TryExtract`, `TryGetCost`) catches the scope up before its stop check (`CatchUpAndThrowIfStopped`), as the structural calls do since N104; a frozen scope is only checked. An extractor of a case, or of a scope under it, made before the case's parent was contradicted, refuses with `ScopeContradictedException` whichever scope or extractor is asked first. The catch-up is left out of `Version` (N87); one that changes what the extractor reads makes it stale, as a run in a writable ancestor does. `Scope.Make`'s exception doc gains N104's "or lies under one" | The query checked a stale stop flag: until some other call caught the case up, such an extractor returned terms from a scope with no model (`R3FixVerifyTests.AnExtractorUnderACaseContradictedThroughItsParentNeverExtracts`; `ContradictedCaseTests.AnExtractorUnderACaseContradictedThroughItsParentRefusesAsOnAStoppedCase`). Cost: the entry catch-up every writable call already makes, on an extractor query of a writable scope; none on a frozen scope | §6.6.8, §6.10 |
+| N113 | D18, D31, §6.13: a lattice merge that throws faults the scope "during a run or a write"; silent on one in the catch-up a call makes first (N87). N112's extractor docs said a catch-up failure faults the scope | `Scope.CatchUp` takes the failure each writable scope's catch-up recorded, right after that scope's rebuild (`EngineScope.TryTakeRecordedFailure`: one volatile read when there is none), and throws `RuleEvaluationException` with the lattice's record; the scope whose catch-up ran the merge and the scope called are faulted with it, as a case's failure faults the case and the scope `Run` was called on (N94). Every entry that catches up reports it: reads (`IsContradictory` included), queries, `CreateChild`, `CreateExtractor`, extractor queries of a writable scope, `OpenCases`, `DefineRule`, `Freeze`, `CaseSet.Add`, writes, `ScopeWriter` calls and runs. The root's catch-up is not checked: every root flush rebuilds and takes its own failure. `CaseSet.Lift`'s found-vacuous check catches each case up and leaves a case it faults to its next call, and the lift goes on (N110). A faulted ancestor still does not fault its other descendants (as after a write's failure) | The engine's rebuild records a failing merge, keeps the old value and goes on, and the catch-up did not take the record: the call returned what the layer held before the merge (`f(x) = 1` where the merge gave 2), the scope was not faulted, and the failure surfaced at the scope's next write, which then faulted with the lattice's message though it did nothing wrong; a scope under the failing ancestor never saw it (`R3FixVerify2Tests`, three probes). Reporting it at the call that ran the merge is the D18 answer for a merge into the layer, whichever call made it. A read's catch-up is a write of the layer, so it faults although a query's own failure does not (D49). Cost: one volatile read per writable scope on the catch-up's path; none at the root. `CatchUpFaultTests` pins the rest | D18, §3.1, §6.6.3, §6.9.4, §6.10, §6.13 |
+| N114 | N113: "every entry that catches up reports it"; §6.9.4: a merge that throws "while the engine's lift writes the parent, or catches a case up inside it, faults the parent"; §6.9.3 and §6.13 silent on a case's catch-up inside a split step | The engine catches cases up inside a split step without the rule layer (the case set's `RunEach` before a case runs, the lift's catch-up of every case before it reads it, the vacuity check after a lift) and records a lattice merge that throws there in the case, which keeps its old value. The run now takes it: `ScheduleCaseRunner` on entry to a case, and `SplitSchedule` when `Step` returns, over the run's cases under the step's scope (`Scope.TakeCaseCatchUpFailure`, a vacuous case its set disposed meanwhile included: its database outlives the disposal). The first found faults its case and is thrown as `RuleEvaluationException` with the lattice's record; `Run` faults its scope (N94). In a host lift, the engine's lift is where a case's catch-up merge runs: it is recorded in the case, the lift reads the case's old value (N110), and the found-vacuous check faults that case, not the parent; only a failure of the lift's own writes into the parent faults the parent. `Scope.Union`, `Scope.Extract`, `CaseSet.Lift` and `Scope.Run` document the N113 failure | Nothing took the record unless the case ran another engine iteration: with `SplitDepthLimit = 1`, or an in-case schedule that runs no iteration after the lift, the cases were disposed at the run's end with it, and `Run` returned as if the lattice had never thrown (`R3FixVerify3Tests.ACasesCatchUpMergeFailureInsideASplitStepIsReported(1)`). When a later in-case iteration did take it, the exception carried the engine's panic rather than the delegate's exception; taking it on entry to the case, through the case's scope, keeps the lattice's record. Not unsound: the case kept its older value. §6.9.4's text was wrong about where the merge runs (`R3FixVerify3Tests.ACasesCatchUpMergeInsideTheEnginesLiftFaultsTheCaseNotTheParent`). Cost: one volatile read per case run and per case of the step's scope when a step ends; nothing at the root or in a run without split steps | §3.1, §6.9.3, §6.9.4, §6.13 |
+| N115 | §3.5–§3.9, §4.1, §4.2, §4.4, §4.6, §4.8, §4.10: the R3 members | `EngineScope` adds `TryTakeRecordedFailure` (N113, N114). `CaseJoinAdapter<T>.Create` takes the function's name (N95); `ValueLattice.CreateCaseJoin` makes the case join once per function, kept in `FunctionHandle.CaseJoin`. `RuleCompiler.CompileSplit(graph, builder, caseTag)` returns the `SplitRule`; its `SplitProgram` also holds a match's column types, its class columns, `CountOf` and `ElementAt` (a set counted without decoding it, a case's element decoded alone), and the assumption template `SplitAssumptions`, checked by `SplitAssumptionChecker`. `SplitRule.SourceAt` replaces `Source` (N91). `ScheduleExecutor` adds `ObserverFailed`, `DriverFor`, `SyncSplitMirrors` (the mirrors a split step's matchers read are synced, and recorded as `MirrorSync` steps, before the step), the split-step frames of N93 (`SplitStepFrame`; `BeginSplitStep`, `ObserveLifts`, `CaseRunEnded`, `EndSplitStep`), `AddCase` and `TakeCaseCatchUpFailure`; `Collect` also takes the split rules and `RecordStep` the cases opened. `Scope` gains `StoppedCase`, `IsStopped`, `CatchUpAndThrowIfStopped`, the case members `AdoptCase`, `ReleaseCase`, `ReleaseDisposedCases`, `DisposeVacuous` and `TakeCaseCatchUpFailure`, `HasChildren` and `Depth`; `EGraph` the lift spec cache; `SplitBuilder` what it collected; `ScopeContradictedException` an internal constructor that names the stopped case. The §3 entries of the R3 public members now carry what their code documents: `CaseSet`'s ownership and refusals, `LiftOptions`' limits, `LiftReport.Rows` (which also counts constructor rows whose class one parent class stands for in every case), `RunStep.Changed` of split and lift steps, the `Schedule.Split` overload over several rules, `SplitBuilder`'s rules | Implementation structure that N90–N114 call for; no behaviour beyond theirs | §3.1, §3.5, §3.6, §3.7, §3.9, §4.1, §4.2, §4.4, §4.6, §4.8, §4.10 |

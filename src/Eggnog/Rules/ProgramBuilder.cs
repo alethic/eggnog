@@ -27,6 +27,7 @@ namespace Eggnog
         readonly string ruleName;
         readonly bool query;
         readonly ScopeTag? licence;
+        readonly Term? caseVariable;
         readonly List<ScopeTag> readScopes = new();
 
         readonly List<ColumnType> rawTypes = new();
@@ -64,13 +65,16 @@ namespace Eggnog
         /// against the scope it runs in, rather than against an owner here (§6.3 step 3, §6.6.4).</param>
         /// <param name="licence">The rule's licence (D12): its own <c>Erasing</c> tag, else its ruleset's; <c>null</c>
         /// for none.</param>
-        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null)
+        /// <param name="caseVariable">A split rule's case variable (R3, <see cref="SplitBuilder.Cases{T}"/>): bound per
+        /// case, so its use in the body is an error; <c>null</c> for any other draft.</param>
+        public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null, Term? caseVariable = null)
         {
             this.graph = graph;
             this.draft = draft;
             this.owner = owner;
             this.query = query;
             this.licence = licence;
+            this.caseVariable = caseVariable;
             ruleName = draft.Name;
         }
 
@@ -133,6 +137,36 @@ namespace Eggnog
             var named = new int[columns.Length];
             for (var i = 0; i < named.Length; i++)
                 named[i] = columns[i].IsRegister ? columns[i].Index : -1;
+
+            return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
+                named, false, readScopes.ToArray());
+        }
+
+        /// <summary>
+        /// Compiles a split rule's matcher (§6.9.2, step 9): the body as a rule's (steps 1 to 7), and a head of one
+        /// <see cref="HeadOpKind.Collect"/> of <paramref name="columns"/>, the key variables, the set variable and every other
+        /// variable an assumption uses. Each must be bound by the body, or equated with a constant, which the collector then
+        /// collects. Class constants follow the global-rule rule (§6.3 step 3): only classes from the root.
+        /// </summary>
+        /// <param name="columns">The declared variables to collect, in column order.</param>
+        /// <returns>The matcher's program.</returns>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid split body.</exception>
+        public RuleProgram BuildSplit(IReadOnlyList<Term> columns)
+        {
+            DeclareVariables();
+            foreach (var fact in draft.Body)
+                AddBodyFact(fact, null);
+
+            ResolveBody();
+            var operands = new Operand[columns.Count];
+            for (var i = 0; i < operands.Length; i++)
+                operands[i] = EvalHead(columns[i]);
+
+            head.Add(new HeadOp(HeadOpKind.Collect, null, operands, -1, null));
+            ReadMirrors();
+            var named = new int[operands.Length];
+            for (var i = 0; i < named.Length; i++)
+                named[i] = operands[i].IsRegister ? operands[i].Index : -1;
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
                 named, false, readScopes.ToArray());
@@ -249,6 +283,9 @@ namespace Eggnog
 
                     if (makeVariables.TryGetValue(term, out var made))
                         throw Error($"head variable '{made}' made by Make appears in When");
+
+                    if (ReferenceEquals(term, caseVariable))
+                        throw Error($"case variable '{shape.Name}' is bound per case; use it only in Assume");
 
                     throw Error($"variable '{shape.Name}' belongs to another rule");
                 }

@@ -12,7 +12,7 @@ namespace Eggnog
         /// <summary>
         /// The depth limit of a scope tree (colors X36): the root is at depth 0.
         /// </summary>
-        const int MaxDepth = 31;
+        internal const int MaxDepth = 31;
 
         readonly object childrenLock = new();
         readonly List<Scope> children = new();
@@ -41,9 +41,9 @@ namespace Eggnog
         public bool IsFrozen => Engine.IsFrozen;
 
         /// <summary>
-        /// Gets the live children made by <see cref="CreateChild"/>, in creation order (a snapshot). Disposed children
-        /// are not listed, even while their release waits; neither are the transient children made for queries on a frozen
-        /// scope (D34).
+        /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step (R3), in
+        /// creation order (a snapshot). Disposed children are not listed, even while their release waits, and neither are
+        /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope (D34).
         /// </summary>
         public IReadOnlyList<Scope> Children
         {
@@ -80,6 +80,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is faulted, at depth 31 (colors X36), or in use on another
         /// thread; or the call comes from a run observer (a structural call, §6.11), or from a primitive, lattice, filter or
         /// cost function.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
         {
             if (tag is not null)
@@ -99,6 +102,7 @@ namespace Eggnog
                 if (held && Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
+                ThrowIfStopped();
                 if (Depth() >= MaxDepth)
                     throw new InvalidOperationException($"Scope '{Path}' is at depth {MaxDepth}, the deepest a scope tree goes (colors X36).");
 
@@ -137,7 +141,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The parent is writable; the scope is faulted or in use on another
         /// thread; or the call comes from a run observer ("Not allowed inside a run observer"), from inside another call of
         /// its thread domain (a query callback, a write), or from a primitive, lattice, filter or cost function.</exception>
-        /// <exception cref="RuleEvaluationException">A merge the freeze ran failed; the scope is then faulted.</exception>
+        /// <exception cref="RuleEvaluationException">A merge the freeze ran failed, or a lattice merge threw in the catch-up
+        /// the freeze makes first (N113); the scope is then faulted.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public void Freeze()
         {
             EngineCallMarker.ThrowIfActive();
@@ -158,6 +164,9 @@ namespace Eggnog
                 if (IsFrozen)
                     return;
 
+                // A scope with a writable parent is caught up for the check (a case contradicted through its parent is
+                // stopped, I25), and is refused either way; the root and children of frozen scopes are never under a case.
+                CatchUpAndThrowIfStopped();
                 if (Parent is { IsFrozen: false })
                     throw new InvalidOperationException("A scope can be frozen only once its parent is");
 
@@ -222,6 +231,9 @@ namespace Eggnog
         /// call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
         public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define)
         {
             ArgumentNullException.ThrowIfNull(ruleset);
@@ -244,6 +256,8 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
+                // Brought up to date first: a case its parent's contradiction reached since its last call is stopped (I25).
+                CatchUpAndThrowIfStopped();
                 var builder = new RuleBuilder(Graph, name);
                 try
                 {
@@ -360,7 +374,8 @@ namespace Eggnog
         /// </summary>
         internal void TryRelease()
         {
-            if (IsRoot || IsDisposed == false)
+            // A case's engine set owns its context until it ends the ownership (ReleaseCase).
+            if (IsRoot || IsDisposed == false || ownedByCases)
                 return;
 
             // Inside an engine call of this scope's domain (a primitive that disposed it, say), the engine would refuse
@@ -459,9 +474,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the scope's depth: 0 for the root.
+        /// Gets the scope's depth: 0 for the root. O(depth).
         /// </summary>
-        int Depth()
+        /// <returns>The depth.</returns>
+        internal int Depth()
         {
             var depth = 0;
             for (var up = Parent; up is not null; up = up.Parent)
@@ -490,11 +506,11 @@ namespace Eggnog
         /// <summary>
         /// Freezes the engine context with the plans of E10: none for the root, whose statistics are empty by design;
         /// otherwise the default variants of every rule a descendant can run: every global rule, the local rules of this
-        /// scope and its ancestors, every live query, and every mirror copy rule. Other containers' local rules are left to
-        /// be planned on their own statistics. The listed queries are held (<see cref="CompiledQuery.Acquire"/>) until the
-        /// engine has frozen, so a query disposed on another thread meanwhile cannot free a listed variant; one disposed
-        /// before the list is built is left out. Global rules, ancestors' local rules and copy rules are never freed while
-        /// this scope lives.
+        /// scope and its ancestors, every live query, every mirror copy rule, and every split matcher (R3). Other
+        /// containers' local rules are left to be planned on their own statistics. The listed queries are held
+        /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread meanwhile
+        /// cannot free a listed variant; one disposed before the list is built is left out. Global rules, ancestors' local
+        /// rules, copy rules and split matchers are never freed while this scope lives.
         /// </summary>
         void FreezeEngine()
         {
@@ -560,6 +576,10 @@ namespace Eggnog
 
             foreach (var rule in Graph.Mirrors.AllCopyRules())
                 Add(rule.Variants.Default);
+
+            // Split matchers (R3) run in any scope a split step reaches, as naive rules; they live as long as the graph.
+            foreach (var split in Graph.SplitRules)
+                Add(split.Program.Variants.Default);
 
             return plans;
         }

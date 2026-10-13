@@ -29,9 +29,11 @@ namespace Eggnog
         /// <param name="changed">Whether it changed the scope.</param>
         /// <param name="elapsed">How long it took.</param>
         /// <param name="rules">For an iteration, the rules that matched in it, in the order they ran; copied.</param>
-        internal RunStep(RunStepKind kind, Scope scope, int index, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics> rules)
+        /// <param name="casesOpened">For a split step, the cases it opened (R3).</param>
+        internal RunStep(RunStepKind kind, Scope scope, int index, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics> rules, int casesOpened = 0)
         {
             Kind = kind;
+            CasesOpened = casesOpened;
             Scope = scope;
             ScopePath = scope.Path;
             Index = index;
@@ -52,7 +54,7 @@ namespace Eggnog
         public RunStepKind Kind { get; }
 
         /// <summary>
-        /// Gets the scope the step ran in.
+        /// Gets the scope the step ran in. A case's steps name the case, which is disposed once the run ends (R3).
         /// </summary>
         public Scope Scope { get; }
 
@@ -67,7 +69,8 @@ namespace Eggnog
         public int Index { get; }
 
         /// <summary>
-        /// Gets whether the step changed its scope (the engine's change flags, §6.5.1).
+        /// Gets whether the step changed its scope (the engine's change flags, §6.5.1). For a split step: whether it made
+        /// progress, that is opened cases or a lift changed the scope (N106).
         /// </summary>
         public bool Changed { get; }
 
@@ -82,8 +85,13 @@ namespace Eggnog
         public IReadOnlyList<RuleStatistics> Rules { get; }
 
         /// <summary>
+        /// Gets, for a split step, the cases it opened (R3); 0 for any other step.
+        /// </summary>
+        public int CasesOpened { get; }
+
+        /// <summary>
         /// Renders the step: <c>#3 iteration root changed: lower uuid 1, and commutes 4</c>, the rules with their match
-        /// counts.
+        /// counts; a split step adds the cases it opened, <c>#7 split-step root/query#2 changed: 2 cases</c>.
         /// </summary>
         /// <returns>The rendering.</returns>
         public override string ToString()
@@ -91,6 +99,9 @@ namespace Eggnog
             var builder = new StringBuilder();
             builder.Append('#').Append(Index.ToString(CultureInfo.InvariantCulture)).Append(' ').Append(KindName(Kind)).Append(' ')
                 .Append(ScopePath).Append(Changed ? " changed" : " unchanged");
+            if (Kind == RunStepKind.SplitStep)
+                builder.Append(": ").Append(CasesOpened.ToString(CultureInfo.InvariantCulture)).Append(CasesOpened == 1 ? " case" : " cases");
+
             for (var i = 0; i < Rules.Count; i++)
             {
                 builder.Append(i == 0 ? ": " : ", ").Append(Rules[i].Rule.Name).Append(' ')
@@ -107,6 +118,8 @@ namespace Eggnog
         {
             RunStepKind.Iteration => "iteration",
             RunStepKind.MirrorSync => "mirror-sync",
+            RunStepKind.SplitStep => "split-step",
+            RunStepKind.Lift => "lift",
             _ => kind.ToString().ToLowerInvariant(),
         };
 

@@ -14,6 +14,33 @@ namespace Eggnog.Tests.Rendering
     public sealed class RenderingTests
     {
 
+        /// <summary>
+        /// R3: a split rule renders as written, its case tag last; a split step renders with its rules and in-case schedule.
+        /// </summary>
+        [Fact]
+        public void SplitRulesAndSplitStepsRender()
+        {
+            var graph = new EGraph();
+            var present = graph.DefineRelation<string>("present");
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var schema = graph.DefineScopeTag("schema");
+            var cases = graph.DefineScopeTag("case");
+            var horn = graph.DefineRuleset("horn");
+            var split = graph.DefineSplit("by kind", s =>
+            {
+                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                s.When(present.In(schema).Of(p), d.Is(dom.Of(p)));
+                var v = s.Cases("v", d);
+                s.Assume(dom.Of(p).Is(Primitives.Singleton<string>().Of(v)), present.Of(p));
+            }, cases);
+
+            Assert.Equal("(split ((present@schema p) (= d (dom p))) (cases v d) (key p) ((set (dom p) (set-of v)) (present p)) :case-tag case)", split.ToString());
+            Assert.Equal(new[] { schema }, split.ReadScopes);
+            Assert.Equal("(saturate (run horn) (split (by kind) (run horn)))", Schedule.Saturate(horn, Schedule.Split(split, horn)).ToString());
+            var untagged = graph.DefineDomainSplit("plain", dom, [present]);
+            Assert.EndsWith("((set (dom k) (set-of v))))", untagged.ToString(), System.StringComparison.Ordinal);
+        }
+
         [Fact]
         public void ARuleRendersAsWritten()
         {

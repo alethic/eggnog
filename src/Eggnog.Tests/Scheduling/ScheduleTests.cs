@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 
 using Eggnog.Tests.Support;
@@ -362,6 +363,48 @@ namespace Eggnog.Tests.Scheduling
             Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.Run(t.Rules, new RunOptions { RowLimit = -1 }));
             Assert.False(t.Root.Check(t.Num.Of(1L)));
             Assert.Equal(RunStopReason.RowLimit, t.Root.Run(t.Rules, new RunOptions { RowLimit = 0 }).StopReason);
+        }
+
+        /// <summary>
+        /// R3: the iteration limit counts the iterations of the run's cases, and the row limit their own rows (D42).
+        /// </summary>
+        [Fact]
+        public void LimitsCountCaseIterationsAndCaseRows()
+        {
+            static (Cosmos.Scoped.CosmosTheory C, Scope Scope) Split()
+            {
+                var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+                c.Graph.Root.Freeze();
+                var scope = c.Graph.Root.CreateChild(c.Schema);
+                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b", "c")), c.Discriminator.Of("kind"));
+                scope.Run(Schedule.Saturate(c.Horn, c.Lattice));
+                return (c, scope);
+            }
+
+            // Unlimited: every iteration of the cases counts.
+            var (c, scope) = Split();
+            var full = scope.Run(Schedule.Split(c.SchemaSplit, Schedule.Saturate(c.Horn, c.Lattice)), new RunOptions { RecordSteps = true });
+            var caseIterations = full.Steps.Count(s => s.Kind == RunStepKind.Iteration && s.Scope.IsCase);
+            Assert.True(caseIterations >= 3);
+            Assert.Equal(full.Steps.Count(s => s.Kind == RunStepKind.Iteration), full.Iterations);
+            Assert.Equal(caseIterations, full.Iterations);              // the scope itself had nothing left to do
+
+            // A limit below that stops inside the cases, and the cases are disposed.
+            (c, scope) = Split();
+            var limited = scope.Run(Schedule.Split(c.SchemaSplit, Schedule.Saturate(c.Horn, c.Lattice)), new RunOptions { IterationLimit = 2 });
+            Assert.Equal(RunStopReason.IterationLimit, limited.StopReason);
+            Assert.Equal(2, limited.Iterations);
+            Assert.Equal(3, limited.CasesOpened);
+            Assert.Empty(scope.Children);
+
+            // The row limit: the scope's own rows fit, but with the rows each case assumed they do not.
+            (c, scope) = Split();
+            var rows = scope.Engine.OwnRowCount;
+            var bounded = scope.Run(Schedule.Split(c.SchemaSplit, Schedule.Saturate(c.Horn, c.Lattice)), new RunOptions { RowLimit = rows });
+            Assert.Equal(RunStopReason.RowLimit, bounded.StopReason);
+            Assert.Equal(3, bounded.CasesOpened);
+            Assert.Equal(0, bounded.Iterations);
+            Assert.Empty(scope.Children);
         }
 
     }
