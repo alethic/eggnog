@@ -10,10 +10,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Match multiplicity of probed sides in a child (colored-contexts spec §9.5, I27, decision 6): a probed atom whose key
-    /// lies in several layers is refined to the union of its hits, so it yields one frame, not one per layer. Only a
-    /// driver's key may yield one frame per layer. The property tests compare distinct bindings only, so they cannot see a
-    /// probe split by layer; these runs count matches.
+    /// Match multiplicity of probed sides in a child: a probed atom whose key lies in several layers is refined to the
+    /// union of its hits, so it yields one frame, not one per layer. Only a driver's key may yield one frame per layer,
+    /// which is the one place a child's match count may exceed the flat executor's. The property tests compare distinct
+    /// bindings only, so they cannot see a probe split by layer; these runs count matches.
     /// </summary>
     public class LayeredProbeJoinTests
     {
@@ -112,7 +112,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// I28, §9.6: one node driven in some frames and probed in others caches its refinements under different slots.
+        /// A node's cached refinement is a function of the node's rows, the slot and the key, so one node driven in
+        /// some frames and probed in others caches its refinements under different slots.
         /// <c>a(z), s(z, y), r(w, y)</c>: the stage on <c>y</c> intersects <c>s</c>'s node, refined by <c>z</c>, with
         /// <c>r</c>'s root node, shared by every frame. Under <c>z1</c>, <c>s</c> holds one <c>y</c> and drives, so
         /// <c>r</c> is probed with <c>v</c> and refined to its rows of both layers; under <c>z2</c>, <c>s</c> holds many

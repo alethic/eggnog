@@ -4,7 +4,7 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// The merge of egglog's <c>basic_math_egraph</c> test tables (core-relations/src/tests.rs:969-1009), ported from
+    /// The merge of egglog's <c>basic_math_egraph</c> test tables (core-relations/src/tests.rs:969-1009), the same as
     /// the test project's <c>UnionTakeNewMerge</c>: when the id in <see cref="ValueColumn"/> differs, stage the union
     /// <c>[current, incoming, incoming ts]</c> into the union-find and take the incoming row ("picking b as the presumed
     /// winner").

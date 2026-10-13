@@ -4,14 +4,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// One layer of a <see cref="TableView"/> (colored-contexts spec §6.3): the table of one context of the chain,
-    /// with its own <see cref="TableInfo"/> (its index catalogs), and the rows of it the view hides. Immutable.
+    /// One layer of a <see cref="TableView"/>: the table of one context of the chain, with its own
+    /// <see cref="TableInfo"/> (its index catalogs), and the rows of it the view hides. Immutable.
     /// </summary>
     /// <remarks>
     /// The layer's table is live: rows appended to it after the view was built are seen through the view. That is
     /// correct because only the view's own context appends to its own layer, and an ancestor that appends makes the
-    /// context not clean until it catches up, which drops its views (§6.3 invalidation). The fields are plain readonly
-    /// fields so compiled kernels can read them (§9.9).
+    /// context not clean until it catches up, which drops its views. The fields are plain readonly fields so compiled
+    /// kernels can read them.
     /// </remarks>
     internal sealed class LayerView
     {
@@ -38,7 +38,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Whether the layer's context was frozen when the view was built: its table, indexes and hidden sets never
-        /// change, and its cached indexes may be shared lock-free (§9.5).
+        /// change, and its cached indexes may be shared lock-free.
         /// </summary>
         public readonly bool IsFrozen;
 
@@ -73,7 +73,7 @@ namespace Eggnog.Relations
         public bool HasInvisible => Table.HasStaleRows || Hidden.IsNone == false;
 
         /// <summary>
-        /// Keeps the rows of <paramref name="subset"/> the view sees: live and not hidden (§6.3):
+        /// Keeps the rows of <paramref name="subset"/> the view sees: live and not hidden:
         /// <see cref="Table.RefineLive"/> when the view hides nothing of the layer, else
         /// <see cref="Table.RefineVisible"/> with <see cref="Hidden"/>. O(subset size).
         /// </summary>
@@ -83,10 +83,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some row of <paramref name="subset"/> is visible to the view: live and not hidden. Stops at the
-        /// first one; when the layer has nothing invisible (<see cref="HasInvisible"/>), any row is. O(rows tested), with
-        /// the hidden test a <see cref="HiddenCursor"/> walk. Defect fixed for layered views
-        /// (core-relations/src/free_join/plan.rs:1502-1505; map §8.1 row 2): egglog takes a nonempty header as proof that
-        /// a zero-variable atom holds, which tombstones (and, here, hides) make false; this test looks for a visible row.
+        /// first one; when the layer has nothing invisible (<see cref="HasInvisible"/>), any row is. O(rows tested),
+        /// with the hidden test a <see cref="HiddenCursor"/> walk. egglog takes a nonempty header as proof that a
+        /// zero-variable atom holds (core-relations/src/free_join/plan.rs:1502-1505), which tombstones (and, here,
+        /// hides) make false; this test looks for a visible row instead.
         /// </summary>
         /// <param name="subset">Row ids of the layer, within its physical rows.</param>
         /// <returns><c>true</c> if a visible row is found.</returns>

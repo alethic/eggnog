@@ -240,6 +240,50 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(Enumerable.Range(5, 35).Select(x => x * 3), Collect(s));
         }
 
+        /// <summary>
+        /// Runs <see cref="SubsetRef.IterBounded{TVisitor}"/> with the <c>-1</c> "None" sentinel fed back as the start
+        /// position, tolerating an exception (debug assertion or argument check) but not a visit.
+        /// </summary>
+        static CollectingVisitor IterFromSentinel(SubsetRef subset, int to)
+        {
+            using var scope = new DebugAssertScope();
+            var visitor = new CollectingVisitor();
+            try
+            {
+                subset.IterBounded(-1, to, ref visitor);
+            }
+            catch (DebugAssertFailedException)
+            {
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+            }
+
+            return visitor;
+        }
+
+        [Fact]
+        public void IterBoundedDenseRejectsSentinelStartInEveryConfiguration()
+        {
+            // egglog returns Option<usize> and takes a usize start, so its None can never be passed back as a start.
+            // Here None is -1, and IterBounded rejects a negative start in every build configuration: passed back in a
+            // dense subset, -1 would visit row Lo - 1, which is not in the subset.
+            var subset = SubsetRef.Dense(new OffsetRange(10, 15));
+            var visitor = IterFromSentinel(subset, 3);
+            Assert.True(visitor.Rows.Contains(9) == false, $"visited [{string.Join(", ", visitor.Rows)}], but row 9 is not in {subset}");
+        }
+
+        [Fact]
+        public void IterBoundedSparseRejectsSentinelStartInEveryConfiguration()
+        {
+            // In the sparse arm a negative start would read the array slot before the subset's window, which in an
+            // index arena belongs to another key's subset.
+            var arena = new[] { 100, 5, 7, 9 };
+            var subset = SubsetRef.Sparse(arena, 1, 4);
+            var visitor = IterFromSentinel(subset, 2);
+            Assert.True(visitor.Rows.Contains(100) == false, $"visited [{string.Join(", ", visitor.Rows)}], but row 100 is not in {subset}");
+        }
+
     }
 
 }

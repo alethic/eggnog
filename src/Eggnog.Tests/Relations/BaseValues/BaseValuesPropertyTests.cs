@@ -49,7 +49,7 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(new BaseValueTypeId(i), registrations[order[i]]());
 
             // The models restate egglog's rules from the Rust source: medium integers are inline iff
-            // `x & (VAL_MASK - 1) == x` (unboxed.rs:76), small ones are `x as u32`, the rest interned.
+            // `x & (VAL_MASK - 1) == x` (unboxed.rs:79), small ones are `x as u32`, the rest interned.
             var longs = new BaseValueModel<long>(x => (x & 0x7FFF_FFFFL) == x ? (uint)x : null, tagged: true);
             var ulongs = new BaseValueModel<ulong>(x => (x & 0x7FFF_FFFFUL) == x ? (uint)x : null, tagged: true);
             var ints = new BaseValueModel<int>(x => unchecked((uint)x), tagged: true);

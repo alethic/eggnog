@@ -61,7 +61,7 @@ namespace Eggnog.Relations.Tests
         public long RootRetractions;
 
         /// <summary>
-        /// The deletes and clears the engine refused, as §6.7 says.
+        /// The deletes and clears the engine refused, as its retraction rule requires.
         /// </summary>
         public long Refusals;
 

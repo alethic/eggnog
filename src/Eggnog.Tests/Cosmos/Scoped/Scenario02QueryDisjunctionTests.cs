@@ -27,11 +27,11 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// Compiles the container with horn and lattice rules only: what R2 can do.
+        /// Compiles the container with horn and lattice rules only, without a split.
         /// </summary>
         static (CosmosTheory C, Scope Schema) CompileContainerWithoutSplit()
         {
-            var graph = new EGraph();                               // serial: deterministic (D46)
+            var graph = new EGraph();                               // serial by default: deterministic
             var c = new CosmosTheory(graph);
             graph.Root.Freeze();                                    // empty and frozen: containers are siblings beneath it
 

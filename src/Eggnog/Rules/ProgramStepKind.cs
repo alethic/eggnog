@@ -23,8 +23,9 @@ namespace Eggnog
         NotEqual,
 
         /// <summary>
-        /// Keeps the match where two class constants are one class in the running context: a comparison a definition left
-        /// to run time (§6.3 step 3).
+        /// Keeps the match where two class constants are one class in the running context: a comparison a definition
+        /// leaves to run time when it cannot drop it as already true (the classes differ where the rule's constants come
+        /// from, that scope cannot be read now without racing another thread, or the program is a query).
         /// </summary>
         Equal,
 

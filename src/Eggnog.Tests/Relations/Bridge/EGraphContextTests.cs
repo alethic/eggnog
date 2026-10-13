@@ -11,9 +11,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="EGraphContext"/> (colored-contexts spec §10.1-§10.5, §17 M10.3; rule-layer E7, E9): isolation, panics
-    /// per context, the change stamp, locals, local ids, canonicalizing host writes, the lifecycle members, reads and
-    /// saturation.
+    /// <see cref="EGraphContext"/>: isolation, panics per context, the change stamp, locals, local ids, canonicalizing
+    /// host writes, the lifecycle members, the parallelism, the report level, reads and saturation.
     /// </summary>
     public class EGraphContextTests
     {
@@ -73,8 +72,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A panic in a child's run is the child's (§10.6): the root's next run reports nothing, and a sibling is not
-        /// affected. The panic function reports through the calling state, not a channel of the e-graph.
+        /// A panic in a child's run is the child's: the root's next run reports nothing, and a sibling is not affected.
+        /// The panic function reports through the calling state, not a channel of the e-graph.
         /// </summary>
         [Fact]
         public void PanicsArePerContext()
@@ -97,14 +96,14 @@ namespace Eggnog.Relations.Tests
             Assert.Null(g.Root.Context.Database.Failure);
             Assert.Null(child.Context.Database.Failure);
 
-            // The failed run committed no progress (X18): the match is found again.
+            // A run that records a failure commits no progress, so the match is found again.
             Assert.Throws<PanicException>(() => child.RunRules(rule));
             Assert.Equal(0, sibling.RunRules(rule).RuleSetReport.NumMatches("panics"));
         }
 
         /// <summary>
-        /// The change stamp moves only for effective changes (rule-layer D16, X30): re-asserting a visible row, a
-        /// redundant union and a run that derives nothing new leave it.
+        /// The change stamp moves only for effective changes: re-asserting a visible row, a redundant union and a run
+        /// that derives nothing new leave it.
         /// </summary>
         [Fact]
         public void VersionIgnoresNoOps()
@@ -174,8 +173,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Every term minted in a child is local to it (I2): fresh ids, staged terms, and the ids its rules mint;
-        /// container ids are minted on the shared counter and are never local (§4.2).
+        /// Every term minted in a child is local to it, since every term mint draws on the child's own id blocks: fresh
+        /// ids, staged terms, and the ids its rules mint; container ids are minted on the shared counter and are never
+        /// local.
         /// </summary>
         [Fact]
         public void IsLocalIdCoversTermMintsAndNotContainerMints()
@@ -209,8 +209,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The context API canonicalizes the id cells of host writes at every level, the root included (rule-layer
-        /// invariant C, §10.4, §19 item 6); the egglog-compatible root API writes them as given.
+        /// The context API canonicalizes the id cells of host writes at every level, the root included, so that every
+        /// id cell it stages is canonical in its context or freshly minted; the egglog-compatible root API writes them
+        /// as given.
         /// </summary>
         [Fact]
         public void TheContextApiCanonicalizesHostIdsAtTheRoot()
@@ -236,7 +237,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rule-layer E7: CreateChild with options, Dispose with colors §8.2's semantics, IsFaulted, Parent, OwnRowCount.
+        /// The lifecycle members follow the storage contexts': <c>CreateChild</c> with options, <c>Dispose</c> (refused
+        /// while children live, bottom-up and idempotent), <c>IsFaulted</c>, <c>Parent</c> and <c>OwnRowCount</c>.
         /// </summary>
         [Fact]
         public void TheLifecycleFollowsStorage()
@@ -273,8 +275,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rule-layer E9: the store-backed e-graph's constructor takes the parallelism; a child of a writable context
-        /// inherits it, a child of a frozen one is serial, and options override both (§10.9).
+        /// The store-backed e-graph's constructor takes the parallelism; a child of a writable context inherits it, a
+        /// child of a frozen one is serial, and options override both.
         /// </summary>
         [Fact]
         public void ParallelismReachesTheStoreAndItsChildren()
@@ -297,7 +299,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rule-layer E7: a child's run reports at the e-graph's report level.
+        /// A child's run reports at the e-graph's report level.
         /// </summary>
         [Fact]
         public void RunsReportAtTheGraphsLevel()
@@ -337,7 +339,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Reads require a clean context (§10.5): staged host writes, or an ancestor's, make it unclean until
+        /// Reads require a clean context: staged host writes, or an ancestor's, make it unclean until
         /// <see cref="EGraphContext.EnsureClean"/>; a frozen context is read from any thread.
         /// </summary>
         [Fact]
@@ -370,8 +372,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A stopped context's writes and runs are no-ops, and its reads but <see cref="EGraphContext.IsContradictory"/>
-        /// are refused (rule-layer D45).
+        /// A stopped context's writes and runs are no-ops, and its reads but
+        /// <see cref="EGraphContext.IsContradictory"/> are refused: a contradicted case has no model.
         /// </summary>
         [Fact]
         public void AStoppedContextIgnoresWritesAndRuns()

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Numerics;
 
 using Xunit;
@@ -105,6 +106,31 @@ namespace Eggnog.Relations.Tests
             Assert.True(PooledArray.IsPoolable<uint>(array.Length));
             Assert.True(BitOperations.IsPow2(array.Length));
             PooledArray.Release(array);
+        }
+
+        /// <summary>
+        /// egglog keeps row storage (<c>vec_cell_vals: Vec&lt;Cell&lt;Value&gt;&gt;</c>) in a pool capped at 32 MiB per
+        /// thread; <c>PoolState::push</c> (pool/mod.rs:182-192) drops any vector that would push the pool past the cap,
+        /// so a single vector over 32 MiB is freed when its buffer is dropped. <see cref="PooledArray"/> never returns
+        /// an array over <see cref="PooledArray.MaxPooledBytes"/> to <see cref="ArrayPool{T}.Shared"/>, so disposed
+        /// storage of that size is not kept reachable from the process-wide pool.
+        /// </summary>
+        [Fact]
+        public void DisposedRowStorageOverTheVecCellLimitIsNotRetained()
+        {
+            var cells = (int)(PoolLimits.VecCellValues / sizeof(uint)) + 1;
+            var rows = new RowBuffer(1, cells);
+            var storage = rows.Data;
+            Assert.True((long)storage.Length * sizeof(uint) > PoolLimits.VecCellValues);
+
+            rows.Dispose();
+
+            var again = ArrayPool<uint>.Shared.Rent(storage.Length);
+            var retained = ReferenceEquals(storage, again);
+            if (retained == false)
+                ArrayPool<uint>.Shared.Return(again);
+
+            Assert.False(retained, "A 64 MiB row buffer was kept by the shared pool after Dispose; egglog frees it.");
         }
 
     }

@@ -101,7 +101,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table the index was built over (or a clone of it with the same row ids).</param>
         /// <param name="allowParallel">Whether a large refresh may run in parallel; <c>false</c> for a frozen context's
-        /// catalogs, which refresh serially (colored-contexts spec X14).</param>
+        /// catalogs, which refresh serially (<see cref="IndexCatalog{TIndex}.SetSerialRefresh"/>).</param>
         public void Refresh(Table table, bool allowParallel = true)
         {
             ArgumentNullException.ThrowIfNull(table);

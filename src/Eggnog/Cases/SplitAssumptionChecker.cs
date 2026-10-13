@@ -5,10 +5,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The definition-time checks of a split rule's assumptions (§6.9.2, <see cref="SplitAssumptions.Compile"/>): each
-    /// fact is a host write (§6.6.2) once its variables are bound, and every term is ground then and reads no table. It
-    /// records the declared variables the facts use, in first-use order, and the column types of each computation. One
-    /// instance per definition; not thread-safe.
+    /// The definition-time checks of a split rule's assumptions (<see cref="SplitAssumptions.Compile"/>): each fact is a
+    /// host write once its variables are bound, and every term is ground then and reads no table. It records the declared
+    /// variables the facts use, in first-use order, and the column types of each computation. One instance per definition;
+    /// not thread-safe.
     /// </summary>
     internal sealed class SplitAssumptionChecker
     {
@@ -45,7 +45,7 @@ namespace Eggnog
 
 
         /// <summary>
-        /// Checks one assumption: a write of host-write shape (§6.6.2).
+        /// Checks one assumption: a write of host-write shape.
         /// </summary>
         public void CheckFact(Fact fact)
         {
@@ -174,7 +174,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks a constant: of this graph's types; a class from the root (§6.3 step 3, as for a global rule).
+        /// Checks a constant: of this graph's types; a class from the root, as for a global rule.
         /// </summary>
         void CheckConstant(TermShape shape)
         {
@@ -200,7 +200,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a table is this graph's and is not a read-only scoped view (invariant R).
+        /// Checks that a table is this graph's and is not a read-only scoped view: writes never target a scoped handle.
         /// </summary>
         void CheckTable(TableHandle table)
         {

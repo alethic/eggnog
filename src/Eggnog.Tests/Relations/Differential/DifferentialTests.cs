@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,11 +11,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The randomized differential suite of the executor and actions (milestone M7): random programs of loads,
-    /// removals, unions, rebuilds, compaction, cloning and rule runs over random tables, run against the engine and
-    /// against a naive model (dictionaries with the merge functions' semantics, a naive union-find, and a nested-loop
-    /// join over the visible rows), compared after every step. See <see cref="DiffGenerator"/> for what programs
-    /// contain and <see cref="DiffRunner"/> for what is compared.
+    /// The randomized differential suite of the executor and actions: random programs of loads, removals, unions,
+    /// rebuilds, compaction, cloning and rule runs over random tables, run against the engine and against a naive model
+    /// (dictionaries with the merge functions' semantics, a naive union-find, and a nested-loop join over the visible
+    /// rows), compared after every step. See <see cref="DiffGenerator"/> for what programs contain and
+    /// <see cref="DiffRunner"/> for what is compared.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -23,12 +24,11 @@ namespace Eggnog.Relations.Tests
     /// <para>
     /// Environment variables: <c>EGGNOG_DIFF_SEEDS</c>, <c>EGGNOG_DIFF_LARGER_SEEDS</c>, <c>EGGNOG_DIFF_BULK_SEEDS</c>,
     /// <c>EGGNOG_DIFF_WIDE_SEEDS</c> and <c>EGGNOG_DIFF_HUGE_SEEDS</c> set how many programs of each profile the
-    /// default tests run; <c>EGGNOG_DIFF_SOAK</c> runs <see cref="Soak"/> for that many seconds over fresh seeds of every
-    /// profile, starting at <c>EGGNOG_DIFF_SEED_BASE</c> if set (otherwise a random base, printed), and fails a program
-    /// that takes longer than <c>EGGNOG_DIFF_SLOW</c> seconds (60), as soon as the limit passes, which is how
-    /// pathological plans show up;
-    /// <c>EGGNOG_DIFF_SEED</c> replays one program (<c>seed</c> or <c>seed:profile</c>) in <see cref="Replay"/> and
-    /// prints it.
+    /// default tests run; <c>EGGNOG_DIFF_SOAK</c> runs <see cref="Soak"/> for that many seconds over fresh seeds of
+    /// every profile, starting at <c>EGGNOG_DIFF_SEED_BASE</c> if set (otherwise a random base, printed), and fails a
+    /// program that takes longer than <c>EGGNOG_DIFF_SLOW</c> seconds (60), as soon as the limit passes, which is how
+    /// pathological plans show up; <c>EGGNOG_DIFF_SEED</c> replays one program (<c>seed</c> or <c>seed:profile</c>) in
+    /// <see cref="Replay"/> and prints it.
     /// </para>
     /// </remarks>
     [Collection(ExecutorStressCollection.Name)]
@@ -60,7 +60,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(stats.RulesWithMatches * 4 > stats.Rules, "too few rules have matches: " + stats);
             Assert.True(stats.DecomposedRules > 0, "no decomposed plan: " + stats);
             Assert.True(stats.ProjectedRules > 0, "no projected query: " + stats);
-            Assert.True(stats.LookupRules > 0, "no decomposed plan checks a materialization through a Lookup stage (map §8.1 row 5): " + stats);
+            Assert.True(stats.LookupRules > 0, "no decomposed plan checks a materialization through a Lookup stage: " + stats);
             Assert.True(stats.MultiplicityChecks > 0, "no multiplicity check: " + stats);
             Assert.True(stats.CachedRules > 0, "no cached plan: " + stats);
             Assert.True(stats.SemiNaiveVariants > stats.SkippedVariants && stats.SkippedVariants > 0, "semi-naive variants not exercised: " + stats);
@@ -82,8 +82,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Bulk tables (hundreds of rows) and queries of two or three atoms, past the index and executor size thresholds,
-        /// and queries of the lost-constraint shape, whose decomposed plans materialize bulk-sized blocks.
+        /// Bulk tables (hundreds of rows) and queries of two or three atoms, past the index and executor size
+        /// thresholds, and queries of the lost-constraint shape, whose decomposed plans materialize bulk-sized blocks.
         /// </summary>
         [Fact]
         public void BulkProgramsAgreeWithTheModel()
@@ -118,11 +118,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// T9 (colored-contexts spec §17 M10.2): small and larger programs in which every semi-naive step is preceded by
-        /// the same variants run over a layered copy of the engine's tables (<see cref="DiffLayeredSemiNaiveStep"/>): rows
-        /// spread over two to four levels with their timestamps, overridden rows hidden in lower levels, so each variant's
-        /// time ranges split per layer; every variant's distinct matches must be the oracle's. 2000 small and 100 larger
-        /// programs by default (<c>EGGNOG_DIFF_LAYERED_SEEDS</c>, <c>EGGNOG_DIFF_LAYERED_LARGER_SEEDS</c>).
+        /// Small and larger programs in which every semi-naive step is preceded by the same variants run over a layered
+        /// copy of the engine's tables (<see cref="DiffLayeredSemiNaiveStep"/>): rows spread over two to four levels
+        /// with their timestamps, overridden rows hidden in lower levels, so each variant's time ranges split per
+        /// layer; every variant's distinct matches must be the oracle's. 2000 small and 100 larger programs by default
+        /// (<c>EGGNOG_DIFF_LAYERED_SEEDS</c>, <c>EGGNOG_DIFF_LAYERED_LARGER_SEEDS</c>).
         /// </summary>
         [Fact]
         public void LayeredSemiNaiveVariantsAgreeWithTheModel()
@@ -268,8 +268,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Puts a <see cref="DiffLayeredSemiNaiveStep"/> before every semi-naive step of <paramref name="program"/>, over
-        /// the same variants and the same tables.
+        /// Puts a <see cref="DiffLayeredSemiNaiveStep"/> before every semi-naive step of <paramref name="program"/>,
+        /// over the same variants and the same tables.
         /// </summary>
         static DiffProgram Layered(DiffProgram program)
         {
@@ -286,6 +286,80 @@ namespace Eggnog.Relations.Tests
         }
 
         static int Count(string variable, int fallback) => int.TryParse(Environment.GetEnvironmentVariable(variable), out var n) && n > 0 ? n : fallback;
+
+        /// <summary>
+        /// The generated programs reach materialization lookups. A block with no value variables whose message
+        /// variables are split across later bags keeps its join constraint only through a
+        /// <see cref="MatScanMode.Lookup"/> stage in the result block, where egglog's planner loses the constraint; a
+        /// bag constrained by two earlier blocks gets a Lookup epilogue. Such plans arise only for queries with named
+        /// variables the action does not read, which the generator makes by projecting some queries onto a subset of
+        /// their variables and by the dense lost-constraint shape. (The lost-constraint query of
+        /// PlannerDecompositionTests, with five of its nine variables read, gets a Lookup stage on most random data.)
+        /// This test inspects the plans of every rule-set query of the default small programs under every
+        /// configuration.
+        /// </summary>
+        [Fact]
+        public void DefaultProgramsReachMaterializationLookups()
+        {
+            var profile = DiffProfile.Small;
+            var decomposed = 0;
+            var lookups = 0;
+            for (var seed = 0; seed < 3000; seed++)
+            {
+                var program = DiffGenerator.Generate(seed, profile);
+                var runner = new DiffRunner(program, profile, new DiffStats());
+                foreach (var step in program.Steps)
+                {
+                    if (step is DiffRunStep run)
+                    {
+                        var function = runner.Db.AddExternalFunction(new DiffRecorder().Function);
+                        var rsb = runner.Db.NewRuleSet();
+                        var rules = new List<RuleId>();
+                        foreach (var query in run.Queries)
+                            foreach (var config in DiffConfig.All)
+                                if (runner.AddRule(rsb, query, config, 0, function, Array.Empty<(int, Constraint)>()) is { } id)
+                                    rules.Add(id);
+
+                        using (var rs = rsb.Build())
+                        {
+                            foreach (var id in rules)
+                            {
+                                if (rs[id].Template is DecomposedPlan plan)
+                                {
+                                    decomposed++;
+                                    var stages = plan.ResultBlock.Concat(plan.Blocks.SelectMany(b => b.Stages));
+                                    if (stages.Any(s => s is FusedIntersectMatStage { Mode: MatScanMode.Lookup }))
+                                        lookups++;
+                                }
+                            }
+                        }
+
+                        runner.Db.FreeExternalFunction(function);
+                    }
+
+                    step.Execute(runner);
+                }
+            }
+
+            Assert.True(decomposed > 0, "no decomposed plan at all");
+            Assert.True(lookups > 0, $"none of {decomposed} decomposed plans has a materialization Lookup stage");
+        }
+
+        /// <summary>
+        /// A shrunk failing program is printed for reproduction, and its seed regenerates the original program, not the
+        /// shrunk one, so the listing must be complete: <see cref="DiffLoadStep.Format"/> lists every row of a load,
+        /// also past the <see cref="DiffLoadStep.FormatLimit"/> rows at which <see cref="DiffLoadStep.Summarize"/>
+        /// stops ("the seed reproduces the rest"). A shrunk bulk or huge program may still load more than 200 rows into
+        /// one table, and must be rebuildable from its listing.
+        /// </summary>
+        [Fact]
+        public void LoadListingsAreComplete()
+        {
+            var rows = Enumerable.Range(0, 300).Select(i => new[] { (uint)i, (uint)(i + 1) }).ToArray();
+            var program = new DiffProgram(1, "bulk", "Serial", 1000, [new DiffTable(0, 1, 2, false, DiffMergeKind.TakeNew, 1, false, [], false, [], [])], []);
+            var listing = new DiffLoadStep(0, rows).Format(program);
+            Assert.Contains(TableTestUtil.Show(rows[^1]), listing);
+        }
 
     }
 

@@ -94,8 +94,8 @@ namespace Eggnog.Relations.Tests
         public void RefinementCountsFollowTheScheduledOrder()
         {
             // Position 0 already runs stage 1 (a scan of a1). egglog seeds the counts from plan index 0 (a scan of a0),
-            // so it would next prefer stage 3 (on a0); the stages actually run refined a1, so stage 2 (on a1) goes next
-            // (map §8.1 row 18).
+            // so it would next prefer stage 3 (on a0); the stages actually run refined a1, so stage 2 (on a1) goes
+            // next. This affects only the ordering heuristic, not the result.
             JoinStage[] stages = [Scan(0, 0), Scan(1, 1), Isect(2, 1, 2), Isect(3, 0, 3)];
             var order = new InstrOrder(4);
             order.Swap(0, 1);

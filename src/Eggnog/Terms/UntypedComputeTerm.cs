@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An untyped application of a primitive (D13), from the internal <c>Compute.Of(Primitive, …)</c>.
+    /// An untyped application of a primitive, from the internal <c>Compute.Of(Primitive, …)</c>.
     /// </summary>
     internal sealed class UntypedComputeTerm : Term
     {

@@ -8,8 +8,10 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// <c>Run</c> resolves every tag a rule the schedule reaches reads before any work (§6.5.3, §6.7): a tag that does not
-    /// resolve from the scope throws before the first step, so the steps before the offending one write nothing.
+    /// <c>Run</c> resolves every tag a rule the schedule reaches reads before any work: a tag that does not resolve
+    /// from the scope throws before the first step, so the steps before the offending one write nothing. Queries
+    /// resolve their tags before any work too, and an <c>Until</c> fact whose tag does not resolve is refused before
+    /// any work.
     /// </summary>
     public sealed class RunTagResolutionTests
     {
@@ -72,6 +74,65 @@ namespace Eggnog.Tests.Scopes
             var inner = outer.CreateChild(t.Inner);
             inner.Run(Schedule.Sequence(Schedule.Repeat(1, t.Rules), Schedule.Repeat(1, later)));
             Assert.True(inner.Check(t.Seen.Of("a"), t.Fact.Of("never")));
+        }
+
+        /// <summary>
+        /// An unresolved tag at a query is an <see cref="InvalidOperationException"/> before any work: a query reading
+        /// two tags, one of which does not resolve, does not sync the other's mirror first.
+        /// </summary>
+        [Fact]
+        public void AnUnresolvedTagAtAQueryIsRefusedBeforeAnyWork()
+        {
+            var t = new ScopeTheory();
+            var query = t.Graph.DefineQuery("two tags", q =>
+            {
+                var x = q.Var<string>("x");
+                q.When(t.Fact.In(t.Outer).Of(x), t.Seen.In(t.Inner).Of(x));
+            });
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Assume(t.Fact.Of("a"));
+            var version = outer.Version;
+
+            Assert.Throws<InvalidOperationException>(() => outer.Count(query));
+
+            Assert.Equal(version, outer.Version);
+        }
+
+        /// <summary>
+        /// An <c>Until</c> fact whose tag does not resolve is refused before any work, as an
+        /// <see cref="ArgumentException"/> (an <c>Until</c> fact the scope cannot read), not as the
+        /// <see cref="InvalidOperationException"/> of an unresolved tag at <c>Run</c>.
+        /// </summary>
+        [Fact]
+        public void AnUntilFactWithAnUnresolvedTagIsAnArgumentException()
+        {
+            var t = new ScopeTheory();
+            var scope = t.Root.CreateChild(t.Outer);
+
+            Assert.Throws<ArgumentException>(() => scope.Run(Schedule.Until(t.Rules, t.Fact.In(t.Inner).Of("a"))));
+        }
+
+        /// <summary>
+        /// An unresolved tag at a query is an <see cref="InvalidOperationException"/> before any work: a query reading
+        /// two tags, the first resolving to the writable scope and stale, the second unresolved, leaves the first
+        /// scope's Version where it was.
+        /// </summary>
+        [Fact]
+        public void AQueryWithAnUnresolvedTagIsRefusedBeforeAnyWork()
+        {
+            var t = new ScopeTheory();
+            var both = t.Graph.DefineQuery("both", q =>
+            {
+                var x = q.Var<string>("x");
+                q.When(t.Fact.In(t.Outer).Of(x), t.Fact.In(t.Inner).Of(x));
+            });
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Assume(t.Fact.Of("a"));
+            var version = outer.Version;
+
+            Assert.Throws<InvalidOperationException>(() => outer.Count(both));
+
+            Assert.Equal(version, outer.Version);
         }
 
     }

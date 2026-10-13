@@ -29,7 +29,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets a variable's value in this match: decoded; a class is canonical in the queried scope as the call reads it,
-        /// even after a union an earlier callback made, and has that scope as its origin (D39).
+        /// even after a union an earlier callback made, and has that scope as its origin.
         /// </summary>
         /// <typeparam name="T">The variable's type.</typeparam>
         /// <param name="variable">A declared variable of the query.</param>
@@ -48,8 +48,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped read (D13): a variable's value in this match, decoded, a class canonical as in
-        /// <see cref="Get{T}(Var{T})"/>.
+        /// The untyped read, for the internal untyped layer: a variable's value in this match, decoded, a class canonical
+        /// as in <see cref="Get{T}(Var{T})"/>.
         /// </summary>
         /// <param name="variable">A declared variable of the query, typed or untyped.</param>
         /// <returns>The value; a class as its sort's value.</returns>

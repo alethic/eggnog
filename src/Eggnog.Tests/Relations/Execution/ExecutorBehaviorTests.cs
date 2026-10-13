@@ -223,7 +223,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void SerialRunsAreDeterministic()
         {
-            // Fresh ids are minted per batch; a serial run mints them in the same order every time (decision 4).
+            // Fresh ids are minted per batch; a serial run mints them in the same order every time, so serial execution
+            // is deterministic for a given program (parallel runs may number ids differently).
             string Run()
             {
                 var m = new ExecutionMathEgraph("Serial");

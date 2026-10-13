@@ -14,8 +14,8 @@ namespace Eggnog.Relations.Tests
         Term,
 
         /// <summary>
-        /// Adds a row of a function (<see cref="EGraph.AddValues"/>), merged with the function's merge; or, for a relation
-        /// fact written without an output, egglog's <c>(R a b)</c>, adds the key as a term of the relation
+        /// Adds a row of a function (<see cref="EGraph.AddValues"/>), merged with the function's merge; or, for a
+        /// relation fact written without an output, egglog's <c>(R a b)</c>, adds the key as a term of the relation
         /// (<see cref="BridgeDiffSeed.IsInsertion"/>).
         /// </summary>
         Set,

@@ -5,18 +5,18 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The assumptions of a split rule as written (§6.9.2), checked at definition like host-write facts (§6.6.2) with the
-    /// declared variables and the case variable as parameters, and grounded per case: each variable becomes the constant a
-    /// match or the case's element binds, and each computation is evaluated on its ground arguments.
+    /// The assumptions of a split rule as written, checked at definition like host-write facts with the declared variables
+    /// and the case variable as parameters, and grounded per case: each variable becomes the constant a match or the case's
+    /// element binds, and each computation is evaluated on its ground arguments.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The checks at definition (<see cref="Compile"/>): every fact is a write (a relation row, a function value, a
     /// constructor output, or a union of classes); no table is read in a term (a function application is refused with
     /// <i>"assumptions do not read; match 'dom' in When"</i>), none is scoped or of another graph; a primitive takes and
-    /// returns values, with arguments of its parameters' types; a class constant is from the root, as for a global rule
-    /// (§6.3 step 3); a variable is declared in the split rule or is its case variable. Grounding then never fails for
-    /// want of a check, only for a primitive that throws or a conflict the host batch finds (D32).
+    /// returns values, with arguments of its parameters' types; a class constant is from the root, as for a global rule; a
+    /// variable is declared in the split rule or is its case variable. Grounding then never fails for want of a check, only
+    /// for a primitive that throws or a conflict the host batch finds.
     /// </para>
     /// <para>
     /// Cost: grounding allocates the ground facts of one case, a few objects per term; it runs once per case opened, not
@@ -54,8 +54,8 @@ namespace Eggnog
         public Fact[] Facts => facts;
 
         /// <summary>
-        /// Checks the assumptions of a split rule (§6.9.2) and lists the declared variables they use, in first-use order,
-        /// which the matcher must collect.
+        /// Checks the assumptions of a split rule and lists the declared variables they use, in first-use order, which the
+        /// matcher must collect.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="name">The split rule's name, for messages.</param>
@@ -99,7 +99,7 @@ namespace Eggnog
 
         /// <summary>
         /// Grounds the facts for one case: each declared variable becomes the value of its column in
-        /// <paramref name="tuple"/> (a class with <paramref name="parent"/>'s origin, usable in the case, D39), the case
+        /// <paramref name="tuple"/> (a class with <paramref name="parent"/>'s origin, usable in the case), the case
         /// variable becomes <paramref name="value"/>, and each computation is evaluated.
         /// </summary>
         /// <param name="tuple">The match, as the matcher collected it.</param>

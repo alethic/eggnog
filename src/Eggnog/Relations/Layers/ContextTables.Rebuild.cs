@@ -11,8 +11,8 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The ancestor rows copied by the current catch-up or step 4, with the layer each lies in and why it is hidden:
-        /// hidden by <see cref="ApplyHides"/> once every copy is staged. Domain thread only; reused.
+        /// The ancestor rows copied by the current catch-up or hide-and-copy step, with the layer each lies in and why
+        /// it is hidden: hidden by <see cref="ApplyHides"/> once every copy is staged. Domain thread only; reused.
         /// </summary>
         List<(TableId Table, int Layer, int Row, HideReason Reason)>? hides;
 
@@ -32,40 +32,43 @@ namespace Eggnog.Relations
         uint[]? copyScratch;
 
         /// <summary>
-        /// One rebuild pass of the child, steps 3 to 5 of C8 (§7.3, C5), at <paramref name="epoch"/>: rewrites the
-        /// context's own rows that name an id displaced since the last pass, hides and copies canonically the ancestor rows
-        /// that name one of its own new losers, then merges.
+        /// One rebuild pass of the child at <paramref name="epoch"/>: rewrites the context's own rows that name an id
+        /// displaced since the last pass, hides and copies canonically the ancestor rows that name one of its own new
+        /// losers, then merges. In the first pass of a rebuild these steps follow the catch-up
+        /// (<see cref="Context.Rebuild"/>).
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The delta is the journal's rows since the context's journal mark (X8), which the pass consumes: the imports and
+        /// The delta is the journal's rows since the context's journal mark, which the pass consumes: the imports and
         /// re-key losers of the catch-up and the context's own losers.
         /// </para>
         /// <para>
-        /// Step 3 (X9): egglog's incremental rebuild of every adopted own layer with rebuild columns against the context's
+        /// Rewrite: egglog's incremental rebuild of every adopted own layer with rebuild columns against the context's
         /// union-find table (<see cref="SortedWritesTable.ApplyRebuild"/>, which reads the journal suffix through its
         /// <see cref="SubsetTracker"/> and also gathers the rows written since its last rebuild), through
-        /// <see cref="Database.RunWithTakenOut{TOperation}"/>, so the database notifies every layer whose rebuild staged a
-        /// rewrite and records failures. Own rows were canonical when appended (X38), so the step is skipped when no id was
-        /// displaced since the last pass.
+        /// <see cref="Database.RunWithTakenOut{TOperation}"/>, so the database notifies every layer whose rebuild
+        /// staged a rewrite and records failures. Own rows were canonical when appended, so the step is skipped when no
+        /// id was displaced since the last pass.
         /// </para>
         /// <para>
-        /// Step 4 (decision 3, losers only): for every shared table with rebuild columns and every ancestor layer the
-        /// context sees, the rows its rebuild index lists under an own loser (<see cref="SortedWritesTable.SharedRebuildIndex"/>,
-        /// <see cref="LayerStatistics.AncestorRowsExamined"/>), live and hidden at no level between, are copied canonically
-        /// and hidden (<see cref="HideReason.Mentions"/>). Imports need no such step: the ancestor rows naming them are
-        /// already invisible at the parent (I13). Never a scan: O(depth × own losers) probes plus their uses.
+        /// Hide and copy, for losers only (a union hides and copies the ancestor rows that name its loser, never those
+        /// that name its winner):
+        /// for every shared table with rebuild columns and every ancestor layer the context sees, the rows its rebuild
+        /// index lists under an own loser (<see cref="SortedWritesTable.SharedRebuildIndex"/>,
+        /// <see cref="LayerStatistics.AncestorRowsExamined"/>), live and hidden at no level between, are copied
+        /// canonically and hidden (<see cref="HideReason.Mentions"/>). Imports need no such step: the ancestor rows
+        /// naming them are already invisible at the parent. Never a scan: O(depth × own losers) probes plus their uses.
         /// </para>
         /// <para>
-        /// Step 5: <see cref="Database.MergeAll"/>, which merges the catch-up's copies, the rewrites and step 4's copies
-        /// in stratum order, folds rows that came to share a key through their merge functions (congruence, which may stage
-        /// unions for the next pass), and seals the hides in its epilogue (X40).
+        /// Merge: <see cref="Database.MergeAll"/>, which merges the catch-up's copies, the rewrites and the
+        /// hide-and-copy step's copies in stratum order, folds rows that came to share a key through their merge
+        /// functions (congruence, which may stage unions for the next pass), and seals the hides in its epilogue.
         /// </para>
         /// </remarks>
         /// <param name="epoch">The pass's epoch.</param>
         /// <returns>Whether the pass changed anything: the merge changed rows or staged writes, or a row was hidden.</returns>
         /// <exception cref="InvalidOperationException">A copy would create the layer of a table whose merge is not a
-        /// lattice merge (decision 2); the context is then faulted.</exception>
+        /// lattice merge, which only the root may write; the context is then faulted.</exception>
         internal bool RebuildPass(uint epoch)
         {
             if (owner.IsContradicted)
@@ -76,10 +79,10 @@ namespace Eggnog.Relations
             var end = journal.Count;
             owner.JournalMark = end;
 
-            // A layer created by a search that no merge round followed is rewritten with the others (X37).
+            // A layer created by a search that no merge round followed is rewritten with the others.
             AdoptDeferred();
 
-            // The own losers (X8). A loser local to the context is left out: no ancestor row names one (I10).
+            // The own losers. A loser local to the context is left out: no ancestor row names one.
             var ownLosers = losers ??= new List<uint>();
             ownLosers.Clear();
             var ids = journal.Ids;
@@ -88,7 +91,7 @@ namespace Eggnog.Relations
                 if (owner.IsOwnDisplacement(ids[i]) && local.Contains(ids[i]) == false)
                     ownLosers.Add(ids[i]);
 
-            // Step 3.
+            // Rewrite the own rows that name an id displaced since the last pass.
             if (from < end)
             {
                 var own = OwnRebuildTables();
@@ -96,7 +99,7 @@ namespace Eggnog.Relations
                     owner.Database.RunWithTakenOut(schema.UnionFind, own, new RebuildTableOperation(schema.UnionFind, owner.UnionFindTable, epoch));
             }
 
-            // Step 4.
+            // Hide and copy the ancestor rows that name an own loser.
             ExecutionState? state = null;
             PendingHides();
             if (ownLosers.Count > 0)
@@ -110,13 +113,13 @@ namespace Eggnog.Relations
 
             var hidden = ApplyHides();
 
-            // Step 5.
+            // Merge.
             return owner.Database.MergeAll(epoch) | hidden;
         }
 
         /// <summary>
-        /// Step 4 of <see cref="RebuildPass"/>: stages a canonical copy of every visible ancestor row that names one of
-        /// <paramref name="ownLosers"/>, and records it for hiding.
+        /// The hide-and-copy step of <see cref="RebuildPass"/>: stages a canonical copy of every visible ancestor row
+        /// that names one of <paramref name="ownLosers"/>, and records it for hiding.
         /// </summary>
         void CopyRowsMentioningLosers(ref ExecutionState? state, ReadOnlySpan<uint> ownLosers, uint epoch)
         {
@@ -154,11 +157,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages a copy of row <paramref name="row"/> of the ancestor layer at depth <paramref name="layerDepth"/> into
-        /// the context, through <paramref name="state"/> (created on first use at <paramref name="epoch"/>), and records the
-        /// row for hiding (§7.2, §7.3): the copy's id cells are rewritten to their canonical ids in the context when
-        /// <paramref name="canonicalize"/> is set, and its timestamp is the epoch. The merge prepares it again (X38), which
-        /// changes nothing.
+        /// Stages a copy of row <paramref name="row"/> of the ancestor layer at depth <paramref name="layerDepth"/>
+        /// into the context, through <paramref name="state"/> (created on first use at <paramref name="epoch"/>), and
+        /// records the row for hiding: the copy's id cells are rewritten to their canonical ids in the context when
+        /// <paramref name="canonicalize"/> is set, and its timestamp is the epoch. The merge prepares it again
+        /// (canonical id cells, the merge's epoch), which changes nothing.
         /// </summary>
         /// <param name="state">The pass's state; created here on first use.</param>
         /// <param name="s">The table's schema.</param>
@@ -194,8 +197,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Hides every row recorded by <see cref="StageCopy"/> since <see cref="PendingHides"/>, after their copies are
-        /// staged and flushed (X12): a hide is never applied before the row carrying its information is pending. The hides
-        /// are sealed by the merge of the same pass (X40), or by <see cref="Context.Rebuild"/>'s epilogue.
+        /// staged and flushed: a hide is never applied before the row carrying its information is pending. The hides
+        /// are sealed by the merge of the same pass, or by <see cref="Context.Rebuild"/>'s epilogue.
         /// </summary>
         /// <returns>Whether any row was hidden.</returns>
         bool ApplyHides()
@@ -207,7 +210,7 @@ namespace Eggnog.Relations
             foreach (var (table, layer, row, reason) in pending)
             {
                 // Each row is staged at most once per pass (a gather is deduplicated, catch-up reads each row once, and
-                // step 4 skips rows the catch-up hid), so the row cannot be hidden here already.
+                // the hide-and-copy step skips rows the catch-up hid), so the row cannot be hidden here already.
                 var added = GetOrCreateLayer(table).Hide(layer, row, reason);
                 Debug.Assert(added, "an ancestor row was copied twice in one pass");
             }
@@ -228,10 +231,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the rebuild index of every own layer of a shared table with rebuild columns up to date: the indexes a
-        /// child's step 4 and lift reads probe (<see cref="SortedWritesTable.SharedRebuildIndex"/>). Called when a child is
-        /// created from the context while it is not frozen (<see cref="Context.CreateChild"/>), so the child never builds
-        /// a whole index on its own path. O(own layers) plus the rows appended since each index's last refresh. Domain
-        /// thread only.
+        /// child's hide-and-copy step and lift reads probe (<see cref="SortedWritesTable.SharedRebuildIndex"/>). Called
+        /// when a child is created from the context while it is not frozen (<see cref="Context.CreateChild"/>), so the
+        /// child never builds a whole index on its own path. O(own layers) plus the rows appended since each index's
+        /// last refresh. Domain thread only.
         /// </summary>
         internal void RefreshOwnRebuildIndexes()
         {
@@ -241,8 +244,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the adopted own layers with rebuild columns, in ascending table order: what step 3 rewrites and the
-        /// container refresh re-stamps (§7.3, §7.4). Valid until the next call.
+        /// Gets the adopted own layers with rebuild columns, in ascending table order: what a rebuild pass rewrites and
+        /// the container refresh re-stamps. Valid until the next call.
         /// </summary>
         internal ReadOnlySpan<TableId> OwnRebuildTables()
         {

@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Host reads (§6.6.3): never create terms, never intern (D15). A constant that was never interned makes its fact
+    /// Host reads: never create terms, never intern. A constant that was never interned makes its fact
     /// false or its term absent. Called under the scope's guard.
     /// </summary>
     internal static class TermReader
@@ -24,7 +24,7 @@ namespace Eggnog
 
         /// <summary>
         /// Reads a ground term inside <see cref="Fact.In"/>: its table applications read the scope
-        /// <paramref name="enclosing"/> resolves to, directly (§6.6.3).
+        /// <paramref name="enclosing"/> resolves to, directly.
         /// </summary>
         /// <param name="scope">The scope read.</param>
         /// <param name="term">The term.</param>
@@ -80,7 +80,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks a ground fact (§6.6.3): a relation row exists, two classes are equal, two values are equal, or an
+        /// Checks a ground fact: a relation row exists, two classes are equal, two values are equal, or an
         /// application has a row.
         /// </summary>
         /// <param name="scope">The scope read.</param>
@@ -141,8 +141,8 @@ namespace Eggnog
         /// Checks, without reading the scope's contents, that <see cref="Check"/> can test <paramref name="fact"/>: what it
         /// would refuse whatever the scope holds. With no scope, only the fact's shape: a relation row, an equality or an
         /// existence, whose terms are constants and table applications (no variable, no computation). With a scope, also
-        /// every table and column type is of its graph and every class constant may be used in it (D39). Used for
-        /// <c>Until</c> conditions, which <see cref="Check"/> reads only when their node executes (§6.5.3).
+        /// every table and column type is of its graph and every class constant may be used in it. Used for
+        /// <c>Until</c> conditions, which <see cref="Check"/> reads only when their node executes.
         /// </summary>
         /// <param name="scope">The scope the fact will be checked in; <c>null</c> to check the shape only.</param>
         /// <param name="fact">The fact.</param>
@@ -259,9 +259,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the scope an application of <paramref name="table"/> reads (§6.6.3): <paramref name="scope"/> itself, or for
-        /// a scoped handle or an enclosing <see cref="Fact.In"/>, the nearest ancestor-or-self tagged so, read directly
-        /// rather than through a mirror. A scoped table must be value-only (D1).
+        /// Gets the scope an application of <paramref name="table"/> reads: <paramref name="scope"/> itself, or for a
+        /// scoped handle or an enclosing <see cref="Fact.In"/>, the nearest ancestor-or-self tagged so, read directly
+        /// rather than through a mirror. A scoped table must be value-only.
         /// </summary>
         /// <exception cref="ArgumentException">The handle is scoped to another tag than the enclosing one, or a scoped
         /// table has a sort column.</exception>

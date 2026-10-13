@@ -20,8 +20,8 @@ namespace Eggnog.Relations
     /// afterwards (a struct wrapping an array must not expose or reuse that array). Where egglog rebuilds a container in
     /// place (<c>rebuild_contents(&amp;mut self)</c>), <see cref="TryRebuild"/> returns a rebuilt copy and leaves the
     /// original untouched. That keeps the old contents available to remove from the element index, which is what lets
-    /// the environment keep that index exact (map §8.1 row 13), and it makes a container read back from the environment
-    /// safe to keep without the lock guard egglog's <c>get_val</c> returns.
+    /// the environment keep that index exact where egglog's goes stale (mod.rs:553-558, 618-623), and it makes a
+    /// container read back from the environment safe to keep without the lock guard egglog's <c>get_val</c> returns.
     /// </para>
     /// <para>
     /// Equality (<see cref="IEquatable{T}.Equals(T)"/>) and <see cref="ComputeHash"/> must agree: equal containers hash

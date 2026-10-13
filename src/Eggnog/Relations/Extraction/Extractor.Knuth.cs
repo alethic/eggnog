@@ -143,9 +143,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Orders two nodes by content, rule-layer decision D10's tie-break after cost: function id (declaration order),
-        /// then the row's columns left to right, e-class and container columns by id and base value columns by content
-        /// order (<see cref="Sort.CompareValues"/>). Total on distinct nodes: two rows of one function differ in a key.
+        /// Orders two nodes by content, the queue's tie-break after cost: function id (declaration order), then the
+        /// row's columns left to right, e-class and container columns by id and base value columns by content order
+        /// (<see cref="Sort.CompareValues"/>). Total on distinct nodes: two rows of one function differ in a key.
         /// </summary>
         /// <returns>The sign of the comparison; 0 only for the same node.</returns>
         int CompareNodes(int left, int right)

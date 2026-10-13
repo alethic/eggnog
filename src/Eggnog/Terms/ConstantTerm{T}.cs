@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A typed constant: a value, or for a sort a class (checked where it is used, D39). Its column type is resolved by
-    /// the graph it is used in.
+    /// A typed constant: a value, or for a sort a class, checked where it is used against the scope that returned it.
+    /// Its column type is resolved by the graph it is used in.
     /// </summary>
     /// <typeparam name="T">The CLR type of the value.</typeparam>
     internal sealed class ConstantTerm<T> : Term<T>

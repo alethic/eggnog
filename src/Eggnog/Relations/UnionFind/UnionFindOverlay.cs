@@ -8,21 +8,21 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The classes a child context merged, over the ids that are canonical in its parent: the context's own level of
-    /// the layered union-find (colored-contexts spec §5.2, C2, L2, B7). <c>find_C = Map ∘ find_P</c>.
+    /// the layered union-find. <c>find_C = Map ∘ find_P</c>.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A class table. Each slot holds one class: its canonical id (the minimum member), its member list in insertion
     /// order, and its member count (0 marks a free slot). <c>classOf</c> maps every member to its slot. Ids in no class
-    /// are their own class in this level, so <see cref="Map"/> is the identity for them. Invariants (I5, I6): the classes
-    /// partition <c>classOf</c>'s keys; every class has at least two members; <c>canonical = min(members)</c>; and, once
-    /// the owning context has caught up with its parent, every member is canonical in the parent. Each helper keeps
-    /// them: a class left with one member dissolves, and a class that loses its canonical recomputes the minimum.
+    /// are their own class in this level, so <see cref="Map"/> is the identity for them. Invariants: the classes
+    /// partition <c>classOf</c>'s keys; every class has at least two members; <c>canonical = min(members)</c>; and,
+    /// once the owning context has caught up with its parent, every member is canonical in the parent. Each helper
+    /// keeps them: a class left with one member dissolves, and a class that loses its canonical recomputes the minimum.
     /// </para>
     /// <para>
-    /// Why a class table (§5.2): <see cref="Map"/> is one hash probe and one load and never writes, so the context's own
-    /// rule tasks may read it while nothing merges; and re-keying after a parent change (<see cref="Rekey"/>) and the
-    /// lift's member maps (L2) need the member lists anyway. Union merges the smaller class into the larger, relinking the
+    /// Why a class table: <see cref="Map"/> is one hash probe and one load and never writes, so the context's own rule
+    /// tasks may read it while nothing merges; and re-keying after a parent change (<see cref="Rekey"/>) and the lift's
+    /// member maps need the member lists anyway. Union merges the smaller class into the larger, relinking the
     /// smaller's members, so a sequence of unions costs O(n log n) in total.
     /// </para>
     /// <para>
@@ -96,8 +96,8 @@ namespace Eggnog.Relations
         public int SlotCount => slotCount;
 
         /// <summary>
-        /// Gets a counter that moves with every effective <see cref="Union"/> and every <see cref="Rekey"/> that changed
-        /// a class (X6, X29): a cache derived from the classes (the lift's member map) is valid while it is unchanged.
+        /// Gets a counter that moves with every effective <see cref="Union"/> and every <see cref="Rekey"/> that
+        /// changed a class: a cache derived from the classes (the lift's member map) is valid while it is unchanged.
         /// </summary>
         public int Version => version;
 
@@ -107,8 +107,8 @@ namespace Eggnog.Relations
         public bool IsFrozen => frozen;
 
         /// <summary>
-        /// Maps an id canonical in the parent to its canonical id in this level: its class's canonical, or itself when it
-        /// is in no class. One hash probe and one load; never writes.
+        /// Maps an id canonical in the parent to its canonical id in this level: its class's canonical, or itself when
+        /// it is in no class. One hash probe and one load; never writes.
         /// </summary>
         /// <param name="parentCanonical">An id canonical in the parent.</param>
         /// <returns>The canonical id in the owning context.</returns>
@@ -174,8 +174,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Merges the classes of <paramref name="a"/> and <paramref name="b"/>, both canonical in the parent
-        /// (§5.2): a new class, a new member, or two classes merged, the smaller into the larger.
+        /// Merges the classes of <paramref name="a"/> and <paramref name="b"/>, both canonical in the parent: a new
+        /// class, a new member, or two classes merged, the smaller into the larger.
         /// </summary>
         /// <remarks>
         /// The canonical of each side is its class's canonical, or the id itself when it is in no class; the smaller
@@ -184,7 +184,8 @@ namespace Eggnog.Relations
         /// <param name="a">An id canonical in the parent.</param>
         /// <param name="b">Another id canonical in the parent.</param>
         /// <param name="winner">The canonical of the merged class; when nothing changed, the common canonical.</param>
-        /// <param name="loser">The canonical that stopped being canonical; when nothing changed, the common canonical.</param>
+        /// <param name="loser">The canonical that stopped being canonical; when nothing changed, the common
+        /// canonical.</param>
         /// <returns><c>true</c> if the two were in different classes.</returns>
         /// <exception cref="InvalidOperationException">The overlay is frozen.</exception>
         public bool Union(uint a, uint b, out uint winner, out uint loser)
@@ -217,21 +218,21 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Re-keys the overlay after the parent displaced <paramref name="displaced"/> into
-        /// <paramref name="parentCanonical"/> (§5.6): the displaced id's class merges with the parent canonical's, and
-        /// the displaced member is replaced by the parent canonical. Reports the ids that were canonical in the owning
-        /// context before and are not after, which the caller journals.
+        /// Re-keys the overlay, as the owning context catches up with its parent, after the parent displaced
+        /// <paramref name="displaced"/> into <paramref name="parentCanonical"/>: the displaced id's class merges with
+        /// the parent canonical's, and the displaced member is replaced by the parent canonical. Reports the ids that
+        /// were canonical in the owning context before and are not after, which the caller journals.
         /// </summary>
         /// <remarks>
         /// <para>
         /// When the displaced id is in no class it was canonical here and is no longer (its parent class now holds a
-        /// smaller id): it is the one id reported, an import, which the caller skips if it journaled it already. Otherwise
-        /// the class's old canonical and the parent canonical's old canonical are each reported when they differ from the
-        /// merged class's canonical. At most two ids are reported.
+        /// smaller id): it is the one id reported, an import, which the caller skips if it journaled it already.
+        /// Otherwise the class's old canonical and the parent canonical's old canonical are each reported when they
+        /// differ from the merged class's canonical. At most two ids are reported.
         /// </para>
         /// <para>
         /// Within a batch of parent displacements the caller passes each id's final parent canonical, so the overlay is
-        /// keyed by parent canonicals again once the batch is done (I6). O(1) expected plus the classes' sizes.
+        /// keyed by parent canonicals again once the batch is done. O(1) expected plus the classes' sizes.
         /// </para>
         /// </remarks>
         /// <param name="displaced">The id the parent displaced; canonical in the parent before.</param>

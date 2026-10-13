@@ -5,7 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Receives the renumbering of live rows while <see cref="RowBuffer.RemoveStale{TRemap}(ref TRemap)"/> compacts a
-    /// buffer: egglog's <c>remap: impl FnMut(&amp;[Value], RowId, RowId)</c> (core-relations/src/row_buffer/mod.rs:357).
+    /// buffer: egglog's <c>remap: impl FnMut(&amp;[Value], RowId, RowId)</c>
+    /// (core-relations/src/row_buffer/mod.rs:357).
     /// </summary>
     /// <remarks>
     /// Implement it on a struct and pass it by reference: the compaction is generic over the struct, so the JIT

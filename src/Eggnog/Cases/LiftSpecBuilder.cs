@@ -6,17 +6,17 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Builds the engine's lift spec of a graph (§6.9.1): which tables a lift writes into a case's parent, and how.
+    /// Builds the engine's lift spec of a graph: which tables a lift writes into a case's parent, and how.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Every table with <see cref="TableHandle.Lift"/> set is listed, in declaration order, except
-    /// <see cref="EGraph.Contradiction"/> (an all-vacuous lift writes it on its own terms, L4); mirror tables are never
-    /// listed (they are not in <see cref="EGraph.Tables"/>). A relation lifts as the engine's <c>Relation</c> kind over its
-    /// unit output: a row present in every live case and absent in the parent is written with the output every live case
-    /// holds, which for unit they always agree on, so exactly the rows present in every live case lift, counted as rows
-    /// (<see cref="LiftReport.Rows"/>). That is what §6.9.1's "function with a unit output and no case join" writes too;
-    /// the kind only keeps relation rows apart from function values in the report (colors N55). A constructor lifts as a
+    /// <see cref="EGraph.Contradiction"/> (an all-vacuous lift writes it on its own terms); mirror tables are never
+    /// listed (they are not in <see cref="EGraph.Tables"/>). A relation lifts as the engine's <c>Relation</c> kind over
+    /// its unit output: a row present in every live case and absent in the parent is written with the output every live
+    /// case holds, which for unit they always agree on, so exactly the rows present in every live case lift, counted as
+    /// rows (<see cref="LiftReport.Rows"/>). That is what a function with a unit output and no case join would write
+    /// too; the kind only keeps relation rows apart from function values in the report. A constructor lifts as a
     /// constructor. A function lifts with its lattice's case join (<see cref="FunctionHandle.CaseJoin"/>), or, without
     /// one, requires every live case to agree.
     /// </para>

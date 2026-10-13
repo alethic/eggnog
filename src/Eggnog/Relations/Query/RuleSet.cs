@@ -39,9 +39,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes a rule set built on <paramref name="view"/> (colored-contexts spec §9.1, X21): its rules' headers
-        /// were evaluated at <paramref name="viewGeneration"/> and <paramref name="viewStamp"/>, and they read the pinned
-        /// views <paramref name="views"/>. The collections are owned by the new instance.
+        /// Initializes a rule set built on <paramref name="view"/>: its rules' headers were evaluated at
+        /// <paramref name="viewGeneration"/> and <paramref name="viewStamp"/>, and they read the pinned views
+        /// <paramref name="views"/>. The collections are owned by the new instance.
         /// </summary>
         /// <param name="rules">The rules.</param>
         /// <param name="actions">The actions, one per rule, with the same indexes.</param>
@@ -73,16 +73,15 @@ namespace Eggnog.Relations
         public ContextView? View { get; }
 
         /// <summary>
-        /// Gets the views of every table the rules' atoms and lookups read, pinned when the rule set was built
-        /// (colored-contexts spec §9.1, X21): the run reads only these. <c>null</c> for a rule set assembled by hand, which
-        /// a root run pins when it starts.
+        /// Gets the views of every table the rules' atoms and lookups read, pinned when the rule set was built: the run
+        /// reads only these. <c>null</c> for a rule set assembled by hand, which a root run pins when it starts.
         /// </summary>
         public ViewSnapshot? Views { get; }
 
         /// <summary>
         /// Gets the view's <see cref="ContextView.Generation"/> when the first header of the rule set was evaluated (or
         /// when it was built, for a rule set without rules); a child's run checks it has not moved, so its headers and trie
-        /// roots read the same views (I29). <see cref="Views"/> is pinned at the build, so a generation that moved between
+        /// roots read the same views. <see cref="Views"/> is pinned at the build, so a generation that moved between
         /// the first header and the build is caught too.
         /// </summary>
         public long ViewGeneration { get; }
@@ -90,7 +89,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the view's <see cref="ContextView.Stamp"/> when the first header was evaluated: a child's run checks it has
         /// not moved, since header subsets name rows, which a merge of the context or an ancestor can move (a compaction),
-        /// remove or add to without changing any view's structure (I29). 0 at a root, which keeps egglog's rule: build a
+        /// remove or add to without changing any view's structure. 0 at a root, which keeps egglog's rule: build a
         /// rule set right before running it.
         /// </summary>
         public long ViewStamp { get; }
@@ -156,7 +155,7 @@ namespace Eggnog.Relations
         /// rule that was itself added from a cached plan, the extra constraints it was added with (egglog clones that
         /// rule's plan, whose headers include them). It keeps the written template and program
         /// (<see cref="RulePlan.WrittenTemplate"/>, <see cref="RulePlan.WrittenActions"/>), never a context's canonical
-        /// variant (colored-contexts spec §9.8).
+        /// variant.
         /// </remarks>
         /// <param name="rule">The rule.</param>
         /// <returns>The cached plan.</returns>
@@ -168,8 +167,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the table an action instruction looks up, which a child's search reads through the rule set's snapshot
-        /// (colored-contexts spec §6.5, §9.1): that of a <see cref="LookupInstr"/>, <see cref="LookupWithDefaultInstr"/>,
+        /// Gets the table an action instruction looks up, which a child's search reads through the rule set's snapshot:
+        /// that of a <see cref="LookupInstr"/>, <see cref="LookupWithDefaultInstr"/>,
         /// <see cref="LookupWithFallbackInstr"/> or <see cref="LookupOrInsertDefaultInstr"/>.
         /// </summary>
         /// <param name="instr">The instruction.</param>

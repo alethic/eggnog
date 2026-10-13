@@ -53,9 +53,9 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Fix (map §8.1 row 7, plan.rs:1481-1491): a bag's atoms may hold variables outside the bag, which egglog looks
-        /// up in the bag's variable map and panics on (and sizes its bitsets too small for). Those columns are not
-        /// expanded in the bag, so they are skipped here, as generic join skips them.
+        /// A bag's atoms may hold variables outside the bag; egglog looks them up in the bag's variable map, which
+        /// panics, and sizes its bitsets too small for them (plan.rs:1481-1491). Those columns are not expanded in the
+        /// bag, so they are skipped here, as generic join skips them.
         /// </para>
         /// <para>
         /// Deterministic probe order: egglog drains a hash map, so probes come in FxHash order; here they are sorted by

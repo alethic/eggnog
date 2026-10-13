@@ -5,24 +5,26 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The store-backed e-graph the rule differentials of colored-contexts spec §17 M10.3 run over, with each function's
-    /// logical shape as a <see cref="SpikeTable"/>, so that <see cref="ReferenceRuleContext"/> (through
-    /// <see cref="SpikeReferenceView"/>) and the engine exchange the same rows.
+    /// The store-backed e-graph the rule differentials run over, with each function's logical shape as a
+    /// <see cref="LogicalTable"/>, so that <see cref="ReferenceRuleContext"/> (through
+    /// <see cref="ReferenceContextView"/>) and the engine exchange the same rows.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Functions, by index into <see cref="Tables"/>: the relations <c>edge(id, id)</c>, <c>path(id, id)</c> and
-    /// <c>mark(id)</c> (unit output, assert-eq merge, writable in children, rule-layer D27); the lattice
-    /// <c>low(id) → i64</c> merged by the minimum; and the constructors <c>num(i64) → id</c>, <c>add(id, id) → id</c> and
-    /// <c>wrap(id) → id</c> (fresh-id default, union-id merge). Values stay below 2³¹, so an i64's cell is the number
-    /// itself and the reference merges cells directly. The relation <c>answer(id, id)</c> receives the conjunctive queries
-    /// of <see cref="ContextRuleCopyTests"/>; no program rule reads or writes it.
+    /// <c>mark(id)</c> (a unit output and an assert-eq merge, which mints no id, adds no rebuild column and is a
+    /// lattice merge, so children may write them); the lattice <c>low(id) → i64</c> merged by the minimum; and the
+    /// constructors <c>num(i64) → id</c>, <c>add(id, id) → id</c> and <c>wrap(id) → id</c> (fresh-id default, union-id
+    /// merge). Values stay below 2³¹, so an i64's cell is the number itself and the reference merges cells directly.
+    /// The relation <c>answer(id, id)</c> receives the conjunctive queries of <see cref="ContextRuleCopyTests"/>; no
+    /// program rule reads or writes it.
     /// </para>
     /// <para>
-    /// Primitives: <see cref="Ne"/> and <see cref="Less"/> keep a match whose two ids differ or are ordered (the history
-    /// family's non-monotone filters; <see cref="Less"/> depends on id order); <see cref="LowOr"/> reads <c>low</c> through
-    /// the running context's view (<see cref="TableAction"/>), returning <see cref="LowDefault"/> for a missing row, and
-    /// says so (<see cref="ExternalFunction.ReadsTables"/>), so a rule that calls it never inherits a watermark (X41).
+    /// Primitives: <see cref="Ne"/> and <see cref="Less"/> keep a match whose two ids differ or are ordered (the
+    /// history family's non-monotone filters; <see cref="Less"/> depends on id order); <see cref="LowOr"/> reads
+    /// <c>low</c> through the running context's view (<see cref="TableAction"/>), returning <see cref="LowDefault"/>
+    /// for a missing row, and says so (<see cref="ExternalFunction.ReadsTables"/>), so a rule that calls it never
+    /// inherits a watermark.
     /// </para>
     /// </remarks>
     sealed class ColorSchema
@@ -118,14 +120,14 @@ namespace Eggnog.Relations.Tests
 
             Tables =
             [
-                new SpikeTable("edge", EGraph.GetTable(functions[Edge]), null, [true, true], null, null),
-                new SpikeTable("path", EGraph.GetTable(functions[Path]), null, [true, true], null, null),
-                new SpikeTable("mark", EGraph.GetTable(functions[Mark]), null, [true], null, null),
-                new SpikeTable("low", EGraph.GetTable(functions[Low]), null, [true], false, Math.Min),
-                new SpikeTable("num", EGraph.GetTable(functions[Num]), null, [false], true, null),
-                new SpikeTable("add", EGraph.GetTable(functions[Add]), null, [true, true], true, null),
-                new SpikeTable("wrap", EGraph.GetTable(functions[Wrap]), null, [true], true, null),
-                new SpikeTable("answer", EGraph.GetTable(functions[Answer]), null, [true, true], null, null),
+                new LogicalTable("edge", EGraph.GetTable(functions[Edge]), [true, true], null, null),
+                new LogicalTable("path", EGraph.GetTable(functions[Path]), [true, true], null, null),
+                new LogicalTable("mark", EGraph.GetTable(functions[Mark]), [true], null, null),
+                new LogicalTable("low", EGraph.GetTable(functions[Low]), [true], false, Math.Min),
+                new LogicalTable("num", EGraph.GetTable(functions[Num]), [false], true, null),
+                new LogicalTable("add", EGraph.GetTable(functions[Add]), [true, true], true, null),
+                new LogicalTable("wrap", EGraph.GetTable(functions[Wrap]), [true], true, null),
+                new LogicalTable("answer", EGraph.GetTable(functions[Answer]), [true, true], null, null),
             ];
 
             Ne = BridgeTestUtil.Register(EGraph, (state, args) => args[0] != args[1] ? args[0] : null);
@@ -174,7 +176,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets each function's logical shape, by table index.
         /// </summary>
-        public IReadOnlyList<SpikeTable> Tables { get; }
+        public IReadOnlyList<LogicalTable> Tables { get; }
 
         /// <summary>
         /// Gets the primitive keeping a match whose two ids differ.
@@ -210,7 +212,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the index of the logical table <paramref name="table"/>.
         /// </summary>
-        public int IndexOf(SpikeTable table)
+        public int IndexOf(LogicalTable table)
         {
             for (var i = 0; i < Tables.Count; i++)
                 if (ReferenceEquals(Tables[i], table))
@@ -237,8 +239,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Lists the logical rows of table <paramref name="table"/> that <paramref name="context"/> sees: relations without
-        /// their unit output. The context must be clean.
+        /// Lists the logical rows of table <paramref name="table"/> that <paramref name="context"/> sees: relations
+        /// without their unit output. The context must be clean.
         /// </summary>
         public List<ulong[]> Rows(EGraphContext context, int table)
         {
@@ -257,7 +259,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Declares a relation over <paramref name="arity"/> id columns: unit output, constant default, assert-eq merge.
+        /// Declares a relation over <paramref name="arity"/> id columns: unit output, constant default, assert-eq
+        /// merge.
         /// </summary>
         FunctionId Relation(string name, int arity)
         {

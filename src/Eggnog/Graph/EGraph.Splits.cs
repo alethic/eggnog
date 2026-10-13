@@ -14,7 +14,7 @@ namespace Eggnog
         ReadOnlyCollection<SplitRule> splitRulesView = Array.AsReadOnly(Array.Empty<SplitRule>());
 
         /// <summary>
-        /// The lift spec of the graph's tables, with the table count it was built at (§6.9.1): rebuilt by
+        /// The engine's <c>LiftSpec</c> of the graph's tables, with the table count it was built at: rebuilt by
         /// <see cref="LiftSpecBuilder.Build"/> when a table is defined. Published whole, read with one volatile read.
         /// </summary>
         internal Tuple<int, Relations.LiftSpec>? LiftSpecCache;
@@ -25,26 +25,26 @@ namespace Eggnog
         public IReadOnlyList<SplitRule> SplitRules => Volatile.Read(ref splitRulesView);
 
         /// <summary>
-        /// Defines a split rule (§6.9.2), compiled immediately: its body (<see cref="SplitBuilder.When"/>,
+        /// Defines a split rule, compiled immediately: its body (<see cref="SplitBuilder.When"/>,
         /// <c>Where</c>), the set it splits over (<see cref="SplitBuilder.Cases{T}"/>), its key, and the assumptions written
-        /// into each case. A split step (<see cref="Schedule.Split(SplitRule, Schedule)"/>) takes it. Any thread, any time
-        /// (D6); a first scoped read in its body creates a mirror table, which counts as a table definition (§6.8).
+        /// into each case. A split step (<see cref="Schedule.Split(SplitRule, Schedule)"/>) takes it. Any thread, any
+        /// time; a first scoped read in its body creates a mirror table, which counts as a table definition.
         /// </summary>
         /// <remarks>
         /// Coverage is the caller's obligation (<see cref="SplitBuilder"/>): wherever the body matches, the cases'
-        /// assumptions must cover the scope. The body is also the split's demand (D43): a key it does not match is never
+        /// assumptions must cover the scope. The body is also the split's demand: a key it does not match is never
         /// split.
         /// </remarks>
         /// <param name="name">The name, unique among the graph's split rules.</param>
         /// <param name="define">Collects the split rule.</param>
         /// <param name="caseTag">The tag of the cases it makes; <c>null</c> for untagged cases.</param>
         /// <returns>The split rule.</returns>
-        /// <exception cref="ArgumentException">The name is empty or taken; the tag belongs to another graph (D38), or is the
+        /// <exception cref="ArgumentException">The name is empty or taken; the tag belongs to another graph, or is the
         /// root's.</exception>
-        /// <exception cref="RuleDefinitionException">The split rule is not valid (the messages of §6.3, and those of its
-        /// shape and assumptions); nothing is registered.</exception>
+        /// <exception cref="RuleDefinitionException">The split rule is not valid (the checks of a rule body, and those
+        /// of its shape and assumptions); nothing is registered.</exception>
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or a first
-        /// scoped read creates a mirror while another thread is using the writable root (D6).</exception>
+        /// scoped read creates a mirror while another thread is using the writable root.</exception>
         public SplitRule DefineSplit(string name, Action<SplitBuilder> define, ScopeTag? caseTag = null)
         {
             EngineCallMarker.ThrowIfActive();
@@ -84,19 +84,19 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Defines the domain split (§6.9.2, D43): wherever every guard holds of a key <c>k</c> and
+        /// Defines the domain split: wherever every guard holds of a key <c>k</c> and
         /// <c>domain(k) = d</c> with more than one element, one case per <c>v</c> in <c>d</c>, assuming
         /// <c>domain(k) = {v}</c>; the split's key is <c>k</c>. Its body is <c>g1(k), …, gn(k), d = domain(k),
-        /// (set-length d) &gt; 1</c>. Any thread, any time (D6); a guard read through a scoped view (<c>T.In(tag)</c>) is
+        /// (set-length d) &gt; 1</c>. Any thread, any time; a guard read through a scoped view (<c>T.In(tag)</c>) is
         /// read as in <see cref="DefineSplit"/>, and its first scoped read creates a mirror table, which counts as a table
-        /// definition (§6.8).
+        /// definition.
         /// </summary>
         /// <remarks>
         /// Coverage obligation: <c>domain(k) = S</c> must mean "wherever every guard holds of k, k's value is one of S". A
-        /// domain only narrows (a lattice meet), so cases made for an older, wider domain still cover the scope (§6.9.5).
-        /// More guards split less: fewer cases and fewer facts, never an unsound one (D43). The domain function needs a
-        /// lattice: without one, a case's <c>domain(k) = {v}</c> would conflict with the wider domain it narrows (D32), in
-        /// every case of every split (N105).
+        /// domain only narrows (a lattice meet), so cases made for an older, wider domain still cover the scope.
+        /// More guards split less: fewer cases and fewer facts, never an unsound one. The domain function needs a
+        /// lattice: without one, a case's <c>domain(k) = {v}</c> would conflict with the wider domain it narrows, in
+        /// every case of every split.
         /// </remarks>
         /// <typeparam name="TKey">The key's type.</typeparam>
         /// <typeparam name="TElement">The domain's element type.</typeparam>
@@ -110,7 +110,7 @@ namespace Eggnog
         /// taken; the tag belongs to another graph, or is the root's.</exception>
         /// <exception cref="RuleDefinitionException">The split rule is not valid (a type is not registered).</exception>
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or a first
-        /// scoped read of a guard creates a mirror while another thread is using the writable root (D6).</exception>
+        /// scoped read of a guard creates a mirror while another thread is using the writable root.</exception>
         public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, ValueSet<TElement>> domain,
             IReadOnlyList<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull
         {
@@ -126,9 +126,9 @@ namespace Eggnog
                 throw new ArgumentException($"Function '{domain}' is a scoped view; a domain split writes its domain in each case, and scoped views are read-only.", nameof(domain));
 
             if (domain.Lattice is null)
-                throw new ArgumentException($"Function '{domain}' has no lattice; a domain split narrows the domain to one element in each case, which only a lattice's merge can do (a function without one would hold two values, D32).", nameof(domain));
+                throw new ArgumentException($"Function '{domain}' has no lattice; a domain split narrows the domain to one element in each case, which only a lattice's merge can do (a function without one would hold two values).", nameof(domain));
 
-            // A guard may be a scoped view: it is read like any atom of DefineSplit's body (§6.8).
+            // A guard may be a scoped view: it is read like any atom of DefineSplit's body.
             for (var i = 0; i < guards.Count; i++)
             {
                 var guard = guards[i] ?? throw new ArgumentNullException(nameof(guards), $"Guard {i} is null.");

@@ -82,7 +82,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Gets the sort of what <paramref name="primitive"/> produces: the unit sort for the filters, integers otherwise.
+        /// Gets the sort of what <paramref name="primitive"/> produces: the unit sort for the filters, integers
+        /// otherwise.
         /// </summary>
         /// <param name="primitive">The primitive.</param>
         /// <returns>The sort.</returns>

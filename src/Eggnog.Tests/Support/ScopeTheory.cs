@@ -5,8 +5,8 @@ namespace Eggnog.Tests.Support
 {
 
     /// <summary>
-    /// A small value-only theory for scope tests: two tags, a fact relation, a derived relation, a lattice function, and
-    /// a ruleset, in a serial graph.
+    /// A small value-only theory for scope tests: two tags, a fact relation, a derived relation, a lattice function,
+    /// and a ruleset, in a serial graph.
     /// </summary>
     public sealed class ScopeTheory
     {

@@ -44,14 +44,14 @@ namespace Eggnog.Relations
         /// <returns>The estimate.</returns>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table.</exception>
         /// <exception cref="NotSupportedException">The database is a child context's, whose statistics come from its view
-        /// (colored-contexts spec §9.7, <see cref="Database.GetQueryTableInfo"/>).</exception>
+        /// (<see cref="Database.GetQueryTableInfo"/>).</exception>
         public ColumnUniqueness GetColumnUniqueness(TableId table, ColumnId column) => GetColumnUniqueness(database.GetQueryTableInfo(table), column);
 
         /// <summary>
         /// Gets the uniqueness estimate of <paramref name="column"/> of one table entry: its live row count and the
-        /// column's distinct-value count in the entry's cached column index (colored-contexts spec §9.7). A layered
-        /// context's view (<see cref="ContextView"/>) sums these over the present layers of a table. O(1) when the column
-        /// index is current; otherwise the cost of refreshing it.
+        /// column's distinct-value count in the entry's cached column index. A layered context's view
+        /// (<see cref="ContextView"/>) sums these over the present layers of a table. O(1) when the column index is
+        /// current; otherwise the cost of refreshing it.
         /// </summary>
         /// <param name="info">The table entry: a database's own, or one layer of a view.</param>
         /// <param name="column">The column.</param>

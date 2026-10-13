@@ -537,6 +537,37 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// Growth drops the old storage to the garbage collector, so an enumerator started before the growth keeps
+        /// reading its old storage, as documented, while other code rents an array of the same length from the shared
+        /// pool.
+        /// </summary>
+        [Fact]
+        public void RowEnumeratorKeepsReadingItsOldStorageAfterGrowth()
+        {
+            var rows = new RowBuffer(1);
+            for (uint i = 0; i < 512; i++)
+                rows.AddRow(new[] { i });
+            Assert.Equal(512, rows.Data.Length);
+
+            var e = rows.EnumerateRows();
+            Assert.True(e.MoveNext());
+
+            // Grows to 1024 cells and leaves the full 512-cell array to the garbage collector, not to the shared pool.
+            rows.AddRow(new[] { 999u });
+
+            // Other code on this thread rents a 512-cell array from the shared pool and fills it.
+            var foreign = ArrayPool<uint>.Shared.Rent(512);
+            Array.Fill(foreign, 0xDEADu);
+
+            Assert.True(e.MoveNext());
+            var seen = e.Current[0];
+            ArrayPool<uint>.Shared.Return(foreign);
+
+            // The documented behaviour: the enumerator still reads the old storage, whose row 1 holds 1.
+            Assert.Equal(1u, seen);
+        }
+
     }
 
 }

@@ -12,8 +12,8 @@ namespace Eggnog
     /// otherwise), equal by content. Operations return this instance when nothing changes.
     /// </summary>
     /// <remarks>
-    /// A set is an interned base value, not a container (D20): its cells are never canonicalized or rewritten, and sets
-    /// hold values only, never classes. Equality is element-wise; the hash combines the element hashes in order; because
+    /// A set is an interned base value, not a container: its cells are never canonicalized or rewritten, and sets hold
+    /// values only, never classes. Equality is element-wise; the hash combines the element hashes in order; because
     /// elements are kept sorted, equal sets have one interned cell. Lookups are binary searches; set operations are
     /// linear merges.
     /// </remarks>

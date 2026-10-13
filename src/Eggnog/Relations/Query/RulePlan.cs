@@ -50,8 +50,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes a new instance whose template and program may run Id constants other than the written ones
-        /// (colored-contexts spec §9.8, X19).
+        /// Initializes a new instance whose template and program may run Id constants other than the written ones: their
+        /// canonical forms in the context the rule set runs in.
         /// </summary>
         /// <param name="template">The plan template that runs: the written one, or its variant for K.</param>
         /// <param name="action">The rule's action id in its rule set.</param>
@@ -125,8 +125,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the template as planned, with the Id constants as written: <see cref="Template"/>, unless the rule runs a
-        /// variant for K (colored-contexts spec §9.8). <see cref="RuleSet.BuildCachedPlan"/> caches this one, so a cached
-        /// plan never bakes one context's canonical forms.
+        /// variant for K. <see cref="RuleSet.BuildCachedPlan"/> caches this one, so a cached plan never bakes one
+        /// context's canonical forms.
         /// </summary>
         public PlanTemplate WrittenTemplate { get; }
 
@@ -137,7 +137,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets K, the executed form of the rule's Id constants in the context it was added in (query constants first,
-        /// then action constants), or <c>null</c> when the rule has none (colored-contexts spec §9.8, I30).
+        /// then action constants), or <c>null</c> when the rule has none.
         /// </summary>
         public uint[]? CanonicalConstants { get; }
 

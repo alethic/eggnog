@@ -6,23 +6,24 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The eq-container guard of a child's rebuild (colored-contexts spec §7.4, G-b, decision 9): a child may not
-    /// displace an id that an eq-sort container (one holding e-class ids) holds, because the container would have to be
-    /// rebuilt in the child, which children never do (they never call <see cref="Database.RebuildContainers"/>).
+    /// The eq-container guard of a child's rebuild: a child may not displace an id that an eq-sort container (one
+    /// holding e-class ids) holds, because the container would have to be rebuilt in the child, which children never do
+    /// (they never call <see cref="Database.RebuildContainers"/>). A child may look eq-sort containers up but never
+    /// interns one (<see cref="ContainerEnv{TContainer}"/> refuses it), and may not displace an id one holds.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Only the child's own displacements are checked: an imported displacement was already renamed by the root's own
-    /// container rebuild (X31), and an intermediate ancestor's own loser is its own guard's business (the child is clean
-    /// only while its parent is).
+    /// container rebuild, and an intermediate ancestor's own loser is its own guard's business (the child is clean only
+    /// while its parent is).
     /// </para>
     /// <para>
     /// The guard runs after each pass of <see cref="Context.Rebuild"/> over the journal rows not checked yet, and again
     /// over the whole journal whenever the store's eq-container version moved since the child last checked
-    /// (<see cref="ContainerValues.EqVersion"/>): the root (while it is not frozen) may intern, or its container rebuild
-    /// may produce, a container naming an id the child displaced earlier, and the child is not clean until it checked
-    /// against it (<see cref="Context.IsClean"/>). The spec checks only the journal rows of each pass, which misses such a
-    /// later container. When the guard throws, the context is faulted (X12) and must be disposed.
+    /// (<see cref="ContainerValues.EqVersion"/>): the root (while it is not frozen) may intern, or its container
+    /// rebuild may produce, a container naming an id the child displaced earlier, and the child is not clean until it
+    /// checked against it (<see cref="Context.IsClean"/>). Checking only the journal rows of each pass would miss such
+    /// a later container. When the guard throws, the context is faulted and must be disposed.
     /// </para>
     /// <para>
     /// Cost: nothing unless a container type holding ids is registered; then one exact element-index probe per type and
@@ -71,7 +72,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowDisplacedElement(uint id)
         {
-            throw new NotSupportedException($"Id {id} is held by a container of e-class ids, and a child context displaced it; eq-sort containers in children are not supported yet (decision 9). The context is faulted; dispose it.");
+            throw new NotSupportedException($"Id {id} is held by a container of e-class ids, and a child context displaced it; a child may not displace an id an eq-sort container holds. The context is faulted; dispose it.");
         }
 
     }

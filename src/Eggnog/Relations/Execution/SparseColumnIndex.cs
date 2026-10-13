@@ -61,13 +61,13 @@ namespace Eggnog.Relations
         /// <summary>
         /// Groups the rows of <paramref name="subset"/> a view sees (live and not in <paramref name="hidden"/>) by
         /// <paramref name="column"/>: the visibility-aware <see cref="Build(Table, SubsetRef, ColumnId)"/> of a layered
-        /// run's small probed pieces (colored-contexts spec §9.3, §9.5), whose probe results need no further visibility
-        /// refinement. With <see cref="HiddenRows.None"/> it is the plain build.
+        /// run's small probed pieces, whose probe results need no further visibility refinement. With
+        /// <see cref="HiddenRows.None"/> it is the plain build.
         /// </summary>
         /// <param name="table">The table: one layer of a view.</param>
         /// <param name="subset">The rows; at most <see cref="Capacity"/>.</param>
         /// <param name="column">The column.</param>
-        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed.</param>
         public void Build(Table table, SubsetRef subset, ColumnId column, HiddenRows hidden)
         {
             if (hidden.IsNone)

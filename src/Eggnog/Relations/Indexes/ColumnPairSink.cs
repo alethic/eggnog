@@ -15,8 +15,9 @@ namespace Eggnog.Relations
     /// Pairs are emitted row by row, all columns of a row together, so they come out in non-decreasing row order: a
     /// stable sort by value then orders them by (value, row) (<see cref="PairRadixSort"/>). egglog instead collects one
     /// column after another, so with several columns a value's rows come out as the first column's rows followed by the
-    /// second's, unsorted, and <c>dedup</c> misses non-adjacent duplicates (map §8.1 row 8). A value repeated in two
-    /// columns of one row is emitted once, which is the deduplication egglog intended.
+    /// second's, unsorted, and <c>dedup</c> misses non-adjacent duplicates
+    /// (core-relations/src/hash_index/mod.rs:341-382). A value repeated in two columns of one row is emitted once,
+    /// which is the deduplication egglog intended.
     /// </para>
     /// <para>
     /// The pair array must have room for every pair: the scanned subset's size times the number of columns. A struct

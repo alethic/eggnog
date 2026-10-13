@@ -8,11 +8,11 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Many light children of one frozen root (colored-contexts spec §17 M9.4, C14, §14.2): a thousand children, each
-    /// making one union and rebuilding, run in parallel and serially over a frozen root of 200,000 rows (the spike's
-    /// README reports about 100 ms for a thousand single-merge contexts in parallel on such a root); and the bytes a
-    /// child costs with no layer and with one empty layer, whose difference is the bytes per empty layer (spec: about
-    /// 1–2 KB).
+    /// Many light children of one frozen root (a child's union-find overlay allocates nothing before its first union,
+    /// and the child creates its single-shard layer of a table at its first use of the table): a thousand children,
+    /// each making one union and rebuilding, run in parallel and serially over a frozen root of 200,000 rows; and the
+    /// bytes a child costs with no layer and with one empty layer, whose difference is the bytes per empty layer
+    /// (budgeted at about 1–2 KB).
     /// </summary>
     /// <remarks>
     /// <para>

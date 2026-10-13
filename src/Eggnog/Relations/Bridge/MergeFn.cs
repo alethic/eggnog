@@ -19,13 +19,13 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Every merge function declares whether it is a lattice merge (associative, commutative and idempotent), which
-    /// decides whether a context with ancestors may write the table (decision 2 in docs/engine/decisions.md):
-    /// <see cref="AssertEq"/> and <see cref="UnionId"/> are; <see cref="Old"/>, <see cref="New"/> and <see cref="Const"/>
-    /// are not (the result depends on arrival order, or is not idempotent); a <see cref="Primitive(ExternalFunctionId, MergeFn[])"/>
-    /// or <see cref="Function(FunctionId, MergeFn[])"/> merge is not unless declared with <see cref="AsLattice"/>
+    /// decides whether a context with ancestors may write the table: <see cref="AssertEq"/> and <see cref="UnionId"/>
+    /// are; <see cref="Old"/>, <see cref="New"/> and <see cref="Const"/> are not (the result depends on arrival order,
+    /// or is not idempotent); a <see cref="Primitive(ExternalFunctionId, MergeFn[])"/> or
+    /// <see cref="Function(FunctionId, MergeFn[])"/> merge is not unless declared with <see cref="AsLattice"/>
     /// (<c>min</c>, <c>max</c> or <c>set-union</c> over the old and new values, say). egglog documents the lattice
-    /// requirement without recording it (map §3.9 item 7). Only the root's declaration matters: the arguments of a
-    /// lattice primitive are typically <see cref="Old"/> and <see cref="New"/>.
+    /// requirement without recording it. Only the root's declaration matters: the arguments of a lattice primitive are
+    /// typically <see cref="Old"/> and <see cref="New"/>.
     /// </para>
     /// </remarks>
     internal sealed class MergeFn
@@ -136,8 +136,8 @@ namespace Eggnog.Relations
         public ReadOnlySpan<MergeFn> Args => args;
 
         /// <summary>
-        /// Gets whether the merge is declared a lattice merge: associative, commutative and idempotent, so that the order
-        /// and repetition of conflicting writes do not change the result (decision 2 in docs/engine/decisions.md).
+        /// Gets whether the merge is declared a lattice merge: associative, commutative and idempotent, so that the
+        /// order and repetition of conflicting writes do not change the result.
         /// </summary>
         public bool IsLattice { get; }
 

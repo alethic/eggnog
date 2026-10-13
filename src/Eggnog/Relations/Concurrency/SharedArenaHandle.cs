@@ -37,8 +37,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Allocates <paramref name="value"/> in the arena. If it implements <see cref="IDisposable"/>, the arena's copy
-        /// is disposed when the arena is.
+        /// Allocates <paramref name="value"/> in the arena. If it implements <see cref="IDisposable"/>, the arena's
+        /// copy is disposed when the arena is.
         /// </summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="value">The value.</param>

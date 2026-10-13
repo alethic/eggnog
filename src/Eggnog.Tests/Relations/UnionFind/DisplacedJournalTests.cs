@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="DisplacedJournal"/> (colored-contexts spec §5.3): appends in nondecreasing timestamp order,
-    /// the id-to-row map, the timestamp bounds shared with <see cref="DisplacedUnionFind"/>, and release.
+    /// Tests for <see cref="DisplacedJournal"/>, the ids a child context displaced: appends in nondecreasing timestamp
+    /// order, the id-to-row map, the timestamp bounds shared with <see cref="DisplacedUnionFind"/>, and release.
     /// </summary>
     public class DisplacedJournalTests
     {

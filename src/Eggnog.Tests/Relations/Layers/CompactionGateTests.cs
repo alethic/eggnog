@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the compaction gate (colored-contexts spec §6.8, C12, X27, I16): a shared layer never compacts while its
-    /// context has live descendants, because compaction renumbers the rows their cursors and hidden sets name; it
-    /// compacts again once they are gone. A context-private table is never gated.
+    /// Tests for the compaction gate: a shared layer never compacts while its context has live descendants, because
+    /// compaction renumbers the rows their cursors and hidden sets name; it compacts again once they are gone. A
+    /// context-private table is never gated.
     /// </summary>
     public class CompactionGateTests
     {

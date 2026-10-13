@@ -7,22 +7,22 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A random program of the rule differentials (colored-contexts spec §17 M10.3): its family, rules, conjunctive
-    /// queries and commands, generated from a seed before anything runs, so that a failing program can be shrunk by
-    /// dropping commands (<see cref="ColorShrinker"/>) and printed.
+    /// A random program of the rule differentials: its family, rules, conjunctive queries and commands, generated from
+    /// a seed before anything runs, so that a failing program can be shrunk by dropping commands
+    /// (<see cref="ColorShrinker"/>) and printed.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Commands write and run rules in contexts up to three deep (four levels with the root), create children of
-    /// writable and frozen contexts, change ancestors after their children exist, freeze contexts whose parents are frozen
-    /// (the root at a random step, in half the programs), dispose leaves, and in the history family delete and clear rows
-    /// anywhere: the generator does not ask whether §6.7 allows it, the harness does, and checks the engine's refusal
-    /// where it does not. Family A starts from a pool of root ids that rule constants name; family B from the terms
-    /// <c>num(0..3)</c>.
+    /// writable and frozen contexts, change ancestors after their children exist, freeze contexts whose parents are
+    /// frozen (the root at a random step, in two programs of three), dispose leaves, and in the history family delete
+    /// and clear rows anywhere: the generator does not ask whether the engine's retraction rule allows it, the harness
+    /// does, and checks the engine's refusal where it does not. Family A starts from a pool of root ids that rule
+    /// constants name; family B from the terms <c>num(0..3)</c>.
     /// </para>
     /// <para>
-    /// The generator keeps a structural model (which contexts live, are frozen, how deep, which ids each may use) so that
-    /// generated commands are valid; the harness re-checks validity when it runs them, for shrunk programs.
+    /// The generator keeps a structural model (which contexts live, are frozen, how deep, which ids each may use) so
+    /// that generated commands are valid; the harness re-checks validity when it runs them, for shrunk programs.
     /// </para>
     /// </remarks>
     sealed class ColorProgram

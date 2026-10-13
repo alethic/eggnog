@@ -9,15 +9,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for one rebuild pass of a child (colored-contexts spec §7.3, C5, X8, X9, decision 3): losers only, epochs,
-    /// congruence through the layered merge, step 4 examining exactly the uses of the own losers, the rows written since
-    /// the last rebuild, own rewrites merged (R2-3), and the incremental path on a large own layer.
+    /// Tests for one rebuild pass of a child: only rows naming its losers are copied, the epochs of copies and
+    /// rewrites, congruence through the layered merge, the examination of exactly the uses of the own losers, the rows
+    /// written since the last rebuild, own rewrites merged, the incremental path on a large own layer, and a parent
+    /// union over the child's own rows.
     /// </summary>
     public class ChildRebuildTests
     {
 
         /// <summary>
-        /// Only rows naming the loser are copied (decision 3): the root's rows naming the winner stay read through.
+        /// Only rows naming the loser are copied: the root's rows naming the winner stay read through.
         /// </summary>
         [Fact]
         public void OnlyRowsNamingTheLoserAreCopied()
@@ -56,8 +57,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Copies and rewrites carry the epoch of the pass that made them (I3, I19): at least the child's creation stamp,
-        /// below the clock after the rebuild.
+        /// Copies and rewrites carry the epoch of the pass that made them: at least the child's creation stamp, below
+        /// the clock after the rebuild.
         /// </summary>
         [Fact]
         public void CopiesAndRewritesCarryThePassEpoch()
@@ -87,14 +88,14 @@ namespace Eggnog.Relations.Tests
                 Assert.True(row[2] >= child.CreatedAt);
             }
 
-            // The journal's stamps never decrease (I3).
+            // The journal's stamps never decrease.
             var stamps = child.Journal!.Timestamps.ToArray();
             Assert.True(stamps.SequenceEqual(stamps.OrderBy(t => t)));
         }
 
         /// <summary>
-        /// Congruence through C4: a copy that lands on a key the root already holds goes through the merge function, whose
-        /// union is staged in the child; the next pass applies it.
+        /// Congruence through the layered merge: a copy that lands on a key the root already holds goes through the
+        /// merge function, whose union is staged in the child; the next pass applies it.
         /// </summary>
         [Fact]
         public void CongruenceRunsThroughTheLayeredMerge()
@@ -108,8 +109,8 @@ namespace Eggnog.Relations.Tests
             Insert(root, pair, three, two, six, 0);
             root.Freeze();
 
-            // The spec's worked trace (§7.3): C unions 3 with 1; pair(3,2)=6 is hidden and copied as pair(1,2)=6, which
-            // hits the root's pair(1,2)=5; UnionIdMerge stages union(5,6) in C and stores nothing.
+            // A worked trace: C unions 3 with 1; pair(3,2)=6 is hidden and copied as pair(1,2)=6, which hits the root's
+            // pair(1,2)=5; UnionIdMerge stages union(5,6) in C and stores nothing.
             var child = root.CreateChild();
             child.Union(one, three);
             child.Rebuild();
@@ -125,7 +126,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Step 4 examines exactly the uses of the own losers, through the root's rebuild index, never a scan.
+        /// The rebuild examines exactly the uses of the own losers, through the root's rebuild index, never a scan.
         /// </summary>
         [Fact]
         public void AncestorRowsExaminedEqualsTheUsesOfTheLosers()
@@ -166,8 +167,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The own rows written since the layer's last rebuild are rewritten with the rest: a row written before a union and
-        /// one written after the previous rebuild both end canonical.
+        /// The own rows written since the layer's last rebuild are rewritten with the rest: a row written before a
+        /// union and one written after the previous rebuild both end canonical.
         /// </summary>
         [Fact]
         public void RowsWrittenSinceTheLastRebuildAreRewritten()
@@ -203,7 +204,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Own rewrites are merged (R2-3): C unions 3 into 1, its own f(3) becomes f(1), and C is clean and canonical.
+        /// Own rewrites are merged: C unions 3 into 1, its own f(3) becomes f(1), and C is clean and canonical.
         /// </summary>
         [Fact]
         public void OwnRewritesAreMerged()
@@ -229,9 +230,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The layered incremental override (§7.3, R2-12): on an own layer of 5000 rows, a union whose loser one row names
-        /// rewrites through the rebuild index, examining only that row, where egglog's rule (more than 10 000 rows) would
-        /// rescan the layer.
+        /// The layered incremental override: on an own layer of 5000 rows, a union whose loser one row names rewrites
+        /// through the rebuild index, examining only that row, where egglog's rule (more than 10 000 rows) would rescan
+        /// the layer.
         /// </summary>
         [Fact]
         public void TheIncrementalPathOnALargeLayerExaminesOnlyTheRowsNamingTheLoser()
@@ -274,8 +275,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child under a parent that is not frozen: the parent's own union and the child's own union in one rebuild of
-        /// the child (imports and own losers together), against a copy.
+        /// A child under a parent that is not frozen: the parent's own union and the child's own union in one rebuild
+        /// of the child (imports and own losers together), against a copy.
         /// </summary>
         [Fact]
         public void ImportsAndOwnLosersInOneRebuild()
@@ -302,6 +303,34 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(12u, Row(root, f, ids[2])![1]);
             child.CheckInvariants();
             LookupPaths.Check(child, ids.Select(id => new[] { id }));
+        }
+
+        /// <summary>
+        /// A union-find import over the child's own rows: the root unions a and b after the child wrote g(b); no root
+        /// table changed. The child's rebuild rewrites its row: a clean child that answered g(b) and missed g(a) would
+        /// hold an own row naming a displaced id, and would not be a copy of the context.
+        /// </summary>
+        [Fact]
+        public void AParentUnionOverAnOwnRowNeverLeavesACleanStaleChild()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var g = store.AddTable(MaxFunction(1), name: "g");
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var child = root.CreateChild();
+            Insert(child, g, b, 1, 0);
+
+            // The root (not frozen, same domain) unions a and b: b loses. No root row mentions either id.
+            root.Union(a, b);
+
+            child.Rebuild();
+            Assert.True(child.IsClean);
+            Assert.Equal(a, child.Find(b));
+
+            // A copy (the root's rows plus the child's write, replayed with the union) holds g(a) = 1 and no g(b).
+            Assert.NotNull(Row(child, g, a));
+            Assert.Null(Row(child, g, b));
         }
 
     }

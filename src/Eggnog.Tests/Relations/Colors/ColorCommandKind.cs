@@ -31,8 +31,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Deletes a row of the table: the one at <see cref="ColorCommand.Arg"/> (modulo the count) among the context's
-        /// rows in rendered order, or a missing key when the table is empty. Refused, and checked to be, where colors
-        /// §6.7 does not allow it.
+        /// rows in rendered order, or a missing key when the table is empty. Refused, and checked to be, where the
+        /// engine's retraction rule does not allow it: in a context with live children, or in a child whose parent is
+        /// writable.
         /// </summary>
         Delete,
 
@@ -47,8 +48,8 @@ namespace Eggnog.Relations.Tests
         Run,
 
         /// <summary>
-        /// Saturates the rules of mask <see cref="ColorCommand.Arg"/>: through <see cref="EGraphContext.Saturate"/> when
-        /// <see cref="ColorCommand.Result"/> is 0, else by a loop of runs checked one by one.
+        /// Saturates the rules of mask <see cref="ColorCommand.Arg"/>: through <see cref="EGraphContext.Saturate"/>
+        /// when <see cref="ColorCommand.Result"/> is 0, else by a loop of runs checked one by one.
         /// </summary>
         Saturate,
 

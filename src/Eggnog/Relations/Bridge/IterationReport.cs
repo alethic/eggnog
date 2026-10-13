@@ -6,13 +6,12 @@ namespace Eggnog.Relations
     /// <summary>
     /// What one iteration of an <see cref="EGraph"/> or an <see cref="EGraphContext"/> did: the rule set's report and
     /// the rebuild that followed. egglog's <c>IterationReport</c> (egglog-reports/src/lib.rs:90-110), plus whether the
-    /// rebuild changed anything, how many passes it ran, and whether a contradiction stopped the context
-    /// (colored-contexts spec §10.3).
+    /// rebuild changed anything, how many passes it ran, and whether a contradiction stopped the context.
     /// </summary>
     /// <remarks>
     /// <see cref="Changed"/> is whether the rule application changed the database, as in egglog; rebuild changes are
-    /// reported separately in <see cref="RebuildChanged"/>, and a scheduler decides saturation from both (decision 11 in
-    /// docs/engine/decisions.md) and stops on <see cref="Stopped"/>. Immutable; only the engine creates one.
+    /// reported separately in <see cref="RebuildChanged"/>, and a scheduler decides saturation from both and stops on
+    /// <see cref="Stopped"/>. Immutable; only the engine creates one.
     /// </remarks>
     internal sealed class IterationReport
     {
@@ -36,7 +35,7 @@ namespace Eggnog.Relations
         /// <param name="rebuildTime">The time the rebuild took; zero when no union called for one.</param>
         /// <param name="rebuildChanged">Whether the rebuild changed any table or container.</param>
         /// <param name="rebuildPasses">The number of rebuild passes; zero when no union called for a rebuild.</param>
-        /// <param name="stopped">Whether a contradiction stopped the context (§6.9).</param>
+        /// <param name="stopped">Whether a contradiction stopped the context.</param>
         internal IterationReport(RuleSetReport ruleSetReport, TimeSpan rebuildTime, bool rebuildChanged, int rebuildPasses, bool stopped)
         {
             ArgumentNullException.ThrowIfNull(ruleSetReport);
@@ -49,8 +48,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the report of a run that did nothing because a contradiction had stopped its context (§10.3): no rule
-        /// ran, nothing changed, <see cref="Stopped"/> is set. Shared.
+        /// Gets the report of a run that did nothing because a contradiction had stopped its context: no rule ran,
+        /// nothing changed, <see cref="Stopped"/> is set. Shared.
         /// </summary>
         public static IterationReport WhenStopped { get; } = new(RuleSetReport.Empty, TimeSpan.Zero, false, 0, true);
 
@@ -82,7 +81,7 @@ namespace Eggnog.Relations
         public int RebuildPasses { get; }
 
         /// <summary>
-        /// Gets whether the context is stopped by a contradiction (§6.9; only with
+        /// Gets whether the context is stopped by a contradiction (only with
         /// <see cref="ContextOptions.StopOnContradiction"/>): it answers only <c>IsContradictory</c> from now on, and a
         /// scheduler stops running it.
         /// </summary>

@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="FlattenedUnionFind"/> (colored-contexts spec §5.4): <c>null</c> when nothing moves, the dense
-    /// representation up to exactly <see cref="FlattenedUnionFind.DenseFactor"/> times the entries and the hash table
-    /// beyond, identity outside the domain, the collected keys, and flattening a chain.
+    /// Tests for <see cref="FlattenedUnionFind"/>, a frozen chain of overlay levels collapsed into one map: <c>null</c>
+    /// when nothing moves, the dense representation up to exactly <see cref="FlattenedUnionFind.DenseFactor"/> times
+    /// the entries and the hash table beyond, identity outside the domain, the collected keys, and flattening a chain.
     /// </summary>
     public class FlattenedUnionFindTests
     {

@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A small store-backed e-graph for the context tests of colored-contexts spec §10 (M10.3): relations as the rule
-    /// layer writes them (unit output, assert-eq merge, a lattice, rule-layer D27), constructors, a lattice function, a
-    /// nullary contradiction relation, and rule builders over them.
+    /// A small store-backed e-graph for the bridge's context tests: relations as the rule layer writes them (unit
+    /// output and an assert-eq merge, which is a lattice merge, so children may write them), constructors, a lattice
+    /// function, a nullary contradiction relation, and rule builders over them.
     /// </summary>
     sealed class ContextGraph
     {

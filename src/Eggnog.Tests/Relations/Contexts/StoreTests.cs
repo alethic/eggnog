@@ -2,15 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
+
+using static Eggnog.Relations.Tests.LayeredTestUtil;
+using static Eggnog.Relations.Tests.QueryTestUtil;
 
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="Store"/> (colored-contexts spec §3.2, §4.1, §4.3): the bridge's layout (union-find table 0,
-    /// id counter 0, clock counter 1 starting at 1), definitions at any time, sealed counters, and the clock's limit.
+    /// Tests for <see cref="Store"/>: the bridge's layout (union-find table 0, id counter 0, clock counter 1 starting
+    /// at 1), definitions at any time, sealed counters, the clock's limit, and the schema through which children reach
+    /// root tables: it knows every root table, is never torn while tables are added, and freezes a table added while
+    /// the root freezes.
     /// </summary>
     public class StoreTests
     {
@@ -21,6 +27,10 @@ namespace Eggnog.Relations.Tests
         internal static SortedWritesTable Function(Store store, int keys = 1) =>
             new(keys, keys + 2, new ColumnId(keys + 1), Enumerable.Range(0, keys + 1).Select(c => new ColumnId(c)).ToArray(), new UnionIdMerge(new ColumnId(keys), store.UnionFindTable, new ColumnId(keys + 1)), ParallelHeuristics.Serial);
 
+        /// <summary>
+        /// A new store lays its root database out as egglog's bridge does: the union-find is table 0, the id counter is
+        /// counter 0 and the clock counter 1, starting at 1.
+        /// </summary>
         [Fact]
         public void TheUnionFindIsTableZeroAndTheCountersAreZeroAndOne()
         {
@@ -51,6 +61,9 @@ namespace Eggnog.Relations.Tests
             Assert.True(store.Schema.FunctionTables.IsEmpty);
         }
 
+        /// <summary>
+        /// A table the store adds is registered with the schema with its shape, stratum and privacy.
+        /// </summary>
         [Fact]
         public void AddTableRegistersTheTableWithTheSchema()
         {
@@ -92,6 +105,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<KeyNotFoundException>(() => store.Schema.GetName(new TableId(9)));
         }
 
+        /// <summary>
+        /// The store refuses a table it cannot layer, and the schema refuses to register a table twice or the
+        /// union-find.
+        /// </summary>
         [Fact]
         public void AddTableRejectsTablesThatCannotBeLayered()
         {
@@ -106,10 +123,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §4.3, X16, X39: every table of a store is added through <see cref="Store.AddTable"/>, so its schema, which
-        /// children read and the root's rebuild walks, knows every root table. The root database's own
-        /// <see cref="Database.AddTable"/> is refused, children or not; a bare database and a clone, which belong to no
-        /// store, add tables as egglog does.
+        /// Every table of a store is added through <see cref="Store.AddTable"/>, so its schema, which children read and
+        /// the root's rebuild walks, knows every root table. The root database's own <see cref="Database.AddTable"/> is
+        /// refused, children or not; a bare database and a clone, which belong to no store, add tables as egglog does.
         /// </summary>
         [Fact]
         public void TheRootDatabaseLeavesDefinitionsToTheStore()
@@ -141,6 +157,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new TableId(0), new Database().AddTable(new DisplacedTable()));
         }
 
+        /// <summary>
+        /// A table added while children live is visible to them at once, and one added after they are disposed gets its
+        /// stratum.
+        /// </summary>
         [Fact]
         public void AddTableAfterChildrenWorks()
         {
@@ -165,6 +185,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(1, store.Schema[h]!.Stratum);
         }
 
+        /// <summary>
+        /// Adding a table while another thread holds the root's domain throws and adds nothing; once the domain is free
+        /// it succeeds.
+        /// </summary>
         [Fact]
         public void AddTableFromAnotherThreadThanTheRootsDomainThrows()
         {
@@ -195,6 +219,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new TableId(1), store.AddTable(Function(store)));
         }
 
+        /// <summary>
+        /// Counters may be added until the first child is created; from then on every way of adding one throws, also
+        /// after every child is disposed.
+        /// </summary>
         [Fact]
         public void AddCounterThrowsOnceAChildHasBeenCreated()
         {
@@ -215,10 +243,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §3.2, §13 edge 25: the clock is checked and throws at <see cref="uint.MaxValue"/>, which is
-        /// <see cref="Value.StaleRep"/>; the last epoch it hands out is one below. Every clock read of the store applies
-        /// the bound: <see cref="Store.ReadClock"/>, <see cref="Context.BeginEpoch"/>, a child's creation stamp and the
-        /// databases' timestamp defaults.
+        /// The clock is checked and throws at <see cref="uint.MaxValue"/>, which is <see cref="Value.StaleRep"/>; the
+        /// last epoch it hands out is one below. Every clock read of the store applies the bound:
+        /// <see cref="Store.ReadClock"/>, <see cref="Context.BeginEpoch"/>, a child's creation stamp and the databases'
+        /// timestamp defaults.
         /// </summary>
         [Fact]
         public void ReadClockOverflowsAtTheStaleMarker()
@@ -246,6 +274,9 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(7u, store.Root.Database.CreateExecutionState(7).Timestamp);
         }
 
+        /// <summary>
+        /// Only a registered zero-key table can be designated the contradiction table, and only once.
+        /// </summary>
         [Fact]
         public void TheContradictionTableIsANullaryRelationDesignatedOnce()
         {
@@ -261,6 +292,185 @@ namespace Eggnog.Relations.Tests
             Assert.True(store.Schema[bottom]!.IsContradiction);
             Assert.False(store.Schema[f]!.IsContradiction);
             Assert.Throws<InvalidOperationException>(() => store.DesignateContradiction(bottom));
+        }
+
+        /// <summary>
+        /// A table added while the root freezes on another thread is frozen with the root, or refused.
+        /// <see cref="Store.AddTable"/> reads the root's frozen flag again once it holds the root's domain, so a freeze
+        /// that completes between the first read and the enter cannot leave the table unfrozen and unsealed in a frozen
+        /// root. <c>EGGNOG_ADDTABLE_RACE</c> sets the number of iterations (5000 by default).
+        /// </summary>
+        [Fact]
+        public void ATableAddedWhileTheRootFreezesIsFrozenOrRefused()
+        {
+            var iterations = int.TryParse(Environment.GetEnvironmentVariable("EGGNOG_ADDTABLE_RACE"), out var n) && n > 0 ? n : 5000;
+            var bad = 0;
+            for (var i = 0; i < iterations && bad == 0; i++)
+            {
+                var store = new Store(ParallelHeuristics.Serial);
+                store.AddTable(MaxFunction(1), name: "f");
+                var root = store.Root;
+                using var start = new Barrier(2);
+                TableId? added = null;
+                var freezer = Task.Run(() =>
+                {
+                    start.SignalAndWait();
+                    try
+                    {
+                        root.Freeze();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                });
+                var adder = Task.Run(() =>
+                {
+                    start.SignalAndWait();
+                    try
+                    {
+                        added = store.AddTable(MaxFunction(1), name: "g");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                });
+
+                Task.WaitAll(freezer, adder);
+                if (root.IsFrozen && added is { } g && store.Schema[g]!.Root.IsShared == false)
+                {
+                    bad++;
+                    Console.WriteLine($"iteration {i}: g={g} rootDbFrozen={root.Database.IsFrozen} fShared={store.Schema[new TableId(1)]!.Root.IsShared} gInRootDb={root.Database.TryGetTableInfo(g, out _)} rootViewFrozen={store.Schema.RootView(g).Layers[0]!.IsFrozen}");
+                }
+            }
+
+            Assert.Equal(0, bad);
+        }
+
+        /// <summary>
+        /// Children reach root tables only through the store's schema, and a child that asserts nothing sees what its
+        /// parent sees. A table that the store's root database holds is known to the schema: adding one to the root
+        /// database directly after children exist is refused or registered.
+        /// </summary>
+        [Fact]
+        public void EveryRootTableIsKnownToTheChildren()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var child = store.Root.CreateChild();
+
+            TableId direct;
+            try
+            {
+                direct = store.Root.Database.AddTable(StoreTests.Function(store), [], [store.UnionFindTable], "direct");
+            }
+            catch (InvalidOperationException)
+            {
+                return; // refused: definitions go through the store
+            }
+
+            Assert.Equal(store.Root.Database.TableCount, child.Database.TableCount);
+            Assert.Equal(store.Root.Database.GetTableSpec(direct).Arity, child.Database.GetTableSpec(direct).Arity);
+            Assert.Contains(direct, store.Schema.FunctionTables.ToArray());
+        }
+
+        /// <summary>
+        /// The schema is read lock-free while a table is added, so a reader never sees a torn schema: every id listed
+        /// in <see cref="LayeredSchema.FunctionTables"/> has a <see cref="LayeredTableSchema"/> when read right after.
+        /// </summary>
+        [Fact]
+        public void EveryListedFunctionTableHasASchemaWhileTablesAreAdded()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var schema = store.Schema;
+            var stop = 0;
+            var torn = 0;
+            using var start = new System.Threading.ManualResetEventSlim();
+            var readers = ConcurrencyTestThread.StartMany(3, _ =>
+            {
+                start.Wait();
+                while (System.Threading.Volatile.Read(ref stop) == 0)
+                {
+                    var tables = schema.FunctionTables;
+                    if (tables.Length > 0 && schema[tables[^1]] is null)
+                        System.Threading.Interlocked.Increment(ref torn);
+                }
+            });
+
+            start.Set();
+            try
+            {
+                for (var i = 0; i < 20_000 && System.Threading.Volatile.Read(ref torn) == 0; i++)
+                    store.AddTable(new SortedWritesTable(1, 2, null, [], new KeepCurrentMerge(), ParallelHeuristics.Serial));
+            }
+            finally
+            {
+                System.Threading.Volatile.Write(ref stop, 1);
+                ConcurrencyTestThread.JoinAll(readers);
+            }
+
+            Assert.Equal(0, torn);
+        }
+
+        /// <summary>
+        /// Children reach root tables only through the store's <see cref="LayeredSchema"/>, and the root's rebuild pass
+        /// rebuilds <see cref="LayeredSchema.FunctionTables"/>. A table added through the root database's own
+        /// <see cref="Database.AddTable"/> is therefore refused (definitions go through the store, as
+        /// <see cref="Database.AddCounter"/> is refused once children exist) or registered with the schema.
+        /// </summary>
+        [Fact]
+        public void ATableAddedThroughAStoreRootsDatabaseIsKnownToTheStore()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var child = store.Root.CreateChild();
+            TableId direct;
+            try
+            {
+                direct = store.Root.Database.AddTable(StoreTests.Function(store), [], [store.UnionFindTable], "direct");
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            Assert.NotNull(store.Schema[direct]);
+            Assert.Contains(direct, store.Schema.FunctionTables.ToArray());
+            Assert.Equal(store.Root.Database.TableCount, child.Database.TableCount);
+            Assert.Equal("direct", child.Database.GetTableName(direct));
+        }
+
+        /// <summary>
+        /// Tables may be added while other threads read the schema (children of a frozen root), and every registered id
+        /// the schema lists has its <see cref="LayeredTableSchema"/>: a reader that finds an id in
+        /// <see cref="LayeredSchema.FunctionTables"/> finds <c>schema[id]</c>.
+        /// </summary>
+        [Fact]
+        public void EveryListedFunctionTableHasItsSchemaWhileTablesAreAdded()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var schema = store.Schema;
+            var stop = 0;
+            var missing = 0;
+            var reader = ConcurrencyTestThread.Start(() =>
+            {
+                while (Volatile.Read(ref stop) == 0)
+                {
+                    var listed = schema.FunctionTables;
+                    if (listed.Length > 0 && schema[listed[^1]] is null)
+                        Interlocked.Increment(ref missing);
+                }
+            });
+
+            try
+            {
+                for (var i = 0; i < 20_000 && Volatile.Read(ref missing) == 0; i++)
+                    store.AddTable(StoreTests.Function(store));
+            }
+            finally
+            {
+                Volatile.Write(ref stop, 1);
+                reader.Join();
+            }
+
+            Assert.Equal(0, missing);
         }
 
     }

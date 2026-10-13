@@ -37,7 +37,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void VariableFreeAtomDoesNotPanic()
         {
-            // egglog unwraps an empty bucket 0 after popping a variable-free atom (map §8.1 row 7).
+            // egglog unwraps an empty bucket 0 after popping a variable-free atom and panics; the queue drops empty
+            // buckets.
             var (db, query) = ExperimentQueries.Build("allconst", PlanStrategy.MinCover);
             Assert.Equal([1, 0], PopAll(new BucketQueue(Context(query, db))));
         }
@@ -45,7 +46,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void OnlyVariablesOfTheBagCount()
         {
-            // A bag whose atom a1 also holds v2, which is not in the bag: egglog indexed var_info[v2] and panicked.
+            // A bag whose atom a1 also holds v2, which is not in the bag: egglog indexes var_info[v2] and panics; the
+            // queue skips variables outside the bag.
             var (db, query) = ExperimentQueries.Build("join2_unused", PlanStrategy.MinCover);
             var ctx = Context(query, db);
             ctx.Variables.Take(new Variable(2));

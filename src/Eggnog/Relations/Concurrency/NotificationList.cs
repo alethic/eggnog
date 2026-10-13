@@ -27,11 +27,11 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// The Rust keeps the flags in a <c>ConcurrentVec</c> and flips them in place under its read lock. Here the flags
-    /// live in segments that never move once allocated (the layout of <see cref="ConcurrentBitSet"/>): segment 0
-    /// holds the first 128 flags and segment <c>k &gt; 0</c> the <c>128·2^(k-1)</c> flags starting at
-    /// <c>128·2^(k-1)</c>, so the total doubles with each segment like the Rust's power-of-two growth. Growth publishes a
-    /// new segment directory under a lock; a thread still holding the old directory reaches the same flags, so no flag
-    /// set during growth is lost and the notify path takes no lock.
+    /// live in segments that never move once allocated (the layout of <see cref="ConcurrentBitSet"/>): segment 0 holds
+    /// the first 128 flags and segment <c>k &gt; 0</c> the <c>128·2^(k-1)</c> flags starting at <c>128·2^(k-1)</c>, so
+    /// the total doubles with each segment like the Rust's power-of-two growth. Growth publishes a new segment
+    /// directory under a lock; a thread still holding the old directory reaches the same flags, so no flag set during
+    /// growth is lost and the notify path takes no lock.
     /// </para>
     /// <para>
     /// Between resets an identifier is listed at most once, provided <see cref="Reset()"/> does not run concurrently
@@ -43,9 +43,9 @@ namespace Eggnog.Relations
     /// x64 and almost the same on Arm64, and an interlocked exchange (a full fence) where the Rust swaps.
     /// </para>
     /// <para>
-    /// Cost: <see cref="Notify"/> of a notified identifier is an acquire load of the directory, a leading-zero count and
-    /// two dependent loads, with no write. The Rust type is a clonable <c>Arc</c> handle; share the reference instead.
-    /// Space is O(n) in the largest identifier notified.
+    /// Cost: <see cref="Notify"/> of a notified identifier is an acquire load of the directory, a leading-zero count
+    /// and two dependent loads, with no write. The Rust type is a clonable <c>Arc</c> handle; share the reference
+    /// instead. Space is O(n) in the largest identifier notified.
     /// </para>
     /// </remarks>
     /// <typeparam name="TKey">The identifier type.</typeparam>
@@ -69,8 +69,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The flag segment directory: nonzero flags are notified. Never empty, except in a lazy list before its first
-        /// notify. Replaced wholesale (under <see cref="growLock"/>) when it grows; segments are shared between successive
-        /// directories and never reallocated.
+        /// notify. Replaced wholesale (under <see cref="growLock"/>) when it grows; segments are shared between
+        /// successive directories and never reallocated.
         /// </summary>
         int[][] segments;
 
@@ -84,8 +84,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes an empty list whose first segment is allocated now or, with <paramref name="lazy"/>, by the first
-        /// notify (colored-contexts spec §14.2: a child context's catalog pays for flags only once it stages a write).
+        /// Initializes an empty list whose first segment is allocated now or, with <paramref name="lazy"/>, by the
+        /// first notify (a child context's catalog is lazy, so the child pays for flags only once it stages a write).
         /// The notify path is the same either way: an empty directory takes the growth branch that a notify past the
         /// last segment already takes.
         /// </summary>
@@ -124,8 +124,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether nothing was notified since the last reset: a child context is clean only without pending
-        /// notifications (colored-contexts spec §7.5). Takes the list's lock; a notify racing the read may or may not be
-        /// seen, as with <see cref="Reset()"/>.
+        /// notifications. Takes the list's lock; a notify racing the read may or may not be seen, as with
+        /// <see cref="Reset()"/>.
         /// </summary>
         public bool IsEmpty
         {

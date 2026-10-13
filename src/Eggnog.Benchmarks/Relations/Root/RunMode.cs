@@ -14,7 +14,7 @@ namespace Eggnog.Relations.Benchmarks
 
         /// <summary>
         /// One thread: <see cref="ParallelHeuristics.Serial"/> for the database and its tables, so rule sets, merges,
-        /// rebuilds and index refreshes take their serial paths. Deterministic (decision 4).
+        /// rebuilds and index refreshes take their serial paths. Deterministic for a given program.
         /// </summary>
         Serial,
 

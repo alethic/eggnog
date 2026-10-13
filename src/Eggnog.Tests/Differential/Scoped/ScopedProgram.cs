@@ -6,16 +6,17 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A random scoped program (§8.2 <c>ScopeDifferentialTests</c>, <c>InheritanceOffEquivalenceTests</c>): tables, two
-    /// tags, global rules, queries, and a sequence of scope commands that build a tree up to four deep with frozen
-    /// prefixes, host writes into writable ancestors between child runs, and local rules with scoped atoms.
+    /// A random scoped program (run by <c>ScopeDifferentialTests</c> and <c>InheritanceOffEquivalenceTests</c>):
+    /// tables, two tags, global rules, queries, and a sequence of scope commands that build a tree up to four deep with
+    /// frozen prefixes, host writes into writable ancestors between child runs, and local rules with scoped atoms.
     /// </summary>
     /// <param name="Seed">The seed it was generated from.</param>
     /// <param name="Tables">The tables.</param>
     /// <param name="Globals">The global rules.</param>
     /// <param name="Queries">The queries (heads empty).</param>
     /// <param name="Commands">The commands, ending with a check.</param>
-    /// <param name="Constructors">Whether the program has a constructor and node relation, which children write.</param>
+    /// <param name="Constructors">Whether the program has a constructor and node relation, which children
+    /// write.</param>
     internal sealed record ScopedProgram(int Seed, ScopedTableSpec[] Tables, ScopedRuleSpec[] Globals, ScopedRuleSpec[] Queries,
         ScopedCommand[] Commands, bool Constructors)
     {

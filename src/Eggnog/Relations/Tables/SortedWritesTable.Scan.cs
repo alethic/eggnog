@@ -23,10 +23,10 @@ namespace Eggnog.Relations
         /// per-row test at all.
         /// </para>
         /// <para>
-        /// Tombstones are skipped whenever the table has any, with or without constraints. egglog evaluates
-        /// constraints on raw rows without that check (mod.rs:429-439, 1018-1025), so a deleted or superseded row whose
-        /// remaining cells satisfy a slow constraint leaks into the join (map §8.1 row 1); a column-0 constraint such as
-        /// <c>c0 &gt; v</c> even matches the tombstone marker itself.
+        /// Tombstones are skipped whenever the table has any, with or without constraints. egglog evaluates constraints
+        /// on raw rows without that check (mod.rs:429-439, 1018-1025), so a deleted or superseded row whose remaining
+        /// cells satisfy a slow constraint leaks into the join; a column-0 constraint such as <c>c0 &gt; v</c> even
+        /// matches the tombstone marker itself.
         /// </para>
         /// <para>
         /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>, which
@@ -99,7 +99,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Visits the rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that a view sees (live
-        /// and not in <paramref name="hidden"/>) and that satisfy every constraint (colored-contexts spec §9.3). It hides
+        /// and not in <paramref name="hidden"/>) and that satisfy every constraint. It hides
         /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
         /// the hidden-aware scan of the base class, which dispatches here.
         /// </summary>
@@ -115,7 +115,7 @@ namespace Eggnog.Relations
         /// <param name="start">The first position.</param>
         /// <param name="count">The number of positions to visit.</param>
         /// <param name="constraints">The constraints rows must satisfy.</param>
-        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows the view hides; sealed.</param>
         /// <param name="sink">Receives each visible row with its row id; must not keep the span.</param>
         /// <returns>The next position, or -1.</returns>
         public new int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
@@ -142,13 +142,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every row of <paramref name="subset"/> a view sees: live and not in <paramref name="hidden"/>
-        /// (colored-contexts spec §9.3). Hides <see cref="Table.ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>,
-        /// which dispatches here.
+        /// Visits every row of <paramref name="subset"/> a view sees: live and not in <paramref name="hidden"/>. Hides
+        /// <see cref="Table.ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>, which dispatches here.
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan; within the table's physical rows.</param>
-        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows the view hides; sealed.</param>
         /// <param name="sink">Receives each visible row with its row id; must not keep the span.</param>
         public new void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
@@ -335,7 +334,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Emits the row at <paramref name="row"/> if it is live (when the table has tombstones), not hidden, and
-        /// satisfies the constraints: the per-row test of a hidden-aware scan (colored-contexts spec §9.3).
+        /// satisfies the constraints: the per-row test of a hidden-aware scan.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static void EmitIfMatchesHidden<TSink>(ref uint cells, int arity, int row, bool checkStale, ReadOnlySpan<Constraint> constraints, ref HiddenCursor hidden, ref TSink sink)

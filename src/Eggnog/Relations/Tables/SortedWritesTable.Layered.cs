@@ -10,13 +10,13 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The child context's layer this table is the own table of, or <c>null</c> for a root or bare table: the one
-        /// test <see cref="Merge"/> pays to dispatch (X2).
+        /// test <see cref="Merge"/> pays to dispatch.
         /// </summary>
         TableLayer? layer;
 
         /// <summary>
-        /// The gate whose live descendants forbid compaction (§6.8, X27): the root context's for a shared root table, the
-        /// owner's for a shared layer, none for a context-private or bare table.
+        /// The gate whose live descendants forbid compaction: the root context's for a shared root table, the owner's
+        /// for a shared layer, none for a context-private or bare table.
         /// </summary>
         DescendantGate? compactionGate;
 
@@ -34,7 +34,7 @@ namespace Eggnog.Relations
         internal TableLayer? Layer => layer;
 
         /// <summary>
-        /// Gets or sets the gate whose live descendants forbid compaction (§6.8). Set when the table is registered with a
+        /// Gets or sets the gate whose live descendants forbid compaction. Set when the table is registered with a
         /// store or created as a layer.
         /// </summary>
         internal DescendantGate? CompactionGate
@@ -75,8 +75,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates the own table of <paramref name="layer"/> (§6.2): an empty table of this table's shape and merge, with
-        /// one shard, never parallel and pending queues created on first use (§14.2), whose merge dispatches to
+        /// Creates the own table of <paramref name="layer"/>: an empty table of this table's shape and merge, with one
+        /// shard, never parallel and pending queues created on first use, whose merge dispatches to
         /// <see cref="MergeLayered"/>, gated for compaction by the owner's descendants unless the table is context-private.
         /// </summary>
         /// <param name="layer">The layer.</param>
@@ -93,7 +93,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Finds the live row whose key starts at <paramref name="key"/>[<paramref name="offset"/>], given the key's hash:
         /// the body of <see cref="FindRow(uint[], int)"/> without the hash, so a layered lookup hashes once for every
-        /// layer (§6.5). Expected O(<see cref="KeyCount"/>).
+        /// layer. Expected O(<see cref="KeyCount"/>).
         /// </summary>
         /// <param name="key">The array holding the key; the caller has checked its bounds.</param>
         /// <param name="offset">The index of the key's first cell.</param>
@@ -109,8 +109,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Merges the staged writes of a child context's layer (§6.6): removals, then inserts, then a gated compaction;
-        /// a row added to the store's contradiction table stops the context when its options ask for it (§6.9).
+        /// Merges the staged writes of a child context's layer: removals, then inserts, then a gated compaction; a row
+        /// added to the store's contradiction table stops the context when its options ask for it.
         /// </summary>
         /// <param name="state">The merge state.</param>
         /// <param name="owner">The layer.</param>
@@ -127,10 +127,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Freezes the table with its context (§8.1, X13): compacts it if its gate allows (<see cref="ForceRehash"/>),
-        /// brings its rebuild index up to date when it has rebuild columns (a table without them, such as a nullary
-        /// relation or a value-only table, has none: an index needs a key column), marks it shared and seals its pending
-        /// state, so staging into it throws. A second call does nothing.
+        /// Freezes the table with its context: compacts it if its gate allows (<see cref="ForceRehash"/>), brings its
+        /// rebuild index up to date when it has rebuild columns (a table without them, such as a nullary relation or a
+        /// value-only table, has none: an index needs a key column), marks it shared and seals its pending state, so
+        /// staging into it throws. A second call does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">Writes are staged and not merged.</exception>
         public override void Freeze()
@@ -150,8 +150,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Debug-checks the root's raw-write contract (X38, I21): every row staged into the table and not merged carries
-        /// <paramref name="epoch"/> in its sort column. Walks the pending row queues without dequeuing. Called by a root
+        /// Debug-checks the root's raw-write contract: every row staged into the table and not merged carries
+        /// <paramref name="epoch"/> in its sort column, so new rows are stamped at or above every watermark already
+        /// committed. Walks the pending row queues without dequeuing. Called by a root
         /// <see cref="Context.Write{TResult}(Func{ExecutionState, TResult})"/> before it merges; nothing in a release build.
         /// </summary>
         /// <param name="epoch">The write batch's epoch.</param>
@@ -173,17 +174,17 @@ namespace Eggnog.Relations
                         if (cells[offset] == Value.StaleRep)
                             continue;
 
-                        Debug.Assert(cells[offset + sortColumn] == epoch, $"A raw root write staged a row with timestamp {cells[offset + sortColumn]} in a batch at epoch {epoch} (I21, X38).");
+                        Debug.Assert(cells[offset + sortColumn] == epoch, $"A raw root write staged a row with timestamp {cells[offset + sortColumn]} in a batch at epoch {epoch}.");
                     }
                 }
             }
         }
 
         /// <summary>
-        /// Applies the staged removals of a layer (§6.6), keys as given: an own row is tombstoned; otherwise a row the
-        /// context sees through an ancestor is hidden (<see cref="HideReason.Retracted"/>); otherwise nothing. Keys are not
-        /// canonicalized: the rows a context sees are canonical in it (I13), so a stale key matches nothing, as at a
-        /// rebuilt root. Legality was checked when the removal was staged (§6.7).
+        /// Applies the staged removals of a layer, keys as given: an own row is tombstoned; otherwise a row the context
+        /// sees through an ancestor is hidden (<see cref="HideReason.Retracted"/>); otherwise nothing. Keys are not
+        /// canonicalized: the rows a context sees are canonical in it, so a stale key matches nothing, as at a rebuilt
+        /// root. Legality was checked when the removal was staged.
         /// </summary>
         /// <returns>Whether a row was tombstoned or hidden.</returns>
         bool DeleteLayered(TableLayer owner)
@@ -229,18 +230,20 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Applies the staged inserts of a layer (§6.6, X38), in queue and staging order. Each incoming row is first
-        /// prepared: its id cells are rewritten to their canonical ids in the context and its sort cell to the merge's
-        /// epoch. Then an own row with the key merges with it as in a plain table; otherwise the row the context sees
-        /// through an ancestor, if any, merges with it: when the merge function returns <c>true</c> its output is appended
-        /// and the ancestor row hidden (<see cref="HideReason.KeyHeld"/>), after the output exists; when it returns
-        /// <c>false</c> nothing is stored and the ancestor row stays visible; otherwise the row is appended under a new key.
+        /// Applies the staged inserts of a layer, in queue and staging order. Each incoming row is first prepared: its
+        /// id cells are rewritten to their canonical ids in the context and its sort cell to the merge's epoch. Then an
+        /// own row with the key merges with it as in a plain table; otherwise the row the context sees through an
+        /// ancestor, if any, merges with it: when the merge function returns <c>true</c> its output is appended and the
+        /// ancestor row hidden (<see cref="HideReason.KeyHeld"/>), after the output exists; when it returns
+        /// <c>false</c> nothing is stored and the ancestor row stays visible; otherwise the row is appended under a new
+        /// key.
         /// </summary>
         /// <remarks>
         /// Rows of one key fold left from the visible row. A merge function's writes (a <see cref="UnionIdMerge"/>'s union)
         /// stage into the context through its catalog. The preparation costs one find per id cell, in children only
         /// (<see cref="LayerStatistics.RowsCanonicalized"/> counts the rows it changed). If a merge function throws, the
-        /// staged inserts not applied are dropped and the exception propagates; the context is then faulted (X12).
+        /// staged inserts not applied are dropped and the exception propagates; the context is then faulted, because a
+        /// hide whose copy was never merged cannot be repaired.
         /// </remarks>
         /// <returns>Whether a key was added or a row changed.</returns>
         bool InsertLayered(ExecutionState state, TableLayer owner)
@@ -360,7 +363,7 @@ namespace Eggnog.Relations
 
                 shard.InsertUnique(keyHash, new TableEntry(keyHash, merged), default(TableEntryHasher));
 
-                // Hide after the output exists, so the key is never invisible (I14).
+                // Hide after the output exists, so the key is never invisible.
                 owner.Hide(j, visible, HideReason.KeyHeld);
                 return true;
             }

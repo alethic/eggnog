@@ -10,16 +10,16 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Fix (map §8.1 row 2, core-relations/src/free_join/plan.rs:1502-1505): no stage ever scans such an atom, so egglog
-    /// only checks that its header subset is non-empty. That subset may hold tombstones, and the atom's slow
-    /// constraints (an equality on an uncacheable column, a range on an unsorted one) are never applied, so a deleted or
-    /// non-matching fact still fires the rule. The template lists these atoms explicitly so the executor checks for a
-    /// visible row that satisfies every constraint.
+    /// No stage ever scans such an atom, so egglog only checks that its header subset is non-empty
+    /// (core-relations/src/free_join/plan.rs:1502-1505). That subset may hold tombstones, and the atom's slow
+    /// constraints (an equality on an uncacheable column, a range on an unsorted one) are never applied, so in egglog a
+    /// deleted or non-matching fact still fires the rule. The template lists these atoms explicitly so the executor
+    /// checks for a visible row that satisfies every constraint.
     /// </para>
     /// <para>
-    /// Fix (core-relations/src/free_join/plan.rs:498-506, 591-596): tree decomposition drops atoms without variables
-    /// from every bag, so a decomposed egglog plan loses even their headers. Here they keep their headers and checks in
-    /// both plan kinds.
+    /// egglog's tree decomposition drops atoms without variables from every bag
+    /// (core-relations/src/free_join/plan.rs:498-506, 591-596), so a decomposed egglog plan loses even their headers.
+    /// Here they keep their headers and checks in both plan kinds.
     /// </para>
     /// </remarks>
     internal sealed class ExistenceCheck

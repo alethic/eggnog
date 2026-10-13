@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// An <see cref="IRowSink"/> that drops the rows a view hides before they reach <see cref="Inner"/>
-    /// (colored-contexts spec §6.3): how a scan of an ancestor layer yields only what the view sees. Scans deliver rows
-    /// in ascending order, so the test is a <see cref="HiddenCursor"/> walk; tombstones are already skipped by the scan.
+    /// An <see cref="IRowSink"/> that drops the rows a view hides before they reach <see cref="Inner"/>: how a scan of
+    /// an ancestor layer yields only what the view sees. Scans deliver rows in ascending order, so the test is a
+    /// <see cref="HiddenCursor"/> walk; tombstones are already skipped by the scan.
     /// </summary>
     /// <typeparam name="TSink">The inner sink; a struct, so the scan is specialized for it.</typeparam>
     internal struct HiddenSkippingSink<TSink> : IRowSink

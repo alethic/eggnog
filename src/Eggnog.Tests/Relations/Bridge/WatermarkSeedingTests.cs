@@ -6,10 +6,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Watermark seeding (colored-contexts spec §10.2, §17 M10.3, X41, D3, D4): a context without progress for a rule
-    /// seeds it lazily from the nearest ancestor with progress as <c>min(W_a, CreatedAt of the ancestor's child on the
-    /// path)</c>, refused when the executed constants differ, for rules that may not inherit, and for contexts that do not
-    /// inherit; generations keep a reused rule id from inheriting a freed rule's progress.
+    /// Watermark seeding: a context without progress for a rule seeds it lazily from the nearest ancestor with
+    /// progress as <c>min(W_a, CreatedAt of the ancestor's child on the path)</c>, refused when the executed constants
+    /// differ, for rules that may not inherit, and for contexts that do not inherit; generations keep a reused rule id
+    /// from inheriting a freed rule's progress.
     /// </summary>
     public class WatermarkSeedingTests
     {
@@ -99,8 +99,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A watermark is used only with the constants it ran with (I30, D3): after a constant loses a union in the child,
-        /// K differs, and the child runs the rule fully, matching the constant's class (X19).
+        /// A watermark is used only with the constants it ran with: the rule's executed constants K, the canonical
+        /// forms of its Id constants in the running context, are kept with its progress. After a constant loses a union
+        /// in the child, K differs, and the child runs the rule fully, matching the constant's class.
         /// </summary>
         [Fact]
         public void AConstantThatLostAUnionInTheChildRefusesTheSeed()
@@ -125,7 +126,8 @@ namespace Eggnog.Relations.Tests
             var seeded = Watermark(child, rule);
             Assert.True(seeded > 0);
 
-            // high loses to low in the child: K becomes [low, low, low], so the seed is refused and the old row matches.
+            // high loses to low in the child: K becomes [low, low, low], so the seed is refused and the old row
+            // matches.
             child.StageUnion(low, high);
             child.FlushUpdates();
             Assert.Equal(0u, Watermark(child, rule));
@@ -136,8 +138,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A reused rule id gets a new generation (§13 edge 29): neither the context's own stale progress nor an
-        /// ancestor's applies to the rule that reuses the id.
+        /// A reused rule id gets a new generation: neither the context's own stale progress nor an ancestor's applies
+        /// to the rule that reuses the id.
         /// </summary>
         [Fact]
         public void ARuleIdReuseNeverInheritsTheFreedRulesProgress()
@@ -161,9 +163,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rules that may not inherit (X41, D4) run fully in a child: naive rules, rules whose actions read a table that
-        /// is not a constructor, and every rule in a context created with <see cref="ContextOptions.InheritWatermarks"/>
-        /// off; a rule whose only lookup is a constructor's does inherit.
+        /// Rules that may not inherit run fully in a child: naive rules, rules whose actions read a table that is not a
+        /// constructor, and every rule in a context created with <see cref="ContextOptions.InheritWatermarks"/> off; a
+        /// rule whose only lookup is a constructor's does inherit.
         /// </summary>
         [Fact]
         public void NonInheritingRulesStartAtZero()
@@ -210,8 +212,8 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0u, Watermark(unseeded, semi));
             Assert.Equal(0u, Watermark(unseeded, mints));
 
-            // A child that lowers low(a) re-fires the reading rule on the old match: the inherited watermark would have
-            // skipped it (R1-4's counterexample, as a regression).
+            // A child that lowers low(a) re-fires the reading rule on the old match edge(a, b): an inherited watermark
+            // would have skipped it, although the value its lookup reads changed in the child.
             g.Assert(child, g.Edge, b, a);
             child.StageRow(g.Low, [a, g.Int(1)]);
             child.FlushUpdates();
@@ -220,8 +222,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A semi-naive rule without atoms fires once in its life (egglog); under an inherited watermark above zero it
-        /// does not fire again in a child, which is correct because the ancestor's effects are visible (§13 edge 30).
+        /// A semi-naive rule without atoms fires once in its life, as in egglog; under an inherited watermark above
+        /// zero it does not fire again in a child, which is correct because the ancestor's effects are visible there.
         /// Unseeded, it fires once more and writes nothing new.
         /// </summary>
         [Fact]

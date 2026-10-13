@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests that a child context's database shares the store-wide registries of the root's by reference (colored-contexts
-    /// spec §3.4; rule-layer spec §13 item 3): the counters, external functions, dependency graph, container environments
-    /// and base value registry, so that a base value boxed at the root unboxes in a child's execution state and the other
-    /// way round, at every depth and in concurrent children.
+    /// Tests that a child context's database shares the store-wide registries of the root's by reference: the counters,
+    /// external functions, dependency graph, container environments and base value registry, so that a base value boxed
+    /// at the root unboxes in a child's execution state and the other way round, at every depth and in concurrent
+    /// children.
     /// </summary>
     public class ChildSharedRegistriesTests
     {
@@ -27,8 +27,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Reads <c>f(key)</c> in a write batch of <paramref name="context"/> through its execution state (the write-phase
-        /// lookup a merge function makes, §6.5), and unboxes it there.
+        /// Reads <c>f(key)</c> in a write batch of <paramref name="context"/> through its execution state (the
+        /// write-phase lookup a merge function makes), and unboxes it there.
         /// </summary>
         static string ReadString(Context context, TableId f, uint key) =>
             context.Write(state =>
@@ -37,6 +37,9 @@ namespace Eggnog.Relations.Tests
                 return state.BaseValues.Unwrap<StringCodec, string>(new Value(value));
             });
 
+        /// <summary>
+        /// A child's and a grandchild's databases, states and cloned states hold the root's registries themselves.
+        /// </summary>
         [Fact]
         public void AChildSharesEveryStoreWideRegistryOfTheRoot()
         {
@@ -59,6 +62,10 @@ namespace Eggnog.Relations.Tests
             child.Dispose();
         }
 
+        /// <summary>
+        /// Strings boxed and staged at the root unbox in a child's and a grandchild's execution states, and the lookup
+        /// creates no layer.
+        /// </summary>
         [Fact]
         public void ABaseValueStagedAtTheRootIsReadFromAChildsExecutionState()
         {
@@ -87,6 +94,9 @@ namespace Eggnog.Relations.Tests
             child.Dispose();
         }
 
+        /// <summary>
+        /// A base value type registered and a value boxed in a child have the same id and meaning at the root.
+        /// </summary>
         [Fact]
         public void BaseValuesBoxedInAChildMeanTheSameAtTheRoot()
         {
@@ -117,6 +127,10 @@ namespace Eggnog.Relations.Tests
             child.Dispose();
         }
 
+        /// <summary>
+        /// Eight children of a frozen root, on parallel threads, read the root's value and intern strings; equal
+        /// strings are one value everywhere.
+        /// </summary>
         [Fact]
         public void ConcurrentChildrenOfAFrozenRootShareTheRegistry()
         {

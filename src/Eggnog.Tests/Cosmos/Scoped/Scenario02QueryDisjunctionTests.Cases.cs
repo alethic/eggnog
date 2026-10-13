@@ -80,8 +80,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
                     var k = cases.Add(c.Case);
                     Assert.True(k.IsCase);
                     k.Assume(c.Dom.Of("kind").Is(ValueSet.Of(kind)));
-                    k.Run(Schedule.Saturate(c.Horn, c.Lattice));    // a case always stops on contradiction (D11)
-                    Assert.False(k.IsContradictory);                // reads below would throw on a stopped case (D45)
+                    k.Run(Schedule.Saturate(c.Horn, c.Lattice));    // a case always stops on contradiction
+                    Assert.False(k.IsContradictory);                // reads below would throw on a stopped case
                     Assert.True(k.Check(c.Form.Of("ref", "uuid-lower")));
                 }
 
@@ -113,7 +113,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             var report = query.Run(c.Saturation);
 
             Assert.True(report.Saturated);
-            Assert.Equal(0, report.CasesOpened);                    // kind is not mentioned (D43)
+            Assert.Equal(0, report.CasesOpened);                    // kind is not mentioned: the query split skips it
             Assert.Empty(query.Children);
             Assert.False(query.Check(c.Form.Of("ref", "uuid-lower")));
             Assert.Equal($"(UuidEq \"ref\" \"{Ref}\")", query.Extract(q).ToString());

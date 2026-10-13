@@ -15,6 +15,9 @@ namespace Eggnog.Relations.Tests
     public class ContainerModelTests
     {
 
+        /// <summary>
+        /// The small programs: degrees of parallelism 1 and 4, twelve seeds each.
+        /// </summary>
         public static TheoryData<int, int> SmallCases()
         {
             var data = new TheoryData<int, int>();
@@ -25,6 +28,9 @@ namespace Eggnog.Relations.Tests
             return data;
         }
 
+        /// <summary>
+        /// The large programs: degrees of parallelism 1 and 4, three seeds each.
+        /// </summary>
         public static TheoryData<int, int> LargeCases()
         {
             var data = new TheoryData<int, int>();

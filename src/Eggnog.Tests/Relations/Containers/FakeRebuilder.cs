@@ -5,9 +5,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A tiny rebuilder that isolates outer-id canonicalization from inner container rewrites: egglog's
-    /// <c>FakeRebuilder</c> (core-relations/src/containers/tests.rs:35-89). <see cref="Rebuilder.RebuildValue"/> maps one
-    /// outer id to another; <see cref="Rebuilder.RebuildSlice"/> maps one inner value to another. No hint column, so a
-    /// rebuild through it is always full.
+    /// <c>FakeRebuilder</c> (core-relations/src/containers/tests.rs:35-89). <see cref="Rebuilder.RebuildValue"/> maps
+    /// one outer id to another; <see cref="Rebuilder.RebuildSlice"/> maps one inner value to another. No hint column,
+    /// so a rebuild through it is always full.
     /// </summary>
     sealed class FakeRebuilder : Rebuilder
     {

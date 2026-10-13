@@ -26,7 +26,7 @@ namespace Eggnog
         public bool Extractable { get; internal set; }
 
         /// <summary>
-        /// The untyped application: the term with this head and <paramref name="arguments"/> (D13).
+        /// The untyped application, of any arity: the term with this head and <paramref name="arguments"/>.
         /// </summary>
         /// <param name="arguments">One term per key, of the key's CLR type.</param>
         /// <returns>The term.</returns>

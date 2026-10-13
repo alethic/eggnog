@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the writes and reads of an <see cref="EGraph"/> outside rules (egglog-bridge/src/lib.rs:322-504, 946-959):
-    /// <see cref="EGraph.AddValues"/>, <see cref="EGraph.AddTerm"/>, <see cref="EGraph.LookupId"/>, the size queries,
-    /// <see cref="EGraph.ClearTable"/>, the row iteration and <see cref="EGraph.FlushUpdates"/>.
+    /// Tests for the writes and reads of an <see cref="EGraph"/> outside rules (egglog-bridge/src/lib.rs:322-504,
+    /// 946-959): <see cref="EGraph.AddValues"/>, <see cref="EGraph.AddTerm"/>, <see cref="EGraph.LookupId"/>, the size
+    /// queries, <see cref="EGraph.ClearTable"/>, the row iteration and <see cref="EGraph.FlushUpdates"/>.
     /// </summary>
     public class EGraphValuesTests
     {
@@ -107,7 +107,8 @@ namespace Eggnog.Relations.Tests
             var fb = egraph.AddTerm(f, [b]);
             Union(egraph, a, b);
 
-            // The row was rebuilt to f(a); a lookup of the stale key b misses (egglog's lookup_id, map §3.6).
+            // The row was rebuilt to f(a); a lookup of the stale key b misses, as egglog's lookup_id does: it does not
+            // canonicalize its key.
             Assert.Null(egraph.LookupId(f, [b]));
             Assert.Equal(fb, egraph.LookupId(f, [a]));
             Assert.Throws<ArgumentException>(() => egraph.LookupId(f, [a, b]));

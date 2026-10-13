@@ -19,8 +19,9 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// egglog's <c>basic_math_egraph</c> (core-relations/src/tests.rs:961-1010): the union-find, <c>num(i, id, ts)</c>
-        /// and <c>add(x, y, id, ts)</c>, both reading the union-find, with the "take the new id and union" merge.
+        /// egglog's <c>basic_math_egraph</c> (core-relations/src/tests.rs:961-1010): the union-find, <c>num(i, id,
+        /// ts)</c> and <c>add(x, y, id, ts)</c>, both reading the union-find, with the "take the new id and union"
+        /// merge.
         /// </summary>
         internal static (Database Db, TableId Uf, TableId Num, TableId Add, CounterId Ids) BasicMathEgraph(ParallelHeuristics? parallelism = null)
         {
@@ -35,7 +36,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void BasicQueryDataLoads()
         {
-            // egglog's basic_query_inner (tests.rs:45-90), up to the rule: numbers 0..10 with fresh ids, then (add x y).
+            // egglog's basic_query_inner (tests.rs:45-90), up to the rule: numbers 0..10 with fresh ids, then (add x
+            // y).
             var (db, _, num, add, idCounter) = BasicMathEgraph();
             var ids = new List<uint>();
             var numBuffer = db.NewBuffer(num);
@@ -390,6 +392,26 @@ namespace Eggnog.Relations.Tests
             // Each clone's states find their own view, clones included.
             Assert.Same(clone.ReadOnlyView, clone.CreateExecutionState().Clone().View);
             Assert.Same(db.ReadOnlyView, db.CreateExecutionState().Clone().View);
+        }
+
+        [Fact]
+        public void ZeroKeyTablesMergeAndAnswerConstraints()
+        {
+            // A nullary function: no key columns, one value and a timestamp.
+            var db = new Database(ParallelHeuristics.Serial);
+            var f = db.AddTable(Function(0, ClosureMerge.TakeNew));
+            Stage(db, f, R(5, 0));
+            Assert.True(db.MergeAll());
+            Stage(db, f, R(6, 1));
+            Assert.True(db.MergeAll());
+            Assert.Equal(new[] { R(6, 1) }, Rows(db, f));
+            Assert.Equal(1, db.EstimateSize(f));
+            using (var processed = db.ProcessConstraints(f, [Constraint.EqConst(C(0), 6)]))
+                Assert.Equal(new[] { R(6, 1) }, Rows(db.GetTable(f), processed.Rows));
+
+            var uniqueness = new ColumnCardEstimator(db).GetColumnUniqueness(f, C(0));
+            Assert.Equal(1ul, uniqueness.TableSize);
+            Assert.Equal(1, db.TotalSizeEstimate);
         }
 
     }

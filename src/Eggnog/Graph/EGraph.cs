@@ -12,17 +12,17 @@ namespace Eggnog
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Threads (§6.12): rule, ruleset, query and tag definitions may be made from any thread at any time and take part
-    /// from the next iteration of every run (D6). A table definition may be made from any thread once the root is frozen;
+    /// Threads: rule, ruleset, query and tag definitions may be made from any thread at any time and take part
+    /// from the next iteration of every run. A table definition may be made from any thread once the root is frozen;
     /// while it is not, it throws <see cref="InvalidOperationException"/> if another thread is using the root at that
     /// moment. A rule definition whose first scoped read of a table creates a mirror table counts as a table definition.
     /// Sorts and value types may be registered from any thread. User delegates the engine invokes (primitives, lattices,
     /// filters, cost functions) must not call into a graph.
     /// </para>
     /// <para>
-    /// The graph runs on one engine e-graph over a store (colors §10.1): every scope is one engine context, the
-    /// <see cref="Root"/> included. A graph defined with nothing written at its root serves an empty frozen root, a frozen
-    /// schema per container (children of the root), and a layer per query beneath it (§2.1).
+    /// Every scope is a context of one e-graph, the <see cref="Root"/> included, and a child costs in proportion to
+    /// what it touches. A graph defined with nothing written at its root serves an empty frozen root, a frozen
+    /// schema scope per container (children of the root), and a transient child per query beneath it.
     /// </para>
     /// </remarks>
     public sealed partial class EGraph
@@ -34,7 +34,7 @@ namespace Eggnog
 
         /// <summary>
         /// Initializes an empty graph: its value types, its root (tagged <see cref="RootTag"/>), and its
-        /// <see cref="Contradiction"/> relation, designated as the engine's contradiction function (E4).
+        /// <see cref="Contradiction"/> relation, designated as the engine's contradiction function.
         /// </summary>
         /// <param name="options">The graph's options; <c>null</c> for <see cref="EGraphOptions.Default"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is less than
@@ -76,8 +76,7 @@ namespace Eggnog
         public ValueStore Values { get; }
 
         /// <summary>
-        /// Gets the root scope: what holds unconditionally. Freeze it empty so that containers can be sibling children
-        /// (§2.1).
+        /// Gets the root scope: what holds unconditionally. Freeze it empty so that containers can be sibling children.
         /// </summary>
         public Scope Root { get; }
 
@@ -104,34 +103,33 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the lock of definitions: table, sort, ruleset, tag, query and rule definitions take it, and so does a
-        /// freeze while it syncs a tag's mirrors and counts the frozen scope (§6.8). Nothing blocks while holding it except
+        /// freeze while it syncs a tag's mirrors and counts the frozen scope. Nothing blocks while holding it except
         /// engine definitions and a freeze's engine work; guards never block.
         /// </summary>
         internal object DefinitionLock { get; } = new();
 
         /// <summary>
-        /// Gets the per-context slot of <see cref="ScopeRuntime"/>s (§4.1, colors §10.1): every engine context of the graph
+        /// Gets the per-context slot of <see cref="ScopeRuntime"/>s: every engine context of the graph
         /// holds its own, built on first use.
         /// </summary>
         internal Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot { get; }
 
         /// <summary>
-        /// Gets the mirror tables and copy rules of scoped reads, and the counts of live frozen scopes per tag (§6.8,
-        /// D38).
+        /// Gets the mirror tables and copy rules of scoped reads, and the counts of live frozen scopes per tag.
         /// </summary>
         internal MirrorRegistry Mirrors { get; }
 
         /// <summary>
         /// Gets or sets whether children and transient children are created with watermark inheritance
-        /// (<c>ContextOptions.InheritWatermarks</c>, colors §10.2): <c>true</c> by default; differential tests compare
-        /// runs with it off (§8.2). Read when a child is created.
+        /// (<c>ContextOptions.InheritWatermarks</c>): <c>true</c> by default; differential tests compare
+        /// runs with it off. Read when a child is created.
         /// </summary>
         internal bool InheritWatermarks { get; set; } = true;
 
         /// <summary>
         /// Gets the number of engine calls that may run user delegates (runs, queries, flushes, freezes) in progress on
-        /// any thread: while it is not zero, a disposed query hands its variants to the graph instead of freeing them
-        /// (§6.4.6). One volatile read.
+        /// any thread: while it is not zero, a disposed query hands its variants to the graph instead of freeing them.
+        /// One volatile read.
         /// </summary>
         internal int ActiveEngineCalls => Volatile.Read(ref engineCalls);
 
@@ -172,12 +170,12 @@ namespace Eggnog
         internal Relations.ExternalFunctionId NotEqual { get; }
 
         /// <summary>
-        /// Gets the graph's equal filter, for class-constant comparisons left to run time (§6.3 step 3).
+        /// Gets the graph's equal filter, for class-constant comparisons left to run time.
         /// </summary>
         internal Relations.ExternalFunctionId Equal { get; }
 
         /// <summary>
-        /// Gets every live engine variant, by description (§6.4.3).
+        /// Gets every live engine variant, by description.
         /// </summary>
         internal ConcurrentDictionary<string, LoweredRule> VariantsByDescription { get; } = new(StringComparer.Ordinal);
 
@@ -187,7 +185,7 @@ namespace Eggnog
         internal EGraphOptions Options { get; }
 
         /// <summary>
-        /// Gets the root's origin (D39).
+        /// Gets the root's origin.
         /// </summary>
         internal ScopeOrigin RootOrigin { get; }
 

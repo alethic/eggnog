@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+
 using Xunit;
 
 namespace Eggnog.Relations.Tests
@@ -67,6 +70,19 @@ namespace Eggnog.Relations.Tests
         {
             // An empty table: 0 rows, 0 values. (0 * b.col) vs (b.table * 0): equal to anything.
             Assert.Equal(0, new ColumnUniqueness(0, 0).CompareTo(new ColumnUniqueness(10, 3)));
+        }
+
+        [Fact]
+        public void ColumnUniquenessEqualityAgreesWithItsOrdering()
+        {
+            // egglog's ColUniqueness implements PartialEq as cmp(other) == Equal (free_join/mod.rs:957-961): 100 rows
+            // over 50 values equals 10 rows over 5 values. ColumnUniqueness agrees: Equals and == follow CompareTo,
+            // which a record struct's field-by-field equality would not.
+            var halves = new ColumnUniqueness(100, 50);
+            var same = new ColumnUniqueness(10, 5);
+            Assert.Equal(0, halves.CompareTo(same));
+            Assert.True(halves.Equals(same));
+            Assert.True(halves == same);
         }
 
     }

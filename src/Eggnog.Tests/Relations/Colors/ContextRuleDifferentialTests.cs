@@ -4,20 +4,21 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The rule differential of colored-contexts spec §17 M10.3: random programs of both families run on the engine's
-    /// contexts and on the operational <see cref="ReferenceRuleContext"/> in lockstep (<see cref="ColorRunner"/>).
+    /// The rule differential: random programs of both families run on the engine's contexts and on the operational
+    /// <see cref="ReferenceRuleContext"/> in lockstep (<see cref="ColorRunner"/>).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Programs write, union, run rules once or to saturation (through the API and step by step), and create, freeze and
-    /// dispose contexts up to three below the root, ancestors changing after their children exist. Family A uses
+    /// Programs write, union, run rules once or to saturation (through the API and step by step), and create, freeze
+    /// and dispose contexts up to three below the root, ancestors changing after their children exist. Family A uses
     /// explicit ids and no minting, compared cell for cell; family B adds terms and minting rules, compared by term
     /// names. Odd seeds run the history family: assert-ne filters, an id-order filter (family A), actions that read a
-    /// table, and deletes and clears wherever asked, applied where colors §6.7 allows them and refused elsewhere.
+    /// table, and deletes and clears wherever asked, applied where the engine's retraction rule allows them (no live
+    /// descendants, and the root or a child of a frozen parent) and refused elsewhere.
     /// </para>
     /// <para>
     /// After every write, run and rebuild the harness checks <see cref="EGraphContext.CheckInvariants"/> and the
-    /// lookup-path comparison (§12.7), compares the view, and checks <c>RestampedCopies == 0</c>.
+    /// lookup-path comparison (<see cref="LookupPaths"/>), compares the view, and checks <c>RestampedCopies == 0</c>.
     /// <c>EGGNOG_CONTEXT_SEEDS</c>, <c>EGGNOG_CONTEXT_SOAK</c>, <c>EGGNOG_CONTEXT_SEED_BASE</c> and
     /// <c>EGGNOG_CONTEXT_RULE_SEED</c> as in <see cref="ColorDifferential"/>.
     /// </para>

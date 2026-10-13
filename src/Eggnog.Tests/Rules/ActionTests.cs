@@ -8,7 +8,8 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// What rule heads do (§6.3 step 8, §6.4.2), and how evaluation failures fault the scope (D18, D31).
+    /// What rule heads do, and how evaluation failures fault the scope: a primitive or lattice delegate that throws is
+    /// reported with the rule and its bindings, and built-in arithmetic is partial, as egglog's is.
     /// </summary>
     public sealed class ActionTests
     {
@@ -16,8 +17,8 @@ namespace Eggnog.Tests.Rules
         [Fact]
         public void GetOrAddDuplicatesAreMergedByTheRebuild()
         {
-            // In parallel each rule's actions run on their own execution state, which mints its own id for a new term
-            // (decision 5): the two rules below mint two ids for Lit(1), and the merge unions them.
+            // In parallel each rule's actions run on their own execution state, which mints its own id for a new term:
+            // the two rules below mint two ids for Lit(1), and the merge unions them.
             var t = new NodeTheory(new EGraphOptions { DegreeOfParallelism = 4 });
             t.Graph.Engine.Database.ParallelRuleSetsOverride = true;
             var first = t.Graph.DefineRelation<Node>("first");
@@ -288,6 +289,53 @@ namespace Eggnog.Tests.Rules
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
 
             Assert.True(e.Bindings is "d={} p=\"e\"" or "d={a, b} p=\"k\"", e.Bindings);
+        }
+
+        /// <summary>
+        /// <see cref="RuleEvaluationException.Bindings"/> renders a set as its documentation shows:
+        /// <c>d={a, b} v="b"</c>.
+        /// </summary>
+        [Fact]
+        public void BindingsRenderASetAsDocumented()
+        {
+            var graph = new EGraph();
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var pick = graph.DefineRelation<string, string>("pick");
+            var rules = graph.DefineRuleset("rules");
+            var boom = Primitive.Create<ValueSet<string>, string, bool>("boom", (_, _) => throw new InvalidOperationException("boom"));
+            rules.DefineRule("throws on a set", r =>
+            {
+                var (p, d, v) = r.Vars<string, ValueSet<string>, string>("p", "d", "v");
+                r.When(d.Is(dom.Of(p)), pick.Of(p, v));
+                r.Where(boom.Of(d, v));
+                r.Then(pick.Of(v, p));
+            });
+            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")), pick.Of("k", "b"));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
+            Assert.Equal("d={a, b} v=\"b\"", e.Bindings);
+        }
+
+        /// <summary>
+        /// egglog's <c>+</c> is partial (<c>checked_add</c>): in a body an overflow drops the match, and only a head
+        /// call fails. <see cref="Primitives.Add"/> is partial the same way, so the run completes and the root is not
+        /// faulted.
+        /// </summary>
+        [Fact]
+        public void ABodyOverflowDropsTheMatchAsInEgglog()
+        {
+            var t = new NodeTheory();
+            var hit = t.Graph.DefineRelation<long>("hit");
+            t.Root.Assume(t.Num.Of(1L), t.Num.Of(long.MaxValue));
+            t.Rules.DefineRule("plus one", r =>
+            {
+                var (x, y) = r.Vars<long, long>("x", "y");
+                r.When(t.Num.Of(x), y.Is(Primitives.Add.Of(x, 1L)));
+                r.Then(hit.Of(y));
+            });
+            var thrown = Record.Exception(() => t.Root.Run(Schedule.Saturate(t.Rules)));
+            Assert.Null(thrown);
+            Assert.False(t.Root.IsFaulted);
         }
 
     }

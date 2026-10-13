@@ -8,9 +8,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="UnionFindOverlay.Rekey"/> (colored-contexts spec §5.6): the seven hand cases of the spec's
-    /// M9.2 list, then random programs of parent unions, child unions and catch-ups replayed against a naive partition,
-    /// through <see cref="OverlayRekeyHarness"/>, which drives an overlay as a context's catch-up does.
+    /// Tests for <see cref="UnionFindOverlay.Rekey"/>, which re-keys a child's classes after its parent merges, through
+    /// <see cref="OverlayRekeyHarness"/>, which drives an overlay as a context's catch-up does: seven hand-written
+    /// cases (a non-canonical member or a canonical displaced in the parent, a class dissolved or two classes joined by
+    /// the parent, a trivial id imported, a chain of parent unions in one batch, and a dissolved class joining
+    /// another), then random programs of parent unions, child unions and catch-ups replayed against a naive partition.
     /// </summary>
     public class UnionFindOverlayRekeyTests
     {
@@ -146,9 +148,9 @@ namespace Eggnog.Relations.Tests
             var canonical = universe.ToHashSet();
 
             // After every catch-up: the overlay over the parent equals the replay of every union; the ids journaled are
-            // exactly those canonical in the child at the last sync and not now; the journal holds exactly the ids that
-            // are not canonical in the child (the parent started empty), once each; and every member is canonical in the
-            // parent (I6), in a class of at least two whose canonical is its minimum (I5).
+            // exactly those canonical in the child at the last sync and not at this one; the journal holds exactly the
+            // ids that are not canonical in the child (the parent started empty), once each; and every member is
+            // canonical in the parent, in a class of at least two whose canonical is its minimum.
             void Sync(List<uint> journaled)
             {
                 foreach (var x in universe)

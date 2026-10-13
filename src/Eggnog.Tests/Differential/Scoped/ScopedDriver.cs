@@ -10,7 +10,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Runs a <see cref="ScopedProgram"/> on Eggnog with scopes as contexts, through the internal untyped layer (D13): the
+    /// Runs a <see cref="ScopedProgram"/> on Eggnog with scopes as contexts, through the internal untyped layer: the
     /// root, children with tags and local rules, scoped atoms over mirrors, host writes, runs, freezes, and checks that
     /// render every scope's view.
     /// </summary>
@@ -29,7 +29,7 @@ namespace Eggnog.Tests.Differential
 
         /// <summary>
         /// A filter that keeps every <c>long</c>: it changes nothing a rule derives, but it uses its variable, so the
-        /// engine counts distinct full bindings (§8.2).
+        /// engine counts distinct full bindings.
         /// </summary>
         static readonly Primitive<long, bool> KeepLong = new("keep", static _ => true, false);
 
@@ -64,8 +64,8 @@ namespace Eggnog.Tests.Differential
                 };
             }
 
-            // The class the keep disequality compares a class variable with: made at the root before anything else, and held
-            // by no table the program reads, so the disequality never drops a match.
+            // The class the keep disequality compares a class variable with: made at the root before anything else, and
+            // held by no table the program reads, so the disequality never drops a match.
             var keeper = graph.DefineConstructor("Keep", [], types[2]);
             keep = graph.Root.Make(new ConstructorTerm<Node>(keeper, []));
 
@@ -179,8 +179,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Renders a scope: its value tables' rows (or every fact, named), its scoped reads of each value table under each
-        /// tag that resolves from it, and the answers of the queries whose tags resolve from it.
+        /// Renders a scope: its value tables' rows (or every fact, named), its scoped reads of each value table under
+        /// each tag that resolves from it, and the answers of the queries whose tags resolve from it.
         /// </summary>
         string Render(int index, bool named)
         {
@@ -279,8 +279,9 @@ namespace Eggnog.Tests.Differential
             if (rule.FilterVar is { } filtered)
                 b.When(new FilterFact(Compute.Of(Primitives.Less, variables[filtered], Term.Constant(types[0], rule.FilterBelow))));
 
-            // Every body variable is used, so match counts are distinct full bindings (§8.2, as colors' ColorSchema.Keep):
-            // a value through a filter that keeps everything, a class through a disequality with a class no row holds.
+            // Every body variable is used, so match counts are distinct full bindings (as with the engine tests'
+            // ColorSchema.Keep): a value through a filter that keeps everything, a class through a disequality with a
+            // class no row holds.
             foreach (var name in rule.Variables)
             {
                 if (name[0] == 'n')

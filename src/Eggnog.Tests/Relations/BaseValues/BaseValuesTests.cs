@@ -11,8 +11,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Ports of egglog's base value tests (core-relations/src/base_values/tests.rs) and of the doc tests in
-    /// core-relations/src/base_values/unboxed.rs. The random samples come from a seeded <see cref="Random"/> in place of
-    /// Rust's <c>StdRng::seed_from_u64(42)</c>, so they differ from egglog's but are just as reproducible.
+    /// core-relations/src/base_values/unboxed.rs, and tests of <c>TryGetExisting</c>, the lookup that finds an interned
+    /// value without interning it. The random samples come from a seeded <see cref="Random"/> in place of Rust's
+    /// <c>StdRng::seed_from_u64(42)</c>, so they differ from egglog's but are just as reproducible.
     /// </summary>
     public class BaseValuesTests
     {
@@ -258,7 +259,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The doc test on <c>bool::try_box</c> (core-relations/src/base_values/unboxed.rs:40-47).
+        /// The doc test on <c>bool::try_box</c> (core-relations/src/base_values/unboxed.rs:42-48).
         /// </summary>
         [Fact]
         public void BoolBoxesTrueAsOneAndFalseAsZero()
@@ -272,7 +273,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The doc test on <c>()::try_box</c> (core-relations/src/base_values/unboxed.rs:57-63).
+        /// The doc test on <c>()::try_box</c> (core-relations/src/base_values/unboxed.rs:58-62).
         /// </summary>
         [Fact]
         public void UnitBoxesAsZero()
@@ -284,8 +285,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1 of the rule-layer spec: a value that was never interned is not found, and looking it up interns
-        /// nothing, for codecs that intern everything and for one that boxes some values inline.
+        /// <c>TryGetExisting</c> does not find a value that was never interned, and looking it up interns nothing, for
+        /// codecs that intern everything and for one that boxes some values inline.
         /// </summary>
         [Fact]
         public void TryGetExistingFailsForAnUnseenValueAndLeavesTheCountUnchanged()
@@ -320,8 +321,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1: a value that was interned is found with the very <see cref="Value"/> <c>Get</c> returned (tagged
-        /// or not, as its codec stores it), it unwraps to the value, and the lookup interns nothing.
+        /// <c>TryGetExisting</c> finds a value that was interned with the very <see cref="Value"/> <c>Get</c> returned
+        /// (tagged or not, as its codec stores it), it unwraps to the value, and the lookup interns nothing.
         /// </summary>
         [Fact]
         public void TryGetExistingRoundTripsASeenValue()
@@ -365,8 +366,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1: a value that boxes inline is always found, with the <see cref="Value"/> <c>Get</c> gives it,
-        /// without consulting the registry (none of these types is registered, so touching a table would throw) and
+        /// <c>TryGetExisting</c> always finds a value that boxes inline, with the <see cref="Value"/> <c>Get</c> gives
+        /// it, without consulting the registry (none of these types is registered, so touching a table would throw) and
         /// without adding to any intern table.
         /// </summary>
         [Fact]
@@ -399,7 +400,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1: a value that would have to be interned, of a type that is not registered, throws as
+        /// <c>TryGetExisting</c> of a value that would have to be interned, of a type that is not registered, throws as
         /// <c>Get</c> does: no registry can have interned it, and asking is a misuse.
         /// </summary>
         [Fact]
@@ -411,8 +412,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1: <see cref="BaseValues.InternedCount"/> sums every intern table, counts each distinct value once,
-        /// ignores inline values, and sees values interned through a clone in the tables the clone shares.
+        /// <see cref="BaseValues.InternedCount"/> sums every intern table, counts each distinct value once, ignores
+        /// inline values, and sees values interned through a clone in the tables the clone shares.
         /// </summary>
         [Fact]
         public void InternedCountSumsEveryInternTable()
@@ -445,8 +446,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Request E1: lookups that race with interning never intern and never see a wrong value; once interning ends,
-        /// every value is found with the <see cref="Value"/> <c>Get</c> gave it.
+        /// <c>TryGetExisting</c> lookups that race with interning never intern and never see a wrong value; once
+        /// interning ends, every value is found with the <see cref="Value"/> <c>Get</c> gave it.
         /// </summary>
         [Fact]
         public async Task TryGetExistingAgreesWithConcurrentInterning()
@@ -501,6 +502,84 @@ namespace Eggnog.Relations.Tests
                 if (x >= min)
                     return x;
             }
+        }
+
+        [Fact]
+        public void SignedZerosAndNaNsResolveAsGetResolvesThem()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<DoubleCodec, double>();
+
+            Assert.False(bases.TryGetExisting<DoubleCodec, double>(-0.0, out _));
+            Assert.False(bases.TryGetExisting<DoubleCodec, double>(0.0, out _));
+            Assert.False(bases.TryGetExisting<DoubleCodec, double>(double.NaN, out _));
+            Assert.Equal(0L, bases.InternedCount);
+
+            var zero = bases.Get<DoubleCodec, double>(0.0);
+            var nan = bases.Get<DoubleCodec, double>(double.NaN);
+            Assert.True(bases.TryGetExisting<DoubleCodec, double>(-0.0, out var negativeZero));
+            Assert.Equal(zero, negativeZero);
+            Assert.Equal(bases.Get<DoubleCodec, double>(-0.0), negativeZero);
+            Assert.True(bases.TryGetExisting<DoubleCodec, double>(BitConverter.Int64BitsToDouble(unchecked((long)0xFFF8_0000_0000_0001UL)), out var otherNaN));
+            Assert.Equal(nan, otherNaN);
+            Assert.Equal(2L, bases.InternedCount);
+        }
+
+        [Fact]
+        public void AClonesLookupsSeeTheSharedTables()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            var clone = bases.Clone();
+
+            var a = bases.Get<StringCodec, string>("a");
+            Assert.True(clone.TryGetExisting<StringCodec, string>("a", out var found));
+            Assert.Equal(a, found);
+
+            var b = clone.Get<StringCodec, string>("b");
+            Assert.True(bases.TryGetExisting<StringCodec, string>("b", out var foundB));
+            Assert.Equal(b, foundB);
+
+            Assert.False(clone.TryGetExisting<StringCodec, string>("c", out _));
+            Assert.Equal(2L, bases.InternedCount);
+            Assert.Equal(2L, clone.InternedCount);
+        }
+
+        [Fact]
+        public void WideValuesThatMustBeInternedAreLookedUpWithoutBeingAdded()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<UInt64Codec, ulong>();
+            bases.RegisterType<IntPtrCodec, nint>();
+            bases.RegisterType<UIntPtrCodec, nuint>();
+
+            Assert.False(bases.TryGetExisting<UInt64Codec, ulong>(ulong.MaxValue, out _));
+            Assert.False(bases.TryGetExisting<IntPtrCodec, nint>(-5, out _));
+            Assert.False(bases.TryGetExisting<UIntPtrCodec, nuint>(nuint.MaxValue, out _));
+            Assert.Equal(0L, bases.InternedCount);
+
+            var big = bases.Get<UInt64Codec, ulong>(ulong.MaxValue);
+            var negative = bases.Get<IntPtrCodec, nint>(-5);
+            Assert.True(bases.TryGetExisting<UInt64Codec, ulong>(ulong.MaxValue, out var foundBig));
+            Assert.Equal(big, foundBig);
+            Assert.True(bases.TryGetExisting<IntPtrCodec, nint>(-5, out var foundNegative));
+            Assert.Equal(negative, foundNegative);
+            Assert.True(foundBig.Rep >= BaseValues.InternedTag);
+            Assert.Equal(2L, bases.InternedCount);
+
+            Assert.True(bases.TryGetExisting<UInt64Codec, ulong>(5UL, out var inline));
+            Assert.Equal(bases.Get<UInt64Codec, ulong>(5UL), inline);
+            Assert.Equal(2L, bases.InternedCount);
+        }
+
+        [Fact]
+        public void TryGetExistingRejectsANullKeyAsGetDoes()
+        {
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            Assert.Throws<ArgumentNullException>(() => bases.Get<StringCodec, string>(null!));
+            Assert.Throws<ArgumentNullException>(() => bases.TryGetExisting<StringCodec, string>(null!, out _));
+            Assert.Equal(0L, bases.InternedCount);
         }
 
     }

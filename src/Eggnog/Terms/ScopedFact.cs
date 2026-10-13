@@ -3,7 +3,8 @@ namespace Eggnog
 
     /// <summary>
     /// <see cref="Fact.In"/>: facts whose every table application, nested ones included, reads the nearest
-    /// ancestor-or-self of the running scope tagged <see cref="Scope"/> (D1, §6.3 step 2). Immutable.
+    /// ancestor-or-self of the running scope tagged <see cref="Scope"/>. A rule or query refuses one that applies a
+    /// table with a sort column. Immutable.
     /// </summary>
     internal sealed class ScopedFact : Fact
     {
@@ -33,8 +34,9 @@ namespace Eggnog
         internal override FactKind Kind => FactKind.Scoped;
 
         /// <summary>
-        /// Gets the first table in <paramref name="fact"/> that belongs to another graph than <paramref name="graph"/>, so
-        /// that <see cref="Fact.In"/> can refuse another graph's tag (D38); <c>null</c> when there is none.
+        /// Gets the first table in <paramref name="fact"/> that belongs to another graph than <paramref name="graph"/>,
+        /// so that <see cref="Fact.In"/> can refuse a tag of another graph than the facts' tables, since a tag belongs
+        /// to one graph; <c>null</c> when there is none.
         /// </summary>
         /// <param name="fact">The fact.</param>
         /// <param name="graph">The tag's graph.</param>

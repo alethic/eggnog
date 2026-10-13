@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="CostModel"/>: egglog's <c>TreeAdditiveCostModel</c> defaults, the <c>enode_cost</c>,
-    /// <c>base_value_cost</c> and <c>container_cost</c> hooks as overrides, saturating long addition and the rejection of
-    /// negative costs (rule-layer decision D19).
+    /// <c>base_value_cost</c> and <c>container_cost</c> hooks as overrides, saturating long addition and the rejection
+    /// of negative costs.
     /// </summary>
     public class CostModelTests
     {

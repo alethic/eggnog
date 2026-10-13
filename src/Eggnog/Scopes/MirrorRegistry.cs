@@ -7,14 +7,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The mirror tables and copy rules of a graph's scoped reads, and the count of live frozen scopes per tag (§6.8,
-    /// D38). Mutated under the graph's definition lock; the per-tag copy-rule lists are read lock-free.
+    /// The mirror tables and copy rules of a graph's scoped reads, and the count of live frozen scopes per tag. Mutated
+    /// under the graph's definition lock; the per-tag copy-rule lists are read lock-free.
     /// </summary>
     /// <remarks>
-    /// A mirror is created by the first scoped read of its <c>(table, tag)</c>, which is a table definition (D6), and is
-    /// refused while a live frozen scope of this graph carries the tag: a frozen scope's mirrors were synced at its
-    /// freeze and are never synced again, so a mirror created later would stay empty there and break invariant M. The
-    /// counts belong to the graph, so one graph's frozen schemas never affect another's theory (D38).
+    /// A mirror is created by the first scoped read of its <c>(table, tag)</c>, which is a table definition (refused
+    /// while another thread is using the writable root), and is refused while a live frozen scope of this graph carries
+    /// the tag: a frozen scope's mirrors are synced at its freeze and never again, so a mirror created after it would
+    /// stay empty there instead of equal to that scope's view of the table. The counts belong to the graph, so one
+    /// graph's frozen schemas never affect another's theory.
     /// </remarks>
     internal sealed class MirrorRegistry
     {
@@ -39,7 +40,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the mirror of <paramref name="table"/> under <paramref name="tag"/>, creating it, with its copy rule, on the
-        /// first read (§6.3 step 2). Called under the graph's definition lock.
+        /// first read. Called under the graph's definition lock.
         /// </summary>
         /// <param name="table">The value-only table read scoped.</param>
         /// <param name="tag">The tag.</param>
@@ -48,7 +49,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">A live frozen scope of this graph carries the tag and the mirror is
         /// new.</exception>
         /// <exception cref="InvalidOperationException">The mirror is new and another thread is using the writable root
-        /// (a table definition, D6).</exception>
+        /// (a table definition).</exception>
         public MirrorTable GetOrCreate(TableHandle table, ScopeTag tag, string reader)
         {
             lock (sync)
@@ -89,7 +90,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the mirrors of one definition's scoped reads, all or nothing (§6.3 step 2): every new mirror's tag is checked
+        /// Gets the mirrors of one definition's scoped reads, all or nothing: every new mirror's tag is checked
         /// against the frozen counts first, and the new mirrors are created while this thread holds the writable root's
         /// guard, so that a refusal leaves no mirror behind. Called under the graph's definition lock, once every other check
         /// of the definition has passed.
@@ -100,7 +101,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">A mirror would be new and a live frozen scope of this graph carries its
         /// tag; nothing was created.</exception>
         /// <exception cref="InvalidOperationException">A mirror would be new and another thread is using the writable root
-        /// (a table definition, D6); nothing was created.</exception>
+        /// (a table definition); nothing was created.</exception>
         public MirrorTable[] GetOrCreateAll(IReadOnlyList<(TableHandle Table, ScopeTag Tag)> reads, string reader)
         {
             var found = new MirrorTable[reads.Count];
@@ -174,7 +175,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets every copy rule of every tag (a snapshot): the plans of a freeze (E10).
+        /// Gets every copy rule of every tag (a snapshot): among the rules a freeze plans.
         /// </summary>
         /// <returns>The copy rules.</returns>
         public CompiledRule[] AllCopyRules() => Volatile.Read(ref allCopyRules);
@@ -222,9 +223,9 @@ namespace Eggnog
         int FrozenCountCore(ScopeTag tag) => tag.Serial < frozenCounts.Length ? frozenCounts[tag.Serial] : 0;
 
         /// <summary>
-        /// Compiles the copy rule of a mirror (§6.8): one register per column, one atom over the source, one write into
-        /// the mirror; semi-naive, with its default variant lowered now, under the description
-        /// <c>$mirror/{mirror name}#{serial}</c> (§6.4.3).
+        /// Compiles the copy rule of a mirror: one register per column, one atom over the source, one write into the
+        /// mirror; semi-naive, with its default variant lowered now, under the description
+        /// <c>$mirror/{mirror name}#{serial}</c>.
         /// </summary>
         CompiledRule CompileCopyRule(TableHandle source, TableHandle mirror)
         {

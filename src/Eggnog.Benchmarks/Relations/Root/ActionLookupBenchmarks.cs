@@ -7,11 +7,13 @@ namespace Eggnog.Relations.Benchmarks
 
     /// <summary>
     /// A rule run whose work is action batches dominated by <c>LookupOrInsertDefault</c> and <c>Lookup</c>, writing a
-    /// function whose merge calls <see cref="ExecutionState.PredictRow(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, Span{uint})"/>,
-    /// for 20,000 and 200,000 matches, serially and in parallel. Part of the root benchmark set that colored contexts
-    /// are gated on (colored-contexts spec §17, M9.0): it exercises the action interpreter's dispatch, the vectorized
-    /// lookups, the predicted-value cache, buffer creation for staging, <see cref="ExecutionState.ReadCounter"/>, and
-    /// the prediction a bridge merge function makes once per merged row.
+    /// function whose merge calls
+    /// <see cref="ExecutionState.PredictRow(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, Span{uint})"/>, for
+    /// 20,000 and 200,000 matches, serially and in parallel. Part of the root benchmark set, which measures the root on
+    /// the engine paths colored contexts extend, so that a cost contexts add to the root shows as a regression: it
+    /// exercises the action interpreter's dispatch, the vectorized lookups, the predicted-value cache, buffer creation
+    /// for staging, <see cref="ExecutionState.ReadCounter"/>, and the prediction a bridge merge function makes once per
+    /// merged row.
     /// </summary>
     /// <remarks>
     /// <para>

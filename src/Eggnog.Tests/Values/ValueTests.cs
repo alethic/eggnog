@@ -11,7 +11,8 @@ namespace Eggnog.Tests.Values
 {
 
     /// <summary>
-    /// Column types, codecs and interning (§6.1, D15, D20, E1).
+    /// Column types, codecs and interning: which types may be value types, how values are stored, and reads that never
+    /// intern.
     /// </summary>
     public sealed class ValueTests
     {
@@ -101,7 +102,7 @@ namespace Eggnog.Tests.Values
             Assert.True(graph.Root.Check(r.Of(0)));
             Assert.False(graph.Root.Check(r.Of(1)));
 
-            // Stored as i64 (D20): Int32Codec would box -1 to the stale marker.
+            // Stored as i64: Int32Codec would box -1 to the stale marker.
             var schema = graph.Engine.GetFunctionInfo(r.Function).Schema;
             Assert.Equal(Relations.ColumnTy.Base(graph.BaseValues.GetTypeId<Relations.Int64Codec, long>()), schema[0]);
 
@@ -304,6 +305,84 @@ namespace Eggnog.Tests.Values
                 Assert.Equal(values[i], graph.Root.Get(f.Of(i)));
                 Assert.True(graph.Root.Check(f.Of(i).Is(values[i])));
             }
+        }
+
+        /// <summary>
+        /// <c>ValueStore.TypeOf</c> of an unknown type throws an <see cref="ArgumentException"/> that names no
+        /// parameter, or the method's own type parameter.
+        /// </summary>
+        [Fact]
+        public void TypeOfNamesNoForeignParameter()
+        {
+            var graph = new EGraph();
+            var e = Assert.Throws<ArgumentException>(() => graph.Values.TypeOf<Point>());
+            Assert.True(e.ParamName is null || e.ParamName == "T", $"ParamName is '{e.ParamName}'");
+        }
+
+        /// <summary>
+        /// <c>default(ClassId)</c> names no class and every scope rejects it, and class values never enter value cells:
+        /// there are no sets of classes, and classes compare only with <c>Is</c> and <c>IsNot</c>.
+        /// <c>ValueStore.Register</c> refuses <see cref="ClassId"/>, and a sort, as a value type.
+        /// </summary>
+        [Fact]
+        public void RegisterRefusesClassIdAndSortsAsValueTypes()
+        {
+            var g = new EGraph();
+            Assert.Throws<ArgumentException>(() => g.Values.Register<ClassId>("cid"));
+            Assert.Throws<ArgumentException>(() => g.Values.Register<Node>("node"));
+        }
+
+        /// <summary>
+        /// A host write never stores <c>default(ClassId)</c>: <c>Register</c> refuses <see cref="ClassId"/> as a value
+        /// type, and were it accepted, the write of a <c>default(ClassId)</c> value would be refused.
+        /// </summary>
+        [Fact]
+        public void ADefaultClassIdNeverReachesATable()
+        {
+            var g = new EGraph();
+            try
+            {
+                g.Values.Register<ClassId>("cid");
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            var f = g.DefineFunction<string, ClassId>("f");
+            Assert.Throws<ArgumentException>(() => g.Root.Assume(f.Of("k").Is(default(ClassId))));
+        }
+
+        /// <summary>
+        /// A <see cref="ValueSet{T}"/> keeps its elements in <c>Comparer&lt;T&gt;.Default</c> order: <c>RegisterSet</c>
+        /// either refuses an element type with no default order, or registers a set type whose sets hold two elements.
+        /// </summary>
+        [Fact]
+        public void RegisterSetRefusesAnElementTypeWithNoOrder()
+        {
+            var g = new EGraph();
+            g.Values.Register<Opaque>("Opaque", Comparer<Opaque>.Create((x, y) => x.X.CompareTo(y.X)));
+            var registered = Record.Exception(() => g.Values.RegisterSet<Opaque>());
+            if (registered is ArgumentException)
+                return;
+
+            Assert.Null(registered);
+            var two = Record.Exception(() => ValueSet.Of(new Opaque(1), new Opaque(2)));
+            Assert.Null(two);
+        }
+
+        /// <summary>
+        /// Values used only for reading never intern: <c>ColumnType&lt;T&gt;.Compare</c> is a read, and does not grow
+        /// the graph's pools.
+        /// </summary>
+        [Fact]
+        public void CompareDoesNotIntern()
+        {
+            var g = new EGraph();
+            var type = g.Values.Register<Opaque>("Opaque");
+            var before = g.Values.InternedCount;
+            type.Compare(new Opaque(1), new Opaque(2));
+            Assert.Equal(before, g.Values.InternedCount);
         }
 
     }

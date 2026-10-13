@@ -18,7 +18,9 @@ namespace Eggnog.Relations.Benchmarks
     /// <see cref="Database.MergeAll"/>.
     /// </para>
     /// <para>
-    /// Not a lattice merge (decision 2). Allocation-free: the key, the values and the predicted row live on the stack.
+    /// Not a lattice merge: a child context refuses to create a layer of a shared (not context-private) table merged by
+    /// it, so only a root writes such a table. Allocation-free: the key, the values and the predicted row live on the
+    /// stack.
     /// </para>
     /// </remarks>
     internal sealed class FunctionMerge : MergeFunction

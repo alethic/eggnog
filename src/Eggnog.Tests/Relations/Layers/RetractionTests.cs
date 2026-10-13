@@ -9,9 +9,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="RetractionGuard"/> and its enforcement points (colored-contexts spec §6.7, decision 1, R1,
-    /// I22): every cell of the guard's table, for shared and context-private tables, and the guard execution states and
-    /// raw buffers carry.
+    /// Tests for <see cref="RetractionGuard"/> and its enforcement points. A context may retract a row of a shared
+    /// table only when it has no live descendants and, in a child, its parent is frozen; a child under a writable
+    /// parent may only subsume; context-private tables are free. Every cell of the guard's table, the guard execution
+    /// states and raw buffers carry, and the raw buffers of a root or a child, which cannot bypass it.
     /// </summary>
     public class RetractionTests
     {
@@ -63,7 +64,7 @@ namespace Eggnog.Relations.Tests
             AssertCell(rootGuard, f, p, false, false, false);
             Assert.False(Allowed(() => rootGuard.CheckClear(store.UnionFindTable)));
 
-            // Child, no live descendants, parent writable: subsume only (R1).
+            // Child, no live descendants, parent writable: subsume only.
             var guard = writable.Tables!.Guard;
             Assert.Same(guard, writable.Database.RetractionGuard);
             AssertCell(guard, f, p, false, false, true);
@@ -86,10 +87,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A bare database's states carry no guard; a store's always carry their database's, which decides when a removal
-        /// is staged. The spec's snapshot (no guard at a root without live descendants) let a state created before a child
-        /// delete the child's rows after it (review of M9.3); the root guard instead returns after one gate read while the
-        /// root has no live descendants.
+        /// A bare database's states carry no guard; a store's always carry their database's, which decides when a
+        /// removal is staged, so a state created before a child cannot delete the child's rows after it. The root guard
+        /// returns after one gate read while the root has no live descendants.
         /// </summary>
         [Fact]
         public void AStoreStateAlwaysCarriesItsDatabasesGuard()
@@ -120,8 +120,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The buffers of <see cref="Database.NewBuffer"/> carry their database's guard (I22 at every entry point), and so do
-        /// their fresh handles; the buffers of a table's own rebuild (<see cref="Table.NewBuffer"/>) carry none.
+        /// The buffers of <see cref="Database.NewBuffer"/> carry their database's guard, as every entry point does, and
+        /// so do their fresh handles; the buffers of a table's own rebuild (<see cref="Table.NewBuffer"/>) carry none.
         /// </summary>
         [Fact]
         public void RawBuffersPassTheGuard()
@@ -144,7 +144,7 @@ namespace Eggnog.Relations.Tests
             early.StageInsert([2u, 3u, 0u]);
             Assert.Equal(5u, Row(child, f, 1)?[1]);
 
-            // A child's raw buffer under a writable parent refuses too (R1), before anything is staged.
+            // A child's raw buffer under a writable parent refuses too, before anything is staged.
             Assert.Throws<InvalidOperationException>(() => child.Database.NewBuffer(f).StageRemove([1u]));
             Assert.False(child.IsFaulted);
         }
@@ -178,7 +178,7 @@ namespace Eggnog.Relations.Tests
             root.Rebuild();
             Assert.Equal(1u, Row(root, f, a)![1]);
 
-            // A child under a writable parent: removals and clears of shared tables are refused (R1) and change nothing.
+            // A child under a writable parent: removals and clears of shared tables are refused and change nothing.
             var refused = child.Database.CreateExecutionState();
             Assert.Throws<InvalidOperationException>(() => refused.StageRemove(f, [a]));
             Assert.Throws<InvalidOperationException>(() => child.ClearTable(f));
@@ -186,7 +186,7 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsFaulted);
             Assert.Null(child.Tables!.TryGetLayer(f));
 
-            // Through a write batch the refusal escapes the batch and faults the child (X12).
+            // Through a write batch the refusal escapes the batch and faults the child.
             Assert.Throws<InvalidOperationException>(() => Remove(child, f, a));
             Assert.True(child.IsFaulted);
             child.Dispose();
@@ -200,6 +200,130 @@ namespace Eggnog.Relations.Tests
             allowed.ClearTable(f);
             Assert.Equal(0, allowed.GetView(f).VisibleCount);
             Assert.Equal(1u, Row(root, f, a)![1]);
+        }
+
+        /// <summary>
+        /// A root with f(1)=5, a live child, and the root row still visible to the child.
+        /// </summary>
+        static (Store Store, TableId F, Context Child) Setup()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            Insert(store.Root, f, 1, 5, 0);
+            var child = store.Root.CreateChild();
+            Assert.Equal(5u, Row(child, f, 1)![1]);
+            return (store, f, child);
+        }
+
+        /// <summary>
+        /// <see cref="Database.NewBuffer"/> is a public write entry point of the root's database (egglog's
+        /// <c>new_buffer</c>); its removals of a shared table are refused while the root has a live child, so the root
+        /// cannot delete a row its child reads.
+        /// </summary>
+        [Fact]
+        public void ARawBufferOfTheRootCannotDeleteASharedRowWhileAChildLives()
+        {
+            var (store, f, _) = Setup();
+            var db = store.Root.Database;
+
+            var refused = false;
+            try
+            {
+                var buffer = db.NewBuffer(f);
+                buffer.StageRemove([1u]);
+                buffer.Flush();
+                db.MergeAll();
+            }
+            catch (InvalidOperationException)
+            {
+                refused = true;
+            }
+
+            // The root row is still there for the child.
+            Assert.Equal(1, store.Schema[f]!.Root.Count);
+            Assert.True(refused, "the removal was not refused");
+        }
+
+        /// <summary>
+        /// The child after a raw delete attempted at the root: a tombstone would leave the root layer's version
+        /// unchanged, so the child's catch-up would not see it and the child would lose a row it saw. The refused
+        /// removal leaves the row in the child's view.
+        /// </summary>
+        [Fact]
+        public void AfterARawRootDeleteTheChildStillSeesTheRow()
+        {
+            var (store, f, child) = Setup();
+            var db = store.Root.Database;
+            try
+            {
+                var buffer = db.NewBuffer(f);
+                buffer.StageRemove([1u]);
+                buffer.Flush();
+                db.MergeAll();
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            child.Rebuild();
+            Assert.Equal(5u, Row(child, f, 1)?[1]);
+        }
+
+        /// <summary>
+        /// The same entry point in a child under a writable parent: the child may not delete a shared row it sees
+        /// through the parent, and a raw buffer of the child's database cannot hide the root row
+        /// (<see cref="HideReason.Retracted"/>) either.
+        /// </summary>
+        [Fact]
+        public void ARawBufferOfAChildCannotRetractUnderAWritableParent()
+        {
+            var (store, f, child) = Setup();
+            var db = child.Database;
+
+            // The guarded path refuses; it is tried on a sibling, since a refusal inside a write batch faults the child
+            // that made it.
+            var sibling = store.Root.CreateChild();
+            Assert.Throws<InvalidOperationException>(() => Remove(sibling, f, 1));
+            sibling.Dispose();
+
+            var refused = false;
+            try
+            {
+                var buffer = db.NewBuffer(f);
+                buffer.StageRemove([1u]);
+                buffer.Flush();
+                db.MergeAll();
+            }
+            catch (InvalidOperationException)
+            {
+                refused = true;
+            }
+
+            // NewBuffer notified the table when it created the buffer (egglog's new_buffer), so the child has a pending
+            // notification and is read only once it merged it; the refused removal staged nothing.
+            child.Rebuild();
+            Assert.Equal(5u, Row(child, f, 1)?[1]);
+            Assert.True(refused, "the retraction was not refused");
+        }
+
+        /// <summary>
+        /// A state of the root's database created before the root had a child carries the root's guard
+        /// (<see cref="Database.GuardForNewState"/>), which each removal consults, so its removals after
+        /// <see cref="Context.CreateChild"/> are checked: <see cref="Database.CreateExecutionState"/> hands out states
+        /// that can outlive a structural call.
+        /// </summary>
+        [Fact]
+        public void AStateCreatedBeforeAChildStillPassesTheGuardAfterIt()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            Insert(store.Root, f, 1, 5, 0);
+            var db = store.Root.Database;
+            var state = db.CreateExecutionState();
+            var child = store.Root.CreateChild();
+            Assert.Equal(5u, Row(child, f, 1)![1]);
+
+            Assert.Throws<InvalidOperationException>(() => state.StageRemove(f, [1u]));
         }
 
     }

@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the contradiction stop at the storage level (colored-contexts spec §6.9, L4, X11, I25): with
-    /// <see cref="ContextOptions.StopOnContradiction"/> a merged contradiction row stops the context, its merge loop
-    /// stops after the round, and it answers only <see cref="Context.IsContradictory"/>; without it a contradiction is an
-    /// ordinary fact (D11); and a case created where a contradiction is visible starts stopped.
+    /// Tests for the contradiction stop at the storage level: with <see cref="ContextOptions.StopOnContradiction"/> a
+    /// merged contradiction row stops the context, its merge loop stops after the round, and it answers only
+    /// <see cref="Context.IsContradictory"/>; without it a contradiction is an ordinary fact; and a case created where
+    /// a contradiction is visible starts stopped.
     /// </summary>
     public class ContradictionTests
     {
@@ -84,7 +84,7 @@ namespace Eggnog.Relations.Tests
             Assert.False(root.IsContradictory);
             LookupPaths.Check(child);
 
-            // §6.9 step 3: a case created under it starts stopped; an ordinary child does not.
+            // A case created under it starts stopped; an ordinary child does not.
             child.Freeze();
             var @case = child.CreateChild(ContextOptions.Case);
             Assert.True(@case.IsContradicted);
@@ -96,10 +96,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The children of a case that a contradiction stopped with writes pending: its parent is never clean again, so a
-        /// child does not catch up with it (§5.6, §7.1). A child that stops on contradictions stops too (the contradiction
-        /// row is visible in its parent); any other child is refused on rebuild, write and child creation, unfaulted and
-        /// without taking an epoch; both may be disposed.
+        /// The children of a case that a contradiction stopped with writes pending: its parent is never clean again,
+        /// and a child catches up only with a parent that is frozen or clean, so it never catches up with that parent.
+        /// A child that stops on contradictions stops too (the contradiction row is visible in its parent); any other
+        /// child is refused on rebuild, write and child creation, unfaulted and without taking an epoch; both may be
+        /// disposed.
         /// </summary>
         [Fact]
         public void TheChildrenOfAStoppedCaseStopOrAreRefused()

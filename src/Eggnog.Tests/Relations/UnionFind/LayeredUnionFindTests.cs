@@ -7,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="LayeredUnionFind"/> (colored-contexts spec §5.4): <c>find_C = overlay_C ∘ find_P</c> over a
-    /// root and two overlay levels against a naive partition, extension without mutation, live levels, and the
-    /// flattened form.
+    /// Tests for <see cref="LayeredUnionFind"/>, the find of a context: <c>find_C = overlay_C ∘ find_P</c> over a root
+    /// and two overlay levels against a naive partition, extension without mutation, live levels, and the flattened
+    /// form.
     /// </summary>
     public class LayeredUnionFindTests
     {
@@ -102,7 +102,7 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(p2.Canonical(x), c2.Find(x));
                 Assert.Equal(c2.Find(x), c2.MapAboveRoot(root.FindNaive(x)));
 
-                // Coarsening (I7): the child's find through its parent's is its own.
+                // A child's partition coarsens its parent's: the child's find through its parent's is its own.
                 Assert.Equal(c2.Find(x), c2.Find(c1.Find(x)));
             }
 

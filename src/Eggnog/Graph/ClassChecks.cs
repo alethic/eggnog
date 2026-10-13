@@ -4,13 +4,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The checks every class value passes before its cell reaches the engine (D39, invariant O, §6.6.7).
+    /// The checks every class value passes before its cell reaches the engine.
     /// </summary>
     internal static class ClassChecks
     {
 
         /// <summary>
-        /// The most origin links a check walks: deeper than any scope tree (colors X36 limits depth to 31).
+        /// The most origin links a check walks: deeper than any scope tree, whose depth the engine limits to 31 (a
+        /// context's layer mask has 32 bits).
         /// </summary>
         const int MaxLinks = 32;
 
@@ -37,7 +38,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the message of the first check <paramref name="value"/> fails when used under <paramref name="target"/>,
-        /// or <c>null</c> when it passes (§6.6.7).
+        /// or <c>null</c> when it passes.
         /// </summary>
         /// <param name="target">The origin of the scope the value is used in.</param>
         /// <param name="value">The value.</param>
@@ -77,7 +78,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether a rule owned by <paramref name="owner"/> (<c>null</c>: a global rule) may hold a class constant of
-        /// <paramref name="origin"/> (§6.3, step 3): global rules hold only classes from the root, local rules classes from
+        /// <paramref name="origin"/>: global rules hold only classes from the root, local rules classes from
         /// their owner or its ancestors. A batch origin stands for its scope; it must have committed.
         /// </summary>
         /// <param name="owner">The rule's owner scope, or <c>null</c> for a global rule.</param>

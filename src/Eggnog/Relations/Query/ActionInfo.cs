@@ -36,8 +36,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes a new instance with the program's constant ids (colored-contexts spec §9.8). The arrays are owned by
-        /// the new instance.
+        /// Initializes a new instance with the program's constant ids. The arrays are owned by the new instance.
         /// </summary>
         /// <param name="instrs">The instruction program.</param>
         /// <param name="usedVariables">The query variables the program reads, ascending.</param>
@@ -64,9 +63,9 @@ namespace Eggnog.Relations
         public Variable[] UsedVariables { get; }
 
         /// <summary>
-        /// Gets the constant ids among the program's operands, as written (colored-contexts spec §9.8, X19): what a
-        /// store-backed context canonicalizes per run (<see cref="CanonicalConstants"/>). A program that
-        /// <see cref="ActionSubstituter"/> rewrote keeps the written list. Callers must not modify the array.
+        /// Gets the constant ids among the program's operands, as written: what a store-backed context canonicalizes per
+        /// run (<see cref="CanonicalConstants"/>), so a constant that has lost a union still names its class. A program
+        /// that <see cref="ActionSubstituter"/> rewrote keeps the written list. Callers must not modify the array.
         /// </summary>
         public ActionIdConstant[] IdConstants { get; }
 

@@ -228,8 +228,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ThrowingCollectionReleasesItsReadLock()
         {
-            // If the enumerator throws mid-write, the read lock must still be released; otherwise the next growth, which
-            // waits for every read lock, would wait forever.
+            // If the enumerator throws mid-write, the read lock must still be released; otherwise the next growth,
+            // which waits for every read lock, would wait forever.
             var v = new ParallelVecWriter<int>(new int[4], 0);
             Assert.Throws<NotSupportedException>(() => v.WriteContents(new ParallelVecWriterThrowingCollection(3, 2)));
 
@@ -351,6 +351,41 @@ namespace Eggnog.Relations.Tests
 
             for (var i = PrefixLength; i < count; i++)
                 Assert.True(covered[i]);
+        }
+
+        [Fact]
+        public void NegativeCountIsRejectedWithoutCorruptingReservations()
+        {
+            // Rust's ExactSizeIterator::len is a usize, so it can never be negative. IReadOnlyCollection<T>.Count can
+            // be. A negative Count is rejected before anything is reserved: added to the logical length
+            // (Interlocked.Add), it would move the length backwards, and the loop would write every yielded item past
+            // its reservation, over other writers' ranges.
+            var v = new ParallelVecWriter<int>(new int[8], 0);
+            Assert.Equal(0, v.WriteSlice(new[] { 1, 2 }));
+
+            Assert.ThrowsAny<Exception>(() => v.WriteContents(new ParallelVecWriterLyingCollection(-1, 7, 8, 9)));
+
+            // A rejected write must not shrink the logical length: the next write must not overlap [0, 2).
+            var next = v.WriteSlice(new[] { 5 });
+            Assert.True(next >= 2, $"the next write landed at {next}, inside the earlier write's range [0, 2)");
+
+            var result = v.Finish(out var count);
+            Assert.True(count >= 3, $"the logical length shrank to {count}");
+            Assert.Equal(1, result[0]);
+            Assert.Equal(2, result[1]);
+        }
+
+        [Fact]
+        public void NegativeCountNeverWritesOutsideAnyReservation()
+        {
+            // Slots past the logical length are untouched by a rejected write.
+            var v = new ParallelVecWriter<int>(new int[8], 0);
+            Assert.Equal(0, v.WriteSlice(new[] { 1 }));
+            Assert.ThrowsAny<Exception>(() => v.WriteContents(new ParallelVecWriterLyingCollection(-1, 7, 8, 9)));
+            using var access = v.ReadAccess();
+            Assert.Equal(1, access.Buffer[0]);
+            for (var i = 1; i < access.Buffer.Length; i++)
+                Assert.True(access.Buffer[i] == 0, $"slot {i} past every reservation was written ({access.Buffer[i]})");
         }
 
     }

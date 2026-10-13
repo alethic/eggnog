@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An untyped variable of a column type (D13), from the internal <c>RuleBuilder.Var(ColumnType, string)</c>.
+    /// An untyped variable of a column type, from the internal <c>RuleBuilder.Var(ColumnType, string)</c>.
     /// </summary>
     internal sealed class UntypedVar : Term
     {

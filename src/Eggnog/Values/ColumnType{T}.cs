@@ -38,9 +38,9 @@ namespace Eggnog
         /// <summary>
         /// Compares two values in content order: strings ordinal, numbers numeric, <c>false &lt; true</c>, sets
         /// lexicographic over their sorted elements, registered types by their comparer (else
-        /// <c>Comparer&lt;T&gt;.Default</c> when comparable, else their cells), classes by id. Extraction breaks ties by
-        /// this order. Comparing is a read: it never interns (D15). Ordered by cell, a value that was never interned
-        /// comes after every interned one, and two such values compare by hash code (zero when they are equal).
+        /// <c>Comparer&lt;T&gt;.Default</c> when comparable, else their cells), classes by id. Extraction breaks ties
+        /// by this order. Comparing is a read: it never interns. Ordered by cell, a value that was never interned comes
+        /// after every interned one, and two such values compare by hash code (zero when they are equal).
         /// </summary>
         /// <param name="x">One value.</param>
         /// <param name="y">The other value.</param>
@@ -63,11 +63,13 @@ namespace Eggnog
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns>The cell.</returns>
-        /// <exception cref="ArgumentException">The value is not representable (a NaN double, a default class).</exception>
+        /// <exception cref="ArgumentException">The value is not representable (a NaN double, a default
+        /// class).</exception>
         internal abstract uint Encode(T value);
 
         /// <summary>
-        /// Gets the cell of a value that is inline or interned already, without interning (D15, E1).
+        /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
+        /// graph's interning pools, which are permanent.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>

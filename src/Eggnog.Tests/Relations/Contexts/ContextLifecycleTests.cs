@@ -8,13 +8,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the lifecycle of contexts in non-frozen chains (colored-contexts spec §8.2, §8.3, X15, X36): creation,
-    /// disposal rules, descendant gates, the depth limit, the shared thread domain, and the refusal of a second thread
-    /// and of re-entrant structural calls; and the domains of children under frozen parents (M9.2).
+    /// Tests for the lifecycle of contexts in non-frozen chains: creation, disposal rules, descendant gates, the depth
+    /// limit, the shared thread domain, and the refusal of a second thread and of re-entrant structural calls; and the
+    /// domains of children under frozen parents.
     /// </summary>
     public class ContextLifecycleTests
     {
 
+        /// <summary>
+        /// Children link to their parents with depths, ancestors, options and creation epochs; each context owns its
+        /// database, which shares the root's store-wide registries.
+        /// </summary>
         [Fact]
         public void CreateChildBuildsTheChain()
         {
@@ -66,6 +70,9 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsContradicted);
         }
 
+        /// <summary>
+        /// A child uses the parallelism its options name, or else its parent's.
+        /// </summary>
         [Fact]
         public void AChildTakesItsParallelismFromItsOptionsOrItsParent()
         {
@@ -77,6 +84,10 @@ namespace Eggnog.Relations.Tests
             Assert.Same(custom, own.Database.Parallelism);
         }
 
+        /// <summary>
+        /// The root and a context with live children cannot be disposed; disposing a leaf is idempotent, detaches it
+        /// from its parent, and makes its members throw <see cref="ObjectDisposedException"/>.
+        /// </summary>
         [Fact]
         public void DisposeRules()
         {
@@ -108,6 +119,9 @@ namespace Eggnog.Relations.Tests
             again.Dispose();
         }
 
+        /// <summary>
+        /// A context's host may be set again to the same object but not replaced, and disposal releases it.
+        /// </summary>
         [Fact]
         public void HostIsSetOnceAndReleasedOnDispose()
         {
@@ -122,6 +136,10 @@ namespace Eggnog.Relations.Tests
             Assert.Null(child.Host);
         }
 
+        /// <summary>
+        /// Each context's gate counts its live descendants as they are created and disposed, and a database can be
+        /// cloned only at a root without live descendants.
+        /// </summary>
         [Fact]
         public void GatesCountLiveDescendantsAndGuardClone()
         {
@@ -138,7 +156,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(root.Gate.HasLiveDescendants);
             Assert.False(c.Gate.HasLiveDescendants);
 
-            // A root with live descendants, and any child, cannot be cloned (§4.3).
+            // A root with live descendants, and any child, cannot be cloned.
             Assert.Throws<InvalidOperationException>(() => root.Database.Clone());
             Assert.Throws<InvalidOperationException>(() => b.Database.Clone());
 
@@ -156,6 +174,9 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => new DescendantGate().Exit());
         }
 
+        /// <summary>
+        /// A chain reaches <see cref="Context.MaxDepth"/> (31) below the root, and the deepest context refuses a child.
+        /// </summary>
         [Fact]
         public void DepthIsLimitedToThirtyOne()
         {
@@ -175,6 +196,9 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, store.Root.Gate.LiveDescendants);
         }
 
+        /// <summary>
+        /// Every context of a chain with no frozen context shares the root's thread domain.
+        /// </summary>
         [Fact]
         public void ANonFrozenChainSharesOneDomain()
         {
@@ -188,6 +212,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(store.Root.Domain.IsHeld);
         }
 
+        /// <summary>
+        /// While one thread holds a chain's domain, structural calls from another thread on any context of the chain
+        /// throw and change nothing; once the domain is free they succeed.
+        /// </summary>
         [Fact]
         public void TwoThreadsOnOneDomainThrow()
         {
@@ -229,8 +257,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §8.3 (M9.2): children of a frozen context get domains of their own, so siblings run on different threads at
-        /// once; freezing gives each live child subtree a new domain; a frozen context is read without its domain.
+        /// Children of a frozen context get domains of their own, so siblings run on different threads at once;
+        /// freezing gives each live child subtree a new domain; a frozen context is read without its domain.
         /// </summary>
         [Fact]
         public void FrozenParentDomains()
@@ -299,6 +327,9 @@ namespace Eggnog.Relations.Tests
             Assert.False(b.IsFaulted);
         }
 
+        /// <summary>
+        /// Inside an operation of the domain, creating and disposing contexts is refused; reads and mints are allowed.
+        /// </summary>
         [Fact]
         public void ReentrantCreateChildAndDisposeThrow()
         {
@@ -324,6 +355,10 @@ namespace Eggnog.Relations.Tests
             child.Dispose();
         }
 
+        /// <summary>
+        /// A context's version moves on every effective change (a merge that changes rows, an effective union, a clear
+        /// that removes rows) and on nothing else.
+        /// </summary>
         [Fact]
         public void VersionMovesWithMergesThatChangeRowsAndEffectiveClears()
         {
@@ -338,7 +373,7 @@ namespace Eggnog.Relations.Tests
             var afterInsert = root.Version;
             Assert.True(afterInsert > 0);
 
-            // A merge that changes nothing, and a redundant union, leave it alone (D16).
+            // A merge that changes nothing, and a redundant union, leave it alone.
             db.WithExecutionState(s => { s.StageInsert(f, [1, 10, 1]); return 0; });
             db.WithExecutionState(s => { s.StageInsert(store.UnionFindTable, [3, 3, 1]); return 0; });
             db.MergeAll(1);

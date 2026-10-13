@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="OverlayDisplacedLookup"/> and the <see cref="TableKind.OverlayDisplaced"/> arm of
-    /// <see cref="VectorizedLookup"/> (colored-contexts spec §5.5): a child's <c>lookup_uf</c> answers column 1 for every
-    /// id with the child's canonical, and columns 0 and 2 for the ids displaced in the child's view.
+    /// <see cref="VectorizedLookup"/>: a child's <c>lookup_uf</c> answers column 1 for every id with the child's
+    /// canonical, and columns 0 and 2 for the ids displaced in the child's view.
     /// </summary>
     public class OverlayDisplacedLookupTests
     {

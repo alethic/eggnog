@@ -8,12 +8,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The lift against its specification (colored-contexts spec §11.2, §17 M10.4, I33): over random parents (a writable
-    /// root, or a writable child of a frozen root) and random cases (unions over parent and local ids, relation rows,
-    /// lattice values, constructor terms, rule runs, vacuous cases), what the parent holds after the lift over its
-    /// original ids is exactly E, the equalities, facts and joined values that held in every live case before it:
-    /// soundness (⊆ E) and completeness (⊇ E). Terms are checked for completeness over every parent id after the lift.
-    /// 400 seeds.
+    /// The lift is sound and complete: over random parents (a writable root, or a writable child of a frozen root) and
+    /// random cases (unions over parent and local ids, relation rows, lattice values, constructor terms, rule runs,
+    /// vacuous cases), what the parent holds after the lift over its original ids is exactly E, the equalities, facts
+    /// and joined values that held in every live case before it: soundness (⊆ E) and completeness (⊇ E). Terms are
+    /// checked for completeness over every parent id after the lift. 400 seeds.
     /// </summary>
     public class LifterPropertyTests
     {
@@ -219,8 +218,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Completeness over every parent id after the lift, terms included: equal in every live case implies equal in the
-        /// parent; an <c>add</c> term every live case holds over parent ids is in the parent.
+        /// Completeness over every parent id after the lift, terms included: equal in every live case implies equal in
+        /// the parent; an <c>add</c> term every live case holds over parent ids is in the parent.
         /// </summary>
         static void CheckTermCompleteness(ContextGraph g, EGraphContext parent, IReadOnlyList<EGraphContext> live, Value[] ids)
         {
@@ -244,7 +243,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The spec the property lifts with: every table of the context graph.
+        /// The spec the property lifts with: every table of the context graph but the contradiction function, which the
+        /// lift writes on its own when every case is vacuous.
         /// </summary>
         static LiftSpec Spec(ContextGraph g) => new(
             new LiftTable(g.Edge, LiftTableKind.Relation),

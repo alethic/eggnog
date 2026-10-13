@@ -9,7 +9,9 @@ namespace Eggnog.Tests.Host
 {
 
     /// <summary>
-    /// Host write batches (D30, D32, §6.6.1, §6.6.2): atomic, canonical, and silent when nothing changes.
+    /// Host write batches: atomic (a batch whose callback throws or whose call is rejected writes nothing, and the
+    /// classes its <c>Make</c> calls returned are invalid), canonical, checked against functions without a lattice,
+    /// confined to the thread that holds the scope's guard, and silent when nothing changes.
     /// </summary>
     public sealed class HostWriteTests
     {
@@ -383,6 +385,304 @@ namespace Eggnog.Tests.Host
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Assume(other.Num.Of(1L)));
             Assert.False(t.Root.IsFaulted);
+        }
+
+        /// <summary>
+        /// If the write callback throws or a call is rejected, nothing is written: a rejected call whose exception the
+        /// callback catches still leaves the batch unwritten, and the version where it was.
+        /// </summary>
+        [Fact]
+        public void AWriteWithARejectedCallWritesNothingEvenWhenTheCallbackCatches()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<string, long>("f");
+            t.Root.Assume(f.Of("k").Is(1L));
+            var version = t.Root.Version;
+
+            t.Root.Write(w =>
+            {
+                w.Assume(t.Num.Of(7L));
+                try
+                {
+                    w.Assume(t.Num.Of(8L), f.Of("k").Is(2L));
+                }
+                catch (FactConflictException)
+                {
+                }
+            });
+
+            Assert.False(t.Root.Check(t.Num.Of(7L)));
+            Assert.False(t.Root.Check(t.Num.Of(8L)));
+            Assert.Equal(version, t.Root.Version);
+        }
+
+        /// <summary>
+        /// Nothing is written when a fact fails: inside a <c>Write</c>, a rejected call leaves none of the facts it
+        /// planned before the failing one.
+        /// </summary>
+        [Fact]
+        public void ARejectedCallInsideWriteLeavesNoPartOfItself()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<string, long>("f");
+            t.Root.Assume(f.Of("k").Is(1L));
+            t.Root.Write(w =>
+            {
+                try
+                {
+                    w.Assume(t.Num.Of(8L), f.Of("k").Is(2L));
+                }
+                catch (FactConflictException)
+                {
+                }
+            });
+
+            Assert.False(t.Root.Check(t.Num.Of(8L)));
+        }
+
+        /// <summary>
+        /// A batch filled from several threads, the misuse the thread guard exists to catch: every call is either
+        /// refused as in use on another thread or written; none is lost or corrupts the batch.
+        /// </summary>
+        /// <remarks>
+        /// The calls run on the batch's own thread and on seven dedicated threads at once. <c>Parallel.For</c> would
+        /// not do: it may run every iteration on the calling thread when the pool is busy (as it is when other test
+        /// classes run in parallel), every call is then the batch's own, and nothing is refused although the guard
+        /// works.
+        /// </remarks>
+        [Fact]
+        public void AWriteFilledFromSeveralThreadsFailsFast()
+        {
+            var t = new NodeTheory();
+            var refused = 0;
+            var other = new System.Collections.Concurrent.ConcurrentBag<string>();
+            void Call(ScopeWriter w, int i)
+            {
+                try
+                {
+                    w.Assume(t.Num.Of(i));
+                }
+                catch (InvalidOperationException e) when (e.Message.Contains("in use on another thread", StringComparison.Ordinal))
+                {
+                    System.Threading.Interlocked.Increment(ref refused);
+                }
+                catch (Exception e)
+                {
+                    other.Add(e.GetType().Name + ": " + e.Message);
+                }
+            }
+
+            var failure = Record.Exception(() => t.Root.Write(w =>
+            {
+                var threads = new System.Threading.Thread[7];
+                for (var k = 0; k < threads.Length; k++)
+                {
+                    var first = k + 1;
+                    threads[k] = new System.Threading.Thread(() =>
+                    {
+                        for (var i = first; i < 20000; i += 8)
+                            Call(w, i);
+                    });
+                    threads[k].Start();
+                }
+
+                for (var i = 0; i < 20000; i += 8)
+                    Call(w, i);
+
+                foreach (var thread in threads)
+                    thread.Join();
+            }));
+
+            var written = 0;
+            for (var i = 0; i < 20000; i++)
+                if (t.Root.Check(t.Num.Of(i)))
+                    written++;
+
+            Assert.True(other.IsEmpty && failure is null && refused > 0,
+                $"refused by the guard: {refused}; written: {written} of 20000; other exceptions: {other.Count} ({string.Join(" | ", System.Linq.Enumerable.Take(System.Linq.Enumerable.Distinct(other), 3))}); Write threw: {failure?.GetType().Name}");
+        }
+
+        /// <summary>
+        /// Every scope call enters the thread domain's guard for the whole call, so a second thread fails fast instead
+        /// of interleaving: a <see cref="ScopeWriter"/> call from another thread during the batch is refused.
+        /// </summary>
+        /// <remarks>
+        /// The call runs on a dedicated thread. A pool task waited on with
+        /// <c>Task.Run(...).GetAwaiter().GetResult()</c> may run inline on the waiting thread (the wait tries to before
+        /// it blocks), which makes the call a same-thread call that the re-entrant guard rightly allows.
+        /// </remarks>
+        [Fact]
+        public void AScopeWriterCallFromAnotherThreadIsRefused()
+        {
+            var t = new NodeTheory();
+            Exception? fromOtherThread = null;
+            var caller = Environment.CurrentManagedThreadId;
+            var callee = caller;
+            t.Root.Write(w =>
+            {
+                var thread = new System.Threading.Thread(() =>
+                {
+                    callee = Environment.CurrentManagedThreadId;
+                    fromOtherThread = Record.Exception(() => w.Assume(t.Num.Of(9L)));
+                });
+                thread.Start();
+                thread.Join();
+            });
+
+            Assert.NotEqual(caller, callee);
+            Assert.IsType<InvalidOperationException>(fromOtherThread);
+            Assert.False(t.Root.Check(t.Num.Of(9L)));
+        }
+
+        /// <summary>
+        /// A public exception constructor validates its arguments like any public API:
+        /// <see cref="FactConflictException"/> refuses a <c>null</c> table.
+        /// </summary>
+        [Fact]
+        public void FactConflictExceptionValidatesItsArguments()
+        {
+            var ex = Record.Exception(() => new FactConflictException(null!, Array.Empty<object>(), 1L, 2L));
+            Assert.IsType<ArgumentNullException>(ex);
+        }
+
+        /// <summary>
+        /// A rejected call that the write delegate catches still leaves the whole batch unwritten: its earlier fact and
+        /// term are not written, the version does not move, and the class its <c>Make</c> returned is invalid.
+        /// </summary>
+        [Fact]
+        public void ARejectedCallThatTheWriteDelegateCatchesStillWritesNothing()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, long>("f");
+            var version = t.Root.Version;
+            var made = default(Node);
+            t.Root.Write(w =>
+            {
+                w.Assume(t.Num.Of(5L));
+                made = w.Make(t.A.Of());
+                try
+                {
+                    w.Assume(t.Num.Of(f.Of(1L)));
+                }
+                catch (ArgumentException)
+                {
+                    // The call was rejected; the batch must write nothing.
+                }
+            });
+
+            Assert.False(t.Root.Check(t.Num.Of(5L)));
+            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
+            Assert.Equal(version, t.Root.Version);
+            Assert.Throws<ArgumentException>(() => t.Root.Find(made));
+        }
+
+        /// <summary>
+        /// A conflict rejected inside a <c>Write</c> and caught there leaves the batch's earlier value unwritten too.
+        /// </summary>
+        [Fact]
+        public void ARejectedConflictCaughtInsideWriteStillWritesNothing()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<string, long>("f");
+            t.Root.Write(w =>
+            {
+                w.Assume(f.Of("k").Is(1L));
+                try
+                {
+                    w.Assume(f.Of("k").Is(2L));
+                }
+                catch (FactConflictException)
+                {
+                    // Rejected.
+                }
+            });
+
+            Assert.False(t.Root.TryGet(f.Of("k"), out _));
+        }
+
+        /// <summary>
+        /// A fact rejected at its second argument, after its first argument planned new terms, leaves none of those
+        /// terms.
+        /// </summary>
+        [Fact]
+        public void APartlyPlannedFactThatIsRejectedLeavesNoTerm()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, long>("f");
+            var link = t.Graph.DefineRelation<Node, long>("link");
+            t.Root.Write(w =>
+            {
+                try
+                {
+                    // Plans Wrap(A) and A as new terms, then rejects the fact at its second argument (a function read).
+                    w.Assume(link.Of(t.Wrap.Of(t.A.Of()), f.Of(1L)));
+                }
+                catch (ArgumentException)
+                {
+                    // Rejected.
+                }
+            });
+
+            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
+            Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
+        }
+
+        /// <summary>
+        /// A host write never gives a function without a lattice a second value: a host union that would merge two keys
+        /// holding different values is refused with <see cref="FactConflictException"/>, leaves the classes apart, and
+        /// does not fault the root.
+        /// </summary>
+        [Fact]
+        public void AHostUnionThatMergesTwoConflictingKeys()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<Node, long>("f");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            t.Root.Assume(f.Of(a).Is(1L), f.Of(b).Is(2L));
+            var thrown = Record.Exception(() => t.Root.Union(a, b));
+            Assert.False(t.Root.IsFaulted, "the root is faulted by " + thrown?.GetType().Name);
+            Assert.IsType<FactConflictException>(thrown);
+            Assert.False(t.Root.AreEqual(a, b));
+        }
+
+        /// <summary>
+        /// The same inside one batch: two keys of one function without a lattice that a union of the batch merges are a
+        /// <see cref="FactConflictException"/>, and the root is not faulted.
+        /// </summary>
+        [Fact]
+        public void ABatchWhoseUnionMergesTwoConflictingKeysIsAFactConflict()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<Node, long>("f");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var thrown = Record.Exception(() => t.Root.Write(w =>
+            {
+                w.Assume(f.Of(a).Is(1L), f.Of(b).Is(2L));
+                w.Union(a, b);
+            }));
+            Assert.False(t.Root.IsFaulted, "the root is faulted by " + thrown?.GetType().Name);
+            Assert.IsType<FactConflictException>(thrown);
+        }
+
+        /// <summary>
+        /// A <see cref="ScopeWriter"/> captured and used on another thread while the batch is open would write into the
+        /// batch from a thread that does not hold the root's guard: the call is refused with
+        /// <see cref="InvalidOperationException"/>.
+        /// </summary>
+        [Fact]
+        public void AScopeWriterUsedFromAnotherThreadIsRefused()
+        {
+            var t = new NodeTheory();
+            Exception? thrown = null;
+            t.Root.Write(w =>
+            {
+                var thread = new System.Threading.Thread(() => thrown = Record.Exception(() => w.Assume(t.Num.Of(3L))));
+                thread.Start();
+                thread.Join();
+            });
+            Assert.IsType<InvalidOperationException>(thrown);
         }
 
     }

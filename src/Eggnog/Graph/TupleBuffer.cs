@@ -19,7 +19,7 @@ namespace Eggnog
     /// Tuples are stored row-major in one array, and found by an open-addressing table of tuple numbers (linear probing,
     /// at most half full). Every array is rented from <see cref="ArrayPool{T}.Shared"/> and returned by
     /// <see cref="Dispose"/>, so a call that fills a buffer allocates nothing per tuple once the pool holds arrays of the
-    /// sizes it needs (conventions: no allocation per match). <see cref="Add"/> costs one hash and an expected O(1)
+    /// sizes it needs. <see cref="Add"/> costs one hash and an expected O(1)
     /// compares; growth rehashes, amortized O(1) per tuple.
     /// </para>
     /// <para>
@@ -170,7 +170,7 @@ namespace Eggnog
         public void SortByCells() => Sort(null);
 
         /// <summary>
-        /// Orders the indexer in content order (§6.1): column by column, each by its column type's order (strings ordinal,
+        /// Orders the indexer in content order: column by column, each by its column type's order (strings ordinal,
         /// numbers numeric, sets lexicographic, classes by id). Distinct cells that a type compares as equal fall back to
         /// the cells' order, so the order is total and deterministic. O(n log n) compares, each decoding the cells it
         /// compares; the cells do not move.

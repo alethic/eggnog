@@ -4,8 +4,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Rewrites the Id constants of an action program into their canonical form in a context (colored-contexts spec
-    /// §9.8, X19), and defines how an instruction's operands are numbered for <see cref="ActionIdConstant.Operand"/>.
+    /// Rewrites the Id constants of an action program into their canonical form in a context, and defines how an
+    /// instruction's operands are numbered for <see cref="ActionIdConstant.Operand"/>.
     /// </summary>
     /// <remarks>
     /// <para>

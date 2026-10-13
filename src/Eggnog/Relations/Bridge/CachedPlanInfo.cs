@@ -10,8 +10,8 @@ namespace Eggnog.Relations
     /// (egglog-bridge/src/lib.rs:974-980).
     /// </summary>
     /// <remarks>
-    /// Never invalidated: the join order is fixed by the table statistics at the rule's first run, as in egglog (map
-    /// §3.9 item 6). Immutable, so it may be shared by any number of contexts.
+    /// Never invalidated: the join order is fixed by the table statistics at the rule's first run, as in egglog.
+    /// Immutable, so it may be shared by any number of contexts.
     /// </remarks>
     internal sealed class CachedPlanInfo
     {

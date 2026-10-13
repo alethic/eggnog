@@ -9,8 +9,8 @@ namespace Eggnog.Tests.Host
 {
 
     /// <summary>
-    /// Host reads (§6.6.3): every row of the check table, values and classes, and reads that never intern or fail for want
-    /// of a rebuild.
+    /// Host reads: every row of the check table, values and classes, rows in content order, and reads that never intern
+    /// or fail for want of a rebuild.
     /// </summary>
     public sealed class HostReadTests
     {
@@ -256,6 +256,66 @@ namespace Eggnog.Tests.Host
             Assert.Throws<ArgumentException>(() => t.Root.CountRows(other.Num));
             Assert.Throws<ArgumentNullException>(() => t.Root.Rows(null!));
             Assert.Throws<ArgumentNullException>(() => t.Root.CountRows(null!));
+        }
+
+        /// <summary>
+        /// <c>CountRows</c> is egglog's <c>print-size</c>, and <c>Rows</c> lists the same rows, after congruence
+        /// collapsed two.
+        /// </summary>
+        [Fact]
+        public void RowsAndCountRowsAgreeAfterCongruence()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            t.Root.Make(t.Wrap.Of(a));
+            t.Root.Make(t.Wrap.Of(b));
+            Assert.Equal(2, t.Root.CountRows(t.Wrap));
+
+            t.Root.Union(a, b);
+
+            Assert.Equal(1, t.Root.CountRows(t.Wrap));
+            Assert.Single(t.Root.Rows(t.Wrap));
+        }
+
+        [Fact]
+        public void ContentOrderOfStrings()
+        {
+            var g = new EGraph();
+            var s = g.DefineRelation<string>("s");
+            var values = new[] { "b", "a", "B", "ä", "aa", "" };
+            g.Root.Assume(values.Select(v => s.Of(v)).ToArray());
+            var rows = g.Root.Rows(s).Select(r => (string)r.Keys[0]).ToArray();
+            Assert.Equal(values.OrderBy(v => v, StringComparer.Ordinal).ToArray(), rows);
+        }
+
+        [Fact]
+        public void ContentOrderOfDoubles()
+        {
+            var g = new EGraph();
+            var s = g.DefineRelation<double>("d");
+            var values = new[] { 1.5, -2.5, 0.0, 1e300, -1e-300, 3.0 };
+            g.Root.Assume(values.Select(v => s.Of(v)).ToArray());
+            var rows = g.Root.Rows(s).Select(r => (double)r.Keys[0]).ToArray();
+            Assert.Equal(values.OrderBy(v => v).ToArray(), rows);
+        }
+
+        [Fact]
+        public void CountRowsAndRowsAgree()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.Lit.Of(1L));
+            var b = t.Root.Make(t.Lit.Of(2L));
+            t.Root.Make(t.Wrap.Of(a));
+            t.Root.Make(t.Wrap.Of(b));
+            t.Root.Union(a, b);
+            Assert.Equal(t.Root.Rows(t.Wrap).Count, t.Root.CountRows(t.Wrap));
+            Assert.Equal(1, t.Root.CountRows(t.Wrap));
+            Assert.Equal(2, t.Root.CountRows(t.Lit));
+            Assert.Equal(0, t.Root.CountRows(t.Graph.Contradiction));
+            t.Root.Assume(t.Graph.Contradiction.Of());
+            Assert.Equal(1, t.Root.CountRows(t.Graph.Contradiction));
+            Assert.Equal("(contradiction)", t.Root.Rows(t.Graph.Contradiction)[0].ToString());
         }
 
     }

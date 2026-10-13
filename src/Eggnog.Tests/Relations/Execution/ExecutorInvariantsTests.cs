@@ -11,10 +11,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T11 (colored-contexts spec §12.7 item 3): the executor part of the context checker
-    /// (<see cref="ExecutorInvariants"/>) passes on clean contexts and reports each deliberate corruption of what the
-    /// executor reads: a view's layers or hidden rows, a frozen catalog, an own row's sort order, stamp, canonical cells or
-    /// key, and the semi-naive floor.
+    /// The executor part of the context invariant checker (<see cref="ExecutorInvariants"/>) passes on clean contexts
+    /// and reports each deliberate corruption of what the executor reads: a view's layers or hidden rows, a frozen
+    /// catalog, an own row's sort order, stamp, canonical cells or key, and the semi-naive floor.
     /// </summary>
     public class ExecutorInvariantsTests
     {
@@ -93,7 +92,7 @@ namespace Eggnog.Relations.Tests
             var (_, f, _, child, _) = Setup();
             var view = child.GetView(f);
 
-            // The root's layer dropped: the view no longer shows what the chain holds.
+            // The root's layer dropped: the view does not show what the chain holds.
             SetCachedView(child, f, new TableView(f, view.Spec, [null, view.Layers[1]]));
             Assert.Contains(Check(child), v => v.StartsWith("view coherence") && v.Contains("depth 0") && v.Contains("absent, expected present"));
 

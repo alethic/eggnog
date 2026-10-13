@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An untyped constant of a column type (D13), from <c>Term.Constant</c>.
+    /// An untyped constant of a column type, from <c>Term.Constant</c>.
     /// </summary>
     internal sealed class UntypedConstantTerm : Term
     {

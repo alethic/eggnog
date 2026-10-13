@@ -21,9 +21,9 @@ namespace Eggnog.Relations.Tests
         public const int I64 = -1;
 
         /// <summary>
-        /// The sort of the unit value, the result of the filter primitives. Relations are written with it as their output,
-        /// as egglog writes none; their cells are nonetheless ids (<see cref="BridgeDiffFunction.IsIdColumn"/>), and a
-        /// variable bound to a relation's output holds one.
+        /// The sort of the unit value, the result of the filter primitives. Relations are written with it as their
+        /// output, as egglog writes none; their cells are nonetheless ids
+        /// (<see cref="BridgeDiffFunction.IsIdColumn"/>), and a variable bound to a relation's output holds one.
         /// </summary>
         public const int Unit = -2;
 

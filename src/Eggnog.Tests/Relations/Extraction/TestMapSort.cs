@@ -14,6 +14,10 @@ namespace Eggnog.Relations.Tests
 
         readonly Sort[] inner;
 
+        /// <summary>
+        /// Initializes a map sort named <paramref name="name"/> from <paramref name="key"/> to
+        /// <paramref name="value"/>.
+        /// </summary>
         public TestMapSort(string name, Sort key, Sort value)
             : base(name)
         {
@@ -22,12 +26,20 @@ namespace Eggnog.Relations.Tests
             inner = [key, value];
         }
 
+        /// <summary>
+        /// Gets the sort of the keys.
+        /// </summary>
         public Sort KeySort { get; }
 
+        /// <summary>
+        /// Gets the sort of the values.
+        /// </summary>
         public Sort ValueSort { get; }
 
+        /// <inheritdoc />
         public override IReadOnlyList<Sort> InnerSorts => inner;
 
+        /// <inheritdoc />
         public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
         {
             if (containers.TryGetValue<MapContainer>(value.Rep, out var map) == false)
@@ -40,6 +52,7 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <inheritdoc />
         public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             var term = dag.App("map-empty");

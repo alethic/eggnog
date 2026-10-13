@@ -29,8 +29,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Plans <paramref name="query"/> with the statistics of the current tables. egglog's <c>plan_query</c>. A layered
-        /// database (a child) plans with its view's statistics (<see cref="View"/>, colored-contexts spec §3.4, §9.7): what
-        /// the context sees, read through, even of tables it never wrote.
+        /// database (a child) plans with its view's statistics (<see cref="View"/>): what the context sees, read through,
+        /// even of tables it never wrote.
         /// </summary>
         /// <param name="query">The query; not modified.</param>
         /// <returns>The plan template.</returns>
@@ -40,7 +40,7 @@ namespace Eggnog.Relations
         /// Gets the columns of <paramref name="table"/> that hold e-class ids: the columns its rebuild canonicalizes
         /// (<see cref="SortedWritesTable.RebuildColumns"/>). The union-find table has none: its rows record displaced
         /// ids. Used to recognize constant ids in rules (<see cref="IdConstant"/>). In a child context's database, from
-        /// the store's schema (colored-contexts spec §3.4, X39).
+        /// the store's schema, since the child's own tables hold only its layers.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The columns; empty when the table rebuilds nothing.</returns>
@@ -73,10 +73,10 @@ namespace Eggnog.Relations
         /// calls <c>process_constraints</c> and keeps its split (core-relations/src/query.rs:407).
         /// </summary>
         /// <remarks>
-        /// In a child context's database (colored-contexts spec §3.4) the split is
-        /// <see cref="ConstraintProcessor.Split"/> on the root's entry of the table: it depends only on the table's kind and
-        /// cacheable columns, which every layer shares, and builds no index. The union-find is refused there (X23, the
-        /// <c>$uf</c> atom guard): a rule in a child never reads the union-find as an atom, so such a rule cannot be built.
+        /// In a child context's database the split is <see cref="ConstraintProcessor.Split"/> on the root's entry of the
+        /// table: it depends only on the table's kind and cacheable columns, which every layer shares, and builds no
+        /// index. The union-find is refused there: a rule in a child never reads the union-find as an atom (only its
+        /// lookups reach a child's union-find), so such a rule cannot be built.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="constraints">The constraints.</param>
@@ -107,8 +107,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the number of rows of the atom's table that match its fast constraints, tombstones included: egglog's
         /// <c>approx_size</c>, the size of the subset <c>process_constraints</c> computed for the atom
-        /// (core-relations/src/free_join/mod.rs:91-94). A layered database reads its view's statistics (colored-contexts
-        /// spec §9.7).
+        /// (core-relations/src/free_join/mod.rs:91-94). A layered database reads its view's statistics.
         /// </summary>
         /// <param name="atom">The atom's id.</param>
         /// <param name="info">The atom.</param>
@@ -130,8 +129,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the table's live row count and the column's distinct-value count from its cached column index. egglog's
         /// <c>col_uniqueness</c> (core-relations/src/free_join/mod.rs:888-895), through
-        /// <see cref="ColumnCardEstimator"/>. A layered database sums its view's per-layer counts (colored-contexts spec
-        /// §9.7).
+        /// <see cref="ColumnCardEstimator"/>. A layered database sums its view's per-layer counts.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="column">The column.</param>
@@ -145,9 +143,9 @@ namespace Eggnog.Relations
         /// egglog's <c>reprocess_constraints</c> core (core-relations/src/query.rs:133-154).
         /// </summary>
         /// <remarks>
-        /// A child context's database throws (colored-contexts spec §3.4): a child's rows lie in several layers, so a
-        /// single-layer subset cannot describe them; every caller instantiates through the child's view instead (§9.4,
-        /// M10.2). One owner test at the root, per header.
+        /// A child context's database throws: a child's rows lie in several layers, so a single-layer subset cannot
+        /// describe them; every caller instantiates through the child's view instead. One owner test at the root, per
+        /// header.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="constraints">The constraints.</param>

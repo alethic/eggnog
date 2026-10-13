@@ -17,8 +17,8 @@ namespace Eggnog.Relations
     /// </para>
     /// <list type="bullet">
     /// <item>A new lock is "to be updated": <see cref="TryGet"/> returns <c>false</c>.</item>
-    /// <item>The first <see cref="GetOrUpdate{TState}"/> runs its update on the value, then moves the lock to "updated".
-    /// Concurrent callers block until it finishes and do not run their own update.</item>
+    /// <item>The first <see cref="GetOrUpdate{TState}"/> runs its update on the value, then moves the lock to
+    /// "updated". Concurrent callers block until it finishes and do not run their own update.</item>
     /// <item>Once updated, <see cref="TryGet"/> and <see cref="GetOrUpdate{TState}"/> return the value without
     /// locking.</item>
     /// <item><see cref="Reset"/> moves the lock back to "to be updated". Like the Rust's <c>reset(&amp;mut self)</c> it

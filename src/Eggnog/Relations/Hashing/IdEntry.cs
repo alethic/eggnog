@@ -2,9 +2,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// An id and a 32-bit payload, the entry of the id-keyed hash tables of colored contexts (colored-contexts spec
-    /// §5.2): a union-find overlay's member-to-class map, a displaced journal's id-to-row map and a flattened prefix's
-    /// id-to-canonical map.
+    /// An id and a 32-bit payload, the entry of the id-keyed hash tables of colored contexts: a union-find overlay's
+    /// member-to-class map, a displaced journal's id-to-row map and a flattened prefix's id-to-canonical map.
     /// </summary>
     /// <remarks>
     /// Eight bytes, no stored hash: the hash is recomputed from <see cref="Id"/> with one multiply and a rotate

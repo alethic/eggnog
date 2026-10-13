@@ -6,8 +6,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// Walks the entries of a one-column <see cref="ProberPiece"/>: egglog's <c>Prober::for_each</c>
     /// (core-relations/src/free_join/execute.rs:284-334) as an external cursor, so the stage's candidate loop is a
-    /// plain loop that can drain and recurse between entries. A driver walks each piece of its prober in turn
-    /// (colored-contexts spec §9.5).
+    /// plain loop that can drain and recurse between entries. A driver walks each piece of its prober in turn.
     /// </summary>
     /// <remarks>
     /// A clamped cached index skips the keys none of whose rows fall in the atom's range. <c>default</c> is

@@ -12,7 +12,9 @@ namespace Eggnog.Relations
     /// Never halts a lane.
     /// </summary>
     /// <remarks>
-    /// Running it sets <see cref="ExecutionState.Changed"/> when it stages a row; egglog's does not (map §8.1 row 16).
+    /// Running it sets <see cref="ExecutionState.Changed"/> when it stages a row; egglog's does not
+    /// (core-relations/src/action/mod.rs:707), so there a merge function that inserts through it under-reports its
+    /// change.
     /// </remarks>
     internal sealed class LookupOrInsertDefaultInstr : Instr
     {

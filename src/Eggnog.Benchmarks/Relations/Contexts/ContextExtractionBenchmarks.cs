@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Extraction over a context (colored-contexts spec §10.10, rule-layer E5): an on-demand extractor made through the
-    /// e-graph's root API (the baseline, M8's path), the same through the context form at the root, and the context form
-    /// in a child of the frozen root that made terms and unions of its own, frozen or not (<see cref="FrozenChild"/>).
+    /// Extraction over a context: an on-demand extractor made through the e-graph's root API (the baseline), the same
+    /// through the context form at the root, and the context form in a child of the frozen root that made terms and
+    /// unions of its own, frozen or not (<see cref="FrozenChild"/>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -18,9 +18,11 @@ namespace Eggnog.Relations.Benchmarks
     /// and row reads) and Knuth's algorithm over what they reach, plus the per-query staleness check.
     /// </para>
     /// <para>
-    /// The root API and the root context form must cost the same per node (§10.10: one branch per discovery round, none
-    /// per node); a child costs one probe per present layer per producing function on top. The setup checks that both root
-    /// forms agree on every class, and that the child agrees with them on every root class it did not merge.
+    /// The root API and the root context form must cost the same per node: the context form tests once per discovery
+    /// round whether it reads layers, and never per node. A child costs one index probe per present layer per producing
+    /// function on top. The setup checks that both root forms give the same total cost over the queried classes, that
+    /// the child costs no queried root class it keeps canonical more than the root does, and that the child extracts
+    /// something.
     /// </para>
     /// <para>The class is not sealed because BenchmarkDotNet generates a class that derives from it.</para>
     /// </remarks>
@@ -116,7 +118,7 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// The root API's on-demand extractor, M8's path.
+        /// The root API's on-demand extractor.
         /// </summary>
         /// <returns>The sum of the costs.</returns>
         [Benchmark(Baseline = true)]
@@ -154,7 +156,7 @@ namespace Eggnog.Relations.Benchmarks
 
         /// <summary>
         /// Makes <paramref name="count"/> terms in <paramref name="context"/>: a leaf when there is nothing to build on
-        /// or one time in four, else a wrap or a pair over earlier terms.
+        /// or one time in four, else a wrap or a pair over terms already made.
         /// </summary>
         static void Make(EGraphContext context, Value[] terms, int start, int count, Random random, EGraph egraph, FunctionId leaf, FunctionId wrap, FunctionId pair)
         {

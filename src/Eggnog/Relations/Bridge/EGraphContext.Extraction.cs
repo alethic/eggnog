@@ -5,14 +5,14 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Starts an extraction query, or an extractor's creation, on this context (colored-contexts spec §10.10): enters
-        /// the thread domain of a context that is not frozen and marks it as running a caller's code (the cost model's
-        /// functions), then checks that the context may be read: not disposed, faulted or stopped, and, with
-        /// <paramref name="requireClean"/>, clean (<see cref="IsClean"/>). A frozen context is entered from any thread and
-        /// holds nothing. Dispose the scope, also when the query throws.
+        /// Starts an extraction query, or an extractor's creation, on this context: enters the thread domain of a
+        /// context that is not frozen and marks it as running a caller's code (the cost model's functions), then checks
+        /// that the context may be read: not disposed, faulted or stopped, and, with <paramref name="requireClean"/>,
+        /// clean (<see cref="IsClean"/>). A frozen context is entered from any thread and holds nothing. Dispose the
+        /// scope, also when the query throws.
         /// </summary>
         /// <remarks>
-        /// An extractor is created on a clean context, whose visible rows are canonical (I35), and queried later without
+        /// An extractor is created on a clean context, whose visible rows are canonical, and queried later without
         /// requiring it clean again: its staleness check (<see cref="ExtractionWatch"/>) already refuses every change to
         /// what it reads, and a change elsewhere (an unrelated table written in an ancestor, host writes staged and not
         /// merged) leaves the rows it reads, and their canonical form, as they were. O(ancestors that are not frozen) with

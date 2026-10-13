@@ -6,9 +6,9 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// A scope disposed from inside an engine call of its thread domain (D40): the engine would refuse the disposal as
-    /// re-entrant, so the release waits for the domain's last exit, even for a scope that has no call of its own in
-    /// progress (a sibling of the running scope, under the same writable parent).
+    /// A scope disposed from inside an engine call of its thread domain: <see cref="Scope.Dispose"/> never throws, and
+    /// the engine would refuse the disposal as re-entrant, so the release waits for the domain's last exit, even for a
+    /// scope that has no call of its own in progress (a sibling of the running scope, under the same writable parent).
     /// </summary>
     public sealed class DisposeInsideARunTests
     {

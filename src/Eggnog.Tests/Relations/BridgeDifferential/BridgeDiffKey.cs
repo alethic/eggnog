@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
     /// oracle (<see cref="BridgeDiffOracle"/>) and the comparison (<see cref="BridgeDiffComparer"/>) index rows by it.
     /// </summary>
     /// <remarks>
-    /// The key wraps the array it is given, without copying it, and hashes its first <see cref="Count"/> cells once: the
-    /// owner must not change them while the key is in a dictionary (a row's cells, which views never change, or a fresh
-    /// array), and a probe over a scratch buffer must only be looked up, not stored. A function without keys (an egglog
-    /// global) has the empty key, so its table holds at most one row.
+    /// The key wraps the array it is given, without copying it, and hashes its first <see cref="Count"/> cells once:
+    /// the owner must not change them while the key is in a dictionary (a row's cells, which views never change, or a
+    /// fresh array), and a probe over a scratch buffer must only be looked up, not stored. A function without keys (an
+    /// egglog global) has the empty key, so its table holds at most one row.
     /// </remarks>
     readonly struct BridgeDiffKey : IEquatable<BridgeDiffKey>
     {

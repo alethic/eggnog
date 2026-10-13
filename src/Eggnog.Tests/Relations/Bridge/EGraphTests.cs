@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the construction of an <see cref="EGraph"/> and the declaration of functions (egglog-bridge/src/lib.rs:
-    /// 140-189, 506-573): the union-find table, the counters, the default panic, the table layout of a function and its
-    /// merge dependencies.
+    /// Tests for the construction of an <see cref="EGraph"/> and the declaration of functions
+    /// (egglog-bridge/src/lib.rs:140-189, 506-573): the union-find table, the counters, the default panic, the table
+    /// layout of a function and its merge dependencies.
     /// </summary>
     public class EGraphTests
     {

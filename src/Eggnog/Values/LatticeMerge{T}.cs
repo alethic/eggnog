@@ -4,14 +4,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The merge external function of a function with a lattice (§6.1): <c>[old, new] → Encode(Merge(Decode(old),
-    /// Decode(new)))</c>, registered before its table and used as <c>MergeFn.Primitive(merge, Old, New).AsLattice()</c>.
+    /// The merge external function of a function with a lattice: <c>[old, new] → Encode(Merge(Decode(old),
+    /// Decode(new)))</c>, registered before its table and used as
+    /// <c>MergeFn.Primitive(merge, Old, New).AsLattice()</c>.
     /// </summary>
     /// <remarks>
-    /// The lattice's delegate runs under <see cref="EngineCallMarker"/>, on whatever thread merges the table. An exception
-    /// from it is recorded (D31, rule name <c>null</c>: no rule owns a merge) and reported with
-    /// <c>ExecutionState.ReportFailure</c>, so the engine call ends in a panic that the rule layer surfaces as a
-    /// <see cref="RuleEvaluationException"/>; the old value is kept. Immutable and thread-safe.
+    /// The lattice's delegate runs under <see cref="EngineCallMarker"/>, on whatever thread merges the table. An
+    /// exception from it is recorded as an evaluation failure of the scope (rule name <c>null</c>: no rule owns a
+    /// merge) and reported with <c>ExecutionState.ReportFailure</c>, so the engine call ends in a panic that the rule
+    /// layer surfaces as a <see cref="RuleEvaluationException"/>; the old value is kept. Immutable and thread-safe.
     /// </remarks>
     /// <typeparam name="T">The value type.</typeparam>
     internal sealed class LatticeMerge<T> : Relations.ExternalFunction

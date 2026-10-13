@@ -10,19 +10,19 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The failed-run decision of colored-contexts spec §21.9, made in M10.3: an exception escaping a child's
-    /// <c>RunRuleSet</c> or <c>ExecuteRuleSet</c> keeps faulting the child (X12); the writes the failed search staged,
-    /// in the layers it created too, are discarded; and <c>Database.MergeAll</c> and <c>MergeTable</c> refuse a faulted
-    /// child, so nothing a failed run staged can ever merge. A recorded failure (a panic) is not an exception and faults
-    /// nothing.
+    /// An exception escaping a child's <c>RunRuleSet</c>, <c>ExecuteRuleSet</c> or flush faults the child, which then
+    /// refuses every write: a failed search may leave hides whose copies never merged, which cannot be repaired. The
+    /// writes the failed search staged, in the layers it created too, are discarded, and <c>Database.MergeAll</c> and
+    /// <c>MergeTable</c> refuse a faulted child, so nothing a failed run staged can ever merge. A recorded failure (a
+    /// panic) is not an exception and faults nothing.
     /// </summary>
     public class FailedChildRunTests
     {
 
         /// <summary>
         /// A parallel child run whose external throws after many action batches flushed into a layer the search created
-        /// (still deferred, X37): the child is faulted, the deferred layer holds nothing staged, its database refuses to
-        /// merge, the parent is untouched, and the child can be disposed.
+        /// (a layer whose creation waits for the merge): the child is faulted, that layer holds nothing staged, its
+        /// database refuses to merge, the parent is untouched, and the child can be disposed.
         /// </summary>
         [Fact]
         public void AThrowingRunFaultsTheChildAndDiscardsWhatItStagedInNewLayers()
@@ -69,8 +69,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The rule layer's queries call <c>ExecuteRuleSet</c> directly: an exception there faults the child too, and its
-        /// staged writes never merge.
+        /// The rule layer's queries call <c>ExecuteRuleSet</c> directly: an exception there faults the child too, and
+        /// its staged writes never merge.
         /// </summary>
         [Fact]
         public void AThrowingExecuteRuleSetFaultsTheChild()
@@ -105,8 +105,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A panic is a recorded failure, not an exception (§8.4): the child is not faulted, its run committed no
-        /// progress (X18), and it keeps working.
+        /// A panic is a recorded failure, not an exception: the child is not faulted, its run committed no progress,
+        /// and it keeps working.
         /// </summary>
         [Fact]
         public void APanicDoesNotFaultTheChild()
@@ -136,8 +136,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A failure the root's rebuild or settle records during <see cref="EGraphContext.CreateChild"/>, or one pending on
-        /// the parent, is taken right after (§8.2, §21.9): the new child is disposed, <see cref="PanicException"/> is
+        /// A failure the root's rebuild or settle records during <see cref="EGraphContext.CreateChild"/>, or one
+        /// pending on the parent, is taken right after: the new child is disposed, <see cref="PanicException"/> is
         /// thrown, and the parent stays usable.
         /// </summary>
         [Fact]
@@ -163,6 +163,43 @@ namespace Eggnog.Relations.Tests
             using var child = g.Root.CreateChild();
             Assert.Equal(1, g.Root.Context.ChildCount);
             child.CheckInvariants();
+        }
+
+        /// <summary>
+        /// An exception escaping a child's flush (here a merge primitive that throws while the child's staged rows
+        /// merge) faults the child, which then refuses every write; the frozen parent is untouched.
+        /// </summary>
+        [Fact]
+        public void AThrowingFlushFaultsTheChild()
+        {
+            var g = new ContextGraph();
+            var failing = false;
+            var boom = Register(g.EGraph, (_, args) => failing ? throw new InvalidOperationException("merge failed") : args[0]);
+            var f = g.EGraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, g.I64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.Primitive(boom, MergeFn.Old, MergeFn.New).AsLattice(),
+                Name = "boomy",
+            });
+            var a = g.Root.FreshId();
+            g.Root.AddValues([(f, [a, g.Int(1)])]);
+            g.Root.Freeze();
+
+            var child = g.Root.CreateChild();
+            failing = true;
+            child.StageRow(f, [a, g.Int(2)]);
+            child.StageRow(f, [a, g.Int(3)]);
+            Assert.Throws<InvalidOperationException>(() => child.FlushUpdates());
+            Assert.True(child.IsFaulted);
+            Assert.Throws<InvalidOperationException>(() => child.StageRow(f, [a, g.Int(4)]));
+            Assert.Throws<InvalidOperationException>(() => child.FlushUpdates());
+
+            failing = false;
+            Assert.True(g.Root.TryLookup(f, [a], out var value));
+            Assert.Equal(g.Int(1), value);
+            child.Dispose();
+            Assert.True(child.IsDisposed);
         }
 
     }

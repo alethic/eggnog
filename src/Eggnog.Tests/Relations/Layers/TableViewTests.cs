@@ -10,10 +10,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="TableView"/>, <see cref="LayerView"/> and <see cref="ContextTables.GetView"/>
-    /// (colored-contexts spec §6.3-§6.5, C4): what a child sees of a table, layer by layer; Lemma F; cleared and private
-    /// tables; frozen folds and live unions; caching and invalidation; and <c>LookupPathsAgree</c> on 2000 random
-    /// layered states (§17 M9.3 done-when).
+    /// Tests for <see cref="TableView"/>, <see cref="LayerView"/> and <see cref="ContextTables.GetView"/>: what a child
+    /// sees of a table, layer by layer; the first layer holding a key decides, even when its row is hidden; cleared and
+    /// private tables; frozen folds and live unions; caching and invalidation; and <c>LookupPathsAgree</c> on 2000
+    /// random layered states.
     /// </summary>
     /// <remarks>
     /// Environment variable: <c>EGGNOG_LAYERED_SEEDS</c> sets the number of random states (2000 by default).
@@ -35,8 +35,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §17 M9.3 done-when: on random layered states, the write-phase lookup, the read-phase lookup and a filtered scan
-        /// agree after every write, and every context sees exactly its reference.
+        /// On random layered states, the write-phase lookup, the read-phase lookup and a filtered scan agree after
+        /// every write, and every context sees exactly its reference.
         /// </summary>
         [Theory]
         [MemberData(nameof(Seeds))]
@@ -89,7 +89,7 @@ namespace Eggnog.Relations.Tests
             var child = root.CreateChild();
             var grandchild = child.CreateChild();
 
-            // Edge case 7: a context hides nothing of a table it never touched.
+            // A context hides nothing of a table it never touched: it shares its parent's view.
             var rootView = root.GetView(f);
             Assert.Same(rootView, store.Schema.RootView(f));
             Assert.Same(rootView, child.GetView(f));
@@ -173,8 +173,9 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void TheFirstLayerHoldingAKeyDecidesEvenWhenItsRowIsHidden()
         {
-            // Lemma F: root f(a)=1; C1 raises it to 5 (hiding the root's row) and freezes; C2 deletes it (hiding C1's row).
-            // A probe from the top hits C1's hidden row and stops: the root's row, hidden by C1, is never reached.
+            // Root f(a)=1; c1 raises it to 5 (hiding the root's row) and freezes; c2 deletes it (hiding c1's row). No
+            // row of a key is visible below a hidden row of that key, so a probe from the top hits c1's hidden row and
+            // stops: the root's row, hidden by c1, is never reached.
             var (_, f, root) = Setup();
             var a = root.NewId();
             Insert(root, f, a, 1, 0);
@@ -191,18 +192,18 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, view.VisibleCount);
             Assert.True(c2.Tables!.TryGetLayer(f)!.HasRetractions);
 
-            // The frozen fold of the root layer at C2 is C1's: one set, nothing live.
+            // The frozen fold of the root layer at c2 is c1's: one set, nothing live.
             Assert.NotNull(view.Layers[0]!.Hidden.Frozen);
             Assert.Null(view.Layers[0]!.Hidden.Live);
             Assert.Null(view.Layers[1]!.Hidden.Frozen);
             Assert.NotNull(view.Layers[1]!.Hidden.Live);
 
-            // C1 still sees its own row.
+            // c1 still sees its own row.
             Assert.Equal(5u, Row(c1, f, a)![1]);
             LookupPaths.Check(c1);
             LookupPaths.Check(c2);
 
-            // Writing the key again lands in C2's own layer: the hidden rows below stay hidden.
+            // Writing the key again lands in c2's own layer: the hidden rows below stay hidden.
             Insert(c2, f, a, 2, 0);
             Assert.Equal(2u, Row(c2, f, a)![1]);
             LookupPaths.Check(c2);
@@ -247,7 +248,7 @@ namespace Eggnog.Relations.Tests
             Insert(root, p, a, 1, 0);
             var child = root.CreateChild();
 
-            // Edge case 17: a descendant never reads a context-private table; its view has no ancestor layer.
+            // A descendant never reads a context-private table; its view has no ancestor layer.
             var view = child.GetView(p);
             Assert.Equal(0u, view.PresentMask);
             Assert.Null(Row(child, p, a));
@@ -276,7 +277,7 @@ namespace Eggnog.Relations.Tests
             Remove(c2, f, ids[2]);
             c2.Freeze();
 
-            // C2's frozen view of the root layer holds both levels' hides in its frozen part.
+            // c2's frozen view of the root layer holds both levels' hides in its frozen part.
             var frozenView = c2.GetView(f);
             var fold = frozenView.Layers[0]!.Hidden;
             Assert.Null(fold.Live);
@@ -284,7 +285,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(frozenView.Layers[0]!.IsFrozen);
             Assert.True(frozenView.Layers[2]!.IsFrozen);
 
-            // A child of C2 that hides another root row: frozen part from C2's fold, live part its own set.
+            // A child of c2 that hides another root row: frozen part from c2's fold, live part its own set.
             var c3 = c2.CreateChild();
             Insert(c3, f, ids[3], 2, 0);
             var view = c3.GetView(f);

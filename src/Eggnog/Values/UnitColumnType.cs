@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The unit value type of relation outputs (D27), over <c>UnitCodec</c>, whose single value is the inline cell 0. Not
+    /// The unit value type of relation outputs, over <c>UnitCodec</c>, whose single value is the inline cell 0. Not
     /// reachable through <see cref="ValueStore.TypeOf{T}"/>, and never seen by extraction.
     /// </summary>
     internal sealed class UnitColumnType : ColumnType<ValueTuple>

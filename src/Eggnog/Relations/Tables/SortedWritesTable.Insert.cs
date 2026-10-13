@@ -125,7 +125,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Inserts the staged rows with one task per shard: egglog's <c>parallel_insert</c>
-        /// (core-relations/src/table/mod.rs:817-974), with two defects fixed and the sort check made before any write.
+        /// (core-relations/src/table/mod.rs:817-974), except that it stores the merge output, reports only real changes
+        /// and checks the sort order before any write.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -145,10 +146,10 @@ namespace Eggnog.Relations
         /// <para>
         /// In phase 3 the task owns the row it just appended, so when the merge function returns <c>true</c> its output
         /// is written over that row and the index points at it; egglog points the index at the incoming row and drops
-        /// the output (mod.rs:902-907, map §8.1 row 3). The task reports a change only for a new key or a merge that
-        /// returned <c>true</c>; egglog reports every staged row (mod.rs:871, row 4). The tasks' execution-state clones
-        /// are flushed once their shard is written, and if any staged a write the caller's
-        /// <see cref="ExecutionState.Changed"/> is set, as the serial path does.
+        /// the output (mod.rs:902-907). The task reports a change only for a new key or a merge that returned
+        /// <c>true</c>; egglog reports every staged row (mod.rs:871). The tasks' execution-state clones are flushed
+        /// once their shard is written, and if any staged a write the caller's <see cref="ExecutionState.Changed"/> is
+        /// set, as the serial path does.
         /// </para>
         /// <para>
         /// If a merge function throws, the table stays consistent. In phase 1 nothing has been written yet. In phase 3

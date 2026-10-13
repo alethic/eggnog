@@ -6,9 +6,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// One rule of a parallel run: the task egglog's parallel <c>run_rule_set</c> spawns per plan
-    /// (core-relations/src/free_join/execute.rs:376-493). It runs the rule on its own <see cref="JoinRun"/> over the rule
-    /// set's pinned views (colored-contexts spec §9.1) and its own action buffer, flushes the batches the buffer still
-    /// holds, and records the rule's report.
+    /// (core-relations/src/free_join/execute.rs:376-493). It runs the rule on its own <see cref="JoinRun"/> over the
+    /// rule set's pinned views and its own action buffer, flushes the batches the buffer still holds, and records the
+    /// rule's report.
     /// </summary>
     internal sealed class RuleWork : ScopedWork
     {
@@ -27,7 +27,7 @@ namespace Eggnog.Relations
         /// Initializes a new instance.
         /// </summary>
         /// <param name="db">The database.</param>
-        /// <param name="views">The rule set's pinned views (colored-contexts spec §9.1).</param>
+        /// <param name="views">The rule set's pinned views.</param>
         /// <param name="rule">The rule.</param>
         /// <param name="actions">The task's action buffer, with the run's scope.</param>
         /// <param name="signals">The run's stop signal.</param>

@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A <see cref="Database"/> set up and driven the way egglog-bridge drives one, and the <see cref="ReferenceView"/>
-    /// oracle that should agree with it, run in lockstep: the root-context part of the spike's differential harness
-    /// (src/Eggnog.Storage.Tests/Harness/Pair.cs, TestSchema.cs).
+    /// oracle that should agree with it, run in lockstep: the root-context part of the context differential harness
+    /// (<see cref="ContextPair"/>, <see cref="ContextTestSchema"/>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -23,9 +23,9 @@ namespace Eggnog.Relations.Tests
     /// </para>
     /// <para>
     /// Driving: rows are staged stamped with the clock and canonicalized first, as the frontend does; a flush is the
-    /// bridge's <c>flush_updates</c> (merge everything at the run's timestamp, advance the clock, rebuild if the union-find grew,
-    /// egglog-bridge/src/lib.rs:946-959) and a rebuild is its native loop (rebuild every table at the next timestamp,
-    /// refresh, advance the clock, until nothing changes; lib.rs:626-682).
+    /// bridge's <c>flush_updates</c> (merge everything at the run's timestamp, advance the clock, rebuild if the
+    /// union-find grew, egglog-bridge/src/lib.rs:946-959) and a rebuild is its native loop (rebuild every table at the
+    /// next timestamp, refresh, advance the clock, until nothing changes; lib.rs:626-682).
     /// </para>
     /// </remarks>
     sealed class CongruenceHarness
@@ -246,7 +246,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The bridge's <c>flush_updates</c>: merge everything at the run's timestamp, advance the clock, and rebuild if the union-find grew.
+        /// The bridge's <c>flush_updates</c>: merge everything at the run's timestamp, advance the clock, and rebuild
+        /// if the union-find grew.
         /// </summary>
         /// <returns>The result of the merge.</returns>
         public bool Flush()

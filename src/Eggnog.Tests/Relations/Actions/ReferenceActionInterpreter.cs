@@ -13,8 +13,9 @@ namespace Eggnog.Relations.Tests
     /// buffers of the database, and predictions through a dictionary keyed by text.
     /// </summary>
     /// <remarks>
-    /// It follows egglog's semantics (core-relations/src/action/mod.rs:598-882) with the port's fix that a row staged by
-    /// <c>LookupOrInsertDefault</c> sets the changed flag.
+    /// It follows egglog's semantics (core-relations/src/action/mod.rs:598-882) except in one place, as the engine
+    /// does: a row staged by <c>LookupOrInsertDefault</c> sets the changed flag, which egglog leaves unset there
+    /// (mod.rs:707).
     /// </remarks>
     sealed class ReferenceActionInterpreter
     {

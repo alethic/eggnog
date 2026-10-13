@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The index of one layer of a <see cref="Prober"/> (colored-contexts spec §9.5): egglog's <c>Prober</c> index part
-    /// (core-relations/src/free_join/execute.rs:155-345) over the atom's rows of layer <see cref="Layer"/>. A root prober
-    /// has exactly one piece, built with egglog's heuristics; a child's has one per layer of the atom's rows.
+    /// The index of one layer of a <see cref="Prober"/>: egglog's <c>Prober</c> index part
+    /// (core-relations/src/free_join/execute.rs:155-345) over the atom's rows of layer <see cref="Layer"/>. A root
+    /// prober has exactly one piece, built with egglog's heuristics; a child's has one per layer of the atom's rows.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -18,13 +18,13 @@ namespace Eggnog.Relations
     /// <para>
     /// Visibility replaces egglog's <c>PotentiallyStale</c> tag: <see cref="MayHoldInvisible"/> is set when the index can
     /// list rows the view does not see (a cached index, refreshed incrementally, keeps rows deleted after they were
-    /// indexed, and never knows what a view hides: hides are not index content, C6) and the layer has such rows
+    /// indexed, and never knows what a view hides: hides are not index content) and the layer has such rows
     /// (<see cref="LayerView.HasInvisible"/>); the stage then refines every probe result for visibility before using it.
-    /// The other kinds are built from visibility-aware scans of a fixed snapshot and list only visible rows (§9.3).
+    /// The other kinds are built from visibility-aware scans of a fixed snapshot and list only visible rows.
     /// </para>
     /// <para>
     /// A plain struct kept in per-position scratch, so building one allocates nothing beyond the index itself. Its fields
-    /// are plain fields so compiled kernels can read them (§9.9).
+    /// are plain fields so compiled kernels can read them.
     /// </para>
     /// </remarks>
     internal struct ProberPiece
@@ -79,10 +79,10 @@ namespace Eggnog.Relations
         /// Gets the number of distinct keys, which picks the side an intersection iterates. egglog's <c>len</c>.
         /// </summary>
         /// <remarks>
-        /// Fix (map §8.1 row 18, core-relations/src/free_join/execute.rs:336-344): egglog returns the key count of the
-        /// whole cached index even when the atom's rows are a sub-range of the table, which can make a large range look
-        /// smaller than a small dynamic index. Here a clamped cached index counts at most one key per row of the range.
-        /// Performance only.
+        /// egglog returns the key count of the whole cached index even when the atom's rows are a sub-range of the
+        /// table (core-relations/src/free_join/execute.rs:336-344), which can make a large range look smaller than a
+        /// small dynamic index. Here a clamped cached index counts at most one key per row of the range. The count
+        /// affects performance only.
         /// </remarks>
         public readonly int Count
         {

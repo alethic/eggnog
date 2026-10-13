@@ -46,6 +46,7 @@ namespace Eggnog.Relations
         /// <param name="bindings">The batch.</param>
         /// <param name="cells">Receives each lane's operand tuple; at least one cell per operand.</param>
         /// <param name="slots">Scratch for the variable operands; at least two cells per operand.</param>
+        /// <exception cref="ArgumentException">The scratch arrays are too small for the operands.</exception>
         /// <exception cref="InvalidOperationException">An operand is a variable the batch does not bind.</exception>
         public ArgGather(ReadOnlySpan<QueryEntry> entries, Bindings bindings, uint[] cells, int[] slots)
         {
@@ -95,6 +96,7 @@ namespace Eggnog.Relations
         /// Loads the operand tuple of <paramref name="lane"/> into <see cref="Cells"/>. O(variable operands).
         /// </summary>
         /// <param name="lane">A lane of the batch.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="lane"/> is outside the batch.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Load(int lane)
         {

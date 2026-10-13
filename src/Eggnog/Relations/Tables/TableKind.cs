@@ -21,7 +21,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// An <see cref="OverlayDisplacedTable"/>: a child context's union-find, its overlay and displaced journal over
-        /// its parent's (colored-contexts spec §5.5).
+        /// its parent's.
         /// </summary>
         OverlayDisplaced,
 

@@ -38,8 +38,8 @@ namespace Eggnog.Tests.Differential
         Query,
 
         /// <summary>
-        /// Defines a query after the first command, so that it may hold classes the host made (D39, §6.6.4); it takes the
-        /// next query number.
+        /// Defines a query after the first command, so that it may hold classes the host made (a query accepts a class
+        /// value made in the scope it runs in or an ancestor); it takes the next query number.
         /// </summary>
         DefineQuery,
 

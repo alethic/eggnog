@@ -9,12 +9,12 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The scope differential (§8.2): random scope trees up to four deep, with tags, frozen prefixes, host writes into
-    /// writable ancestors between child runs, local rules with scoped atoms, and host queries with scoped atoms from tagged
-    /// scopes and their descendants, all over value-only tables, run with scopes as contexts and checked against the
-    /// program's literal encoding at one root (<see cref="LiteralOracle"/>). At every check each scope's view, its scoped
-    /// reads, and every query's answer must equal the oracle's facts for its context constant. 300 seeds by default;
-    /// <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
+    /// The scope differential: random scope trees up to four deep, with tags, frozen prefixes, host writes into
+    /// writable ancestors between child runs, local rules with scoped atoms, and host queries with scoped atoms from
+    /// tagged scopes and their descendants, all over value-only tables, run with scopes as contexts and checked against
+    /// the program's literal encoding at one root (<see cref="LiteralOracle"/>). At every check each scope's view, its
+    /// scoped reads, and every query's answer must equal the oracle's facts for its context constant. 300 seeds by
+    /// default; <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
     /// </summary>
     public sealed class ScopeDifferentialTests
     {
@@ -24,6 +24,10 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         const int DefaultSeeds = 300;
 
+        /// <summary>
+        /// Every seed's program agrees with its literal encoding at every check. At most three failing programs are
+        /// reported.
+        /// </summary>
         [Fact]
         public void ScopesAgreeWithTheLiteralEncoding()
         {
@@ -35,13 +39,19 @@ namespace Eggnog.Tests.Differential
             Assert.True(failures.Count == 0, string.Join("\n\n", failures));
         }
 
+        /// <summary>
+        /// The generator produces every shape the comparison relies on: trees four deep, tags, at least two freezes,
+        /// local rules and queries with scoped atoms, writes into an ancestor between child runs, and a final check in
+        /// every program.
+        /// </summary>
         [Fact]
-        public void TheProgramsCoverWhatTheSpecLists()
+        public void TheGeneratedProgramsCoverEveryShapeUnderTest()
         {
             var programs = Enumerable.Range(0, DefaultSeeds).Select(s => ScopedProgram.Generate(s, false)).ToList();
             var creates = programs.SelectMany(p => p.Commands.Where(c => c.Kind == ScopedCommandKind.Create)).ToList();
 
-            // Trees four deep, tags, frozen prefixes, writes into ancestors with children, local rules with scoped atoms.
+            // Trees four deep, tags, frozen prefixes, writes into ancestors with children, local rules with scoped
+            // atoms.
             Assert.Contains(programs, p => Depths(p).Max() == 4);
             Assert.Contains(creates, c => c.Tag >= 0);
             Assert.Contains(programs, p => p.Commands.Count(c => c.Kind == ScopedCommandKind.Freeze) >= 2);

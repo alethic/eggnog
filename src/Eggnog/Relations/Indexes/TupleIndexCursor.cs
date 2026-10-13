@@ -5,7 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// An external cursor over the entries of a <see cref="TupleIndex"/>, in <see cref="TupleIndex.ForEach{TVisitor}"/>
-    /// order: the iteration compiled plans use in place of egglog's closure-based <c>for_each</c> (map §5.3).
+    /// order: the iteration compiled plans use in place of egglog's closure-based <c>for_each</c>, since expression
+    /// trees cannot pass a struct visitor by reference.
     /// </summary>
     /// <remarks>
     /// <c>default</c> is positioned before the first entry. The current key is exposed as an array and offset, which

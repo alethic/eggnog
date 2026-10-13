@@ -5,8 +5,9 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Stages the meet's equalities (colored-contexts spec §11.1, §11.2, I33 completeness of equalities): for every
-        /// block of parent ids equal in every live case, the union of its first member with each other member.
+        /// Stages the meet's equalities: for every block of parent ids equal in every live case, the union of its first
+        /// member with each other member. Every equality between parent ids that holds in every live case is in some
+        /// block.
         /// </summary>
         /// <param name="seed">The seed case's index in the live cases.</param>
         /// <param name="report">Counts the unions.</param>

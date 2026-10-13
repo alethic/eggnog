@@ -9,10 +9,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for containers under colored contexts, storage part (colored-contexts spec §7.4, §10.7, X31, decision 9; C13
-    /// interim): the dirty log through which children re-stamp their own rows naming a container the root rebuilt in
-    /// place, cleared when the root's last descendant goes; the eq guard (G-b); the refusal to intern an eq-sort container
-    /// in a child (G-a); and children never rebuilding containers.
+    /// Tests for containers under colored contexts, storage part: the dirty log through which children re-stamp their
+    /// own rows naming a container the root rebuilt in place, cleared when the root's last descendant goes; the eq
+    /// guard, which keeps a child from holding a view in which an eq-sort container names one of its own losers, since
+    /// children never rebuild containers; the refusal to intern an eq-sort container in a child; and children never
+    /// rebuilding containers.
     /// </summary>
     public class ContainerContextTests
     {
@@ -37,7 +38,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// The root rebuilds a container in place while it has a live child: the container's id goes to the dirty log,
-        /// and the child's rebuild re-stamps its own row naming it (§7.4); the log is cleared with the last descendant.
+        /// and the child's rebuild re-stamps its own row naming it; the log is cleared with the last descendant.
         /// </summary>
         [Fact]
         public void AChildRestampsItsRowsNamingAContainerTheRootRebuiltInPlace()
@@ -85,8 +86,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G-b: a child that displaces an id an eq-sort container holds is refused (and faulted); one that displaces the
-        /// other id of the union is not; an import of a parent's displacement is not checked (the root renamed it).
+        /// The eq guard: a child that displaces an id an eq-sort container holds is refused (and faulted); one that
+        /// displaces the other id of the union is not; an import of a parent's displacement is not checked (the root
+        /// renamed it).
         /// </summary>
         [Fact]
         public void AChildCannotDisplaceAnIdAnEqContainerHolds()
@@ -114,10 +116,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G-b against containers that appear later: the root (not frozen) interns an eq-sort container naming an id the
-        /// child displaced in an earlier rebuild. The child is not clean from then on, even though no row changed; its
-        /// next rebuild checks its whole journal against the new container and refuses it (faulted), where a copy would
-        /// have unioned the containers.
+        /// The eq guard against containers that appear afterwards: the root (not frozen) interns an eq-sort container
+        /// naming an id the child displaced in an earlier rebuild. The child is not clean from then on, even though no
+        /// row changed; its next rebuild checks its whole journal against the new container and refuses it (faulted),
+        /// where a copy would have unioned the containers.
         /// </summary>
         [Fact]
         public void AContainerInternedAfterTheDisplacementIsCheckedAgainstIt()
@@ -191,8 +193,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A frozen context interns no new eq-sort container (§7.4): its descendants would never re-run their guard
-        /// against it. Looking one up, and interning one that exists or one over base values, stay allowed.
+        /// A frozen context interns no new eq-sort container: its descendants would never re-run their guard against
+        /// it. Looking one up, and interning one that exists or one over base values, stay allowed.
         /// </summary>
         [Fact]
         public void AFrozenContextInternsNoNewEqContainer()
@@ -232,8 +234,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G-a: a child may look an eq-sort container up but not intern one; containers over base values it may intern,
-        /// on the shared counter, so their ids are global.
+        /// A child may look an eq-sort container up but not intern one; containers over base values it may intern, on
+        /// the shared counter, so their ids are global.
         /// </summary>
         [Fact]
         public void AChildInternsOnlyBaseValueContainers()
@@ -258,7 +260,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Children never rebuild containers (§7.4): a child's database refuses the container rebuild and egglog's pass.
+        /// Children never rebuild containers: a child's database refuses the container rebuild and egglog's pass.
         /// </summary>
         [Fact]
         public void ChildrenNeverRebuildContainers()
@@ -267,6 +269,75 @@ namespace Eggnog.Relations.Tests
             var child = store.Root.CreateChild();
             Assert.Throws<InvalidOperationException>(() => child.Database.RebuildContainers(store.UnionFindTable));
             Assert.Throws<InvalidOperationException>(() => child.Database.RebuildPass(store.UnionFindTable, [f]));
+        }
+
+        static (Store Store, TableId F) ContainerSetup()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            store.Root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter), holdsIds: true);
+            return (store, f);
+        }
+
+        /// <summary>
+        /// A child may not hold a view in which an eq-sort container names one of its own losers, since children never
+        /// rebuild containers. A container the (writable) root interns after the child's rebuild, naming the child's
+        /// loser, is checked at the child's next rebuild, which refuses the child (<see cref="NotSupportedException"/>,
+        /// faulted) unless the two containers are equal in it: in a fresh root replaying the chain, the containers [x]
+        /// and [y] become equal once x and y are, and their ids are unioned.
+        /// </summary>
+        [Fact]
+        public void AnEqContainerInternedByTheRootAfterAChildDisplacedItsElementIsRefused()
+        {
+            var (store, f) = ContainerSetup();
+            var root = store.Root;
+            var x = root.NewId();
+            var y = root.NewId();
+            var child = root.CreateChild();
+
+            // y loses to x in the child; no container holds y yet, so the guard lets it pass.
+            child.Union(x, y);
+            child.Rebuild();
+            Assert.Equal(x, child.Find(y));
+
+            // The root (not frozen) interns [x] and [y] and names them in rows the child will read.
+            var kx = Intern(root, new VecContainer(x));
+            var ky = Intern(root, new VecContainer(y));
+            Insert(root, f, kx, 1, 0);
+            Insert(root, f, ky, 2, 0);
+
+            // Sound: the child is refused (NotSupportedException, faulted), or the two containers are equal in it.
+            Exception? refused = null;
+            try
+            {
+                child.Rebuild();
+            }
+            catch (NotSupportedException e)
+            {
+                refused = e;
+            }
+
+            if (refused is null)
+                Assert.True(child.AreEqual(kx, ky), $"the child equates {x} and {y} but keeps the containers [{x}] (id {kx}) and [{y}] (id {ky}) apart, and was not refused");
+        }
+
+        /// <summary>
+        /// The copy the eq guard compares with: the same chain replayed in a fresh root unions the two container ids.
+        /// </summary>
+        [Fact]
+        public void TheFreshRootCopyOfThatChainEquatesTheContainers()
+        {
+            var (store, f) = ContainerSetup();
+            var root = store.Root;
+            var x = root.NewId();
+            var y = root.NewId();
+            var kx = Intern(root, new VecContainer(x));
+            var ky = Intern(root, new VecContainer(y));
+            Insert(root, f, kx, 1, 0);
+            Insert(root, f, ky, 2, 0);
+            root.Union(x, y);
+            root.Rebuild();
+            Assert.True(root.AreEqual(kx, ky));
         }
 
     }

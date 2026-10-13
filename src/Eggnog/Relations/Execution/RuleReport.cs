@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// <remarks>
     /// egglog reports the plan as a structured value and has no report for decomposed plans (its
     /// <c>Plan::to_report</c> is a <c>todo!()</c> for them); here the plan is the template's text, for both kinds.
-    /// Immutable. Public because <see cref="RuleSetReport"/> holds it; only the engine creates one.
+    /// Immutable. <see cref="RuleSetReport"/> holds it; only the engine creates one.
     /// </remarks>
     internal sealed class RuleReport
     {
@@ -40,7 +40,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the number of matches that reached the end of the rule's action program. Matches are a multiset, so
-        /// the count depends on the plan (decision 6: parity with egglog is not required).
+        /// the count depends on the plan and need not agree with egglog's.
         /// </summary>
         public long NumMatches { get; }
 

@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="ContainerValueIndex"/>, the exact element index (map §8.1 row 13), against a dictionary of
-    /// occurrence counts.
+    /// Tests for <see cref="ContainerValueIndex"/>, the element index, which unlike egglog's stays exact through
+    /// removals and renames, against a dictionary of occurrence counts.
     /// </summary>
     public class ContainerValueIndexTests
     {

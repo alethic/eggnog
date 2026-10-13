@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="ColumnCardEstimator"/> and <see cref="ColumnUniqueness"/> (egglog's <c>ColumnCardEst</c> and
-    /// <c>ColUniqueness</c>, core-relations/src/free_join/mod.rs:878-976).
+    /// Tests for <see cref="ColumnCardEstimator"/> and <see cref="ColumnUniqueness"/> (egglog's <c>ColumnCardEst</c>
+    /// and <c>ColUniqueness</c>, core-relations/src/free_join/mod.rs:878-976).
     /// </summary>
     public class ColumnCardEstimatorTests
     {

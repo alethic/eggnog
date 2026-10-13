@@ -21,7 +21,7 @@ namespace Eggnog.Relations
     /// <para>
     /// The cache bounds what each thread keeps by bytes (<see cref="PoolLimits.OffsetVec"/> per length), as egglog
     /// bounds its pool, rather than by count, as the shared array pool does: with the shared pool alone, a join holding
-    /// a few hundred small refined subsets at once allocated on every rent past the pool's capacity, which is a few
+    /// a few hundred small refined subsets at once allocates on every rent past the pool's capacity, which is a few
     /// dozen buffers of a length per core. Every buffer, cached or not, has a length the shared pool hands out, so
     /// either side takes the other's buffers.
     /// </para>
@@ -47,7 +47,7 @@ namespace Eggnog.Relations
             if (minimumLength == 0)
                 return Array.Empty<int>();
 
-            // A negative length skips the cache and makes the shared pool throw, as before.
+            // A negative length skips the cache and makes the shared pool throw.
             if ((uint)minimumLength <= OffsetBufferCache.MaxLength && cache?.TryRent(minimumLength) is { } cached)
                 return cached;
 

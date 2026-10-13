@@ -6,16 +6,15 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The views of the tables a rule set reads, pinned when the rule set was built (colored-contexts spec §9.1, X21):
-    /// the executor's trie roots, probers and kernels, and the search phase's action lookups, read only these, so a run
-    /// sees one fixed picture of every table even while its tasks create layers (X37) and whatever the context's view
-    /// cache does meanwhile.
+    /// The views of the tables a rule set reads, pinned when the rule set was built: the executor's trie roots, probers
+    /// and kernels, and the search phase's action lookups, read only these, so a run sees one fixed picture of every
+    /// table even while its tasks create layers and whatever the context's view cache does meanwhile.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A <see cref="TableView"/> per table index, <c>null</c> for a table the rule set does not read. Built by
     /// <see cref="ContextView.Snapshot(ReadOnlySpan{TableId})"/> from the context's cached view instances, the same ones
-    /// header evaluation read, so headers and trie roots agree (I29). At a root each entry is the root's single-layer view
+    /// header evaluation read, so headers and trie roots agree. At a root each entry is the root's single-layer view
     /// of the table, and every rule set shares one snapshot over the root's view cache: a root's views never change, and
     /// the cache's entries are only ever filled, so the entries a rule set reads stay what they were when it was built.
     /// </para>

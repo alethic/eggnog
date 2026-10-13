@@ -6,10 +6,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A layered context made by hand for the layered executor's tests (colored-contexts spec §9.1, T8): a chain of
-    /// databases, one per depth, whose tables are the layers of each table's view, with any rows, tombstones and hidden
-    /// rows a test asks for. Attached to the depth-0 database (<see cref="Database.AttachView"/>), whose own tables are
-    /// every view's layer 0, so rules built and run there plan, evaluate headers and join through these views.
+    /// A layered context made by hand for the layered executor's tests: a chain of databases, one per depth, whose
+    /// tables are the layers of each table's view, with any rows, tombstones and hidden rows a test asks for. Attached
+    /// to the depth-0 database (<see cref="Database.AttachView"/>), whose own tables are every view's layer 0, so rules
+    /// built and run there plan, evaluate headers and join through these views.
     /// </summary>
     /// <remarks>
     /// The views are built once (<see cref="Seal"/>) and never change; <see cref="ViewGeneration"/> is 0, and

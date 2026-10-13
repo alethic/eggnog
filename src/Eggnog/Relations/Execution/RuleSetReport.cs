@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// Reports are keyed by rule description. Several rules may share one (the semi-naive variants of a rule do), so
-    /// each description maps to the reports of its rules in rule order. Immutable once returned. Public because
+    /// each description maps to the reports of its rules in rule order. Immutable once returned.
     /// <see cref="EGraph.RunRules"/> returns it inside its <see cref="IterationReport"/>; only the engine creates one.
     /// </remarks>
     internal sealed class RuleSetReport
@@ -40,8 +40,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether merging the rule set's staged writes changed the database (decision 11: the rule application
-        /// alone; rebuilding is reported separately).
+        /// Gets whether merging the rule set's staged writes changed the database: the rule application alone;
+        /// rebuilding is reported separately.
         /// </summary>
         public bool Changed { get; }
 

@@ -16,10 +16,10 @@ namespace Eggnog.Relations
         static uint[]? scratch;
 
         /// <summary>
-        /// Finds the visible row with the one-cell key <paramref name="k0"/> (§6.5, the read phase): probes the layers
-        /// from the top down, and the first layer whose key index holds the key decides (Lemma F): its row if the view
-        /// does not hide it, otherwise none. No allocation; one hash probe per present layer, plus a sealed-set probe on
-        /// a hit.
+        /// Finds the visible row with the one-cell key <paramref name="k0"/> (the read phase): probes the layers from
+        /// the top down, and the first layer whose key index holds the key decides: its row if the view does not hide
+        /// it, otherwise none, since no row with a hidden row's key is visible below the hidden row's layer. No
+        /// allocation; one hash probe per present layer, plus a sealed-set probe on a hit.
         /// </summary>
         /// <param name="k0">The key.</param>
         /// <param name="layer">The depth of the layer holding the row, or −1.</param>

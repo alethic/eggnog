@@ -4,8 +4,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/07-sweep-links.egg with scopes as contexts: sweep's <c>links</c> container and the queries
-    /// its facade probe asks, the ones that need no case split (R2). Each query runs in its own child of the frozen
+    /// prototypes/cosmos-facts/07-sweep-links.egg with scopes as contexts: sweep's <c>links</c> container and the
+    /// queries its facade probe asks, the ones that need no case split. Each query runs in its own child of the frozen
     /// schema; one schema serves them all.
     /// </summary>
     public sealed partial class Scenario07SweepLinksTests

@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 
 using Xunit;
+
+using static Eggnog.Relations.Tests.BridgeTestUtil;
 
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The lift (colored-contexts spec §11.2, L1, L2, L4, I33): equalities through the meet, facts through the seed's own
-    /// rows and the winner probe, lattice values through case joins, terms bottom-up, vacuous cases, limits and the memo.
+    /// The lift: equalities through the meet, facts through the seed's own rows and the winner probe, lattice values
+    /// through case joins, terms bottom-up, vacuous cases, the contracts of the table kinds, limits, the memo,
+    /// cancellation between rounds, and the lift reads a root refuses.
     /// </summary>
     public class LifterTests
     {
@@ -26,8 +31,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The relations of the context graph as relations, its constructors as constructors, and <c>low</c> joined by the
-        /// maximum (the case join of a table merged by the minimum).
+        /// The relations of the context graph as relations, its constructors as constructors, and <c>low</c> joined by
+        /// the maximum (the case join of a table merged by the minimum).
         /// </summary>
         static LiftSpec Spec(ContextGraph g) => new(
             new LiftTable(g.Edge, LiftTableKind.Relation),
@@ -54,10 +59,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G1(b), L1: a fact that holds in a case only through an ancestor row naming a class's winner is found by the
-        /// winner probe. Case 1 merges b into a (a wins, so the parent's <c>mark(a)</c> is not copied, and <c>mark(b)</c>
-        /// holds only through it); case 2 asserts <c>mark(b)</c> without that equality. Case 1 is the seed (both have one
-        /// group, and ties go to the first), so its own rows are empty and only step (b) finds the fact.
+        /// A fact that holds in a case only through an ancestor row naming a class's winner is found by the winner
+        /// probe. Case 1 merges b into a (a wins, so the parent's <c>mark(a)</c> is not copied, and <c>mark(b)</c>
+        /// holds only through it); case 2 asserts <c>mark(b)</c> without that equality. Case 1 is the seed (both have
+        /// one group, and ties go to the first), so its own rows are empty and only the winner probe finds the fact.
         /// </summary>
         [Fact]
         public void G1bFactThroughWinnerIsLifted()
@@ -180,7 +185,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// L4: a vacuous case is left out of the meet and the facts, so what the live cases share is lifted although the
+        /// A vacuous case is left out of the meet and the facts, so what the live cases share is lifted although the
         /// vacuous one never had it; <see cref="CaseSet.DisposeVacuous"/> then drops it.
         /// </summary>
         [Fact]
@@ -217,7 +222,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// L4: when every case is vacuous the parent is contradictory: the contradiction is written into it, and a parent
+        /// When every case is vacuous the parent is contradictory: the contradiction is written into it, and a parent
         /// that is itself a case stops.
         /// </summary>
         [Fact]
@@ -249,8 +254,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Cases a schedule found vacuous and disposed (<see cref="CaseSet.RunEach"/>) still count: when none is left, the
-        /// lift contradicts the parent.
+        /// Cases a schedule found vacuous and disposed (<see cref="CaseSet.RunEach"/>) still count: when none is left,
+        /// the lift contradicts the parent.
         /// </summary>
         [Fact]
         public void CasesDisposedAsVacuousStillContradictTheParent()
@@ -277,8 +282,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Lattice values: the case join (here the maximum, for a table merged by the minimum) combines differing values;
-        /// without a join, only an agreed value is lifted.
+        /// Lattice values: the case join (here the maximum, for a table merged by the minimum) combines differing
+        /// values; without a join, only an agreed value is lifted.
         /// </summary>
         [Fact]
         public void ALatticeValueIsLiftedThroughTheCaseJoin()
@@ -301,7 +306,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(g.Int(4), g.Root.LookupId(g.Low, [ids[1]]));
             Assert.Null(g.Root.LookupId(g.Low, [ids[2]]));
 
-            // Without a join, the differing value of ids[0] stays where it was.
+            // Without a join, values the cases disagree on are not lifted.
             var (h, hid) = Setup(1);
             using var plain = new CaseSet(h.Root);
             plain.AddCase().StageRow(h.Low, [hid[0], h.Int(3)]);
@@ -312,9 +317,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Terms bottom-up: each case builds <c>add(num(1), num(2))</c> from local ids. Round 1 lifts the <c>num</c> terms
-        /// (their keys are base values); once the cases see the parent's terms, their local ids stand for parent ids and
-        /// round 2 lifts the <c>add</c> term over them.
+        /// Terms bottom-up: each case builds <c>add(num(1), num(2))</c> from local ids. Round 1 lifts the <c>num</c>
+        /// terms (their keys are base values); once the cases see the parent's terms, their local ids stand for parent
+        /// ids and round 2 lifts the <c>add</c> term over them.
         /// </summary>
         [Fact]
         public void TermsAreLiftedBottomUp()
@@ -480,7 +485,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Lifted rows are written not subsumed (§11.2), whatever the cases' rows say; the cases keep theirs.
+        /// Lifted rows are written not subsumed, whatever the cases' rows say; the cases keep theirs.
         /// </summary>
         [Fact]
         public void LiftedRowsAreNotSubsumed()
@@ -596,6 +601,176 @@ namespace Eggnog.Relations.Tests
             Assert.True(set.IsDisposed);
             set.Dispose();
             Assert.Throws<ObjectDisposedException>(() => set.AddCase());
+        }
+
+        /// <summary>
+        /// A case join applies to <see cref="LiftTableKind.Function"/> only, and a relation with an id output is
+        /// refused (its seed output could be local to the seed, and no local id may reach the parent): both before
+        /// anything is written.
+        /// </summary>
+        [Fact]
+        public void MisplacedJoinsAndIdRelationsAreRefused()
+        {
+            var (g, ids) = Setup(1);
+            using var set = new CaseSet(g.Root);
+            set.AddCase().AddTerm(g.Num, [g.Int(7)]);
+            var version = g.Root.Version;
+
+            Assert.Throws<ArgumentException>(() => set.Lift(new LiftSpec(new LiftTable(g.Mark, LiftTableKind.Relation, (a, _) => a)), LiftOptions.Default));
+            Assert.Throws<ArgumentException>(() => set.Lift(new LiftSpec(new LiftTable(g.Num, LiftTableKind.Relation)), LiftOptions.Default));
+            Assert.Equal(version, g.Root.Version);
+            _ = ids;
+        }
+
+        /// <summary>
+        /// A relation-kind table with a base output lifts a key only where every live case holds the same output.
+        /// </summary>
+        [Fact]
+        public void ARelationKindLiftsABaseOutputTheCasesAgreeOn()
+        {
+            var (g, ids) = Setup(2);
+            using var set = new CaseSet(g.Root);
+            var one = set.AddCase();
+            var two = set.AddCase();
+            one.StageRow(g.Low, [ids[0], g.Int(4)]);
+            two.StageRow(g.Low, [ids[0], g.Int(4)]);
+            one.StageRow(g.Low, [ids[1], g.Int(1)]);
+            two.StageRow(g.Low, [ids[1], g.Int(2)]);
+
+            set.Lift(new LiftSpec(new LiftTable(g.Low, LiftTableKind.Relation)), LiftOptions.Default);
+            Assert.Equal<Value?>(g.Int(4), g.Root.LookupId(g.Low, [ids[0]]));
+            Assert.Null(g.Root.LookupId(g.Low, [ids[1]]));
+        }
+
+        /// <summary>
+        /// A <see cref="LiftTableKind.Relation"/> table writes the output every live case holds (bridge relations have
+        /// a unit output). A function with another base output listed as a relation is not lifted with one case's
+        /// value: here <c>low(a)</c> is 1 in one case and 5 in the other, so nothing is written, where writing 1 into
+        /// the root would make the second case see <c>low(a) = 1</c>. A refusal (the lift's
+        /// <see cref="ArgumentException"/> for a function that does not fit its kind) passes too.
+        /// </summary>
+        [Fact]
+        public void ARelationKindWithABaseOutputIsNotLiftedFromOneCase()
+        {
+            var (g, ids) = Setup(1);
+            var a = ids[0];
+            using var set = new CaseSet(g.Root);
+            var one = set.AddCase();
+            one.StageRow(g.Low, [a, g.Int(1)]);
+            var two = set.AddCase();
+            two.StageRow(g.Low, [a, g.Int(5)]);
+            var spec = new LiftSpec(new LiftTable(g.Low, LiftTableKind.Relation));
+
+            var refused = Record.Exception(() => set.Lift(spec, LiftOptions.Default));
+            if (refused is not null)
+            {
+                Assert.IsType<ArgumentException>(refused);
+                return;
+            }
+
+            two.EnsureClean();
+            Assert.Null(g.Root.LookupId(g.Low, [a]));
+            Assert.Equal(g.Int(5), two.LookupId(g.Low, [a]));
+        }
+
+        static uint Max(ContextGraph g, uint a, uint b)
+        {
+            var values = g.EGraph.BaseValues;
+            return values.Get<Int64Codec, long>(Math.Max(values.Unwrap<Int64Codec, long>(new Value(a)), values.Unwrap<Int64Codec, long>(new Value(b)))).Rep;
+        }
+
+        /// <summary>
+        /// <see cref="LiftTableKind.Relation"/> listed for a function with a base output never writes a value one live
+        /// case does not hold: <c>low(a)</c> is 3 in one case and 5 in another, and a lifted fact holds in every live
+        /// case. Either the kind is refused for such a function, or the value written holds in every live case.
+        /// </summary>
+        [Fact]
+        public void ARelationKindNeverLiftsAValueOneLiveCaseDoesNotHold()
+        {
+            var (g, ids) = Setup(1);
+            using var set = new CaseSet(g.Root);
+            set.AddCase().StageRow(g.Low, [ids[0], g.Int(3)]);
+            set.AddCase().StageRow(g.Low, [ids[0], g.Int(5)]);
+
+            try
+            {
+                set.Lift(new LiftSpec(new LiftTable(g.Low, LiftTableKind.Relation)), LiftOptions.Default);
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            var lifted = g.Root.LookupId(g.Low, [ids[0]]);
+            Assert.True(lifted is null || lifted == g.Int(5), $"low(a) = {(lifted is { } v ? g.EGraph.BaseValues.Unwrap<Int64Codec, long>(v) : 0)} was lifted, but one live case holds low(a) = 5");
+        }
+
+        /// <summary>
+        /// The bridge's lift reads (<c>EGraphContext.Lift.cs</c>): <c>IsLocalId</c>, <c>ScanMerges</c>, <c>ScanOwn</c>,
+        /// <c>ScanAncestorsMentioning</c> and the member map are refused at the root.
+        /// </summary>
+        [Fact]
+        public void TheLiftReadsAreRefusedAtTheRoot()
+        {
+            var (g, ids) = Setup(1);
+            g.Assert(g.Root, g.Mark, ids[0]);
+            g.Root.FlushUpdates();
+            Assert.Throws<InvalidOperationException>(() => g.Root.IsLocalId(ids[0]));
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                var sink = new RowCountSink();
+                g.Root.ScanOwn(g.Mark, ref sink);
+            });
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                var sink = new RowCountSink();
+                g.Root.ScanAncestorsMentioning(g.Mark, ids[0].Rep, ref sink);
+            });
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                var visitor = new MergeCollector();
+                g.Root.ScanMerges(ref visitor);
+            });
+            Assert.Throws<InvalidOperationException>(() => g.Root.GetMemberMap());
+        }
+
+        /// <summary>
+        /// The lift checks its token between rounds, not only before the first. A case join cancels the token during
+        /// round 1 of a lift that needs two rounds (terms bottom-up); round 2 does not run.
+        /// </summary>
+        [Fact]
+        public void TheTokenIsCheckedBetweenRounds()
+        {
+            var (g, ids) = Setup(1);
+            using var cancellation = new CancellationTokenSource();
+            using var set = new CaseSet(g.Root);
+            for (var i = 0; i < 2; i++)
+            {
+                var @case = set.AddCase();
+                var one = @case.AddTerm(g.Num, [g.Int(1)]);
+                @case.AddTerm(g.Add, [one, one]);
+                @case.StageRow(g.Low, [ids[0], g.Int(i)]);
+            }
+
+            var spec = new LiftSpec(
+                new LiftTable(g.Num, LiftTableKind.Constructor),
+                new LiftTable(g.Add, LiftTableKind.Constructor),
+                new LiftTable(g.Low, LiftTableKind.Function, (a, b) =>
+                {
+                    cancellation.Cancel();
+                    return Max(g, a, b);
+                }));
+
+            Assert.Throws<OperationCanceledException>(() => set.Lift(spec, LiftOptions.Default, cancellation.Token));
+            Assert.NotNull(g.Root.LookupId(g.Num, [g.Int(1)]));
+            Assert.Equal(g.Int(1), g.Root.LookupId(g.Low, [ids[0]]));
+            Assert.Equal(0, g.Root.TableSize(g.Add));
+            Assert.False(g.Root.IsFaulted);
+            foreach (var @case in set.Cases)
+            {
+                @case.EnsureClean();
+                @case.CheckInvariants();
+            }
         }
 
     }

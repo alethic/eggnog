@@ -9,13 +9,13 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the sealing discipline (colored-contexts spec X40, I18; review finding R1-1): every merge of a child
-    /// seals the hidden sets it touched before it returns, so the read paths, which probe sealed sets only, see every hide
-    /// at once, also after a merge that grows no union-find.
+    /// Tests for the sealing discipline: every merge of a child seals the hidden sets it touched before it returns, so
+    /// the read paths, which probe sealed sets only, see every hide at once, also after a merge that grows no
+    /// union-find.
     /// </summary>
     /// <remarks>
-    /// R1-1's rule half ("a rule over <c>f</c> derives <c>g(a,5)</c> only") runs a rule in the child through the layered
-    /// executor (M10.2, <see cref="ARuleOverTheViewDerivesOnlyTheChildsValue"/>); the scan half reads the view directly.
+    /// The rule half ("a rule over <c>f</c> derives <c>g(a,5)</c> only") runs a rule in the child through the layered
+    /// executor (<see cref="ARuleOverTheViewDerivesOnlyTheChildsValue"/>); the scan half reads the view directly.
     /// </remarks>
     public class HiddenSealingTests
     {
@@ -34,7 +34,7 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void AScanOfTheViewSeesOnlyTheChildsValue()
         {
-            // R1-1: f(Id) -> i64 by max with a timestamp column; root f(a)=1, frozen; the child writes f(a)=5, a merge that
+            // f(Id) -> i64 by max with a timestamp column; root f(a)=1, frozen; the child writes f(a)=5, a merge that
             // grows no union-find. A scan of the child's view yields f(a)=5 only.
             var (_, f, child, a) = Setup();
             Insert(child, f, a, 5, 0);
@@ -53,8 +53,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ARuleOverTheViewDerivesOnlyTheChildsValue()
         {
-            // R1-1, rule half: root f(a)=1, frozen; the child writes f(a)=5 (a merge that grows no union-find); a rule over
-            // f in the child derives g(a,5) only, never g(a,1) from the hidden root row.
+            // The rule half: root f(a)=1, frozen; the child writes f(a)=5 (a merge that grows no union-find); a rule
+            // over f in the child derives g(a,5) only, never g(a,1) from the hidden root row.
             var (store, f, child, a) = Setup();
             var g = store.AddTable(Relation(2), name: "g");
             Insert(child, f, a, 5, 0);
@@ -79,7 +79,7 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ADeletedAncestorRowIsAbsentAtOnce()
         {
-            // R1-1, delete variant: after StageRemove(f, [a]), TryGetRow(f, [a]) is absent.
+            // The delete variant: after StageRemove(f, [a]), TryGetRow(f, [a]) is absent.
             var (_, f, child, a) = Setup();
             Remove(child, f, a);
             Assert.Equal(0, child.Tables!.UnsealedCount);

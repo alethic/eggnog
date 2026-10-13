@@ -5,9 +5,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <c>int</c> and enums, stored as the engine's <c>i64</c> (<c>Int64Codec</c>) through widen and narrow functions
-    /// (D20): <c>Int32Codec</c> boxes −1 to <c>Value.StaleRep</c>, which marks a deleted row when it lands in a table's
-    /// first column, while <c>Int64Codec</c> boxes <c>[0, 2^31)</c> inline and interns the rest. The extraction sort is a
+    /// <c>int</c> and enums, stored as the engine's <c>i64</c> (<c>Int64Codec</c>) through widen and narrow functions:
+    /// <c>Int32Codec</c> boxes −1 to <c>Value.StaleRep</c>, which marks a deleted row when it lands in a table's first
+    /// column, while <c>Int64Codec</c> boxes <c>[0, 2^31)</c> inline and interns the rest. The extraction sort is a
     /// <c>BaseSort&lt;Int64Codec, long&gt;</c> under this type's name that formats through the narrow function.
     /// </summary>
     /// <typeparam name="T">The CLR type of the values.</typeparam>

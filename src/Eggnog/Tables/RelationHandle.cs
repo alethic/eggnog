@@ -3,7 +3,7 @@ namespace Eggnog
 
     /// <summary>
     /// The base of the typed relations. A relation is a set of tuples: an engine function whose output is the unit
-    /// value (D27). Its untyped members are internal (D13).
+    /// value. Its untyped members, which take any arity, are internal.
     /// </summary>
     public abstract class RelationHandle : TableHandle
     {
@@ -17,7 +17,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped application: the fact that the relation holds the tuple <paramref name="arguments"/> (D13).
+        /// The untyped application, of any arity: the fact that the relation holds the tuple
+        /// <paramref name="arguments"/>.
         /// </summary>
         /// <param name="arguments">One term per key, of the key's CLR type.</param>
         /// <returns>The fact.</returns>
@@ -28,7 +29,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped scoped view (D13): what the typed <c>In(tag)</c> returns, as an untyped relation.
+        /// The untyped scoped view: what the typed <c>In(tag)</c> returns, as an untyped relation.
         /// </summary>
         /// <param name="tag">The tag of the scope to read.</param>
         /// <returns>The view.</returns>

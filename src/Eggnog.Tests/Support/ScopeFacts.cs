@@ -7,9 +7,10 @@ namespace Eggnog.Tests.Support
 {
 
     /// <summary>
-    /// A scope's facts modulo renaming of classes (decision 4): every row of every table of the graph in the scope's view,
-    /// rendered with each class named by its least ground term (by size, then rendering, ordinal). Two scopes with equal
-    /// facts give equal lists whatever ids their classes got. For tests.
+    /// A scope's facts modulo renaming of classes, the form in which runs that may mint different ids (a parallel run
+    /// and a serial one) are compared: every row of every table of the graph in the scope's view, rendered with each
+    /// class named by its least ground term (by size, then rendering, ordinal). Two scopes with equal facts give equal
+    /// lists whatever ids their classes got. For tests.
     /// </summary>
     public static class ScopeFacts
     {
@@ -18,7 +19,8 @@ namespace Eggnog.Tests.Support
         /// Gets the scope's facts, sorted ordinal.
         /// </summary>
         /// <param name="scope">The scope.</param>
-        /// <returns>One line per row: <c>(StrEq "kind" "a") = (StrEq "kind" "a")</c>, <c>(dom "kind") = {a, b}</c>.</returns>
+        /// <returns>One line per row: <c>(StrEq "kind" "a") = (StrEq "kind" "a")</c>,
+        /// <c>(dom "kind") = {a, b}</c>.</returns>
         public static IReadOnlyList<string> Of(Scope scope)
         {
             var rows = new List<TableRow>();

@@ -32,7 +32,7 @@ namespace Eggnog.Relations
         /// <remarks>
         /// Requires rebuild columns (an index needs a key column). Exclusive: the table's owner calls it while it
         /// rebuilds or freezes, and a child context calls it on an ancestor that is idle in the child's thread domain
-        /// (<see cref="SharedRebuildIndex"/>, I11).
+        /// (<see cref="SharedRebuildIndex"/>).
         /// </remarks>
         internal Index<ColumnIndex> RefreshRebuildIndex()
         {
@@ -42,11 +42,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the rebuild index as descendants read it (colored-contexts spec §6.6, §7.3 step 4, §6.10): <c>null</c> for
-        /// a table without rebuild columns (no id can be mentioned, and an index needs a key column); for a frozen table,
-        /// the index its freeze built, which is current and shared lock-free by any number of concurrent descendants;
-        /// otherwise the index refreshed now (<see cref="RefreshRebuildIndex"/>), which a child context does only for an
-        /// ancestor that is not frozen and so shares its thread domain and is idle.
+        /// Gets the rebuild index as descendants read it: <c>null</c> for a table without rebuild columns (no id can be
+        /// mentioned, and an index needs a key column); for a frozen table, the index its freeze built, which is
+        /// current and shared lock-free by any number of concurrent descendants; otherwise the index refreshed now
+        /// (<see cref="RefreshRebuildIndex"/>), which a child context does only for an ancestor that is not frozen and
+        /// so shares its thread domain and is idle.
         /// </summary>
         /// <returns>The index, or <c>null</c>.</returns>
         internal Index<ColumnIndex>? SharedRebuildIndex()
@@ -56,7 +56,7 @@ namespace Eggnog.Relations
 
             if (isShared)
             {
-                Debug.Assert(rebuildIndex is not null && rebuildIndex.NeedsRefresh(this) == false, "a frozen table's rebuild index is current (I23)");
+                Debug.Assert(rebuildIndex is not null && rebuildIndex.NeedsRefresh(this) == false, "a frozen table's rebuild index is current");
                 return rebuildIndex;
             }
 
@@ -64,14 +64,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Implements the rebuild-index hook of <see cref="RefreshRowsForValues"/>: egglog's candidate collection
+        /// Adds to <paramref name="candidates"/> the rows the rebuild index lists under each of <paramref name="values"/>
+        /// (stale rows and repeats allowed), for <see cref="RefreshRowsForValues"/>: egglog's candidate collection
         /// (core-relations/src/table/rebuild.rs:81-93), which probes the rebuild index for every dirty id. O(dirty ids +
         /// rows found) after the refresh.
         /// </summary>
         /// <param name="values">The dirty ids.</param>
-        /// <param name="candidates">Receives the rows listed under them (stale rows and repeats allowed).</param>
-        /// <param name="handled">Set to true.</param>
-        partial void CollectRowsMentioning(HashSet<uint> values, List<int> candidates, ref bool handled)
+        /// <param name="candidates">Receives the rows listed under them.</param>
+        void CollectRowsMentioning(HashSet<uint> values, List<int> candidates)
         {
             var index = RefreshRebuildIndex().Data;
             foreach (var value in values)
@@ -82,12 +82,10 @@ namespace Eggnog.Relations
                         candidates.Add(row);
                 }
             }
-
-            handled = true;
         }
 
         /// <summary>
-        /// Implements the incremental-rebuild hook of <see cref="ApplyRebuild"/>: egglog's <c>rebuild_incremental</c>
+        /// The incremental path of <see cref="ApplyRebuild"/>: egglog's <c>rebuild_incremental</c>
         /// (core-relations/src/table/rebuild.rs:120-195). Refreshes the rebuild index, reads the ids the providing table
         /// displaced since this table's last rebuild against it (its <paramref name="hintColumn"/> over
         /// <paramref name="toScan"/>), gathers the rows the index lists under them and the rows appended since that
@@ -95,17 +93,17 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Fix (rebuild.rs:52-66, 120-195): egglog gathers only the rows that mention an id displaced since this table's
-        /// last rebuild. A row written after that rebuild that mentions an id displaced before it is never rewritten,
-        /// while the full path, taken for tables of at most 10000 rows, rewrites it: the result depended on the table's
-        /// size (found by the differential suite, soak seed 108799). egglog-bridge happens to write only ids canonical
-        /// as of the last rebuild; this table does not rely on it. The rows appended since the last rebuild against the
-        /// same rebuilder (<see cref="FirstRowSinceRebuild"/>; all of them after a new generation) are gathered too,
-        /// which costs O(rows written since), at most what the full path costs; rows older than that were canonical as
-        /// of that rebuild, so only ids the rebuilder displaced since can make them stale. The mark is kept per
-        /// rebuilder, like the <see cref="SubsetTracker"/> position that names those ids: a rebuild against another
-        /// union-find moves neither. The rewrite goes parallel by the number of rows gathered, the work it does, where
-        /// egglog uses the number of displaced ids.
+        /// egglog gathers only the rows that mention an id displaced since this table's last rebuild (rebuild.rs:52-66,
+        /// 120-195). A row written after that rebuild that mentions an id displaced before it is then never rewritten,
+        /// while the full path, taken for tables of at most 10000 rows, rewrites it, so the result would depend on the
+        /// table's size. egglog-bridge happens to write only ids canonical as of the last rebuild; this table does not
+        /// rely on it. The rows appended since the last rebuild against the same rebuilder
+        /// (<see cref="FirstRowSinceRebuild"/>; all of them after a new generation) are gathered too, which costs
+        /// O(rows written since), at most what the full path costs; rows older than that were canonical as of that
+        /// rebuild, so only ids the rebuilder displaced since can make them stale. The mark is kept per rebuilder, like
+        /// the <see cref="SubsetTracker"/> position that names those ids: a rebuild against another union-find moves
+        /// neither. The rewrite goes parallel by the number of rows gathered, the work it does, where egglog uses the
+        /// number of displaced ids.
         /// </para>
         /// <para>
         /// egglog rewrites each displaced id's rows separately, so a row mentioning two displaced ids (or one id in two
@@ -117,10 +115,18 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// Reports whether anything was staged; egglog's serial path reports a change whenever some id's subset is
-        /// nonempty (rebuild.rs:182; map §8.1 row 17).
+        /// nonempty (rebuild.rs:182).
         /// </para>
         /// </remarks>
-        partial void RebuildIncremental(TableId rebuilderTableId, Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed)
+        /// <param name="rebuilderTableId">The providing table's id, which keys its rebuild mark (<see cref="MarkRebuilt"/>).</param>
+        /// <param name="rebuilderTable">The providing table.</param>
+        /// <param name="rebuilder">The rebuilder.</param>
+        /// <param name="hintColumn">The providing table's column naming changed values.</param>
+        /// <param name="toScan">The providing table's rows appended since the last rebuild.</param>
+        /// <param name="nextTimestamp">The timestamp rewritten rows get.</param>
+        /// <param name="state">The execution state.</param>
+        /// <returns>Whether anything was staged.</returns>
+        bool RebuildIncremental(TableId rebuilderTableId, Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state)
         {
             var index = RefreshRebuildIndex().Data;
             var gather = new ColumnIndexGatherSink(index);
@@ -128,9 +134,9 @@ namespace Eggnog.Relations
             gather.AppendRange(FirstRowSinceRebuild(rebuilderTableId), data.Count);
             var count = gather.SortUnique();
             lastRebuildRows = count;
-            changed = count > 0 && RebuildRows(rebuilder, gather.Rows, count, nextTimestamp, state, parallelism.ParallelizeRebuild(count));
+            var changed = count > 0 && RebuildRows(rebuilder, gather.Rows, count, nextTimestamp, state, parallelism.ParallelizeRebuild(count));
             gather.Release();
-            handled = true;
+            return changed;
         }
 
         /// <summary>

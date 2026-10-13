@@ -20,7 +20,8 @@ namespace Eggnog.Relations
         /// arena's object itself. Cost: an unbox, which is one type check.
         /// </remarks>
         /// <typeparam name="T">The value type.</typeparam>
-        /// <param name="reference">The shared reference; must come from <see cref="SharedArenaHandle.Alloc{T}"/>.</param>
+        /// <param name="reference">The shared reference; must come from
+        /// <see cref="SharedArenaHandle.Alloc{T}"/>.</param>
         /// <returns>A read-only reference to the arena's copy.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref readonly T ValueRef<T>(this SharedRef<T> reference)

@@ -12,14 +12,14 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A tagged class in place of egglog's boxed closures (map §5, "Rules"): <see cref="Kind"/> says which case it is and
-    /// which fields are meaningful; there are no virtual calls. Being data, a rule can be printed, validated
+    /// A tagged class in place of egglog's boxed closures: <see cref="Kind"/> says which case it is and which fields
+    /// are meaningful; there are no virtual calls. Being data, a rule can be printed, validated
     /// (<see cref="Validate"/>) and lowered again for another context.
     /// </para>
     /// <para>
     /// Every write is stamped with the rule's timestamp variable (<see cref="RuleBindings.NextTimestamp"/>), the
     /// <see cref="InstrKind.ReadCounter"/> every lowered rule begins with, so all rows a run writes carry the run's
-    /// timestamp (map §1.3). Immutable; the entry arrays are owned by the action. Cold path.
+    /// timestamp. Immutable; the entry arrays are owned by the action. Cold path.
     /// </para>
     /// </remarks>
     internal sealed class RuleAction
@@ -270,7 +270,7 @@ namespace Eggnog.Relations
                 case RuleActionKind.Insert:
                     rule.Insert(Table, BuildRow(bindings, entries, Math, default, Entry, hasOutput: false));
 
-                    // §10.6: a head insert into the contradiction function stops a case's search early.
+                    // A head insert into the contradiction function stops a case's search early.
                     if (bindings.TryGetStop(Table, out var stop))
                         rule.CallExternal(stop, ReadOnlySpan<QueryEntry>.Empty);
 
@@ -439,11 +439,11 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Defect fixed (egglog-bridge/src/rule.rs:477-519; map §8.1 row 19): egglog reads the cell with a plain
-        /// <c>lookup</c> of the committed table, so for a key the table lacks (whose subsumed row the preceding lookup
-        /// only staged) the lane halts and every later action of the rule is skipped for that match. Worse, when an
-        /// earlier lookup in the same batch predicted the key's row as not subsumed, the preceding lookup returns that
-        /// prediction and the subsumption is lost.
+        /// egglog reads the cell with a plain <c>lookup</c> of the committed table (egglog-bridge/src/rule.rs:477-519),
+        /// so for a key the table lacks (whose subsumed row the preceding lookup only staged) the lane halts and every
+        /// later action of the rule is skipped for that match. Worse, when an earlier lookup in the same batch
+        /// predicted the key's row as not subsumed, the preceding lookup returns that prediction and the subsumption is
+        /// lost.
         /// </para>
         /// <para>
         /// Here the cell is read with a <c>LookupOrInsertDefault</c> of the subsumption column, which reads the committed

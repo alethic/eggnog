@@ -4,10 +4,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The ids of containers the root rebuilt in place while it had live descendants (colored-contexts spec §7.4, C13
-    /// interim, X31): the store-wide log from which each child re-stamps the rows of its own layers that mention such a
-    /// container, so its semi-naive evaluation sees them as new, as egglog's <c>refresh_rows_for_values</c> does at the
-    /// root.
+    /// The ids of containers the root rebuilt in place while it had live descendants: the store-wide log from which
+    /// each child re-stamps the rows of its own layers that mention such a container, so its semi-naive evaluation sees
+    /// them as new, as egglog's <c>refresh_rows_for_values</c> does at the root. Children never rebuild containers
+    /// themselves: container interning is global, and only the root's rebuild renames them.
     /// </summary>
     /// <remarks>
     /// <para>

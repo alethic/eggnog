@@ -8,7 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tree decomposition: the egglog defects fixed by this port (map §8.1 rows 2, 5, 6, 7), determinism, and purity.
+    /// Tree decomposition: the egglog defects this planner avoids (atoms without variables, lost join constraints,
+    /// orphaned chain children, bags holding variables outside the bag), the pathwidth of the chain, determinism, and
+    /// purity.
     /// </summary>
     public class PlannerDecompositionTests
     {
@@ -17,8 +19,8 @@ namespace Eggnog.Relations.Tests
             text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim('(', ')').Split(',').Select(uint.Parse).ToArray()).ToArray();
 
         /// <summary>
-        /// The lost-constraint query: nine atoms over three tables, found by the random search of this suite (seed 30731)
-        /// after the <c>all_children</c> fix, which removed the orphan-chain cases of egglog's <c>lost3.egg</c>.
+        /// The lost-constraint query: nine atoms over three tables, from the random search of this suite (seed 30731),
+        /// with the orphan-chain cases of egglog's <c>lost3.egg</c> absorbed by <c>all_children</c>.
         /// </summary>
         static (PlanTestDatabase Db, Query Query) LostConstraintQuery(uint[][] t0, uint[][] t1, uint[][] t2)
         {
@@ -55,8 +57,9 @@ namespace Eggnog.Relations.Tests
                 Rows("(2,1,0) (0,0,1) (0,1,3) (2,2,3) (1,3,2) (1,1,3) (3,0,2)"));
             var plan = Assert.IsType<DecomposedPlan>(QueryPlanner.PlanQuery(query, statsDb));
 
-            // Block 0's message variables are split across the later bags (v3 only in block 1, v1 only in block 2), so it
-            // constrains neither, and it has no value variables: egglog's result block skips it (plan.rs:897-904, 993-995).
+            // Block 0's message variables are split across the later bags (v3 only in block 1, v1 only in block 2), so
+            // it constrains neither, and it has no value variables: egglog's result block skips it (plan.rs:897-904,
+            // 993-995).
             Assert.Equal("msg[v1,v2,v3,v5] val[]", plan.Blocks[0].Spec.ToString());
             Assert.DoesNotContain(plan.Blocks.Skip(1), b => b.Stages.Any(s => s is FusedIntersectMatStage { Cover.Rep: 0 }));
             Assert.Equal(
@@ -96,8 +99,8 @@ namespace Eggnog.Relations.Tests
         [InlineData("spider", "MinCover")]
         public void FreeJoinWithDecompositionPlansCorrectly(string name, string strategy)
         {
-            // egglog panicked on path4 and rect ("Option::unwrap() on None" at plan.rs:1344/1491, "insert at index 3
-            // exceeds fixedbitset size 3"): bag atoms hold variables outside the bag (map §8.1 row 7).
+            // egglog panics on path4 and rect ("Option::unwrap() on None" at plan.rs:1344/1491, "insert at index 3
+            // exceeds fixedbitset size 3"): bag atoms hold variables outside the bag.
             var (db, query) = ExperimentQueries.Build(name, Enum.Parse<PlanStrategy>(strategy));
             var plan = Assert.IsType<DecomposedPlan>(QueryPlanner.PlanQuery(query, db));
             var output = query.GetUsedVariables();
@@ -129,15 +132,15 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void OrphanedFirstChildIsAbsorbed()
         {
-            // Bags 0 and 1 are both children of bag 2 (bag 0 shares x and c with it, bag 1 shares y), and bag 1 continues
-            // the chain: continuing through it keeps the widest bag at its own 3 atoms, while continuing through bag 0
-            // would fold bag 1's 3 atoms into the root (4). egglog's all_children[1..] (plan.rs:805) skips bag 0, which
-            // then becomes a chain of its own: [bag0, bag1, bag2], joined through a Lookup epilogue. Fixed: bag 0 is
-            // absorbed into the chain node, giving [bag1, bag2 + bag0] (map §8.1 row 6).
+            // Bags 0 and 1 are both children of bag 2 (bag 0 shares x and c with it, bag 1 shares y), and bag 1
+            // continues the chain: continuing through it keeps the widest bag at its own 3 atoms, while continuing
+            // through bag 0 would fold bag 1's 3 atoms into the root (4). egglog's all_children[1..] (plan.rs:805)
+            // skips bag 0, which then becomes a chain of its own: [bag0, bag1, bag2], joined through a Lookup epilogue.
+            // Here bag 0 is absorbed into the chain node, giving [bag1, bag2 + bag0].
             //
-            // (Before the pathwidth-score fix, plan.rs:735-740, this test gave bag 0 three atoms and bag 1 one; the
-            // corrected score then makes bag 0, children[0], the continuation, and nothing is orphaned. The sizes are
-            // swapped so that the orphan case is still exercised.)
+            // (With the pathwidth score of plan.rs:735-740 corrected, giving bag 0 three atoms and bag 1 one would make
+            // bag 0, children[0], the continuation, and nothing would be orphaned. The sizes are chosen so that the
+            // orphan case is exercised.)
             Variable x = new(0), c = new(1), a = new(2), y = new(3), b = new(4);
             var bag0 = Bag([x, a, c], [0]);
             var bag1 = Bag([y, b], [1, 2, 3]);
@@ -153,8 +156,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ChainParentTiesGoToTheLowestBag()
         {
-            // Bag 0 shares one variable with bag 1 and one with bag 2: egglog's max_by_key on (count, -j) picks bag 1, so
-            // the chain is 0 -> 1 -> 2. Picking bag 2 would make bags 0 and 1 siblings and absorb one of them.
+            // Bag 0 shares one variable with bag 1 and one with bag 2: egglog's max_by_key on (count, -j) picks bag 1,
+            // so the chain is 0 -> 1 -> 2. Picking bag 2 would make bags 0 and 1 siblings and absorb one of them.
             Variable x = new(0), y = new(1), z = new(2);
             var chain = QueryPlanner.TopologicallySortBags([Bag([x], [0]), Bag([x, y], [1]), Bag([x, z], [2])]);
             Assert.Equal([[0], [1], [2]], chain.Select(b => b.Atoms.Select(kv => kv.Key.Index).ToArray()));
@@ -166,7 +169,7 @@ namespace Eggnog.Relations.Tests
             // Property test against brute force: for random bag trees (bag i's parent is the later bag it shares a
             // variable with), the chain's widest node equals the minimum, over every choice of continuation child at
             // every node, of the widest node the walk would build. This is the pathwidth egglog's doc comment promises
-            // (plan.rs:704-716), which its swapped score (plan.rs:735-740, commit d19135d6) does not deliver.
+            // (plan.rs:704-716), which its swapped score (plan.rs:735-740) does not deliver.
             var rng = new Random(4242);
             for (var trial = 0; trial < 2000; trial++)
             {
@@ -274,8 +277,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void VariableFreeAtomKeepsHeaderAndCheckUnderDecomposition()
         {
-            // egglog drops atoms without variables from every bag, so a decomposed plan lost their headers
-            // (plan.rs:498-506, 591-596); and it never applied their slow constraints (map §8.1 row 2).
+            // egglog drops atoms without variables from every bag, so its decomposed plans lose their headers
+            // (plan.rs:498-506, 591-596) and never apply their slow constraints.
             var db = new PlanTestDatabase();
             var t = db.AddTable(2, 2, PlanTestDatabase.ExperimentRows(20, 10), -1, [false, true]);
             var tables = Enumerable.Range(0, 4).Select(i => db.AddTable(2, 2, PlanTestDatabase.ExperimentRows(10 + 10 * i, 3 + i))).ToArray();
@@ -373,6 +376,30 @@ namespace Eggnog.Relations.Tests
                 "[0] FusedIntersect a0[c0,c1] bind[c0->v0, c1->v1] probe[a1[c0] key[1]]",
                 "[1] FusedIntersect a1[c1] bind[c1->v2]",
             ], PlanLines.Of(QueryPlanner.PlanQuery(query, db, PlanStrategy.PureSize, false)));
+        }
+
+        [Fact]
+        public void DecomposedHeadersAreInAtomOrder()
+        {
+            // PlanTemplate.Headers holds the fast constraints of each atom that has any, in atom order. A decomposed
+            // plan collects them bag by bag, leaf bag first: path4 with fast constraints on a0 and a3 meets a3 (block
+            // 0's bag {a1,a2,a3}) before a0 (block 1's bag {a0,a1,a2}), and still lists a0 first. Column uniqueness
+            // uses whole-table numbers, so the constraints do not change the decomposition.
+            var db = new PlanTestDatabase();
+            (int N, int M)[] sizes = [(100, 30), (10, 5), (50, 20), (20, 10)];
+            var tables = sizes.Select(t => db.AddTable(2, 2, PlanTestDatabase.ExperimentRows(t.N, t.M))).ToArray();
+            var qb = new QueryBuilder(db);
+            var v = Enumerable.Range(0, 5).Select(i => qb.NewVariable()).ToArray();
+            qb.AddAtom(tables[0], [v[0], v[1]], [Constraint.EqConst(new ColumnId(0), new Value(1))]);
+            qb.AddAtom(tables[1], [v[1], v[2]]);
+            qb.AddAtom(tables[2], [v[2], v[3]]);
+            qb.AddAtom(tables[3], [v[3], v[4]], [Constraint.EqConst(new ColumnId(1), new Value(4))]);
+            qb.MarkUsed(v[0]);
+            qb.MarkUsed(v[4]);
+            var plan = Assert.IsType<DecomposedPlan>(QueryPlanner.PlanQuery(qb.Build(new ActionId(0)), db));
+
+            var atoms = plan.Headers.Select(h => h.Atom.Index).ToArray();
+            Assert.Equal(atoms.Order(), atoms);
         }
 
     }

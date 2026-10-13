@@ -9,10 +9,10 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Moves <paramref name="atom"/>'s node out of the bindings into <paramref name="prober"/> and gives it an index
-        /// over <paramref name="columns"/> per layer of the node's rows (colored-contexts spec §9.5,
-        /// <see cref="BuildPiece"/>). egglog's <c>get_index</c> (core-relations/src/free_join/execute.rs:819-884) for each
-        /// layer; a single-layer node (every root node) gets one piece, built exactly as egglog builds its index.
+        /// Moves <paramref name="atom"/>'s node out of the bindings into <paramref name="prober"/> and gives it an
+        /// index over <paramref name="columns"/> per layer of the node's rows (<see cref="BuildPiece"/>). egglog's
+        /// <c>get_index</c> (core-relations/src/free_join/execute.rs:819-884) for each layer; a single-layer node
+        /// (every root node) gets one piece, built exactly as egglog builds its index.
         /// </summary>
         /// <param name="prober">Receives the node and the pieces; its spare piece array is kept.</param>
         /// <param name="atom">The atom's index.</param>
@@ -47,7 +47,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Builds the index of one layer of an atom's rows (§9.5): egglog's <c>get_index</c> choice per layer.
+        /// Builds the index of one layer of an atom's rows: egglog's <c>get_index</c> choice per layer.
         /// <list type="bullet">
         /// <item>at most eight rows and one column: a <see cref="SparseColumnIndex"/> over the rows the view sees;</item>
         /// <item>a dense range of more than half the layer, every column cacheable: the layer's cached index (its
@@ -59,7 +59,7 @@ namespace Eggnog.Relations
         /// view sees.</item>
         /// </list>
         /// Only a cached index can list rows the view does not see (tombstones, and rows it hides: hides are not index
-        /// content, C6), so only its pieces refine for visibility (<see cref="ProberPiece.MayHoldInvisible"/>).
+        /// content), so only its pieces refine for visibility (<see cref="ProberPiece.MayHoldInvisible"/>).
         /// <paramref name="root"/> (whether the node is the atom's root node) only splits the executor's counters.
         /// </summary>
         void BuildPiece(ref ProberPiece piece, TrieNode node, int layer, LayerView lv, SubsetRef rows, ReadOnlySpan<ColumnId> columns, bool root)
@@ -194,7 +194,7 @@ namespace Eggnog.Relations
         /// <paramref name="key"/>, appending the refinement to <paramref name="updates"/>: a small candidate is refined and
         /// copied into the frame; a large one goes through the node's child cache, so it is refined once per rule execution
         /// (core-relations/src/free_join/execute.rs:1124-1143). A multi-layer node caches it under the piece's layer
-        /// selector (§9.6): the rows of that layer only.
+        /// selector: the rows of that layer only.
         /// </summary>
         /// <param name="updates">The frame buffer.</param>
         /// <param name="node">The atom's node, held by the scan's prober.</param>
@@ -255,7 +255,7 @@ namespace Eggnog.Relations
         /// Refines a probed atom of an intersection to the rows of several layers holding <paramref name="key"/>
         /// (<paramref name="layerHits"/>), appending the refinement to <paramref name="updates"/>: a small candidate is
         /// refined and copied into the frame; a large one goes through the node's child cache under selector 0 (every
-        /// layer, §9.6).
+        /// layer).
         /// </summary>
         /// <returns><c>false</c> if no row survives.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -416,7 +416,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Refines the hits of a several-piece probe into one row set per layer: each hit's rows that its layer's view sees
-        /// (when its piece may list invisible rows) and that satisfy <paramref name="constraints"/> (§9.5). The per-layer
+        /// (when its piece may list invisible rows) and that satisfy <paramref name="constraints"/>. The per-layer
         /// array comes from the task's <see cref="TrieNodePool.Layers"/>.
         /// </summary>
         /// <returns>The rows, owned by the caller; empty when no row survives.</returns>

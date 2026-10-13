@@ -2,15 +2,16 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What one context remembers of one rule's runs (colored-contexts spec §10.2, X17): the timestamp of its last
-    /// successful run there, the executed Id constants <b>K</b> of that run (§9.8, I30), and the generation of the rule
-    /// it belongs to, so progress of a freed rule never applies to a rule that reuses its id.
+    /// What one context remembers of one rule's runs: the timestamp of its last successful run there, the executed Id
+    /// constants <b>K</b> of that run (the canonical form, in that context, of every Id constant of the rule's query
+    /// and actions), and the generation of the rule it belongs to, so progress of a freed rule never applies to a rule
+    /// that reuses its id.
     /// </summary>
     /// <remarks>
-    /// A semi-naive watermark: rows stamped at or after <see cref="LastRunAt"/> are new to the rule in that context, and
-    /// the watermark applies only while the rule's current constants equal <see cref="Constants"/> (a constant that lost
-    /// a union forces a full run, §13 edge 31). <c>default</c> holds generation 0, which no rule has (generations start
-    /// at 1, <see cref="RuleTable"/>), so an unused slot never matches. A 16-byte value; immutable.
+    /// A semi-naive watermark: rows stamped at or after <see cref="LastRunAt"/> are new to the rule in that context,
+    /// and the watermark applies only while the rule's current constants equal <see cref="Constants"/> (a constant that
+    /// lost a union forces a full run). <c>default</c> holds generation 0, which no rule has (generations start at 1,
+    /// <see cref="RuleTable"/>), so an unused slot never matches. A 16-byte value; immutable.
     /// </remarks>
     internal readonly struct RuleProgress
     {

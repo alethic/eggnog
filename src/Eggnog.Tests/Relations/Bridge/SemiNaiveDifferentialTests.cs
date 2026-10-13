@@ -11,9 +11,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Differential tests of the rule layer (map §6, M8): random programs of rules and facts run semi-naively, naively,
-    /// and through a naive evaluator over <see cref="ReferenceView"/> (match the closed snapshot, apply every write,
-    /// close again), which must agree after every iteration. Programs that mint ids, which the reference cannot follow,
+    /// Differential tests of the bridge's rules: random programs of rules and facts run semi-naively, naively, and
+    /// through a naive evaluator over <see cref="ReferenceView"/> (match the closed snapshot, apply every write, close
+    /// again), which must agree after every iteration. Programs that mint ids, which the reference cannot follow,
     /// compare semi-naive and naive runs by their counts.
     /// </summary>
     /// <remarks>
@@ -93,8 +93,8 @@ namespace Eggnog.Relations.Tests
                 var where = $"iteration {iteration} of\n{trace}";
                 Assert.True(semiReport.Changed == naiveReport.Changed, $"changed {semiReport.Changed} semi-naively, {naiveReport.Changed} naively, {where}");
 
-                // The runs may mint different numbers of ids: each batch of matches has its own cache of minted keys
-                // (decision 5), and the batches differ; duplicates are unioned, so the number of classes agrees.
+                // The runs may mint different numbers of ids: each batch of matches has its own cache of minted keys,
+                // as in egglog, and the batches differ; duplicates are unioned, so the number of classes agrees.
                 var semiClasses = semi.EGraph.Database.ReadCounter(semi.EGraph.IdCounter) - semi.EGraph.UnionCount;
                 var naiveClasses = naive.EGraph.Database.ReadCounter(naive.EGraph.IdCounter) - naive.EGraph.UnionCount;
                 Assert.True(semiClasses == naiveClasses, $"{semiClasses} classes semi-naively, {naiveClasses} naively, {where}");

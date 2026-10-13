@@ -9,18 +9,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Adversarial review tests for the layered union-find (colored-contexts spec §5, §8.3, §12.2, §17 M9.2): structural
-    /// calls from inside a visitor of a frozen context, the I9 precondition at the root, and random programs run
+    /// Soundness tests for the layered union-find: structural calls from inside a visitor of a frozen context, the
+    /// precondition that the root's displaced ids only grow while it has live descendants, and random programs run
     /// concurrently under a frozen chain against the naive model.
     /// </summary>
     public class LayeredUnionFindSoundnessTests
     {
 
         /// <summary>
-        /// §8.3: "CreateChild, Freeze and Dispose throw InvalidOperationException when the calling thread already holds
-        /// the context's domain ... from inside ... a ScanMerges visitor". A frozen context's ScanMerges takes no domain,
-        /// so disposing the context from inside its own visitor must still be refused; otherwise the scan runs on over a
-        /// released overlay and returns a partial result without any error.
+        /// CreateChild, Freeze and Dispose throw <see cref="InvalidOperationException"/> from inside a ScanMerges
+        /// visitor of the context. A frozen context's ScanMerges takes no domain, so disposing the context from inside
+        /// its own visitor must still be refused; otherwise the scan runs on over a released overlay and returns a
+        /// partial result without any error.
         /// </summary>
         [Fact]
         public void DisposingAFrozenContextFromInsideItsOwnScanMergesIsRefused()
@@ -53,7 +53,7 @@ namespace Eggnog.Relations.Tests
 
             var scanError = Record.Exception(() => child.ScanMerges(ref visitor));
 
-            // Either the re-entrant Dispose is refused (§8.3), or the scan reports that the context went away under it.
+            // Either the re-entrant Dispose is refused, or the scan reports that the context went away under it.
             // Silently returning a partial scan of a context that is now disposed is neither.
             Assert.True(
                 disposeError is InvalidOperationException || scanError is not null,
@@ -61,9 +61,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// I9 (§12.2): the parent's displaced count only grows, because "$uf cannot be cleared while descendants live".
-        /// Clearing the root's union-find under a live child must be refused; otherwise the child's cursor points past the
-        /// parent's rows and its catch-up silently skips every later displacement.
+        /// A parent's displaced count only grows while it has live descendants, because a child's cursor indexes the
+        /// parent's displaced ids. Clearing the root's union-find under a live child must be refused; otherwise the
+        /// child's cursor points past the parent's rows and its catch-up silently skips every later displacement.
         /// </summary>
         [Fact]
         public void ClearingTheRootUnionFindUnderALiveChildIsRefused()
@@ -90,11 +90,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// I3 (§12.1): a context's epochs never decrease, because its operations run one at a time in its domain. A write
-        /// batch whose action rebuilds the same context (catching up with a parent that changed) runs a nested epoch and
-        /// journals imports at a later timestamp than the batch's own; the batch's union, stamped with the batch's earlier
-        /// epoch, then trips the journal's order check and faults the child (X12). Either the nested operation must be
-        /// refused, leaving the child usable, or the batch must succeed.
+        /// A context's epochs never decrease, because its operations run one at a time in its domain. A write batch
+        /// whose action rebuilds the same context (catching up with a parent that changed) would run a nested epoch and
+        /// journal imports at a later timestamp than the batch's own; the batch's union, stamped with the batch's
+        /// earlier epoch, would then trip the journal's order check and fault the child. Either the nested operation
+        /// must be refused, leaving the child usable, or the batch must succeed.
         /// </summary>
         [Fact]
         public void ANestedRebuildInsideAWriteDoesNotFaultTheChild()
@@ -128,8 +128,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Children of a frozen chain run random union programs concurrently, each with a grandchild sharing its domain and
-        /// a freeze half-way, and every find is checked against the naive model of the chain (I7, I11, I24).
+        /// Children of a frozen chain run random union programs concurrently, each with a grandchild sharing its domain
+        /// and a freeze half-way, and every find is checked against the naive model of the chain.
         /// </summary>
         [Fact]
         public void ConcurrentProgramsUnderAFrozenChainAgreeWithTheModel()
@@ -196,8 +196,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A frozen context is readable from any thread without its domain (§8.3), and the checker requires only that it
-        /// be clean (§12.7), which a frozen context always is. Checking it while its children are created and disposed
+        /// A frozen context is readable from any thread without its domain, and the checker requires only that it be
+        /// clean, which a frozen context always is. Checking it while its children are created and disposed
         /// on other threads (as concurrent-children harnesses do) must not report violations that do not exist.
         /// </summary>
         [Fact]
@@ -235,6 +235,10 @@ namespace Eggnog.Relations.Tests
             Assert.True(error is null, error?.Message);
         }
 
+        /// <summary>
+        /// Runs a random union program in a new child of <paramref name="parent"/> and, from some step on, in a
+        /// grandchild, freezing the child at a random step; every check compares each find with the model.
+        /// </summary>
         static void RunChild(Context parent, ReferenceUnionFindContext parentModel, int seed)
         {
             var random = new Random(seed);

@@ -10,21 +10,14 @@ namespace Eggnog.Tests.Surface
 {
 
     /// <summary>
-    /// The package shows one API (D29, D44): no public or protected member of <c>Eggnog</c> mentions an engine or spike
-    /// type, the engine is part of <c>Eggnog</c> and exports nothing, and <c>Eggnog</c> references no other Eggnog
-    /// assembly, the spike included. And the public surface is exactly the one the milestones so far list (§3):
-    /// <c>Surface/PublicSurface.txt</c>.
+    /// The package shows one API: no public or protected member of <c>Eggnog</c> mentions an engine type, the engine is
+    /// part of <c>Eggnog</c> and exports nothing, and <c>Eggnog</c> references no other Eggnog assembly. And the public
+    /// surface is exactly the one <c>Surface/PublicSurface.txt</c> lists.
     /// </summary>
     public sealed class PublicSurfaceTests
     {
 
         static readonly Assembly Library = typeof(EGraph).Assembly;
-
-        /// <summary>
-        /// The spike's assembly name. This test project references the spike for the engine's context differentials
-        /// (<c>Relations/Contexts</c>); the library must not.
-        /// </summary>
-        const string Spike = "Eggnog.Storage";
 
         /// <summary>
         /// The engine's namespace. The engine is compiled into the library's assembly (<c>src/Eggnog/Relations</c>), so
@@ -33,7 +26,7 @@ namespace Eggnog.Tests.Surface
         const string EngineNamespace = "Eggnog.Relations";
 
         [Fact]
-        public void NoPublicMemberMentionsAnEngineOrSpikeType()
+        public void NoPublicMemberMentionsAnEngineType()
         {
             var leaks = new List<string>();
             foreach (var type in Library.GetExportedTypes())
@@ -60,13 +53,12 @@ namespace Eggnog.Tests.Surface
         }
 
         /// <summary>
-        /// The public surface is exactly the milestones' so far (§3, §9): every public type and member the spec tags R1a,
-        /// R1b, R2 or R3, and nothing else; each milestone only added to the listing (D28). After a reviewed change of the
-        /// surface, set <c>EGGNOG_SURFACE</c> to a file path to write the listing there, and replace
-        /// <c>Surface/PublicSurface.txt</c> with it.
+        /// The public surface is exactly the listing in <c>Surface/PublicSurface.txt</c>: every public type and member,
+        /// and nothing else. After a deliberate change of the surface, set <c>EGGNOG_SURFACE</c> to a file path to
+        /// write the listing there, and replace <c>Surface/PublicSurface.txt</c> with it.
         /// </summary>
         [Fact]
-        public void TheSurfaceIsExactlyR1aAndR1b()
+        public void TheSurfaceIsExactlyTheListedOne()
         {
             var actual = SurfaceListing.Of(Library);
             if (Environment.GetEnvironmentVariable("EGGNOG_SURFACE") is { Length: > 0 } path)
@@ -80,13 +72,13 @@ namespace Eggnog.Tests.Surface
             var missing = expected.Except(actual).ToArray();
             var extra = actual.Except(expected).ToArray();
             Assert.True(missing.Length == 0 && extra.Length == 0,
-                "Missing from the library:\n  " + string.Join("\n  ", missing) + "\nNot in the R1a and R1b surface:\n  " + string.Join("\n  ", extra));
+                "Missing from the library:\n  " + string.Join("\n  ", missing) + "\nNot in the listed surface:\n  " + string.Join("\n  ", extra));
             Assert.Equal(expected, actual);
         }
 
         /// <summary>
-        /// The package holds one assembly (engine decision 13): the engine is compiled into the library, exports nothing,
-        /// and the library references no other Eggnog assembly, so no other packaged assembly can show types of its own.
+        /// The package holds one assembly: the engine is compiled into the library, exports nothing, and the library
+        /// references no other Eggnog assembly, so no other packaged assembly can show types of its own.
         /// </summary>
         [Fact]
         public void TheLibraryContainsTheEngineAndReferencesNoOtherEggnogAssembly()
@@ -95,12 +87,11 @@ namespace Eggnog.Tests.Surface
             Assert.Empty(Library.GetExportedTypes().Where(IsEngine).Select(t => t.FullName));
 
             var references = Library.GetReferencedAssemblies().Select(r => r.Name ?? "").ToArray();
-            Assert.DoesNotContain(Spike, references);
             Assert.DoesNotContain(references, n => n.StartsWith("Eggnog", StringComparison.Ordinal));
         }
 
         /// <summary>
-        /// Gets whether a type, or any type it is built from, belongs to the engine or the spike.
+        /// Gets whether a type, or any type it is built from, belongs to the engine.
         /// </summary>
         static bool Mentions(Type type)
         {
@@ -110,7 +101,7 @@ namespace Eggnog.Tests.Surface
             if (type.IsGenericParameter)
                 return false;
 
-            if (IsEngine(type) || type.Assembly.GetName().Name == Spike)
+            if (IsEngine(type))
                 return true;
 
             return type.IsGenericType && type.GetGenericArguments().Any(Mentions);

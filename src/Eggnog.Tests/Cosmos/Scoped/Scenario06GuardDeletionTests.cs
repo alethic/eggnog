@@ -6,9 +6,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/06-guard-deletion.egg with scopes as contexts: guard deletion and tautologies as rewrites
-    /// plus extraction. Deletions read facts only from the schema (the rewrite ruleset is erasing under the schema tag,
-    /// D12), so a conjunct's own consequence in the query never deletes it.
+    /// prototypes/cosmos-facts/06-guard-deletion.egg with scopes as contexts: guard deletion and tautologies as
+    /// rewrites plus extraction. Deletions read facts only from the schema (the rewrite ruleset is erasing under the
+    /// schema tag), so a conjunct's own consequence in the query never deletes it.
     /// </summary>
     public sealed class Scenario06GuardDeletionTests
     {
@@ -101,7 +101,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             var (query, q) = Ask(c, schema, c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")));
             using (query)
             {
-                // The conjunct's own consequence holds in the query, but the deletion judges on the schema (D12).
+                // The conjunct's own consequence holds in the query, but the deletion judges on the schema.
                 Assert.True(query.Check(c.Present.Of("kind")));
                 Assert.False(schema.Check(c.Present.Of("kind")));
                 Assert.False(query.Check(c.Present.In(c.Schema).Of("kind")));

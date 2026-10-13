@@ -43,10 +43,10 @@ namespace Eggnog.Relations
         /// <c>added || es.changed</c>; removals alone do not count).
         /// </para>
         /// <para>
-        /// Defect fixed (core-relations/src/free_join/mod.rs:514-517, 593-605; map §8.1 row 11): egglog merges rounds of
-        /// fewer than four tables with <c>merge_simple</c>, in notification order and ignoring strata, so a merge
-        /// function could read a read dependency whose staged writes (a rebuild's rewrite) were not merged yet. Here
-        /// every round respects strata; a small round only skips the parallel machinery.
+        /// egglog merges rounds of fewer than four tables with <c>merge_simple</c>, in notification order and ignoring
+        /// strata (core-relations/src/free_join/mod.rs:514-517, 593-605), so there a merge function can read a read
+        /// dependency whose staged writes (a rebuild's rewrite) are not merged yet. Here every round respects strata; a
+        /// small round only skips the parallel machinery.
         /// </para>
         /// <para>
         /// egglog pre-allocates buffers for each merging table's declared write dependencies, because it removes the
@@ -56,9 +56,9 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// Every merge state carries <paramref name="timestamp"/> as its <see cref="ExecutionState.Timestamp"/>: the
-        /// epoch captured for the run or rebuild pass whose writes are being merged (map §4.2 C1: every write of a run
-        /// or pass, merge functions' included, is stamped with the captured epoch). Rows a merge function writes without
-        /// an incoming row to copy a timestamp from (a <see cref="UnionIdMerge"/> without a timestamp column, a bridge
+        /// epoch captured for the run or rebuild pass whose writes are being merged (every write of a run or pass,
+        /// merge functions' included, is stamped with the captured epoch). Rows a merge function writes without an
+        /// incoming row to copy a timestamp from (a <see cref="UnionIdMerge"/> without a timestamp column, a bridge
         /// <c>Function</c> merge minting a term) carry it; egglog's merge functions read the bridge's timestamp counter
         /// instead, which holds the same value. If a merge throws, the exception propagates (unwrapped, also from the
         /// parallel arm) after every table is back in the table map, the interrupted round's tables are notified again,
@@ -74,7 +74,8 @@ namespace Eggnog.Relations
         /// outside any run, loading data).</param>
         /// <returns><c>true</c> if any merge added rows or staged writes.</returns>
         /// <exception cref="InvalidOperationException">The database is frozen, or it is a faulted child context's: an
-        /// operation of the child failed, and nothing it staged may merge (X12, the failed-run decision of §21.9).</exception>
+        /// operation of the child failed, and nothing it staged may merge; a faulted child can only be
+        /// disposed.</exception>
         public bool MergeAll(uint? timestamp = null)
         {
             ThrowIfFrozen();
@@ -85,12 +86,11 @@ namespace Eggnog.Relations
         /// <see cref="MergeAll"/> with the timestamp resolved.
         /// </summary>
         /// <remarks>
-        /// In a child context's database (colored-contexts spec X2, X40, §6.9): strata always merge serially (a layer's
-        /// merge creates layers and hides rows on the domain thread); every round starts by adopting the layers created
-        /// during a search (<see cref="TakeRound"/>); the loop stops before a round once a contradiction stopped the
-        /// context, leaving the remaining writes pending; and the epilogue seals every hidden set the merge touched and
-        /// drops the views whose structure changed (<see cref="ContextTables.AfterMerge"/>). At the root each costs one
-        /// null test.
+        /// In a child context's database: strata always merge serially (a layer's merge creates layers and hides rows
+        /// on the domain thread); every round starts by adopting the layers created during a search
+        /// (<see cref="TakeRound"/>); the loop stops before a round once a contradiction stopped the context, leaving
+        /// the remaining writes pending; and the epilogue seals every hidden set the merge touched and drops the views
+        /// whose structure changed (<see cref="ContextTables.AfterMerge"/>). At the root each costs one null test.
         /// </remarks>
         bool MergeAllCore(uint timestamp)
         {
@@ -98,8 +98,8 @@ namespace Eggnog.Relations
             bool parallel;
             if (layers is { } l)
             {
-                // The failed-run decision (§21.9, M10.3): a faulted child never merges again, so nothing a failed
-                // operation staged can land. Tested inside the root's existing null test: zero root cost.
+                // A faulted child never merges again, so nothing a failed operation staged can land. Tested inside the
+                // root's existing null test: zero root cost.
                 l.Owner.ThrowIfFaulted();
                 parallel = false;
             }
@@ -164,7 +164,7 @@ namespace Eggnog.Relations
             var resolved = ResolveTimestamp(timestamp);
             if (layers is { } l)
             {
-                // A faulted child never merges again (the failed-run decision, §21.9, M10.3).
+                // A faulted child never merges again, so nothing a failed operation staged can land.
                 l.Owner.ThrowIfFaulted();
                 l.AdoptDeferred();
             }
@@ -197,7 +197,7 @@ namespace Eggnog.Relations
         /// <returns>The number of tables.</returns>
         int TakeRound()
         {
-            // Layers created during a search enter the table map before the round takes its tables (X37).
+            // Layers created during a search enter the table map before the round takes its tables.
             layers?.AdoptDeferred();
             notified.Clear();
             var count = catalog.Notifications.Reset(notified);
@@ -307,7 +307,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Merges one table in a fresh execution state carrying <paramref name="timestamp"/> and flushes the state: the
         /// body of egglog's merge closures (mod.rs:554-555, 563-564, 598-599). Thread-safe across distinct tables.
-        /// A merge that added or removed rows moves <see cref="ChangeStamp"/> (X30): one test per table merge.
+        /// A merge that added or removed rows moves <see cref="ChangeStamp"/>: one test per table merge.
         /// </summary>
         /// <returns>Whether the merge added rows or its merge function staged writes.</returns>
         bool MergeOne(TableInfo info, uint timestamp)

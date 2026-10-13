@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
     /// A reference model of egglog's encoding of one base value type, written from the Rust source
     /// (core-relations/src/base_values/mod.rs:158-188, unboxed.rs) rather than from the port: a value is stored inline
     /// when <c>inline</c> says so, and otherwise gets the next intern index the first time it is seen, tagged with
-    /// <c>0x8000_0000</c> when the type boxes some values inline. Calls must be made in the same order as on the registry
-    /// under test, so that intern indices line up.
+    /// <c>0x8000_0000</c> when the type boxes some values inline. Calls must be made in the same order as on the
+    /// registry under test, so that intern indices line up.
     /// </summary>
     /// <typeparam name="T">The base value type.</typeparam>
     public sealed class BaseValueModel<T>
@@ -63,8 +63,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Gets the value that unwrapping the representation of <paramref name="value"/> yields: the value itself when it
-        /// is inline, otherwise the first equal value interned.
+        /// Gets the value that unwrapping the representation of <paramref name="value"/> yields: the value itself when
+        /// it is inline, otherwise the first equal value interned.
         /// </summary>
         /// <param name="value">A value already passed to <see cref="Box"/>.</param>
         /// <returns>The representative.</returns>

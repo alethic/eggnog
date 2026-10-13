@@ -6,7 +6,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Evaluates the fast constraints of a header against a table as a context sees it: one subset per layer of the
-    /// table's view (colored-contexts spec §9.4). The layered form of <see cref="IHeaderEvaluator"/>, which
+    /// table's view. The layered form of <see cref="IHeaderEvaluator"/>, which
     /// <see cref="PlanTemplate.InstantiateLayered{TEvaluator}"/> instantiates through. A context's
     /// <see cref="ContextView"/> implements it; <see cref="SingleLayerEvaluator{TEvaluator}"/> wraps a single-table
     /// evaluator as layer 0.

@@ -17,7 +17,7 @@ namespace Eggnog.Relations
     /// The shared array pool keeps a fixed number of arrays per size (a few dozen per core), so a join that holds
     /// hundreds of small refined subsets at once (a morsel of frames, each owning the rows of its probes) exhausts it,
     /// and every rent past that allocates while every return past it is dropped. egglog's pool is bounded by bytes
-    /// instead: one MiB holds thousands of small vectors. This cache restores that bound for buffers of at most
+    /// instead: one MiB holds thousands of small vectors. This cache applies that bound to buffers of at most
     /// <see cref="MaxLength"/> row ids.
     /// </para>
     /// <para>

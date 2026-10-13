@@ -6,18 +6,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A random small program over a chain of contexts, for the context extraction differential (colored-contexts spec
-    /// §10.10): terms made and classes unioned at each level, rule saturations in between, children created under
-    /// frozen or writable parents, and writes to a writable parent after its child was created. The same program can be
-    /// run on a chain of contexts or replayed, in order, at a fresh root.
+    /// A random small program over a chain of contexts, for the context extraction differential: terms made and classes
+    /// unioned at each level, rule saturations in between, children created under frozen or writable parents, and
+    /// writes to a writable parent after its child was created. The same program can be run on a chain of contexts or
+    /// replayed, in order, at a fresh root.
     /// </summary>
     /// <remarks>
     /// The schema is one e-class sort <c>E</c> with constructors <c>L0</c>, <c>L1</c>, <c>Num(i64)</c>, <c>U(E)</c>,
     /// <c>W(E)</c> and <c>B(E, E)</c> of random costs from 0 to 3 (so cost ties are common), and two rules that
-    /// saturate: <c>B(x, y) = z =&gt; B(y, x) = z</c> and <c>U(x) = u, W(u) = w =&gt; union(w, x)</c>. Every program fact
-    /// is a term or a union, and every rule is monotone, so the deepest context's final saturated view is determined by
-    /// the facts of its chain, whatever order they came in: a fresh root replaying them reaches the same e-graph up to
-    /// the renaming of ids.
+    /// saturate: <c>B(x, y) = z =&gt; B(y, x) = z</c> and <c>U(x) = u, W(u) = w =&gt; union(w, x)</c>. Every program
+    /// fact is a term or a union, and every rule is monotone, so the deepest context's final saturated view is
+    /// determined by the facts of its chain, whatever order they came in: a fresh root replaying them reaches the same
+    /// e-graph up to the renaming of ids.
     /// </remarks>
     sealed class ContextExtractionProgram
     {

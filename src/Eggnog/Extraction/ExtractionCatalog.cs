@@ -7,7 +7,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The graph's extraction bookkeeping (§6.10): one engine extraction schema per distinct set of heads that cost models
+    /// The graph's extraction bookkeeping: one engine extraction schema per distinct set of heads that cost models
     /// mark unextractable (the empty set is the common case), every constructor declared in each; the map from engine
     /// functions to constructors; and the conversion of cost models, cached per model instance.
     /// </summary>
@@ -27,7 +27,8 @@ namespace Eggnog
 
         /// <summary>
         /// The scope whose extractor runs on this thread: a per-row cost function decodes its node's classes with that
-        /// scope's origin (§3.8 <c>NodeView</c>). Set around each extraction, which runs on its caller's thread.
+        /// scope's origin (through <see cref="NodeView"/>). Set around each extraction, which runs on its caller's
+        /// thread.
         /// </summary>
         [ThreadStatic]
         static Scope? currentScope;

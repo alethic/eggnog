@@ -6,7 +6,7 @@ namespace Eggnog
 
     /// <summary>
     /// Compares two tuples of a <see cref="TupleBuffer"/> by their numbers: lexicographically by cells, or, given the
-    /// column types, in content order (§6.1). Sorts a buffer's order without moving its cells.
+    /// column types, in content order. Sorts a buffer's order without moving its cells.
     /// </summary>
     /// <remarks>
     /// A struct, so a sort boxes it once per call rather than once per compare. In content order, distinct cells that a

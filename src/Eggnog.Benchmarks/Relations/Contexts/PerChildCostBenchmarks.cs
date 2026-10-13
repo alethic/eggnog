@@ -6,11 +6,11 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// What one child costs, as its root grows (colored-contexts spec §17 M9.4 and M10.4, L6 and B4): a child is created,
-    /// makes 100 unions, rebuilds and is disposed, over roots of 20,000, 200,000 and 2,000,000 rows, frozen or not; the
-    /// full workload (M10.4) also runs one rule in the child. Time and allocated bytes per invocation must stay flat
-    /// within 1.5× across the three sizes (the M9.4 done-when); the child's copy, examination and match counters are
-    /// identical across them, which the setups check.
+    /// What one child costs, as its root grows: a child is created, makes 100 unions, rebuilds and is disposed, over
+    /// roots of 20,000, 200,000 and 2,000,000 rows, frozen or not; the full workload also runs one rule in the child. A
+    /// child's work is proportional to what it touches, never to the root's size, so time and allocated bytes per
+    /// invocation must stay flat within 1.5× across the three sizes, and a per-child step that scans the root shows up
+    /// as growth; the child's copy, examination and match counters are identical across them, which the setups check.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -18,14 +18,15 @@ namespace Eggnog.Relations.Benchmarks
     /// child unions the first 200 ids in pairs, so 100 of them become its own losers; its rebuild finds the 300 root rows
     /// naming them through the root's rebuild indexes (never a scan), copies them canonically, hides the originals and
     /// merges. A frozen root built its indexes at its freeze; a root that is not frozen brings them up to date when it
-    /// creates a child (root work, which the setup's first child absorbs; later children find them current).
+    /// creates a child (root work, which the setup's first child absorbs; the children after it find them current).
     /// </para>
     /// <para>
-    /// The full workload (<see cref="ChildUnionsRebuildAndRuleRun"/>) runs on the bridge: a <see cref="CaseGraph"/> root
-    /// of <see cref="RootRows"/> ids whose rule <c>edge(x, y) ⇒ path(x, y)</c> ran once at the root. The child stages the
-    /// same 100 unions, flushes (its rebuild copies the root rows naming its losers) and runs the rule once. The rule's
-    /// watermark is inherited from the root (§10.2), so its semi-naive variants match only the child's 200 rewritten
-    /// <c>edge</c> rows, whatever the root's size; the setup checks the match count.
+    /// The full workload (<see cref="ChildUnionsRebuildAndRuleRun"/>) runs on the bridge: a <see cref="CaseGraph"/>
+    /// root of <see cref="RootRows"/> ids whose rule <c>edge(x, y) ⇒ path(x, y)</c> ran once at the root. The child
+    /// stages the same 100 unions, flushes (its rebuild copies the root rows naming its losers) and runs the rule once.
+    /// The rule is semi-naive and its actions depend on its matches alone, so the child inherits the rule's watermark
+    /// from the root, and its semi-naive variants match only the child's 200 rewritten <c>edge</c> rows, whatever the
+    /// root's size; the setup checks the match count.
     /// </para>
     /// <para>
     /// Each invocation creates and disposes its own child, so BenchmarkDotNet chooses the invocation count; the memory
@@ -95,7 +96,7 @@ namespace Eggnog.Relations.Benchmarks
         public long ChildUnionsAndRebuild() => Run(workload!).Copied;
 
         /// <summary>
-        /// The full workload (M10.4): a bridge child, 100 unions, a flush (which rebuilds), one rule run, disposal.
+        /// The full workload: a bridge child, 100 unions, a flush (which rebuilds), one rule run, disposal.
         /// </summary>
         /// <returns>The rule's matches.</returns>
         [Benchmark]

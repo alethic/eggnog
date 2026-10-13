@@ -4,8 +4,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// One cached index a frozen context should build before it is shared (colored-contexts spec §8.1, §9.10): a table
-    /// and the ordered columns of the index, a column index for one column and a tuple index for more.
+    /// One cached index a context builds while it freezes, before it is shared (an entry of a
+    /// <see cref="FreezeWarmup"/>, collected from plans by <see cref="PlanIndexKeys.Collect"/>): a table and the ordered
+    /// columns of the index, a column index for one column and a tuple index for more.
     /// </summary>
     /// <param name="Table">The table.</param>
     /// <param name="Columns">The key columns, in key order; at least one.</param>

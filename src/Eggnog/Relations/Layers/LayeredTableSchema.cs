@@ -5,15 +5,15 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What every context of a store knows about one function table, independent of any context's rows
-    /// (colored-contexts spec §6.1): its id and name, the root's table and <see cref="TableInfo"/>, whether it is
-    /// context-private or the store's contradiction table, its stratum, and the shape every layer of it shares.
+    /// What every context of a store knows about one function table, independent of any context's rows: its id and
+    /// name, the root's table and <see cref="TableInfo"/>, whether it is context-private or the store's contradiction
+    /// table, its stratum, and the shape every layer of it shares.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Built once by <see cref="LayeredSchema.Register"/> and immutable afterwards, apart from
-    /// <see cref="IsContradiction"/>, which <see cref="Store.DesignateContradiction"/> sets once. Child databases answer
-    /// schema questions from it (X39) instead of from their own table maps, which hold only their own layers.
+    /// <see cref="IsContradiction"/>, which <see cref="Store.DesignateContradiction"/> sets once. Child databases
+    /// answer schema questions from it instead of from their own table maps, which hold only their own layers.
     /// </para>
     /// <para>
     /// <see cref="RootInfo"/> is the root database's entry held by reference, so it stays valid while the root takes
@@ -30,7 +30,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="id">The table's id.</param>
         /// <param name="rootInfo">The root database's entry for it, whose table is a <see cref="SortedWritesTable"/>.</param>
-        /// <param name="contextPrivate">Whether descendants never read the table (§6.1, decision 1).</param>
+        /// <param name="contextPrivate">Whether descendants never read the table.</param>
         /// <param name="stratum">The table's merge stratum.</param>
         internal LayeredTableSchema(TableId id, TableInfo rootInfo, bool contextPrivate, int stratum)
         {
@@ -64,12 +64,12 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the table is context-private: not layered, never read by descendants, exempt from the
-        /// retraction and compaction gates (decision 1, §6.7, §6.8).
+        /// retraction and compaction gates.
         /// </summary>
         public bool IsContextPrivate { get; }
 
         /// <summary>
-        /// Gets whether the table is the store's designated contradiction table, a nullary relation (§6.9).
+        /// Gets whether the table is the store's designated contradiction table, a nullary relation.
         /// </summary>
         public bool IsContradiction => isContradiction;
 
@@ -104,15 +104,17 @@ namespace Eggnog.Relations
         public TableSpec Spec => RootInfo.Spec;
 
         /// <summary>
-        /// Gets whether the table's merge is a lattice merge, so children may write it (decision 2).
+        /// Gets whether the table's merge is a lattice merge, so children may write it; only the root writes a table
+        /// whose merge is not.
         /// </summary>
         public bool IsLattice => Root.MergeFunction.IsLattice;
 
         /// <summary>
-        /// Gets whether the table is a constructor, for the action read analysis of §10.2: its merge resolves a conflict
-        /// only by a union of ids, so a row's value changes only through unions, which descendants see through their find.
-        /// A core <see cref="UnionIdMerge"/>, or a bridge function's <see cref="FunctionTableMerge"/> whose output merge
-        /// is <see cref="MergeFnKind.UnionId"/> (egglog's constructors; the bridge wraps every function's merge, so the
+        /// Gets whether the table is a constructor, for the action read analysis that decides which rules may inherit a
+        /// watermark (<see cref="ActionReadAnalysis"/>): its merge resolves a conflict only by a union of ids, so a
+        /// row's value changes only through unions, which descendants see through their find. A core
+        /// <see cref="UnionIdMerge"/>, or a bridge function's <see cref="FunctionTableMerge"/> whose output merge is
+        /// <see cref="MergeFnKind.UnionId"/> (egglog's constructors; the bridge wraps every function's merge, so the
         /// core type alone would make no bridge table a constructor).
         /// </summary>
         public bool IsConstructor => ConstructorValueColumn >= 0;

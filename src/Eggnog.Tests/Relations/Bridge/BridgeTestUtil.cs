@@ -12,7 +12,7 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// Creates a serial e-graph, so that runs are deterministic (decision 4).
+        /// Creates a serial e-graph, so that runs are deterministic: a parallel run may number ids differently.
         /// </summary>
         public static EGraph NewEGraph() => new(ParallelHeuristics.Serial);
 

@@ -5,10 +5,9 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// The console app's footprint mode, <c>--context-footprint</c> (colored-contexts spec §14.2, §17 M10.4, L6, L7, G3):
-    /// prints the bytes the structures of colored contexts allocate and the counters of the case-split workloads,
-    /// measured in this process. Allocation counts and counters do not depend on the machine's load, so these figures need
-    /// no idle machine; times are not measured.
+    /// The console app's footprint mode, <c>--context-footprint</c>: prints the bytes the structures of colored
+    /// contexts allocate and the counters of the case-split workloads, measured in this process. Allocation counts and
+    /// counters do not depend on the machine's load, so these figures need no idle machine; times are not measured.
     /// </summary>
     /// <remarks>
     /// Bytes are <see cref="GC.GetAllocatedBytesForCurrentThread"/> differences after a warm-up, averaged over many
@@ -94,12 +93,12 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// L6, B5: bytes per case of a split, with contexts and with clones.
+        /// Bytes per case of a split, with contexts and with clones (<see cref="CaseSplitMemoryBenchmarks"/>).
         /// </summary>
         static void CaseSplits()
         {
             Console.WriteLine();
-            Console.WriteLine("## Case splits (L6): bytes per case");
+            Console.WriteLine("## Case splits: bytes per case");
             foreach (var rows in new[] { 20_000, 200_000 })
             {
                 var contexts = new CaseGraph(rows);
@@ -119,14 +118,14 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// L6, B5: the bytes of one case, structure by structure. Each line adds one step to the case's work, under a fresh
+        /// The bytes of one case, structure by structure. Each line adds one step to the case's work, under a fresh
         /// writable scope over a frozen root of 20,000 rows, and prints what the step adds (the scope's own cost is
         /// subtracted): the case itself, a union and its rebuild, an asserted fact, a rule run, and a lift.
         /// </summary>
         static void CaseParts()
         {
             Console.WriteLine();
-            Console.WriteLine("## One case, structure by structure (L6, B5): bytes each step adds");
+            Console.WriteLine("## One case, structure by structure: bytes each step adds");
             var graph = new CaseGraph(20_000, runCopy: true);
             graph.Root.Freeze();
             var scope = Measure(() => graph.Root.CreateChild().Dispose());
@@ -187,24 +186,24 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// L7, G2: the late-parent-mint counters.
+        /// The late-parent-mint counters (<see cref="LateParentMintBenchmarks"/>).
         /// </summary>
         static void LateParentMints()
         {
             Console.WriteLine();
-            Console.WriteLine("## Late parent mints (L7)");
+            Console.WriteLine("## Late parent mints");
             foreach (var cases in new[] { 2, 8 })
                 foreach (var terms in new[] { 16, 256 })
                     Console.WriteLine(LateParentMintBenchmarks.Run(LateParentMintBenchmarks.RootRows, cases, terms));
         }
 
         /// <summary>
-        /// G3: histograms of rows copied per union.
+        /// Histograms of rows copied per union (<see cref="CopyVolumeBenchmarks"/>).
         /// </summary>
         static void CopyVolumes()
         {
             Console.WriteLine();
-            Console.WriteLine("## Copy volume per union (G3)");
+            Console.WriteLine("## Copy volume per union");
             foreach (var rows in new[] { 20_000, 200_000 })
             {
                 var root = CopyVolumeBenchmarks.Build(rows);

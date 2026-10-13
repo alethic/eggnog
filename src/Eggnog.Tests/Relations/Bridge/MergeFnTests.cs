@@ -455,7 +455,8 @@ namespace Eggnog.Relations.Tests
                 Name = "f",
             });
 
-            // Resolution order: the function node's panic, then its argument; the assert-eq panic; the primitive's panic.
+            // Resolution order: the function node's panic, then its argument; the assert-eq panic; the primitive's
+            // panic.
             var lookup = egraph.NewPanic("Lookup on g failed in the merge function for f");
             var assertEq = egraph.NewPanic("Illegal merge attempted for function f");
             var primitive = egraph.NewPanic("Merge function for f primitive call failed");

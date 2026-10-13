@@ -6,8 +6,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// How a schedule picks local rules (§6.5.2, §6.7): a local rule joins an iteration only when its own ruleset is among
-    /// the iteration's rulesets and the iteration runs in its owner or a descendant of it.
+    /// How a schedule picks local rules: a local rule joins an iteration only when its own ruleset is among the
+    /// iteration's rulesets and the iteration runs in its owner or a descendant of it.
     /// </summary>
     public sealed class LocalRuleScheduleTests
     {

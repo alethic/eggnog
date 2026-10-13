@@ -9,8 +9,9 @@ namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// Runs a split-oracle program in the literal encoding (§8.2): contexts as data at one root, with the prototype's split
-    /// rules (<see cref="PrototypeTheory.Split"/>) and its schedule <c>(saturate horn lattice split rewrite)</c>; the oracle.
+    /// Runs a split-oracle program in the literal encoding: contexts as data at one root, with the prototype's split
+    /// rules (<see cref="PrototypeTheory.Split"/>) and its schedule <c>(saturate horn lattice split rewrite)</c>; the
+    /// oracle.
     /// </summary>
     public static class SplitOracleLiteral
     {

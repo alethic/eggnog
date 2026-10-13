@@ -8,17 +8,26 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the union-find part of the context invariant checker (colored-contexts spec §12.7 item 1, L3): a clean
-    /// context passes, and each deliberate corruption of a context's union-find structures, made behind the engine's back
-    /// through reflection or internal members, is reported with the invariant it breaks.
+    /// Tests for the union-find part of the context invariant checker: a clean context passes, and each deliberate
+    /// corruption of a context's union-find structures, made behind the engine's back through reflection or internal
+    /// members, is reported with the invariant it breaks.
     /// </summary>
     public class UnionFindInvariantCheckerTests
     {
 
+        /// <summary>
+        /// Reads the private instance field <paramref name="name"/> of <paramref name="owner"/>.
+        /// </summary>
         static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(owner)!;
 
+        /// <summary>
+        /// Writes the private instance field <paramref name="name"/> of <paramref name="owner"/>.
+        /// </summary>
         static void SetField(object owner, string name, object? value) => owner.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(owner, value);
 
+        /// <summary>
+        /// Asserts that the checker throws for <paramref name="context"/> with a message naming <paramref name="tag"/>.
+        /// </summary>
         static void AssertViolation(Context context, string tag)
         {
             var error = Assert.Throws<InvalidOperationException>(() => context.CheckInvariants());
@@ -26,7 +35,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A root with ids 0..9 and the union 1 → 0; a clean child that merged {2, 3} and {4, 5, 6}.
+        /// A root with ids 0..9 and the unions 1 → 0 and, after the child exists, 7 → 0; a child, rebuilt clean, that
+        /// merged {2, 3} and {4, 5, 6}.
         /// </summary>
         static (Store Store, Context Root, Context Child, uint[] Ids) Setup()
         {
@@ -45,6 +55,9 @@ namespace Eggnog.Relations.Tests
             return (store, root, child, ids);
         }
 
+        /// <summary>
+        /// A clean chain of three contexts passes, writable and frozen.
+        /// </summary>
         [Fact]
         public void ACleanChainPasses()
         {
@@ -61,6 +74,9 @@ namespace Eggnog.Relations.Tests
             root.CheckInvariants();
         }
 
+        /// <summary>
+        /// The checker refuses a context that is not clean.
+        /// </summary>
         [Fact]
         public void TheCheckerNeedsACleanContext()
         {
@@ -69,6 +85,9 @@ namespace Eggnog.Relations.Tests
             Assert.Contains("clean", Assert.Throws<InvalidOperationException>(() => child.CheckInvariants()).Message);
         }
 
+        /// <summary>
+        /// A class whose canonical is not its least member is reported.
+        /// </summary>
         [Fact]
         public void ACanonicalThatIsNotTheMinimumIsReported()
         {
@@ -76,9 +95,12 @@ namespace Eggnog.Relations.Tests
             var overlay = child.Overlay!;
             Assert.True(overlay.TryGetClass(ids[4], out var slot));
             Field<uint[]>(overlay, "canonicals")[slot] = ids[6];
-            AssertViolation(child, "I5:");
+            AssertViolation(child, "overlay classes:");
         }
 
+        /// <summary>
+        /// A class member that is not canonical in the parent is reported.
+        /// </summary>
         [Fact]
         public void AMemberNotCanonicalInTheParentIsReported()
         {
@@ -93,9 +115,12 @@ namespace Eggnog.Relations.Tests
             var match = new IdEntryMatch(ids[3]);
             Assert.True(classOf.Remove(FxHasher.Hash(ids[3]), ref match, out _));
             classOf.InsertUnique(FxHasher.Hash(ids[1]), new IdEntry(ids[1], (uint)slot), default(IdEntryHasher));
-            AssertViolation(child, "I6:");
+            AssertViolation(child, "overlay members:");
         }
 
+        /// <summary>
+        /// Journal timestamps out of order are reported.
+        /// </summary>
         [Fact]
         public void JournalTimestampsOutOfOrderAreReported()
         {
@@ -104,13 +129,17 @@ namespace Eggnog.Relations.Tests
             Assert.True(journal.Count >= 2);
             var timestamps = Field<uint[]>(journal, "timestamps");
             timestamps[0] = timestamps[journal.Count - 1] + 10;
-            AssertViolation(child, "I8:");
+            AssertViolation(child, "journal:");
         }
 
+        /// <summary>
+        /// A journal that misses a displaced id is reported.
+        /// </summary>
         [Fact]
         public void AMissingJournalRowIsReported()
         {
-            // Drop the last journal row behind the context's back, keeping it clean: J and completeness break.
+            // Drop the last journal row behind the context's back, keeping it clean: the journal then misses a
+            // displaced id.
             var (_, _, child, _) = Setup();
             var journal = child.Journal!;
             var count = journal.Count;
@@ -120,18 +149,24 @@ namespace Eggnog.Relations.Tests
             SetField(journal, "count", count - 1);
             SetField(child, "journalMark", count - 1);
             Assert.True(child.IsClean);
-            AssertViolation(child, "I8:");
+            AssertViolation(child, "journal:");
         }
 
+        /// <summary>
+        /// A cursor into the parent's displaced ids past their count is reported.
+        /// </summary>
         [Fact]
         public void ACursorOutOfBoundsIsReported()
         {
             var (_, _, child, _) = Setup();
             SetField(child, "parentDisplacedAtCreation", child.Parent!.DisplacedCount + 1);
             Assert.True(child.IsClean);
-            AssertViolation(child, "I9:");
+            AssertViolation(child, "cursor bounds:");
         }
 
+        /// <summary>
+        /// An id local to a context that an ancestor's overlay holds is reported.
+        /// </summary>
         [Fact]
         public void ALocalIdInAnAncestorIsReported()
         {
@@ -141,18 +176,24 @@ namespace Eggnog.Relations.Tests
             var local = grandchild.NewId();
             Assert.True(child.Overlay!.Union(ids[8], local, out _, out _));
             Assert.True(grandchild.IsClean);
-            AssertViolation(grandchild, "I10:");
+            AssertViolation(grandchild, "local ids:");
         }
 
+        /// <summary>
+        /// Root union-find rows with timestamps out of order are reported.
+        /// </summary>
         [Fact]
         public void ARootRowOutOfOrderIsReported()
         {
             var (store, root, _, _) = Setup();
             var timestamps = Field<uint[]>(store.RootUnionFind.UnionFind, "timestamps");
             timestamps[0] = timestamps[1] + 10;
-            AssertViolation(root, "I4:");
+            AssertViolation(root, "root union-find:");
         }
 
+        /// <summary>
+        /// A frozen child whose flattened map is missing is reported.
+        /// </summary>
         [Fact]
         public void AFlattenedMapThatDisagreesWithTheChainIsReported()
         {
@@ -161,9 +202,13 @@ namespace Eggnog.Relations.Tests
             child.Freeze();
             child.CheckInvariants();
             SetField(child, "flattened", null);
-            AssertViolation(child, "I23:");
+            AssertViolation(child, "frozen prefix:");
         }
 
+        /// <summary>
+        /// A descendant gate whose count disagrees with the live descendants is reported, at a writable and at a frozen
+        /// root.
+        /// </summary>
         [Fact]
         public void AGateThatMiscountsIsReported()
         {

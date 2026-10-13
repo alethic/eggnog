@@ -43,8 +43,8 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(new[] { R(2, 20, 1) }, Rows(db.GetTable(f), before.Rows));
             }
 
-            // Deleting after the index was built leaves the row listed (a deletion changes no version); scanning through
-            // the table drops it.
+            // Deleting after the index was built leaves the row listed (a deletion changes no version); scanning
+            // through the table drops it.
             StageRemove(db, f, R(4));
             db.MergeAll();
             using var processed = db.ProcessConstraints(f, [Constraint.EqConst(C(1), 10)]);

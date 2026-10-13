@@ -63,8 +63,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Scales the estimate down to a subset of <paramref name="subsetSize"/> rows, assuming the distinct values are
         /// spread evenly: <c>(subsetSize, ColumnSize * subsetSize / TableSize)</c> with a saturating product, or (0, 0)
-        /// when either size is zero. egglog's <c>scale</c> (core-relations/src/free_join/mod.rs:931-943), which egglog
-        /// has not wired into its planner yet.
+        /// when either size is zero. egglog's <c>scale</c> (core-relations/src/free_join/mod.rs:931-943), which nothing
+        /// in egglog calls.
         /// </summary>
         /// <param name="subsetSize">The number of rows in the subset.</param>
         /// <returns>The scaled estimate.</returns>

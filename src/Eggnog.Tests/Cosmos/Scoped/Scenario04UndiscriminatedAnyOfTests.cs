@@ -4,10 +4,11 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/04-undiscriminated-anyof.egg with scopes as contexts (gap 3), without the split (R2): the
+    /// prototypes/cosmos-facts/04-undiscriminated-anyof.egg with scopes as contexts, without the split: the
     /// <c>anyOf</c>'s branches are rules local to the schema, guarded on the hidden discriminator <c>$anyOf/0</c>, and
     /// with horn and lattice rules alone they never meet: the schema's domain of status stays open, and a query for a
-    /// value outside both branches is not refuted. The split that unions the branch domains is R3's.
+    /// value outside both branches is not refuted. The schema's split unions the branch domains
+    /// (<see cref="AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains"/>).
     /// </summary>
     public sealed partial class Scenario04UndiscriminatedAnyOfTests
     {

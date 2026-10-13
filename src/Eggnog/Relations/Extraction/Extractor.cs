@@ -7,8 +7,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Finds the cheapest term of e-classes of an <see cref="EGraph"/>: the port of egglog's <c>Extractor</c>
-    /// (src/extract.rs:126-757), computing costs with Knuth's algorithm and breaking ties by content (rule-layer decision
-    /// D10) instead of egglog's Bellman-Ford fixpoint and scan-order ties.
+    /// (src/extract.rs:126-757), computing costs with Knuth's algorithm and breaking ties by content instead of
+    /// egglog's Bellman-Ford fixpoint and scan-order ties.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -26,8 +26,8 @@ namespace Eggnog.Relations
     /// extracted term is always finite (egglog needs a separate topological rank for this, src/extract.rs:397-500).
     /// </para>
     /// <para>
-    /// Ties are broken by content (D10): the queue orders nodes by cost, then function id (declaration order), then
-    /// their columns left to right, e-class and container columns by id and base value columns by content
+    /// Ties are broken by content: the queue orders nodes by cost, then function id (declaration order), then their
+    /// columns left to right, e-class and container columns by id and base value columns by content
     /// (<see cref="BaseSort{TCodec, T}"/>, culture-invariant). The order is total, so the result depends only on the
     /// e-graph's contents and ids, never on scan order, discovery order or the order of queries. With positive head
     /// costs and no saturation a class's choice is the least node, in this order, of those of the cheapest cost; with
@@ -37,27 +37,27 @@ namespace Eggnog.Relations
     /// Two ways to create one. <see cref="ComputeCostsFromRootSorts"/> is egglog's: it reads every row of every
     /// constructor reachable from the root sorts and costs every class at once.
     /// <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> reads only the classes reachable
-    /// from the values it is asked about (D10: Knuth's algorithm over the classes reachable from the root), finding each
-    /// class's nodes through the cached index on its constructors' output columns, and extends its graph as later
-    /// queries reach further; classes already costed stay final, because each discovery is closed
-    /// downward, and the finalizations of earlier queries that decide ties among newly discovered nodes are replayed in
-    /// order (Extractor.Replay.cs), so each query's run is a from-scratch run's over everything discovered. Both give
-    /// the same choice for every class they cost, whatever was asked before.
+    /// from the values it is asked about (Knuth's algorithm over the classes reachable from them), finding each class's
+    /// nodes through the cached index on its constructors' output columns, and extends its graph as later queries reach
+    /// further; classes already costed stay final, because each discovery is closed downward, and the finalizations of
+    /// earlier queries that decide ties among newly discovered nodes are replayed in order (Extractor.Replay.cs), so
+    /// each query's run is a from-scratch run's over everything discovered. Both give the same choice for every class
+    /// they cost, whatever was asked before.
     /// </para>
     /// <para>
-    /// Contexts (colored-contexts spec §10.10, rule-layer E5). <see cref="CreateOnDemand(ExtractionSchema, EGraphContext,
-    /// CostModel?, ExtractionOptions?)"/> extracts in an <see cref="EGraphContext"/>: classes are canonical in the
-    /// context, and a class's nodes are the rows the context sees, found through each layer's cached index on the output
-    /// column with the rows the context hides filtered out, never through the root's tables alone. The root forms read
-    /// the root as before, at no extra cost per node.
+    /// Contexts. <see cref="CreateOnDemand(ExtractionSchema, EGraphContext, CostModel?, ExtractionOptions?)"/> extracts
+    /// in an <see cref="EGraphContext"/>: classes are canonical in the context, and a class's nodes are the rows the
+    /// context sees, found through each layer's cached index on the output column with the rows the context hides
+    /// filtered out, never through the root's tables alone. The root forms read the root's tables alone, at no extra
+    /// cost per node.
     /// </para>
     /// <para>
     /// The extractor reads the e-graph as it was when created, which must be rebuilt (canonical), as it is after every
-    /// flush and run. Using it after what it reads changed throws: the rows of its functions' tables, or the union-find,
-    /// at any level of its context's chain that was not frozen when it was created (<see cref="ExtractionWatch"/>). The
-    /// clock is not consulted, so rule runs, queries and write batches that change none of that keep it current
-    /// (rule-layer D49). Not thread-safe: queries extend its caches. Extractors over a frozen context share nothing
-    /// mutable, so any number of them may run at once, each on its own thread.
+    /// flush and run. Using it after what it reads changed throws: the rows of its functions' tables, or the
+    /// union-find, at any level of its context's chain that was not frozen when it was created
+    /// (<see cref="ExtractionWatch"/>). The clock is not consulted, so rule runs, queries and write batches that change
+    /// none of that keep it current. Not thread-safe: queries extend its caches. Extractors over a frozen context share
+    /// nothing mutable, so any number of them may run at once, each on its own thread.
     /// </para>
     /// </remarks>
     internal sealed partial class Extractor
@@ -272,11 +272,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates an extractor that costs only the classes reachable from the values it is asked about (rule-layer
-        /// decision D10), discovering them as queries arrive: a class's nodes are found by probing the cached index on the
-        /// output column of each extractable function producing its sort, its children's classes are discovered in turn,
-        /// and Knuth's algorithm then runs over what was discovered. Later queries extend the graph; classes already costed
-        /// stay final. Any extractable function may be used, so any sort may be queried.
+        /// Creates an extractor that costs only the classes reachable from the values it is asked about, discovering
+        /// them as queries arrive: a class's nodes are found by probing the cached index on the output column of each
+        /// extractable function producing its sort, its children's classes are discovered in turn, and Knuth's
+        /// algorithm then runs over what was discovered. Later queries extend the graph; classes already costed stay
+        /// final. Any extractable function may be used, so any sort may be queried.
         /// </summary>
         /// <param name="schema">The e-graph's extraction schema.</param>
         /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
@@ -290,12 +290,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates an extractor over <paramref name="context"/> that costs only the classes reachable from the values it is
-        /// asked about, as <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> does at the root
-        /// (colored-contexts spec §10.10, rule-layer E5): classes are canonical in the context, and a class's nodes are the
-        /// rows the context sees whose output column holds it, found by probing, in each layer of the context's view of
-        /// each producing function, the layer's cached index on the output column, with the rows the context hides
-        /// skipped. At the root it reads what the root API's extractor reads and chooses the same terms.
+        /// Creates an extractor over <paramref name="context"/> that costs only the classes reachable from the values
+        /// it is asked about, as <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> does at
+        /// the root: classes are canonical in the context, and a class's nodes are the rows the context sees whose
+        /// output column holds it, found by probing, in each layer of the context's view of each producing function,
+        /// the layer's cached index on the output column, with the rows the context hides skipped. At the root it reads
+        /// what the root API's extractor reads and chooses the same terms.
         /// </summary>
         /// <remarks>
         /// <para>

@@ -22,13 +22,13 @@ namespace Eggnog.Relations
     /// ends with <see cref="EndRule"/>.
     /// </para>
     /// <para>
-    /// Layers (colored-contexts spec §9.1, §9.5). Every table is read through the rule set's pinned views
-    /// (<see cref="ViewSnapshot"/>): an atom's rows are a <see cref="LayeredSubset"/> over the layers of its view, and
-    /// each prober has one <see cref="ProberPiece"/> per layer of its atom's rows. Drivers enumerate their pieces one after
-    /// the other, one frame per (piece, key); probed sides of one piece take egglog's path, and probes of several pieces
-    /// join their hits across layers (<see cref="LayerHits"/>). Every path that yields rows checks what the view sees
-    /// (I26). At a root every view has one layer and every node, prober and frame one piece, so a root run takes egglog's
-    /// paths behind a handful of per-stage and per-probe tests.
+    /// Layers. Every table is read through the rule set's pinned views (<see cref="ViewSnapshot"/>): an atom's rows are
+    /// a <see cref="LayeredSubset"/> over the layers of its view, and each prober has one <see cref="ProberPiece"/> per
+    /// layer of its atom's rows. Drivers enumerate their pieces one after the other, one frame per (piece, key); probed
+    /// sides of one piece take egglog's path, and probes of several pieces join their hits across layers
+    /// (<see cref="LayerHits"/>). Every path that yields rows checks what the view sees. At a root every view has one
+    /// layer and every node, prober and frame one piece, so a root run takes egglog's paths behind a handful of
+    /// per-stage and per-probe tests.
     /// </para>
     /// <para>
     /// Moving a node out of the bindings (egglog's <c>unwrap_val</c>) is reading its slot and nulling it; moving it back
@@ -122,7 +122,7 @@ namespace Eggnog.Relations
         /// Initializes an idle join task.
         /// </summary>
         /// <param name="database">The database whose rules run: its view's depth sizes the layered row sets.</param>
-        /// <param name="views">The rule set's pinned views, which every table is read through (§9.1).</param>
+        /// <param name="views">The rule set's pinned views, which every table is read through.</param>
         /// <param name="signals">The stop signal shared by every state of the run.</param>
         /// <param name="parallel">Whether the run hands work to other tasks, so shared state must not be reused.</param>
         /// <param name="framePool">The run's recycled frame buffers, for a parallel run; <c>null</c> otherwise.</param>
@@ -175,8 +175,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Sets up the current rule: a root node over every row of each atom's view (every layer's physical rows), narrowed
         /// by every header subset of the rule's instance, then the existence checks of the atoms without variables.
-        /// egglog's opening of each plan in <c>run_rule_set</c> (core-relations/src/free_join/execute.rs:517-539), plus the
-        /// fix of map §8.1 row 2.
+        /// egglog's opening of each plan in <c>run_rule_set</c> (core-relations/src/free_join/execute.rs:517-539), plus
+        /// a check that egglog does not make: an atom without variables must have a visible row satisfying its
+        /// constraints (core-relations/src/free_join/plan.rs:1502-1505 checks only that its header is non-empty).
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns><c>false</c> if the rule cannot match: it has no instance, a header or root is empty, or an atom
@@ -233,10 +234,10 @@ namespace Eggnog.Relations
                     return false;
             }
 
-            // Fix (map §8.1 row 2, core-relations/src/free_join/plan.rs:1502-1505): no stage scans an atom without
-            // variables, and egglog only checks that its header subset is non-empty, which may hold only tombstones (or,
-            // in a child, rows the view hides) and ignores its slow constraints. Check that a visible row satisfying them
-            // exists, in some layer of the atom's rows.
+            // No stage scans an atom without variables, and egglog only checks that its header subset is non-empty
+            // (core-relations/src/free_join/plan.rs:1502-1505), which may hold only tombstones (or, in a child, rows
+            // the view hides) and ignores its slow constraints. Check that a visible row satisfying them exists, in
+            // some layer of the atom's rows.
             foreach (var check in plan.ExistenceChecks)
                 if (ExistsVisibleRow(check) == false)
                     return false;
@@ -319,7 +320,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Checks that some visible row of the atom's current node satisfies the check's slow constraints: each layer of
-        /// the node's rows is scanned with the layer's hidden rows (§9.5), so a root scans its one layer as before.
+        /// the node's rows is scanned with the layer's hidden rows, so a root scans its one layer, hiding nothing.
         /// </summary>
         bool ExistsVisibleRow(ExistenceCheck check)
         {

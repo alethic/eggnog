@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="UnionFindOverlay"/>'s class table (colored-contexts spec §5.2): the three shapes of a union,
-    /// canonical = minimum member, member lists in insertion order, the class map, slot reuse, the version, freezing,
-    /// and a random property test against <see cref="PartitionReference"/>.
+    /// Tests for <see cref="UnionFindOverlay"/>'s class table, the classes a child context merged: the three shapes of
+    /// a union, canonical = minimum member, member lists in insertion order, the class map, slot reuse, the version,
+    /// freezing, and a random property test against <see cref="PartitionReference"/>.
     /// </summary>
     public class UnionFindOverlayTests
     {

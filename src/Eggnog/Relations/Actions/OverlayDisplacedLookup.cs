@@ -4,9 +4,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Looks up, lane by lane, one column of a child context's union-find for an id (colored-contexts spec §5.5): the
-    /// <see cref="DisplacedLookup"/> of an <see cref="OverlayDisplacedTable"/>. Column 1 is answered for every id (its
-    /// canonical id in the child), so the bridge's union-find lookup never misses
+    /// Looks up, lane by lane, one column of a child context's union-find for an id: the <see cref="DisplacedLookup"/>
+    /// of an <see cref="OverlayDisplacedTable"/>. Column 1 is answered for every id (its canonical id in the child), so
+    /// the bridge's union-find lookup never misses
     /// (<see cref="OverlayDisplacedTable.TryGetColumn(uint, int, out uint)"/>).
     /// </summary>
     internal readonly struct OverlayDisplacedLookup : ILaneProducer

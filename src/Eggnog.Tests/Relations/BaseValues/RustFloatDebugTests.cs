@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Pins <see cref="RustFloatDebug"/> to Rust's <c>Debug</c> for <c>f64</c> and <c>f32</c>. Every expected string was
-    /// printed by rustc 1.99 (<c>format!("{:?}", x)</c>). The property tests check the output against .NET's shortest
-    /// round-trip format: the same number of digits, reading back as the same float, and differing only where the value
-    /// lies exactly halfway between two candidates, where Rust rounds up and .NET to even.
+    /// Pins <see cref="RustFloatDebug"/> to Rust's <c>Debug</c> for <c>f64</c> and <c>f32</c>. Every expected string
+    /// was printed by rustc 1.99 (<c>format!("{:?}", x)</c>). The property tests check the output against .NET's
+    /// shortest round-trip format: the same number of digits, reading back as the same float, and differing only where
+    /// the value lies exactly halfway between two candidates, where Rust rounds up and .NET to even.
     /// </summary>
     public class RustFloatDebugTests
     {

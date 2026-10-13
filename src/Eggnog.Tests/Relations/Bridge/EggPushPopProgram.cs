@@ -8,16 +8,16 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// An egglog program translated by hand into <see cref="EGraph"/> and <see cref="EGraphContext"/> calls, for
-    /// <see cref="EggPushPopTests"/> (colored-contexts spec §17 M10.3; map §6's M10 gate). There is no <c>.egg</c> reader
-    /// (rule-layer D14); this keeps the translations short and close to the source.
+    /// <see cref="EggPushPopTests"/>. Eggnog has no <c>.egg</c> reader (programs use the C# API only); this keeps the
+    /// translations short and close to the source.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Commands map as follows. <c>(push)</c> is <see cref="EGraphContext.CreateChild"/> on the current context and
     /// <c>(pop)</c> is <see cref="EGraphContext.Dispose"/>. A top-level term is <see cref="EGraphContext.AddTerm"/>, a
     /// top-level <c>union</c> is <see cref="EGraphContext.StageUnion"/> then <see cref="EGraphContext.FlushUpdates"/>,
-    /// <c>print-size</c> is <see cref="EGraphContext.TableSize"/>, and a <c>check</c> of terms looks each term up without
-    /// inserting it (<see cref="TryTerm"/>), as egglog's check queries them. <c>(run n :until facts)</c> is
+    /// <c>print-size</c> is <see cref="EGraphContext.TableSize"/>, and a <c>check</c> of terms looks each term up
+    /// without inserting it (<see cref="TryTerm"/>), as egglog's check queries them. <c>(run n :until facts)</c> is
     /// <see cref="Run"/>, which follows egglog's <c>run_schedule</c> (src/lib.rs:965-1046): up to n iterations, each
     /// preceded by the <c>until</c> check, stopping after an iteration whose rule application changed nothing.
     /// </para>
@@ -25,7 +25,7 @@ namespace Eggnog.Relations.Tests
     /// A global <c>(let $x (C))</c> of a nullary constructor stays a C# variable: egglog keeps it in a nullary function
     /// <c>$x</c>, which <c>print-size</c> does not list, and a rule that mentions <c>$x</c> matches <c>C()</c> instead,
     /// which binds the same class. Definitions made inside a push are made on the e-graph while the child lives (they
-    /// are never sealed, colored-contexts §4.3) and outlive the pop, unused; egglog drops them with the popped copy.
+    /// are never sealed) and outlive the pop, unused; egglog drops them with the popped copy.
     /// </para>
     /// </remarks>
     sealed class EggPushPopProgram
@@ -34,7 +34,7 @@ namespace Eggnog.Relations.Tests
         readonly List<EGraphContext> stack = new();
 
         /// <summary>
-        /// Initializes an empty serial e-graph (decision 4: golden tests run serially).
+        /// Initializes an empty serial e-graph: golden tests run serially, since serial runs are deterministic.
         /// </summary>
         public EggPushPopProgram()
         {
@@ -143,8 +143,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Looks a term up in the current context without inserting it: <c>null</c> when an argument is missing or no row
-        /// has the key. What a <c>check</c> of a term matches.
+        /// Looks a term up in the current context without inserting it: <c>null</c> when an argument is missing or no
+        /// row has the key. What a <c>check</c> of a term matches.
         /// </summary>
         public Value? TryTerm(FunctionId function, params Value?[] keys)
         {
@@ -167,8 +167,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// <c>(run limit :until facts)</c> on <paramref name="rules"/> (egglog's whole default ruleset) in the current
-        /// context: before each iteration the <paramref name="until"/> facts are checked and end the run when they hold;
-        /// an iteration whose rule application changed nothing ends it too (egglog's <c>can_stop</c>, which is
+        /// context: before each iteration the <paramref name="until"/> facts are checked and end the run when they
+        /// hold; an iteration whose rule application changed nothing ends it too (egglog's <c>can_stop</c>, which is
         /// <c>!changed</c> of the iteration report, egglog-reports/src/lib.rs:248-249). Returns the iterations run.
         /// </summary>
         public int Run(EGraphRuleId[] rules, int limit, Func<bool>? until = null)
@@ -194,7 +194,7 @@ namespace Eggnog.Relations.Tests
         public int Size(FunctionId function) => Current.TableSize(function);
 
         /// <summary>
-        /// Plans every rule (if a run has not) and asserts it may inherit watermarks (§10.2): the condition under which
+        /// Plans every rule (if a run has not) and asserts it may inherit watermarks: the condition under which
         /// egglog's push, which copies <c>last_run_at</c>, coincides with watermark inheritance.
         /// </summary>
         public void AssertAllInherit(IEnumerable<EGraphRuleId> rules)

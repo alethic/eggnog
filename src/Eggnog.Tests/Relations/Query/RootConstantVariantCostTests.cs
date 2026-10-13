@@ -8,9 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Review probe (root cost, colored-contexts spec §14.1 "Id constants (Store-backed root)": per rule per run,
-    /// O(constants) finds and one compare). A store-backed root has one current K per rule at a time, so a rule whose
-    /// constant changes its canonical form must keep paying O(constants) per run, however many times it changed.
+    /// What Id constants cost a store-backed root: per rule per run, O(constants) finds and one compare. A store-backed
+    /// root has one current K per rule at a time, so a rule whose constant changes its canonical form must keep paying
+    /// only O(constants) per run, however many times it changed: its current variant stays cached between runs instead
+    /// of being rebuilt on every run.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class RootConstantVariantCostTests

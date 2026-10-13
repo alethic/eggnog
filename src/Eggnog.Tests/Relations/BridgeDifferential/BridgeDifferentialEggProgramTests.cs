@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// More of egglog's test programs (egglog/tests/*.egg) through the three-way harness, with egglog's answers checked on
-    /// top: queries on relation outputs, and global lattices that must saturate.
+    /// More of egglog's test programs (egglog/tests/*.egg) through the three-way harness, with egglog's answers checked
+    /// on top: queries on relation outputs, and global lattices that must saturate.
     /// </summary>
     public class BridgeDifferentialEggProgramTests
     {
@@ -17,10 +17,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// egglog's tests/relation-query-allowed.egg with relations declared as the harness declares them
-        /// (<see cref="BridgeDiffFunctionKind.Relation"/>): <c>(= (myrel 1) (myrel 2))</c> must not match, because egglog
-        /// desugars a relation into a constructor into a fresh sort (egglog/src/ast/desugar.rs:396-427), so each row has an
-        /// id of its own. The harness once gave relations a unit output with the assert-eq merge, under which every row had
-        /// the same output and the rule fired in all three evaluations; it now declares them as egglog does.
+        /// (<see cref="BridgeDiffFunctionKind.Relation"/>): <c>(= (myrel 1) (myrel 2))</c> must not match, because
+        /// egglog desugars a relation into a constructor into a fresh sort (egglog/src/ast/desugar.rs:396-427), so each
+        /// row has an id of its own. Declared with a unit output and the assert-eq merge instead, every row would have
+        /// the same output and the rule would fire in all three evaluations, so the harness declares relations as
+        /// egglog does.
         /// </summary>
         [Fact]
         public void RelationOutputsAreDistinctAsTheHarnessDeclaresRelations()
@@ -65,8 +66,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's tests/repro-should-saturate.egg and merge-saturates.egg: a global min lattice whose rule writes values
-        /// the merge ignores changes nothing, so the first iteration reports no change and the schedule saturates.
+        /// egglog's tests/repro-should-saturate.egg and merge-saturates.egg: a global min lattice whose rule writes
+        /// values the merge ignores changes nothing, so the first iteration reports no change and the schedule
+        /// saturates.
         /// </summary>
         [Fact]
         public void GlobalLatticeWritesThatChangeNothingSaturate()
@@ -88,8 +90,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's tests/repro-equal-constant.egg and repro-equal-constant2.egg: an atom that compares a global lattice's
-        /// value to a constant, <c>(= (foo) 5)</c>, matches only that value.
+        /// egglog's tests/repro-equal-constant.egg and repro-equal-constant2.egg: an atom that compares a global
+        /// lattice's value to a constant, <c>(= (foo) 5)</c>, matches only that value.
         /// </summary>
         [Theory]
         [InlineData(5u, 10u)]
@@ -110,8 +112,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs relation-query-allowed.egg's rules for one iteration: <c>(= (myrel 1) (myrel 1)) =&gt; (shouldappear)</c>
-        /// and <c>(= (myrel 1) (myrel 2)) =&gt; (shouldnotappear)</c>, the output variable of sort
+        /// Runs relation-query-allowed.egg's rules for one iteration:
+        /// <c>(= (myrel 1) (myrel 1)) =&gt; (shouldappear)</c> and
+        /// <c>(= (myrel 1) (myrel 2)) =&gt; (shouldnotappear)</c>, the output variable of sort
         /// <paramref name="outputSort"/>.
         /// </summary>
         static BridgeDiffView Run(BridgeDiffFunction[] functions, BridgeDiffSeed[] seeds, int outputSort)

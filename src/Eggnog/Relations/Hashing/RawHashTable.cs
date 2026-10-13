@@ -172,7 +172,8 @@ namespace Eggnog.Relations
         /// <param name="hash">The 64-bit hash of what is looked up.</param>
         /// <param name="match">Recognizes the entry.</param>
         /// <param name="found">Whether an entry matched.</param>
-        /// <returns>A reference to the entry, or a null reference when <paramref name="found"/> is <c>false</c>.</returns>
+        /// <returns>A reference to the entry, or a null reference when <paramref name="found"/> is
+        /// <c>false</c>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref TEntry FindRef<TMatch>(ulong hash, ref TMatch match, out bool found)
             where TMatch : struct, IEntryMatch<TEntry>

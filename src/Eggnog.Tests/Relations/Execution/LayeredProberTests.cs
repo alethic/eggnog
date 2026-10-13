@@ -11,9 +11,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T5 (colored-contexts spec §9.5): probers with one piece per layer. Each piece clamps and probes its own layer's
-    /// index; a prober counts its pieces' keys; a driver walks every piece (one frame per (piece, key)); a probe of several
-    /// pieces joins its hits across layers.
+    /// Probers with one piece per layer. Each piece clamps and probes its own layer's index; a prober counts its
+    /// pieces' keys; a driver walks every piece (one frame per (piece, key)); a probe of several pieces joins its hits
+    /// across layers.
     /// </summary>
     public class LayeredProberTests
     {
@@ -62,7 +62,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void AFrameUpdateCarriesItsLayerInTwentyFourBytes()
         {
-            // §9.5: the layer byte sits beside the kind byte, so the frame buffer's entries do not grow.
+            // The layer byte sits beside the kind byte, so carrying a layer costs a frame buffer entry no space: it
+            // stays at 24 bytes.
             Assert.Equal(24, Unsafe.SizeOf<FrameUpdate>());
             var updates = new FrameUpdates();
             updates.RefineAtomDense(new AtomId(3), 2, new OffsetRange(5, 9));
@@ -101,9 +102,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Without key uniqueness (S6 off), a key visible in two layers of the driving atom gives two frames, one per
-        /// layer, which partition the atom's rows with that key; the probed atom's hits in two layers join as one row set.
-        /// The distinct bindings are the flat join's (I27); the count may exceed it (decision 6).
+        /// Without key uniqueness (a view may show a key in several layers), a key visible in two layers of the driving
+        /// atom gives two frames, one per layer, which partition the atom's rows with that key; the probed atom's hits
+        /// in two layers join as one row set. The distinct bindings are the flat join's; the match count may exceed it,
+        /// since match counts need not agree.
         /// </summary>
         [Theory]
         [InlineData("Gj")]

@@ -11,7 +11,8 @@ namespace Eggnog.Tests.Diagnostics
 {
 
     /// <summary>
-    /// What a run reports (D41): per-rule statistics, and the engine's search, merge and rebuild times.
+    /// What a run reports and shows while it runs: per-rule statistics, the engine's search, merge and rebuild times,
+    /// recorded steps and plans, and the run observer, which may only read.
     /// </summary>
     public sealed class DiagnosticsTests
     {
@@ -150,7 +151,8 @@ namespace Eggnog.Tests.Diagnostics
                 Assert.True(step.Elapsed >= TimeSpan.Zero);
             }
 
-            // Iterations 0 to 3 add num(1) to num(3) and their copies; the last one only copies num(3)... and then nothing.
+            // Iterations 0 to 3 add num(1) to num(3) and their copies; the last one only copies num(3)... and then
+            // nothing.
             Assert.Equal(new[] { true, true, true, true, false }, Array.ConvertAll(report.Steps.ToArray(), s => s.Changed));
             Assert.Equal(new[] { count, copy }, Array.ConvertAll(report.Steps[0].Rules.ToArray(), r => r.Rule));
             Assert.Equal(new[] { 1L, 1L }, Array.ConvertAll(report.Steps[0].Rules.ToArray(), r => r.Matches));
@@ -283,7 +285,6 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Contains($"(form {schema.Id} \"data.guid\" \"uuid-lower\")", root.Rows(c.Form).Select(r => r.ToString()));
         }
 
-
         [Fact]
         public void MirrorSyncsAreSteps()
         {
@@ -315,9 +316,9 @@ namespace Eggnog.Tests.Diagnostics
         }
 
         /// <summary>
-        /// R3: a split step is a step, recorded after the iterations of its cases and the lifts it made; each lift is a
-        /// step of the split scope, recorded between the cases' iterations. The observer sees the same steps and may read a
-        /// case while it runs.
+        /// A split step is a step, recorded after the iterations of its cases and the lifts it made; each lift is a
+        /// step of the split scope, recorded between the cases' iterations. The observer sees the same steps and may
+        /// read a case while it runs.
         /// </summary>
         [Fact]
         public void SplitStepsAndLiftsAreSteps()
@@ -346,7 +347,7 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Equal(report.Steps, observed);
             Assert.True(readInCase > 0);
             var splitSteps = report.Steps.Where(s => s.Kind == RunStepKind.SplitStep).ToArray();
-            Assert.True(splitSteps.Length >= 2);                                  // the first opens, a later one finds nothing new
+            Assert.True(splitSteps.Length >= 2);                       // the first opens, a later one finds nothing new
             var first = splitSteps[0];
             Assert.Same(scope, first.Scope);
             Assert.Equal(2, first.CasesOpened);
@@ -373,6 +374,207 @@ namespace Eggnog.Tests.Diagnostics
             Assert.All(caseIterations, s => Assert.True(s.Scope.IsDisposed));       // the run ended: its cases are gone
             Assert.Equal(report.Iterations, report.Steps.Count(s => s.Kind == RunStepKind.Iteration));
         }
+
+        /// <summary>
+        /// An observer may only read: a write, a <c>Run</c>, any other call that changes a scope, and every structural
+        /// call throw <see cref="InvalidOperationException"/> with the message
+        /// <c>Not allowed inside a run observer</c>. <c>CreateChild</c> adds a child to the running scope's tree, so it
+        /// is refused.
+        /// </summary>
+        [Fact]
+        public void CreateChildFromARunObserverIsRefused()
+        {
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("seen", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            var scope = t.Root.CreateChild(t.Outer);
+            scope.Assume(t.Fact.Of("a"));
+            Exception? refused = null;
+            Scope? made = null;
+            scope.Run(Schedule.Saturate(t.Rules), new RunOptions
+            {
+                Observer = _ =>
+                {
+                    if (made is not null || refused is not null)
+                        return;
+
+                    try
+                    {
+                        made = scope.CreateChild(t.Inner);
+                    }
+                    catch (Exception exception)
+                    {
+                        refused = exception;
+                    }
+                },
+            });
+
+            Assert.Null(made);
+            var error = Assert.IsType<InvalidOperationException>(refused);
+            Assert.Equal("Not allowed inside a run observer", error.Message);
+        }
+
+        /// <summary>
+        /// A call from a run observer that changes a scope throws <see cref="InvalidOperationException"/> with the
+        /// message <c>Not allowed inside a run observer</c>, as <c>Assume</c>, <c>Run</c> and <c>Scope.DefineRule</c>
+        /// do: <c>Freeze</c> changes the running scope, which stays unfrozen.
+        /// </summary>
+        [Fact]
+        public void FreezeFromARunObserverGivesTheObserverMessage()
+        {
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("seen", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            t.Root.Freeze();
+            var scope = t.Root.CreateChild(t.Outer);
+            scope.Assume(t.Fact.Of("a"));
+            Exception? refused = null;
+            scope.Run(Schedule.Saturate(t.Rules), new RunOptions { Observer = _ => refused ??= Record.Exception(scope.Freeze) });
+
+            var error = Assert.IsType<InvalidOperationException>(refused);
+            Assert.False(scope.IsFrozen);
+            Assert.Equal("Not allowed inside a run observer", error.Message);
+        }
+
+        [Fact]
+        public void ObserverWritesAreRefusedAndTheFlagIsReset()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var errors = new List<Exception?>();
+            var q = t.Graph.DefineQuery("q", b =>
+            {
+                var x = b.Var<long>("x");
+                b.When(t.Num.Of(x));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions
+            {
+                Observer = step =>
+                {
+                    errors.Add(Record.Exception(() => t.Root.Make(t.A.Of())));
+                    errors.Add(Record.Exception(() => t.Root.Union(t.Root.Make(t.A.Of()), t.Root.Make(t.A.Of()))));
+                    errors.Add(Record.Exception(() => t.Root.Write(w => { })));
+                    errors.Add(Record.Exception(() => t.Root.ForEachMatch(q, m =>
+                    {
+                        t.Root.Assume(t.Num.Of(100L));
+                        return true;
+                    })));
+                    Assert.True(t.Root.Count(q) >= 1);
+                },
+            });
+            Assert.All(errors, e => Assert.IsType<InvalidOperationException>(e));
+            Assert.False(t.Root.Check(t.Num.Of(100L)));
+            t.Root.Assume(t.Num.Of(100L));
+            Assert.True(t.Root.Check(t.Num.Of(100L)));
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+        }
+
+        [Fact]
+        public void AThrowingObserverDoesNotFaultAndResetsTheFlag()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            Assert.Throws<FormatException>(() => t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions
+            {
+                Observer = _ => throw new FormatException("boom"),
+            }));
+            Assert.False(t.Root.IsFaulted);
+            t.Root.Assume(t.Num.Of(50L));
+            Assert.Equal(RunStopReason.Completed, t.Root.Run(Schedule.Saturate(t.Rules)).StopReason);
+        }
+
+        [Fact]
+        public void StepsMatchIterationsAndRuleTotals()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            var rule = t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var observed = new List<RunStep>();
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true, Observer = observed.Add });
+            Assert.Equal(report.Iterations, report.Steps.Count);
+            Assert.Equal(report.Steps, observed);
+            Assert.Equal(Enumerable.Range(0, report.Steps.Count), report.Steps.Select(s => s.Index));
+            Assert.Equal(report.Rules[rule].Matches, report.Steps.SelectMany(s => s.Rules).Where(r => r.Rule == rule).Sum(r => r.Matches));
+            Assert.Equal(report.Rules[rule].IterationsWithMatches, report.Steps.Count(s => s.Rules.Any(r => r.Rule == rule)));
+            Assert.False(report.Steps[^1].Changed);
+            Assert.True(report.Steps[0].Changed);
+        }
+
+        [Fact]
+        public void PlansAreRecorded()
+        {
+            var t = new NodeTheory(new EGraphOptions { RecordPlans = true });
+            t.Root.Assume(t.Num.Of(1L));
+            var rule = t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RecordSteps = true });
+            Assert.False(string.IsNullOrEmpty(report.Rules[rule].Plan));
+            Assert.All(report.Steps.SelectMany(s => s.Rules), r => Assert.False(string.IsNullOrEmpty(r.Plan)));
+
+            var plain = new NodeTheory();
+            plain.Root.Assume(plain.Num.Of(1L));
+            var r2 = plain.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(plain.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 5L));
+                r.Then(plain.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            Assert.Null(plain.Root.Run(Schedule.Saturate(plain.Rules)).Rules[r2].Plan);
+        }
+
+        [Fact]
+        public void AStepWithMatchesThatChangedNothing()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            var rule = t.Rules.DefineRule("same", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(t.Num.Of(x));
+            });
+            var report = t.Root.Run(Schedule.Repeat(2, t.Rules), new RunOptions { RecordSteps = true });
+            Assert.Single(report.Steps);
+            Assert.False(report.Steps[0].Changed);
+            Assert.Single(report.Steps[0].Rules);
+            Assert.Equal(1, report.Steps[0].Rules[0].Matches);
+            Assert.True(report.Saturated);
+        }
+
     }
 
 }

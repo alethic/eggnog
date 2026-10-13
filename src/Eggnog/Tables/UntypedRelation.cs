@@ -2,8 +2,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A relation of any arity, made by the untyped <c>EGraph.DefineRelation</c> overload (D13) and applied with
-    /// <see cref="RelationHandle.Apply"/>. Internal until a consumer needs more than four columns.
+    /// A relation of any arity, made by the untyped <c>EGraph.DefineRelation</c> overload and applied with
+    /// <see cref="RelationHandle.Apply"/>. Internal; the public typed handles take up to four key columns.
     /// </summary>
     internal sealed class UntypedRelation : RelationHandle
     {

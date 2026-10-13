@@ -12,9 +12,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for layer creation from the tasks of a child's rule run (colored-contexts spec X37, I34; review findings
-    /// R1-2, R2-2): clones of one execution state, as <see cref="ActionBatchWork"/> makes them, stage into the same
-    /// untouched tables on many threads during a search.
+    /// Tests for layer creation from the tasks of a child's rule run: clones of one execution state, as
+    /// <see cref="ActionBatchWork"/> makes them, stage into the same untouched tables on many threads during a search.
+    /// Exactly one layer per table is created and published but not adopted, a concurrent reader of the catalog sees
+    /// each layer appear once and never change, and no view or view generation changes during the search; the next
+    /// merge adopts the layers and merges every write.
     /// </summary>
     public class LayerCreationConcurrencyTests
     {

@@ -4,8 +4,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The type of a column: a sort (its cells are classes) or a value type (its cells are base values). Invariant V:
-    /// within one graph, equal values have equal cells in every scope, and distinct values distinct cells.
+    /// The type of a column: a sort (its cells are classes) or a value type (its cells are base values). Within one
+    /// graph, equal values have equal cells in every scope, and distinct values distinct cells, so value joins,
+    /// constants and disequalities compare cells.
     /// </summary>
     /// <remarks>
     /// Column types belong to one graph's <see cref="ValueStore"/>: <see cref="ValueStore.TypeOf{T}"/> finds them, the
@@ -91,7 +92,8 @@ namespace Eggnog
         internal abstract uint EncodeObject(object value);
 
         /// <summary>
-        /// Gets the cell of a value that is inline or interned already, without interning (D15, E1).
+        /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
+        /// graph's interning pools, which are permanent.
         /// </summary>
         /// <param name="value">The value, of <see cref="ClrType"/>.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>

@@ -19,21 +19,20 @@ namespace Eggnog.Relations
         /// child except its continuation, with their whole subtrees. The result is reversed: leaves first, root last.
         /// </para>
         /// <para>
-        /// Fix (map §8.1 row 6, plan.rs:805, commit <c>7f4cbc49</c>): egglog iterates <c>all_children[1..]</c>, so when
-        /// the first child is not the continuation it is neither absorbed nor continued; it later becomes the root of a
-        /// separate chain that contributes through a <c>Lookup</c> epilogue, and the layout differs from the one the
-        /// pathwidth scored. Here every child other than the continuation is absorbed.
+        /// egglog iterates <c>all_children[1..]</c> (plan.rs:805), so when the first child is not the continuation it is
+        /// neither absorbed nor continued; it becomes the root of a separate chain that contributes through a
+        /// <c>Lookup</c> epilogue, and the layout differs from the one the pathwidth scored. Here every child other than
+        /// the continuation is absorbed.
         /// </para>
         /// <para>
-        /// Fix (plan.rs:735-740, the second half of map §2.7 item 3): egglog scores a candidate continuation by
-        /// unioning this bag's atoms with the subtrees of the <em>candidate's own</em> children
-        /// (<c>all_children_list[*chain_child]</c>, whose <c>child != chain_child</c> filter is then vacuous), but the
-        /// bags the walk absorbs into this chain node are the candidate's <em>siblings</em>. The pathwidth commit
-        /// <c>7f4cbc49</c> iterated <c>all_children_list[i]</c>, the siblings; the "review feedback" refactor
-        /// <c>d19135d6</c> swapped the index. With every sibling really absorbed (the row 6 fix), the swapped score can
-        /// choose the widest layout and fold a whole subtree into one bag, losing the Yannakakis pruning. Here the score
-        /// is this bag's atoms plus the subtrees of every sibling of the candidate, as in <c>7f4cbc49</c>, so it measures
-        /// the chain node the walk actually builds. Any choice yields a valid chain; only plan quality depends on it.
+        /// egglog scores a candidate continuation by unioning this bag's atoms with the subtrees of the <em>candidate's
+        /// own</em> children (<c>all_children_list[*chain_child]</c>, whose <c>child != chain_child</c> filter is then
+        /// vacuous; plan.rs:735-740), but the bags the walk absorbs into this chain node are the candidate's
+        /// <em>siblings</em>. With every sibling absorbed, that score can choose the widest layout and fold a whole
+        /// subtree into one bag, losing the Yannakakis pruning. Here the score is this bag's atoms plus the subtrees of
+        /// every sibling of the candidate (<c>all_children_list[i]</c>, the form of egglog commit <c>7f4cbc49</c>), so it
+        /// measures the chain node the walk actually builds. Any choice yields a valid chain; only plan quality depends
+        /// on it.
         /// </para>
         /// </remarks>
         /// <param name="bags">The bags from <see cref="DecomposeIntoBags"/>.</param>
@@ -65,7 +64,7 @@ namespace Eggnog.Relations
                 foreach (var chainChild in children[i])
                 {
                     // The chain node this bag becomes if chainChild continues: the bag plus its other children's whole
-                    // subtrees (fix of plan.rs:735-740, see the remarks).
+                    // subtrees (unlike plan.rs:735-740, see the remarks).
                     var score = AtomSet(bags[i], atomCapacity);
                     foreach (var sibling in children[i])
                         if (sibling != chainChild)

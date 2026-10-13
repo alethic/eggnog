@@ -6,10 +6,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A stack of <see cref="Subset"/> arrays of one length, the per-layer storage of multi-layer
-    /// <see cref="LayeredSubset"/>s (colored-contexts spec §9.2): one array per layered trie node or probe result in a
-    /// child's run, reused instead of allocated. The layered executor owns one per run, sized to the running context's
-    /// layer count (its depth plus one), which bounds the layers of every table it reads (M10.2: owned by
-    /// <c>TrieNodePool</c>).
+    /// <see cref="LayeredSubset"/>s: one array per layered trie node or probe result in a child's run, reused instead
+    /// of allocated. The layered executor owns one per run, through its <see cref="TrieNodePool"/>, sized to the
+    /// running context's layer count (its depth plus one), which bounds the layers of every table it reads.
     /// </summary>
     /// <remarks>
     /// <para>

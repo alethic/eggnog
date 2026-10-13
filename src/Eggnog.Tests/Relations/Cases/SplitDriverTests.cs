@@ -8,17 +8,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The split driver (colored-contexts spec §11.3, L5, B6; rule-layer E8): lift before deepening, demand before any
-    /// case exists, keys covered by live records in the scope or an ancestor, limits, depth-first disposal, vacuous cases
-    /// dropped, and the domain never held while sources and schedules run.
+    /// The split driver: lift before deepening, demand before any case exists, keys covered by live records in the
+    /// scope or an ancestor, limits, depth-first disposal, vacuous cases dropped, exceptions that leave the records for
+    /// disposal, and the domain never held while sources and schedules run.
     /// </summary>
     public class SplitDriverTests
     {
 
         /// <summary>
-        /// Lift before deepening (L5, TheSy): phase A runs every case with nested splits off and lifts before phase B runs
-        /// any case with them on, so phase B (and the nested split it opens) already sees what phase A lifted; nested
-        /// steps skip the key of the split they are a case of (B6).
+        /// Lift before deepening, as in TheSy: phase A runs every case with nested splits off and lifts before phase B
+        /// runs any case with them on, so phase B (and the nested split it opens) already sees what phase A lifted;
+        /// nested steps skip the key of the split they are a case of, which the ancestor's live record covers.
         /// </summary>
         [Fact]
         public void PhaseALiftsBeforePhaseBDeepens()
@@ -58,8 +58,8 @@ namespace Eggnog.Relations.Tests
             Assert.True(g.Root.ContainsKey(g.Path, [w.B, w.C]));
             Assert.True(g.Root.ContainsKey(g.Edge, [w.B, w.C]));
 
-            // The top split opened 2 cases, each case's nested split of d 2 more; nested steps skipped b (covered by the
-            // root's record) and, at depth 2, both keys.
+            // The top split opened 2 cases, each case's nested split of d 2 more; nested steps skipped b (covered by
+            // the root's record) and, at depth 2, both keys.
             Assert.Equal(6, report.CasesOpened);
             Assert.True(report.SplitsSkipped >= 2);
             Assert.True(report.Lifts >= 3);
@@ -74,7 +74,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Demand-driven splitting (L5): a request the demand rejects opens no case; the demand is asked before any case
+        /// Demand-driven splitting: a request the demand rejects opens no case; the demand is asked before any case
         /// exists.
         /// </summary>
         [Fact]
@@ -105,8 +105,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// B6: a key covered by a live record in the scope or any ancestor is skipped, and so is a second request for one
-        /// key in a step; once the records are disposed the key is split again.
+        /// A key covered by a live record in the scope or any ancestor is skipped, so a split already open is not
+        /// opened again; a second request for one key in a step is skipped too; once the records are disposed the key
+        /// is split again.
         /// </summary>
         [Fact]
         public void KeysCoveredByALiveRecordAreSkipped()
@@ -172,9 +173,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Disposal is depth-first and in reverse creation order: <see cref="SplitDriver.DisposeRecords"/> succeeds over
-        /// nested records (a case with live children could not be disposed first), leaves no record, and disposes every
-        /// case at every depth.
+        /// Disposal is depth-first and in reverse creation order: <see cref="SplitDriver.DisposeRecords"/> succeeds
+        /// over nested records (a case with live children could not be disposed first), leaves no record, and disposes
+        /// every case at every depth.
         /// </summary>
         [Fact]
         public void RecordsAreDisposedDepthFirst()
@@ -204,8 +205,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// L4: a case whose assumption contradicts it is disposed before the schedule runs, the lift goes on over the
-        /// live cases, and a split whose cases are all vacuous contradicts the scope and ends the step.
+        /// A case whose assumption contradicts it stops and is disposed before the schedule runs, the lift goes on over
+        /// the live cases, and a split whose cases are all vacuous contradicts the scope and ends the step.
         /// </summary>
         [Fact]
         public void StoppedCasesAreDisposed()
@@ -240,8 +241,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// rule-layer E8: an exception from the schedule propagates, the records opened stay, and
-        /// <see cref="SplitDriver.DisposeRecords"/> cleans them up.
+        /// An exception from the schedule propagates, the records opened stay, and
+        /// <see cref="SplitDriver.DisposeRecords"/> cleans them up; the scope is not faulted.
         /// </summary>
         [Fact]
         public void AScheduleExceptionPropagatesAndLeavesTheRecords()

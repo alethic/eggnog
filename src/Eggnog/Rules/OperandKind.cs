@@ -18,8 +18,8 @@ namespace Eggnog
         Constant,
 
         /// <summary>
-        /// A class constant, by its index in <see cref="RuleProgram.WrittenIdConstants"/>: lowered with the cell a variant
-        /// is built for (§6.4.5).
+        /// A class constant, by its index in <see cref="RuleProgram.WrittenIdConstants"/>: lowered with the constant
+        /// values its variant is built with (<see cref="LoweredRule.Constants"/>).
         /// </summary>
         IdConstant,
 

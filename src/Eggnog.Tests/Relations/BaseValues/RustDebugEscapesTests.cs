@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Checks the rustc-generated <see cref="RustDebugEscapes"/> table against .NET's Unicode categories, an independent
-    /// reference, wherever the two can agree: Rust escapes Cc, Cf, Cs, Co, Zl, Zp, Zs other than the space, and every
-    /// grapheme extender (all Mn and Me), and prints the other assigned categories raw.
+    /// Checks the rustc-generated <see cref="RustDebugEscapes"/> table against .NET's Unicode categories, an
+    /// independent reference, wherever the two can agree: Rust escapes Cc, Cf, Cs, Co, Zl, Zp, Zs other than the space,
+    /// and every grapheme extender (all Mn and Me), and prints the other assigned categories raw.
     /// </summary>
     public class RustDebugEscapesTests
     {

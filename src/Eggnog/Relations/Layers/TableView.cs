@@ -6,11 +6,11 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What one context sees of one function table (colored-contexts spec §6.3, X20): a <see cref="LayerView"/> per
-    /// depth of the chain from the root to the context, <c>null</c> where that context has no layer of the table or where
-    /// a deeper level cleared it. A row is visible when it is live in its layer and that layer's
-    /// <see cref="LayerView.Hidden"/> does not hold it; at most one visible row holds a key (I12), and the first layer
-    /// from the top whose key index holds a key decides it (Lemma F, <see cref="FindRow(uint, out int)"/>).
+    /// What one context sees of one function table: a <see cref="LayerView"/> per depth of the chain from the root to
+    /// the context, <c>null</c> where that context has no layer of the table or where a deeper level cleared it. A row
+    /// is visible when it is live in its layer and that layer's <see cref="LayerView.Hidden"/> does not hold it; at
+    /// most one visible row holds a key, and the first layer from the top whose key index holds a key decides it
+    /// (<see cref="FindRow(uint, out int)"/>): no row with a hidden row's key is visible below the hidden row's layer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -20,10 +20,10 @@ namespace Eggnog.Relations
     /// views are <see cref="LayeredSchema.RootView"/>.
     /// </para>
     /// <para>
-    /// The fields are plain readonly fields so compiled kernels can read them (§9.9). <see cref="AllRows"/> and
+    /// The fields are plain readonly fields so compiled kernels can read them. <see cref="AllRows"/> and
     /// <see cref="AnyVisible"/> are the layered executor's entry points: the rows a root trie node starts from, and the
-    /// existence test of a zero-variable atom (§9.2), which fixes egglog's defect for layered views
-    /// (core-relations/src/free_join/plan.rs:1502-1505; map §8.1 row 2).
+    /// existence test of a zero-variable atom, which requires a visible row where egglog takes a nonempty header as
+    /// proof (core-relations/src/free_join/plan.rs:1502-1505).
     /// </para>
     /// </remarks>
     internal sealed partial class TableView
@@ -66,7 +66,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="id">The table's id.</param>
         /// <param name="spec">The table's spec.</param>
-        /// <param name="layers">The layers by depth; at most 32 (X36), each over a <see cref="SortedWritesTable"/>.</param>
+        /// <param name="layers">The layers by depth; at most 32 (a layered subset keeps a 32-bit layer mask), each over
+        /// a <see cref="SortedWritesTable"/>.</param>
         internal TableView(TableId id, TableSpec spec, LayerView?[] layers) :
             this(id, spec, layers, requireSorted: true)
         {
@@ -80,7 +81,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(layers);
             if (layers.Length > 32)
-                throw new ArgumentException("A view has at most 32 layers (X36).", nameof(layers));
+                throw new ArgumentException("A view has at most 32 layers.", nameof(layers));
 
             Id = id;
             Spec = spec;
@@ -102,11 +103,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates the one-layer view of a database's own table, hiding nothing: what a root context, or a bare database,
-        /// sees of each of its tables (colored-contexts spec §9.1, <see cref="ContextView.ForRoot"/>). The table may be of
-        /// any kind (the union-find included), since the executor only scans and indexes it; the point lookups of this
-        /// type (<see cref="FindRow(uint, out int)"/> and its overloads) need a <see cref="SortedWritesTable"/> and are
-        /// used only on a child's views.
+        /// Creates the one-layer view of a database's own table, hiding nothing: what a root context, or a bare
+        /// database, sees of each of its tables (<see cref="ContextView.ForRoot"/>). The table may be of any kind (the
+        /// union-find included), since the executor only scans and indexes it; the point lookups of this type
+        /// (<see cref="FindRow(uint, out int)"/> and its overloads) need a <see cref="SortedWritesTable"/> and are used
+        /// only on a child's views.
         /// </summary>
         /// <param name="id">The table's id.</param>
         /// <param name="info">The database's entry for the table.</param>
@@ -119,10 +120,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets every physical row of every present layer that has rows, as one dense subset per layer (§9.2): the
-        /// layered form of a table's <see cref="Table.All"/>. Tombstones and hidden rows are included, as egglog's
-        /// <c>all</c> includes tombstones; the executor refines visibility where it reads rows (I26). A view with one
-        /// layer with rows gives a single-layer subset, which is every root view's case. O(layers).
+        /// Gets every physical row of every present layer that has rows, as one dense subset per layer: the layered
+        /// form of a table's <see cref="Table.All"/>. Tombstones and hidden rows are included, as egglog's <c>all</c>
+        /// includes tombstones; the executor refines visibility where it reads rows. A view with one layer with rows
+        /// gives a single-layer subset, which is every root view's case. O(layers).
         /// </summary>
         /// <param name="pool">The pool a per-layer array comes from when two or more layers have rows, or <c>null</c>.</param>
         /// <returns>The rows, which the caller owns.</returns>
@@ -172,9 +173,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some row of <paramref name="subset"/> of layer <paramref name="layer"/> is visible to the view:
-        /// the existence test of a zero-variable atom. Defect fixed (core-relations/src/free_join/plan.rs:1502-1505; map
-        /// §8.1 row 2): egglog answers that test by a nonempty header alone, so a deleted fact still fires; this test
-        /// requires a live row that no level hides. See <see cref="LayerView.AnyVisible"/>.
+        /// the existence test of a zero-variable atom. egglog answers that test by a nonempty header alone
+        /// (core-relations/src/free_join/plan.rs:1502-1505), so a deleted fact still fires; this test requires a live
+        /// row that no level hides. See <see cref="LayerView.AnyVisible"/>.
         /// </summary>
         /// <param name="layer">The layer; an absent or out-of-range layer has no visible row.</param>
         /// <param name="subset">Row ids of that layer, within its physical rows.</param>
@@ -205,8 +206,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the largest timestamp of any row of the present layers (the last run of each sorted layer), or 0 when the
-        /// table is unsorted or empty (rule-layer D16). O(layers).
+        /// Gets the largest timestamp of any row of the present layers (the last run of each sorted layer), or 0 when
+        /// the table is unsorted or empty. O(layers).
         /// </summary>
         public uint LatestStamp
         {

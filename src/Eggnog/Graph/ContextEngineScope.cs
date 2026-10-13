@@ -6,24 +6,23 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The engine side of one scope over one engine context (§6.6.6, colors §10): every scope, the root included, is an
+    /// The engine side of one scope over one engine context: every scope, the root included, is an
     /// <c>EGraphContext</c>, and every member maps onto one context member.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Id constants (D3) are the engine's from R2: every Store-backed context runs each class constant of a rule in its
-    /// canonical form there, and uses a watermark only when the stored constants equal the current ones (X19, I30), so a
-    /// rule's variant is lowered once, with the constants as written, and never again (§6.4.4). R1's re-lowering path is
-    /// gone.
+    /// Id constants are the engine's: every Store-backed context runs each class constant of a rule in its canonical
+    /// form there, and uses a watermark only when the stored constants equal the current ones, so a rule's variant is
+    /// lowered once, with the constants as written, and never again.
     /// </para>
     /// <para>
     /// Host batches stage on the context's bridge side (<c>StageRow</c>, <c>StageUnion</c>, <c>FreshId</c>), whose
-    /// <c>FlushUpdates</c> canonicalizes the id cells of every staged row at every level (invariant C; colors §10.4).
+    /// <c>FlushUpdates</c> canonicalizes the id cells of every staged row at every level.
     /// </para>
     /// <para>
     /// Engine calls that may run user delegates (runs, queries, flushes) are counted on the graph, so that a query
-    /// disposed meanwhile on another thread hands its variants to the graph instead of freeing them under a running call
-    /// (D49, §6.4.6). The adapter holds no state of its own beyond the context, and allocates nothing per row.
+    /// disposed meanwhile on another thread hands its variants to the graph instead of freeing them under a running
+    /// call. The adapter holds no state of its own beyond the context, and allocates nothing per row.
     /// </para>
     /// </remarks>
     internal sealed class ContextEngineScope : EngineScope
@@ -48,7 +47,7 @@ namespace Eggnog
         public Relations.EGraphContext Context { get; }
 
         /// <summary>
-        /// Gets the runtime of this context (§4.1): its value of the graph's context-local slot.
+        /// Gets the runtime of this context: its value of the graph's context-local slot.
         /// </summary>
         public ScopeRuntime Runtime => Context.GetLocal(graph.RuntimeSlot);
 
@@ -57,7 +56,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets a stamp of the rows the context's views show: the sum of the change stamps of the context and its ancestors
-        /// (the storage context's view stamp, colors §9.1, I29). It moves whenever the context's own layer or an ancestor's
+        /// (the storage context's view stamp). It moves whenever the context's own layer or an ancestor's
         /// changes, which <see cref="Version"/> alone does not see. O(depth).
         /// </summary>
         public long ViewStamp => Context.Context.ViewStamp;
@@ -210,7 +209,7 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>
-        /// One iteration of the query's naive rule in the context (§6.6.6): its collector stages nothing, so the merge
+        /// One iteration of the query's naive rule in the context: its collector stages nothing, so the merge
         /// changes nothing and <see cref="Version"/> stays.
         /// </remarks>
         public override void RunQuery(LoweredRule query)

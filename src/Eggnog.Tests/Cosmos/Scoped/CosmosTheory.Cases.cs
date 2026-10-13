@@ -7,26 +7,32 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// <summary>Gets the tag of a discriminator split's cases.</summary>
         public ScopeTag Case { get; private set; } = null!;
 
-        /// <summary>Gets the paths the running scope's predicate terms mention: an analysis, derived from terms alone.</summary>
+        /// <summary>
+        /// Gets the paths the running scope's predicate terms mention: an analysis, derived from terms alone.
+        /// </summary>
         public Relation<string> Mentioned { get; private set; } = null!;
 
         /// <summary>Gets the split a schema is compiled with: every present discriminator.</summary>
         public SplitRule SchemaSplit { get; private set; } = null!;
 
-        /// <summary>Gets the split a query runs: the present discriminators its predicate mentions (D43).</summary>
+        /// <summary>
+        /// Gets the split a query runs: the present discriminators its predicate mentions, so that a query does not
+        /// split again on every discriminator the frozen schema already split on.
+        /// </summary>
         public SplitRule QuerySplit { get; private set; } = null!;
 
         /// <summary>Gets the schedule a schema is compiled with: facts and splits, no rewrites.</summary>
         public Schedule Facts { get; private set; } = null!;
 
         /// <summary>
-        /// Gets the schedule a query runs: the prototype's (saturate horn lattice split rewrite), with the facts settled
-        /// before each split step, so that the split sees the narrowest domain (D43).
+        /// Gets the schedule a query runs: the prototype's (saturate horn lattice split rewrite), with the facts
+        /// settled before each split step, so that the split sees the narrowest domain and opens no case that goes
+        /// vacuous only once the domain narrows.
         /// </summary>
         public Schedule Saturation { get; private set; } = null!;
 
         /// <summary>
-        /// Defines the split members (R3): the case tag, the analysis <see cref="Mentioned"/> and the rules that derive it,
+        /// Defines the split members: the case tag, the analysis <see cref="Mentioned"/> and the rules that derive it,
         /// the schema's and the query's domain splits, and the schedules that take them.
         /// </summary>
         partial void DefineCases()

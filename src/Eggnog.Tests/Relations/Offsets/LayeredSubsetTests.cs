@@ -8,16 +8,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="LayeredSubset"/> and <see cref="SubsetArrayPool"/> (colored-contexts spec §9.2, T1): a
-    /// property test over 2000 seeds against a reference of one <see cref="SortedSet{T}"/> per layer, plus the
-    /// representation rules (single versus multi-layer, collapsing, the root path), ownership and pooling.
+    /// Tests for <see cref="LayeredSubset"/> and <see cref="SubsetArrayPool"/>: a property test over 2000 seeds
+    /// against a reference of one <see cref="SortedSet{T}"/> per layer, plus the representation rules (single versus
+    /// multi-layer, collapsing, the root path), ownership and pooling.
     /// </summary>
     [Collection(AllocationProbeCollection.Name)]
     public class LayeredSubsetTests
     {
 
         /// <summary>
-        /// The number of seeds of the property test (T1).
+        /// The number of seeds of the property test.
         /// </summary>
         const int Seeds = 2000;
 

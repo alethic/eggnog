@@ -8,13 +8,13 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A child context's union-find exposed as a table: the child's <see cref="UnionFindOverlay"/> and
-    /// <see cref="DisplacedJournal"/> over its parent's union-find (colored-contexts spec §5.5), the counterpart of the
-    /// root's <see cref="DisplacedTable"/> at <c>TableId 0</c> of the child's database.
+    /// <see cref="DisplacedJournal"/> over its parent's union-find, the counterpart of the root's
+    /// <see cref="DisplacedTable"/> at <c>TableId 0</c> of the child's database.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Rows are the journal's: row <c>r</c> is <c>[id, find_C(id), ts]</c>, one per id that stopped being canonical in
-    /// the child (§5.3). Column 1 is computed on every read with <see cref="Finder"/>, the parent's find extended with the
+    /// the child. Column 1 is computed on every read with <see cref="Finder"/>, the parent's find extended with the
     /// overlay, so it is always current and never cacheable; rows are in nondecreasing timestamp order. Scans, subsets
     /// and versions cover the journal only, which is the child's own layer: <see cref="TableVersion.Minor"/> is the
     /// journal's length and the generation never changes, so a layer's rebuild finds the ids displaced since its last one
@@ -24,8 +24,8 @@ namespace Eggnog.Relations
     /// <para>
     /// To union <c>a</c> and <c>b</c> in the child, stage <c>[a, b, ts]</c>; <see cref="Merge"/> maps both through the
     /// parent's find, merges their overlay classes and journals the loser. The context must be current with its parent
-    /// when it merges (§5.5 precondition), which its writes and rebuilds guarantee. Rows are never deleted or cleared
-    /// (decision 1), and the table cannot be cloned (a child's union-find is not a standalone copy).
+    /// when it merges, which its writes and rebuilds guarantee. Rows are never deleted or cleared, and the table cannot
+    /// be cloned (a child's union-find is not a standalone copy).
     /// </para>
     /// <para>
     /// Threading: reads run concurrently while no merge runs; <see cref="Merge"/> is exclusive (the owning context's
@@ -121,7 +121,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the number of own unions whose loser was an id of an ancestor and whose winner an id local to the child
-        /// (<see cref="UnionFindStatistics.ParentIdLosers"/>, the G2/L7 measure).
+        /// (<see cref="UnionFindStatistics.ParentIdLosers"/>): what smaller-id-wins costs when a parent that is not
+        /// frozen lifts terms after cases created them.
         /// </summary>
         public long ParentIdLosers => Interlocked.Read(ref parentIdLosers);
 
@@ -239,7 +240,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Visits the journal rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that are not in
-        /// <paramref name="hidden"/> and satisfy every constraint (colored-contexts spec §9.3): the plain scan through a
+        /// <paramref name="hidden"/> and satisfy every constraint: the plain scan through a
         /// <see cref="HiddenSkippingSink{TSink}"/>, as <see cref="DisplacedTable"/> does. Hides the hidden-aware
         /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
         /// which dispatches here; with <see cref="HiddenRows.None"/> it is the plain scan.
@@ -249,7 +250,7 @@ namespace Eggnog.Relations
         /// <param name="start">The first position.</param>
         /// <param name="count">The number of positions to visit.</param>
         /// <param name="constraints">The constraints rows must satisfy.</param>
-        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed.</param>
         /// <param name="sink">Receives each expanded visible row with its row id; must not keep the span.</param>
         /// <returns>The next position, or -1.</returns>
         public new int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
@@ -283,7 +284,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan.</param>
-        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed.</param>
         /// <param name="sink">Receives each expanded visible row with its row id.</param>
         public new void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
@@ -379,8 +380,8 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>
-        /// View-level (§5.5): an id the child journaled gives its journal row; an id displaced in an ancestor's view gives
-        /// the ancestor's row with column 1 replaced by the child's canonical id, and <paramref name="rowId"/> -1, since
+        /// View-level: an id the child journaled gives its journal row; an id displaced in an ancestor's view gives the
+        /// ancestor's row with column 1 replaced by the child's canonical id, and <paramref name="rowId"/> -1, since
         /// the row is not one of this table's.
         /// </remarks>
         public override bool TryGetRow(ReadOnlySpan<uint> key, Span<uint> destination, out int rowId)
@@ -452,7 +453,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>
-        /// §5.5: for each staged <c>[l, r, ts]</c>, in queue and staging order, maps both ids through the parent's find,
+        /// For each staged <c>[l, r, ts]</c>, in queue and staging order, maps both ids through the parent's find,
         /// merges their overlay classes, and journals the loser at <c>ts</c>. A union between distinct classes whose
         /// timestamp precedes the journal's last row throws before changing anything (the order check of
         /// <see cref="DisplacedUnionFind.Union"/>); a redundant union may carry an old timestamp. A row counts as both
@@ -486,11 +487,11 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        /// <remarks>A child's union-find is never cleared (decision 1).</remarks>
+        /// <remarks>A child's union-find is never cleared.</remarks>
         /// <exception cref="InvalidOperationException">Always.</exception>
         public override void Clear()
         {
-            throw new InvalidOperationException("A child context's union-find cannot be cleared (decision 1).");
+            throw new InvalidOperationException("A child context's union-find cannot be cleared: its displacements are never retracted.");
         }
 
         /// <inheritdoc />
@@ -506,8 +507,8 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>
-        /// §8.1: freezes the overlay and seals the pending state; afterwards <see cref="Merge"/> throws and staging a
-        /// union throws. A second call does nothing.
+        /// Freezes the overlay and seals the pending state; afterwards <see cref="Merge"/> throws and staging a union
+        /// throws. A second call does nothing.
         /// </remarks>
         /// <exception cref="InvalidOperationException">Unions are staged and not merged.</exception>
         public override void Freeze()

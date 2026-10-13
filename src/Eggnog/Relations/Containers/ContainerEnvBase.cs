@@ -22,8 +22,8 @@ namespace Eggnog.Relations
         /// Initializes a new instance.
         /// </summary>
         /// <param name="typeId">The environment's id in its <see cref="ContainerValues"/>.</param>
-        /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers), which colored contexts
-        /// refuse to intern in a child (decision 9, G-a); <c>false</c> for containers over base values only.</param>
+        /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers), which a child context
+        /// may look up but not intern; <c>false</c> for containers over base values only.</param>
         private protected ContainerEnvBase(ContainerTypeId typeId, bool holdsIds)
         {
             TypeId = typeId;
@@ -37,15 +37,16 @@ namespace Eggnog.Relations
         StrongBox<long>? eqVersion;
 
         /// <summary>
-        /// Gets whether the containers hold e-class ids (colored-contexts spec §10.7): eq-sort containers, which a child
-        /// context may look up but not intern (G-a), and whose elements a child may not displace (G-b, §7.4). Containers
-        /// over base values are registered with <c>holdsIds: false</c> and are allowed everywhere.
+        /// Gets whether the containers hold e-class ids: eq-sort containers, which a child context may look up but not
+        /// intern, and whose elements a child may not displace (<see cref="EqContainerGuard"/>), because children never
+        /// rebuild containers. Containers over base values are registered with <c>holdsIds: false</c> and are allowed
+        /// everywhere.
         /// </summary>
         public bool HoldsIds { get; }
 
         /// <summary>
         /// Gets or sets the counter this environment increments each time it gains a container whose content it did not
-        /// hold before (<see cref="ContainerValues.EqVersion"/>, §7.4 G-b): set by <see cref="ContainerValues"/> on the
+        /// hold before (<see cref="ContainerValues.EqVersion"/>): set by <see cref="ContainerValues"/> on the
         /// environments that hold e-class ids, before any container is interned.
         /// </summary>
         internal StrongBox<long>? EqVersionCounter
@@ -92,8 +93,9 @@ namespace Eggnog.Relations
         public abstract void ExtendContainersContaining(ReadOnlySpan<uint> values, OrderedValueSet output);
 
         /// <summary>
-        /// Gets whether some container of this environment holds <paramref name="value"/>, through the exact element index
-        /// (colored-contexts spec §7.4, G-b). Thread-safe; one probe.
+        /// Gets whether some container of this environment holds <paramref name="value"/>, through the exact element
+        /// index: the question the eq-container guard asks of each id a child displaced
+        /// (<see cref="EqContainerGuard"/>). Thread-safe; one probe.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns><c>true</c> if a container holds it.</returns>
@@ -116,8 +118,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Records that the environment gained a container whose content it did not hold before: moves
         /// <see cref="EqVersionCounter"/>, when set, so every child context re-runs its eq-container guard over its own
-        /// displacements before it is read again (§7.4, G-b). One interlocked increment per new container of a type that
-        /// holds ids; nothing otherwise. Thread-safe.
+        /// displacements before it is read again. One interlocked increment per new container of a type that holds ids;
+        /// nothing otherwise. Thread-safe.
         /// </summary>
         private protected void NoteNewContent()
         {

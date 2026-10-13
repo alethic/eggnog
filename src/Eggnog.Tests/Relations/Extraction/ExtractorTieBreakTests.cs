@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for rule-layer decision D10: ties broken by cost, then function, then columns (classes by canonical id, base
-    /// values by content), independent of insertion and union order; and acyclic results with zero costs.
+    /// Tests for the extractor's tie-breaks: ties broken by cost, then function, then columns (classes by canonical id,
+    /// base values by content), independent of insertion and union order; and acyclic results with zero costs.
     /// </summary>
     public class ExtractorTieBreakTests
     {

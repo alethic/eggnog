@@ -4,10 +4,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Looks up, lane by lane, one column of the row a child context sees by a key of any width (colored-contexts spec
-    /// §6.5, X25): the layered counterpart of <see cref="SortedKeyNLookup"/>, used for keys of zero or more than three
-    /// cells. The key is gathered into a scratch array and probed with
-    /// <see cref="TableView.TryGetColumn(uint[], int, int, out uint)"/>, which hashes it once for every layer.
+    /// Looks up, lane by lane, one column of the row a child context sees by a key of any width: the layered
+    /// counterpart of <see cref="SortedKeyNLookup"/>, used for keys of zero or more than three cells. The key is
+    /// gathered into a scratch array and probed with <see cref="TableView.TryGetColumn(uint[], int, int, out uint)"/>,
+    /// which hashes it once for every layer.
     /// </summary>
     internal readonly struct LayeredKeyNLookup : ILaneProducer
     {

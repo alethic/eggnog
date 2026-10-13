@@ -2,9 +2,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What runs inside a case (colored-contexts spec §11.3, L5; rule-layer E8, §6.9.3): the in-case schedule of a split.
-    /// The driver runs it once per case with nested splits disabled (phase A), lifts, then again with nested splits
-    /// enabled (phase B), which recurses into <see cref="SplitDriver.Step"/> at the next depth.
+    /// What runs inside a case: the in-case schedule of a split. The driver runs it once per case with nested splits
+    /// disabled (phase A), lifts, then again with nested splits enabled (phase B), which recurses into
+    /// <see cref="SplitDriver.Step"/> at the next depth. What the cases derive is thus lifted before any case splits
+    /// further.
     /// </summary>
     /// <remarks>
     /// Called without the scope's thread domain held, so the schedule may create children of the case (nested splits).

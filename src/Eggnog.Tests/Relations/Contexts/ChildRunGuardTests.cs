@@ -10,16 +10,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The guards of a rule run in a child (colored-contexts spec §8.3, §8.4, §9.1, X12, X21, X37, I29, I34): a rule set
-    /// whose pinned views are stale is refused, layers its search creates wait for the merge, an exception faults the
-    /// child, and an action cannot write the context in the middle of the search.
+    /// The guards of a rule run in a child: a rule set whose pinned views are stale is refused, layers its search
+    /// creates wait for the merge, an exception faults the child, an action cannot write the context in the middle of
+    /// the search, and the union-find is read through lookups only.
     /// </summary>
     public class ChildRunGuardTests
     {
 
         /// <summary>
-        /// A store with <c>f(x)</c> holding a few ids at the root, an empty <c>g(x)</c>, and a child of the root, which is
-        /// left writable so a test can change it after the child exists.
+        /// A store with <c>f(x)</c> holding a few ids at the root, an empty <c>g(x)</c>, and a child of the root, which
+        /// is left writable so a test can change it after the child exists.
         /// </summary>
         static (Store Store, TableId F, TableId G, Context Root, Context Child) Setup()
         {
@@ -40,7 +40,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Builds <c>f(x) → g(x)</c> in <paramref name="context"/>, with <paramref name="external"/> called on every match.
+        /// Builds <c>f(x) → g(x)</c> in <paramref name="context"/>, with <paramref name="external"/> called on every
+        /// match.
         /// </summary>
         static RuleSet Build(Store store, TableId f, TableId g, Context context, ExternalFunctionId? external = null)
         {
@@ -58,6 +59,10 @@ namespace Eggnog.Relations.Tests
             return rsb.Build();
         }
 
+        /// <summary>
+        /// A rule set built before the child's own merge changed its view is refused by both run entry points without
+        /// faulting the child, since its headers and snapshot describe the old rows; built again, it runs.
+        /// </summary>
         [Fact]
         public void ARuleSetWhoseViewsChangedSinceItWasBuiltIsRefused()
         {
@@ -79,6 +84,9 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A rule set is refused, without faulting the child, while the parent has changed since the child caught up.
+        /// </summary>
         [Fact]
         public void ARuleSetIsRefusedWhileTheChildIsBehindItsParent()
         {
@@ -87,7 +95,8 @@ namespace Eggnog.Relations.Tests
             {
                 using var rs = Build(store, f, g, child);
 
-                // The parent changes after the rule set was built: the child's views are not current until it catches up.
+                // The parent changes after the rule set was built: the child's views are not current until it catches
+                // up.
                 Insert(root, f, root.NewId(), 0);
                 Assert.False(child.IsViewCurrent);
                 Assert.Throws<InvalidOperationException>(() => child.Database.RunRuleSet(rs, ReportLevel.TimeOnly, store.ReadClock()));
@@ -97,6 +106,10 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A layer the search creates by staging into a table is adopted into the table map at the merge, not during
+        /// the search.
+        /// </summary>
         [Fact]
         public void LayersCreatedDuringTheSearchWaitForTheMerge()
         {
@@ -107,7 +120,7 @@ namespace Eggnog.Relations.Tests
                 Assert.Null(child.Tables!.TryGetLayer(g));
                 var executed = child.Database.ExecuteRuleSet(rs, ReportLevel.TimeOnly, store.ReadClock());
 
-                // X37: the search staged into g and so created its layer, which enters the table map at the merge only.
+                // The search staged into g and so created its layer, which enters the table map at the merge only.
                 var layer = child.Tables!.TryGetLayer(g);
                 Assert.NotNull(layer);
                 Assert.False(layer!.IsAdopted);
@@ -118,6 +131,10 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// An exception thrown by an external function during a run escapes and faults the child, which then refuses
+        /// writes.
+        /// </summary>
         [Fact]
         public void AnExceptionEscapingARunFaultsTheChild()
         {
@@ -132,20 +149,23 @@ namespace Eggnog.Relations.Tests
                 using var rs = Build(store, f, g, child, thrower);
                 Assert.Throws<InvalidOperationException>(() => child.Database.RunRuleSet(rs, ReportLevel.TimeOnly, store.ReadClock()));
 
-                // X12: only Dispose is allowed now.
+                // Only Dispose is allowed now.
                 Assert.True(child.IsFaulted);
                 Assert.ThrowsAny<InvalidOperationException>(() => Insert(child, f, child.NewId(), 0));
             }
         }
 
+        /// <summary>
+        /// A rule in a child may look the union-find up, and the lookup answers from the child's own unions.
+        /// </summary>
         [Fact]
         public void AChildRuleMayLookUpTheUnionFind()
         {
             var (store, f, g, _, child) = Setup();
             using (child)
             {
-                // A child reads the union-find through lookups only (X23): its snapshot holds no view of it, and the
-                // lookups read the child's own union-find.
+                // A child reads the union-find through lookups only: its snapshot holds no view of it, and the lookups
+                // read the child's own union-find.
                 var a = child.NewId();
                 var b = child.NewId();
                 Insert(child, f, a, 0);
@@ -170,6 +190,9 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A write to the child from inside a rule's action is refused on every match, and the run itself completes.
+        /// </summary>
         [Fact]
         public void AnActionCannotWriteTheChildDuringTheSearch()
         {
@@ -203,6 +226,59 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(5, LayeredRuleUtil.Visible(child, g).Count);
                 child.CheckInvariants();
             }
+        }
+
+        /// <summary>
+        /// A child that asserts nothing sees what its parent sees. A rule over the union-find run in a child either
+        /// sees the root's unions or is refused, since a <c>$uf</c> atom in a child is unsupported; it never reads the
+        /// child's own union-find rows as if they were its view.
+        /// </summary>
+        [Fact]
+        public void AChildRuleOverTheUnionFindDoesNotSilentlyReadThePlaceholder()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var root = store.Root;
+            var uf = store.UnionFindTable;
+            var marker = store.AddTable(new SortedWritesTable(1, 2, C(1), [], new KeepCurrentMerge(), ParallelHeuristics.Serial), name: "marker");
+
+            var a = root.NewId();
+            var b = root.NewId();
+            var e = root.BeginEpoch();
+            root.Database.WithExecutionState(s => { s.StageInsert(uf, [b, a, e]); return 0; }, e);
+            root.Database.MergeAll(e);
+            root.EndEpoch();
+            Assert.Equal(1, store.RootUnionFind.UnionFind.Count);
+
+            var child = root.CreateChild();
+
+            int RunOver(Database db)
+            {
+                var rsb = db.NewRuleSet();
+                var q = rsb.NewRule();
+                var x = q.NewVariable("x");
+                var y = q.NewVariable("y");
+                var t = q.NewVariable("t");
+                q.AddAtom(uf, [x, y, t]);
+                var rb = q.Build();
+                rb.Build("over-uf");
+                using var rs = rsb.Build();
+                return (int)db.RunRuleSet(rs, ReportLevel.WithPlan).NumMatches("over-uf");
+            }
+
+            Assert.Equal(1, RunOver(root.Database));
+
+            int childMatches;
+            try
+            {
+                childMatches = RunOver(child.Database);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or KeyNotFoundException)
+            {
+                return; // refused: acceptable
+            }
+
+            Assert.Equal(1, childMatches);
+            _ = marker;
         }
 
     }

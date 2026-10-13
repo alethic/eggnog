@@ -6,9 +6,10 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The plans a freeze makes (E10, §6.7 Freeze step 2): the default variants of every rule a descendant can run, planned
-    /// on the frozen scope's statistics: every global rule, the scope's local rules, every query and every mirror copy rule;
-    /// another container's local rules are left to be planned on their own statistics.
+    /// The plans a freeze makes (a rule is planned once, and every later run reuses the plan): the default variants of
+    /// every rule a descendant can run, planned on the frozen scope's statistics: every global rule, the scope's local
+    /// rules, every query and every mirror copy rule; another container's local rules are left to be planned on their
+    /// own statistics.
     /// </summary>
     public sealed class FreezePlanTests
     {
@@ -68,8 +69,8 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// R3: a split matcher is a rule a descendant can run (a split step in a query beneath the frozen schema), so the
-        /// schema's freeze plans it too (§6.7 step 2).
+        /// A split matcher is a rule a descendant can run (a split step in a query beneath the frozen schema), so the
+        /// schema's freeze plans it too.
         /// </summary>
         [Fact]
         public void AFreezePlansTheSplitMatchers()

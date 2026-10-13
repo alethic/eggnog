@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An evaluation failure an external function recorded during an engine call (D31): which rule, what failed, the
+    /// An evaluation failure an external function recorded during an engine call: which rule, what failed, the
     /// decoded arguments, and the exception. The rule layer turns the first one of a call into a
     /// <see cref="RuleEvaluationException"/>.
     /// </summary>

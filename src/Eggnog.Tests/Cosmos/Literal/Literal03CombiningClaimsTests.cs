@@ -4,7 +4,7 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/03-combining-claims.egg</c>, as written (gap 2): the schema's
+    /// <c>prototypes/cosmos-facts/03-combining-claims.egg</c>, as written: the schema's
     /// <c>kind ∈ {order, invoice}</c> and the query's <c>kind &lt;&gt; 'invoice'</c> only together prove the guard
     /// <c>kind = 'order'</c>; the domain lattice narrows to <c>{order}</c>. The expected figures are the egglog CLI's
     /// (vendored <c>ext/egglog</c> at 5e655cae).

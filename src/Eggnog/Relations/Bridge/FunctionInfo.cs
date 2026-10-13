@@ -6,7 +6,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// What an <see cref="EGraph"/> keeps about a declared function: egglog-bridge's <c>FunctionInfo</c>
     /// (egglog-bridge/src/lib.rs:982-997), without the ids of the rule-based rebuild rules, which the engine does not
-    /// build (decision 10: rebuild is the native path only).
+    /// build: it rebuilds through the native path only.
     /// </summary>
     /// <remarks>
     /// Immutable once the function is added.

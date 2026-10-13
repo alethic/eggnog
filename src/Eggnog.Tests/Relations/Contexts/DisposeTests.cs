@@ -10,18 +10,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="Context.Dispose"/> in full (colored-contexts spec §8.2, §13 edge 23): the rules (the root and
-    /// a context with live children refuse, a second call does nothing, every later call throws
-    /// <see cref="ObjectDisposedException"/>), what it releases, the gates it exits (which release compaction and
-    /// retraction above it), the container dirty log cleared with the last descendant, and disposing faulted, frozen and
-    /// scanned contexts.
+    /// Tests for <see cref="Context.Dispose"/> in full: the rules (the root and a context with live children refuse, a
+    /// second call does nothing, every later call throws <see cref="ObjectDisposedException"/>), what it releases, the
+    /// gates it exits (which release compaction and retraction above it), the container dirty log cleared with the last
+    /// descendant, and disposing faulted, frozen and scanned contexts.
     /// </summary>
     public class DisposeTests
     {
 
         /// <summary>
-        /// A second dispose does nothing; every later call to another member throws ObjectDisposedException (edge case
-        /// 23).
+        /// A second dispose does nothing; every later call to another member throws
+        /// <see cref="ObjectDisposedException"/>.
         /// </summary>
         [Fact]
         public void EveryLaterCallThrowsObjectDisposed()
@@ -132,8 +131,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A dispose from inside a scan of the context (or from another thread during one) is refused; a re-entrant dispose
-        /// from a write batch too.
+        /// A dispose from inside a scan of the context (or from another thread during one) is refused; a re-entrant
+        /// dispose from a write batch too.
         /// </summary>
         [Fact]
         public void ADisposeDuringAScanOrABatchIsRefused()

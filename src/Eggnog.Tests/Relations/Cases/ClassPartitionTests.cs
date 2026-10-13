@@ -8,15 +8,15 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The meet of the live cases' partitions (colored-contexts spec §11.1, I33 completeness of equalities): the blocks of
-    /// parent ids equal in every case, from any seed.
+    /// The meet of the live cases' partitions, on which the lift relies to write every equality that holds in all its
+    /// cases: the blocks of parent ids equal in every case, from any seed.
     /// </summary>
     public class ClassPartitionTests
     {
 
         /// <summary>
-        /// A graph with <paramref name="count"/> root ids and one case per entry of <paramref name="unions"/>, each making
-        /// the unions listed (pairs of id indexes), all brought up to date.
+        /// A graph with <paramref name="count"/> root ids and one case per entry of <paramref name="unions"/>, each
+        /// making the unions listed (pairs of id indexes), all brought up to date.
         /// </summary>
         static (ContextGraph Graph, Value[] Ids, List<EGraphContext> Cases) Setup(int count, params (int A, int B)[][] unions)
         {

@@ -2,8 +2,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Decides which entries <see cref="RawHashTable{TEntry}.Retain{TPredicate}(ref TPredicate)"/> keeps: the closure of
-    /// hashbrown's <c>HashTable::retain</c>.
+    /// Decides which entries <see cref="RawHashTable{TEntry}.Retain{TPredicate}(ref TPredicate)"/> keeps: the closure
+    /// of hashbrown's <c>HashTable::retain</c>.
     /// </summary>
     /// <remarks>
     /// Implement it on a struct so the JIT specializes the scan. The predicate may update the entry in place (the

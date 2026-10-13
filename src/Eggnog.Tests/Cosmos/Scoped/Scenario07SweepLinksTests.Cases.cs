@@ -4,7 +4,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// The facade probe's queries of 07 that lower only through a case split on <c>data.type</c> (R3): each runs the
+    /// The facade probe's queries of 07 that lower only through a case split on <c>data.type</c>: each runs the
     /// theory's <see cref="CosmosTheory.Saturation"/> in its own query scope under the frozen schema, which
     /// <see cref="SweepLinks.Compile"/> compiled with its own split (three cases: park, map, spot).
     /// </summary>
@@ -12,8 +12,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
     {
 
         /// <summary>
-        /// Asks a query with the split (<see cref="CosmosTheory.Saturation"/>), and checks that the run saturated and left
-        /// no case behind.
+        /// Asks a query with the split (<see cref="CosmosTheory.Saturation"/>), and checks that the run saturated and
+        /// left no case behind.
         /// </summary>
         static (Scope Query, Pred Q, RunReport Report) AskWithSplit(CosmosTheory c, Scope schema, ConstructorTerm<Pred> term)
         {
@@ -65,9 +65,10 @@ namespace Eggnog.Tests.Cosmos.Scoped
                     c.And.Of(c.StrEq.Of("data.type", "park"), c.StrEq.Of("data.data.parkId", SweepLinks.Park)),
                     c.And.Of(c.StrEq.Of("data.type", "map"), c.StrEq.Of("data.data.parkId", SweepLinks.Park)))));
 
-                // Eggnog's spelling of equal cost (§8.1.1, N35): the host made the parkId comparison's class before the map
-                // equality's, so the tie between the two spellings of the second conjunction goes to the commuted one (D10).
-                // egglog's spelling is in the same class.
+                // Eggnog's spelling of equal cost, as in the literal suite: the host made the parkId comparison's class
+                // before the map equality's, and extraction breaks ties by content, the lower class id first, so the
+                // tie between the two spellings of the second conjunction goes to the commuted one; egglog breaks it by
+                // scan order. egglog's spelling is in the same class.
                 var best = query.Extract(q);
                 Assert.Equal(
                     $"(Or (And (StrEq \"data.type\" \"park\") (StrEq \"data.data.parkId\" \"{SweepLinks.Park}\")) (And (StrEq \"data.data.parkId\" \"{SweepLinks.Park}\") (StrEq \"data.type\" \"map\")))",

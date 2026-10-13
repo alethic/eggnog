@@ -6,10 +6,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Lifts into a parent what holds in every live case of a split (colored-contexts spec §11.2, L1, L2, L4, I33): the
-    /// equalities between parent ids (the meet of the cases' partitions, <see cref="ClassPartition"/>), the facts of the
-    /// spec's tables over parent ids, and lattice values joined over the cases; vacuous cases are left out, and a split
-    /// whose cases are all vacuous contradicts the parent.
+    /// Lifts into a parent what holds in every live case of a split: the equalities between parent ids (the meet of the
+    /// cases' partitions, <see cref="ClassPartition"/>), the facts of the spec's tables over parent ids, and lattice
+    /// values joined over the cases; vacuous cases are left out, and a split whose cases are all vacuous contradicts
+    /// the parent.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -21,10 +21,12 @@ namespace Eggnog.Relations
     /// <see cref="LiftOptions.RoundLimit"/> is reached.
     /// </para>
     /// <para>
-    /// Soundness (I33): a written equality or fact holds in every live case, a vacuous case has no model, and the
-    /// coverage of the cases is the caller's obligation. Completeness: every equality between parent ids, and every fact
-    /// of a listed table over parent ids, that holds in every live case is written once the rounds settle, through the
-    /// seed's own rows (step (a)) and the winner probe of its group roots (step (b), L1).
+    /// Soundness: a written equality or fact holds in every live case, a vacuous case has no model, and the coverage of
+    /// the cases is the caller's obligation. Completeness: every equality between parent ids, and every fact of a
+    /// listed table over parent ids, that holds in every live case is written once the rounds settle, through the
+    /// seed's own rows and the winner probe of its group roots. The probe is needed because only losers are marked: an
+    /// ancestor row that mentions a merged class's winner is never copied into the case, so the lift looks such rows up
+    /// by each winner.
     /// </para>
     /// <para>
     /// Memo. The caller keeps the <see cref="LiftSignature"/> of the last lift that settled: the versions it read and the
@@ -56,7 +58,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Lifts what holds in every live case of <paramref name="cases"/> into <paramref name="parent"/> with a new
-        /// <see cref="Lifter"/> (§11.2).
+        /// <see cref="Lifter"/>.
         /// </summary>
         /// <param name="parent">The cases' parent; not frozen, stopped or disposed.</param>
         /// <param name="cases">The cases: children of <paramref name="parent"/>, at least one.</param>
@@ -128,7 +130,7 @@ namespace Eggnog.Relations
                     CountLive(cases, report);
                     if (live.Count == 0)
                     {
-                        // L4: no live case, so no model of the parent under the cases' coverage.
+                        // No live case, so no model of the parent under the cases' coverage.
                         report.ParentContradicted = true;
                         report.Changed |= ContradictParent(parent, cases, false, 0);
                         break;
@@ -181,12 +183,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Writes the parent's contradiction (L4) when every case is vacuous, through the e-graph's contradiction function
+        /// Writes the parent's contradiction when every case is vacuous, through the e-graph's contradiction function
         /// if it has one and the parent does not see it yet, and flushes. The row's output is the function's constant
-        /// default; else, for an id output, the term's id in the parent (a fresh one), never a case's output, which can be
-        /// local to it (I10); else the base value a vacuous case merged into its own layer of the function, read from
-        /// <paramref name="cases"/> or, when none of them has it (a case set that already disposed its vacuous cases),
-        /// <paramref name="keptOutput"/>.
+        /// default; else, for an id output, the term's id in the parent (a fresh one), never a case's output, which can
+        /// be local to it and so absent from the parent; else the base value a vacuous case merged into its own layer
+        /// of the function, read from <paramref name="cases"/> or, when none of them has it (a case set that already
+        /// disposed its vacuous cases), <paramref name="keptOutput"/>.
         /// </summary>
         /// <param name="parent">The parent; clean.</param>
         /// <param name="cases">The cases, all vacuous; may be empty.</param>
@@ -266,7 +268,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Checks the parent and the cases (§11.2's preconditions).
+        /// Checks the lift's preconditions on the parent and the cases.
         /// </summary>
         static void Validate(EGraphContext parent, IReadOnlyList<EGraphContext> cases)
         {

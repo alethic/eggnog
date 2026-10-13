@@ -12,19 +12,19 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Rules in concurrent children (colored-contexts spec §10.9, §17 M10.3): sixteen children of a frozen root run on
-    /// eight threads through <see cref="ConcurrentChildren"/>, each staging host writes (rows, terms and unions over root
-    /// and child-local ids) and saturating a rule set that derives relations, mints constructor terms, unions classes and
-    /// raises a lattice. Each child must end equal, modulo the renaming of the ids it minted, to a serial replay of the
-    /// same program in a fresh child of the same root; its <see cref="EGraphContext.CheckInvariants"/> must pass; and the
+    /// Rules in concurrent children: sixteen children of a frozen root run on eight threads through
+    /// <see cref="ConcurrentChildren"/>, each staging host writes (rows, terms and unions over root and child-local
+    /// ids) and saturating a rule set that derives relations, mints constructor terms, unions classes and raises a
+    /// lattice. Each child must end equal, modulo the renaming of the ids it minted, to a serial replay of the same
+    /// program in a fresh child of the same root; its <see cref="EGraphContext.CheckInvariants"/> must pass; and the
     /// frozen root must be unchanged bit for bit: every row of every table in physical order with its timestamp, the
     /// union-find's rows and parent array, and the root's version.
     /// </summary>
     /// <remarks>
     /// Renaming. A child's ids come from its id blocks, so the same program mints different ids in different children.
     /// Root ids are shared and kept; every other class (each holds a constructor term, since the programs mint ids only
-    /// through constructors) is named by its smallest term, by length then ordinal, over the child's constructor rows. A
-    /// congruence-closed view gives distinct classes distinct smallest terms, so the names are a renaming.
+    /// through constructors) is named by its smallest term, by length then ordinal, over the child's constructor rows.
+    /// A congruence-closed view gives distinct classes distinct smallest terms, so the names are a renaming.
     /// </remarks>
     public class ConcurrentChildRulesTests
     {
@@ -35,8 +35,8 @@ namespace Eggnog.Relations.Tests
         const int MaxIterations = 64;
 
         /// <summary>
-        /// Serial children (the default under a frozen parent, §10.9) lease one thread each and run eight at a time;
-        /// children given two threads through <see cref="ContextOptions.Parallelism"/> lease two and run four at a time.
+        /// Serial children (the default under a frozen parent) lease one thread each and run eight at a time; children
+        /// given two threads through <see cref="ContextOptions.Parallelism"/> lease two and run four at a time.
         /// </summary>
         [Theory]
         [InlineData(1, 1)]
@@ -59,7 +59,7 @@ namespace Eggnog.Relations.Tests
             g.Root.AddTerm(g.Add, [ids[1], ids[2]]);
             g.Root.FlushUpdates();
 
-            // One root iteration, so that the children inherit watermarks (§10.2) and still have work of their own.
+            // One root iteration, so that the children inherit the root's watermarks and still have work of their own.
             g.Root.RunRules(rules);
             g.Root.Freeze();
             Assert.All(rules, r => Assert.True(g.EGraph.GetRuleInfo(r).AllowInheritance));
@@ -104,8 +104,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// The rule set, every rule query-determined (constructors, relations, a lattice; no table reads in actions):
-        /// <c>edge → path</c>, transitivity, <c>path(x, y) → add(x, y)</c>, commutativity of <c>add</c>, two-cycles collapse,
-        /// <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>.
+        /// <c>edge → path</c>, transitivity, <c>path(x, y) → add(x, y)</c>, commutativity of <c>add</c>, two-cycles
+        /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>.
         /// </summary>
         static EGraphRuleId[] Rules(ContextGraph g)
         {
@@ -156,8 +156,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A random child program in two rounds: each stages edges over root ids, a union of root ids, a term over root
-        /// ids with an edge from it, a union of a minted term with a root id (second round), and a <c>low</c> value; then
-        /// flushes and saturates. Each step receives the ids the program minted so far, so a replay mints its own.
+        /// ids with an edge from it, a union of a minted term with a root id (second round), and a <c>low</c> value;
+        /// then flushes and saturates. Each step receives the ids the program minted so far, so a replay mints its own.
         /// </summary>
         static List<Action<EGraphContext, List<Value>>> Program(ContextGraph g, Value[] ids, Random random)
         {
@@ -198,7 +198,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Runs a program in <paramref name="child"/>: a <c>null</c> step flushes and saturates. Returns a log of each
-        /// saturation's iteration count, which a serial replay must reproduce (decision 4: serial runs are deterministic).
+        /// saturation's iteration count, which a serial replay must reproduce, since serial runs are deterministic.
         /// </summary>
         static string Replay(EGraphContext child, List<Action<EGraphContext, List<Value>>> program, EGraphRuleId[] rules)
         {
@@ -223,8 +223,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Writes every function's rows as <paramref name="child"/> sees them, sorted, with root ids kept and every other
-        /// class named by its smallest constructor term.
+        /// Writes every function's rows as <paramref name="child"/> sees them, sorted, with root ids kept and every
+        /// other class named by its smallest constructor term.
         /// </summary>
         static string Normalize(ContextGraph g, EGraphContext child, uint rootIdBound)
         {

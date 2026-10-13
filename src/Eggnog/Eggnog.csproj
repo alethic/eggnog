@@ -2,15 +2,22 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-        <Description>Equality saturation for .NET: typed definitions, rules, schedules, host writes and reads, and extraction, on a C# reimplementation of egglog's relational engine.</Description>
-        <PackageTags>egraph;e-graph;equality-saturation;datalog;rewriting;union-find;free-join</PackageTags>
+        <Description>Equality saturation for .NET with egglog's capabilities and a typed C# API: relations, functions with lattice merges, constructors, rules, schedules, queries and extraction, plus scopes (child contexts, frozen bases shared across threads) and case splits with lift, on a C# reimplementation of egglog's engine.</Description>
+        <PackageTags>egraph;e-graph;equality-saturation;egglog;datalog;rewriting;term-rewriting;union-find;free-join</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageIcon>icon.png</PackageIcon>
     </PropertyGroup>
 
+    <!-- The package page's readme is this project's README.md (absolute links only: nuget.org cannot resolve relative
+         ones); the repository's README.md is the GitHub page. LICENSE and NOTICE travel with the package, since NOTICE
+         carries egglog's MIT notice. The pack runs in the outer, cross-targeting build, which has no default items, so
+         README.md is included explicitly (and removed from the inner builds' defaults first, to keep one item). -->
     <ItemGroup>
-        <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Remove="README.md" />
+        <None Include="README.md" Pack="true" PackagePath="\" />
         <None Include="..\..\icon.png" Pack="true" PackagePath="\" Visible="false" />
+        <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+        <None Include="..\..\NOTICE" Pack="true" PackagePath="\" Visible="false" />
     </ItemGroup>
 
     <ItemGroup>

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
@@ -11,7 +12,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests that <see cref="BaseValues"/> is thread-safe: concurrent boxing agrees on every value and keeps intern
-    /// indices dense, and concurrent registration is idempotent and races safely with boxing.
+    /// indices dense, concurrent registration is idempotent and races safely with boxing, and <c>TryGetExisting</c>
+    /// misses that race with interning never intern.
     /// </summary>
     public class BaseValuesConcurrencyTests
     {
@@ -133,6 +135,52 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(ids[0][4], bases.GetTypeId<StringCodec, string>());
             Assert.Equal(ids[0][13], bases.GetTypeId(typeof(InternedCodec<decimal>)));
             Assert.Equal("\"t1\"", bases.Format(ids[0][4], bases.Get<StringCodec, string>("t1")));
+        }
+
+        [Fact]
+        public async Task MissesRacingWithInterningNeverIntern()
+        {
+            const int keys = 20_000;
+            var bases = new BaseValues();
+            bases.RegisterType<StringCodec, string>();
+            bases.RegisterType<Int64Codec, long>();
+
+            using var writing = new CancellationTokenSource();
+            var lookups = Enumerable.Range(0, 4).Select(r => Task.Factory.StartNew(() =>
+            {
+                var random = new Random(r);
+                var misses = 0L;
+                while (writing.IsCancellationRequested == false)
+                {
+                    // Odd keys are never interned by anyone: every lookup must miss and must not add the key.
+                    var k = random.Next(keys) | 1;
+                    if (bases.TryGetExisting<StringCodec, string>(Key(k), out _))
+                        throw new InvalidOperationException($"found never-interned key {k}");
+                    if (bases.TryGetExisting<Int64Codec, long>(-1L - k, out _))
+                        throw new InvalidOperationException($"found never-interned long {-1L - k}");
+
+                    misses++;
+                }
+
+                return misses;
+            }, TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+            var written = 0L;
+            for (var k = 0; k < keys; k += 2)
+            {
+                bases.Get<StringCodec, string>(Key(k));
+                bases.Get<Int64Codec, long>(-1L - k);
+                written += 2;
+            }
+
+            writing.Cancel();
+            var misses = await Task.WhenAll(lookups);
+            Assert.True(misses.Sum() > 0);
+            Assert.Equal(written, bases.InternedCount);
+            Assert.Equal(keys / 2, bases.GetTable<StringCodec, string>().InternedCount);
+            Assert.Equal(keys / 2, bases.GetTable<Int64Codec, long>().InternedCount);
+
+            static string Key(int k) => "key" + k.ToString(CultureInfo.InvariantCulture);
         }
 
     }

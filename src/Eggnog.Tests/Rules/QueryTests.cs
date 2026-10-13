@@ -12,9 +12,10 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// Host conjunctive queries (§6.6.4, D34, D49) at the root: <c>Any</c>, <c>Count</c> and <c>ForEachMatch</c>; queries
-    /// write nothing, so they move neither the version nor an extractor, and a failure in one leaves the scope usable;
-    /// <c>Dispose</c> frees the engine rule once no call uses it.
+    /// Host conjunctive queries: <c>Any</c>, <c>Count</c> and <c>ForEachMatch</c>. Queries write nothing, so they move
+    /// neither the version nor an extractor, and a failure in one leaves the scope usable; matches come in content
+    /// order, with classes canonical in the queried scope; <c>Dispose</c> frees the engine rule once no call uses it;
+    /// and a query allocates per match no more than the engine run it wraps.
     /// </summary>
     [Collection(Relations.Tests.AllocationProbeCollection.Name)]
     public sealed class QueryTests
@@ -406,7 +407,7 @@ namespace Eggnog.Tests.Rules
 
             t.Root.Union(a, b);
 
-            // The engine runs the constant in its canonical form (X19), so the variant lowered at definition serves on.
+            // The engine runs the constant in its canonical form, so the variant lowered at definition serves on.
             Assert.Equal(2, t.Root.Count(fromB));
             Assert.Same(original, fromB.Compiled.Variants.Default);
             Assert.True(t.Graph.VariantsByDescription.ContainsKey(original.Description));
@@ -545,8 +546,8 @@ namespace Eggnog.Tests.Rules
                 q.When(pair.Of(n, s));
             });
 
-            // Cells of negative and large numbers are interned in insertion order, which is not their numeric order; strings
-            // are interned too. Content order is numeric, then ordinal ("B" < "a" < "b").
+            // Cells of negative and large numbers are interned in insertion order, which is not their numeric order;
+            // strings are interned too. Content order is numeric, then ordinal ("B" < "a" < "b").
             var rows = new (long, string)[] { (5_000_000_000, "b"), (-3, "a"), (7, "b"), (-3, "B"), (long.MinValue, ""), (7, "a"), (2_147_483_648, "z") };
             g.Root.Assume(rows.Select(r => pair.Of(r.Item1, r.Item2)).ToArray());
             var seen = new List<(long, string)>();
@@ -583,8 +584,8 @@ namespace Eggnog.Tests.Rules
                 return true;
             });
 
-            // Both matches were collected before the union; the second, read after it, is canonical, and names the first's
-            // class.
+            // Both matches were collected before the union; the second, read after it, is canonical, and names the
+            // first's class.
             Assert.Equal(2, classes.Count);
             Assert.Equal(t.Root.Find(classes[1]), classes[1]);
             Assert.True(t.Root.AreEqual(classes[0], classes[1]));
@@ -650,8 +651,8 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// The bytes the second of two calls of <paramref name="action"/> allocates on this thread: the graph is serial, so
-        /// the engine runs on this thread, and the first call fills the pools the second reuses.
+        /// The bytes the second of two calls of <paramref name="action"/> allocates on this thread: the graph is
+        /// serial, so the engine runs on this thread, and the first call fills the pools the second reuses.
         /// </summary>
         static long Allocated(Action action)
         {
@@ -686,7 +687,6 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", fromPrimitive!.Message);
             Assert.DoesNotContain(t.Graph.Queries, q => q.Name == "from a filter");
         }
-
 
         [Fact]
         public void QueriesOnAFrozenScopeRunFromEightThreads()
@@ -753,6 +753,105 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(4, inner.CountRows(t.Fact));
             Assert.Equal("(query ((fact@outer x) (fact x)) (x))", tagged.ToString());
         }
+
+        /// <summary>
+        /// The engine's own allocation for running a query's rule to completion with a collector that keeps nothing.
+        /// </summary>
+        static long EngineOnly(NodeTheory t, Query query) => Allocated(() =>
+        {
+            var compiled = query.Compiled;
+            var variant = t.Root.Engine.PrepareVariant(compiled.Variants, compiled.Program.WrittenIdConstants, false);
+            t.Root.Runtime.QueryMatches = null;
+            t.Root.Engine.RunQuery(variant);
+        });
+
+        /// <summary>
+        /// Hot paths allocate nothing per row, per match or per probe: <c>Count</c> allocates per match no more than
+        /// the engine run it wraps, within 16 bytes.
+        /// </summary>
+        [Fact]
+        public void CountAllocatesNoMoreThanTheEnginePerMatch()
+        {
+            const int small = 1_000;
+            const int large = 21_000;
+            var (a, qa, _) = Numbers(small);
+            var (b, qb, _) = Numbers(large);
+
+            var count = (Allocated(() => b.Root.Count(qb)) - Allocated(() => a.Root.Count(qa))) / (double)(large - small);
+            var engine = (EngineOnly(b, qb) - EngineOnly(a, qa)) / (double)(large - small);
+
+            Assert.True(count <= engine + 16, $"Count allocates {count:0.#} bytes per match; the engine run allocates {engine:0.#}.");
+        }
+
+        /// <summary>
+        /// As <see cref="CountAllocatesNoMoreThanTheEnginePerMatch"/>, for ForEachMatch with a callback that reads each
+        /// match.
+        /// </summary>
+        [Fact]
+        public void ForEachMatchAllocatesNoMoreThanTheEnginePerMatch()
+        {
+            const int small = 1_000;
+            const int large = 21_000;
+            var (a, qa, xa) = Numbers(small);
+            var (b, qb, xb) = Numbers(large);
+            long sink = 0;
+
+            var each = (Allocated(() => b.Root.ForEachMatch(qb, m => { sink += m.Get(xb); return true; }))
+                - Allocated(() => a.Root.ForEachMatch(qa, m => { sink += m.Get(xa); return true; }))) / (double)(large - small);
+            var engine = (EngineOnly(b, qb) - EngineOnly(a, qa)) / (double)(large - small);
+
+            Assert.True(each <= engine + 16, $"ForEachMatch allocates {each:0.#} bytes per match; the engine run allocates {engine:0.#}.");
+            Assert.NotEqual(0, sink);
+        }
+
+        /// <summary>
+        /// <c>Any</c> stops the engine at the first match; per row of the scanned table it allocates no more than an
+        /// engine run to completion, within 4 bytes.
+        /// </summary>
+        [Fact]
+        public void AnyAllocatesNoMoreThanAFullEngineRunPerRow()
+        {
+            const int small = 1_000;
+            const int large = 21_000;
+            var (a, qa, _) = Numbers(small);
+            var (b, qb, _) = Numbers(large);
+
+            var any = (Allocated(() => b.Root.Any(qb)) - Allocated(() => a.Root.Any(qa))) / (double)(large - small);
+            var engine = (EngineOnly(b, qb) - EngineOnly(a, qa)) / (double)(large - small);
+
+            Assert.True(any <= engine + 4, $"Any allocates {any:0.#} bytes per row; a full engine run allocates {engine:0.#}.");
+        }
+
+        /// <summary>
+        /// <c>QueryMatch.Get</c> returns a class canonical in the queried scope, and a <c>ForEachMatch</c> callback may
+        /// call the scope: after a union made from the callback, later matches still return canonical classes.
+        /// </summary>
+        [Fact]
+        public void LaterMatchesAreCanonicalAfterTheCallbackWrites()
+        {
+            var t = new NodeTheory();
+            Var<Node> n = null!;
+            var lits = t.Graph.DefineQuery("lits", q =>
+            {
+                n = q.Var<Node>("n");
+                q.When(Fact.Exists(t.Lit.Of(q.Var<long>("x"))), n.Is(t.Lit.Of(q.Var<long>("y"))));
+            });
+            var one = t.Root.Make(t.Lit.Of(1L));
+            var two = t.Root.Make(t.Lit.Of(2L));
+            var classes = new List<Node>();
+            t.Root.ForEachMatch(lits, m =>
+            {
+                classes.Add(m.Get(n));
+                if (classes.Count == 1)
+                    t.Root.Union(one, two);
+
+                return true;
+            });
+
+            foreach (var c in classes)
+                Assert.Equal(t.Root.Find(c), c);
+        }
+
     }
 
 }

@@ -6,18 +6,19 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The rule layer's guard of one thread domain (D47): a <c>ThreadAffinityGuard</c> held for the whole of every scope
-    /// call (a host batch, a run, a read), the releases deferred until the domain's current call ends (D40), and whether a
+    /// The rule layer's guard of one thread domain: a <c>ThreadAffinityGuard</c> held for the whole of every scope
+    /// call (a host batch, a run, a read), the releases deferred until the domain's current call ends, and whether a
     /// run observer is running. A second thread fails fast instead of interleaving between engine calls.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Re-entrant on the owning thread. One guard per thread domain: a writable scope shares its guard with every child
     /// created under it, each child of a frozen scope gets a new one, and freezing a scope gives each child subtree that
-    /// shares its guard a new one (colors §8.3). Entering and leaving cost one compare-and-swap or one increment.
+    /// shares its guard a new one, as the engine does with its own thread domains. Entering and leaving cost one
+    /// compare-and-swap or one increment.
     /// </para>
     /// <para>
-    /// A release (D40) may run on any thread, the one that disposed a scope or ended its last call, and holds the guard for
+    /// A release may run on any thread, the one that disposed a scope or ended its last call, and holds the guard for
     /// its engine work, under a release lock. That work is internal and short and runs no user code, so a call that finds
     /// the guard held waits on the release lock and tries again: it fails only when the guard is still held once no
     /// release can hold it, that is, by another call. A <c>Dispose</c> on one thread therefore never makes another
@@ -72,7 +73,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Enters the domain for a release (D40) unless another thread holds it or another release is in progress: as
+        /// Enters the domain for a release unless another thread holds it or another release is in progress: as
         /// <see cref="TryEnter"/>, under the release lock, which a call that finds the guard held waits on.
         /// </summary>
         /// <returns>Whether the domain was entered; the caller then calls <see cref="ExitAfterRelease"/>.</returns>
@@ -108,7 +109,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Leaves the domain once; at depth 0, runs the releases deferred meanwhile (D40), after the domain is released, so
+        /// Leaves the domain once; at depth 0, runs the releases deferred meanwhile, after the domain is released, so
         /// that a release deferred while this thread was leaving is never lost: either this exit takes it, or its scope saw
         /// the domain free.
         /// </summary>
@@ -125,13 +126,13 @@ namespace Eggnog
         public bool IsHeldByAnotherThread => guard.IsHeld && guard.Depth == 0;
 
         /// <summary>
-        /// Gets or sets whether a run observer is running on the owning thread (R1b): reads of the run's scopes are then
+        /// Gets or sets whether a run observer is running on the owning thread: reads of the run's scopes are then
         /// allowed and every other call is refused.
         /// </summary>
         public bool InObserver { get; set; }
 
         /// <summary>
-        /// Defers the release of <paramref name="scope"/> until the domain's current call ends (D40).
+        /// Defers the release of <paramref name="scope"/> until the domain's current call ends.
         /// </summary>
         /// <param name="scope">The disposed scope.</param>
         public void DeferRelease(Scope scope)

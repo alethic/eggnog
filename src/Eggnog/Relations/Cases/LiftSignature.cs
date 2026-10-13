@@ -5,13 +5,13 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What a settled lift read (colored-contexts spec §11.2): the versions of the parent, of those of its ancestors that
-    /// are not frozen, and of each case, with the identities of the parent and the cases, and the spec it lifted. A lift
-    /// whose first round finds the signature it memoized last time has nothing new to read and returns at once.
+    /// What a settled lift read: the versions of the parent, of those of its ancestors that are not frozen, and of each
+    /// case, with the identities of the parent and the cases, and the spec it lifted. A lift whose first round finds
+    /// the signature it memoized last time has nothing new to read and returns at once.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Versions are change stamps (<see cref="EGraphContext.Version"/>, X30): they move with every merge that adds or
+    /// Versions are change stamps (<see cref="EGraphContext.Version"/>): they move with every merge that adds or
     /// removes rows (unions included), every hide and clear, and the stop flag; never for no-ops. Frozen ancestors cannot
     /// change, so they are left out.
     /// </para>

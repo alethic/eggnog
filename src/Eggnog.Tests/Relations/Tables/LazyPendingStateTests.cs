@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Lazy pending queues (colored-contexts spec §14.2, §21.9, M10.4): a child's tables create each queue on its first
-    /// publication; until then readers see an empty shared queue, and an eager state (every root and bare table) is
-    /// unchanged.
+    /// Lazy pending queues: a child's tables create each queue on its first publication, so a layer pays nothing for
+    /// queues it never stages into; until then readers see an empty shared queue. A lazy state seals, rolls back and
+    /// copies like an eager one (the state of every root and bare table).
     /// </summary>
     public class LazyPendingStateTests
     {

@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="HiddenSet"/> (colored-contexts spec §6.3, X40, I18, I20): random add and seal sequences
-    /// against a <see cref="SortedSet{T}"/>, the switch to a bitset, unions, and a sealed set reopening.
+    /// Tests for <see cref="HiddenSet"/>: random add and seal sequences against a <see cref="SortedSet{T}"/>, the
+    /// switch to a bitset, unions, and a sealed set reopening.
     /// </summary>
     public class HiddenSetTests
     {
@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// A random sequence of adds and seals over a layer that grows: <see cref="HiddenSet.Contains"/> always agrees
         /// with the reference, <see cref="HiddenSet.ContainsSealed"/> agrees whenever the set is sealed, and the set only
-        /// grows (I20).
+        /// grows: nothing hidden is ever un-hidden.
         /// </summary>
         [Theory]
         [MemberData(nameof(Seeds))]

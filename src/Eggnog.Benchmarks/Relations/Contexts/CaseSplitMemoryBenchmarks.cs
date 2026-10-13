@@ -6,10 +6,10 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Memory of a case split, contexts against full clones (colored-contexts spec §17 M10.4, L6, B5): the bytes one split
-    /// of <see cref="Cases"/> cases allocates with colored contexts (a case set under a fresh scope, each case one union
-    /// and one fact, optionally lifted), against egglog's push, a <see cref="Database.Clone"/> of the root per case with
-    /// the same writes (the in-house baseline), over roots of 20,000 and 200,000 ids.
+    /// Memory of a case split, contexts against full clones: the bytes one split of <see cref="Cases"/> cases allocates
+    /// with colored contexts (a case set under a fresh scope, each case one union and one fact, optionally lifted),
+    /// against egglog's push, a <see cref="Database.Clone"/> of the root per case with the same writes (the in-house
+    /// baseline), over roots of 20,000 and 200,000 ids.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -17,7 +17,7 @@ namespace Eggnog.Relations.Benchmarks
     /// context side freezes it and opens each split under a fresh writable child (the scope), so the scope's own state
     /// does not grow across invocations; case <c>j</c> unions <c>x_{2j}</c> with <c>x_{2j+1}</c> and marks
     /// <c>x_1</c>, which every case shares, so the lift has one fact to write. The clone side clones a second, unfrozen
-    /// root with the same rows (a root with live children cannot be cloned, §4.3), stages the same union and fact into each
+    /// root with the same rows (a root with live children cannot be cloned), stages the same union and fact into each
     /// copy and merges them; it never lifts, since clones have nothing to lift into.
     /// </para>
     /// <para>
@@ -81,6 +81,9 @@ namespace Eggnog.Relations.Benchmarks
         /// Opens <paramref name="cases"/> cases under a fresh child of <paramref name="graph"/>'s frozen root, writes and
         /// rebuilds each, lifts if asked, and disposes everything.
         /// </summary>
+        /// <param name="graph">The graph whose frozen root the scope is created under.</param>
+        /// <param name="cases">The number of cases.</param>
+        /// <param name="lift">Whether to lift the cases into the scope before disposing them.</param>
         /// <returns>The rows the cases hold themselves.</returns>
         internal static long RunContexts(CaseGraph graph, int cases, bool lift)
         {
@@ -109,6 +112,8 @@ namespace Eggnog.Relations.Benchmarks
         /// Clones <paramref name="graph"/>'s root database once per case, stages the case's union and fact into the copy and
         /// merges them.
         /// </summary>
+        /// <param name="graph">The graph whose root database is cloned; its root must have no live children.</param>
+        /// <param name="cases">The number of cases, one clone each.</param>
         /// <returns>The rows the copies hold.</returns>
         internal static long RunClones(CaseGraph graph, int cases)
         {

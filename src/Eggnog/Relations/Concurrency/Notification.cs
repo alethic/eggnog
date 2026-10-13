@@ -6,8 +6,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A one-shot event: <see cref="Notify"/> happens at most once (later calls are no-ops), and every current or future
-    /// waiter is released by it. Waits can be bounded by a timeout.
+    /// A one-shot event: <see cref="Notify"/> happens at most once (later calls are no-ops), and every current or
+    /// future waiter is released by it. Waits can be bounded by a timeout.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -60,7 +60,8 @@ namespace Eggnog.Relations
         /// spurious wakeup can extend the wait. This port waits against a deadline fixed on entry, and re-checks the
         /// flag before reporting a timeout.
         /// </remarks>
-        /// <param name="timeout">The longest time to wait; <see cref="Timeout.InfiniteTimeSpan"/> waits forever.</param>
+        /// <param name="timeout">The longest time to wait; <see cref="Timeout.InfiniteTimeSpan"/> waits
+        /// forever.</param>
         /// <returns><c>true</c> if notified; <c>false</c> if the timeout elapsed first.</returns>
         public bool WaitWithTimeout(TimeSpan timeout)
         {

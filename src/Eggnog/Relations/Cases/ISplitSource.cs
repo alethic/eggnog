@@ -4,8 +4,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Where splits come from (colored-contexts spec §11.3; rule-layer E8, §6.9.2): a source finds the splits a scope
-    /// could take and, once the driver opens a split's cases, makes each case assume its part.
+    /// Where splits come from: a source finds the splits a scope could take and, once the driver opens a split's cases,
+    /// makes each case assume its part.
     /// </summary>
     /// <remarks>
     /// The driver calls a source without holding the scope's thread domain, so the source may run queries, write and create

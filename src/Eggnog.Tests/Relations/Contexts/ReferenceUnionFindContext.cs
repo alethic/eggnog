@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The naive model of one context's union-find (colored-contexts spec §17 M9.2): the ids minted in it and the unions
-    /// asserted in it, in order. Context = copy: the context's partition is the closure of every union asserted in it or
-    /// in any ancestor, whenever the ancestor asserted it, and its canonical ids are the class minima.
+    /// The naive model of one context's union-find: the ids minted in it and the unions asserted in it, in order.
+    /// Context = copy: the context's partition is the closure of every union asserted in it or in any ancestor,
+    /// whenever the ancestor asserted it, and its canonical ids are the class minima.
     /// </summary>
     sealed class ReferenceUnionFindContext
     {
@@ -53,7 +53,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets the ids that were not canonical in the parent's view when this context was created: the ids a context's
-        /// journal must not hold (I8).
+        /// journal must not hold.
         /// </summary>
         public IReadOnlySet<uint> DisplacedInParentAtCreation { get; }
 

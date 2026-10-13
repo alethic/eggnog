@@ -4,16 +4,16 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Collects the seed case's source rows for one lifted table (colored-contexts spec §11.2 steps (a) and (b)): each
-    /// row's keys and output, deduplicated by key in a <see cref="LiftCandidates"/> arena; with a winner filter, only rows
-    /// whose id keys name the winner.
+    /// Collects the seed case's source rows for one lifted table, which are its own rows and the ancestor rows that
+    /// mention one of its group roots: each row's keys and output, deduplicated by key in a
+    /// <see cref="LiftCandidates"/> arena; with a winner filter, only rows whose id keys name the winner.
     /// </summary>
     /// <remarks>
-    /// A bridge function's table row is its keys, then its output, then the timestamp and possibly the subsumption flag, so
-    /// the first <c>keys + 1</c> cells are exactly what the lift needs. The winner filter serves step (b): an ancestor row
-    /// that names a group root only in its output stands for no new parent key, because its key cells are either group
-    /// roots themselves (and probed as such) or stand only for themselves. Runs as a scan callback: it only computes.
-    /// No allocation per row once the arena is warm.
+    /// A bridge function's table row is its keys, then its output, then the timestamp and possibly the subsumption
+    /// flag, so the first <c>keys + 1</c> cells are exactly what the lift needs. The winner filter serves the ancestor
+    /// rows: an ancestor row that names a group root only in its output stands for no new parent key, because its key
+    /// cells are either group roots themselves (and probed as such) or stand only for themselves. Runs as a scan
+    /// callback: it only computes. No allocation per row once the arena is warm.
     /// </remarks>
     internal struct LiftKeySink : IRowSink
     {
@@ -49,7 +49,8 @@ namespace Eggnog.Relations
         public int Offered { get; private set; }
 
         /// <summary>
-        /// Keeps, from now on, only rows that name <paramref name="id"/> in an id key column (step (b)).
+        /// Keeps, from now on, only rows that name <paramref name="id"/> in an id key column (for the ancestor rows
+        /// that mention a group root).
         /// </summary>
         /// <param name="id">The group root.</param>
         public void FilterOn(uint id)
@@ -59,7 +60,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Keeps every row from now on (step (a)).
+        /// Keeps every row from now on (for the seed case's own rows).
         /// </summary>
         public void ClearFilter() => filter = false;
 

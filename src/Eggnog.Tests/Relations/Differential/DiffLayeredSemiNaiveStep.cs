@@ -6,19 +6,20 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T9 (colored-contexts spec §17 M10.2): the semi-naive variants of a <see cref="DiffSemiNaiveStep"/>, run over a
-    /// layered copy of the engine's current tables instead of the tables themselves, and checked against the same oracle.
+    /// The semi-naive variants of a <see cref="DiffSemiNaiveStep"/>, run over a layered copy of the engine's current
+    /// tables instead of the tables themselves, and checked against the same oracle.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The copy (<see cref="SyntheticLayers"/>): two to four levels of the program's tables. Every live row of a
     /// sorted-writes table goes to one level at random, keeping its timestamp, so each level's time column holds rows of
     /// any epoch and every variant's time range is one binary search per layer. Some keys also get a decoy, a different
-    /// row with the same key in a lower level, which the view hides, as a context's view hides an ancestor's row a deeper
-    /// level overrides (Lemma F). A union-find stays one layer (<see cref="TableView.ForTable"/>). So the view shows exactly
-    /// the engine's live rows, which the runner compares with the model after every step, and every variant's distinct
-    /// matches over the copy must be the oracle's, as in the flat run (I27, I31's Lemma 1: per-layer time splits partition
-    /// the view).
+    /// row with the same key in a lower level, which the view hides, as a context's view hides an ancestor's row that a
+    /// deeper level overrides (the topmost layer holding a key decides). A union-find stays one layer
+    /// (<see cref="TableView.ForTable"/>). So the view shows exactly the engine's live rows, which the runner compares
+    /// with the model after every step, and every variant's distinct matches over the copy must be the oracle's, as in
+    /// the flat run: the layered executor finds the distinct matches a naive join over the visible rows finds, and the
+    /// variants' time ranges, split per layer, still partition the view, since hidden rows fall on neither side.
     /// </para>
     /// <para>
     /// The rules record their matches and nothing else, so the step changes neither the engine nor the model and does not
@@ -235,6 +236,12 @@ namespace Eggnog.Relations.Tests
             return rsb.AddRuleFromCachedPlan(cached, extras.Select(x => (new AtomId(x.Atom), x.Constraint)).ToArray());
         }
 
+        /// <summary>
+        /// Adds to <paramref name="rsb"/> the rule over <paramref name="atoms"/>, planned under
+        /// <paramref name="config"/>, whose action only calls <paramref name="recorder"/> with <paramref name="tag"/>
+        /// and the recorded variables.
+        /// </summary>
+        /// <returns>The rule.</returns>
         static RuleId Build(RuleSetBuilder rsb, DiffQuery query, IReadOnlyList<DiffAtom> atoms, DiffConfig config, uint tag, ExternalFunctionId recorder)
         {
             var q = rsb.NewRule();

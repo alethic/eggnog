@@ -11,8 +11,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="Database.ApplyRebuild"/>, <see cref="Database.RefreshRowsForValues"/> and the table runner
-    /// behind them (egglog's core-relations/src/free_join/mod.rs:365-444), driven as egglog-bridge's rebuild loop drives
-    /// them (egglog-bridge/src/lib.rs:626-682).
+    /// behind them (egglog's core-relations/src/free_join/mod.rs:365-444), driven as egglog-bridge's rebuild loop
+    /// drives them (egglog-bridge/src/lib.rs:626-682).
     /// </summary>
     public class DatabaseRebuildTests
     {
@@ -78,8 +78,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void TheBridgeRebuildLoopReachesTheCongruenceClosure()
         {
-            // f(1) = 10, f(2) = 20, f(10) = 100, f(20) = 200; g(10) = 1000, g(20) = 2000. Unioning 1 and 2 makes 10 = 20,
-            // hence 100 = 200 and 1000 = 2000.
+            // f(1) = 10, f(2) = 20, f(10) = 100, f(20) = 200; g(10) = 1000, g(20) = 2000. Unioning 1 and 2 makes 10 =
+            // 20, hence 100 = 200 and 1000 = 2000.
             var (db, uf, tables) = Setup(2);
             var (f, g) = (tables[0], tables[1]);
             Stage(db, f, R(1, 10, 1), R(2, 20, 1), R(10, 100, 1), R(20, 200, 1));
@@ -247,6 +247,74 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new[] { R(4, 40, 1), R(20, 1, 5) }, Rows(db, g));
             Assert.Equal(new[] { R(1, 1, 1) }, Rows(db, plain));
             Assert.Equal(0, db.GetTable(uf).Count);
+        }
+
+        [Fact]
+        public void ParallelRebuildMergesReadDependenciesFirst()
+        {
+            // F's merge reads G; both are rebuilt in parallel (the parallel run_on_tables arm) and notified in
+            // completion order. G is merged before F reads it.
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                var parallelism = new ParallelHeuristics(4);
+                var db = new Database(parallelism);
+                var uf = db.AddTable(new DisplacedTable(), name: "$uf");
+                var g = db.AddTable(Function(1, ClosureMerge.TakeNew, [C(0)], parallelism), [], [], "g");
+                var f = db.AddTable(Function(1, new LookupMerge(g, 1, 1, 1), [C(0)], parallelism), [g], [], "f");
+                Stage(db, g, Enumerable.Range(0, 6000).Select(i => R((uint)(1000 + i), 7, 0)).Concat([R(1, 100, 0), R(2, 200, 0)]).ToArray());
+                Stage(db, f, Enumerable.Range(0, 6000).Select(i => R((uint)(1000 + i), 7, 0)).Concat([R(1, 0, 0), R(2, 0, 0)]).ToArray());
+                db.MergeAll();
+                Stage(db, uf, R(1, 2, 1));
+                db.MergeAll();
+                Assert.True(db.Parallelism.ParallelizeDbLevelOp(db.TotalSizeEstimate));
+
+                db.ApplyRebuild(uf, [f, g], 2);
+                var gRow = Rows(db, g).Single(r => r[0] == 1);
+                var fRow = Rows(db, f).Single(r => r[0] == 1);
+                Assert.Equal(gRow[1], fRow[1]);
+            }
+        }
+
+        [Fact]
+        public void RebuildMergesStampUnionsWithTheRebuildTimestamp()
+        {
+            // UnionIdMerge without a timestamp column stamps its union with ExecutionState.Timestamp. The MergeAll that
+            // ApplyRebuild runs gives its merge states the pass's timestamp, so the union staged by the congruence it
+            // finds does not go backwards in the union-find's timestamp column, which the union-find would reject.
+            var db = new Database(ParallelHeuristics.Serial);
+            var uf = db.AddTable(new DisplacedTable(), name: "$uf");
+            var f = db.AddTable(Function(1, new UnionIdMerge(C(1), uf), [C(0), C(1)]), [], [uf], "f");
+            Stage(db, f, R(1, 10, 1), R(2, 20, 1));
+            db.MergeAll();
+            Stage(db, uf, R(1, 2, 2));
+            db.MergeAll();
+
+            // f(2) = 20 becomes f(1) = 20, which collides with f(1) = 10 and unions 10 and 20 at the rebuild's
+            // timestamp.
+            db.ApplyRebuild(uf, [f], 3);
+            Assert.Equal(10u, ((DisplacedTable)db.GetTable(uf)).FindNaive(20));
+            Assert.Null(db.Failure);
+        }
+
+        [Fact]
+        public void RowsMergeFunctionsWriteDuringARebuildCarryThePassTimestamp()
+        {
+            // Every write of a rebuild pass, including writes made by merge functions, carries the pass's captured
+            // timestamp. A merge state carrying 0 would break the sort order of a table sorted by timestamp once that
+            // table holds later rows.
+            var db = new Database(ParallelHeuristics.Serial);
+            var uf = db.AddTable(new DisplacedTable(), name: "$uf");
+            var log = db.AddTable(Function(1, KeepCurrentMerge.Instance), name: "log");
+            var f = db.AddTable(Function(1, new StampingMerge(log, 1), [C(0)]), [], [log], "f");
+            Stage(db, log, R(100, 100, 2));
+            Stage(db, f, R(1, 10, 1), R(2, 20, 1));
+            db.MergeAll();
+            Stage(db, uf, R(1, 2, 2));
+            db.MergeAll();
+
+            // f(2) = 20 becomes f(1) = 20 at timestamp 3 and collides with f(1) = 10: the merge logs (10, 20).
+            db.ApplyRebuild(uf, [f], 3);
+            Assert.Contains(Rows(db, log), r => r.SequenceEqual(R(10, 20, 3)));
         }
 
     }

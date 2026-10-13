@@ -8,15 +8,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// What a light child costs (colored-contexts spec §14.2, C14, §21.9, M10.4): the bytes a bare child and an empty
-    /// layer allocate, measured on this thread after a warm-up, stay under the bounds the lazy pending queues, lazy
-    /// notification flags and lazy index-catalog gates bring them to; and the root's tables keep their eager queues.
+    /// What a light child costs, since a child pays in proportion to what it touches: the bytes a bare child and an
+    /// empty layer allocate, measured on this thread after a warm-up, stay under the bounds the lazy pending queues,
+    /// lazy notification flags and lazy index-catalog gates bring them to; and the root's tables keep their eager
+    /// queues.
     /// </summary>
     /// <remarks>
     /// The bounds have headroom over the Release figures (about 2.5 KB and 1.1 KB, <c>--context-footprint</c> of the
-    /// benchmark app) for the DEBUG-only bookkeeping of the test build. Before M10.4 the same workloads allocated about
-    /// 4.7 KB and 2.8 KB, mostly two <see cref="System.Collections.Concurrent.ConcurrentQueue{T}"/> segments per pending
-    /// state.
+    /// benchmark app) for the DEBUG-only bookkeeping of the test build. Without the lazy queues, flags and gates the
+    /// same workloads allocate about 4.7 KB and 2.8 KB, mostly two
+    /// <see cref="System.Collections.Concurrent.ConcurrentQueue{T}"/> segments per pending state.
     /// </remarks>
     [Trait("Category", "Performance")]
     [Collection(AllocationProbeCollection.Name)]
@@ -59,6 +60,10 @@ namespace Eggnog.Relations.Tests
             return (store, f);
         }
 
+        /// <summary>
+        /// Creating and disposing a child of a frozen root allocates under 3,200 bytes, and creating an empty layer in
+        /// it under 1,600 more.
+        /// </summary>
         [Fact]
         public void ABareChildAndAnEmptyLayerStayLight()
         {

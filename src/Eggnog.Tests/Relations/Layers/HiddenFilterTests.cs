@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the filter family over hidden rows (colored-contexts spec §6.3, X20): <see cref="HiddenRows"/>,
-    /// <see cref="HiddenCursor"/>, <see cref="VisibleRowFilter"/>, <see cref="HiddenOnlyFilter"/>,
-    /// <see cref="HiddenSkippingSink{TSink}"/> and <see cref="LayerView.RefineVisible"/>, against a reference.
+    /// Tests for the filter family over hidden rows: <see cref="HiddenRows"/>, <see cref="HiddenCursor"/>,
+    /// <see cref="VisibleRowFilter"/>, <see cref="HiddenOnlyFilter"/>, <see cref="HiddenSkippingSink{TSink}"/> and
+    /// <see cref="LayerView.RefineVisible"/>, against a reference.
     /// </summary>
     public class HiddenFilterTests
     {

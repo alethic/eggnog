@@ -8,13 +8,13 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Property tests of extraction on small random e-graphs (<see cref="RandomExtractionGraph"/>) against an independent
-    /// reference: every class's cost equals a Bellman-Ford fixpoint over the rows; the extracted term's cost, recomputed
-    /// over its tree, equals the reported cost; the term evaluates back to its class; no term found by brute-force
-    /// enumeration is cheaper; on-demand and root-sort extractors agree, whatever order classes are asked in (also with
-    /// mostly zero and saturated costs, where the on-demand extractor must replay earlier queries' finalizations); the
-    /// first variant is the best term; and with positive costs each class's choice is the least of its cheapest nodes in
-    /// rule-layer decision D10's order.
+    /// Property tests of extraction on small random e-graphs (<see cref="RandomExtractionGraph"/>) against an
+    /// independent reference: every class's cost equals a Bellman-Ford fixpoint over the rows; the extracted term's
+    /// cost, recomputed over its tree, equals the reported cost; the term evaluates back to its class; no term found by
+    /// brute-force enumeration is cheaper; on-demand and root-sort extractors agree, whatever order classes are asked
+    /// in (also with mostly zero and saturated costs, where the on-demand extractor must replay earlier queries'
+    /// finalizations); the first variant is the best term; and with positive costs each class's choice is the least of
+    /// its cheapest nodes in the extractor's tie-break order (<see cref="D10Order"/>).
     /// </summary>
     public class ExtractionPropertyTests
     {
@@ -24,6 +24,9 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         const int EnumerationDepth = 4;
 
+        /// <summary>
+        /// The batches of 100 seeds, each with positive costs and with costs that may be zero.
+        /// </summary>
         public static TheoryData<int, bool> Seeds()
         {
             var data = new TheoryData<int, bool>();
@@ -109,7 +112,7 @@ namespace Eggnog.Relations.Tests
                 Assert.True(variants.Zip(variants.Skip(1)).All(p => p.First.Cost <= p.Second.Cost), context);
                 Assert.Equal(variants.ToArray(), onDemand.ExtractVariants(graph.E, value, 10, dag).ToArray());
 
-                // With positive costs, the choice is the least node of the cheapest, in D10's order.
+                // With positive costs, the choice is the least node of the cheapest, in the tie-break order.
                 if (positiveCosts)
                 {
                     var cheapest = graph.Nodes
@@ -208,6 +211,9 @@ namespace Eggnog.Relations.Tests
             return depth;
         }
 
+        /// <summary>
+        /// The batches of 100 seeds, each in mode 0 (mostly zero head costs) and mode 1 (costs that saturate).
+        /// </summary>
         public static TheoryData<int, int> OrderSeeds()
         {
             var data = new TheoryData<int, int>();
@@ -225,8 +231,8 @@ namespace Eggnog.Relations.Tests
         public void OnDemandChoicesDoNotDependOnQueryOrder(int batch, int mode)
         {
             // Mostly zero head costs (mode 0) or costs that saturate (mode 1): a node can cost what its child costs, so
-            // when a class became final in an earlier query decides ties. Every class's choice, asked in random orders of
-            // a warmed on-demand extractor, is the root-sort extractor's, which is one from-scratch run.
+            // when a class became final in an earlier query decides ties. Every class's choice, asked in random orders
+            // of a warmed on-demand extractor, is the root-sort extractor's, which is one from-scratch run.
             var choices = mode == 0 ? new long[] { 0, 0, 0, 1 } : new long[] { 0, 1, long.MaxValue / 2, long.MaxValue };
             var replays = 0;
             var compared = 0;

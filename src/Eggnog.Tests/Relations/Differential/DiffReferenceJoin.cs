@@ -25,8 +25,8 @@ namespace Eggnog.Relations.Tests
     /// <para>
     /// A projected query is joined in full first and projected afterwards, so the budget bounds its full matches too:
     /// the engine enumerates them all, whatever the action reads, so a projection onto few variables of a product of
-    /// large components would otherwise reach the engine (soak seed 9100124, a cross product of four components read
-    /// through one variable, ran for more than half an hour).
+    /// large components would otherwise reach the engine (soak seed 9100124 has a cross product of four components
+    /// read through one variable, which the engine takes more than half an hour to enumerate).
     /// </para>
     /// </remarks>
     static class DiffReferenceJoin

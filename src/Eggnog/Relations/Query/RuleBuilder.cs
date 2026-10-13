@@ -80,12 +80,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Lists the constant ids among <paramref name="program"/>'s operands (colored-contexts spec §9.8, X19): every
-        /// constant operand that lands in an id column of its instruction's table (<see cref="Database.GetIdColumns"/>:
-        /// insert and conditional-insert values, remove and lookup keys, the keys and entry defaults of a lookup-or-insert),
-        /// or in either id column of the store's union-find, or that the caller flagged as an id
-        /// (<see cref="QueryEntry.IdConst"/>: comparisons, external-function arguments). Operands are numbered as
-        /// <see cref="ActionSubstituter.Operands"/> numbers them.
+        /// Lists the constant ids among <paramref name="program"/>'s operands, which a store-backed context runs in their
+        /// canonical form: every constant operand that lands in an id column of its instruction's table
+        /// (<see cref="Database.GetIdColumns"/>: insert and conditional-insert values, remove and lookup keys, the keys
+        /// and entry defaults of a lookup-or-insert), or in either id column of the store's union-find, or that the caller
+        /// flagged as an id (<see cref="QueryEntry.IdConst"/>: comparisons, external-function arguments). Operands are
+        /// numbered as <see cref="ActionSubstituter.Operands"/> numbers them.
         /// </summary>
         /// <param name="program">The rule's instructions.</param>
         /// <returns>The constant ids, in instruction and operand order.</returns>

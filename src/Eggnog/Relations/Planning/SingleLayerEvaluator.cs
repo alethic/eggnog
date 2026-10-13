@@ -6,9 +6,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// An <see cref="IHeaderEvaluator"/> seen as an <see cref="ILayeredHeaderEvaluator"/> whose every table has one layer,
-    /// layer 0 (colored-contexts spec §9.4): how <see cref="PlanTemplate.Instantiate{TEvaluator}"/> forwards to
+    /// layer 0: how <see cref="PlanTemplate.Instantiate{TEvaluator}"/> forwards to
     /// <see cref="PlanTemplate.InstantiateLayered{TEvaluator}"/>, so single-table evaluators (a root database, test
-    /// statistics) keep instantiating plans as before.
+    /// statistics) instantiate plans through the layered path, one layer per table.
     /// </summary>
     /// <typeparam name="TEvaluator">The wrapped evaluator's type.</typeparam>
     internal struct SingleLayerEvaluator<TEvaluator> : ILayeredHeaderEvaluator

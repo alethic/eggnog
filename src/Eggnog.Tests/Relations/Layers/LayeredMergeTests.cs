@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the layered merge of a child (colored-contexts spec §6.6, C4, X2, decision 2): new keys, keys the child
-    /// sees through an ancestor with merges that change and that do not, folds, a constructor's union staged into the
-    /// child, the lattice check, deletes, and reads of the stratum being merged.
+    /// Tests for the layered merge of a child: new keys, keys the child sees through an ancestor with merges that
+    /// change and that do not, folds, a constructor's union staged into the child, the lattice check (only the root may
+    /// write a table whose merge is not a lattice merge), deletes, and reads of the stratum being merged.
     /// </summary>
     public class LayeredMergeTests
     {
@@ -146,18 +146,18 @@ namespace Eggnog.Relations.Tests
             root.Freeze();
             var child = root.CreateChild();
 
-            // Edge case 15: reads that hit create no layer and do not throw.
+            // Reads that hit create no layer and do not throw.
             var state = child.Database.CreateExecutionState(child.Store.ReadClock());
             Assert.Equal(7u, state.PredictColumn(h, [a], [MergeVal.FromConstant(new Value(1)), MergeVal.FromConstant(new Value(0))], C(1)));
             Assert.Null(child.Tables!.TryGetLayer(h));
 
-            // The first write (here a prediction that misses and stages) is refused, naming decision 2.
+            // The first write (here a prediction that misses and stages) is refused: the merge is not a lattice merge.
             var error = Assert.Throws<InvalidOperationException>(() => state.PredictColumn(h, [b], [MergeVal.FromConstant(new Value(1)), MergeVal.FromConstant(new Value(0))], C(1)));
-            Assert.Contains("decision 2", error.Message);
+            Assert.Contains("only the root", error.Message);
             Assert.Throws<InvalidOperationException>(() => state.StageInsert(h, [b, 1, state.Timestamp]));
             Assert.Null(child.Tables.TryGetLayer(h));
 
-            // Through a write batch the refusal faults the child (X12).
+            // Through a write batch the refusal faults the child, which then allows only Dispose.
             Assert.Throws<InvalidOperationException>(() => Insert(child, h, b, 1, 0));
             Assert.True(child.IsFaulted);
             child.Dispose();
@@ -199,7 +199,8 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.Version > version);
             Assert.Equal(1u, Row(root, f, ids[0])![1]);
 
-            // Edge case 19: a stale key (ids[3] lost to ids[2] at the root) matches nothing.
+            // A delete with a stale key (ids[3] lost to ids[2] at the root) matches nothing: the visible rows are
+            // canonical.
             Insert(child, f, ids[2], 6, 0);
             version = child.Version;
             Remove(child, f, ids[3]);
@@ -211,8 +212,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void AMergeFunctionReadingItsOwnStratumThrows()
         {
-            // Edge case 16: t and u share a stratum; u's merge reads t while both merge. The root throws
-            // KeyNotFoundException (t is taken out), a child InvalidOperationException.
+            // t and u share a stratum; u's merge reads t while both merge. The root throws KeyNotFoundException (t is
+            // taken out), a child InvalidOperationException.
             var store = new Store(ParallelHeuristics.Serial);
             var t = store.AddTable(MaxFunction(1), name: "t");
             var u = store.AddTable(new SortedWritesTable(1, 3, C(2), [C(0)], new StratumReadingMerge(t), ParallelHeuristics.Serial), name: "u");

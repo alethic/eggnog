@@ -2,9 +2,9 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/prelude.egg</c>, ported as written (§8.1.1): contexts as data (<see cref="Ctx"/>),
-    /// inheritance by <c>horn</c> rules, splits and lifts written as rules in the <c>split</c> ruleset. Tables are defined
-    /// in the prelude's order, so constructors keep egglog's declaration order, which extraction breaks ties by.
+    /// <c>prototypes/cosmos-facts/prelude.egg</c>, ported as written: contexts as data (<see cref="Ctx"/>), inheritance
+    /// by <c>horn</c> rules, splits and lifts written as rules in the <c>split</c> ruleset. Tables are defined in the
+    /// prelude's order, so constructors keep egglog's declaration order, which extraction breaks ties by.
     /// </summary>
     /// <remarks>
     /// <c>(relation contradiction (Ctx))</c> becomes <see cref="Contradicts"/>, named <c>contradicts</c>, because the
@@ -84,7 +84,9 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// <summary>Gets <c>(Query)</c>: the schema plus the query's conjuncts.</summary>
         public Constructor<Ctx> Query { get; }
 
-        /// <summary>Gets <c>(Assume c p v)</c>: <c>c</c> plus "path p is present and holds v", one case of a split.</summary>
+        /// <summary>
+        /// Gets <c>(Assume c p v)</c>: <c>c</c> plus "path p is present and holds v", one case of a split.
+        /// </summary>
         public Constructor<Ctx, string, string, Ctx> Assume { get; }
 
         /// <summary>Gets <c>parent</c>: a child context inherits its parent's facts.</summary>

@@ -107,7 +107,8 @@ namespace Eggnog.Relations.Tests
             var query = qb.Build(new ActionId(0));
 
             // f2(x, y): x -> y. f2(1, z): the key is a constant, so the antecedent is empty and dropped (egglog).
-            // f2(_, z): the key is a wildcard, so z is not determined (fixed: egglog used the wildcard as a variable).
+            // f2(_, z): the key is a wildcard, so z is not determined (egglog passes the wildcard into the dependency
+            // as if it were a variable).
             // t3(x, y, z): every column is a key, a dependency with an empty consequent.
             Assert.Equal(2, query.FunDeps.Count);
             Assert.Equal([x], query.FunDeps[0].Antecedent);

@@ -6,7 +6,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The sync of mirrors just before use (D48, §6.8): before an iteration, a query or a freeze reads <c>T@tag</c> in a
+    /// The sync of mirrors just before use: before an iteration, a query or a freeze reads <c>T@tag</c> in a
     /// scope, the tagged scope runs the tag's copy rules once if it is writable and changed since its last sync.
     /// </summary>
     /// <remarks>
@@ -21,7 +21,7 @@ namespace Eggnog
         /// For each tag, brings <c>resolve(scope, tag)</c>'s mirrors current if that scope is writable and its view changed
         /// since its last sync (the view stamp of it and its ancestors moved, or the tag gained a copy rule); records a
         /// <see cref="RunStepKind.MirrorSync"/> step when <paramref name="executor"/> is given. Every tag is resolved before
-        /// any sync, so an unresolved tag is refused before any work (§6.13). Syncs are not iterations of the run (D42), and
+        /// any sync, so an unresolved tag is refused before any work. Syncs are not iterations of the run, and
         /// their stamp moves are left out of the tagged scope's <see cref="Scope.Version"/>: mirror tables are internal.
         /// </summary>
         /// <param name="scope">The reading scope.</param>

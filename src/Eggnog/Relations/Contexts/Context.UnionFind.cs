@@ -11,45 +11,45 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Gets the context's union-find table (§5): the root's <see cref="DisplacedTable"/>, or a child's
+        /// Gets the context's union-find table: the root's <see cref="DisplacedTable"/>, or a child's
         /// <see cref="OverlayDisplacedTable"/>, at the store's union-find id of the context's database.
         /// </summary>
         public Table UnionFindTable => overlayTable is { } table ? table : store.RootUnionFind;
 
         /// <summary>
-        /// Gets the context's find (§5.4): the root's union-find, or the parent's find followed by the child's overlay.
-        /// Never writes; exact whenever the context is current with its parent (<see cref="IsUnionFindCurrent"/>).
+        /// Gets the context's find: the root's union-find, or the parent's find followed by the child's overlay. Never
+        /// writes; exact whenever the context is current with its parent (<see cref="IsUnionFindCurrent"/>).
         /// </summary>
         public LayeredUnionFind UnionFind => finder;
 
         /// <summary>
         /// Gets the number of ids displaced in the context's union-find table: the root's union rows, or the rows of a
-        /// child's journal (§5.3). Only grows.
+        /// child's journal. Only grows.
         /// </summary>
         public int DisplacedCount => journal is { } j ? j.Count : store.RootUnionFind.UnionFind.Count;
 
         /// <summary>
-        /// Gets the number of ids that are not canonical in the context's view: the root's displaced count, or, in a child,
-        /// the ids displaced in its parent's view when it was created plus its journal, which holds exactly the others
-        /// (I8). Exact when the context is current with its parent (<see cref="IsUnionFindCurrent"/>). O(1).
+        /// Gets the number of ids that are not canonical in the context's view: the root's displaced count, or, in a
+        /// child, the ids displaced in its parent's view when it was created plus its journal, which holds exactly the
+        /// others Exact when the context is current with its parent (<see cref="IsUnionFindCurrent"/>). O(1).
         /// </summary>
         internal long DisplacedInViewCount => displacedInParentView + DisplacedCount;
 
         /// <summary>
         /// Gets the ids displaced in the context's union-find table, in row order: the root's union children, or a
-        /// child's journal. What a child of this context catches up with (X7). Valid until the next union.
+        /// child's journal. What a child of this context catches up with. Valid until the next union.
         /// </summary>
         public ReadOnlySpan<uint> DisplacedIds => journal is { } j ? j.Ids : store.RootUnionFind.UnionFind.Children;
 
         /// <summary>
-        /// Gets whether a child has re-keyed its union-find over every displacement its parent has made (§5.6): its cursor
+        /// Gets whether a child has re-keyed its union-find over every displacement its parent has made: its cursor
         /// into the parent's displaced ids is at their end. Always true at the root.
         /// </summary>
         public bool IsUnionFindCurrent => parent is null || unionFindCursor == parent.DisplacedCount;
 
         /// <summary>
-        /// Gets the find this context gives the children it creates (§5.4): its own chain until it freezes, then the
-        /// chain flattened into one map above the root's find. Children created before a freeze keep the explicit chain.
+        /// Gets the find this context gives the children it creates: its own chain until it freezes, then the chain
+        /// flattened into one map above the root's find. Children created before a freeze keep the explicit chain.
         /// </summary>
         internal LayeredUnionFind FinderForChildren => Volatile.Read(ref finderForChildren);
 
@@ -64,15 +64,15 @@ namespace Eggnog.Relations
         internal DisplacedJournal? Journal => journal;
 
         /// <summary>
-        /// Gets the counts of what the context's union-find did (§5.6). At the root, <see cref="UnionFindStatistics.OwnUnions"/>
-        /// is its displaced count and the rest are zero.
+        /// Gets the counts of what the context's union-find did. At the root,
+        /// <see cref="UnionFindStatistics.OwnUnions"/> is its displaced count and the rest are zero.
         /// </summary>
         public UnionFindStatistics UnionFindStatistics => overlayTable is { } table
             ? new UnionFindStatistics(table.OwnUnions, Interlocked.Read(ref importedDisplacements), Interlocked.Read(ref rekeyedMembers), table.ParentIdLosers)
             : new UnionFindStatistics(store.RootUnionFind.UnionFind.Count, 0, 0, 0);
 
         /// <summary>
-        /// Gets the canonical id of <paramref name="id"/> in this context: the minimum of its class (§5.7, I7).
+        /// Gets the canonical id of <paramref name="id"/> in this context: the minimum of its class.
         /// </summary>
         /// <remarks>
         /// Requires the context to be clean (<see cref="IsClean"/>); a context that is not frozen is entered (its thread
@@ -99,7 +99,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="a"/> and <paramref name="b"/> name one class in this context (§5.7). Requires the
+        /// Gets whether <paramref name="a"/> and <paramref name="b"/> name one class in this context. Requires the
         /// context to be clean, as <see cref="Find"/> does.
         /// </summary>
         /// <param name="a">An id.</param>
@@ -122,9 +122,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Mints a fresh id: a class with nothing known about it (colored-contexts spec §4.2, §5.7). A child mints from
-        /// its id blocks, so the id is local to it (<see cref="IsLocalId"/>); the root mints directly from the store's id
-        /// counter. Thread-safe.
+        /// Mints a fresh id: a class with nothing known about it. A child mints from its id blocks, so the id is local
+        /// to it (<see cref="IsLocalId"/>); the root mints directly from the store's id counter. Thread-safe.
         /// </summary>
         /// <returns>The id.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
@@ -145,9 +144,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="id"/> was minted in this context: it lies in one of the context's id blocks
-        /// (§4.2). Exact for every id the context minted, since every term mint in a child goes through its blocks (I2);
-        /// container ids are minted on the shared counter and are never local. Lock-free, O(log blocks).
+        /// Gets whether <paramref name="id"/> was minted in this context: it lies in one of the context's id blocks.
+        /// Exact for every id the context minted, since every term mint in a child goes through its blocks; container
+        /// ids are minted on the shared counter and are never local. Lock-free, O(log blocks).
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns><c>true</c> if the id is local to this context.</returns>
@@ -163,18 +162,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Merges the classes of <paramref name="a"/> and <paramref name="b"/> in this context and its descendants
-        /// (§5.7): one <see cref="Write{TResult}"/> that stages <c>[a, b, epoch]</c> into the union-find table. Rows that
-        /// mention the loser are brought up to date by the next <see cref="Rebuild"/>, which the context needs before it
-        /// is read again.
+        /// Merges the classes of <paramref name="a"/> and <paramref name="b"/> in this context and its descendants: one
+        /// <see cref="Write{TResult}"/> that stages <c>[a, b, epoch]</c> into the union-find table. Rows that mention
+        /// the loser are brought up to date by the next <see cref="Rebuild"/>, which the context needs before it is
+        /// read again.
         /// </summary>
         /// <param name="a">An id.</param>
         /// <param name="b">Another id.</param>
         /// <returns><c>true</c> if the classes were distinct: the displaced count grew.</returns>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is held
-        /// by another thread; or the call comes from inside a write batch's action or a <c>ScanMerges</c> visitor of the
-        /// same domain (§8.3).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen, faulted or contradicted; its domain is
+        /// held by another thread; or the call comes from inside a write batch's action or a <c>ScanMerges</c> visitor
+        /// of the same domain.</exception>
         public bool Union(uint a, uint b)
         {
             var before = Write((Context: this, A: a, B: b), static (state, args) =>
@@ -192,8 +191,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="id"/>, a displaced id of this child, was displaced by the child itself rather than
-        /// inherited from its parent (§5.3, X8): it is canonical in the parent. Computed at use time, which is always
+        /// Gets whether <paramref name="id"/>, a displaced id of this child, was displaced by the child itself rather
+        /// than inherited from its parent: it is canonical in the parent. Computed at use time, which is always
         /// correct: if the parent later displaces an own loser, that loser's ancestor rows are invisible at the parent
         /// level, so treating it as inherited is right.
         /// </summary>
@@ -202,15 +201,14 @@ namespace Eggnog.Relations
         internal bool IsOwnDisplacement(uint id) => parentFinder is { } p && p.Find(id) == id;
 
         /// <summary>
-        /// Visits the merges this child made over its parent's ids (§5.7, L2, G1(a)): for every class of its overlay,
-        /// each member that is not local to the child, paired with the class's canonical id; a class's canonical is
-        /// visited paired with itself when it is a parent id. Deterministic: slot order, then insertion order
-        /// (decision 4).
+        /// Visits the merges this child made over its parent's ids: for every class of its overlay, each member that is
+        /// not local to the child, paired with the class's canonical id; a class's canonical is visited paired with
+        /// itself when it is a parent id. Deterministic: slot order, then insertion order.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Requires the context to be clean. The visitor may read any context (<see cref="Find"/> included). It runs as a
-        /// callback of the context's thread domain (§8.3): a write to any context of the domain (<see cref="Union"/>,
+        /// Requires the context to be clean. The visitor may read any context (<see cref="Find"/> included). It runs as
+        /// a callback of the context's thread domain: a write to any context of the domain (<see cref="Union"/>,
         /// <see cref="Write{TResult}"/>) and a rebuild that would run a pass are refused before they stage anything, so
         /// the scanned context stays clean and its classes stay as they are; <see cref="CreateChild"/>,
         /// <see cref="Freeze"/> and <see cref="Dispose"/> are refused too. A frozen context is scanned without its
@@ -285,10 +283,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws <see cref="InvalidOperationException"/> when the calling thread runs a caller's code inside an operation
-        /// of <paramref name="domain"/> (a write batch's action, a <see cref="ScanMerges{TVisitor}"/> visitor): the
-        /// operation named by <paramref name="operation"/> would change a context the running operation depends on
-        /// (§8.3). Nothing has been staged or changed when it throws, and no context is faulted.
+        /// Throws <see cref="InvalidOperationException"/> when the calling thread runs a caller's code inside an
+        /// operation of <paramref name="domain"/> (a write batch's action, a <see cref="ScanMerges{TVisitor}"/>
+        /// visitor): the operation named by <paramref name="operation"/> would change a context the running operation
+        /// depends on. Nothing has been staged or changed when it throws, and no context is faulted.
         /// </summary>
         /// <param name="domain">The domain the calling thread holds.</param>
         /// <param name="operation">The refused operation's name.</param>

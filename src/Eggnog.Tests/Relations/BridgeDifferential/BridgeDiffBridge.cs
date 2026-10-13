@@ -7,26 +7,26 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A bridge differential program run on an <see cref="EGraph"/>, with every rule semi-naive or every rule naive: the
-    /// system under test.
+    /// A bridge differential program run on an <see cref="EGraph"/>, with every rule semi-naive or every rule naive:
+    /// the system under test.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Functions are declared as egglog's frontend declares them (egglog/src/lib.rs:789-850, map §3.1): a constructor
-    /// with a fresh-id default and the union-id merge; a relation the same way, as the frontend desugars it into a
-    /// constructor into a fresh sort of its own (egglog/src/ast/desugar.rs:396-427), so its output column holds ids; the
-    /// integer lattices with a failing default and <c>(min old new)</c> or <c>(max old new)</c>, declared lattices; an id
+    /// Functions are declared as egglog's frontend declares them (egglog/src/lib.rs:789-850): a constructor with a
+    /// fresh-id default and the union-id merge; a relation the same way, as the frontend desugars it into a constructor
+    /// into a fresh sort of its own (egglog/src/ast/desugar.rs:396-427), so its output column holds ids; the integer
+    /// lattices with a failing default and <c>(min old new)</c> or <c>(max old new)</c>, declared lattices; an id
     /// function with a failing default and the union-id merge. Whether a function has a subsumption column is the
     /// program's choice (egglog gives every constructor and relation one; the generator gives most of them one). The
     /// primitives are <see cref="BridgeDiffPrimitives"/> registered as external functions.
     /// </para>
     /// <para>
     /// Seeds go through the e-graph's own entry points: <see cref="EGraph.AddTerm"/> for terms and relation insertions,
-    /// <see cref="EGraph.AddValues"/> for the other facts (consecutive ones in one call) and for bulk loads, and a union
-    /// through the union action followed by <see cref="EGraph.FlushUpdates"/>, with id arguments canonicalized first, as
-    /// the frontend's are. Rules are built with <see cref="EGraphRuleBuilder"/> as the frontend lowers them: a relation
-    /// atom without an output binds a fresh variable, and a relation insertion is a lookup. Every iteration runs the rules
-    /// the program's schedule lists with <see cref="EGraph.RunRules"/>.
+    /// <see cref="EGraph.AddValues"/> for the other facts (consecutive ones in one call) and for bulk loads, and a
+    /// union through the union action followed by <see cref="EGraph.FlushUpdates"/>, with id arguments canonicalized
+    /// first, as the frontend's are. Rules are built with <see cref="EGraphRuleBuilder"/> as the frontend lowers them:
+    /// a relation atom without an output binds a fresh variable, and a relation insertion is a lookup. Every iteration
+    /// runs the rules the program's schedule lists with <see cref="EGraph.RunRules"/>.
     /// </para>
     /// <para>
     /// With parallel settings the e-graph runs on four threads and always takes the parallel rule-set executor
@@ -99,7 +99,8 @@ namespace Eggnog.Relations.Tests
                         nextSeed++;
                         break;
                     case BridgeDiffSeedKind.Set when seed.IsInsertion(declared):
-                        // egglog's (R a b): the relation's row, with a fresh id that the merge unions with an existing one.
+                        // egglog's (R a b): the relation's row, with a fresh id that the merge unions with an existing
+                        // one.
                         seedIds[nextSeed] = EGraph.AddTerm(functions[seed.Function], seed.Args.Take(declared[seed.Function].KeyCount).Select(Resolve).ToArray()).Rep;
                         nextSeed++;
                         break;
@@ -190,8 +191,8 @@ namespace Eggnog.Relations.Tests
         };
 
         /// <summary>
-        /// Gets the column type of column <paramref name="column"/> of <paramref name="function"/>: the id type for an id
-        /// column (a relation's output included), else its sort's.
+        /// Gets the column type of column <paramref name="column"/> of <paramref name="function"/>: the id type for an
+        /// id column (a relation's output included), else its sort's.
         /// </summary>
         ColumnTy ColumnType(BridgeDiffFunction function, int column) => function.IsIdColumn(column) ? ColumnTy.Id : Type(function.SortOf(column));
 
@@ -242,8 +243,9 @@ namespace Eggnog.Relations.Tests
             rb.PlanStrategy = rule.Strategy;
             rb.NoDecomposition = rule.NoDecomposition;
 
-            // Variables are created on first use, with the type of the column that binds them (so a unit-sorted variable
-            // bound to a relation's output is an id), and a variable shrinking left unused never reaches the bridge.
+            // Variables are created on first use, with the type of the column that binds them (so a unit-sorted
+            // variable bound to a relation's output is an id), and a variable shrinking left unused never reaches the
+            // bridge.
             var vars = new RuleVariable?[rule.VarSorts.Length];
             RuleEntry Entry(BridgeDiffEntry e, ColumnTy type)
             {

@@ -17,8 +17,8 @@ namespace Eggnog.Relations
     /// Register the type in the e-graph's <see cref="EGraph.BaseValues"/> before declaring functions over this sort.
     /// </para>
     /// <para>
-    /// Extraction's tie-break (rule-layer decision D10) orders base values by content, which must not depend on the
-    /// machine or the thread (decision 4): by the comparer given here; else ordinally for <see cref="string"/> (never by
+    /// Extraction's tie-break orders base values by content, which must not depend on the machine or the thread, so
+    /// that extraction is deterministic: by the comparer given here; else ordinally for <see cref="string"/> (never by
     /// the current culture's collation); else by <see cref="Comparer{T}.Default"/> when <typeparamref name="T"/>
     /// implements <see cref="IComparable{T}"/>, which for the built-in numeric, boolean and character types is
     /// culture-invariant. A type whose own order depends on the culture should be given a comparer. The boxed

@@ -6,10 +6,10 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// <c>find</c> in a child (colored-contexts spec §17 M9.4, §5.4, §14.2): the root's find (one hop on a frozen,
-    /// compressed root), a child's layered find (the root's find, then one probe per non-empty level of the chain), and
-    /// a child under a frozen chain, whose parent's levels are flattened into one map (one dense load or probe). Chains of
-    /// depth 1 and 3 over a frozen root of 1,000,000 ids with 500,000 unions; each level makes 1,000 unions of its own.
+    /// <c>find</c> in a child: the root's find (one hop on a frozen, compressed root), a child's layered find (the
+    /// root's find, then one probe per non-empty level of the chain), and a child under a frozen chain, whose parent's
+    /// levels are flattened into one map (one dense load or probe). Chains of depth 1 and 3 over a frozen root of
+    /// 1,000,000 ids with 500,000 unions; each level makes 1,000 unions of its own.
     /// </summary>
     /// <remarks>
     /// <para>

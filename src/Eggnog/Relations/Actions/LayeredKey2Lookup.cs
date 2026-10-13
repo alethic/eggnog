@@ -4,9 +4,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Looks up, lane by lane, one column of the row a child context sees by a two-cell key (colored-contexts spec §6.5,
-    /// X25): the layered counterpart of <see cref="SortedKey2Lookup"/>, probing
-    /// <see cref="TableView.TryGetColumn(uint, uint, int, out uint)"/> with the key in registers.
+    /// Looks up, lane by lane, one column of the row a child context sees by a two-cell key: the layered counterpart of
+    /// <see cref="SortedKey2Lookup"/>, probing <see cref="TableView.TryGetColumn(uint, uint, int, out uint)"/> with the
+    /// key in registers.
     /// </summary>
     internal readonly struct LayeredKey2Lookup : ILaneProducer
     {

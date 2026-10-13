@@ -2,8 +2,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What the layered executor reads of a context (colored-contexts spec §9.1, X21): its depth, its views and its find.
-    /// Implemented by <see cref="ContextTables"/>, and by synthetic layer sets in executor tests.
+    /// What the layered executor reads of a context: its depth, its views and its find. Implemented by
+    /// <see cref="ContextTables"/>, and by synthetic layer sets in executor tests.
     /// </summary>
     internal interface ILayerViewSource
     {
@@ -14,8 +14,8 @@ namespace Eggnog.Relations
         int Depth { get; }
 
         /// <summary>
-        /// Gets a counter that moves whenever a cached view is dropped because its structure changed; a rule set records
-        /// it when it snapshots its views (X21).
+        /// Gets a counter that moves whenever a cached view is dropped because its structure changed; a rule set
+        /// records it when it snapshots its views.
         /// </summary>
         long ViewGeneration { get; }
 

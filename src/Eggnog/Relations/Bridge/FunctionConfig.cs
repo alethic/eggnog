@@ -10,8 +10,8 @@ namespace Eggnog.Relations
     /// <remarks>
     /// The frontend maps a constructor to <see cref="DefaultVal.FreshId"/>, <see cref="MergeFn.UnionId"/> and
     /// <see cref="CanSubsume"/>; a custom function to <see cref="DefaultVal.Fail"/> with <see cref="MergeFn.AssertEq"/>
-    /// or its <c>:merge</c> expression; a relation to a constructor whose output is a fresh, non-unionable sort
-    /// (map §3.1). <see cref="EGraph.AddTable"/> copies what it needs, so the instance may be reused.
+    /// or its <c>:merge</c> expression; a relation to a constructor whose output is a fresh, non-unionable sort.
+    /// <see cref="EGraph.AddTable"/> copies what it needs, so the instance may be reused.
     /// </remarks>
     internal sealed class FunctionConfig
     {

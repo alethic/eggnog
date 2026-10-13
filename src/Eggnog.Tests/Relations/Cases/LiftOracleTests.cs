@@ -7,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Lift behaviours (colored-contexts spec §11.2) that the other <c>Cases/</c> tests leave unchecked: the memo's cover of
-    /// writable ancestors, the inclusive candidate limit, duplicate cases, and the refusal of a lift from inside a callback
-    /// of the parent's thread domain.
+    /// Lift behaviours that the other <c>Cases/</c> tests leave unchecked: the memo's cover of writable ancestors, the
+    /// inclusive candidate limit, late parent ids, tables only the root may write, duplicate cases, and the refusal of
+    /// a lift from inside a callback of the parent's thread domain.
     /// </summary>
     public class LiftOracleTests
     {
@@ -34,10 +34,11 @@ namespace Eggnog.Relations.Tests
             new LiftTable(g.Mark, LiftTableKind.Relation));
 
         /// <summary>
-        /// The memo covers the parent's ancestors that are not frozen (<see cref="LiftSignature"/>, §11.2). The parent is a
-        /// child of a writable root, and its cases split b = t against b = f. The first lift settles with nothing to lift.
-        /// The root then gains <c>edge(t, c)</c> and <c>edge(f, c)</c>: neither the parent nor a case writes anything, but
-        /// <c>edge(b, c)</c> now holds in both cases through the winners, so the next lift must not be skipped by the memo.
+        /// The memo covers the parent's ancestors that are not frozen (<see cref="LiftSignature"/>). The parent is a
+        /// child of a writable root, and its cases split b = t against b = f. The first lift settles with nothing to
+        /// lift. The root then gains <c>edge(t, c)</c> and <c>edge(f, c)</c>: neither the parent nor a case writes
+        /// anything, but <c>edge(b, c)</c> now holds in both cases through the winners, so the next lift must not be
+        /// skipped by the memo.
         /// </summary>
         [Fact]
         public void TheMemoSeesAWritableAncestorChange()
@@ -66,9 +67,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The candidate limit is inclusive (§11.2: a source is skipped when its product is greater than the limit). The seed
-        /// merges a and x and holds <c>edge(a, d)</c>, which stands for two parent keys; the other case merges a with a third
-        /// id and holds both keys. With a limit of two the row is expanded and both facts are lifted, though no equality is.
+        /// The candidate limit is inclusive: a source row is skipped only when the product of its key cells' member
+        /// lists is greater than the limit. The seed merges a and x and holds <c>edge(a, d)</c>, which stands for two
+        /// parent keys; the other case merges a with a third id and holds both keys. With a limit of two the row is
+        /// expanded and both facts are lifted, though no equality is.
         /// </summary>
         [Fact]
         public void ARowAtTheCandidateLimitIsExpanded()
@@ -108,8 +110,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Late parent ids (L7, §4.2): the root mints p after the cases reserved their id blocks, so in each case the local
-        /// term that is unioned with p is the class's canonical id. A lifted constructor row, and a lifted function with an
+        /// Late parent ids: the root mints p after the cases reserved their id blocks, so in each case the local term
+        /// that is unioned with p is the class's canonical id. A lifted constructor row, and a lifted function with an
         /// id output, must name the common parent id p, never the seed's local id, which the parent cannot read.
         /// </summary>
         [Fact]
@@ -154,10 +156,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A lift into a child parent leaves out a table whose merge is not a lattice merge (decision 2: only the root may
-        /// write it). The frozen root holds <c>val(t) = 5</c> and <c>val(f) = 5</c>, so <c>val(b) = 5</c> holds in both
-        /// cases of the split b = t against b = f; the lift writes what it may (<c>mark(b)</c>, which both cases assert) and
-        /// neither throws nor writes <c>val</c> into the child parent.
+        /// A lift into a child parent leaves out a table whose merge is not a lattice merge, since only the root may
+        /// write such a table. The frozen root holds <c>val(t) = 5</c> and <c>val(f) = 5</c>, so <c>val(b) = 5</c>
+        /// holds in both cases of the split b = t against b = f; the lift writes what it may (<c>mark(b)</c>, which
+        /// both cases assert) and neither throws nor writes <c>val</c> into the child parent.
         /// </summary>
         [Fact]
         public void ALiftIntoAChildLeavesOutTablesOnlyTheRootMayWrite()
@@ -203,7 +205,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A case listed twice is refused (§11.2's preconditions).
+        /// A case listed twice is refused before the lift writes anything: no memo is kept and the parent's ids stay
+        /// apart.
         /// </summary>
         [Fact]
         public void ACaseListedTwiceIsRefused()
@@ -218,9 +221,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A lift started inside a callback of the parent's thread domain (here a <c>ScanMerges</c> visitor of a case) is
-        /// refused before it reads or writes anything, even when it would write nothing; outside the visitor the same lift
-        /// runs.
+        /// A lift started inside a callback of the parent's thread domain (here a <c>ScanMerges</c> visitor of a case)
+        /// is refused before it reads or writes anything, even when it would write nothing; outside the visitor the
+        /// same lift runs.
         /// </summary>
         [Fact]
         public void ALiftInsideAMergeVisitorIsRefused()

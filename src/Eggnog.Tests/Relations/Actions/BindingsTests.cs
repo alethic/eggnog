@@ -3,6 +3,8 @@ using System.Linq;
 
 using Xunit;
 
+using static Eggnog.Relations.Tests.ActionTestUtil;
+
 namespace Eggnog.Relations.Tests
 {
 
@@ -123,7 +125,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void LaterPushesRejectAUsedVariableWithNoSegment()
         {
-            // Variable 1 lies inside the mapped range and variable 7 past it; neither has a segment after the first push.
+            // Variable 1 lies inside the mapped range and variable 7 past it; neither has a segment after the first
+            // push.
             foreach (var missing in new[] { V(1), V(7) })
             {
                 var b = new Bindings();
@@ -210,6 +213,39 @@ namespace Eggnog.Relations.Tests
 
             for (var v = 0; v < 40; v++)
                 Assert.Equal(Enumerable.Range(v, 10).Select(x => (uint)x), b[V(v)].ToArray());
+        }
+
+        /// <summary>
+        /// egglog checks on every push after the first that each used variable is mapped, as a <c>debug_assert</c>
+        /// (core-relations/src/action/mod.rs:214-224); <see cref="Bindings"/> checks it in every build. A later push
+        /// whose used list names a variable the first push did not map is refused, so it never writes through that
+        /// variable's offset of -1 into lane <c>matches - 1</c> of the segment at offset 0, another variable's earlier
+        /// match.
+        /// </summary>
+        [Fact]
+        public void ALaterPushWithAnUnmappedUsedVariableDoesNotCorruptAnotherColumn()
+        {
+            var b = new Bindings();
+            var map = new DenseIdMap<Variable, Value>();
+            map.Insert(V(0), new Value(1));
+            map.Insert(V(2), new Value(5));
+            b.Push(map, [V(0)]);
+
+            map.Insert(V(0), new Value(2));
+            map.Insert(V(1), new Value(9));
+            var threw = false;
+            try
+            {
+                b.Push(map, [V(0), V(1)]);
+            }
+            catch (InvalidOperationException)
+            {
+                threw = true;
+            }
+
+            // Either the push is rejected, or variable 0 keeps the values it was given.
+            if (threw == false)
+                Assert.Equal(new uint[] { 1, 2 }, b[V(0)].ToArray());
         }
 
     }

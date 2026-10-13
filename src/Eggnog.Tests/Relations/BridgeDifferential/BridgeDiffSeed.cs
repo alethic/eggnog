@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// A seed of a bridge differential program: a term, a fact or a union run outside the rules, before the first
     /// iteration or between two. Its id arguments name the classes of earlier term seeds
-    /// (<see cref="BridgeDiffEntry.Variable"/> with the seed's index), canonicalized when the seed runs, as the frontend
-    /// passes canonical ids.
+    /// (<see cref="BridgeDiffEntry.Variable"/> with the seed's index), canonicalized when the seed runs, as the
+    /// frontend passes canonical ids.
     /// </summary>
     /// <remarks>
     /// A fact of a relation whose output is the unit constant (<see cref="BridgeDiffFunction.IsNoOutput"/>) is egglog's
@@ -16,16 +16,16 @@ namespace Eggnog.Relations.Tests
     /// </remarks>
     /// <param name="Kind">What the seed does.</param>
     /// <param name="Function">The function of a term or fact; -1 for a union.</param>
-    /// <param name="Args">The keys of a term, the row (keys then output) of a fact, the two terms of a union, or the first
-    /// key and the number of rows of a bulk load.</param>
-    /// <param name="Phase">When the seed runs: 0 before the rules are built, <c>k</c> before iteration <c>k</c> (counting
-    /// from 1).</param>
+    /// <param name="Args">The keys of a term, the row (keys then output) of a fact, the two terms of a union, or the
+    /// first key and the number of rows of a bulk load.</param>
+    /// <param name="Phase">When the seed runs: 0 before the rules are built, <c>k</c> before iteration <c>k</c>
+    /// (counting from 1).</param>
     sealed record BridgeDiffSeed(BridgeDiffSeedKind Kind, int Function, BridgeDiffEntry[] Args, int Phase)
     {
 
         /// <summary>
-        /// Gets whether the seed inserts a relation row, egglog's <c>(R a b)</c>: a fact of a relation whose output is the
-        /// unit constant. It runs as a term of the relation (<see cref="EGraph.AddTerm"/>) on its keys.
+        /// Gets whether the seed inserts a relation row, egglog's <c>(R a b)</c>: a fact of a relation whose output is
+        /// the unit constant. It runs as a term of the relation (<see cref="EGraph.AddTerm"/>) on its keys.
         /// </summary>
         /// <param name="functions">The program's functions.</param>
         /// <returns><c>true</c> for a relation insertion.</returns>

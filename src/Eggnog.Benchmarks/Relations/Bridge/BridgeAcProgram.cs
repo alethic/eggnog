@@ -38,10 +38,10 @@ namespace Eggnog.Relations.Benchmarks
     /// <c>ac.exe</c> prints one iteration more (0 to 10). Its iteration 9 re-derives the saturated e-graph (about 5.2
     /// million matches, no new row, no new union), but the more than 20,000 rows it stages into <c>add</c> go through
     /// egglog's <c>parallel_insert</c>, which reports a change for every staged row before deciding whether the merge
-    /// changes anything (core-relations/src/table/mod.rs:871), so the loop runs iteration 10, which finds no new row and
-    /// takes microseconds. The engine reports real changes only (docs/design/egglog-engine-map.md §8.1 row 4,
-    /// <see cref="SortedWritesTable"/>'s parallel insert), so here iteration 9 reports none and is the last. With one rayon
-    /// thread egglog would take its serial insert, which reports real changes only, and stop after 10 iterations too.
+    /// changes anything (core-relations/src/table/mod.rs:871), so the loop runs iteration 10, which finds no new row
+    /// and takes microseconds. The engine's parallel insert (<see cref="SortedWritesTable"/>) reports a change only
+    /// where a merge changes a row, so here iteration 9 reports none and is the last. With one rayon thread egglog
+    /// would take its serial insert, which reports real changes only, and stop after 10 iterations too.
     /// </para>
     /// </remarks>
     internal sealed class BridgeAcProgram

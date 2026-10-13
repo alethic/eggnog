@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 using Xunit;
@@ -10,27 +11,29 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Regressions the differential suite (<see cref="DifferentialTests"/>) found, reduced to fixed programs. They run
-    /// with the executor stress tests, since some go parallel.
+    /// Fixed programs reduced from programs of the differential suite (<see cref="DifferentialTests"/>), each pinning
+    /// down a behaviour a random program exposed: the run-time stage sort, and incremental rebuilds. They run with the
+    /// executor stress tests, since some go parallel.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class DifferentialRegressionTests
     {
 
         /// <summary>
-        /// Soak seed 55299 (bulk profile): a three-atom path <c>t1(.., v1, ..), t0(v1, v2, ..), t1(.., v2, ..)</c> planned
-        /// with Free Join while <c>t0</c> was the smallest table, so its stage comes first and probes both outer atoms,
-        /// whose own stages probe nothing. Reused from the cached plan after <c>t0</c> grew a little past <c>t1</c>,
-        /// egglog's run-time sort put both outer stages first (equal refinement, smaller): a cross product of the two
-        /// outer covers with the middle cover scanned in full under each pair, about 400M row visits for 6k matches. The
-        /// outer stages are probed by the middle one, so they now wait for it (see <see cref="StageOrdering"/>, the fix
-        /// of execute.rs:2399-2470).
+        /// Soak seed 55299 (bulk profile): a three-atom path <c>t1(.., v1, ..), t0(v1, v2, ..), t1(.., v2, ..)</c>
+        /// planned with Free Join while <c>t0</c> was the smallest table, so its stage comes first and probes both
+        /// outer atoms, whose own stages probe nothing. Reused from the cached plan after <c>t0</c> grew a little past
+        /// <c>t1</c>, egglog's run-time sort puts both outer stages first (equal refinement, smaller): a cross product
+        /// of the two outer covers with the middle cover scanned in full under each pair, about 400M row visits for 6k
+        /// matches. Here the outer stages are probed by the middle one, so they wait for it
+        /// (<see cref="StageOrdering"/>, which departs from core-relations/src/free_join/execute.rs:2399-2470).
         /// </summary>
         [Fact]
         public void ProbedFreeJoinStagesWaitForTheirProberOnAPath()
         {
-            // The plan the soak printed: [0] FusedIntersect a1 bind[v1, v2, v6] probe[a0[c3] key[0], a2[c2] key[1]];
-            // [1] FusedIntersect a0 bind[v0, v4, v5]; [2] FusedIntersect a2 bind[v7, v3, v8].
+            // The plan the soak prints for that seed: [0] FusedIntersect a1 bind[v1, v2, v6]
+            // probe[a0[c3] key[0], a2[c2] key[1]]; [1] FusedIntersect a0 bind[v0, v4, v5];
+            // [2] FusedIntersect a2 bind[v7, v3, v8].
             JoinStage[] stages =
             [
                 new FusedIntersectStage(Cover(1, 0, 1, 2), [Bind(0, 1), Bind(1, 2), Bind(2, 6)], [Probe(0, 3, 0), Probe(2, 2, 1)]),
@@ -47,9 +50,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Soak seed 243399 (huge profile): a cached two-atom join whose plan probes the first atom from the second's
-        /// stage, reused after a load left the first atom smaller. egglog's sort ran the first atom's stage first, so the
-        /// second stage scanned its 20000-row cover under each of the first atom's 20000 rows (39 s in a debug build). The
-        /// probed stage now waits for its prober.
+        /// stage, reused after a load left the first atom smaller. egglog's sort runs the first atom's stage first, so
+        /// the second stage scans its 20000-row cover under each of the first atom's 20000 rows (39 s in a debug
+        /// build). Here the probed stage waits for its prober.
         /// </summary>
         [Fact]
         public void ProbedFreeJoinStageWaitsForItsProber()
@@ -89,12 +92,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Found by review of the fix above: the eligibility check rescanned every unscheduled stage's probes for every
-        /// comparison of the selection sort, O(stages³ × probes) on the executor's per-frame path. It is now kept as a
-        /// count per atom of the probes of the unscheduled stages. Property test: on random Free Join stage lists (random
-        /// covers, shared ones included, random probes, cyclic, repeated and self-probes included, sizes with many ties,
-        /// random starting orders and start positions), the sort gives exactly the order of the definition, which rescans
-        /// the unscheduled stages, through both overloads.
+        /// The eligibility check is kept as a count per atom of the probes of the unscheduled stages; rescanning every
+        /// unscheduled stage's probes for every comparison of the selection sort would cost O(stages³ × probes) on the
+        /// executor's per-frame path. Property test: on random Free Join stage lists (random covers, shared ones
+        /// included, random probes, cyclic, repeated and self-probes included, sizes with many ties, random starting
+        /// orders and start positions), the sort gives exactly the order of the definition, which rescans the
+        /// unscheduled stages, through both overloads.
         /// </summary>
         [Fact]
         public void IncrementalEligibilityMatchesItsDefinition()
@@ -139,9 +142,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The run-time sort of a list of Free Join stages as <see cref="StageOrdering"/> defines it: egglog's selection
-        /// sort from <paramref name="start"/> by (-refinement, size, -relations), where a stage is eligible unless another
-        /// unscheduled stage probes its cover atom, found by rescanning them.
+        /// The run-time sort of a list of Free Join stages as <see cref="StageOrdering"/> defines it: egglog's
+        /// selection sort from <paramref name="start"/> by (-refinement, size, -relations), where a stage is eligible
+        /// unless another unscheduled stage probes its cover atom, found by rescanning them.
         /// </summary>
         static int[] ReferenceSort(FusedIntersectStage[] stages, int[] initial, int start, int[] sizes, int atoms)
         {
@@ -246,9 +249,9 @@ namespace Eggnog.Relations.Tests
         /// Soak seed 108799 (huge profile): a union displaces 6487 and a rebuild of the then empty table consumes it;
         /// then more than 10000 rows are loaded, some mentioning 6487, and the next rebuild takes the incremental path
         /// (a big table, no new unions). egglog's incremental path looks only at rows that mention ids displaced since
-        /// the table's last rebuild (core-relations/src/table/rebuild.rs:52-66, 120-195), so those rows were never
-        /// canonicalized, while the full path, taken for smaller tables, rewrites them: the result depended on the
-        /// table's size. The incremental path now also rewrites the rows appended since the table's last rebuild.
+        /// the table's last rebuild (core-relations/src/table/rebuild.rs:52-66, 120-195), so it never canonicalizes
+        /// those rows, while the full path, taken for smaller tables, rewrites them: the result depends on the table's
+        /// size. The incremental path here also rewrites the rows appended since the table's last rebuild.
         /// </summary>
         [Theory]
         [InlineData(1)]
@@ -277,12 +280,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Found by review of the fix above: the mark of the rows written since the last rebuild was kept once per table,
-        /// while the union-find positions it pairs with are kept per rebuilder. A rebuild against a second union-find
-        /// moved the mark past rows the first had not canonicalized, so the next incremental rebuild against the first
-        /// never rewrote them, and the result depended on the table's size again. The marks are now kept per rebuilder.
-        /// Each union-find here displaces one id before the rows are written, and each rebuild must rewrite its own id's
-        /// rows whatever the other rebuild did in between.
+        /// The mark of the rows written since the last rebuild is kept per rebuilder, as the union-find positions it
+        /// pairs with are. A mark kept once per table would let a rebuild against a second union-find move it past rows
+        /// the first had not canonicalized, so that the next incremental rebuild against the first would never rewrite
+        /// them, and the result would depend on the table's size again. Each union-find here displaces one id before
+        /// the rows are written, and each rebuild rewrites its own id's rows whatever the other rebuild did in between.
         /// </summary>
         [Theory]
         [InlineData(1)]
@@ -312,7 +314,8 @@ namespace Eggnog.Relations.Tests
             Assert.DoesNotContain(rows, r => r[1] == 9001);
             Assert.Equal(1_201, rows.Count(r => r[1] == 6487));
 
-            // The rebuild against the first must still rewrite its id's rows, although the other rebuild came after them.
+            // The rebuild against the first must still rewrite its id's rows, although the other rebuild came after
+            // them.
             Assert.True(db.ApplyRebuild(uf, [f], 4));
             rows = DatabaseTestUtil.Rows(db, f);
             Assert.Equal(12_000, rows.Count);
@@ -330,6 +333,88 @@ namespace Eggnog.Relations.Tests
         static StageBinding Bind(int column, int variable) => new(new ColumnId(column), new Variable(variable));
 
         static Probe Probe(int atom, int column, int key) => new(new ScanSpec(new SubAtom(new AtomId(atom), [new ColumnId(column)]), []), [new ColumnId(key)]);
+
+        /// <summary>
+        /// The rebuild watermark (SortedWritesTable.RebuildWatermark.cs) is kept per rebuilder, as the union-find
+        /// positions it pairs with are (<see cref="SubsetTracker"/> is keyed by the rebuilder's table id). A rebuild
+        /// against a second union-find, which displaces nothing, leaves the first union-find's watermark where it was,
+        /// so the next incremental rebuild against the first rewrites every row that mentions its displaced id, as the
+        /// full path (tables of at most 10000 rows) does: the result does not depend on the table's size.
+        /// </summary>
+        [Theory]
+        [InlineData(10_000)]
+        [InlineData(12_000)]
+        public void IncrementalRebuildDoesNotDependOnAnotherRebuilder(int rows)
+        {
+            var db = new Database(ParallelHeuristics.Serial);
+            var uf = db.AddTable(new DisplacedTable());
+            var other = db.AddTable(new DisplacedTable());
+            var f = db.AddTable(new SortedWritesTable(1, 3, new ColumnId(2), [new ColumnId(1)], new MinMerge(new ColumnId(1)), ParallelHeuristics.Serial));
+            DatabaseTestUtil.Stage(db, uf, [6487, 4553, 0]);
+            db.MergeAll();
+
+            // The union is consumed while the table is empty.
+            Assert.False(db.ApplyRebuild(uf, [f], 1));
+
+            DatabaseTestUtil.Stage(db, f, Enumerable.Range(0, rows).Select(i => new[] { (uint)i, i % 10 == 0 ? 6487u : (uint)i, 2u }).ToArray());
+            db.MergeAll();
+
+            // A rebuild against another union-find, which displaces nothing, and so changes nothing.
+            Assert.False(db.ApplyRebuild(other, [f], 3));
+
+            // Every row that mentions 6487 is rewritten, whatever the table's size.
+            Assert.True(db.ApplyRebuild(uf, [f], 4));
+            Assert.DoesNotContain(DatabaseTestUtil.Rows(db, f), r => r[1] == 6487);
+        }
+
+        /// <summary>
+        /// The eligibility check of <see cref="StageOrdering"/>, where it departs from
+        /// core-relations/src/free_join/execute.rs:2399-2470, runs inside the selection sort's inner loop. It is kept
+        /// incrementally (a per-atom count of unscheduled probers), so the sort costs O(stages²), as egglog's does;
+        /// rescanning every unscheduled stage's probes for every comparison would cost O(stages³ × probes). The
+        /// executor re-sorts on the hot path, once per frame at every third position when the stage there is larger
+        /// than 32 rows. Quadratic growth makes a sort of four times the stages cost about 16 times as much; cubic
+        /// growth about 64 times.
+        /// </summary>
+        [Fact]
+        public void RunTimeStageSortStaysQuadratic()
+        {
+            var small = TimeSort(64);
+            var large = TimeSort(256);
+            Assert.True(large < 32 * small, $"sorting 256 stages took {large / small:0.0} times as long as sorting 64 (quadratic growth gives 16)");
+        }
+
+        /// <summary>
+        /// Times one run-time stage sort of a Free Join path of <paramref name="n"/> stages, each probing the next
+        /// one's cover: the best of several rounds.
+        /// </summary>
+        static double TimeSort(int n)
+        {
+            var stages = Enumerable.Range(0, n).Select(i => (JoinStage)new FusedIntersectStage(
+                new ScanSpec(new SubAtom(new AtomId(i), [new ColumnId(0), new ColumnId(1)]), []),
+                [new StageBinding(new ColumnId(0), new Variable(i)), new StageBinding(new ColumnId(1), new Variable(i + 1))],
+                i < n - 1 ? [new Probe(new ScanSpec(new SubAtom(new AtomId(i + 1), [new ColumnId(0)]), []), [new ColumnId(1)])] : [])).ToArray();
+            var rng = new Random(1);
+            var sizes = new FixedSizes(Enumerable.Range(0, n).Select(_ => rng.Next(100, 1000)).ToArray());
+            var order = new InstrOrder(n);
+            var leaf = new bool[n];
+            var refined = new long[n];
+            var reps = Math.Max(4, 400_000 / (n * n));
+            var best = double.MaxValue;
+            for (var round = 0; round < 5; round++)
+            {
+                var clock = Stopwatch.StartNew();
+                for (var r = 0; r < reps; r++)
+                {
+                    order.Reset(n);
+                    StageOrdering.SortPlanBySize(order, leaf, 0, stages, ref sizes, refined);
+                }
+
+                best = Math.Min(best, clock.Elapsed.TotalMilliseconds / reps);
+            }
+
+            return best;
+        }
 
     }
 

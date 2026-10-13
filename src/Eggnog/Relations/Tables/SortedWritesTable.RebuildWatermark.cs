@@ -46,8 +46,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether rows were appended since <see cref="ApplyRebuild"/> (or <see cref="SettleAppends"/>) last ran
-        /// against <paramref name="rebuilderTableId"/>: the rows a raw write may have left stale (colored-contexts spec
-        /// §7.6). Always <c>false</c> for a table without rebuild columns, which no union can make stale. O(1).
+        /// against <paramref name="rebuilderTableId"/>: the rows a raw write may have left stale. Always <c>false</c>
+        /// for a table without rebuild columns, which no union can make stale. O(1).
         /// </summary>
         /// <param name="rebuilderTableId">The rebuilder's table id.</param>
         /// <returns><c>true</c> if such rows exist.</returns>

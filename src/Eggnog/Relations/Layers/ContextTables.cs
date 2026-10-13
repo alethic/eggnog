@@ -8,33 +8,33 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A child context's layering engine (colored-contexts spec §6.2, X1): its lazily created <see cref="TableLayer"/>s,
-    /// the layer lock and the deferred-adoption list, the cached <see cref="TableView"/>s and their dirty flags, the hidden
-    /// sets awaiting a seal, its cursors into its ancestors, its <see cref="RetractionGuard"/> and its
-    /// <see cref="LayerStatistics"/>. Reachable as <see cref="Context.Tables"/> and <see cref="Database.Layers"/>; the root
-    /// has none.
+    /// A child context's layering engine: its lazily created <see cref="TableLayer"/>s, the layer lock and the
+    /// deferred-adoption list, the cached <see cref="TableView"/>s and their dirty flags, the hidden sets awaiting a
+    /// seal, its cursors into its ancestors, its <see cref="RetractionGuard"/> and its <see cref="LayerStatistics"/>.
+    /// Reachable as <see cref="Context.Tables"/> and <see cref="Database.Layers"/>; the root has none.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Layers (X37). A layer is created by <see cref="GetOrCreateLayer"/> on the context's first write, hide or clear of a
-    /// table: double-checked under the layer lock, published to the database's catalog (<see cref="TableCatalog.Publish"/>)
-    /// and to the layer slots with volatile writes, and adopted into the database's table map at once, or, during a search
-    /// (<see cref="InSearch"/>), at the next merge round (<see cref="AdoptDeferred"/>). Creating an empty layer changes no
-    /// view and no <see cref="ViewGeneration"/>: it adds no visible row and hides nothing.
+    /// Layers. A layer is created by <see cref="GetOrCreateLayer"/> on the context's first write, hide or clear of a
+    /// table: double-checked under the layer lock, published to the database's catalog
+    /// (<see cref="TableCatalog.Publish"/>) and to the layer slots with volatile writes, and adopted into the
+    /// database's table map at once, or, during a search (<see cref="InSearch"/>), at the next merge round
+    /// (<see cref="AdoptDeferred"/>). Creating an empty layer changes no view and no <see cref="ViewGeneration"/>: it
+    /// adds no visible row and hides nothing.
     /// </para>
     /// <para>
-    /// Threads (§8.3, I34). Everything runs on the context's domain thread, except that the tasks of the context's own
-    /// rule run may create layers; they touch only the catalog and the layer slots, both copy-on-write under the layer
-    /// lock. A frozen context never grows or writes its arrays (X43): it answers for a table added after its freeze
-    /// through its parent.
+    /// Threads. Everything runs on the context's domain thread, except that the tasks of the context's own rule run may
+    /// create layers; they touch only the catalog and the layer slots, both copy-on-write under the layer lock. A
+    /// frozen context never grows or writes its arrays: it answers for a table added after its freeze through its
+    /// parent.
     /// </para>
     /// <para>
-    /// Rebuild (§7, C5, C8). <see cref="CatchUpRows"/> absorbs what the context's unsettled ancestors appended since its
-    /// cursors, and <see cref="RebuildPass"/> rewrites the context's own rows over the ids displaced since its last pass,
-    /// hides and copies the ancestor rows naming its own losers, and merges; both copy through
-    /// <see cref="StageCopy"/> and hide only once the copies are staged (X12). <see cref="ScanOwn{TSink}"/> and
-    /// <see cref="ScanAncestorsMentioning{TSink}"/> are the lift's reads (§6.10), and <see cref="CheckInvariants"/> is the
-    /// tables part of the context's checker (§12.7).
+    /// Rebuild. <see cref="CatchUpRows"/> absorbs what the context's unsettled ancestors appended since its cursors,
+    /// and <see cref="RebuildPass"/> rewrites the context's own rows over the ids displaced since its last pass, hides
+    /// and copies the ancestor rows naming its own losers, and merges; both copy through <see cref="StageCopy"/> and
+    /// hide only once the copies are staged. <see cref="ScanOwn{TSink}"/> and
+    /// <see cref="ScanAncestorsMentioning{TSink}"/> are the lift's reads, and <see cref="CheckInvariants"/> is the
+    /// tables part of the context's checker.
     /// </para>
     /// </remarks>
     internal sealed partial class ContextTables : ILayerViewSource
@@ -116,7 +116,7 @@ namespace Eggnog.Relations
         public LayeredSchema Schema => schema;
 
         /// <summary>
-        /// Gets the context's retraction guard (§6.7).
+        /// Gets the context's retraction guard.
         /// </summary>
         public RetractionGuard Guard => guard;
 
@@ -126,8 +126,8 @@ namespace Eggnog.Relations
         public LayerStatistics Statistics => statistics;
 
         /// <summary>
-        /// Gets or sets whether the context's rule run is searching: layers created meanwhile wait for the next merge round
-        /// to enter the database's table map (X37). Set by <see cref="Database.RunRuleSet"/> around the search.
+        /// Gets or sets whether the context's rule run is searching: layers created meanwhile wait for the next merge
+        /// round to enter the database's table map. Set by <see cref="Database.RunRuleSet"/> around the search.
         /// </summary>
         internal bool InSearch
         {
@@ -136,7 +136,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the number of hidden sets awaiting a seal: zero outside a merge of the context (I18, X40).
+        /// Gets the number of hidden sets awaiting a seal: zero outside a merge of the context.
         /// </summary>
         internal int UnsealedCount => unsealed.Count;
 
@@ -153,14 +153,15 @@ namespace Eggnog.Relations
         public uint Find(uint id) => owner.UnionFind.Find(id);
 
         /// <summary>
-        /// Gets the table writes to <paramref name="table"/> are staged into (the catalog's resolver, §6.2): the context's
+        /// Gets the table writes to <paramref name="table"/> are staged into (the catalog's resolver): the context's
         /// union-find table for the union-find, otherwise the context's layer of the table, created on first use.
         /// Thread-safe.
         /// </summary>
         /// <param name="table">The table staged into.</param>
         /// <returns>The table.</returns>
         /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed,
-        /// faulted or contradicted, or the table's merge is not a lattice merge (decision 2).</exception>
+        /// faulted or contradicted, or the table's merge is not a lattice merge, which only the root may
+        /// write.</exception>
         /// <exception cref="KeyNotFoundException">The table is not registered with the store.</exception>
         internal Table ResolveForStaging(TableId table)
         {
@@ -168,8 +169,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the context's layer of <paramref name="table"/>, or <c>null</c> when it has none (or the id lies beyond a
-        /// frozen context's arrays, X43). Lock-free.
+        /// Gets the context's layer of <paramref name="table"/>, or <c>null</c> when it has none (or the id lies beyond
+        /// a frozen context's arrays). Lock-free.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The layer, or <c>null</c>.</returns>
@@ -181,14 +182,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the context's layer of <paramref name="table"/>, creating it on first use (§6.2, C14, decision 2, X37).
-        /// Thread-safe: the tasks of the context's rule run may call it.
+        /// Gets the context's layer of <paramref name="table"/>, creating it on first use. Thread-safe: the tasks of
+        /// the context's rule run may call it.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The layer.</returns>
         /// <exception cref="InvalidOperationException">The layer cannot be created: the context is frozen, disposed,
-        /// faulted or contradicted, or the table is shared and its merge is not a lattice merge (decision 2: copying a row
-        /// on touch counts as a write).</exception>
+        /// faulted or contradicted, or the table is shared and its merge is not a lattice merge, which only the root
+        /// may write (copying a row on touch counts as a write).</exception>
         /// <exception cref="KeyNotFoundException">The table is not registered with the store.</exception>
         internal TableLayer GetOrCreateLayer(TableId table)
         {
@@ -219,10 +220,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Discards every write staged in the layers created during the search that just failed, which still wait on the
-        /// deferred list (X37) and so are not in the database's table map that <see cref="Database.ExecuteRuleSet"/>'s
-        /// rollback walks (the failed-run decision of colored-contexts spec §21.9, M10.3). Called on the domain thread
-        /// after every task of the search has finished; the layers stay deferred, empty. O(deferred layers).
+        /// Discards every write staged in the layers created during the search that just failed, which still wait on
+        /// the deferred list and so are not in the database's table map that <see cref="Database.ExecuteRuleSet"/>'s
+        /// rollback walks: an exception in a child's search faults it, and the rollback then leaves no staged write
+        /// behind. Called on the domain thread after every task of the search has finished; the layers stay deferred,
+        /// empty. O(deferred layers).
         /// </summary>
         internal void DiscardDeferredStaged()
         {
@@ -248,8 +250,8 @@ namespace Eggnog.Relations
         internal void NoteUnsealed(HiddenSet set, SortedWritesTable layer) => unsealed.Add((set, layer));
 
         /// <summary>
-        /// Records a hide in <paramref name="table"/>'s layer: the context's change stamp moves (X30), the table's views
-        /// are dropped at the next invalidation, and the hide is counted.
+        /// Records a hide in <paramref name="table"/>'s layer: the context's change stamp moves, the table's views are
+        /// dropped at the next invalidation, and the hide is counted.
         /// </summary>
         /// <param name="table">The table.</param>
         internal void NoteHidden(TableId table)
@@ -313,7 +315,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some level in <c>(layer, Depth]</c> hides row <paramref name="row"/> of the layer at depth
-        /// <paramref name="layer"/>, sealed or not: the write path's visibility test (§6.5). O(depth − layer).
+        /// <paramref name="layer"/>, sealed or not: the write path's visibility test. O(depth − layer).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="layer">The depth of the row's layer.</param>
@@ -329,8 +331,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Drops every structure of the layering: the context is disposed (§8.2). Its descendants are disposed already,
-        /// so nothing reads its layers or views any more.
+        /// Drops every structure of the layering: the context is disposed. Its descendants are disposed already, so
+        /// nothing reads its layers or views any more.
         /// </summary>
         internal void Release()
         {
@@ -414,7 +416,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowNotLattice(LayeredTableSchema schema)
         {
-            throw new InvalidOperationException($"Table {schema.Name ?? schema.Id.ToString()} has a merge that is not a lattice merge, so only the root context may write it (decision 2); a child's first write, hide or copy of one of its rows is refused.");
+            throw new InvalidOperationException($"Table {schema.Name ?? schema.Id.ToString()} has a merge that is not a lattice merge, so only the root context may write it; a child's first write, hide or copy of one of its rows is refused.");
         }
 
     }

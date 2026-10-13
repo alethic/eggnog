@@ -9,19 +9,19 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the lift's storage reads (colored-contexts spec §6.10, L1, review finding G1(b)):
-    /// <see cref="Context.ScanOwn{TSink}"/> visits the child's own live rows, and
-    /// <see cref="Context.ScanAncestorsMentioning{TSink}"/> the ancestor rows the child sees that name an id, through the
-    /// ancestors' rebuild indexes; both refuse the root and an unclean context, and the second returns nothing for a table
-    /// without rebuild columns, a context-private table and a local id.
+    /// Tests for the lift's storage reads: <see cref="Context.ScanOwn{TSink}"/> visits the child's own live rows, and
+    /// <see cref="Context.ScanAncestorsMentioning{TSink}"/> the ancestor rows the child sees that name an id, through
+    /// the ancestors' rebuild indexes; both refuse the root and an unclean context, and the second returns nothing for
+    /// a table without rebuild columns, a context-private table and a local id.
     /// </summary>
     public class LiftReadTests
     {
 
         /// <summary>
-        /// G1(b): with losers-only marking a fact that holds in a case only through an ancestor row naming a class's winner
-        /// is never copied into the case; the winner probe finds it. The parent holds <c>r(a)</c>; the case unions a and b
-        /// (a wins), so <c>r(b)</c> holds in the case, carried only by the parent's row <c>r(a)</c>.
+        /// With losers-only marking, a fact that holds in a case only through an ancestor row naming a class's winner
+        /// is never copied into the case, so the lift needs the winner probe, which finds it. The parent holds
+        /// <c>r(a)</c>; the case unions a and b (a wins), so <c>r(b)</c> holds in the case, carried only by the
+        /// parent's row <c>r(a)</c>.
         /// </summary>
         [Fact]
         public void TheWinnerProbeFindsAFactCarriedByAnAncestorRow()
@@ -143,7 +143,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Both reads refuse the root (§13 edge 33) and a context that is not clean.
+        /// Both reads refuse the root and a context that is not clean.
         /// </summary>
         [Fact]
         public void TheReadsRefuseTheRootAndUncleanContexts()

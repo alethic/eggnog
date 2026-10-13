@@ -6,7 +6,7 @@ namespace Eggnog
     internal sealed partial class HostBatch
     {
 
-        // The congruence check of merges (D32). A union of the batch, or a constructor write that gives an existing key
+        // The congruence check of merges. A union of the batch, or a constructor write that gives an existing key
         // another class, merges classes; the rebuild then merges every pair of rows whose keys become equal, and for a
         // function without a lattice two such rows with different values are an engine panic, which would fault the
         // scope. Phase 1 therefore simulates the closure the rebuild will compute: an overlay union-find over the cells
@@ -108,7 +108,8 @@ namespace Eggnog
                 });
             }
 
-            // The root is rebuilt after every flush and every run, so the stored rows are canonical.
+            // The scope is rebuilt after every flush and every run, and caught up when the write enters, so the stored
+            // rows are canonical.
             foreach (var (table, row) in stored)
                 AddMergeRow(table, row[..^1], row[^1], true);
 

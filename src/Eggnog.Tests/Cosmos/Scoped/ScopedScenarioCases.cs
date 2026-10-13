@@ -7,10 +7,11 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// Every R2 query of the scoped Cosmos scenarios 01 to 06 and 08 (§8.1.2) as a <see cref="ScopedScenarioCase"/>, with
-    /// the steps that compile a case's container and ask its query; scenario 07's queries are <see cref="SweepLinks"/>'s.
-    /// Used by the tests that must run every scenario in another setting: two graphs in either order and on parallel
-    /// threads (ScopeTagTests), and a degree of parallelism above 1 (ParallelEquivalenceTests).
+    /// Every query of the scoped Cosmos scenarios 01 to 06 and 08 that runs without a split, as a
+    /// <see cref="ScopedScenarioCase"/>, with the steps that compile a case's container and ask its query; scenario
+    /// 07's queries are <see cref="SweepLinks"/>'s. Used by the tests that must run every scenario in another setting:
+    /// two graphs in either order and on parallel threads (ScopeTagTests), and a degree of parallelism above 1
+    /// (ParallelEquivalenceTests).
     /// </summary>
     public static class ScopedScenarioCases
     {
@@ -99,8 +100,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
         ];
 
         /// <summary>
-        /// Compiles a case's container under the graph's frozen root: declares it in a new schema scope, saturates horn and
-        /// lattice rules, and freezes it.
+        /// Compiles a case's container under the graph's frozen root: declares it in a new schema scope, saturates horn
+        /// and lattice rules, and freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
         /// <param name="scenario">The case.</param>
@@ -116,7 +117,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// Asks a case's query of its compiled container (<see cref="SweepLinks.Ask"/>) and returns whether its result holds.
+        /// Asks a case's query of its compiled container (<see cref="SweepLinks.Ask"/>) and returns whether its result
+        /// holds.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schema">The case's frozen schema.</param>
@@ -130,7 +132,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// Compiles every case's container and sweep's in one graph, under its frozen root (frozen here if it is not yet).
+        /// Compiles every case's container and sweep's in one graph, under its frozen root (frozen here if it is not
+        /// yet).
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <returns>The frozen schemas, one per case, then sweep's.</returns>
@@ -141,8 +144,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// Asks every case's query of the schemas <see cref="CompileAll"/> made, and every sweep query; returns the cases
-        /// whose result does not hold, and each sweep query's extraction.
+        /// Asks every case's query of the schemas <see cref="CompileAll"/> made, and every sweep query; returns the
+        /// cases whose result does not hold, and each sweep query's extraction.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schemas">The schemas.</param>

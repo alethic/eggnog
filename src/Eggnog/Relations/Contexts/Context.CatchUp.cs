@@ -9,8 +9,8 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Catch-up step 1 (§5.6, C8): re-keys the child's union-find over the displacements its parent made since the
-        /// child last caught up, through one cursor into the parent's displaced ids (X7), journaling at
+        /// The first step of a child's catch-up: re-keys the child's union-find over the displacements its parent made
+        /// since the child last caught up, through one cursor into the parent's displaced ids, journaling at
         /// <paramref name="epoch"/> every id that stops being canonical in the child.
         /// </summary>
         /// <remarks>
@@ -19,7 +19,8 @@ namespace Eggnog.Relations
         /// canonical in the parent and re-keys its overlay (<see cref="UnionFindOverlay.Rekey"/>); the ids the re-key
         /// reports lost are journaled unless they already are. The parent's displaced ids re-export every displacement
         /// visible at the parent, its own imports included, so one cursor suffices. Afterwards every overlay member is
-        /// canonical in the parent again (I6) and the journal is complete (I8).
+        /// canonical in the parent again, and the journal holds every id that stopped being canonical in the child
+        /// since its creation.
         /// </para>
         /// <para>
         /// Cost: O(1) expected per parent displacement plus the sizes of the classes involved; nothing when the child is
@@ -28,10 +29,9 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// Unions staged in the child and not merged yet would be merged after the imports, possibly with an older
-        /// timestamp than they carry, so they are refused when there is something to catch up with. (The spec's sketch
-        /// refuses them before checking the cursor; refusing only when a re-key happens is equivalent for every caller,
-        /// whose staged unions <see cref="Rebuild"/> merges right after, and keeps a rebuild with nothing to catch up
-        /// with from failing.)
+        /// timestamp than they carry, so they are refused when there is something to catch up with, and only then:
+        /// every caller's staged unions are merged by <see cref="Rebuild"/> right after, and a rebuild with nothing to
+        /// catch up with does not fail.
         /// </para>
         /// </remarks>
         /// <param name="epoch">The rebuild pass's epoch, stamped on every journaled id.</param>
@@ -56,9 +56,9 @@ namespace Eggnog.Relations
             for (var i = unionFindCursor; i < end; i++)
             {
                 var d = ids[i];
-                Debug.Assert(idBlocks!.Contains(d) == false, "a parent displaced an id local to its child (I10)");
+                Debug.Assert(idBlocks!.Contains(d) == false, "a parent displaced an id local to its child");
 
-                // The final canonical of d in the parent: within a batch, chains d → p1 → p2 resolve to p2 (edge case 5).
+                // The final canonical of d in the parent: within a batch, chains d → p1 → p2 resolve to p2.
                 var p = parentFinder!.Find(d);
                 Debug.Assert(p < d, "a displaced id's canonical is smaller than it");
                 var n = overlay.Rekey(d, p, lost);
@@ -81,8 +81,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The container part of a child's catch-up (§7.4, C13 interim): re-stamps, at <paramref name="epoch"/>, the rows
-        /// of the child's own layers that name a container the root rebuilt in place since the child last looked
+        /// The container part of a child's catch-up: re-stamps, at <paramref name="epoch"/>, the rows of the child's
+        /// own layers that name a container the root rebuilt in place since the child last looked
         /// (<see cref="Store.ContainerDirtyLog"/>), so the child's semi-naive evaluation sees them as new, as egglog's
         /// <c>refresh_rows_for_values</c> does at the root. Root rows are re-stamped by the root itself and arrive as
         /// appends; ancestors in between refresh their own rows in their own rebuilds.

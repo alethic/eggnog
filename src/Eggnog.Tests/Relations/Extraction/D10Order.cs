@@ -4,20 +4,25 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Rule-layer decision D10's order on the nodes of a <see cref="RandomExtractionGraph"/>, computed independently of
-    /// the extractor: function id, then the columns left to right, the <c>Num</c> literal by its integer value and every
-    /// id column by id.
+    /// The extractor's tie-break order on the nodes of a <see cref="RandomExtractionGraph"/>, which decides between
+    /// nodes of equal cost, computed independently of the extractor: function id, then the columns left to right, the
+    /// <c>Num</c> literal by its integer value and every id column by id.
     /// </summary>
     sealed class D10Order : IComparer<(int Function, Value[] Row)>
     {
 
         readonly RandomExtractionGraph graph;
 
+        /// <summary>
+        /// Initializes the order over the nodes of <paramref name="graph"/>.
+        /// </summary>
+        /// <param name="graph">The graph whose functions and base values the order reads.</param>
         public D10Order(RandomExtractionGraph graph)
         {
             this.graph = graph;
         }
 
+        /// <inheritdoc />
         public int Compare((int Function, Value[] Row) x, (int Function, Value[] Row) y)
         {
             var byFunction = graph.Functions[x.Function].Rep.CompareTo(graph.Functions[y.Function].Rep);

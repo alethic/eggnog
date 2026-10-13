@@ -5,15 +5,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A compiled conjunctive query for host reads (D34, D49): <see cref="Scope.Any(Query)"/>,
-    /// <see cref="Scope.Count(Query)"/> and <see cref="Scope.ForEachMatch(Query, QueryCallback)"/>. Made by
-    /// <see cref="EGraph.DefineQuery(string, Action{QueryBuilder})"/>. Define a reusable query once; dispose one made for
-    /// a single request, which frees its engine rule and call sites.
+    /// A compiled conjunctive query for host reads: <see cref="Scope.Any(Query)"/>, <see cref="Scope.Count(Query)"/>
+    /// and <see cref="Scope.ForEachMatch(Query, QueryCallback)"/>. Made by
+    /// <see cref="EGraph.DefineQuery(string, Action{QueryBuilder})"/>. Define a reusable query once; dispose one made
+    /// for a single request, which frees its engine rule and call sites.
     /// </summary>
     /// <remarks>
     /// A query runs as a naive engine rule whose only action collects its matches: it writes nothing, so it moves neither
-    /// <see cref="Scope.Version"/> nor any extractor, and a failure in it leaves the scope usable (D49). Its class
-    /// constants are checked against the scope at each call (D39). Thread-safe.
+    /// <see cref="Scope.Version"/> nor any extractor, and a failure in it leaves the scope usable. Its class constants are
+    /// checked against the scope at each call. Thread-safe.
     /// </remarks>
     public sealed class Query : IDisposable
     {
@@ -49,7 +49,7 @@ namespace Eggnog
         public bool IsDisposed => Compiled.IsDisposed;
 
         /// <summary>
-        /// Disposes the query (D49): never throws. Later use throws <see cref="ObjectDisposedException"/>; the query's
+        /// Disposes the query: never throws. Later use throws <see cref="ObjectDisposedException"/>; the query's
         /// engine rule and call sites are freed once no call is using it, and its name may be defined again. A second
         /// call does nothing.
         /// </summary>

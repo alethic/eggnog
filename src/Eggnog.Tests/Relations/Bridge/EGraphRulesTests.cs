@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
 
@@ -257,8 +258,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The transitive closure of a chain, semi-naively and naively: the same paths after every iteration, in the same
-        /// number of iterations, with fewer matches semi-naively.
+        /// The transitive closure of a chain, semi-naively and naively: the same paths after every iteration, in the
+        /// same number of iterations, with fewer matches semi-naively.
         /// </summary>
         [Fact]
         public void TransitiveClosureIsTheSameSemiNaivelyAndNaively()
@@ -420,8 +421,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A panic is thrown after the run merged and rebuilt, and the rule's watermark is not committed (colored-contexts
-        /// spec X18, §19 item 4: egglog advances it), so the next run finds the match again.
+        /// A panic is thrown after the run merged and rebuilt, and the rule's watermark is not committed (egglog
+        /// advances it), so the next run finds the match again.
         /// </summary>
         [Fact]
         public void APanicIsThrownAfterTheRunWithoutCommittingTheWatermark()
@@ -613,7 +614,8 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(3, egraph.RunRules(rule).RuleSetReport.NumMatches("count"));
             Assert.Equal(3, Unint(egraph, Rows(egraph, acc).Single().Values[1]));
 
-            // The naive rule matches every src row again, and its writes collide with acc(0) in the merge, which throws.
+            // The naive rule matches every src row again, and its writes collide with acc(0) in the merge, which
+            // throws.
             failing = true;
             var t = egraph.NextTimestamp;
             Assert.Throws<InvalidOperationException>(() => egraph.RunRules(rule, again));
@@ -694,6 +696,178 @@ namespace Eggnog.Relations.Tests
             egraph.ReportLevel = ReportLevel.WithPlan;
             var report = egraph.RunRules(rule);
             Assert.NotNull(report.RuleSetReport.RuleReports["copy"].Single().Plan);
+        }
+
+        /// <summary>
+        /// The progress map keeps every rule's watermark through its growth and rehashing: a child that runs 40
+        /// semi-naive rules over one edge, then again with nothing new, matches nothing the second time, and after one
+        /// more edge every rule matches exactly that edge once.
+        /// </summary>
+        [Fact]
+        public void TheProgressMapKeepsEveryRulesWatermark()
+        {
+            var g = new ContextGraph();
+            var rules = Enumerable.Range(0, 40).Select(i => g.EdgeToPath(name: $"copy{i}")).ToArray();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var c = g.Root.FreshId();
+            g.Assert(g.Root, g.Edge, a, b);
+            g.Root.FlushUpdates();
+            g.Root.Freeze();
+
+            using var child = g.Root.CreateChild(new ContextOptions { InheritWatermarks = false });
+            var first = child.RunRules(rules);
+            var again = child.RunRules(rules);
+            g.Assert(child, g.Edge, b, c);
+            child.FlushUpdates();
+            var third = child.RunRules(rules);
+            for (var i = 0; i < rules.Length; i++)
+            {
+                Assert.Equal(1, first.RuleSetReport.NumMatches($"copy{i}"));
+                Assert.Equal(0, again.RuleSetReport.NumMatches($"copy{i}"));
+                Assert.Equal(1, third.RuleSetReport.NumMatches($"copy{i}"));
+                Assert.True(child.CommittedLastRunAt(rules[i], g.EGraph.GetRuleInfo(rules[i]).Generation) > 0);
+            }
+
+            child.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A rule listed again in a list longer than the scan limit (the dictionary path of the repeat detection) runs
+        /// with the run's own timestamp, as in a short list
+        /// (<see cref="ARuleListedTwiceRunsAgainWithTheNewWatermark"/>): its later listings match nothing, and a naive
+        /// rule listed twice matches every row each time.
+        /// </summary>
+        [Fact]
+        public void ARuleListedAgainInALongListRunsWithTheRunsTimestamp()
+        {
+            var g = new ContextGraph();
+            var semi = g.EdgeToPath(name: "semi");
+            var naive = g.EdgeToPath(semiNaive: false, name: "naive");
+            var fillers = Enumerable.Range(0, 20).Select(i => g.EdgeToPath(name: $"filler{i}")).ToArray();
+            var ids = Enumerable.Range(0, 3).Select(_ => g.Root.FreshId()).ToArray();
+            g.Assert(g.Root, g.Edge, ids[0], ids[1]);
+            g.Assert(g.Root, g.Edge, ids[1], ids[2]);
+            g.Root.FlushUpdates();
+
+            var list = new List<EGraphRuleId> { semi, naive };
+            list.AddRange(fillers);
+            list.Add(semi);
+            list.Add(naive);
+            list.Add(semi);
+            var report = g.Root.RunRules(list.ToArray());
+
+            Assert.Equal(2, report.RuleSetReport.NumMatches("semi"));
+            Assert.Equal(4, report.RuleSetReport.NumMatches("naive"));
+            Assert.Equal(2, report.RuleSetReport.NumMatches("filler19"));
+            Assert.Equal(0, g.Root.RunRules(list.ToArray()).RuleSetReport.NumMatches("semi"));
+        }
+
+        /// <summary>
+        /// A merge that throws after a failure was recorded: a panic action records a failure in the search, then a
+        /// merge primitive throws. Progress is committed unless a failure was recorded, so neither rule's watermark
+        /// moves.
+        /// </summary>
+        [Fact]
+        public void AMergeExceptionAfterARecordedFailureCommitsNoProgress()
+        {
+            var g = new ContextGraph();
+            var failing = false;
+            var boom = Register(g.EGraph, (_, args) => failing ? throw new InvalidOperationException("merge failed") : args[1]);
+            var acc = g.EGraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, g.I64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.Primitive(boom, MergeFn.Old, MergeFn.New),
+                Name = "acc",
+            });
+            var a = g.Root.FreshId();
+            g.Root.AddValues([(g.Mark, [a, g.Unit]), (acc, [a, g.Int(1)])]);
+
+            var wb = g.EGraph.NewRule("write", true);
+            var x = wb.NewVar(ColumnTy.Id);
+            wb.QueryTable(g.Mark, [x, wb.NewVar(g.UnitType)], false);
+            wb.Set(acc, [x, RuleEntry.Const(g.Int(2), g.I64)]);
+            var write = wb.Build();
+
+            var pb = g.EGraph.NewRule("panics", true);
+            pb.QueryTable(g.Mark, [pb.NewVar(ColumnTy.Id), pb.NewVar(g.UnitType)], false);
+            pb.Panic("recorded");
+            var panics = pb.Build();
+
+            failing = true;
+            Assert.Throws<InvalidOperationException>(() => g.Root.RunRules(write, panics));
+            Assert.Equal(0u, g.EGraph.GetRuleInfo(write).LastRunAt);
+            Assert.Equal(0u, g.EGraph.GetRuleInfo(panics).LastRunAt);
+            Assert.Equal(0u, g.Root.CommittedLastRunAt(write, g.EGraph.GetRuleInfo(write).Generation));
+        }
+
+        /// <summary>
+        /// Registers an i64 addition primitive that counts its calls.
+        /// </summary>
+        static ExternalFunctionId CountingAdd(EGraph egraph, Action onCall)
+        {
+            return Register(egraph, (state, args) =>
+            {
+                onCall();
+                var a = state.BaseValues.Unwrap<Int64Codec, long>(new Value(args[0]));
+                var b = state.BaseValues.Unwrap<Int64Codec, long>(new Value(args[1]));
+                return state.BaseValues.Get<Int64Codec, long>(a + b).Rep;
+            });
+        }
+
+        /// <summary>
+        /// When a run throws an ordinary exception, <see cref="EGraph.RunRules"/> restores the rules' watermarks so the
+        /// next run finds the matches again, and nothing the failed run staged survives: the action batches that ran
+        /// before the exception leave no writes in the tables' pending buffers for the next merge, which would apply
+        /// their matches twice (with a <c>(+ old new)</c> counter, 200 matches would count 328).
+        /// </summary>
+        [Fact]
+        public void AnExceptionDoesNotApplyTheMatchesBeforeItTwice()
+        {
+            var egraph = NewEGraph();
+            var i64 = IntType(egraph);
+            var add = CountingAdd(egraph, () => { });
+            var src = Constructor(egraph, "src", false, i64);
+            var acc = egraph.AddTable(new FunctionConfig
+            {
+                Schema = [i64, i64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.Primitive(add, MergeFn.Old, MergeFn.New),
+                Name = "acc",
+            });
+
+            const int N = 200;
+            for (var i = 0; i < N; i++)
+                egraph.AddTerm(src, [Int(egraph, i)]);
+
+            var fail = true;
+            var gateCalls = 0;
+            var gate = Register(egraph, (_, args) =>
+            {
+                if (fail && ++gateCalls > 150)
+                    throw new InvalidOperationException("gate closed");
+
+                return args[0];
+            });
+
+            var rb = egraph.NewRule("count", true);
+            var k = rb.NewVar(i64);
+            var id = rb.NewVar(ColumnTy.Id);
+            rb.QueryTable(src, [k, id], false);
+            rb.CallExternalFunc(gate, [k], i64, () => "gate");
+            rb.Set(acc, [egraph.BaseValueConstant<Int64Codec, long>(0), egraph.BaseValueConstant<Int64Codec, long>(1)]);
+            var rule = rb.Build();
+
+            Assert.Throws<InvalidOperationException>(() => egraph.RunRules(rule));
+            Assert.Equal(0u, egraph.GetRuleInfo(rule).LastRunAt);
+
+            fail = false;
+            var report = egraph.RunRules(rule);
+            Assert.Equal(N, report.RuleSetReport.NumMatches("count"));
+            var rows = Rows(egraph, acc);
+            Assert.Single(rows);
+            Assert.Equal(N, Unint(egraph, rows[0].Values[1]));
         }
 
     }

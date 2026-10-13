@@ -2,8 +2,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The mirror of one value-only table under one tag (§6.8): the engine function <c>T@tag</c> that scoped atoms read,
-    /// and the copy rule that keeps it equal to the tagged scope's own view of <c>T</c> (invariant M).
+    /// The mirror of one value-only table under one tag: the engine function <c>T@tag</c> that scoped atoms read, and
+    /// the copy rule that keeps it equal to the tagged scope's own view of <c>T</c>.
     /// </summary>
     internal sealed class MirrorTable
     {
@@ -52,7 +52,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the copy rule: <c>T(x…) → T@tag(x…)</c> for a relation, <c>T(x…) = v → T@tag(x…) = v</c> for a function
-        /// (merged by its lattice). Semi-naive and inheritable; it runs only in mirror syncs (D48).
+        /// (merged by its lattice). Semi-naive and inheritable; it runs only in mirror syncs.
         /// </summary>
         public CompiledRule CopyRule { get; }
 

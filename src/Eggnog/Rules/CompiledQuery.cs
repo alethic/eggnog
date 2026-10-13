@@ -5,9 +5,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A compiled query (§6.6.4): its program, whose head is one collector of the declared variables, its one engine
-    /// variant (naive, lowered once: the engine runs its class constants in their canonical forms, X19), the column types of its
-    /// matches, and the count of calls using it, which defers the release of a disposed query (D49).
+    /// A compiled query: its program, whose head is one collector of the declared variables, its one engine variant
+    /// (naive, lowered once: the engine runs its class constants in their canonical forms in the running context), the
+    /// column types of its matches, and the count of calls using it, which defers the release of a disposed query.
     /// </summary>
     /// <remarks>
     /// Thread-safe: <see cref="Acquire"/>, <see cref="Release"/> and <see cref="Dispose"/> take a private lock, and the
@@ -82,7 +82,7 @@ namespace Eggnog
         public ColumnType[] Columns { get; }
 
         /// <summary>
-        /// Gets the columns of a match whose cells are classes, ascending: the ones a query canonicalizes (§6.6.4).
+        /// Gets the columns of a match whose cells are classes, ascending: the ones a query canonicalizes.
         /// </summary>
         public int[] SortColumns { get; }
 
@@ -162,7 +162,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Marks the query disposed and frees its variants once no call uses it (D49). Never throws.
+        /// Marks the query disposed and frees its variants once no call uses it. Never throws.
         /// </summary>
         /// <returns><c>true</c> the first time; <c>false</c> when the query was disposed already.</returns>
         public bool Dispose()
@@ -184,9 +184,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Frees the variants now, or hands them to the graph (D49, §6.4.6) when the call comes from a user delegate the
-        /// engine invoked, or while an engine call that may run user delegates is in progress on any thread: the graph frees
-        /// them before it next prepares an iteration or a query. Never waits.
+        /// Frees the variants now, or hands them to the graph when the call comes from a user delegate the engine invoked,
+        /// or while an engine call that may run user delegates is in progress on any thread: the graph frees them before it
+        /// next prepares an iteration or a query. Never waits.
         /// </summary>
         void Free()
         {

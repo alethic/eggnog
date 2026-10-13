@@ -4,8 +4,8 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A rule or a query of a <see cref="ScopedProgram"/>: a body of atoms, an optional filter <c>var &lt; bound</c> on an
-    /// <c>i64</c> variable, and a head of atoms (empty for a query, whose variables are its body's).
+    /// A rule or a query of a <see cref="ScopedProgram"/>: a body of atoms, an optional filter <c>var &lt; bound</c> on
+    /// an <c>i64</c> variable, and a head of atoms (empty for a query, whose variables are its body's).
     /// </summary>
     /// <param name="Name">The rule's name, unique in the program.</param>
     /// <param name="Body">The body's atoms.</param>

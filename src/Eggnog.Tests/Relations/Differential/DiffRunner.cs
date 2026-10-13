@@ -418,8 +418,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets whether a decomposed plan checks a materialization through a <see cref="MatScanMode.Lookup"/> stage: in
-        /// its result block (a block whose message variables no single later bag holds and that has no value variables,
-        /// the fix of map §8.1 row 5) or as an epilogue of a block.
+        /// its result block (where it keeps the join constraint of a block whose message variables no single later bag
+        /// holds and that has no value variables, a constraint egglog's planner loses:
+        /// core-relations/src/free_join/plan.rs:897-904, 993-995) or as an epilogue of a block.
         /// </summary>
         public static bool HasMaterializationLookup(DecomposedPlan plan)
         {

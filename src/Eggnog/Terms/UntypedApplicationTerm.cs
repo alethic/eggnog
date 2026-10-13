@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An untyped application of a function or constructor (D13), from <c>FunctionHandle.Apply</c> or
+    /// An untyped application of a function or constructor, from <c>FunctionHandle.Apply</c> or
     /// <c>ConstructorHandle.Apply</c>.
     /// </summary>
     internal sealed class UntypedApplicationTerm : Term

@@ -6,7 +6,7 @@ namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// What one encoding of a split-oracle program proves in its query (§8.2): whether the query is contradictory, and for
+    /// What one encoding of a split-oracle program proves in its query: whether the query is contradictory, and for
     /// each path the query mentions whether it is present, its stored forms, and its domain.
     /// </summary>
     public sealed class SplitOracleFacts

@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A rule's progress in a <see cref="ReferenceRuleContext"/>: the tick of its last run there and the canonical forms its
-    /// id constants had then (colored-contexts spec §10.2, X19): the reference's <c>RuleProgress</c>.
+    /// A rule's progress in a <see cref="ReferenceRuleContext"/>: the tick of its last run there and the canonical
+    /// forms its id constants had then; the reference's counterpart of the engine's <see cref="RuleProgress"/>.
     /// </summary>
     /// <param name="Time">The tick of the last run.</param>
     /// <param name="Constants">The canonical forms of the rule's id constants at that run (K).</param>

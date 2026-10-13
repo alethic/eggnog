@@ -242,6 +242,33 @@ namespace Eggnog.Relations.Tests
             Assert.True(inner.IsCompleted);
         }
 
+        [Fact]
+        public void ReentrantGetOrUpdateDoesNotRunTheUpdateTwicePerEpoch()
+        {
+            // std::sync::Once (resettable_oncelock.rs:52-60) is not reentrant: calling get_or_update from inside the
+            // update deadlocks, so the update can never run twice in one epoch. C#'s Monitor is reentrant, so an inner
+            // call would see "not completed" and run a second update inside the first; the lock rejects the reentrant
+            // call with an InvalidOperationException, which keeps at most one update per epoch.
+            var lockObj = new ResettableOnceLock<int>(0);
+            var runs = 0;
+            Exception? failure = null;
+            try
+            {
+                lockObj.GetOrUpdate(0, (ref int x, int _) =>
+                {
+                    runs++;
+                    lockObj.GetOrUpdate(0, (ref int y, int _) => runs++);
+                });
+            }
+            catch (InvalidOperationException e)
+            {
+                failure = e;
+            }
+
+            if (failure is null)
+                Assert.Equal(1, runs);
+        }
+
     }
 
 }

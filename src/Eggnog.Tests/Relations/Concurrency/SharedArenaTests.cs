@@ -11,8 +11,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="SharedArena"/>: ports of egglog's concurrency/src/tests.rs:640-788 (the two proptests become
-    /// seeded randomized tests) and of the doc examples in shared_arena.rs.
+    /// Tests for <see cref="SharedArena"/>: ports of egglog's concurrency/src/tests.rs:640-788 (the two proptests
+    /// become seeded randomized tests) and of the doc examples in shared_arena.rs.
     /// </summary>
     public sealed class SharedArenaTests
     {

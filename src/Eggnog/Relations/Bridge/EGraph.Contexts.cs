@@ -24,27 +24,27 @@ namespace Eggnog.Relations
         int localSlotCount;
 
         /// <summary>
-        /// Gets the e-graph's contradiction function (colored-contexts spec §10.1, §6.9), or <c>null</c> when none is
-        /// designated (<see cref="DesignateContradiction"/>).
+        /// Gets the e-graph's contradiction function, or <c>null</c> when none is designated
+        /// (<see cref="DesignateContradiction"/>).
         /// </summary>
         internal FunctionId? Contradiction => Volatile.Read(ref contradiction) is var c and > 0 ? new FunctionId(c - 1) : null;
 
         /// <summary>
-        /// Gets the early-stop function (§10.6), or <c>null</c> when no contradiction function is designated.
+        /// Gets the early-stop function, or <c>null</c> when no contradiction function is designated.
         /// </summary>
         internal ExternalFunctionId? StopOnContradiction => Contradiction is null ? null : stopOnContradiction;
 
         /// <summary>
         /// Gets the contradiction function's table and the early-stop function, which rule lowering appends after every
-        /// head insert into that table (§10.6); <c>null</c> when no contradiction function is designated.
+        /// head insert into that table; <c>null</c> when no contradiction function is designated.
         /// </summary>
         internal (TableId Table, ExternalFunctionId Stop)? ContradictionHook => Contradiction is { } c ? (GetTable(c), stopOnContradiction) : null;
 
         /// <summary>
-        /// Gets the threads that concurrent children lease from (colored-contexts spec §10.1, §10.9): as many as the
-        /// degree of parallelism the e-graph was built with (<see cref="ParallelHeuristics.DegreeOfParallelism"/> of the
-        /// root's heuristics). <see cref="ConcurrentChildren"/> runs each child's body under a lease of the child's own
-        /// degree of parallelism, so children running side by side never use more threads than the root alone may.
+        /// Gets the threads that concurrent children lease from: as many as the degree of parallelism the e-graph was
+        /// built with (<see cref="ParallelHeuristics.DegreeOfParallelism"/> of the root's heuristics).
+        /// <see cref="ConcurrentChildren"/> runs each child's body under a lease of the child's own degree of
+        /// parallelism, so children running side by side never use more threads than the root alone may.
         /// </summary>
         internal ParallelismBudget ParallelismBudget => parallelismBudget;
 
@@ -54,21 +54,22 @@ namespace Eggnog.Relations
         internal int LocalSlotCount => Volatile.Read(ref localSlotCount);
 
         /// <summary>
-        /// Designates <paramref name="function"/> as the e-graph's contradiction function (rule-layer E4, colored-contexts
-        /// §6.9, §10.1): a nullary relation whose row, once it merges into a context that stops on contradictions
+        /// Designates <paramref name="function"/> as the e-graph's contradiction function: a nullary relation whose
+        /// row, once it merges into a context that stops on contradictions
         /// (<see cref="ContextOptions.StopOnContradiction"/>, cases), stops that context. Maps to
         /// <see cref="Relations.Store.DesignateContradiction"/>. Once per e-graph.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Rules planned from now on follow every head insert into the function with the early-stop call
-        /// (<see cref="StopOnContradictionFunction"/>, §10.6), which cuts a stopping case's search short; a rule planned
+        /// Rules planned after the designation follow every head insert into the function with the early-stop call
+        /// (<see cref="StopOnContradictionFunction"/>), which cuts a stopping case's search short; a rule planned
         /// before the designation keeps its plan, so its insert only sets the stop flag when it merges. The rule layer
         /// designates its contradiction relation when it builds the graph, before any rule runs.
         /// </para>
         /// <para>
-        /// Refused once the store has had a child (E4: before any child exists): a child created earlier would have
-        /// missed the check made at its creation (§6.9 item 3), and plans run in it would lack the early stop.
+        /// Refused once the store has had a child: a child created before the designation would have missed the check
+        /// made at its creation (whether its parent's view holds a contradiction row), and plans run in it would lack
+        /// the early stop.
         /// </para>
         /// </remarks>
         /// <param name="function">A function with no key columns: the schema is its output alone (the rule layer's
@@ -88,8 +89,8 @@ namespace Eggnog.Relations
                     throw new InvalidOperationException($"{GetFunctionName(new FunctionId(contradiction - 1))} is the e-graph's contradiction function already.");
 
                 // Atomic with child creation: the first child notes itself under the store's definition lock before its
-                // constructor reads the contradiction table (Context.AddChild), so either this designation lands first and
-                // every child checks it at its creation (§6.9 item 3), or the refusal below sees that child.
+                // constructor reads the contradiction table (Context.AddChild), so either this designation lands first
+                // and every child checks it at its creation, or the refusal below sees that child.
                 lock (store.DefinitionLock)
                 {
                     if (store.HasHadChildren)
@@ -104,9 +105,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Makes a slot of per-context state (§10.1; rule-layer §13 item 4): every context of the e-graph holds one value
-        /// of type <typeparamref name="T"/> for it, built by <paramref name="factory"/> the first time the context is
-        /// asked (<see cref="EGraphContext.GetLocal{T}"/>). Thread-safe.
+        /// Makes a slot of per-context state: every context of the e-graph holds one value of type
+        /// <typeparamref name="T"/> for it, built by <paramref name="factory"/> the first time the context is asked
+        /// (<see cref="EGraphContext.GetLocal{T}"/>). Thread-safe.
         /// </summary>
         /// <typeparam name="T">The type of the per-context value.</typeparam>
         /// <param name="factory">Builds a context's value; may run on any thread that first asks, and more than once when

@@ -9,17 +9,18 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Copy volume per union (colored-contexts spec §17 M10.4, L6, G3): how many ancestor rows a child copies (rewrites
-    /// into its own layer, hiding the originals, decision 3) for one union, as a histogram over unions of random root
-    /// ids on a root whose ids are named by very different numbers of rows.
+    /// Copy volume per union: how many ancestor rows a child copies (rewrites into its own layer, hiding the originals)
+    /// for one union, as a histogram over unions of random root ids on a root whose ids are named by very different
+    /// numbers of rows.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The root (<see cref="Build"/>) holds, for each of its ids, one <c>f(x) → v</c> row and one <c>r(x, h(x))</c> row,
-    /// where the hub <c>h(x)</c> is drawn with a heavy tail (the cube of a uniform draw over a random permutation of the
-    /// ids, so a few random ids are the hub of thousands of rows), and it is frozen. A union copies the rows naming its loser, the larger id (smaller-id-wins), so
-    /// a union whose loser is a hub copies thousands of rows and most copy two or three. Losers-only marking copies
-    /// nothing for the winner's rows (L1 reads them through the winner probe instead).
+    /// The root (<see cref="Build"/>) holds, for each of its ids, one <c>f(x) → v</c> row and one <c>r(x, h(x))</c>
+    /// row, where the hub <c>h(x)</c> is drawn with a heavy tail (the cube of a uniform draw over a random permutation
+    /// of the ids, so a few random ids are the hub of thousands of rows), and it is frozen. A union copies the rows
+    /// naming its loser, the larger id (smaller-id-wins), so a union whose loser is a hub copies thousands of rows and
+    /// most copy two or three. Only losers are marked, so nothing is copied for the winner's rows: the lift reads those
+    /// through the winner probe (<see cref="Context.ScanAncestorsMentioning{TSink}"/>) instead.
     /// </para>
     /// <para>
     /// <see cref="Histogram"/> runs <see cref="Unions"/> single-union children and buckets the rows each copied (powers of
@@ -126,6 +127,9 @@ namespace Eggnog.Relations.Benchmarks
         /// <summary>
         /// Draws <paramref name="count"/> unions of distinct random ids.
         /// </summary>
+        /// <param name="ids">The ids to draw from.</param>
+        /// <param name="count">The number of unions.</param>
+        /// <returns>The unions, each of two different ids.</returns>
         internal static (uint A, uint B)[] Draw(uint[] ids, int count)
         {
             var random = new Random(Seed + 1);
@@ -144,6 +148,8 @@ namespace Eggnog.Relations.Benchmarks
         /// Runs each union in a child of its own and buckets the rows the child copied: bucket 0 holds unions that copied
         /// nothing, bucket <c>k ≥ 1</c> those that copied <c>[2^(k-1), 2^k)</c> rows.
         /// </summary>
+        /// <param name="store">The store whose frozen root the children are created under.</param>
+        /// <param name="pairs">The unions, one child each.</param>
         /// <returns>The bucket counts, the total rows copied and the largest copy.</returns>
         internal static (long[] Buckets, long Total, long Largest) Histogram(Store store, (uint A, uint B)[] pairs)
         {
@@ -166,8 +172,11 @@ namespace Eggnog.Relations.Benchmarks
         }
 
         /// <summary>
-        /// Formats non-empty buckets as <c>[lo, hi): count</c>.
+        /// Formats the non-empty buckets as <c>range: count</c>, where the range is <c>0</c>, <c>1</c>, or
+        /// <c>lo-hi</c> with both ends included.
         /// </summary>
+        /// <param name="buckets">The bucket counts <see cref="Histogram"/> returns.</param>
+        /// <returns>The text.</returns>
         internal static string Format(long[] buckets)
         {
             var text = new StringBuilder();

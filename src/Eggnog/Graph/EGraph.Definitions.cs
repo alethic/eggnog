@@ -107,8 +107,9 @@ namespace Eggnog
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, null, options, null, 0);
 
         /// <summary>
-        /// Defines a nullary function with a value output. With no lattice, two different values are an error (D32 for host
-        /// writes, D31 for rules).
+        /// Defines a nullary function with a value output. With no lattice, two different values are an error: a host
+        /// write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run with
+        /// <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
@@ -122,8 +123,9 @@ namespace Eggnog
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of one key with a value output. With no lattice, two different values are an error (D32
-        /// for host writes, D31 for rules).
+        /// Defines a function of one key with a value output. With no lattice, two different values are an error: a
+        /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
+        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
@@ -138,8 +140,9 @@ namespace Eggnog
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of two keys with a value output. With no lattice, two different values are an error (D32
-        /// for host writes, D31 for rules).
+        /// Defines a function of two keys with a value output. With no lattice, two different values are an error: a
+        /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
+        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
@@ -156,8 +159,9 @@ namespace Eggnog
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of three keys with a value output. With no lattice, two different values are an error (D32
-        /// for host writes, D31 for rules).
+        /// Defines a function of three keys with a value output. With no lattice, two different values are an error: a
+        /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
+        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
@@ -175,8 +179,9 @@ namespace Eggnog
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of four keys with a value output. With no lattice, two different values are an error (D32
-        /// for host writes, D31 for rules).
+        /// Defines a function of four keys with a value output. With no lattice, two different values are an error: a
+        /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
+        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
@@ -278,7 +283,7 @@ namespace Eggnog
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
-        /// Defines a named ruleset. Any thread, any time (D6).
+        /// Defines a named ruleset. Any thread, any time.
         /// </summary>
         /// <param name="name">The name, unique among the graph's rulesets.</param>
         /// <returns>The ruleset.</returns>
@@ -286,7 +291,7 @@ namespace Eggnog
         public Ruleset DefineRuleset(string name) => DefineRulesetCore(name, null);
 
         /// <summary>
-        /// Defines a named ruleset with an optional licence (D12).
+        /// Defines a named ruleset with an optional licence.
         /// </summary>
         Ruleset DefineRulesetCore(string name, ScopeTag? licence)
         {
@@ -309,7 +314,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped relation definition (D13): any number of columns.
+        /// The untyped relation definition: any number of columns, where the typed overloads stop at four.
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The column types, of this graph.</param>
@@ -319,7 +324,7 @@ namespace Eggnog
             DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, options, null, 0);
 
         /// <summary>
-        /// The untyped function definition (D13): any number of keys.
+        /// The untyped function definition: any number of keys, where the typed overloads stop at four.
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The key types, of this graph.</param>
@@ -331,7 +336,7 @@ namespace Eggnog
             DefineTable(static () => new UntypedFunction(), name, TableKind.Function, Copy(keys), output ?? throw new ArgumentNullException(nameof(output)), options, lattice, 0);
 
         /// <summary>
-        /// The untyped constructor definition (D13): any number of keys.
+        /// The untyped constructor definition: any number of keys, where the typed overloads stop at four.
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The key types, of this graph.</param>
@@ -343,8 +348,8 @@ namespace Eggnog
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
-        /// Defines a table (§6.2): validates, then under the definition lock adds the engine function
-        /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable, D6) and publishes the
+        /// Defines a table: validates, then under the definition lock adds the engine function
+        /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
         T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost)
@@ -428,9 +433,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Adds the engine function of a table with the layout of §6.2: a relation's unit default and assert-equal merge, a
+        /// Adds the engine function of a table: a relation's unit default and assert-equal merge, a
         /// function's lattice merge (its own <c>LatticeMerge</c> external) or assert-equal, a constructor's fresh-id
-        /// default and union merge. A table definition (D6): while the root is writable, the call enters the root's guard,
+        /// default and union merge. A table definition: while the root is writable, the call enters the root's guard,
         /// so it throws when another thread is using the root; once the root is frozen, any thread may define one. Called
         /// under the definition lock. Nothing is registered when the engine refuses the table.
         /// </summary>

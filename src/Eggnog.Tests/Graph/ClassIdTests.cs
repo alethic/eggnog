@@ -8,8 +8,9 @@ namespace Eggnog.Tests.Graph
 {
 
     /// <summary>
-    /// Class values carry the scope that returned them (D39, §6.6.7). In R1 every origin is the root's, so the checks
-    /// that can fail are <c>default(ClassId)</c>, another graph's class, and a value of a batch that did not commit.
+    /// Class values carry the scope that returned them, their origin, and are refused where that origin is not usable:
+    /// <c>default(ClassId)</c>, another graph's class, a value of a batch that did not commit, a class of a sibling or
+    /// of a disposed scope, and a class a rule holds from a scope it cannot run in.
     /// </summary>
     public sealed class ClassIdTests
     {
@@ -126,7 +127,6 @@ namespace Eggnog.Tests.Graph
             Assert.NotEqual(a.Id, foreign.Id);
         }
 
-
         [Fact]
         public void ASiblingQuerysClassIsRefused()
         {
@@ -196,8 +196,8 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// R3: a class a case returned dies with the case, which the run that made it disposes when it ends (D39); the same
-        /// class obtained from the scope itself stays usable.
+        /// A class a case returned dies with the case, which the run that made it disposes when it ends; the same class
+        /// obtained from the scope itself stays usable.
         /// </summary>
         [Fact]
         public void ACasesClassIsRefusedAfterTheRunThatMadeTheCase()
@@ -231,6 +231,33 @@ namespace Eggnog.Tests.Graph
             Assert.Throws<ArgumentException>(() => scope.Union(fromCase.Value, q));
             Assert.True(scope.AreEqual(q, scope.Find(q)));
         }
+
+        /// <summary>
+        /// A value made by a batch whose call was rejected is invalid afterwards: nothing of the batch is written, its
+        /// <c>Make</c> calls included.
+        /// </summary>
+        [Fact]
+        public void AMakeOfABatchWithARejectedCallIsInvalidAfterwards()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<string, long>("f");
+            t.Root.Assume(f.Of("k").Is(1L));
+            var made = default(Node);
+            t.Root.Write(w =>
+            {
+                made = w.Make(t.A.Of());
+                try
+                {
+                    w.Assume(f.Of("k").Is(2L));
+                }
+                catch (FactConflictException)
+                {
+                }
+            });
+
+            Assert.Throws<ArgumentException>(() => t.Root.Find(made));
+        }
+
     }
 
 }

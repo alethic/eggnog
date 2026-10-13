@@ -5,9 +5,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A sort: cells are class ids (<c>ColumnTy.Id</c>). Encoding takes the value's cell (the callers check the class with
-    /// <see cref="ClassChecks.Require"/> in the scope at hand); decoding makes a <see cref="ClassId"/> with the scope's
-    /// origin; the extraction sort is an <c>EqSort</c> of the sort's name.
+    /// A sort: cells are class ids (<c>ColumnTy.Id</c>). Encoding takes the value's cell (the callers check the class
+    /// with <see cref="ClassChecks.Require"/> in the scope at hand); decoding makes a <see cref="ClassId"/> with the
+    /// scope's origin; the extraction sort is an <c>EqSort</c> of the sort's name.
     /// </summary>
     /// <typeparam name="TSort">The sort.</typeparam>
     internal sealed class SortColumnType<TSort> : ColumnType<TSort> where TSort : struct, ISort<TSort>

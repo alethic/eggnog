@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for canonical and stamped writes in a child (colored-contexts spec X38, §6.6, I13, I19, I21; review finding
-    /// R2-4): a write naming a stale id lands on the canonical key and merges with the row visible there, also after the
-    /// child's own union and rebuild, without another rebuild; and a raw write's timestamp is replaced by the merge's
-    /// epoch.
+    /// Tests for canonical and stamped writes in a child: a write naming a stale id lands on the canonical key and
+    /// merges with the row visible there, also after the child's own union and rebuild, without another rebuild; and a
+    /// raw write's timestamp is replaced by the merge's epoch. So a clean child never holds a stale id, and every own
+    /// row carries a stamp at or above the child's creation stamp.
     /// </summary>
     public class CanonicalWriteTests
     {
@@ -64,7 +64,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// R2-4: after the child's own <c>Union(x, y)</c> and rebuild, a write of <c>f(y)</c> merges into <c>f(x)</c> at
+        /// After the child's own <c>Union(x, y)</c> and rebuild, a write of <c>f(y)</c> merges into <c>f(x)</c> at
         /// once: the child stays clean, needs no rebuild, and its invariants hold.
         /// </summary>
         [Fact]

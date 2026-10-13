@@ -13,7 +13,8 @@ namespace Eggnog.Relations.Tests
         Ne,
 
         /// <summary>
-        /// The first id is smaller than the second (<see cref="ColorSchema.Less"/>): a primitive that depends on id order.
+        /// The first id is smaller than the second (<see cref="ColorSchema.Less"/>): a primitive that depends on id
+        /// order.
         /// </summary>
         Less,
 

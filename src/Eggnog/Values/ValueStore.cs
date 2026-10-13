@@ -16,7 +16,7 @@ namespace Eggnog
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types through the <c>Register*</c> methods. Thread-safe.
     /// </summary>
     /// <remarks>
-    /// Names are unique across sorts and value types. Interning pools are permanent (D15): <see cref="InternedCount"/>
+    /// Names are unique across sorts and value types. Interning pools are permanent: <see cref="InternedCount"/>
     /// reports their growth, so a long-lived host can recycle a graph.
     /// </remarks>
     public sealed class ValueStore
@@ -46,7 +46,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of values interned in every pool of the graph; pools never shrink (D15, E1).
+        /// Gets the number of values interned in every pool of the graph; pools never shrink.
         /// </summary>
         public long InternedCount => values.InternedCount;
 
@@ -55,8 +55,8 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The CLR type.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to call
-        /// (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
+        /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
+        /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
         /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
@@ -79,27 +79,28 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers an interned value type over <see cref="IEquatable{T}"/> (the engine's <c>InternedCodec&lt;T&gt;</c>).
-        /// Classes are never values (D20): <see cref="ClassId"/> and sorts cannot be registered (a sort joins through
-        /// <see cref="EGraph.DefineSort{TSort}(string)"/>), and a set type joins through <see cref="RegisterSet{T}"/>.
+        /// Registers an interned value type over <see cref="IEquatable{T}"/>: equal values are stored once. Classes are
+        /// never values: <see cref="ClassId"/> and sorts cannot be registered (a sort joins through <see
+        /// cref="EGraph.DefineSort{TSort}(string)"/>), and a set type joins through <see cref="RegisterSet{T}"/>.
         /// </summary>
         /// <typeparam name="T">The CLR type; values must be immutable, and equal values must hash alike. Not
         /// <see cref="ClassId"/>, a sort or a <see cref="ValueSet{T}"/>.</typeparam>
         /// <param name="name">The type's name, unique among the store's types.</param>
-        /// <param name="order">Extraction's tie-break order and <see cref="ColumnType{T}.Compare"/>; must not depend on
-        /// the culture. <c>null</c>: <c>Comparer&lt;T&gt;.Default</c> when <typeparamref name="T"/> is comparable, else the
-        /// values' cells.</param>
-        /// <param name="format">Formats a value as a literal; <c>null</c>: its culture-invariant <c>ToString</c>.</param>
+        /// <param name="order">Extraction's tie-break order and <see cref="ColumnType{T}.Compare"/>; must not depend
+        /// on the culture. <c>null</c>: <c>Comparer&lt;T&gt;.Default</c> when <typeparamref name="T"/> is comparable,
+        /// else the values' cells.</param>
+        /// <param name="format">Formats a value as a literal; <c>null</c>: its culture-invariant
+        /// <c>ToString</c>.</param>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException"><typeparamref name="T"/> or <paramref name="name"/> is taken, the name is
-        /// empty, or <typeparamref name="T"/> is <see cref="ClassId"/>, a sort or a set.</exception>
+        /// <exception cref="ArgumentException"><typeparamref name="T"/> or <paramref name="name"/> is taken, the name
+        /// is empty, or <typeparamref name="T"/> is <see cref="ClassId"/>, a sort or a set.</exception>
         public ColumnType<T> Register<T>(string name, IComparer<T>? order = null, Func<T, string>? format = null)
             where T : notnull, IEquatable<T>
         {
             EngineCallMarker.ThrowIfActive();
             NameRules.ValidateName(name, nameof(name));
             if (typeof(T) == typeof(ClassId))
-                throw new ArgumentException("ClassId cannot be a value type: classes are never values (D20); compare classes with Is and IsNot, and define e-class sorts with EGraph.DefineSort.");
+                throw new ArgumentException("ClassId cannot be a value type: classes are never values; compare classes with Is and IsNot, and define e-class sorts with EGraph.DefineSort.");
 
             if (RegisterMethod(typeof(T)) == "EGraph.DefineSort")
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a sort, not a value type: define it with EGraph.DefineSort.");
@@ -119,8 +120,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers the set type of <typeparamref name="T"/>, named <c>Set&lt;{element name}&gt;</c>, or gets it when it
-        /// is registered already. Sets are interned base values (D20), kept in ascending element order: ordinal for
+        /// Registers the set type of <typeparamref name="T"/>, named <c>Set&lt;{element name}&gt;</c>, or gets it when
+        /// it is registered already. Sets are interned base values, kept in ascending element order: ordinal for
         /// strings, <c>Comparer&lt;T&gt;.Default</c> otherwise, so the element type must be <c>string</c> or comparable
         /// (<see cref="IComparable{T}"/> or <see cref="IComparable"/>); an order given to <see cref="Register{T}"/> is
         /// not the sets' element order.
@@ -171,7 +172,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers an enum, named <c>typeof(TEnum).Name</c> and stored as <c>i64</c> (D20), or gets it when it is
+        /// Registers an enum, named <c>typeof(TEnum).Name</c> and stored as <c>i64</c>, or gets it when it is
         /// registered already. Values format as their member names and compare by their numeric values.
         /// </summary>
         /// <typeparam name="TEnum">The enum.</typeparam>
@@ -222,7 +223,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="name">The sort's name.</param>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException"><typeparamref name="TSort"/> or <paramref name="name"/> is taken.</exception>
+        /// <exception cref="ArgumentException"><typeparamref name="TSort"/> or <paramref name="name"/> is
+        /// taken.</exception>
         internal ColumnType<TSort> AddSort<TSort>(string name) where TSort : struct, ISort<TSort>
         {
             lock (sync)

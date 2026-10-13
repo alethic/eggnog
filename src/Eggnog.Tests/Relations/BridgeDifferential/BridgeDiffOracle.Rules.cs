@@ -76,9 +76,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Enumerates the matches of atoms <paramref name="atom"/> onwards by nested loops (using a column index for the
-        /// first column a constant or bound variable fixes), firing each complete match. A relation atom without an output
-        /// (<see cref="BridgeDiffFunction.IsNoOutput"/>) matches any output, as the frontend's fresh variable does.
+        /// Enumerates the matches of atoms <paramref name="atom"/> onwards by nested loops (using a column index for
+        /// the first column a constant or bound variable fixes), firing each complete match. A relation atom without an
+        /// output (<see cref="BridgeDiffFunction.IsNoOutput"/>) matches any output, as the frontend's fresh variable
+        /// does.
         /// </summary>
         /// <returns><c>false</c> when the match budget ran out.</returns>
         bool Match(BridgeDiffRule rule, int atom, uint[] binding, bool[] bound)
@@ -154,9 +155,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets the cell a rule's constant runs as: an eq-sort constant in its canonical form in the snapshot, as a
-        /// store-backed e-graph runs every Id constant of a rule (colored-contexts spec X19, §19 item 4: a constant that
-        /// lost a union keeps matching its class, where egglog's cached plan stops matching); any other constant as
-        /// written.
+        /// store-backed e-graph runs every Id constant of a rule in its canonical form in the running context (a
+        /// constant that lost a union keeps matching its class, where egglog's cached plan stops matching); any other
+        /// constant as written.
         /// </summary>
         uint RuleConstant(BridgeDiffEntry entry) => BridgeDiffSort.IsEq(entry.Sort) ? Find(entry.Value) : Constant(entry);
 
@@ -187,8 +188,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs a complete match: the primitives filter it (or bind their results), then the actions run in order, reading
-        /// the snapshot and collecting writes and unions.
+        /// Runs a complete match: the primitives filter it (or bind their results), then the actions run in order,
+        /// reading the snapshot and collecting writes and unions.
         /// </summary>
         /// <exception cref="BridgeDiffPanicException">An action panicked.</exception>
         void Fire(BridgeDiffRule rule, uint[] binding, bool[] bound)
@@ -263,9 +264,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Looks a key of a function up: the snapshot's output, else the output an earlier lookup of the iteration chose,
-        /// else a fresh id (constructor or relation), recorded and written. A subsumption writes the row subsumed whatever
-        /// it found.
+        /// Looks a key of a function up: the snapshot's output, else the output an earlier lookup of the iteration
+        /// chose, else a fresh id (constructor or relation), recorded and written. A subsumption writes the row
+        /// subsumed whatever it found.
         /// </summary>
         /// <returns>The output.</returns>
         /// <exception cref="BridgeDiffPanicException">The function has no default and no row for the key.</exception>

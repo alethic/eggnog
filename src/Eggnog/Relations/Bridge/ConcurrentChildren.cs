@@ -8,11 +8,11 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Runs a body for each of several children of frozen contexts on concurrent threads, within the e-graph's
-    /// <see cref="EGraph.ParallelismBudget"/> (colored-contexts spec §10.9, C9).
+    /// <see cref="EGraph.ParallelismBudget"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Soundness. A child of a frozen context has a thread domain of its own (§8.3), and so does every descendant created
+    /// Soundness. A child of a frozen context has a thread domain of its own, and so does every descendant created
     /// under it while it is not frozen; the frozen ancestors they share are immutable. So children run concurrently exactly
     /// when each one's parent is frozen and none is an ancestor of another (two children in one line of descent would
     /// share the lower one's domain or read a context the other writes). <see cref="Run(IReadOnlyList{EGraphContext}, Action{EGraphContext, int})"/>
@@ -35,7 +35,7 @@ namespace Eggnog.Relations
     /// Errors. As with <see cref="Parallel.For(int, int, ParallelOptions, Action{int})"/>, once a body throws no new body
     /// starts and the running ones finish. A single exception is rethrown as itself, with its stack trace; several are
     /// thrown as the <see cref="AggregateException"/>. Each child's own state follows its operations' rules: an exception
-    /// escaping a child's write or run faults that child only (X12).
+    /// escaping a child's write or run faults that child only.
     /// </para>
     /// <para>
     /// Cost. O(children + the sum of their depths) to check the arguments, one lease per body, and the thread pool's cost

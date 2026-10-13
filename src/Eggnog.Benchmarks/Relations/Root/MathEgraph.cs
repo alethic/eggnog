@@ -4,8 +4,8 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// egglog's <c>basic_math_egraph</c> fixture (core-relations/src/tests.rs:953-1010), ported from the test project's
-    /// <c>Relations/Execution/ExecutionMathEgraph.cs</c>: a database with a union-find, <c>num(value, id, ts)</c> and
+    /// egglog's <c>basic_math_egraph</c> fixture (core-relations/src/tests.rs:953-1010), the benchmark counterpart of
+    /// the test project's <c>ExecutionMathEgraph</c>: a database with a union-find, <c>num(value, id, ts)</c> and
     /// <c>add(x, y, id, ts)</c>, each sorted by its timestamp and merged with <see cref="UnionTakeNewMerge"/>, and an id
     /// counter. The tables the two <see cref="RuleSetRunBenchmarks"/> programs run on.
     /// </summary>

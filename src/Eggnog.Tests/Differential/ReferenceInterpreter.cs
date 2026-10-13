@@ -8,10 +8,10 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The differential's oracle (§8.2): evaluates a <see cref="RandomProgram"/> naively over decoded values, with its own
-    /// union-find and congruence closure, independently of the rule layer and the engine. Each iteration is Jacobi-style:
-    /// every rule matches the database as it was when the iteration began, their writes merge at its end, and a rebuild
-    /// restores congruence. Schedules, limits and run reports follow the rule layer's semantics (§6.5).
+    /// The differential's oracle: evaluates a <see cref="RandomProgram"/> naively over decoded values, with its own
+    /// union-find and congruence closure, independently of the rule layer and the engine. Each iteration is
+    /// Jacobi-style: every rule matches the database as it was when the iteration began, their writes merge at its end,
+    /// and a rebuild restores congruence. Schedules, limits and run reports follow the rule layer's semantics.
     /// </summary>
     /// <remarks>
     /// Values are <c>long</c>, <c>string</c> and <c>ValueSet&lt;int&gt;</c>; a class is a <c>long</c> id. Rows of a
@@ -172,7 +172,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Executes a schedule node (§6.5.2); returns whether it changed the database.
+        /// Executes a schedule node; returns whether it changed the database.
         /// </summary>
         bool Execute(DiffSchedule schedule)
         {
@@ -225,7 +225,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// One iteration of the rulesets' rules (§6.5.1): the limit is checked first, even with no rules.
+        /// One iteration of the rulesets' rules: the limit is checked first, even with no rules.
         /// </summary>
         bool Iterate(int[] rulesets)
         {
@@ -412,8 +412,8 @@ namespace Eggnog.Tests.Differential
         };
 
         /// <summary>
-        /// Restores congruence: canonical cells everywhere, constructor rows with one key unioned, function rows with one
-        /// key merged; repeated until no union happens. Returns whether a union happened.
+        /// Restores congruence: canonical cells everywhere, constructor rows with one key unioned, function rows with
+        /// one key merged; repeated until no union happens. Returns whether a union happened.
         /// </summary>
         bool Rebuild()
         {
@@ -468,7 +468,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Finds all matches of a body: the join of its atoms in order, then its steps; each match binds every variable.
+        /// Finds all matches of a body: the join of its atoms in order, then its steps; each match binds every
+        /// variable.
         /// </summary>
         List<object?[]> Match(RefBody body)
         {
@@ -636,8 +637,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A slot's value: a bound variable's, or a constant's (a class constant's class, canonical now); <c>null</c> for an
-        /// unbound variable.
+        /// A slot's value: a bound variable's, or a constant's (a class constant's class, canonical now); <c>null</c>
+        /// for an unbound variable.
         /// </summary>
         object? Value(RefSlot slot, object?[] binding) => slot.IsVariable ? binding[slot.Variable] : Constant(slot.Constant!);
 
@@ -677,7 +678,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Writes a ground host fact (§6.6.2): a relation row, a function value, or an equality of classes (a union).
+        /// Writes a ground host fact: a relation row, a function value, or an equality of classes (a union).
         /// </summary>
         void Assume(DiffFact fact)
         {
@@ -742,7 +743,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Checks a ground fact (§6.6.3).
+        /// Checks a ground fact, as a host check does.
         /// </summary>
         bool Check(DiffFact fact)
         {

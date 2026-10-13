@@ -58,12 +58,12 @@ namespace Eggnog
         public ColumnType? Output { get; internal set; }
 
         /// <summary>
-        /// Gets whether lifts copy the table into a case's parent (R3).
+        /// Gets whether lifts copy the table into a case's parent.
         /// </summary>
         public bool Lift { get; internal set; }
 
         /// <summary>
-        /// Gets whether every key, and the output, is a value type: such a table may be read scoped (D1).
+        /// Gets whether every key, and the output, is a value type: only such a table may be read scoped.
         /// </summary>
         public bool IsValueOnly
         {
@@ -79,9 +79,9 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the tag of a read-only scoped view made by <c>In(tag)</c>: an atom over the view reads the nearest
-        /// ancestor-or-self of the running scope tagged so (D1, §6.8). <c>null</c> for the table itself. A scoped view is
-        /// rejected in any write: a <see cref="RuleDefinitionException"/> in a rule head, an
-        /// <see cref="ArgumentException"/> in a host write.
+        /// ancestor-or-self of the running scope tagged so, through a mirror table that copy rules keep equal to that
+        /// scope's view of the table. <c>null</c> for the table itself. A scoped view is rejected in any write: a
+        /// <see cref="RuleDefinitionException"/> in a rule head, an <see cref="ArgumentException"/> in a host write.
         /// </summary>
         public ScopeTag? ReadScope { get; private set; }
 
@@ -98,14 +98,14 @@ namespace Eggnog
         internal TableHandle? Source { get; set; }
 
         /// <summary>
-        /// Gets the tag of a mirror handle (§6.8): the handle over the engine function <c>T@tag</c>, which only copy rules
-        /// write. <c>null</c> for every other handle.
+        /// Gets the tag of a mirror handle: the handle over the engine function <c>T@tag</c>, which scoped reads of the
+        /// table under the tag compile to and which only copy rules write. <c>null</c> for every other handle.
         /// </summary>
         internal ScopeTag? MirrorTag { get; set; }
 
         /// <summary>
-        /// Gets whether this is a mirror handle, which is never listed in <see cref="EGraph.Tables"/> and never reaches a
-        /// user.
+        /// Gets whether this is a mirror handle, which is never listed in <see cref="EGraph.Tables"/> and never reaches
+        /// a user.
         /// </summary>
         internal bool IsMirror => MirrorTag is not null;
 
@@ -115,22 +115,24 @@ namespace Eggnog
         internal TableHandle Table => ReadScope is null ? this : Source!;
 
         /// <summary>
-        /// Makes <paramref name="view"/> a read-only scoped view of this table under <paramref name="tag"/> (§3.3
-        /// <c>In</c>): it shares the table's definition and engine function, with <see cref="ReadScope"/> set.
+        /// Makes <paramref name="view"/> a read-only scoped view of this table under <paramref name="tag"/>, for the
+        /// typed <c>In</c> methods: it shares the table's definition and engine function, with <see cref="ReadScope"/>
+        /// set.
         /// </summary>
         /// <typeparam name="T">The handle type, the table's own.</typeparam>
         /// <param name="view">A new, uninitialized handle of the table's type.</param>
         /// <param name="tag">The tag.</param>
         /// <returns>The view.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="tag"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort column.</exception>
+        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort
+        /// column.</exception>
         internal T ViewIn<T>(T view, ScopeTag tag) where T : TableHandle
         {
             ArgumentNullException.ThrowIfNull(tag);
             var table = Table;
             table.Graph.CheckTag(tag, nameof(tag));
             if (table.IsValueOnly == false)
-                throw new ArgumentException($"'{table.Name}' has a sort column; scoped reads are limited to tables whose columns are all values (D1).", nameof(tag));
+                throw new ArgumentException($"'{table.Name}' has a sort column; scoped reads are limited to tables whose columns are all values.", nameof(tag));
 
             view.Graph = table.Graph;
             view.Name = table.Name;

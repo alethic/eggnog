@@ -2,9 +2,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A left-hand-side primitive of a bridge differential rule (<see cref="EGraphRuleBuilder.QueryPrim"/>): a call on two
-    /// entries whose result is a variable, bound by the call when nothing bound it before, or else compared with it, like
-    /// a constant result.
+    /// A left-hand-side primitive of a bridge differential rule (<see cref="EGraphRuleBuilder.QueryPrim"/>): a call on
+    /// two entries whose result is a variable, bound by the call when nothing bound it before, or else compared with
+    /// it, like a constant result.
     /// </summary>
     /// <remarks>
     /// The bridge evaluates it after the join, on every match of every variant, and drops the matches where the call

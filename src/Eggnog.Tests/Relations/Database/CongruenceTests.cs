@@ -73,7 +73,8 @@ namespace Eggnog.Relations.Tests
                     var ids = harness.Ids;
                     uint Pick() => ids[random.Next(ids.Count)];
                     harness.InsertMany(harness.Pair, Enumerable.Range(0, 24_000).Select(_ => new[] { Pick(), Pick(), Pick() }).ToArray());
-                    // Distinct wrap keys: random ones would collide often enough to collapse the whole graph into one class.
+                    // Distinct wrap keys: random ones would collide often enough to collapse the whole graph into one
+                    // class.
                     harness.InsertMany(harness.Wrap, Enumerable.Range(0, 3_000).Select(i => new[] { ids[i], Pick() }).ToArray());
                     harness.InsertMany(harness.Low, Enumerable.Range(0, 3_000).Select(_ => new[] { Pick(), (uint)random.Next(100) }).ToArray());
                     harness.Flush();

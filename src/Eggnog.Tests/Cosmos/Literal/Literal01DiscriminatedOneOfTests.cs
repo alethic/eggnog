@@ -5,9 +5,9 @@ namespace Eggnog.Tests.Cosmos.Literal
 
     /// <summary>
     /// <c>prototypes/cosmos-facts/01-discriminated-oneof.egg</c>, as written: the "B" branch of a discriminated
-    /// <c>oneOf</c> declares <c>ref</c> a canonical lowercase UUID, so <c>kind = 'B'</c> lowers the UUID comparison, and
-    /// without the discriminator nothing lowers. Each <c>(push)</c> block is a fresh graph; the expected figures are the
-    /// egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
+    /// <c>oneOf</c> declares <c>ref</c> a canonical lowercase UUID, so <c>kind = 'B'</c> lowers the UUID comparison,
+    /// and without the discriminator nothing lowers. Each <c>(push)</c> block is a fresh graph; the expected figures
+    /// are the egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
     /// </summary>
     public sealed class Literal01DiscriminatedOneOfTests
     {

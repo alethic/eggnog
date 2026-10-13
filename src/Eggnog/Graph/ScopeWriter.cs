@@ -4,18 +4,18 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The writes of one <see cref="Scope.Write"/> batch (D30): each call is checked as it is made, and the batch is
+    /// The writes of one <see cref="Scope.Write"/> batch: each call is checked as it is made, and the batch is
     /// staged, flushed and rebuilt once, after the callback returns. Reads are not available; the scope's own members
     /// refuse calls while the batch is open. Valid only during the batch (<see cref="ObjectDisposedException"/>
     /// afterwards).
     /// </summary>
     /// <remarks>
-    /// Every call enters the scope's thread domain for its duration (D47): from the thread that called
+    /// Every call enters the scope's thread domain for its duration: from the thread that called
     /// <see cref="Scope.Write"/> it is re-entrant, and from any other thread it throws
     /// <see cref="InvalidOperationException"/> instead of interleaving with the batch. A call that throws, for any reason,
     /// rejects the whole batch: <see cref="Scope.Write"/> then writes nothing, even when the callback caught the
-    /// exception, and the classes the batch's <see cref="Make{TSort}"/> calls returned stay invalid (D39). While the batch
-    /// is open, the scope's writable ancestors refuse writes and runs (N88).
+    /// exception, and the classes the batch's <see cref="Make{TSort}"/> calls returned stay invalid. While the batch
+    /// is open, the scope's writable ancestors refuse writes and runs.
     /// </remarks>
     public sealed class ScopeWriter
     {
@@ -45,7 +45,7 @@ namespace Eggnog
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">A fact is not a write.</exception>
         /// <exception cref="FactConflictException">A function without a lattice would get a second value, from the facts
-        /// or from a merge of the batch (D32).</exception>
+        /// or from a merge of the batch.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
@@ -76,7 +76,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The term.</param>
-        /// <returns>The class, valid in this batch and, once it commits, in the scope (D39).</returns>
+        /// <returns>The class, valid in this batch and, once it commits, in the scope.</returns>
         /// <exception cref="ArgumentException">A subterm reads a function, computes, is a variable, or holds a class
         /// value this scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
@@ -107,9 +107,9 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="a">One class.</param>
         /// <param name="b">The other class.</param>
-        /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
+        /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values (D32).</exception>
+        /// hold different values.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
@@ -139,7 +139,7 @@ namespace Eggnog
         internal void Close() => closed = true;
 
         /// <summary>
-        /// Enters the scope's thread domain for one call (D47) and brings the scope up to date with its ancestors (N88). A
+        /// Enters the scope's thread domain for one call and brings the scope up to date with its ancestors. A
         /// refusal while the batch is open rejects the batch; a call after the batch ended changes nothing. The batch's end
         /// is checked again once the domain is entered: the batch's thread closes the writer before it leaves the domain, so
         /// a call from another thread that waited out the batch sees it ended instead of planning into a committed batch.
@@ -175,7 +175,7 @@ namespace Eggnog
 
             // A call the callback made in the domain between two of the batch's calls (an ancestor's query syncing its
             // mirrors, say) may have left the scope behind its ancestors; writes and runs that would change what the batch
-            // read are refused (N88). The catch-up is left out of Version (N87).
+            // read are refused. The catch-up is left out of Version.
             try
             {
                 Scope.CatchUp();

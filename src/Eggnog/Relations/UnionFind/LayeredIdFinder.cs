@@ -5,8 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A context's layered union-find as an <see cref="IIdFinder"/>: <see cref="LayeredUnionFind.Find"/>, the root's
-    /// find followed by one probe per non-empty overlay level (colored-contexts spec §5.4, §5.5).
-    /// <see cref="OverlayCanonicalizer"/> runs <see cref="CanonicalizeLoops"/> with it.
+    /// find followed by one probe per non-empty overlay level. <see cref="OverlayCanonicalizer"/> runs
+    /// <see cref="CanonicalizeLoops"/> with it.
     /// </summary>
     internal readonly struct LayeredIdFinder : IIdFinder
     {

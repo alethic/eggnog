@@ -9,10 +9,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The database's side of colored contexts (colored-contexts spec §3.4): which <see cref="Context"/> owns it, the
-    /// store clock it pins (C1), the id blocks a child mints from (§4.2), its change stamp (D16, X30), and the child
-    /// constructor. A bare database (no <see cref="Store"/>) has no owner, no clock and no blocks, and behaves exactly as
-    /// egglog's.
+    /// The database's side of colored contexts: which <see cref="Context"/> owns it, the store clock it pins, the id
+    /// blocks a child mints from, its change stamp, and the child constructor. A bare database (no <see cref="Store"/>)
+    /// has no owner, no clock and no blocks, and behaves exactly as egglog's.
     /// </summary>
     internal sealed partial class Database
     {
@@ -47,36 +46,37 @@ namespace Eggnog.Relations
         ContextTables? layers;
 
         /// <summary>
-        /// Whether the database is frozen (§8.1). Written last by <see cref="Freeze"/>.
+        /// Whether the database is frozen. Written last by <see cref="Freeze"/>.
         /// </summary>
         volatile bool frozen;
 
         /// <summary>
-        /// What rule building, planning and the executor read (§9.1): a child's, attached with its layers; a root's or
-        /// bare database's, made on first use of <see cref="View"/>.
+        /// What rule building, planning and the executor read: a child's, attached with its layers; a root's or bare
+        /// database's, made on first use of <see cref="View"/>.
         /// </summary>
         ContextView? contextView;
 
         /// <summary>
-        /// Initializes a child context's database (§3.4): its own catalog, notification list, table map and size
-        /// estimate, sharing the root's counters, external functions, dependency graph, container environments and base
-        /// value registry by reference.
+        /// Initializes a child context's database: its own catalog, notification list, table map and size estimate,
+        /// sharing the root's counters, external functions, dependency graph, container environments and base value
+        /// registry by reference.
         /// </summary>
         /// <remarks>
-        /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>, §5.5) at the store's
+        /// The table map holds the child's union-find (its <see cref="OverlayDisplacedTable"/>) at the store's
         /// union-find id, and the child's own layers as they are adopted (<see cref="AdoptLayer"/>). Writes are staged
         /// through the catalog's resolver, which hands out the child's union-find for the union-find id and the child's
-        /// layer of any other table, created on first use (<see cref="ContextTables.ResolveForStaging"/>, §6.2, X37). The
-        /// context attaches its layering right after construction (<see cref="AttachLayers"/>). The root's container
+        /// layer of any other table, created on first use (<see cref="ContextTables.ResolveForStaging"/>). The context
+        /// attaches its layering right after construction (<see cref="AttachLayers"/>). The root's container
         /// environments and base value registry are created here if they did not exist, so both share one instance: a
         /// value the root boxed unboxes in the child, and a type or value registered through either is seen by both
-        /// (rule-layer spec §13 item 3; the registry is thread-safe, so concurrent children may share it too).
+        /// (the registry is thread-safe, so concurrent children may share it too).
         /// </remarks>
         /// <param name="root">The store's root database.</param>
         /// <param name="owner">The child context.</param>
         /// <param name="unionFind">The child's union-find table.</param>
         /// <param name="ids">The child's id blocks.</param>
-        /// <param name="parallelism">The child's parallelism (the C9 default or the child's option, §10.9).</param>
+        /// <param name="parallelism">The child's parallelism: the child's option, or by default serial under a frozen
+        /// parent and the parent's heuristics otherwise.</param>
         internal Database(Database root, Context owner, Table unionFind, IdBlockAllocator ids, ParallelHeuristics parallelism)
         {
             ArgumentNullException.ThrowIfNull(root);
@@ -113,24 +113,24 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the representation of the store's clock counter, or −1 when the database has none. An execution state
-        /// reading this counter gets its own timestamp (C1).
+        /// reading this counter gets its own timestamp.
         /// </summary>
         internal int ClockCounterRep => clockRep;
 
         /// <summary>
-        /// Gets the change stamp (D16, X30): moved by merges that add or remove rows, by clears that empty a table, by
-        /// hides and by the contradiction stop; no-ops and redundant unions leave it alone. <see cref="Context.Version"/>
-        /// reads it.
+        /// Gets the change stamp: moved by merges that add or remove rows, by clears that empty a table, by hides and
+        /// by the contradiction stop; no-ops and redundant unions leave it alone. <see cref="Context.Version"/> reads
+        /// it.
         /// </summary>
         internal long ChangeStamp => Interlocked.Read(ref changeStamp);
 
         /// <summary>
-        /// Gets a child's layering engine, or <c>null</c> at the root and in a bare database (§3.4).
+        /// Gets a child's layering engine, or <c>null</c> at the root and in a bare database.
         /// </summary>
         internal ContextTables? Layers => layers;
 
         /// <summary>
-        /// Gets or sets the guard this database's retractions go through (§6.7): the root's
+        /// Gets or sets the guard this database's retractions go through: the root's
         /// <see cref="LayeredSchema.RootGuard"/>, a child's <see cref="ContextTables.Guard"/>; <c>null</c> in a bare
         /// database. <see cref="ClearTable"/> consults it; execution states and the buffers of <see cref="NewBuffer"/>
         /// take <see cref="GuardForNewState"/>.
@@ -138,44 +138,43 @@ namespace Eggnog.Relations
         internal RetractionGuard? RetractionGuard { get; set; }
 
         /// <summary>
-        /// Gets whether the database is frozen (§8.1): its tables are sealed and its indexes refresh serially; merges,
+        /// Gets whether the database is frozen: its tables are sealed and its indexes refresh serially; merges,
         /// rebuilds, clears, rule runs and new buffers throw.
         /// </summary>
         public bool IsFrozen => frozen;
 
         /// <summary>
-        /// Gets the guard an execution state or a buffer of <see cref="NewBuffer"/> created now keeps (§6.7): none in a bare
-        /// database (one null test per staged removal there), otherwise <see cref="RetractionGuard"/>, which decides when a
-        /// removal is staged.
+        /// Gets the guard an execution state or a buffer of <see cref="NewBuffer"/> created now keeps: none in a bare
+        /// database (one null test per staged removal there), otherwise <see cref="RetractionGuard"/>, which decides
+        /// when a removal is staged.
         /// </summary>
         /// <remarks>
-        /// The spec hands out none at a root without live descendants as well, reasoning that a child cannot be created
-        /// while a state of the root is in use. That holds for the states of a write batch or a rule run (structural calls
-        /// are refused re-entrantly, §8.3), but not for a state from <see cref="CreateExecutionState"/> or a buffer from
-        /// <see cref="NewBuffer"/>, which may outlive a <see cref="Context.CreateChild"/> and would then delete rows the new
-        /// child reads (I22). So a store's root always hands out its guard, whose checks start with one volatile read of
-        /// the root's gate and return at once while the root has no live descendants
-        /// (<see cref="RetractionGuard.CheckRemove"/>).
+        /// A store's root hands out its guard even while it has no live descendants. The state of a write batch or a
+        /// rule run cannot outlive a child's creation (structural calls are refused re-entrantly), but a state from
+        /// <see cref="CreateExecutionState"/> or a buffer from <see cref="NewBuffer"/> may outlive a
+        /// <see cref="Context.CreateChild"/>, and without the guard would then delete rows the new child reads. The
+        /// guard's checks start with one volatile read of the root's gate and return at once while the root has no live
+        /// descendants (<see cref="RetractionGuard.CheckRemove"/>).
         /// </remarks>
         /// <returns>The guard, or <c>null</c>.</returns>
         internal RetractionGuard? GuardForNewState() => owner is null ? null : RetractionGuard;
 
         /// <summary>
-        /// Gets the view rules are built, planned and run through (colored-contexts spec §9.1, X39): a child's reads its
-        /// layers; a root's or bare database's, made on first use (<see cref="ContextView.ForRoot"/>), sees each table as
-        /// one layer and answers as the database's own members do.
+        /// Gets the view rules are built, planned and run through: a child's reads its layers; a root's or bare
+        /// database's, made on first use (<see cref="ContextView.ForRoot"/>), sees each table as one layer and answers
+        /// as the database's own members do.
         /// </summary>
         internal ContextView View => Volatile.Read(ref contextView) ?? CreateRootView();
 
         /// <summary>
         /// Gets the view when tables may lie in several layers (a child, or a synthetic layer set attached in executor
-        /// tests), else <c>null</c>: the switch of the layered planning and query members (§3.4). One field load at a root.
+        /// tests), else <c>null</c>: the switch of the layered planning and query members. One field load at a root.
         /// </summary>
         internal ContextView? LayeredView => Volatile.Read(ref contextView) is { IsLayered: true } layered ? layered : null;
 
         /// <summary>
-        /// Attaches a child's layering engine (§3.4), which the catalog's resolver and the merge epilogue use, makes its
-        /// guard the database's, and attaches the view over it (§9.1). Once.
+        /// Attaches a child's layering engine, which the catalog's resolver and the merge epilogue use, makes its guard
+        /// the database's, and attaches the view over it. Once.
         /// </summary>
         /// <param name="tables">The child's layering.</param>
         /// <exception cref="InvalidOperationException">This is not a child's database, or layers are attached already.</exception>
@@ -191,9 +190,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Attaches the view of <paramref name="source"/>'s layers as the database's <see cref="View"/> (§9.1): a child's
-        /// <see cref="ContextTables"/>, or, in executor tests, a synthetic layer set over a bare database whose own tables
-        /// are the layers' layer 0 (their specs and names answer schema questions). Before any view is made. Once.
+        /// Attaches the view of <paramref name="source"/>'s layers as the database's <see cref="View"/>: a child's
+        /// <see cref="ContextTables"/>, or, in executor tests, a synthetic layer set over a bare database whose own
+        /// tables are the layers' layer 0 (their specs and names answer schema questions). Before any view is made.
+        /// Once.
         /// </summary>
         /// <param name="source">The layers.</param>
         /// <exception cref="InvalidOperationException">The database already has a view, or is a store's root.</exception>
@@ -218,9 +218,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Puts a child's new layer into the table map (§6.2, X37), so its merges, rebuilds and index resets visit it. On
-        /// the domain thread, outside a search: at creation, or at the next merge round for a layer created during a
-        /// search (<see cref="ContextTables.AdoptDeferred"/>).
+        /// Puts a child's new layer into the table map, so its merges, rebuilds and index resets visit it. On the
+        /// domain thread, outside a search: at creation, or at the next merge round for a layer created during a search
+        /// (<see cref="ContextTables.AdoptDeferred"/>).
         /// </summary>
         /// <param name="layer">The layer.</param>
         internal void AdoptLayer(TableLayer layer)
@@ -232,9 +232,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether the child's layer of <paramref name="table"/> is adopted and taken out of the table map by a merge
-        /// in progress (§6.2): a write-phase read of it is a read of the stratum being merged (X2). Exact whenever the
-        /// write phase asks, since every layer is adopted before a merge round starts.
+        /// Gets whether the child's layer of <paramref name="table"/> is adopted and taken out of the table map by a
+        /// merge in progress: a write-phase read of it is a read of the stratum being merged. Exact whenever the write
+        /// phase asks, since every layer is adopted before a merge round starts.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns><c>true</c> if the layer is taken out.</returns>
@@ -242,13 +242,13 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Moves the change stamp for a change of a child's layering that no merge reports: a hide, the contradiction
-        /// stop (X30).
+        /// stop.
         /// </summary>
         internal void NoteLayerChange() => BumpChangeStamp();
 
         /// <summary>
-        /// Clears a child's own layer for <see cref="ContextTables.ClearTable"/> (§6.7): its rows and staged writes,
-        /// its cached indexes, the size estimate, and the change stamp.
+        /// Clears a child's own layer for <see cref="ContextTables.ClearTable"/>: its rows and staged writes, its
+        /// cached indexes, the size estimate, and the change stamp.
         /// </summary>
         /// <param name="info">The layer's entry.</param>
         internal void ClearOwnLayer(TableInfo info)
@@ -262,7 +262,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Attaches a store's root database to its root context and designates the store's clock (§3.2).
+        /// Attaches a store's root database to its root context and designates the store's clock.
         /// </summary>
         /// <param name="root">The root context.</param>
         /// <param name="clock">The store's clock counter.</param>
@@ -274,8 +274,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Increments <paramref name="counter"/> for a term mint seen from this database (§4.2): in a child, the store's
-        /// id counter is redirected to the child's id blocks, so every id the child mints is local to it; any other
+        /// Increments <paramref name="counter"/> for a term mint seen from this database: in a child, the store's id
+        /// counter is redirected to the child's id blocks, so every id the child mints is local to it; any other
         /// counter, and every counter at the root, increments directly. One null test at the root.
         /// </summary>
         /// <param name="counter">The counter.</param>
@@ -287,16 +287,16 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Increments <paramref name="counter"/> on the shared counters, never redirected to id blocks: for ids that must
-        /// not be local to any context, such as globally interned container ids (L3, C13).
+        /// Increments <paramref name="counter"/> on the shared counters, never redirected to id blocks: for ids that
+        /// must not be local to any context, such as globally interned container ids.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
         internal long IncrementSharedCounter(CounterId counter) => counters.Increment(counter);
 
         /// <summary>
-        /// Gets the spec of <paramref name="table"/> (X39): from the store's schema in a child, whose table map holds
-        /// only its own layers; from the table map at the root and in a bare database.
+        /// Gets the spec of <paramref name="table"/>: from the store's schema in a child, whose table map holds only
+        /// its own layers; from the table map at the root and in a bare database.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The spec.</returns>
@@ -304,7 +304,7 @@ namespace Eggnog.Relations
         internal TableSpec GetTableSpec(TableId table) => IsChild ? owner!.Store.Schema.GetSpec(table) : GetTableInfo(table).Spec;
 
         /// <summary>
-        /// Gets the name of <paramref name="table"/>, or <c>null</c> (X39): from the store's schema in a child, from the
+        /// Gets the name of <paramref name="table"/>, or <c>null</c>: from the store's schema in a child, from the
         /// table map at the root and in a bare database.
         /// </summary>
         /// <param name="table">The table.</param>
@@ -313,8 +313,8 @@ namespace Eggnog.Relations
         internal string? GetTableName(TableId table) => IsChild ? owner!.Store.Schema.GetName(table) : GetTableInfo(table).Name;
 
         /// <summary>
-        /// Resolves an optional timestamp parameter (§4.1): the given value, or else the store clock's current value, or
-        /// 0 for a database without a clock (as before contexts existed).
+        /// Resolves an optional timestamp parameter: the given value, or else the store clock's current value, or 0 for
+        /// a database without a clock (a bare database).
         /// </summary>
         /// <param name="timestamp">The timestamp passed, or <c>null</c>.</param>
         /// <returns>The timestamp to use.</returns>
@@ -341,17 +341,17 @@ namespace Eggnog.Relations
         /// test.
         /// </summary>
         /// <remarks>
-        /// A child answers those questions through its view (§3.4, X39, <see cref="View"/>): its entry for a table is its
-        /// own layer (and for the union-find its own union-find layer), not what it sees, and its rows lie in several
+        /// A child answers those questions through its view (<see cref="View"/>): its entry for a table is its own
+        /// layer (and for the union-find its own union-find layer), not what it sees, and its rows lie in several
         /// layers, which no single subset describes. So every table is refused here in a child: context = copy, a child
-        /// never answers a query from a layer as if it were its view, and a rule in a child never reads the union-find as
-        /// an atom (X23, decision 10: only lookups reach it).
+        /// never answers a query from a layer as if it were its view, and a rule in a child never reads the union-find
+        /// as an atom (only lookups reach it).
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <returns>The entry.</returns>
         /// <exception cref="KeyNotFoundException">No such table, or it is taken out.</exception>
         /// <exception cref="NotSupportedException">This is a child context's database: <paramref name="table"/> is the
-        /// store's union-find (X23), or a function table, which is answered through <see cref="View"/>.</exception>
+        /// store's union-find, or a function table, which is answered through <see cref="View"/>.</exception>
         internal TableInfo GetQueryTableInfo(TableId table)
         {
             if (IsChild)
@@ -363,7 +363,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Throws when this is a store's database, root or child, for <see cref="AddTable"/>: every table of a store is
         /// added through <see cref="Store.AddTable"/>, which registers it with the schema children read and the root's
-        /// rebuild walks (§4.3, X16, X39).
+        /// rebuild walks.
         /// </summary>
         void ThrowIfStoreDefinition()
         {
@@ -372,7 +372,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws when this is a child's database, for definitions, which only the store adds (§3.4).
+        /// Throws when this is a child's database, for definitions, which only the store adds.
         /// </summary>
         void ThrowIfChildDefinition()
         {
@@ -382,7 +382,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Throws when this is a child's database, for the public rebuild entry points: a child rebuilds through
-        /// <see cref="Context"/>, whose layers call the internal table operations (§3.4, §7).
+        /// <see cref="Context"/>, whose layers call the internal table operations.
         /// </summary>
         /// <param name="member">The member called.</param>
         void ThrowIfChildRebuild(string member)
@@ -392,8 +392,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The staging resolver of a child's catalog (§6.2): the child's union-find for the union-find id, otherwise the
-        /// child's layer of the table, created on first use (X37).
+        /// The staging resolver of a child's catalog: the child's union-find for the union-find id, otherwise the
+        /// child's layer of the table, created on first use.
         /// </summary>
         /// <param name="table">The table staged into.</param>
         /// <returns>The table writes are staged into.</returns>
@@ -419,7 +419,7 @@ namespace Eggnog.Relations
         void ThrowQueriedInChild(TableId table)
         {
             if (table == owner!.Store.UnionFindTable)
-                throw new NotSupportedException($"The union-find (table {table}) cannot be an atom of a query in a child context; a child reads it only through lookups (X23).");
+                throw new NotSupportedException($"The union-find (table {table}) cannot be an atom of a query in a child context; a child reads it only through lookups.");
 
             throw new NotSupportedException($"Table {table} lies in several layers in a child context; read it through the database's View (ContextView), which evaluates headers, statistics and estimates per layer.");
         }

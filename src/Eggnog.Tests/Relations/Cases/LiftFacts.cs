@@ -4,8 +4,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// What holds in a set of contexts over a parent's original ids, for <see cref="LifterPropertyTests"/>: equal pairs,
-    /// relation rows, lattice joins and constructor terms, by id index. Sorted sets, so comparisons are order-free.
+    /// What holds in a set of contexts over a parent's original ids, for <see cref="LifterPropertyTests"/>: equal
+    /// pairs, relation rows, lattice joins and constructor terms, by id index. Sorted sets, so comparisons are
+    /// order-free.
     /// </summary>
     sealed class LiftFacts
     {

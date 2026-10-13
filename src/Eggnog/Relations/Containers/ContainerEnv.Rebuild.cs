@@ -168,14 +168,14 @@ namespace Eggnog.Relations
         /// <para>
         /// Goes parallel when <see cref="ParallelHeuristics.ParallelizeIntraContainerOp"/> holds for the number of
         /// containers. egglog gates this with <c>parallelize_inter_container_op</c>, the threshold for the number of
-        /// environments (more than one), so any two containers went parallel (mod.rs:526; map §8.1 row 15).
+        /// environments (more than one), so there any two containers go parallel (mod.rs:526).
         /// </para>
         /// <para>
         /// Serially, each hash-cons shard is walked once (<see cref="ContainerRebuildPredicate{TContainer}"/>): an entry
         /// whose contents changed is taken out of every structure and queued; an entry whose id alone changed is renamed
         /// in place, moving its reverse-map entry and its index occurrences (egglog leaves the index stale here,
-        /// mod.rs:553-558; map §8.1 row 13). The queued containers are then inserted back, merging where they collide;
-        /// a container whose id did not change and survived its merge is dirty.
+        /// mod.rs:553-558). The queued containers are then inserted back, merging where they collide; a container whose
+        /// id did not change and survived its merge is dirty.
         /// </para>
         /// <para>
         /// Cost: O(total size of all containers), plus index updates for the changed ones.

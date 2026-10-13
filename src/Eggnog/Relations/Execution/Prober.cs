@@ -7,15 +7,15 @@ namespace Eggnog.Relations
     /// <summary>
     /// The indexes over some columns of an atom's current rows, one per layer of those rows, together with the atom's
     /// trie node, which the stage holds while it runs: egglog's <c>Prober</c>
-    /// (core-relations/src/free_join/execute.rs:155-345), split into <see cref="ProberPiece"/>s (colored-contexts spec
-    /// §9.5).
+    /// (core-relations/src/free_join/execute.rs:155-345), split into <see cref="ProberPiece"/>s.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A root prober has one piece, <see cref="First"/>, built with egglog's heuristics; every probe then takes today's
-    /// path after one <see cref="PieceCount"/> compare. A child's atom whose rows lie in several layers gets one piece per
-    /// such layer, the first in <see cref="First"/> and the others in <see cref="Rest"/>; a driver enumerates the pieces
-    /// one after the other (one frame per (piece, key)), and a probe of several pieces joins its hits across layers.
+    /// A root prober has one piece, <see cref="First"/>, built with egglog's heuristics; every probe then takes
+    /// egglog's path after one <see cref="PieceCount"/> compare. A child's atom whose rows lie in several layers gets
+    /// one piece per such layer, the first in <see cref="First"/> and the others in <see cref="Rest"/>; a driver
+    /// enumerates the pieces one after the other (one frame per (piece, key)), and a probe of several pieces joins its
+    /// hits across layers.
     /// </para>
     /// <para>
     /// A plain struct kept in per-position scratch arrays. <see cref="Rest"/> is kept between uses of the scratch slot

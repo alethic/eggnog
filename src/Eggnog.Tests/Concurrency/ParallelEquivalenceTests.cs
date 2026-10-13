@@ -11,7 +11,7 @@ namespace Eggnog.Tests.Concurrency
 {
 
     /// <summary>
-    /// Parallel runs are equivalent to serial ones (D46, decision 4): every R2 query of the scoped Cosmos programs
+    /// Parallel runs are equivalent to serial ones: every query of the scoped Cosmos programs
     /// (<see cref="ScopedScenarioCases"/> and sweep's), with a degree of parallelism of 4 on the graph and on the query
     /// scopes, gives every scope the serial run's facts modulo renaming of classes. Extraction is compared at 1 only,
     /// since ties may break differently in parallel.
@@ -78,7 +78,7 @@ namespace Eggnog.Tests.Concurrency
         [Fact]
         public void EachScenarioHasTheSerialFacts()
         {
-            // Every R2 query of scenarios 01 to 06 and 08; scenario 07's are the sweep test's.
+            // Every query of scenarios 01 to 06 and 08; scenario 07's are the sweep test's.
             foreach (var scenario in ScopedScenarioCases.All)
             {
                 var serial = Query(1, scenario.Declare, scenario.Query);

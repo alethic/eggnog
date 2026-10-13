@@ -70,8 +70,7 @@ namespace Eggnog.Relations
         public Database Database => db;
 
         /// <summary>
-        /// Gets the view rules are instantiated through and the rule set pins (<see cref="Database.View"/>,
-        /// colored-contexts spec §9.1).
+        /// Gets the view rules are instantiated through and the rule set pins (<see cref="Database.View"/>).
         /// </summary>
         public ContextView View => view;
 
@@ -89,7 +88,7 @@ namespace Eggnog.Relations
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate.</returns>
         /// <remarks>
-        /// In a child, its view's estimate (colored-contexts spec §3.4): the sum over the layers of the table's view.
+        /// In a child, its view's estimate: the sum over the layers of the table's view.
         /// </remarks>
         public int EstimateSize(TableId table, Constraint? constraint = null) => db.EstimateSize(table, constraint);
 
@@ -122,10 +121,10 @@ namespace Eggnog.Relations
         /// O(headers) constraint evaluations, typically binary searches on a sorted timestamp column; no planning.
         /// </para>
         /// <para>
-        /// Id constants (colored-contexts spec §9.8, X19): the rule runs K, the canonical form of each of its Id constants
-        /// in this database's context (<paramref name="canonical"/>, computed through <see cref="View"/> when not given):
-        /// the cached plan's variant for K (<see cref="CachedPlan.GetVariantFor"/>), which is the written plan itself
-        /// whenever every constant is canonical, as it always is in a bare database.
+        /// Id constants: the rule runs K, the canonical form of each of its Id constants in this database's context
+        /// (<paramref name="canonical"/>, computed through <see cref="View"/> when not given): the cached plan's variant
+        /// for K (<see cref="CachedPlan.GetVariantFor"/>), which is the written plan itself whenever every constant is
+        /// canonical, as it always is in a bare database.
         /// </para>
         /// </remarks>
         /// <param name="cached">The cached plan.</param>
@@ -170,12 +169,13 @@ namespace Eggnog.Relations
         /// <remarks>
         /// <para>
         /// The rule set pins the views of every table its rules' atoms and lookups read
-        /// (<see cref="ContextView.Snapshot(ReadOnlySpan{RulePlan}, DenseIdMap{ActionId, ActionInfo}, TableId?)"/>,
-        /// colored-contexts spec §9.1, X21), and records the view's generation and stamp as they were when its first header
-        /// was evaluated (I29). A merge between the first header and the run, in the context or an ancestor, moves one of
-        /// them, and a child's run then refuses the rule set (<see cref="Database.RunRuleSet"/>): its header subsets name
-        /// rows of the views as they were, which the run's snapshot no longer is. With neither moved, the snapshot holds the
-        /// cached view instances header evaluation read.
+        /// (<see cref="ContextView.Snapshot(ReadOnlySpan{RulePlan}, DenseIdMap{ActionId, ActionInfo}, TableId?)"/>),
+        /// and records the view's generation and stamp as they were when its first header was evaluated, so the run's
+        /// headers and trie roots read the same views. A merge between the first header and the run, in the context or an
+        /// ancestor, moves one of them, and a child's run then refuses the rule set (<see cref="Database.RunRuleSet"/>):
+        /// its header subsets name rows of the views as they were when the headers were evaluated, which the run's
+        /// snapshot does not show. With neither moved, the snapshot holds the cached view instances header evaluation
+        /// read.
         /// </para>
         /// <para>
         /// At a root the views are its single-layer views, shared by every rule set, so building allocates no snapshot.
@@ -217,9 +217,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Plans and adds the rule <paramref name="query"/> describes, with its action program and the program's constant
         /// ids: <see cref="AddBuiltRule(RuleBuilder, QueryBuilder, Instr[], IdConstant[], string)"/>, after which the rule
-        /// runs K (colored-contexts spec §9.8): the query is planned with its constants as written, then the template and
-        /// the program are rewritten to the constants' canonical forms in this database's context before the headers are
-        /// evaluated. The rule keeps the written ones for <see cref="RuleSet.BuildCachedPlan"/>.
+        /// runs K: the query is planned with its constants as written, then the template and the program are rewritten to
+        /// the constants' canonical forms in this database's context before the headers are evaluated. The rule keeps the
+        /// written ones for <see cref="RuleSet.BuildCachedPlan"/>.
         /// </summary>
         /// <param name="builder">The rule's builder, which must be the open one; it is closed.</param>
         /// <param name="query">The rule's query builder.</param>
@@ -272,8 +272,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Evaluates the headers of one instantiation of <paramref name="cached"/>. egglog's
         /// <c>get_rule_with_extra_constraints</c> (core-relations/src/query.rs:191-243), on
-        /// <see cref="PlanTemplate.InstantiateLayered{TEvaluator}"/> through the database's view (colored-contexts spec
-        /// §9.4): one subset per layer of each table's view, the root's single layer at a root.
+        /// <see cref="PlanTemplate.InstantiateLayered{TEvaluator}"/> through the database's view: one subset per layer of
+        /// each table's view, the root's single layer at a root.
         /// </summary>
         /// <param name="cached">The cached plan.</param>
         /// <param name="action">The action id of the instantiation.</param>
@@ -323,8 +323,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Records the view's generation and stamp before the first header is evaluated (I29): what a child's run checks
-        /// the views still are. O(depth) once per builder; a root's are constant.
+        /// Records the view's generation and stamp before the first header is evaluated: what a child's run checks the
+        /// views still are, so its headers and trie roots read the same views. O(depth) once per builder; a root's are
+        /// constant.
         /// </summary>
         void PinViews()
         {

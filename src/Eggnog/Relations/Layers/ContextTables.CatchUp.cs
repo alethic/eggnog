@@ -16,14 +16,15 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The layer versions of each ancestor that was not settled when the context was created, by depth then table
-        /// index: where its view started. Rows an ancestor appended at or beyond them came after the context's creation;
-        /// the invariant checker reads them (I13). <c>null</c> for the ancestors settled at creation, which never append.
+        /// index: where its view started. Rows an ancestor appended at or beyond them came after the context's
+        /// creation; the invariant checker reads them. <c>null</c> for the ancestors settled at creation, which never
+        /// append.
         /// </summary>
         readonly TableVersion[]?[] creationRows;
 
         /// <summary>
         /// The number of leading ancestors the context has read in full: frozen ancestors that cannot change any more,
-        /// whose cursors are dropped (§6.2).
+        /// whose cursors are dropped.
         /// </summary>
         int settled;
 
@@ -34,7 +35,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some ancestor that is not settled changed since the context last caught up with it: its change
-        /// stamp moved (§7.2; the root's is its database's <see cref="Database.ChangeStamp"/>). O(unsettled ancestors).
+        /// stamp moved (the root's is its database's <see cref="Database.ChangeStamp"/>). O(unsettled ancestors).
         /// </summary>
         public bool NeedsCatchUp
         {
@@ -61,36 +62,39 @@ namespace Eggnog.Relations
         internal AncestorCursor? CursorAt(int depthOfAncestor) => cursors[depthOfAncestor];
 
         /// <summary>
-        /// Catch-up step 2 (§7.2, C8): reads every row the unsettled ancestors appended to a shared table since the
-        /// context last caught up with them, and copies into the context, at <paramref name="epoch"/>, each one the context
-        /// must hold itself; the copied ancestor rows are hidden once their copies are staged.
+        /// The second step of a child's catch-up, after the union-find's: reads every row the unsettled ancestors
+        /// appended to a shared table since the context last caught up with them, and copies into the context, at
+        /// <paramref name="epoch"/>, each one the context must hold itself; the copied ancestor rows are hidden once
+        /// their copies are staged.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Run by the first pass of <see cref="Context.Rebuild"/>, after the union-find caught up (step 1), while every
-        /// ancestor is idle: frozen, or rebuilt and sharing the context's thread domain. For each live appended row that
-        /// the context sees (hidden at no level between the row's layer and the context, and not below a level that
-        /// cleared the table):
+        /// Run by the first pass of <see cref="Context.Rebuild"/>, after the union-find caught up, while every ancestor
+        /// is idle: frozen, or rebuilt and sharing the context's thread domain. For each live appended row that the
+        /// context sees (hidden at no level between the row's layer and the context, and not below a level that cleared
+        /// the table):
         /// </para>
         /// <list type="bullet">
         /// <item><description>(a) it names an id that is not canonical in the context: copied canonically
         /// (<see cref="HideReason.Mentions"/>). This also covers an ancestor row that was stale in its own layer when a
-        /// raw root write appended it (X38), since <c>find_C = overlay ∘ find_P</c>;</description></item>
+        /// raw root write appended it, since <c>find_C = overlay ∘ find_P</c>;</description></item>
         /// <item><description>(b) the context's own layer holds its key: copied as it is
-        /// (<see cref="HideReason.KeyHeld"/>), so the next merge folds it into the own row (I12);</description></item>
-        /// <item><description>(c′) its timestamp lies below the context's semi-naive floor (<see cref="Context.SemiNaiveFloor"/>):
-        /// copied to re-stamp it (<see cref="HideReason.Restamped"/>), so a watermark the context already used still
-        /// sees it as new (the C7 safeguard; it never fires while writers stamp with their state's timestamp, I21);</description></item>
-        /// <item><description>(c) otherwise it is visible as it is: canonical in the context, and no own row holds its
+        /// (<see cref="HideReason.KeyHeld"/>), so the next merge folds it into the own row and the context sees one row
+        /// with the key;</description></item>
+        /// <item><description>(c) its timestamp lies below the context's semi-naive floor
+        /// (<see cref="Context.SemiNaiveFloor"/>): copied to re-stamp it (<see cref="HideReason.Restamped"/>), so a
+        /// watermark the context already used still sees it as new (a safeguard of the watermarks; it never fires while
+        /// writers stamp with their state's timestamp);</description></item>
+        /// <item><description>(d) otherwise it is visible as it is: canonical in the context, and no own row holds its
         /// key.</description></item>
         /// </list>
         /// <para>
         /// A visible contradiction row stops a context created with <see cref="ContextOptions.StopOnContradiction"/>
-        /// (§6.9); the copies staged so far are then dropped unflushed, and the context answers only
-        /// <see cref="Context.IsContradictory"/>. Ancestor tombstones need no work: a replaced row reappears as an append.
-        /// Before reading, every layer the cursors have seen is checked to be in the same generation (I16): a layer that
-        /// compacted or was cleared under a live descendant would renumber the rows the cursors and hidden sets name, so
-        /// the catch-up throws, which faults the context (X12).
+        /// the copies staged so far are then dropped unflushed, and the context answers only
+        /// <see cref="Context.IsContradictory"/>. Ancestor tombstones need no work: a replaced row reappears as an
+        /// append. Before reading, every layer the cursors have seen is checked to be in the same generation: a layer
+        /// that compacted or was cleared under a live descendant would renumber the rows the cursors and hidden sets
+        /// name, so the catch-up throws, which faults the context.
         /// </para>
         /// <para>
         /// What was read is recorded in the cursors as pending, and <see cref="CommitCursors"/> publishes it after the
@@ -100,8 +104,8 @@ namespace Eggnog.Relations
         /// </remarks>
         /// <param name="epoch">The pass's epoch, which the copies are stamped with.</param>
         /// <returns>Whether any ancestor row was copied and hidden.</returns>
-        /// <exception cref="InvalidOperationException">An ancestor layer changed generation (I16), or a copy would create
-        /// the layer of a table whose merge is not a lattice merge (decision 2).</exception>
+        /// <exception cref="InvalidOperationException">An ancestor layer changed generation, or a copy would create the
+        /// layer of a table whose merge is not a lattice merge, which only the root may write.</exception>
         internal bool CatchUpRows(uint epoch)
         {
             if (settled == depth)
@@ -217,9 +221,9 @@ namespace Eggnog.Relations
                     StageCopy(ref state, s, layer, a, r, HideReason.Restamped, false, epoch);
                     statistics.RestampedCopies++;
 #if DEBUG
-                    // §19 item 9: (c′) stays as defence in depth, but every engine and bridge path stamps with the
-                    // state's timestamp (I21), so only the raw-write contract can put a row below a reader's floor.
-                    Debug.Assert(owner.Store.HasRawWrites, $"I21: an ancestor row of table {table} was stamped {data[offset + sortColumn]}, below this context's semi-naive floor {floor}, without raw writes (a re-stamped catch-up copy).");
+                    // The re-stamp stays as defence in depth, but every engine and bridge path stamps with the state's
+                    // timestamp, so only the raw-write contract can put a row below a reader's floor.
+                    Debug.Assert(owner.Store.HasRawWrites, $"An ancestor row of table {table} was stamped {data[offset + sortColumn]}, below this context's semi-naive floor {floor}, without raw writes (a re-stamped catch-up copy).");
 #endif
                 }
             }
@@ -228,9 +232,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws when a layer some unsettled cursor has seen is no longer in the generation the cursor saw (I16). Only
-        /// ancestors whose change stamp moved are checked: a layer changes generation only in a merge that changed rows,
-        /// a clear, or a compaction, each of which moves its context's stamp.
+        /// Throws when a layer some unsettled cursor has seen is no longer in the generation the cursor saw. Only
+        /// ancestors whose change stamp moved are checked: a layer changes generation only in a merge that changed
+        /// rows, a clear, or a compaction, each of which moves its context's stamp.
         /// </summary>
         void CheckGenerations(ReadOnlySpan<TableId> tables)
         {
@@ -283,7 +287,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowGenerationChanged(TableId table, int depth, int seen, int now)
         {
-            throw new InvalidOperationException($"The layer of table {table} at depth {depth} moved from generation {seen} to {now} while a descendant held cursors and hidden sets over its rows (I16); compaction and clears are gated while descendants live.");
+            throw new InvalidOperationException($"The layer of table {table} at depth {depth} moved from generation {seen} to {now} while a descendant held cursors and hidden sets over its rows; compaction and clears are gated while descendants live.");
         }
 
     }

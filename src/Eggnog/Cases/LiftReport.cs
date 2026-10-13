@@ -4,8 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// What one <see cref="CaseSet.Lift"/> did (§6.9.4, colors §11.2): the counts are of writes made into the parent.
-    /// Immutable.
+    /// What one <see cref="CaseSet.Lift"/> did: the counts are of writes made into the parent. Immutable.
     /// </summary>
     public sealed class LiftReport
     {
@@ -41,14 +40,14 @@ namespace Eggnog
         public int LiveCases { get; }
 
         /// <summary>
-        /// Gets the number of vacuous (contradictory) cases: they have no model and are left out (L4); the set disposes them
+        /// Gets the number of vacuous (contradictory) cases: they have no model and are left out; the set disposes them
         /// after the lift.
         /// </summary>
         public int VacuousCases { get; }
 
         /// <summary>
         /// Gets whether every case was vacuous, so that the parent has no model under the cases' coverage: its
-        /// <see cref="EGraph.Contradiction"/> was written (L4).
+        /// <see cref="EGraph.Contradiction"/> was written.
         /// </summary>
         public bool ParentContradicted { get; }
 
@@ -59,7 +58,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the rows written with an existing output: relation rows (a relation lifts as a function whose output is the
-        /// unit value, §6.9.1), and constructor rows whose class one parent class stands for in every case.
+        /// unit value), and constructor rows whose class one parent class stands for in every case.
         /// </summary>
         public long Rows { get; }
 
@@ -76,8 +75,8 @@ namespace Eggnog
         public long Values { get; }
 
         /// <summary>
-        /// Gets the candidate rows not examined because a case row stood for more than
-        /// <see cref="LiftOptions.CandidateLimit"/> parent keys.
+        /// Gets the parent-level candidate rows not examined: each case row that stood for more than
+        /// <see cref="LiftOptions.CandidateLimit"/> parent keys adds the number of keys it stood for.
         /// </summary>
         public long Skipped { get; }
 

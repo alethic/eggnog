@@ -6,15 +6,15 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The cases of one split of a parent context (colored-contexts spec §11.2; rule-layer E8, §6.9.4): children created as
-    /// cases, run, lifted into the parent, and disposed together.
+    /// The cases of one split of a parent context: children created as cases, run, lifted into the parent, and disposed
+    /// together.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Lifecycle: <see cref="AddCase"/> creates a case (a child that stops on a contradiction, L4); the caller makes it
+    /// Lifecycle: <see cref="AddCase"/> creates a case (a child that stops on a contradiction); the caller makes it
     /// assume its part; <see cref="RunEach"/> runs a schedule in every case, disposing the cases found vacuous first;
     /// <see cref="Lift"/> writes into the parent what holds in every live case; <see cref="DisposeVacuous"/> drops the
-    /// cases that became contradictory; <see cref="Dispose"/> disposes every case in reverse creation order, each case's
+    /// cases that are contradictory; <see cref="Dispose"/> disposes every case in reverse creation order, each case's
     /// own split records first (depth-first).
     /// </para>
     /// <para>
@@ -83,7 +83,7 @@ namespace Eggnog.Relations
         public bool IsDisposed => disposed;
 
         /// <summary>
-        /// Creates a case: a child of the parent (rule-layer E8).
+        /// Creates a case: a child of the parent.
         /// </summary>
         /// <param name="options">The case's options; they must make a case that stops on a contradiction.
         /// <see cref="ContextOptions.Case"/> if <c>null</c>.</param>
@@ -103,8 +103,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Runs <paramref name="schedule"/> in every case (colored-contexts spec §11.2): each case is brought up to date
-        /// first, and a contradictory case is disposed at once and counted as vacuous (L4) instead of run.
+        /// Runs <paramref name="schedule"/> in every case: each case is brought up to date first, and a contradictory
+        /// case is disposed at once and counted as vacuous instead of run. A contradictory case holds vacuously, so
+        /// dropping it does not change what holds in every case.
         /// </summary>
         /// <param name="schedule">The in-case work.</param>
         /// <param name="depth">The depth passed to the schedule.</param>
@@ -142,10 +143,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Lifts into the parent what holds in every live case (colored-contexts spec §11.2; <see cref="Lifter"/>),
-        /// checking <paramref name="cancellationToken"/> between rounds. When every case of the set was disposed as vacuous
-        /// before the lift, the parent is contradictory (L4) and its contradiction is written, with the base output a
-        /// vacuous case held when the set disposed it if the contradiction function needs one.
+        /// Lifts into the parent what holds in every live case (<see cref="Lifter"/>), checking
+        /// <paramref name="cancellationToken"/> between rounds. When every case of the set was disposed as vacuous
+        /// before the lift, the parent is contradictory, since its cases cover it and none is consistent, and its
+        /// contradiction is written, with the base output a vacuous case held when the set disposed it if the
+        /// contradiction function needs one.
         /// </summary>
         /// <param name="spec">The tables to lift.</param>
         /// <param name="options">The limits.</param>
@@ -179,9 +181,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Disposes the cases that are contradictory (rule-layer E8: host-driven lifts, which never call
-        /// <see cref="RunEach"/>), each case's split records first, and returns their number. Each case that is not
-        /// stopped is brought up to date first.
+        /// Disposes the cases that are contradictory, each case's split records first, and returns their number. Each
+        /// case that is not stopped is brought up to date first. This serves lifts the host drives itself, which never
+        /// call <see cref="RunEach"/>.
         /// </summary>
         /// <returns>The number of cases disposed.</returns>
         /// <exception cref="ObjectDisposedException">The set is disposed.</exception>
@@ -208,8 +210,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Disposes every case, in reverse creation order, each case's split records first (colored-contexts spec §11.2,
-        /// §11.3). A second call does nothing.
+        /// Disposes every case, in reverse creation order, each case's split records first. A second call does nothing.
         /// </summary>
         public void Dispose()
         {
@@ -230,21 +231,21 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Throws <see cref="ArgumentException"/> unless <paramref name="options"/> make a case that stops on a
-        /// contradiction (L4; rule-layer E8).
+        /// contradiction, so that a vacuous case stops and can be dropped.
         /// </summary>
         /// <param name="options">The options.</param>
         /// <param name="parameter">The parameter's name for the exception.</param>
         internal static void CheckCaseOptions(ContextOptions options, string parameter)
         {
             if (options.IsCase == false || options.StopOnContradiction == false)
-                throw new ArgumentException("Case options must set IsCase and StopOnContradiction, so a vacuous case stops and is dropped (L4).", parameter);
+                throw new ArgumentException("Case options must set IsCase and StopOnContradiction, so a vacuous case stops and is dropped.", parameter);
         }
 
         /// <summary>
-        /// Disposes one vacuous case as <see cref="DisposeCase"/> does, first keeping the base output of its contradiction
-        /// row while the set has none (<see cref="Lifter.TryReadContradictionOutput"/>): once every case is disposed,
-        /// <see cref="Lift"/> writes the parent's contradiction with it, as a lift over the undisposed cases would (L4,
-        /// rule-layer N51). O(1) beyond the disposal for a contradiction function with a constant default or an id output.
+        /// Disposes one vacuous case as <see cref="DisposeCase"/> does, first keeping the base output of its
+        /// contradiction row while the set has none (<see cref="Lifter.TryReadContradictionOutput"/>): once every case
+        /// is disposed, <see cref="Lift"/> writes the parent's contradiction with it, as a lift over the undisposed
+        /// cases would. O(1) beyond the disposal for a contradiction function with a constant default or an id output.
         /// </summary>
         void DisposeVacuousCase(EGraphContext @case)
         {
@@ -272,7 +273,7 @@ namespace Eggnog.Relations
         {
             foreach (var @case in cases)
                 if (@case.IsDisposed)
-                    throw new InvalidOperationException("A case of the set was disposed outside it. Only vacuous cases may be dropped (L4); without it the remaining cases do not cover the parent, so the set can only be disposed.");
+                    throw new InvalidOperationException("A case of the set was disposed outside it. Only vacuous cases may be dropped; without it the remaining cases do not cover the parent, so the set can only be disposed.");
         }
 
         /// <summary>

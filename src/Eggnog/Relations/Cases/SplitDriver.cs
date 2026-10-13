@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Drives case splits in a scope (colored-contexts spec §11.3, L5, B6; rule-layer E8, §6.9.3): finds the splits its
-    /// sources ask for, opens the cases of the ones worth taking, runs the in-case schedule in them, and lifts what holds
-    /// in every live case back into the scope, lifting before deepening.
+    /// Drives case splits in a scope: finds the splits its sources ask for, opens the cases of the ones worth taking,
+    /// runs the in-case schedule in them, and lifts what holds in every live case back into the scope, lifting before
+    /// deepening.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -15,12 +15,12 @@ namespace Eggnog.Relations
     /// </para>
     /// <list type="number">
     /// <item>finds the requests of every source in the scope;</item>
-    /// <item>skips a request covered by a live record in the scope or any ancestor (B6): a record of the same source object
-    /// (by reference, so a record another driver opened from a source it shares with this one covers the request, and a
-    /// record of an unrelated source at the same index in another driver's list does not) over the same cells; or by
-    /// another request of the same step;</item>
+    /// <item>skips a request covered by a live record in the scope or any ancestor, so a split an ancestor already
+    /// opened is not opened again: a record of the same source object (by reference, so a record another driver opened
+    /// from a source it shares with this one covers the request, and a record of an unrelated source at the same index
+    /// in another driver's list does not) over the same cells; or by another request of the same step;</item>
     /// <item>skips a request over the limits (<see cref="SplitOptions.CaseLimit"/>, at least one case);</item>
-    /// <item>skips a request the demand rejects, before any case exists (L5);</item>
+    /// <item>skips a request the demand rejects, before any case exists;</item>
     /// <item>opens the cases: a <see cref="CaseSet"/> recorded on the scope, then one case per index, each assumed by its
     /// source;</item>
     /// <item><b>phase A</b>: for every live record this driver opened in the scope, in creation order (those its earlier
@@ -32,21 +32,20 @@ namespace Eggnog.Relations
     /// when that changed something.</item>
     /// </list>
     /// <para>
-    /// Records live until <see cref="DisposeRecords"/>: later steps in the scope or its descendants skip their keys, and the
-    /// cases take in the scope's new facts through their catch-up. A later step runs and lifts them again, so what the
-    /// cases derive from the scope's new facts is lifted, and a case those facts make vacuous is dropped (rule-layer
-    /// §6.9.3, D43); the lift memo makes a record whose cases and scope did not change cost one signature check. A step
-    /// reports a change only when it opened cases or a lift changed the scope, never for in-case work, so a schedule that
-    /// repeats it until nothing changes ends. The driver never holds the scope's thread domain while
-    /// it calls a source, the demand or the schedule, which may create children (nested splits; colored-contexts §8.3).
-    /// Exceptions from a source or the schedule propagate; the records opened so far stay for
-    /// <see cref="DisposeRecords"/>. After every lift the cases found vacuous are disposed (L4); a lift whose cases are
-    /// all vacuous contradicts the scope, and the step ends there.
+    /// Records live until <see cref="DisposeRecords"/>: later steps in the scope or its descendants skip their keys,
+    /// and the cases take in the scope's new facts through their catch-up. A later step runs and lifts them again, so
+    /// what the cases derive from the scope's new facts is lifted, and a case those facts make vacuous is dropped; the
+    /// lift memo makes a record whose cases and scope did not change cost one signature check. A step reports a change
+    /// only when it opened cases or a lift changed the scope, never for in-case work, so a schedule that repeats it
+    /// until nothing changes ends. The driver never holds the scope's thread domain while it calls a source, the demand
+    /// or the schedule, which may create children (nested splits). Exceptions from a source or the schedule propagate;
+    /// the records opened so far stay for <see cref="DisposeRecords"/>. After every lift the cases found vacuous are
+    /// disposed; a lift whose cases are all vacuous contradicts the scope, and the step ends there.
     /// </para>
     /// <para>
     /// One driver may serve any number of scopes, one step at a time per thread; its per-step lists are local. Several
-    /// drivers may serve one scope (the rule layer builds one per split node, rule-layer §6.9.3): each runs and lifts only
-    /// its own records, and they share coverage only through shared source objects.
+    /// drivers may serve one scope (the rule layer builds one per split node): each runs and lifts only its own
+    /// records, and they share coverage only through shared source objects.
     /// </para>
     /// </remarks>
     internal sealed class SplitDriver
@@ -90,7 +89,7 @@ namespace Eggnog.Relations
         public SplitOptions Options => options;
 
         /// <summary>
-        /// Runs one split step in <paramref name="scope"/> at split depth <paramref name="depth"/> (§11.3).
+        /// Runs one split step in <paramref name="scope"/> at split depth <paramref name="depth"/>.
         /// </summary>
         /// <param name="scope">The scope; writable.</param>
         /// <param name="depth">The scope's split depth: 0 at the top.</param>
@@ -193,9 +192,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Disposes every split record of <paramref name="scope"/> (§11.3): depth-first, in reverse creation order, each
-        /// record's cases disposed by their <see cref="CaseSet"/> (each case's own records first). Nothing when the scope
-        /// has none.
+        /// Disposes every split record of <paramref name="scope"/>: depth-first, in reverse creation order, each
+        /// record's cases disposed by their <see cref="CaseSet"/> (each case's own records first). Nothing when the
+        /// scope has none.
         /// </summary>
         /// <param name="scope">The scope.</param>
         public static void DisposeRecords(EGraphContext scope)
@@ -208,7 +207,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether a live record of <paramref name="scope"/> or of an ancestor, opened by any driver, splits
-        /// <paramref name="source"/> over <paramref name="values"/> (B6). O(depth x records x cells).
+        /// <paramref name="source"/> over <paramref name="values"/>. O(depth x records x cells).
         /// </summary>
         static bool IsCovered(EGraphContext scope, ISplitSource source, ReadOnlySpan<uint> values)
         {

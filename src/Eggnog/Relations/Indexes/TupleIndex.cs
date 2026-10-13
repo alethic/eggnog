@@ -414,13 +414,13 @@ namespace Eggnog.Relations
         /// <summary>
         /// Groups the rows of <paramref name="subset"/> of <paramref name="table"/> a view sees (live and not in
         /// <paramref name="hidden"/>) by <paramref name="columns"/>: the visibility-aware
-        /// <see cref="BuildForSubset(Table, SubsetRef, ReadOnlySpan{ColumnId})"/> of a layered run's multi-column probes
-        /// (colored-contexts spec §9.3, §9.5). With <see cref="HiddenRows.None"/> it is the plain build.
+        /// <see cref="BuildForSubset(Table, SubsetRef, ReadOnlySpan{ColumnId})"/> of a layered run's multi-column
+        /// probes. With <see cref="HiddenRows.None"/> it is the plain build.
         /// </summary>
         /// <param name="table">The table: one layer of a view.</param>
         /// <param name="subset">The rows to group.</param>
         /// <param name="columns">The key columns, in key order; at least one.</param>
-        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed.</param>
         /// <returns>The index, which the caller owns; dispose it when done.</returns>
         public static TupleIndex BuildForSubset(Table table, SubsetRef subset, ReadOnlySpan<ColumnId> columns, HiddenRows hidden)
         {
@@ -436,13 +436,13 @@ namespace Eggnog.Relations
         /// <summary>
         /// Adds the rows of <paramref name="subset"/> of <paramref name="table"/> a view sees, projected onto
         /// <paramref name="columns"/>, one row at a time: the visibility-aware <see cref="MergeSubset"/> for per-subset
-        /// builds (colored-contexts spec §9.3). Not part of <see cref="IIndexBase{TSelf}"/>: catalog indexes stay
-        /// hidden-agnostic (C6). With <see cref="HiddenRows.None"/> it is <see cref="MergeSubset"/>.
+        /// builds. Not part of <see cref="IIndexBase{TSelf}"/>: catalog indexes stay hidden-agnostic, because hides
+        /// belong to views, not to index content. With <see cref="HiddenRows.None"/> it is <see cref="MergeSubset"/>.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="columns">The key columns.</param>
         /// <param name="subset">The rows to add; greater than every row already indexed.</param>
-        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows the view hides; sealed.</param>
         internal void MergeSubsetVisible(Table table, ReadOnlySpan<ColumnId> columns, SubsetRef subset, HiddenRows hidden)
         {
             if (hidden.IsNone)

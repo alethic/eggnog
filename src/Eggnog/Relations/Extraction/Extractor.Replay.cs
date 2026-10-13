@@ -9,13 +9,13 @@ namespace Eggnog.Relations
         // Replaying earlier queries' finalizations, on demand.
         //
         // An on-demand extractor runs Knuth's algorithm once per query, over the classes that query discovered. A node
-        // discovered now may depend on a class that became final in an earlier query. A from-scratch run over everything
-        // discovered so far would release that node only when the class's chosen node leaves the queue, at its (cost,
-        // D10 key) position. Queuing the node at once instead lets it overtake nodes of its own cost that a from-scratch
-        // run pops first, and so changes which node wins a tie: the choice would depend on which values were asked about
-        // before. That happens only when the class costs as much as the node (zero costs, or costs saturated at
-        // long.MaxValue); otherwise the class is final, in a from-scratch run, before any node of the node's cost leaves
-        // the queue, and queuing the node early changes nothing (WaitOnChildren).
+        // discovered now may depend on a class that became final in an earlier query. A from-scratch run over
+        // everything discovered so far would release that node only when the class's chosen node leaves the queue, at
+        // its (cost, content order) position. Queuing the node at once instead lets it overtake nodes of its own cost
+        // that a from-scratch run pops first, and so changes which node wins a tie: the choice would depend on which
+        // values were asked about before. That happens only when the class costs as much as the node (zero costs, or
+        // costs saturated at long.MaxValue); otherwise the class is final, in a from-scratch run, before any node of
+        // the node's cost leaves the queue, and queuing the node early changes nothing (WaitOnChildren).
         //
         // For a class that does cost as much, the node waits on it, and the class's finalization is replayed: its chosen
         // node is queued again at its cost, once the replays of the children it must wait on by the same rule (those of

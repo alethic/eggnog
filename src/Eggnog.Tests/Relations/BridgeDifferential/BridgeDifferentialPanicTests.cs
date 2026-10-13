@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Random programs whose rules read functions without a default at keys no atom guarantees, so they may panic
-    /// (egglog's <c>lookup</c> of a custom function, LookupWithFallback with a lazy panic). Which iteration panics first
-    /// does not depend on the evaluation: a match whose lookup misses is new the first time it exists, so the semi-naive
-    /// bridge, the naive bridge and the oracle must all panic in the same iteration, and agree before it.
+    /// (egglog's <c>lookup</c> of a custom function, LookupWithFallback with a lazy panic). Which iteration panics
+    /// first does not depend on the evaluation: a match whose lookup misses is new the first time it exists, so the
+    /// semi-naive bridge, the naive bridge and the oracle must all panic in the same iteration, and agree before it.
     /// </summary>
     public class BridgeDifferentialPanicTests
     {

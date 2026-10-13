@@ -6,9 +6,9 @@ namespace Eggnog.Tests.Support
 {
 
     /// <summary>
-    /// Runs a test body on dedicated threads that are all alive at once: unlike <c>Parallel.For</c>, which may run every
-    /// iteration inline on the calling thread when the pool is busy, the threads meet at a barrier before the first
-    /// iteration, so the calls really overlap (rule-layer §8.3, N24).
+    /// Runs a test body on dedicated threads that are all alive at once: unlike <c>Parallel.For</c>, which may run
+    /// every iteration inline on the calling thread when the pool is busy, the threads meet at a barrier before the
+    /// first iteration, so the calls really overlap.
     /// </summary>
     internal static class DedicatedThreads
     {
@@ -26,8 +26,8 @@ namespace Eggnog.Tests.Support
         /// <param name="threads">The number of threads.</param>
         /// <param name="iterations">The number of iterations.</param>
         /// <param name="body">The body, given the iteration.</param>
-        /// <returns>The number of distinct threads that ran iterations: <paramref name="threads"/> when every thread had
-        /// one.</returns>
+        /// <returns>The number of distinct threads that ran iterations: <paramref name="threads"/> when every thread
+        /// had one.</returns>
         /// <exception cref="AggregateException">An iteration threw; the exceptions of every thread.</exception>
         /// <exception cref="TimeoutException">The threads did not meet or finish in time.</exception>
         public static int For(int threads, int iterations, Action<int> body)

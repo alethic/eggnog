@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T7 (colored-contexts spec §9.8, X19, I30): a store-backed context, the root included, runs every Id constant of a
-    /// rule, in its query and its actions, in its canonical form there; a bare database runs them as written; cached plans
-    /// keep the written plan, and each context's executed constants K select a cached variant.
+    /// A store-backed context, the root included, runs every Id constant of a rule, in its query and its actions, in
+    /// its canonical form there; a bare database runs them as written; cached plans keep the written plan, and each
+    /// context's executed constants K select a cached variant.
     /// </summary>
     public class ConstantSubstitutionTests
     {
@@ -174,7 +174,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, LayeredRuleUtil.Run(root, rsb => rsb.AddRuleFromCachedPlan(cached)).NumMatches("r to s"));
             Assert.Equal(0, cached.VariantCount);
 
-            // A child unions k into c: its run matches the class and writes c (context = copy of a root that did so).
+            // A child unions k into c: its run matches the class and writes c, as a copy of a root that did so would.
             root.Freeze();
             using var child = root.CreateChild();
             Assert.True(child.Union(c, k));

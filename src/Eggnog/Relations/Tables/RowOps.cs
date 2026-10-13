@@ -5,13 +5,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Row-level primitives over a table's raw row storage, for compiled kernels (colored-contexts spec §9.3, §9.9, M12):
-    /// static, non-virtual and over arrays and offsets, as expression trees need (they cannot use spans or ref structs).
+    /// Row-level primitives over a table's raw row storage, for compiled kernels: static, non-virtual and over arrays
+    /// and offsets, as expression trees need (they cannot use spans or ref structs).
     /// </summary>
     /// <remarks>
     /// The interpreter's scans test visibility with a <see cref="HiddenCursor"/> walk; a compiled per-piece kernel
     /// probes the sealed sets directly through <see cref="IsVisible"/>, which reads only the arrays a
-    /// <see cref="HiddenSet"/> publishes and so agrees with every other read path (I18).
+    /// <see cref="HiddenSet"/> publishes. A context's hidden sets are sealed outside its merges, whenever rows are
+    /// read, so this test agrees with every other read path.
     /// </remarks>
     internal static class RowOps
     {

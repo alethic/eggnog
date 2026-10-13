@@ -6,31 +6,30 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Generates the random rules of the rule differentials (colored-contexts spec §17 M10.3), per program family
-    /// (<see cref="ColorFamily"/>).
+    /// Generates the random rules of the rule differentials, per program family (<see cref="ColorFamily"/>).
     /// </summary>
     /// <remarks>
     /// <para>
     /// Bodies have one to three atoms; every atom after the first joins on an earlier variable, so matches stay few.
-    /// Family A's id constants are indexes into the program's pool of root ids (resolved later), and its heads write
-    /// relations, the lattice <c>low</c>, constructor rows with an output variable, and unions. The history family adds
-    /// <see cref="ColorFilter"/>s and <see cref="ColorActionKind.Read"/>s; the id-order filter only in family A, whose ids
-    /// both sides share.
+    /// Family A's id constants are indexes into the program's pool of root ids (<see cref="ColorRule.Resolve"/>
+    /// replaces them with the ids when the program runs), and its heads write relations, the lattice <c>low</c>,
+    /// constructor rows with an output variable, and unions. The history family adds <see cref="ColorFilter"/>s and
+    /// <see cref="ColorActionKind.Read"/>s; the id-order filter only in family A, whose ids both sides share.
     /// </para>
     /// <para>
-    /// Family B must terminate although rules mint. Its tables are split into the lower stratum <c>edge</c>, <c>mark</c>,
-    /// <c>low</c>, <c>num</c> and the upper <c>path</c>, <c>add</c>, <c>wrap</c>. A rule that writes the lower stratum, or
-    /// mints, reads only the lower stratum; a rule that reads the upper stratum writes only <c>path</c> or unions. So the
-    /// lower stratum never holds a minted class that was not already one of its classes (unions only merge classes), the
-    /// bindings minting rules see are finitely many, and so are the terms they mint.
+    /// Family B must terminate although rules mint. Its tables are split into the lower stratum <c>edge</c>,
+    /// <c>mark</c>, <c>low</c>, <c>num</c> and the upper <c>path</c>, <c>add</c>, <c>wrap</c>. A rule that writes the
+    /// lower stratum, or mints, reads only the lower stratum; a rule that reads the upper stratum writes only
+    /// <c>path</c> or unions. So the lower stratum never holds a minted class that was not already one of its classes
+    /// (unions only merge classes), the bindings minting rules see are finitely many, and so are the terms they mint.
     /// </para>
     /// <para>
     /// The monotone family's bodies never read a lattice output: a <c>low</c> atom binds its value to a variable of its
     /// own, which nothing else reads (<see cref="IsLatticeOutput"/>). A body that joins on <c>low</c>'s value is not
-    /// monotone: once a write lowers it, facts derived from the old value persist (at a plain root too), while the fresh
-    /// root of <see cref="ContextRuleCopyTests"/>, which replays every write before it saturates, never sees the old value
-    /// (found by the copy soak at seed 7000246). Such bodies stay in the history family, which the operational reference
-    /// checks. Conjunctive queries (<see cref="Query"/>) may read <c>low</c>'s value: they run once over views that agree.
+    /// monotone: once a write lowers it, facts derived from the old value persist (at a plain root too), while the
+    /// fresh root of <see cref="ContextRuleCopyTests"/>, which replays every write before it saturates, never sees the
+    /// old value. Such bodies stay in the history family, which the operational reference checks. Conjunctive queries
+    /// (<see cref="Query"/>) may read <c>low</c>'s value: they run once over views that agree.
     /// </para>
     /// </remarks>
     static class ColorRuleGenerator
@@ -246,8 +245,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// In the history family, now and then, copies what an id variable's <c>low</c> reads into another's: the action
-        /// reads a table a descendant can lower, so the rule must not inherit a watermark (R1-4, X41).
+        /// In the history family, now and then, copies what an id variable's <c>low</c> reads into another's: the
+        /// action reads a table a descendant can lower, so the rule must not inherit a watermark.
         /// </summary>
         static void CopyARead(Random random, ColorRule rule, ColorFamily family)
         {
@@ -292,8 +291,8 @@ namespace Eggnog.Relations.Tests
         static bool IsLatticeOutput(ColorRule rule, int v) => rule.Atoms.Any(a => a.Table == ColorSchema.Low && a.Entries[1] == v);
 
         /// <summary>
-        /// Picks a value variable for a value column: usually a new one; when <paramref name="monotone"/>, never the value
-        /// a <c>low</c> atom binds.
+        /// Picks a value variable for a value column: usually a new one; when <paramref name="monotone"/>, never the
+        /// value a <c>low</c> atom binds.
         /// </summary>
         static long ValueVar(Random random, ColorRule rule, bool monotone)
         {

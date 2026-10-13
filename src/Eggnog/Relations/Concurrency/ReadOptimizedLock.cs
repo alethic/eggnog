@@ -22,11 +22,11 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// A writer publishes itself by swapping a fresh <see cref="Notification"/> into the writer slot, then waits until
-    /// every stripe drains to zero, spinning briefly and then blocking until the last reader wakes it. While a writer is
-    /// pending or active, new readers and writers block on its notification, which it fires on release. That is the
-    /// Rust's <c>WriteOngoing</c> token, and like the Rust a pending writer holds off new readers. Reader and writer use a
-    /// Dekker handshake: the reader's increment and the writer's swap are full fences, each followed by a read of the
-    /// other side's state, so they can never both miss each other.
+    /// every stripe drains to zero, spinning briefly and then blocking until the last reader wakes it. While a writer
+    /// is pending or active, new readers and writers block on its notification, which it fires on release. That is the
+    /// Rust's <c>WriteOngoing</c> token, and like the Rust a pending writer holds off new readers. Reader and writer
+    /// use a Dekker handshake: the reader's increment and the writer's swap are full fences, each followed by a read of
+    /// the other side's state, so they can never both miss each other.
     /// </para>
     /// <para>
     /// Memory ordering matches the Rust: everything a writer did before releasing is visible to every later reader and
@@ -158,8 +158,8 @@ namespace Eggnog.Relations
         public T IntoInner() => data;
 
         /// <summary>
-        /// Releases a read lock taken on stripe slot <paramref name="slot"/>, and wakes a writer that may be waiting for
-        /// readers to drain.
+        /// Releases a read lock taken on stripe slot <paramref name="slot"/>, and wakes a writer that may be waiting
+        /// for readers to drain.
         /// </summary>
         /// <param name="slot">The counter index recorded when the read lock was taken.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

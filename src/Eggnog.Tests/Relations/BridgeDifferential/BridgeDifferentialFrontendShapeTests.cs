@@ -12,8 +12,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Runs the random bridge differential programs with their functions declared as egglog's frontend declares them
-    /// (egglog/src/lib.rs:789-850, egglog/src/ast/desugar.rs:396-427): every constructor can subsume, and a relation is a
-    /// constructor into a fresh, never-unioned sort (fresh-id default, union-id merge, subsumable), inserted by a lookup.
+    /// (egglog/src/lib.rs:789-850, egglog/src/ast/desugar.rs:396-427): every constructor can subsume, and a relation is
+    /// a constructor into a fresh, never-unioned sort (fresh-id default, union-id merge, subsumable), inserted by a
+    /// lookup.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class BridgeDifferentialFrontendShapeTests
@@ -53,8 +54,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs the programs of seeds <paramref name="first"/> onwards, transformed, and fails with the smallest failing
-        /// seed's program and failure.
+        /// Runs the programs of seeds <paramref name="first"/> onwards, transformed, and fails with the smallest
+        /// failing seed's program and failure.
         /// </summary>
         static BridgeDiffStats RunSeeds(int first, int count, Func<BridgeDiffProgram, BridgeDiffProgram> transform)
         {
@@ -104,11 +105,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Rewrites every relation into an explicit constructor into a fresh sort of its own: an atom's output variable
-        /// takes that sort (an output it does not name becomes a fresh variable of it), an insertion becomes a lookup, a
-        /// lookup's result takes the sort, and a fact seed that inserts becomes a term seed. The harness declares
-        /// relations this way already (<see cref="BridgeDiffFunctionKind.Relation"/>), and a relation insertion mints its
-        /// row's id as a term does, so the seeds' ids keep their numbers; the rewrite checks that the relation kind and
-        /// its explicit desugaring agree.
+        /// takes that sort (an output it does not name becomes a fresh variable of it), an insertion becomes a lookup,
+        /// a lookup's result takes the sort, and a fact seed that inserts becomes a term seed. The harness declares
+        /// relations this way already (<see cref="BridgeDiffFunctionKind.Relation"/>), and a relation insertion mints
+        /// its row's id as a term does, so the seeds' ids keep their numbers; the rewrite checks that the relation kind
+        /// and its explicit desugaring agree.
         /// </summary>
         internal static BridgeDiffProgram RelationsAsConstructors(BridgeDiffProgram program)
         {

@@ -5,7 +5,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// What one rule did during a run, or during one step of it (D41). Immutable.
+    /// What one rule did during a run, or during one step of it. Immutable.
     /// </summary>
     public sealed class RuleStatistics
     {
@@ -34,7 +34,8 @@ namespace Eggnog
         public Rule Rule { get; }
 
         /// <summary>
-        /// Gets the engine's match count, summed over the run (decision 6: it may differ from egglog's).
+        /// Gets the engine's match count, summed over the run. The count depends on match multiplicity, which differs
+        /// between query plans, so it may differ from egglog's.
         /// </summary>
         public long Matches { get; }
 

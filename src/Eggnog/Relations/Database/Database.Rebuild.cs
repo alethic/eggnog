@@ -22,13 +22,14 @@ namespace Eggnog.Relations
         /// <c>run_on_tables</c>, mod.rs:412-444). Tables that staged anything are notified, the rebuilder is put back,
         /// and <see cref="MergeAll"/> applies the rewrites: colliding keys go through their merge functions, which is
         /// congruence closure, and the unions those stage merge into the rebuilder in the same fixpoint. That merge runs
-        /// at <paramref name="nextTimestamp"/> too, so the rows and unions merge functions write carry the pass's epoch
-        /// (map §4.2 C1; egglog's merge functions read the bridge's timestamp counter, which holds that value).
+        /// at <paramref name="nextTimestamp"/> too, so the rows and unions merge functions write carry the pass's
+        /// epoch, as every write of the pass does (egglog's merge functions read the bridge's timestamp counter, which
+        /// holds that value).
         /// </para>
         /// <para>
-        /// The parallel arm notifies tables in completion order, which egglog's small-batch merge then followed; here
-        /// <see cref="MergeAll"/> sorts every round by stratum, so the order of notification does not matter (map §8.1
-        /// row 11).
+        /// The parallel arm notifies tables in completion order, which egglog's small-batch merge then follows
+        /// (core-relations/src/free_join/mod.rs:593-605); here <see cref="MergeAll"/> sorts every round by stratum, so
+        /// the order of notification does not matter.
         /// </para>
         /// </remarks>
         /// <param name="rebuilder">The table providing the rebuilder.</param>
@@ -39,7 +40,7 @@ namespace Eggnog.Relations
         /// <exception cref="ArgumentException">A table is listed twice, or the rebuilder is listed.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">A table does not exist.</exception>
         /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
-        /// context (colored-contexts spec §3.4).</exception>
+        /// context; or the database is frozen.</exception>
         public bool ApplyRebuild(TableId rebuilder, ReadOnlySpan<TableId> tablesToRebuild, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(ApplyRebuild));
@@ -63,7 +64,7 @@ namespace Eggnog.Relations
         /// <exception cref="ArgumentException">A table is listed twice.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">A table does not exist.</exception>
         /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
-        /// context (colored-contexts spec §3.4).</exception>
+        /// context; or the database is frozen.</exception>
         public bool RefreshRowsForValues(ReadOnlySpan<TableId> tablesToRefresh, ReadOnlySpan<uint> dirtyIds, uint nextTimestamp)
         {
             ThrowIfChildRebuild(nameof(RefreshRowsForValues));

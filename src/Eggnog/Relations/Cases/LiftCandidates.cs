@@ -5,17 +5,16 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A deduplicating arena of fixed-width entries for the lift (colored-contexts spec §11.2): the seed case's source
-    /// rows, and the parent keys they stand for. Entries are equal when their first <see cref="KeyWidth"/> cells are;
-    /// the first entry added with a key is kept.
+    /// A deduplicating arena of fixed-width entries for the lift: the seed case's source rows, and the parent keys they
+    /// stand for. Entries are equal when their first <see cref="KeyWidth"/> cells are; the first entry added with a key
+    /// is kept.
     /// </summary>
     /// <remarks>
     /// Row-major cells in one array and an open-addressing table of entry indexes (linear probing, at most half full),
     /// hashed with <see cref="FxHasher"/>. <see cref="Reset"/> keeps the storage, so a lift reuses one arena for every
     /// table and round: after warm-up, adding allocates nothing. <see cref="Reset"/> costs what the arena last held, not
-    /// its capacity: after one large table, the slot table stays large, and clearing all of it for every later table and
-    /// round would make a round cost O(tables × the largest table ever seen) (colored-contexts spec §14.2). Not
-    /// thread-safe.
+    /// its capacity: after one large table, the slot table stays large, and clearing all of it for every following
+    /// table and round would make a round cost O(tables × the largest table ever seen). Not thread-safe.
     /// </remarks>
     internal sealed class LiftCandidates
     {

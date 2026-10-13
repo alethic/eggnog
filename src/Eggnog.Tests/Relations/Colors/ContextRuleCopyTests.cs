@@ -1,20 +1,23 @@
+using System;
 using System.Linq;
 
 using Xunit;
+
+using static Eggnog.Relations.Tests.BridgeTestUtil;
 
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <i>Context = copy</i> for rules (colored-contexts spec §17 M10.3, monotone family only): after saturation, a
-    /// context's view equals that of a fresh root that replays the host writes of the context's chain and saturates the
-    /// same rules, and random conjunctive queries give the same answers in both.
+    /// <i>Context = copy</i> for rules, for the monotone family: after saturation, a context's view equals that of a
+    /// fresh root that replays the host writes of the context's chain and saturates the same rules, and random
+    /// conjunctive queries give the same answers in both.
     /// </summary>
     /// <remarks>
     /// <para>
     /// For monotone programs every fact an ancestor derived, under fewer equalities or before later writes, is in the
-    /// chain's fixpoint, so the saturated view is that fixpoint whatever the schedule. Non-monotone programs are governed
-    /// by the operational reference instead (<see cref="ContextRuleDifferentialTests"/>, X41, R1-5).
+    /// chain's fixpoint, so the saturated view is that fixpoint whatever the schedule. Non-monotone programs are
+    /// governed by the operational reference instead (<see cref="ContextRuleDifferentialTests"/>).
     /// </para>
     /// <para>
     /// Family A replays with the same explicit ids and compares cell for cell; family B re-adds the terms and compares
@@ -76,8 +79,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// R1-3: rule <c>R(x, 7) → S(x)</c>; the root holds <c>R(1, 3)</c> and <c>union(7, 3)</c>, runs the rule and is
-        /// frozen. The root runs the constant 7 as its canonical 3 (X19), so it derives <c>S(1)</c>; a child that asserts
+        /// Rule <c>R(x, 7) → S(x)</c>; the root holds <c>R(1, 3)</c> and <c>union(7, 3)</c>, runs the rule and is
+        /// frozen. The root runs the constant 7 as its canonical 3, so it derives <c>S(1)</c>; a child that asserts
         /// nothing derives nothing more and has its parent's view, which a fresh root replaying the chain also has.
         /// </summary>
         [Fact]
@@ -137,6 +140,23 @@ namespace Eggnog.Relations.Tests
         {
             ColorDifferential.Soak(new ColorFamily(false, false), Options, alternateHistory: false);
             ColorDifferential.Soak(new ColorFamily(true, false), Options, alternateHistory: false);
+        }
+
+        /// <summary>
+        /// A program of the monotone family that the copy oracle accepts. A body that binds the output of the min
+        /// lattice <c>low</c> is not monotone: once a host write lowers <c>low</c> after a saturation, facts derived
+        /// from the old value persist (at a plain root too), while the fresh root replays both writes before saturating
+        /// and never sees the old value. For example, <c>union(#2, #1); low(#1, 3); saturate; low(#2, 0)</c> in a
+        /// grandchild, with <c>low(v0, v1), num(v1, v2), num(#1, v3) =&gt; set path(add(v2, v0), v2)</c> and a union
+        /// rule over edges, makes the context union <c>num(0)</c> with <c>num(3)</c>, which the fresh root never does.
+        /// The monotone family's bodies therefore never read a lattice output, so the copy oracle reports no false
+        /// failure for this seed.
+        /// </summary>
+        [Fact]
+        public void TheCopyOracleHoldsForTheMonotoneFamilyAtSeed7000246()
+        {
+            var program = ColorProgram.Generate(7000246, new ColorFamily(true, false), ColorDifferential.Steps * 4);
+            ColorDifferential.RunOrShrink(program, new ColorRunOptions(Reference: false, Copy: true));
         }
 
     }

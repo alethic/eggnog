@@ -28,8 +28,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The rows of the planner experiments (plan_dump.rs): <c>(i % m, (7i + 3) % (n + 1))</c> for <c>i</c> below
-        /// <paramref name="n"/>.
+        /// The rows of the planner experiments, the table contents of the golden plans:
+        /// <c>(i % m, (7i + 3) % (n + 1))</c> for <c>i</c> below <paramref name="n"/>.
         /// </summary>
         public static IEnumerable<uint[]> ExperimentRows(int n, int m)
         {

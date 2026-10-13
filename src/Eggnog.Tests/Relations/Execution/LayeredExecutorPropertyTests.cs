@@ -10,19 +10,21 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T8 (colored-contexts spec §17 M10.2): randomized differential tests of the layered executor. Random layered states
-    /// (<see cref="SyntheticLayers"/>: two to four levels of the same three tables, each with rows, tombstones, superseded
-    /// rows and cached indexes, views that leave layers out and hide rows in frozen and live parts) and random conjunctive
-    /// queries (constants, repeated variables, wildcards, comparisons and column equalities, atoms without variables, every
-    /// strategy, decomposition on and off, cached plans with extra header constraints) must produce, through
-    /// <see cref="Database.RunRuleSet"/>, exactly the distinct bindings of a nested-loop join over the rows the views show
-    /// (<see cref="LayerFlattener"/>), and the flat executor's over a database holding those rows.
+    /// Randomized differential tests of the layered executor. Random layered states (<see cref="SyntheticLayers"/>: two
+    /// to four levels of the same three tables, each with rows, tombstones, superseded rows and cached indexes, views
+    /// that leave layers out and hide rows in frozen and live parts) and random conjunctive queries (constants,
+    /// repeated variables, wildcards, comparisons and column equalities, atoms without variables, every strategy,
+    /// decomposition on and off, cached plans with extra header constraints) must produce, through
+    /// <see cref="Database.RunRuleSet"/>, exactly the distinct bindings of a nested-loop join over the rows the views
+    /// show (<see cref="LayerFlattener"/>), and the flat executor's over a database holding those rows.
     /// </summary>
     /// <remarks>
-    /// With S6 (key uniqueness, I12) every view shows at most one row per key, as a context's views do: a row whose key a
-    /// higher layer shows is hidden, as Lemma F's hides make it. The S6-off variant drops that, so a key may be visible in
-    /// several layers; the executor's match equivalence (I27) does not depend on it, only the flat comparison does. Matches
-    /// are a multiset, so only distinct bindings are compared (decision 6).
+    /// With key uniqueness (<c>s6</c>) every view shows at most one row per key, as a context's views do: a row whose
+    /// key a higher layer shows is hidden, as a context hides it, since the topmost layer that holds a key decides a
+    /// lookup. The variant without key uniqueness drops that, so a key may be visible in several layers; the executor's
+    /// match equivalence (the distinct bindings of a join over the visible rows) does not depend on it, only the flat
+    /// comparison does, since a keyed flat table cannot hold two rows with one key. Matches are a multiset and their
+    /// count may differ from the flat executor's, so only distinct bindings are compared.
     /// </remarks>
     [Collection(ExecutorStressCollection.Name)]
     public class LayeredExecutorPropertyTests
@@ -73,7 +75,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The S6-off variant: views may show a key in several layers.
+        /// Without key uniqueness: views may show a key in several layers.
         /// </summary>
         [Theory]
         [MemberData(nameof(ModesData))]
@@ -122,9 +124,10 @@ namespace Eggnog.Relations.Tests
                 Assert.True(expected.SetEquals(ExecutionTestUtil.Distinct(log)), context + Describe(rs[rule], expected, log));
                 Assert.Equal(log.Count, report.NumMatches("rule"));
 
-                // Multiplicity (I27, decision 6): every match is one path of frames, and the frames of a stage partition the
-                // visible rows they refine, so no executor emits more matches than there are combinations of visible rows
-                // satisfying the query. A row read twice, or a layer enumerated twice, breaks the bound.
+                // Multiplicity, which need not equal the flat executor's: every match is one path of frames, and the
+                // frames of a stage partition the visible rows they refine, so no executor emits more matches than
+                // there are combinations of visible rows satisfying the query. A row read twice, or a layer enumerated
+                // twice, breaks the bound.
                 Assert.True(log.Count <= combinations, context + $" (multiplicity: {log.Count} matches, {combinations} row combinations)" + Describe(rs[rule], expected, log));
 
                 if (s6)

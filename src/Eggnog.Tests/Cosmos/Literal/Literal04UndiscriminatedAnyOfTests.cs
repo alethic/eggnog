@@ -4,10 +4,10 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/04-undiscriminated-anyof.egg</c>, as written (gap 3): an undiscriminated <c>anyOf</c>
-    /// becomes a hidden discriminator <c>$anyOf/0</c> over its branch indices; the split runs over the schema itself, and
-    /// the lift unions the branch domains, so <c>status = 'purged'</c> contradicts the declaration. The expected figures
-    /// are the egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
+    /// <c>prototypes/cosmos-facts/04-undiscriminated-anyof.egg</c>, as written: an undiscriminated <c>anyOf</c>
+    /// becomes a hidden discriminator <c>$anyOf/0</c> over its branch indices; the split runs over the schema itself,
+    /// and the lift unions the branch domains, so <c>status = 'purged'</c> contradicts the declaration. The expected
+    /// figures are the egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
     /// </summary>
     public sealed class Literal04UndiscriminatedAnyOfTests
     {

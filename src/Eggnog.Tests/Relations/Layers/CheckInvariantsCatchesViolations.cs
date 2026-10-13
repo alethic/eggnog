@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The tables part of the context checker, and its eq-container part, catch violations (colored-contexts spec §12.7
-    /// item 2, L3, B2; §7.4 G-b): each test corrupts one invariant deliberately, through internal members no correct
-    /// operation uses that way, and asserts that <see cref="Context.CheckInvariants"/> names it.
+    /// The tables part of the context checker, and its eq-container part, catch violations: each test corrupts one
+    /// invariant deliberately, through internal members no correct operation uses that way, and asserts that
+    /// <see cref="Context.CheckInvariants"/> reports it under the checker's label for that invariant.
     /// </summary>
     public class CheckInvariantsCatchesViolations
     {
@@ -42,10 +42,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// I13: an own row names an id the context displaced, and the context was marked rebuilt without rewriting it.
+        /// An own row names an id the context displaced, and the context was marked rebuilt without rewriting it: a
+        /// clean context's visible rows name canonical ids only.
         /// </summary>
         [Fact]
-        public void AStaleOwnRowViolatesI13()
+        public void AStaleOwnRowBreaksCanonicalIds()
         {
             var (store, f, a, b) = Setup(freeze: true);
             var child = store.Root.CreateChild();
@@ -53,28 +54,29 @@ namespace Eggnog.Relations.Tests
             child.Union(a, b);
             child.JournalMark = child.Journal!.Count;
             Assert.True(child.IsClean);
-            AssertViolates(child, "I13");
+            AssertViolates(child, "canonical ids");
         }
 
         /// <summary>
-        /// I14: an ancestor row hidden with no row carrying its information.
+        /// An ancestor row hidden with no visible row carrying its information.
         /// </summary>
         [Fact]
-        public void AHideWithoutACarrierViolatesI14()
+        public void AHideWithoutACarrierBreaksHiddenContent()
         {
             var (store, f, a, _) = Setup(freeze: true);
             var child = store.Root.CreateChild();
             var row = store.Schema[f]!.Root.FindRow([a]);
             child.Tables!.GetOrCreateLayer(f).Hide(0, row, HideReason.KeyHeld);
             child.Tables.SealHidden();
-            AssertViolates(child, "I14");
+            AssertViolates(child, "hidden content");
         }
 
         /// <summary>
-        /// I18: a hidden set left unsealed outside a merge.
+        /// A hidden set left unsealed outside a merge: the read paths probe sealed sets only, so they would miss the
+        /// hide.
         /// </summary>
         [Fact]
-        public void AnUnsealedHideViolatesI18()
+        public void AnUnsealedHideBreaksSealing()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var f = store.AddTable(MaxFunction(1), name: "f");
@@ -91,15 +93,15 @@ namespace Eggnog.Relations.Tests
             // A hide outside a merge, with no seal after it: the sealed set reopens its tail.
             child.Tables.TryGetLayer(f)!.Hide(0, store.Schema[f]!.Root.FindRow([b]), HideReason.KeyHeld);
             Assert.Equal(1, child.Tables.UnsealedCount);
-            AssertViolates(child, "I18");
+            AssertViolates(child, "sealing");
         }
 
         /// <summary>
-        /// I12: an ancestor appended a row under a key the context holds, and the context's cursor was moved past it
-        /// without the catch-up that would fold it in.
+        /// An ancestor appended a row under a key the context holds, and the context's cursor was moved past it without
+        /// the catch-up that would fold it in, so two visible rows hold one key.
         /// </summary>
         [Fact]
-        public void TwoVisibleRowsWithOneKeyViolateI12()
+        public void TwoVisibleRowsWithOneKeyBreakUniqueKeys()
         {
             var (store, f, a, b) = Setup(freeze: false);
             var root = store.Root;
@@ -109,14 +111,14 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsClean);
             SkipCatchUp(child, f);
             Assert.True(child.IsClean);
-            AssertViolates(child, "I12");
+            AssertViolates(child, "unique keys");
         }
 
         /// <summary>
-        /// I17: a cursor whose stamp moved past an ancestor's change without its row versions.
+        /// A cursor whose stamp moved past an ancestor's change without its row versions.
         /// </summary>
         [Fact]
-        public void ACursorBehindItsAncestorViolatesI17()
+        public void ACursorBehindItsAncestorBreaksCursors()
         {
             var (store, f, a, _) = Setup(freeze: false);
             var root = store.Root;
@@ -126,15 +128,15 @@ namespace Eggnog.Relations.Tests
             cursor.SetPendingStamp(root.Version);
             cursor.CommitPending();
             Assert.True(child.IsClean);
-            AssertViolates(child, "I17");
+            AssertViolates(child, "cursors");
         }
 
         /// <summary>
-        /// I16: an ancestor layer compacted under a hidden set (past the gate), so the set names rows of another
+        /// An ancestor layer compacted under a hidden set (past the gate), so the set names rows of another
         /// generation.
         /// </summary>
         [Fact]
-        public void AHiddenSetOfAnotherGenerationViolatesI16()
+        public void AHiddenSetOfAnotherGenerationBreaksGenerations()
         {
             var (store, f, a, _) = Setup(freeze: false);
             var root = store.Root;
@@ -143,14 +145,14 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.Tables!.TryGetLayer(f)!.HasHidden);
             store.Schema[f]!.Root.Rehash();
             SkipCatchUp(child, f);
-            AssertViolates(child, "I16");
+            AssertViolates(child, "generations");
         }
 
         /// <summary>
-        /// I10 (tables part): an ancestor row names an id local to the context.
+        /// An ancestor row names an id local to the context (the tables part of the check that local ids stay local).
         /// </summary>
         [Fact]
-        public void AnAncestorRowNamingALocalIdViolatesI10()
+        public void AnAncestorRowNamingALocalIdBreaksLocalIds()
         {
             var (store, f, _, _) = Setup(freeze: false);
             var root = store.Root;
@@ -167,14 +169,14 @@ namespace Eggnog.Relations.Tests
             }
 
             Assert.True(child.IsClean);
-            AssertViolates(child, "I10");
+            AssertViolates(child, "local ids");
         }
 
         /// <summary>
-        /// I34: an own layer holding staged writes outside a merge (staged without notifying the database).
+        /// An own layer holding staged writes outside a merge (staged without notifying the database).
         /// </summary>
         [Fact]
-        public void StagedWritesInALayerViolateI34()
+        public void StagedWritesInALayerBreakAdoption()
         {
             var (store, f, a, _) = Setup(freeze: true);
             var child = store.Root.CreateChild();
@@ -183,15 +185,15 @@ namespace Eggnog.Relations.Tests
             buffer.StageInsert([a, 9, store.ReadClock()]);
             buffer.Flush();
             Assert.True(child.IsClean);
-            AssertViolates(child, "I34");
+            AssertViolates(child, "adoption");
         }
 
         /// <summary>
-        /// G-b: an eq-sort container holds an id the child displaced, and the store's eq-container version was put back,
-        /// so the child's guard never saw the container (§7.4).
+        /// An eq-sort container holds an id the child displaced, and the store's eq-container version was put back, so
+        /// the child's guard never saw the container.
         /// </summary>
         [Fact]
-        public void AnEqContainerHoldingAnOwnLoserViolatesGb()
+        public void AnEqContainerHoldingAnOwnLoserIsReported()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var containers = store.Root.Database.Containers;
@@ -208,7 +210,7 @@ namespace Eggnog.Relations.Tests
             root.Database.WithExecutionState(state => state.Containers.RegisterValue(new VecContainer(y), state));
             containers.GetEnvironment<VecContainer>().EqVersionCounter!.Value = version;
             Assert.True(child.IsClean);
-            AssertViolates(child, "G-b");
+            AssertViolates(child, "eq-sort containers");
         }
 
         /// <summary>
@@ -241,6 +243,82 @@ namespace Eggnog.Relations.Tests
                 cursor.SetPendingStamp(child.Ancestors[a].Version);
                 cursor.CommitPending();
             }
+        }
+
+        /// <summary>
+        /// An own row whose timestamp lies below the context's creation stamp.
+        /// </summary>
+        [Fact]
+        public void AnOwnRowStampedBeforeTheContextBreaksStamps()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var a = root.NewId();
+            root.Freeze();
+            var child = root.CreateChild();
+            Insert(child, f, a, 5, 0);
+            child.CheckInvariants();
+
+            var own = child.Tables!.TryGetLayer(f)!.Own;
+            var sort = store.Schema[f]!.SortColumn;
+            Assert.True(child.CreatedAt > 0);
+            own.Rows.Data[sort] = 0;
+            AssertViolates(child, "stamps");
+        }
+
+        /// <summary>
+        /// The ancestor half of the canonical-ids check: the context displaced an id and was marked rebuilt without the
+        /// rebuild step that hides the ancestor rows naming its losers, so the ancestor row naming the loser stays
+        /// visible.
+        /// </summary>
+        [Fact]
+        public void AVisibleAncestorRowNamingAnOwnLoserBreaksCanonicalIds()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            Insert(root, f, b, 1, 0);
+            root.Freeze();
+            var child = root.CreateChild();
+            child.Union(a, b);
+            child.JournalMark = child.Journal!.Count;
+            Assert.True(child.IsClean);
+            AssertViolates(child, "canonical ids");
+        }
+
+        /// <summary>
+        /// A grandchild hides its parent's row while a row with the same key stays visible below it (here the root's,
+        /// which the parent never hid because its cursor skipped the catch-up): a hidden row must not let a row of its
+        /// key show through from below.
+        /// </summary>
+        [Fact]
+        public void AHiddenRowWhoseKeyIsVisibleBelowIsReported()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var b = root.NewId();
+            var child = root.CreateChild();
+            Insert(child, f, b, 5, 0);
+            Insert(root, f, b, 3, 0);
+
+            // The child skips the catch-up that would fold the root's row into its own, so both rows stay visible.
+            var tables = child.Tables!;
+            var cursor = tables.CursorAt(0)!;
+            cursor.SetPendingRows(f, tables.AncestorLayer(0, f)!.Version);
+            cursor.SetPendingStamp(root.Version);
+            cursor.CommitPending();
+            Assert.True(child.IsClean);
+
+            var grandchild = child.CreateChild();
+            var row = tables.TryGetLayer(f)!.Own.FindRow([b]);
+            Assert.True(row >= 0);
+            grandchild.Tables!.GetOrCreateLayer(f).Hide(1, row, HideReason.KeyHeld);
+            grandchild.Tables.SealHidden();
+            AssertViolates(grandchild, "keys below a hide");
         }
 
     }

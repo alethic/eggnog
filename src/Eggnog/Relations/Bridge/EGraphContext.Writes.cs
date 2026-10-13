@@ -16,21 +16,22 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Stages a row of <paramref name="function"/> (its keys and output) on the context's bridge side, for the next
-        /// <see cref="FlushUpdates"/> (colored-contexts spec §10.4, X24). The row's id cells are canonicalized in this
-        /// context when it is flushed, at every level, the root included (the rule layer's invariant C).
+        /// <see cref="FlushUpdates"/>. The row's id cells are canonicalized in this context when it is flushed, at
+        /// every level, the root included, which the rule layer relies on: every id it writes is canonical in the
+        /// target context.
         /// </summary>
         /// <remarks>
         /// Nothing is visible until the flush; the context is not clean meanwhile (<see cref="IsClean"/>). A stopped
-        /// context ignores the row (rule-layer D45). In a child, a function whose merge is not a lattice merge is refused
-        /// here, before anything is staged (decision 2). O(row) amortized.
+        /// context ignores the row. In a child, a function whose merge is not a lattice merge is refused here, before
+        /// anything is staged. O(row) amortized.
         /// </remarks>
         /// <param name="function">The function.</param>
         /// <param name="row">One value per schema column: the keys, then the output.</param>
         /// <exception cref="ArgumentException">The function is not declared, or the row's width is not its column
         /// count.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the function cannot be written in a
-        /// child (decision 2); the domain is held by another thread; or the call comes from inside a callback of the
-        /// domain (a raw escape's action or a visitor, §8.3).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the function cannot be written
+        /// in a child; the domain is held by another thread; or the call comes from inside a callback of the domain (a
+        /// raw escape's action or a visitor).</exception>
         public void StageRow(FunctionId function, ReadOnlySpan<Value> row)
         {
             ThrowIfUnwritable();
@@ -47,19 +48,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages the term <paramref name="function"/>(<paramref name="key"/>) with a fresh id as its output and returns
-        /// the id (§10.4): minted from the context's id blocks in a child (so it is local, I2), from the store's counter at
-        /// the root. After the flush the term's canonical id is <see cref="Find"/> of it: the fresh id for a new key, else
-        /// the existing term's class, which the constructor's union merge reconciles.
+        /// Stages the term <paramref name="function"/>(<paramref name="key"/>) with a fresh id as its output and
+        /// returns the id: minted from the context's id blocks in a child (so it is local), from the store's counter at
+        /// the root. After the flush the term's canonical id is <see cref="Find"/> of it: the fresh id for a new key,
+        /// else the existing term's class, which the constructor's union merge reconciles.
         /// </summary>
         /// <param name="function">The function, usually a constructor.</param>
         /// <param name="key">One value per key column.</param>
         /// <returns>The fresh id.</returns>
         /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
         /// count.</exception>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped; the function cannot be
-        /// written in a child (decision 2); the domain is held by another thread; or the call comes from inside a callback
-        /// of the domain (§8.3).</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped; the function cannot
+        /// be written in a child; the domain is held by another thread; or the call comes from inside a callback of the
+        /// domain.</exception>
         public Value StageTerm(FunctionId function, ReadOnlySpan<Value> key)
         {
             ThrowIfUnwritable();
@@ -71,13 +72,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages the union of <paramref name="a"/> and <paramref name="b"/> for the next <see cref="FlushUpdates"/>
-        /// (§10.4). A stopped context ignores it.
+        /// Stages the union of <paramref name="a"/> and <paramref name="b"/> for the next <see cref="FlushUpdates"/>. A
+        /// stopped context ignores it.
         /// </summary>
         /// <param name="a">One id.</param>
         /// <param name="b">The other.</param>
         /// <exception cref="InvalidOperationException">The context is frozen or faulted; the domain is held by another
-        /// thread; or the call comes from inside a callback of the domain (§8.3).</exception>
+        /// thread; or the call comes from inside a callback of the domain.</exception>
         public void StageUnion(Value a, Value b)
         {
             ThrowIfUnwritable();
@@ -91,8 +92,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Mints a fresh id in this context (§10.4, §4.2): from its id blocks in a child, from the store's counter at the
-        /// root. Thread-safe.
+        /// Mints a fresh id in this context: from its id blocks in a child, from the store's counter at the root.
+        /// Thread-safe.
         /// </summary>
         /// <returns>The id.</returns>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped.</exception>
@@ -100,14 +101,14 @@ namespace Eggnog.Relations
         public Value FreshId() => new(context.NewId());
 
         /// <summary>
-        /// Stages <paramref name="values"/> (<see cref="StageRow"/>) and flushes (<see cref="FlushUpdates"/>), §10.4. If a
-        /// row is malformed, nothing is staged.
+        /// Stages <paramref name="values"/> (<see cref="StageRow"/>) and flushes (<see cref="FlushUpdates"/>). If a row
+        /// is malformed, nothing is staged.
         /// </summary>
         /// <param name="values">The rows, each with its function.</param>
         /// <exception cref="ArgumentException">A function is not declared, or a row's width is not its column
         /// count.</exception>
         /// <exception cref="InvalidOperationException">The context is frozen or faulted; the domain is held by another
-        /// thread; or the call comes from inside a callback of the domain (§8.3), and nothing is staged.</exception>
+        /// thread; or the call comes from inside a callback of the domain, and nothing is staged.</exception>
         /// <exception cref="PanicException">The flush recorded a failure.</exception>
         public void AddValues(IEnumerable<(FunctionId Function, Value[] Row)> values)
         {
@@ -120,14 +121,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Adds the term <paramref name="function"/>(<paramref name="inputs"/>) and returns its canonical id here
-        /// (§10.4): <see cref="StageTerm"/>, <see cref="FlushUpdates"/>, then <see cref="Find"/> of the fresh id.
+        /// Adds the term <paramref name="function"/>(<paramref name="inputs"/>) and returns its canonical id here:
+        /// <see cref="StageTerm"/>, <see cref="FlushUpdates"/>, then <see cref="Find"/> of the fresh id.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="inputs">The key.</param>
         /// <returns>The term's canonical id in this context.</returns>
         /// <exception cref="InvalidOperationException">The context is frozen or faulted; the domain is held by another
-        /// thread; or the call comes from inside a callback of the domain (§8.3), and nothing is staged.</exception>
+        /// thread; or the call comes from inside a callback of the domain, and nothing is staged.</exception>
         /// <exception cref="PanicException">The flush recorded a failure.</exception>
         public Value AddTerm(FunctionId function, ReadOnlySpan<Value> inputs)
         {
@@ -142,8 +143,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Merges the host writes staged here, and everything else staged in the context, at an epoch of its own, then
-        /// rebuilds if the merge unioned anything: egglog's <c>flush_updates</c> (lib.rs:946-959) for a context
-        /// (colored-contexts spec §10.4, X24, X38).
+        /// rebuilds if the merge unioned anything: egglog's <c>flush_updates</c> (lib.rs:946-959) for a context.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -156,7 +156,7 @@ namespace Eggnog.Relations
         /// context drops what is staged and returns <c>false</c>.
         /// </para>
         /// <para>
-        /// An exception escaping a child's flush faults it (X12).
+        /// An exception escaping a child's flush faults it.
         /// </para>
         /// </remarks>
         /// <returns>Whether the merge changed the context; changes made by the rebuild are not reported.</returns>
@@ -171,20 +171,21 @@ namespace Eggnog.Relations
         /// current clock, and flushes what it staged; the writes land at the next <see cref="FlushUpdates"/>. egglog's
         /// <c>with_execution_state</c> (lib.rs:928-944) for a context: a raw escape for one-shot manipulation, with
         /// <see cref="TableAction"/>s and <see cref="UnionAction"/>s, say. Rows staged in a child are canonicalized and
-        /// re-stamped when they merge (X38).
+        /// re-stamped when they merge.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Writes land in the order the host issued them (colored-contexts spec §10.4): rows and unions this context staged
-        /// earlier through <see cref="HostWrites"/> are flushed first (<see cref="FlushStagedFirst"/>), so an
-        /// order-dependent merge sees them before the raw rows. One emptiness test when nothing is staged.
+        /// Writes land in the order the host issued them: rows and unions this context staged earlier through
+        /// <see cref="HostWrites"/> are flushed first (<see cref="FlushStagedFirst"/>), so an order-dependent merge
+        /// sees them before the raw rows. One emptiness test when nothing is staged.
         /// </para>
         /// <para>
-        /// The action runs as a callback of the context's domain (<see cref="RunRawAction{TResult}"/>, §8.3), as egglog's
-        /// closure borrows the e-graph shared: it may read, and every call that writes or changes a context of the domain
-        /// (staging, <see cref="AddValues"/>, <see cref="AddTerm"/>, <see cref="FlushUpdates"/>, <see cref="RunRules"/>, a
-        /// rebuild with work to do, a clear) is refused inside it. Its rows, stamped with the clock read before it, would
-        /// otherwise merge after writes issued later, or below a watermark a run inside it committed (I31).
+        /// The action runs as a callback of the context's domain (<see cref="RunRawAction{TResult}"/>), as egglog's
+        /// closure borrows the e-graph shared: it may read, and every call that writes or changes a context of the
+        /// domain (staging, <see cref="AddValues"/>, <see cref="AddTerm"/>, <see cref="FlushUpdates"/>,
+        /// <see cref="RunRules"/>, a rebuild with work to do, a clear) is refused inside it. Its rows, stamped with the
+        /// clock read before it, would otherwise merge after writes issued later, or below a watermark a run inside it
+        /// committed.
         /// </para>
         /// </remarks>
         /// <typeparam name="TResult">The result type.</typeparam>
@@ -205,11 +206,11 @@ namespace Eggnog.Relations
         /// <summary>
         /// The root's egglog-compatible raw escape, for <see cref="EGraph.WithExecutionState{TResult}"/>: egglog's
         /// <c>with_execution_state</c> (lib.rs:928-944) on the root database, stamped with the current clock, with no
-        /// writability check beyond egglog's. Like <see cref="WithExecutionState{TResult}"/> it first flushes what the root
-        /// staged through the context API, so writes land in the order the host issued them (§10.4); under egglog's API
-        /// alone that is one emptiness test and the timestamp sequence is egglog's. The action runs as a callback of the
-        /// root's domain (<see cref="RunRawAction{TResult}"/>), so writes and runs issued from inside it are refused, as
-        /// egglog's shared borrow of the e-graph refuses them.
+        /// writability check beyond egglog's. Like <see cref="WithExecutionState{TResult}"/> it first flushes what the
+        /// root staged through the context API, so writes land in the order the host issued them; under egglog's API
+        /// alone that is one emptiness test and the timestamp sequence is egglog's. The action runs as a callback of
+        /// the root's domain (<see cref="RunRawAction{TResult}"/>), so writes and runs issued from inside it are
+        /// refused, as egglog's shared borrow of the e-graph refuses them.
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="action">The action.</param>
@@ -225,13 +226,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Runs a raw escape's <paramref name="action"/> with a fresh execution state over the context's database, stamped
-        /// with the current clock, then flushes the state into the database's pending buffers and records a failure it
-        /// reports: <see cref="Database.WithExecutionState{TResult}"/> (egglog's <c>with_execution_state</c>,
-        /// mod.rs:446-450), with the action marked as a callback of the context's domain, as <c>Context.Write</c> marks its
-        /// batch (§8.3). Every call that writes or changes a context of the domain then refuses inside the action
-        /// (<see cref="Context.ThrowIfInCallback"/>); reads and a nested raw escape are allowed. Called with the domain
-        /// held. Two counter updates beyond the database's escape, and no allocation beyond the state.
+        /// Runs a raw escape's <paramref name="action"/> with a fresh execution state over the context's database,
+        /// stamped with the current clock, then flushes the state into the database's pending buffers and records a
+        /// failure it reports: <see cref="Database.WithExecutionState{TResult}"/> (egglog's
+        /// <c>with_execution_state</c>, mod.rs:446-450), with the action marked as a callback of the context's domain,
+        /// as <c>Context.Write</c> marks its batch. Every call that writes or changes a context of the domain then
+        /// refuses inside the action (<see cref="Context.ThrowIfInCallback"/>); reads and a nested raw escape are
+        /// allowed. Called with the domain held. Two counter updates beyond the database's escape, and no allocation
+        /// beyond the state.
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="action">The action.</param>
@@ -258,11 +260,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Removes every row of <paramref name="function"/> from the context's view (§6.7, <see cref="Context.ClearTable"/>),
-        /// and every row of it staged here and not flushed: egglog's <c>clear_table</c> at the root (lib.rs:409-424, which
-        /// drops what in-flight buffers staged for the table); in a child, the child's layer is cleared and the ancestors'
-        /// rows of the function disappear from its views. Refused while the context has live descendants, and in a child
-        /// whose parent is not frozen (decision 1, R1); a refused clear drops nothing.
+        /// Removes every row of <paramref name="function"/> from the context's view (<see cref="Context.ClearTable"/>),
+        /// and every row of it staged here and not flushed: egglog's <c>clear_table</c> at the root (lib.rs:409-424,
+        /// which drops what in-flight buffers staged for the table); in a child, the child's layer is cleared and the
+        /// ancestors' rows of the function disappear from its views. Refused while the context has live descendants,
+        /// and in a child whose parent is not frozen; a refused clear drops nothing.
         /// </summary>
         /// <remarks>Rows staged for other functions, and staged unions, are kept for the next flush. O(the clear) plus
         /// O(staged cells).</remarks>
@@ -279,18 +281,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Interns <paramref name="container"/> in this context and returns its id (colored-contexts spec §10.7): egglog's
+        /// Interns <paramref name="container"/> in this context and returns its id: egglog's
         /// <c>get_container_value</c>. At the root the type is registered first if needed (as one holding ids); a child
         /// needs it registered already, since registration is a definition of the e-graph
-        /// (<see cref="EGraph.RegisterContainerType{TContainer}"/>). Container ids are global, minted on the store's shared
-        /// counter, never local (§4.2). In a child an eq-sort container (one that holds ids) cannot be interned (G-a,
-        /// decision 9); a container over base values can.
+        /// (<see cref="EGraph.RegisterContainerType{TContainer}"/>). Container ids are global, minted on the store's
+        /// shared counter, never local. In a child an eq-sort container (one that holds ids) cannot be interned; a
+        /// container over base values can.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped; it is a child and the
-        /// type is not registered; or it is a child and the type holds ids (G-a).</exception>
+        /// type is not registered; or it is a child and the type holds ids.</exception>
         internal Value GetContainerValue<TContainer>(in TContainer container)
             where TContainer : struct, IContainerValue<TContainer>
         {
@@ -330,7 +332,7 @@ namespace Eggnog.Relations
             if (parent is { IsFrozen: false } p)
                 p.EnsureClean();
 
-            // Catch up before anything is staged (X24): replayed rows are stamped after every ancestor change they could
+            // Catch up before anything is staged: replayed rows are stamped after every ancestor change they could
             // collide with, and canonicalized against the current union-find.
             context.PrepareForWrite();
             if (IsStopped)
@@ -420,15 +422,15 @@ namespace Eggnog.Relations
         /// accepted, then the root flushes (<see cref="FlushCore"/>, which leaves a recorded failure to the next run).
         /// </summary>
         /// <remarks>
-        /// Bypasses <see cref="HostWrites"/>, as M8 did: rows replayed as given need no catch-up at the root, so keeping
-        /// them bridge-side would only retain a copy of the batch (§14.1: nothing per staged insert). If a row is malformed
-        /// nothing of the batch is published. A stopped root ignores the rows.
+        /// Bypasses <see cref="HostWrites"/>: rows replayed as given need no catch-up at the root, so keeping them
+        /// bridge-side would only retain a copy of the batch, and the root pays nothing per staged insert. If a row is
+        /// malformed nothing of the batch is published. A stopped root ignores the rows.
         /// <para>
-        /// Writes land in the order the host issued them (colored-contexts spec §10.4): rows and unions the root staged
-        /// earlier through the context API (<see cref="StageRow"/>, <see cref="StageTerm"/>, <see cref="AddValues"/>,
-        /// <see cref="StageUnion"/>) are flushed first, in an epoch of their own, so an order-dependent merge
-        /// (<c>:merge new</c>, <c>:merge old</c>) sees them before this batch. When nothing is staged bridge-side, as
-        /// under egglog's API alone, this costs one test and the timestamp sequence is egglog's.
+        /// Writes land in the order the host issued them: rows and unions the root staged earlier through the context
+        /// API (<see cref="StageRow"/>, <see cref="StageTerm"/>, <see cref="AddValues"/>, <see cref="StageUnion"/>) are
+        /// flushed first, in an epoch of their own, so an order-dependent merge (<c>:merge new</c>, <c>:merge old</c>)
+        /// sees them before this batch. When nothing is staged bridge-side, as under egglog's API alone, this costs one
+        /// test and the timestamp sequence is egglog's.
         /// </para>
         /// </remarks>
         internal void AddValuesAtRoot(IEnumerable<(FunctionId Function, Value[] Row)> values)
@@ -483,7 +485,7 @@ namespace Eggnog.Relations
         /// Flushes the rows and unions this context staged through the context API (<see cref="HostWrites"/>) before a raw
         /// path (the root's egglog-compatible <see cref="AddValuesAtRoot"/>, <see cref="AddTermAtRoot"/> and
         /// <see cref="EGraph.RunIteration"/>, or <c>WithExecutionState</c> in any context) stages into database buffers of
-        /// its own, so that writes merge in the order the host issued them (§10.4). One emptiness test when nothing is
+        /// its own, so that writes merge in the order the host issued them. One emptiness test when nothing is
         /// staged; otherwise one <see cref="FlushCore"/>, which leaves a recorded failure to the next run or flush. Called
         /// with the context's domain held.
         /// </summary>
@@ -568,8 +570,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Refuses, in a child, a function whose merge is not a lattice merge (decision 2), before anything is staged: a
-        /// write would otherwise fail at the merge and fault the child.
+        /// Refuses, in a child, a function whose merge is not a lattice merge, before anything is staged: a write would
+        /// otherwise fail at the merge and fault the child.
         /// </summary>
         void CheckWritable(FunctionInfo info)
         {
@@ -577,7 +579,7 @@ namespace Eggnog.Relations
                 return;
 
             if (owner.Store.Schema[info.Table] is { IsLattice: false, IsContextPrivate: false })
-                throw new InvalidOperationException($"{info.Name} has a merge that is not a lattice merge, so only the root may write it (decision 2).");
+                throw new InvalidOperationException($"{info.Name} has a merge that is not a lattice merge, so only the root may write it.");
         }
 
     }

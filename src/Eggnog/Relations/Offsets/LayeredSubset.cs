@@ -9,14 +9,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// An owned set of rows of one table as a context sees it: a <see cref="Subset"/> per layer of the table's view
-    /// (colored-contexts spec §9.2), the row set of every trie node, header and probe result of a layered run. Rows of
-    /// different layers are different rows, even with equal ids.
+    /// An owned set of rows of one table as a context sees it: a <see cref="Subset"/> per layer of the table's view,
+    /// the row set of every trie node, header and probe result of a layered run. Rows of different layers are different
+    /// rows, even with equal ids.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Representation. While the rows lie in at most one layer, the subset is <em>single</em>: one <see cref="Subset"/>
-    /// and its layer, which is what every root subset is (layer 0), so the root path is today's subset behind one null
+    /// and its layer, which is what every root subset is (layer 0), so the root path is a plain subset behind one null
     /// test. Once two or more layers are nonempty it is <em>multi-layer</em>: an array of per-layer subsets indexed by
     /// layer, with a mask of the nonempty ones; the entries outside the mask are <see cref="Subset.Empty"/>. Every
     /// operation that can empty layers collapses back: a multi-layer subset always has at least two nonempty layers.
@@ -31,7 +31,7 @@ namespace Eggnog.Relations
     /// field.
     /// </para>
     /// <para>
-    /// At most <see cref="MaxLayers"/> layers, because the layer mask is a <see cref="uint"/> (X36). Not thread-safe for
+    /// At most <see cref="MaxLayers"/> layers, because the layer mask is a <see cref="uint"/>. Not thread-safe for
     /// mutation; any number of threads may read one nobody mutates.
     /// </para>
     /// </remarks>
@@ -39,7 +39,8 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The most layers a subset can span: the deepest context chain (X36).
+        /// The most layers a subset can span: the layers of the deepest context chain, whose depth is at most
+        /// <see cref="Context.MaxDepth"/>.
         /// </summary>
         public const int MaxLayers = 32;
 
@@ -307,9 +308,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Enumerates the rows of a single-layer subset (every root subset, so root code reads a header or node as it read
-        /// a plain subset). A multi-layer subset is read per layer (<see cref="GetLayer"/>), since its row ids repeat
-        /// across layers.
+        /// Enumerates the rows of a single-layer subset (every root subset, so root code reads a header or node as it
+        /// reads a plain subset). A multi-layer subset is read per layer (<see cref="GetLayer"/>), since its row ids
+        /// repeat across layers.
         /// </summary>
         /// <returns>The enumerator.</returns>
         /// <exception cref="InvalidOperationException">The subset is multi-layer.</exception>

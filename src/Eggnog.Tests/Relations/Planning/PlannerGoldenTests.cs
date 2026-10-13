@@ -6,23 +6,24 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Golden stage lists for the planner experiments: the plans egglog printed at HEAD for the same queries and the same
-    /// table contents (map notes 06-planner.md [EXP]; scratchpad dump.txt, dump2.txt, dump3.txt), in this port's text
-    /// format.
+    /// Golden stage lists for the planner experiments: the plans egglog prints for the same queries
+    /// (<see cref="ExperimentQueries"/>) and the same table contents, in this port's text format.
     /// </summary>
     /// <remarks>
     /// Differences from egglog's output, each deliberate:
     /// <list type="bullet">
     /// <item>Probe and filter lists of Free Join stages are sorted by atom id; egglog drains an FxHash map. Only
-    /// <c>const_repeat</c> under PureSize differs (egglog printed the scans <c>[a0, a2, a1]</c>).</item>
-    /// <item>Atoms without variables get an <c>exists</c> check (map §8.1 row 2): <c>allconst</c>.</item>
-    /// <item>MinCover with a variable-free atom no longer panics (row 7): <c>allconst</c> under MinCover plans like
-    /// PureSize.</item>
-    /// <item>Free Join with decomposition no longer panics (row 7): path4 and rect under PureSize/MinCover, which egglog
-    /// could not plan, are covered by <see cref="PlannerDecompositionTests"/>.</item>
+    /// <c>const_repeat</c> under PureSize differs (egglog prints the scans <c>[a0, a2, a1]</c>).</item>
+    /// <item>Atoms without variables get an <c>exists</c> check that a visible row exists, where egglog only checks
+    /// that the header is non-empty: <c>allconst</c>.</item>
+    /// <item>MinCover with a variable-free atom, on which egglog panics, plans like PureSize: <c>allconst</c>.</item>
+    /// <item>Free Join with decomposition, on which egglog panics, plans path4 and rect under PureSize and MinCover;
+    /// <see cref="PlannerDecompositionTests"/> covers them.</item>
     /// </list>
-    /// The <c>all_children</c> fix (row 6) and the lost-constraint fix (row 5) change none of these plans: every chain
-    /// node here has at most one child, and every block with message variables contributes a prologue.
+    /// Two other departures change none of these plans: the chain walk absorbs every child of a chain node (egglog's
+    /// <c>all_children[1..]</c> orphans the first), and the result block joins a block that no later block constrains
+    /// through a <c>Lookup</c> stage (egglog's result block skips such a block and loses its join constraint). Every
+    /// chain node here has at most one child, and every block with message variables contributes a prologue.
     /// </remarks>
     public class PlannerGoldenTests
     {
@@ -262,7 +263,7 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ConstRepeatPureSize()
         {
-            // egglog printed the scans in hash order, [a0.c0, a2.c0{c1 > 2}, a1.c0{c1 == c0}].
+            // egglog prints the scans in hash order, [a0.c0, a2.c0{c1 > 2}, a1.c0{c1 == c0}].
             Assert.Equal(
             [
                 "SinglePlan",
@@ -347,8 +348,8 @@ namespace Eggnog.Relations.Tests
         [InlineData("MinCover")]
         public void AllConstant(string strategy)
         {
-            // egglog: Gj and PureSize print the same stage and header; MinCover panicked (map §8.1 row 7). The exists
-            // check is new (row 2).
+            // egglog: Gj and PureSize print the same stage and header; MinCover panics on the variable-free atom.
+            // egglog has no exists check: it only checks that the header is non-empty.
             Assert.Equal(
             [
                 "SinglePlan",

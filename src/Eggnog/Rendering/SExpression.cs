@@ -8,9 +8,8 @@ namespace Eggnog
 
     /// <summary>
     /// Renders terms, facts, rules, split rules and schedules as egglog s-expressions, for <c>ToString</c> and messages.
-    /// Constants are
-    /// formatted by their column type where the context gives one (a table's argument), and with the built-in literal
-    /// syntax otherwise; named primitives render by name, lambdas as <c>&lt;lambda&gt;</c>.
+    /// Constants are formatted by their column type where the context gives one (a table's argument), and with the
+    /// built-in literal syntax otherwise; named primitives render by name, lambdas as <c>&lt;lambda&gt;</c>.
     /// </summary>
     internal static class SExpression
     {
@@ -41,8 +40,8 @@ namespace Eggnog
 
         /// <summary>
         /// Renders a rule as written: <c>(rule (body…) (head…) :ruleset name)</c>, with <c>:naive</c> for a naive rule,
-        /// <c>:erasing tag</c> for its licence (D12), or <c>:reads-own-facts "reason"</c> for an exempt rule; a scoped
-        /// application renders as <c>(present@schema p)</c>.
+        /// <c>:erasing tag</c> for an erasing rule's licence, or <c>:reads-own-facts "reason"</c> for an exempt rule; a
+        /// scoped application renders as <c>(present@schema p)</c>.
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns>The rendering.</returns>
@@ -127,7 +126,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Renders a split rule as written (§6.9.2): <c>(split (body…) (cases v d) (key k) (assume…))</c>, then
+        /// Renders a split rule as written: <c>(split (body…) (cases v d) (key k) (assume…))</c>, then
         /// <c>:case-tag tag</c> when its cases are tagged; the assumptions render as actions.
         /// </summary>
         /// <param name="rule">The split rule.</param>
@@ -182,7 +181,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Renders a table row (§6.11): <c>(present "kind")</c>, <c>(dom "kind") = (set-of "a" "b")</c>,
+        /// Renders a table row: <c>(present "kind")</c>, <c>(dom "kind") = (set-of "a" "b")</c>,
         /// <c>(StrEq "kind" "a") = #17</c>.
         /// </summary>
         /// <param name="row">The row.</param>

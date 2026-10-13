@@ -19,31 +19,32 @@ namespace Eggnog.Relations
         const int SampledIds = 256;
 
         /// <summary>
-        /// How many times the gate check (§12.7 item 7) tries to read the descendant tree and the gate in one consistent
-        /// state before it gives up for this run of the checker.
+        /// How many times the gate check (the gate's count against the live descendants) tries to read the descendant
+        /// tree and the gate in one consistent state before it gives up for this run of the checker.
         /// </summary>
         const int GateReadAttempts = 16;
 
         /// <summary>
-        /// Checks the context's invariants (§12.7, L3) and throws listing every violation found: the debug checker that
-        /// tests run after every rebuild, and that DEBUG builds run at the end of <see cref="Rebuild"/>.
+        /// Checks the context's invariants and throws listing every violation found: the debug checker that tests run
+        /// after every rebuild, and that DEBUG builds run at the end of <see cref="Rebuild"/>.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Composition (§12.7, B2): the union-find part (<see cref="CheckUnionFindInvariants"/>, I4-I10, I23 and the
-        /// gate), then, in a child, the tables part (<see cref="ContextTables.CheckInvariants"/>, I10 and I12-I19) and the
-        /// eq-container part (<see cref="CheckEqContainerElements"/>, G-b), and at every level the executor part
-        /// (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as the executor reads
-        /// them). The root's rows are checked
-        /// canonical (I35) where the root settles, at <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds
-        /// (<see cref="CheckRootSettled"/>): elsewhere a raw root write may leave a stale row until the next rebuild, as
-        /// in egglog (X38). Cost: linear in the context's overlay and journal, its parent's displacements since its
-        /// creation, its ancestors' overlays, journals and root rows (I10), the root's id range at the root, and the
+        /// Composition: the union-find part (<see cref="CheckUnionFindInvariants"/>: the union-find's classes, journal,
+        /// cursor and local ids, the frozen prefix and the gate), then, in a child, the tables part
+        /// (<see cref="ContextTables.CheckInvariants"/>: what the context holds and hides, and local ids in ancestor
+        /// layers) and the eq-container part (<see cref="CheckEqContainerElements"/>), and at every level the executor
+        /// part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as the
+        /// executor reads them). The root's rows are checked canonical where the root settles, at
+        /// <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds (<see cref="CheckRootSettled"/>):
+        /// elsewhere a raw root write may leave a stale row until the next rebuild, as in egglog. Cost: linear in the
+        /// context's overlay and journal, its parent's displacements since its creation, its ancestors' overlays,
+        /// journals and root rows (checked for the context's local ids), the root's id range at the root, and the
         /// tables part's cost.
         /// </para>
         /// <para>
-        /// A context that is not frozen is checked inside its thread domain (I24), so nothing it reads changes under the
-        /// check; a frozen context is read without it (§8.3).
+        /// A context that is not frozen is checked inside its thread domain, so nothing it reads changes under the
+        /// check; a frozen context is read without it.
         /// </para>
         /// </remarks>
         /// <exception cref="InvalidOperationException">The context is not clean, an invariant is violated, or the
@@ -63,11 +64,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without throwing:
-        /// the union-find part, the tables part, the executor part and, with <paramref name="eqContainers"/>, the
-        /// eq-container part (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
-        /// (<c>EGraphContext.CheckInvariants</c>, §12.7), reporting the eq-container part as its C6. The caller holds the
-        /// domain of a context that is not frozen, and the context is clean.
+        /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without
+        /// throwing: the union-find part, the tables part, the executor part and, with <paramref name="eqContainers"/>,
+        /// the eq-container part (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
+        /// (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part itself. The caller holds the domain
+        /// of a context that is not frozen, and the context is clean.
         /// </summary>
         /// <param name="violations">Receives one line per violation.</param>
         /// <param name="eqContainers">Whether to include the eq-container part.</param>
@@ -82,9 +83,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Checks I35 at the root (§12.3, §7.6): every id cell of every live row of every registered table is canonical in
-        /// the root's view, as after <see cref="Settle"/>; throws listing the violations. The root part of the tables check,
-        /// which DEBUG builds run where the root settles (<see cref="CreateChild"/>, <see cref="Freeze"/>).
+        /// Checks that the root is settled: every id cell of every live row of every registered table is canonical in
+        /// the root's view, as after <see cref="Settle"/>; throws listing the violations, each starting with
+        /// <c>root settled:</c>. The root part of the tables
+        /// check, which DEBUG builds run where the root settles (<see cref="CreateChild"/>, <see cref="Freeze"/>).
         /// </summary>
         /// <remarks>Cost: O(root rows × id columns), plus the union-find's finds.</remarks>
         /// <exception cref="InvalidOperationException">This is not the root, or a root row names a non-canonical
@@ -114,7 +116,7 @@ namespace Eggnog.Relations
                     {
                         var cell = cells[column.Rep];
                         if (find.FindNaive(cell) != cell)
-                            Report(violations, $"I35: root row {r} of table {id} names {cell} in column {column.Rep}, which is {find.FindNaive(cell)} at the root");
+                            Report(violations, $"root settled: root row {r} of table {id} names {cell} in column {column.Rep}, which is {find.FindNaive(cell)} at the root");
                     }
                 }
             }
@@ -124,10 +126,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Adds to <paramref name="violations"/> every own displacement of a child that an eq-sort container holds (§7.4
-        /// G-b, decision 9; the storage half of the bridge's check C6, §12.7): what the eq-container guard refuses. Nothing
-        /// at the root or without a container type holding ids. O(journal × container types) probes.
+        /// Adds to <paramref name="violations"/> every own displacement of a child that an eq-sort container holds (the
+        /// storage half of the bridge's eq-container check), each starting with <c>eq-sort containers:</c>: what the
+        /// eq-container guard refuses. Nothing at the root or without a container type holding ids. O(journal ×
+        /// container types) probes.
         /// </summary>
+        /// <param name="violations">Receives one line per violation.</param>
         internal void CheckEqContainerElements(List<string> violations)
         {
             if (containers is not { HasEqContainers: true } values)
@@ -135,7 +139,7 @@ namespace Eggnog.Relations
 
             foreach (var id in journal!.Ids)
                 if (IsOwnDisplacement(id) && values.AnyEqContainerMentions(id))
-                    Report(violations, $"G-b: the context displaced {id}, which an eq-sort container holds");
+                    Report(violations, $"eq-sort containers: the context displaced {id}, which an eq-sort container holds");
         }
 
         /// <summary>
@@ -145,23 +149,28 @@ namespace Eggnog.Relations
         void AssertRootSettled() => CheckRootSettled();
 
         /// <summary>
-        /// Adds to <paramref name="violations"/> every violation of the union-find invariants (§12.2, §12.7 item 1).
+        /// Adds to <paramref name="violations"/> every violation of the union-find invariants.
         /// </summary>
         /// <remarks>
-        /// At the root, I4 (<c>parents[i] ≤ i</c>, one row per displaced id, rows ordered by timestamp, every displaced id
-        /// non-canonical) and, once frozen, full compression. In a child: (1) I5/I6, the overlay partitions its members
-        /// into classes of at least two whose canonical is their minimum, each member canonical in the parent and mapped to
-        /// its slot; (2) I7, coarsening <c>find_C(find_P(x)) = find_C(x)</c> and minimality on the members, the journal,
-        /// the parent's displacements since creation and sampled ids; (3) I8, journal ids unique, ordered, non-canonical,
-        /// not displaced in the parent's view at creation, J (every non-canonical member is journaled) and completeness
-        /// (every parent displacement since creation is non-canonical and journaled); (4) I9, the cursor bounds;
-        /// (5) I10, no id local to the child in an ancestor's overlay, journal or root rows. At every level: (6) I23, the
-        /// frozen prefix and a flattened map that agrees with the chain; (7) the descendant gate equals the live
-        /// descendants counted recursively. Item 7 compares the two only when it read them in one consistent state
-        /// (<see cref="TryCountDescendantsConsistently"/>): always so for a context that is not frozen, whose descendants
-        /// share the domain the checker holds; under a frozen context, whose descendants come and go on other threads, it
-        /// retries and, if they never stand still, checks nothing this time rather than report a violation that does not
-        /// exist.
+        /// At the root, the union-find array (<c>parents[i] ≤ i</c>, one row per displaced id, rows ordered by
+        /// timestamp, every displaced id non-canonical) and, once frozen, full compression. In a child: (1) the overlay
+        /// partitions its members into classes of at least two whose canonical is their minimum, each member canonical
+        /// in the parent and mapped to its slot; (2) coarsening <c>find_C(find_P(x)) = find_C(x)</c> and minimality on
+        /// the members, the journal, the parent's displacements since creation and sampled ids; (3) journal ids unique,
+        /// ordered, non-canonical, not displaced in the parent's view at creation, every non-canonical member
+        /// journaled, and completeness (every parent displacement since creation is non-canonical and journaled); (4)
+        /// the cursor bounds; (5) no id local to the child in an ancestor's overlay, journal or root rows. At every
+        /// level: (6) the frozen prefix and a flattened map that agrees with the chain; (7) the descendant gate equals
+        /// the live descendants counted recursively. Each violation starts with the name of its check: <c>root
+        /// union-find:</c> for the root's array, <c>frozen prefix:</c> for its compression and for (6), <c>overlay
+        /// classes:</c> and <c>overlay members:</c> (a member not canonical in the parent) for (1), <c>coarsening:</c>
+        /// for (2) and for a member that does not find its class's canonical, <c>journal:</c> for (3), <c>cursor
+        /// bounds:</c> for (4) and the journal mark, <c>local ids:</c> for (5) and for a local id journaled as the
+        /// parent's, and <c>gate:</c> for (7). Item 7 compares the two only when it read them in one consistent state
+        /// (<see cref="TryCountDescendantsConsistently"/>): always so for a context that is not frozen, whose
+        /// descendants share the domain the checker holds; under a frozen context, whose descendants come and go on
+        /// other threads, it retries and, if they never stand still, checks nothing this time rather than report a
+        /// violation that does not exist.
         /// </remarks>
         /// <param name="violations">Receives one line per violation.</param>
         internal void CheckUnionFindInvariants(List<string> violations)
@@ -208,7 +217,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// I4 at the root, and compression once frozen.
+        /// The root's union-find array (each parent at or below its index, one row per displaced id, rows ordered by
+        /// timestamp, every displaced id non-canonical), and compression once frozen.
         /// </summary>
         void CheckRootUnionFind(List<string> violations)
         {
@@ -218,9 +228,9 @@ namespace Eggnog.Relations
             {
                 var p = parents[i];
                 if (p > (uint)i)
-                    Report(violations, $"I4: parents[{i}] = {p} is above its index");
+                    Report(violations, $"root union-find: parents[{i}] = {p} is above its index");
                 else if (frozen && parents[(int)p] != p)
-                    Report(violations, $"I23: the frozen root is not compressed at {i}");
+                    Report(violations, $"frozen prefix: the frozen root is not compressed at {i}");
             }
 
             var children = displaced.Children;
@@ -229,21 +239,22 @@ namespace Eggnog.Relations
             {
                 var id = children[row];
                 if (displaced.FindNaive(id) == id)
-                    Report(violations, $"I4: displaced id {id} (row {row}) is canonical");
+                    Report(violations, $"root union-find: displaced id {id} (row {row}) is canonical");
 
                 if (displaced.TryGetRow(id, out var found) == false || found != row)
-                    Report(violations, $"I4: displaced id {id} maps to row {found}, not {row}");
+                    Report(violations, $"root union-find: displaced id {id} maps to row {found}, not {row}");
 
                 if (row > 0 && stamps[row] < stamps[row - 1])
-                    Report(violations, $"I4: row {row} has timestamp {stamps[row]} below the previous row's {stamps[row - 1]}");
+                    Report(violations, $"root union-find: row {row} has timestamp {stamps[row]} below the previous row's {stamps[row - 1]}");
             }
 
             if (journalMark > children.Length)
-                Report(violations, $"I9: the journal mark {journalMark} is beyond the {children.Length} displaced ids");
+                Report(violations, $"cursor bounds: the journal mark {journalMark} is beyond the {children.Length} displaced ids");
         }
 
         /// <summary>
-        /// I5-I10 in a child.
+        /// The union-find invariants of a child: its overlay's classes, coarsening, its journal, its cursor and its
+        /// local ids.
         /// </summary>
         void CheckChildUnionFind(List<string> violations)
         {
@@ -253,7 +264,7 @@ namespace Eggnog.Relations
             var f = finder;
             var blocks = idBlocks!;
 
-            // (1) I5, I6: the overlay's classes.
+            // (1) The overlay's classes.
             var seen = new HashSet<uint>();
             var members = new List<uint>();
             var occupied = 0;
@@ -267,7 +278,7 @@ namespace Eggnog.Relations
                 var list = o.MembersOf(slot);
                 var canonical = o.CanonicalOf(slot);
                 if (count < 2)
-                    Report(violations, $"I5: the class in slot {slot} has {count} member");
+                    Report(violations, $"overlay classes: the class in slot {slot} has {count} member");
 
                 var min = uint.MaxValue;
                 foreach (var m in list)
@@ -275,67 +286,68 @@ namespace Eggnog.Relations
                     min = Math.Min(min, m);
                     members.Add(m);
                     if (seen.Add(m) == false)
-                        Report(violations, $"I5: {m} is a member twice");
+                        Report(violations, $"overlay classes: {m} is a member twice");
 
                     if (o.TryGetClass(m, out var k) == false || k != slot)
-                        Report(violations, $"I5: member {m} of slot {slot} maps to slot {k}");
+                        Report(violations, $"overlay classes: member {m} of slot {slot} maps to slot {k}");
 
                     if (pf.Find(m) != m)
-                        Report(violations, $"I6: member {m} of slot {slot} is not canonical in the parent (it is {pf.Find(m)} there)");
+                        Report(violations, $"overlay members: member {m} of slot {slot} is not canonical in the parent (it is {pf.Find(m)} there)");
 
                     var cm = f.Find(m);
                     if (cm != canonical)
-                        Report(violations, $"I7: member {m} of slot {slot} finds {cm}, not its class's canonical {canonical}");
+                        Report(violations, $"coarsening: member {m} of slot {slot} finds {cm}, not its class's canonical {canonical}");
 
-                    // J (I8): every member that is not its class's canonical has stopped being canonical here.
+                    // Every member that is not its class's canonical has stopped being canonical here, so it is
+                    // journaled.
                     if (m != canonical && j.Contains(m) == false)
-                        Report(violations, $"I8: member {m} is not canonical (its class's canonical is {canonical}) and is not journaled");
+                        Report(violations, $"journal: member {m} is not canonical (its class's canonical is {canonical}) and is not journaled");
                 }
 
                 if (canonical != min)
-                    Report(violations, $"I5: the class in slot {slot} has canonical {canonical}, not its minimum {min}");
+                    Report(violations, $"overlay classes: the class in slot {slot} has canonical {canonical}, not its minimum {min}");
             }
 
             if (seen.Count != o.MemberCount)
-                Report(violations, $"I5: the classes hold {seen.Count} members, the class map {o.MemberCount}");
+                Report(violations, $"overlay classes: the classes hold {seen.Count} members, the class map {o.MemberCount}");
 
             if (occupied != o.ClassCount)
-                Report(violations, $"I5: {occupied} slots are occupied, the overlay counts {o.ClassCount} classes");
+                Report(violations, $"overlay classes: {occupied} slots are occupied, the overlay counts {o.ClassCount} classes");
 
-            // (3) I8: the journal.
+            // (3) The journal.
             var ids = j.Ids;
             var stamps = j.Timestamps;
             for (var row = 0; row < ids.Length; row++)
             {
                 var id = ids[row];
                 if (j.TryGetRow(id, out var found) == false || found != row)
-                    Report(violations, $"I8: journaled id {id} maps to row {found}, not {row}");
+                    Report(violations, $"journal: journaled id {id} maps to row {found}, not {row}");
 
                 if (row > 0 && stamps[row] < stamps[row - 1])
-                    Report(violations, $"I8: journal row {row} has timestamp {stamps[row]} below the previous row's {stamps[row - 1]}");
+                    Report(violations, $"journal: journal row {row} has timestamp {stamps[row]} below the previous row's {stamps[row - 1]}");
 
                 if (f.Find(id) == id)
-                    Report(violations, $"I8: journaled id {id} (row {row}) is canonical");
+                    Report(violations, $"journal: journaled id {id} (row {row}) is canonical");
 
                 if (DisplacedInParentAtCreation(id))
-                    Report(violations, $"I8: journaled id {id} was already displaced in the parent's view when the context was created");
+                    Report(violations, $"journal: journaled id {id} was already displaced in the parent's view when the context was created");
 
                 if (blocks.Contains(id) && IsOwnDisplacement(id) == false)
-                    Report(violations, $"I10: local id {id} is journaled as displaced by the parent");
+                    Report(violations, $"local ids: local id {id} is journaled as displaced by the parent");
             }
 
-            // (4) I9: the cursor.
+            // (4) The cursor.
             var parentCount = parent!.DisplacedCount;
             if (unionFindCursor < parentDisplacedAtCreation || unionFindCursor > parentCount)
-                Report(violations, $"I9: the cursor {unionFindCursor} is outside [{parentDisplacedAtCreation}, {parentCount}]");
+                Report(violations, $"cursor bounds: the cursor {unionFindCursor} is outside [{parentDisplacedAtCreation}, {parentCount}]");
 
             if (IsUnionFindCurrent == false)
-                Report(violations, $"I9: the context is clean but its cursor {unionFindCursor} is behind the parent's {parentCount} displaced ids");
+                Report(violations, $"cursor bounds: the context is clean but its cursor {unionFindCursor} is behind the parent's {parentCount} displaced ids");
 
             if (journalMark > j.Count)
-                Report(violations, $"I9: the journal mark {journalMark} is beyond the journal's {j.Count} rows");
+                Report(violations, $"cursor bounds: the journal mark {journalMark} is beyond the journal's {j.Count} rows");
 
-            // Completeness (I8): every parent displacement since creation stopped being canonical here and is journaled.
+            // Completeness: every parent displacement since creation stopped being canonical here and is journaled.
             var parentIds = parent.DisplacedIds;
             var suffix = new List<uint>();
             for (var i = parentDisplacedAtCreation; i < Math.Min(parentCount, parentIds.Length); i++)
@@ -343,12 +355,12 @@ namespace Eggnog.Relations
                 var id = parentIds[i];
                 suffix.Add(id);
                 if (f.Find(id) == id)
-                    Report(violations, $"I8: the parent displaced {id} but it is canonical here");
+                    Report(violations, $"journal: the parent displaced {id} but it is canonical here");
                 else if (j.Contains(id) == false)
-                    Report(violations, $"I8: the parent displaced {id} after this context was created, and it is not journaled");
+                    Report(violations, $"journal: the parent displaced {id} after this context was created, and it is not journaled");
             }
 
-            // (2) I7: coarsening and minimality.
+            // (2) Coarsening and minimality.
             foreach (var x in members)
                 CheckCoarsening(violations, x, pf, f);
 
@@ -361,7 +373,7 @@ namespace Eggnog.Relations
             foreach (var x in SampleIds())
                 CheckCoarsening(violations, x, pf, f);
 
-            // (5) I10: no ancestor holds an id local to this context.
+            // (5) No ancestor holds an id local to this context.
             for (var level = 0; level < Depth; level++)
             {
                 var a = ancestors[level];
@@ -370,7 +382,7 @@ namespace Eggnog.Relations
                     var root = store.RootUnionFind.UnionFind;
                     foreach (var id in root.Children)
                         if (blocks.Contains(id) || blocks.Contains(root.FindNaive(id)))
-                            Report(violations, $"I10: a root union-find row mentions an id local to the context at depth {Depth} ({id} → {root.FindNaive(id)})");
+                            Report(violations, $"local ids: a root union-find row mentions an id local to the context at depth {Depth} ({id} → {root.FindNaive(id)})");
 
                     continue;
                 }
@@ -379,16 +391,16 @@ namespace Eggnog.Relations
                 for (var slot = 0; slot < ao.SlotCount; slot++)
                     foreach (var m in ao.MembersOf(slot))
                         if (blocks.Contains(m))
-                            Report(violations, $"I10: the overlay of the ancestor at depth {level} holds {m}, local to the context at depth {Depth}");
+                            Report(violations, $"local ids: the overlay of the ancestor at depth {level} holds {m}, local to the context at depth {Depth}");
 
                 foreach (var id in a.journal!.Ids)
                     if (blocks.Contains(id))
-                        Report(violations, $"I10: the journal of the ancestor at depth {level} holds {id}, local to the context at depth {Depth}");
+                        Report(violations, $"local ids: the journal of the ancestor at depth {level} holds {id}, local to the context at depth {Depth}");
             }
         }
 
         /// <summary>
-        /// I23: a frozen context's ancestors are frozen, and a frozen child's flattened map agrees with its chain.
+        /// A frozen context's ancestors are frozen, and a frozen child's flattened map agrees with its chain.
         /// </summary>
         void CheckFrozenPrefix(List<string> violations)
         {
@@ -397,14 +409,14 @@ namespace Eggnog.Relations
 
             for (var level = 0; level < Depth; level++)
                 if (ancestors[level].frozen == false)
-                    Report(violations, $"I23: the context is frozen but its ancestor at depth {level} is not");
+                    Report(violations, $"frozen prefix: the context is frozen but its ancestor at depth {level} is not");
 
             if (parent is null)
                 return;
 
             var flat = LayeredUnionFind.Flattened(store.RootUnionFind.UnionFind, flattened);
             if (ReferenceEquals(flat.Prefix, FinderForChildren.Prefix) == false)
-                Report(violations, "I23: the frozen context does not give its children its flattened find");
+                Report(violations, "frozen prefix: the frozen context does not give its children its flattened find");
 
             var keys = Members(finder);
             finder.Prefix?.CollectKeys(keys);
@@ -416,25 +428,25 @@ namespace Eggnog.Relations
                 var chain = finder.Find(x);
                 var flatFind = flat.Find(x);
                 if (chain != flatFind)
-                    Report(violations, $"I23: the flattened find maps {x} to {flatFind}, the chain to {chain}");
+                    Report(violations, $"frozen prefix: the flattened find maps {x} to {flatFind}, the chain to {chain}");
             }
         }
 
         /// <summary>
-        /// Checks I7 for one id: coarsening over the parent, minimality, and idempotence.
+        /// Checks the find of one id: coarsening over the parent, minimality, and idempotence.
         /// </summary>
         static void CheckCoarsening(List<string> violations, uint x, LayeredUnionFind parentFind, LayeredUnionFind find)
         {
             var cx = find.Find(x);
             var px = parentFind.Find(x);
             if (find.Find(px) != cx)
-                Report(violations, $"I7: find(find_P({x}) = {px}) = {find.Find(px)}, but find({x}) = {cx}");
+                Report(violations, $"coarsening: find(find_P({x}) = {px}) = {find.Find(px)}, but find({x}) = {cx}");
 
             if (cx > x || cx > px)
-                Report(violations, $"I7: find({x}) = {cx} is above {x} or its parent canonical {px}");
+                Report(violations, $"coarsening: find({x}) = {cx} is above {x} or its parent canonical {px}");
 
             if (find.Find(cx) != cx)
-                Report(violations, $"I7: find({x}) = {cx} is not canonical itself");
+                Report(violations, $"coarsening: find({x}) = {cx} is not canonical itself");
         }
 
         /// <summary>
@@ -503,6 +515,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Adds a violation, up to <see cref="MaxReportedViolations"/>.
         /// </summary>
+        /// <param name="violations">The violations found so far.</param>
+        /// <param name="message">The violation.</param>
         internal static void Report(List<string> violations, string message)
         {
             if (violations.Count < MaxReportedViolations)

@@ -7,14 +7,14 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Review tests: per-subset indexes (egglog's <c>group_by_col</c> / <c>group_by_key</c>, which the join builds for
-    /// every probed trie node and, for multi-column keys, on every <c>get_index</c> call, execute.rs:873-893) draw their
-    /// hash tables from thread-local pools in egglog (<c>ColumnIndexShard.table: Pooled&lt;IndexMap&gt;</c>,
+    /// Per-subset indexes (egglog's <c>group_by_col</c> / <c>group_by_key</c>, which the join builds for every probed
+    /// trie node and, for multi-column keys, on every <c>get_index</c> call, execute.rs:873-893) draw their hash tables
+    /// from thread-local pools in egglog (<c>ColumnIndexShard.table: Pooled&lt;IndexMap&gt;</c>,
     /// <c>SubsetTable.hash: Pooled&lt;HashTable&gt;</c>, <c>keys: RowBuffer</c> over a pooled <c>Vec</c>;
     /// core-relations/src/hash_index/mod.rs:123-144, 191-203, 490-501; pool/mod.rs:424-446). The conventions require
-    /// pooling where the Rust pools, and the Memory module already defines the matching limits
-    /// (<see cref="PoolLimits.ColumnIndex"/>, <see cref="PoolLimits.TupleIndexes"/>), but nothing uses them: every
-    /// build allocates fresh hash-table storage sized to the subset, and <c>Dispose</c> returns only the arena.
+    /// pooling where the Rust pools: here the hash tables come from the engine's pools, bounded by
+    /// <see cref="PoolLimits.ColumnIndex"/> and <see cref="PoolLimits.TupleIndexes"/>, and <c>Dispose</c> returns them
+    /// with the arena, so a build repeated over and over allocates no fresh hash-table storage once the pools are warm.
     /// </summary>
     [Collection(IndexStressCollection.Name)]
     public class IndexPoolingTests
@@ -32,8 +32,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Building and disposing a 400-row, 400-value column index over and over should reuse pooled storage after
-        /// warm-up, as egglog's pooled <c>IndexMap</c> does; it allocates about 7 KB of fresh hash-table arrays per build.
+        /// Building and disposing a 400-row, 400-value column index over and over reuses pooled storage after warm-up,
+        /// as egglog's pooled <c>IndexMap</c> does: each build allocates less than 1 KB.
         /// </summary>
         [Fact]
         public void RepeatedGroupByColumnReusesPooledStorage()
@@ -57,8 +57,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The same for a two-column tuple index (egglog rebuilds one on every multi-column <c>get_index</c> call): it
-        /// allocates its hash table and its key buffer (with every intermediate growth) afresh on each build.
+        /// The same for a two-column tuple index (egglog rebuilds one on every multi-column <c>get_index</c> call): its
+        /// hash table and its key buffer come back from the pools at their grown sizes, so each build allocates less
+        /// than 1 KB.
         /// </summary>
         [Fact]
         public void RepeatedGroupByKeyReusesPooledStorage()

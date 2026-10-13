@@ -26,7 +26,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Calls <see cref="ColorSchema.LowOr"/>, which reads <c>low</c> in the running context, and defines a variable
-        /// with the value: a table read in an action (the history family), so the rule never inherits (X41).
+        /// with the value: a table read in an action (the history family), so the rule never inherits a watermark (a
+        /// descendant can change the row read, and an inherited watermark would never re-fire the old match).
         /// </summary>
         Read,
 

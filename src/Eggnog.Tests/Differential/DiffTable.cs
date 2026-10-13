@@ -2,8 +2,8 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A table of a random program: a relation over values, a function with a value output, or a constructor of the sort
-    /// <see cref="Support.Node"/>.
+    /// A table of a random program: a relation over values, a function with a value output, or a constructor of the
+    /// sort <see cref="Support.Node"/>.
     /// </summary>
     internal sealed class DiffTable
     {

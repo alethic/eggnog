@@ -10,7 +10,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The scope tree (§6.7): children, paths, freezing, depth, tag resolution and per-scope parallelism.
+    /// The scope tree: children, paths, freezing, depth, tag resolution and per-scope parallelism; what a frozen scope
+    /// refuses, and the structural calls a run observer may not make.
     /// </summary>
     public sealed class ScopeTreeTests
     {
@@ -65,7 +66,7 @@ namespace Eggnog.Tests.Scopes
             var query = Task.Factory.StartNew(() => t.Root.Count(blocking), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
 
-            // The query runs in a transient child of the frozen root, which Children does not list (D34).
+            // The query runs in a transient child of the frozen root, which Children does not list.
             Assert.Empty(t.Root.Children);
             Assert.Equal(1, t.Root.Engine.Context.Context.ChildCount);
 
@@ -193,7 +194,6 @@ namespace Eggnog.Tests.Scopes
             Assert.True(b.Check(t.Fact.Of("b")));
         }
 
-
         [Fact]
         public void FreezingFromInsideACallOfTheDomainIsRefused()
         {
@@ -213,6 +213,60 @@ namespace Eggnog.Tests.Scopes
             Assert.False(t.Root.IsFrozen);
             Assert.Same(t.Root.Guard, child.Guard);
         }
+
+        /// <summary>
+        /// A host write on a frozen scope is an <see cref="InvalidOperationException"/>; so is <c>DefineRule</c>, whose
+        /// message says the scope's local rules are fixed.
+        /// </summary>
+        [Fact]
+        public void AFrozenScopeRefusesWritesAndLocalRules()
+        {
+            var t = new ScopeTheory();
+            t.Root.Freeze();
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Freeze();
+
+            Assert.Throws<InvalidOperationException>(() => outer.Assume(t.Fact.Of("a")));
+            Assert.Throws<InvalidOperationException>(() => outer.Write(w => w.Assume(t.Fact.Of("a"))));
+            var error = Assert.Throws<InvalidOperationException>(() => outer.DefineRule(t.Rules, "late", r => r.Then(t.Seen.Of("a"))));
+            Assert.Equal("Scope 'root/outer#1' is frozen; its local rules are fixed", error.Message);
+        }
+
+        /// <summary>
+        /// A write, run or structural call from a run observer throws <see cref="InvalidOperationException"/>; only
+        /// reads are allowed there. <c>CreateChild</c> is a structural call, and the running scope gains no child.
+        /// </summary>
+        [Fact]
+        public void CreateChildFromARunObserverIsRefused()
+        {
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("seen", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            var scope = t.Root.CreateChild();
+            scope.Assume(t.Fact.Of("a"));
+
+            Exception? refused = null;
+            var created = false;
+            scope.Run(Schedule.Saturate(t.Rules), new RunOptions
+            {
+                Observer = _ =>
+                {
+                    if (refused is not null || created)
+                        return;
+
+                    refused = Record.Exception(() => scope.CreateChild());
+                    created = refused is null;
+                },
+            });
+
+            Assert.IsType<InvalidOperationException>(refused);
+            Assert.Empty(scope.Children);
+        }
+
     }
 
 }

@@ -7,7 +7,8 @@ namespace Eggnog.Tests.Differential
     /// <summary>
     /// A primitive a random program may call: a named built-in of <see cref="Primitives"/> or a lambda, with its
     /// signature, its meaning for the reference interpreter, the engine primitive for Eggnog, and its C# spelling for a
-    /// printed program. Every primitive is pure, total on the values a program reaches, and bounded, so runs stay small.
+    /// printed program. Every primitive is pure, total on the values a program reaches, and bounded, so runs stay
+    /// small.
     /// </summary>
     internal sealed class DiffPrimitive
     {

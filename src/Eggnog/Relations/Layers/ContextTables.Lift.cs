@@ -7,8 +7,8 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Visits every live row of the context's own layer of <paramref name="table"/> (§6.10, L1): the rows the context
-        /// stored itself, canonical in it (I13). Nothing when it has no layer. O(own rows).
+        /// Visits every live row of the context's own layer of <paramref name="table"/>: the rows the context stored
+        /// itself, canonical in it. Nothing when it has no layer. O(own rows).
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="table">A registered function table.</param>
@@ -26,13 +26,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every ancestor row of <paramref name="table"/> the context sees that names <paramref name="id"/> in an id
-        /// column (§6.10, L1, the winner probe of the lift): through each visible ancestor layer's rebuild index, never a
+        /// Visits every ancestor row of <paramref name="table"/> the context sees that names <paramref name="id"/> in
+        /// an id column (the winner probe of the lift): through each visible ancestor layer's rebuild index, never a
         /// scan. Rows come layer by layer from the root up, each layer's in row order, each once.
         /// </summary>
         /// <remarks>
-        /// Nothing for a table without rebuild columns (no id can be named), for a context-private table (ancestors' layers
-        /// of it are not visible), or for an id local to the context (no ancestor row names one, I10). The id must be
+        /// Nothing for a table without rebuild columns (no id can be named), for a context-private table (ancestors'
+        /// layers of it are not visible), or for an id local to the context (no ancestor row names one). The id must be
         /// canonical in the context. Cost: O(depth) index probes plus the uses of the id.
         /// </remarks>
         /// <typeparam name="TSink">The sink type.</typeparam>

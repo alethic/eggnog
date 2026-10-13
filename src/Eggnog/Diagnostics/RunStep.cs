@@ -8,7 +8,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One step of a run (§6.11, D41), delivered to <see cref="RunOptions.Observer"/> as it happens and kept in
+    /// One step of a run, delivered to <see cref="RunOptions.Observer"/> as it happens and kept in
     /// <see cref="RunReport.Steps"/> with <see cref="RunOptions.RecordSteps"/>. Immutable.
     /// </summary>
     /// <remarks>
@@ -29,7 +29,7 @@ namespace Eggnog
         /// <param name="changed">Whether it changed the scope.</param>
         /// <param name="elapsed">How long it took.</param>
         /// <param name="rules">For an iteration, the rules that matched in it, in the order they ran; copied.</param>
-        /// <param name="casesOpened">For a split step, the cases it opened (R3).</param>
+        /// <param name="casesOpened">For a split step, the cases it opened.</param>
         internal RunStep(RunStepKind kind, Scope scope, int index, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics> rules, int casesOpened = 0)
         {
             Kind = kind;
@@ -54,7 +54,7 @@ namespace Eggnog
         public RunStepKind Kind { get; }
 
         /// <summary>
-        /// Gets the scope the step ran in. A case's steps name the case, which is disposed once the run ends (R3).
+        /// Gets the scope the step ran in. A case's steps name the case, which is disposed once the run ends.
         /// </summary>
         public Scope Scope { get; }
 
@@ -69,8 +69,8 @@ namespace Eggnog
         public int Index { get; }
 
         /// <summary>
-        /// Gets whether the step changed its scope (the engine's change flags, §6.5.1). For a split step: whether it made
-        /// progress, that is opened cases or a lift changed the scope (N106).
+        /// Gets whether the step changed its scope (the engine's change flags). For a split step: whether it made
+        /// progress, that is opened cases or a lift changed the scope.
         /// </summary>
         public bool Changed { get; }
 
@@ -85,7 +85,7 @@ namespace Eggnog
         public IReadOnlyList<RuleStatistics> Rules { get; }
 
         /// <summary>
-        /// Gets, for a split step, the cases it opened (R3); 0 for any other step.
+        /// Gets, for a split step, the cases it opened; 0 for any other step.
         /// </summary>
         public int CasesOpened { get; }
 

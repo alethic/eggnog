@@ -11,9 +11,9 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Failures stay per context (colored-contexts spec §10.6): the state belongs to the context whose run, merge or flush
-    /// called the function, so the failure lands in that context's database (<see cref="Database.Failure"/>) and is
-    /// reported by that context alone. egglog records the message in a side channel shared by the whole e-graph instead.
+    /// Failures stay per context: the state belongs to the context whose run, merge or flush called the function, so
+    /// the failure lands in that context's database (<see cref="Database.Failure"/>) and is reported by that context
+    /// alone. egglog records the message in a side channel shared by the whole e-graph instead.
     /// </para>
     /// <para>
     /// For the e-graph's egglog-compatible root API, the function also records its message in the e-graph's side channel

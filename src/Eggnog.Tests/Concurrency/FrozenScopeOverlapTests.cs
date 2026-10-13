@@ -10,9 +10,10 @@ namespace Eggnog.Tests.Concurrency
 {
 
     /// <summary>
-    /// Reads, queries and extractors on a frozen scope take no guard (§6.6.3, §6.10, E5, D47): while an extraction is held
-    /// inside its cost function, or a query inside its filter, on another thread, the same frozen scope serves every other
-    /// read, query and extraction on this thread. Deterministic, unlike the parallel loops, which overlap only by chance.
+    /// Reads, queries and extractors on a frozen scope take no guard, so any number of them may run on any threads:
+    /// while an extraction is held inside its cost function, or a query inside its filter, on another thread, the same
+    /// frozen scope serves every other read, query and extraction on this thread. Deterministic, unlike the parallel
+    /// loops, which overlap only by chance.
     /// </summary>
     public sealed class FrozenScopeOverlapTests
     {

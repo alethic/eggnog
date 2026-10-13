@@ -7,21 +7,22 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A rule of the rule differentials (colored-contexts spec §17 M10.3) over <see cref="ColorSchema"/>, in a form that is
-    /// both built into the engine (<see cref="Build"/>, through <see cref="EGraphRuleBuilder"/>) and evaluated naively by
+    /// A rule of the rule differentials over <see cref="ColorSchema"/>, in a form that is both built into the engine
+    /// (<see cref="Build"/>, through <see cref="EGraphRuleBuilder"/>) and evaluated naively by
     /// <see cref="ReferenceRuleEvaluator"/>, so the engine is checked against a definition with no plans, timestamps or
     /// layers.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A body of <see cref="Atoms"/> and <see cref="Filters"/>, and a head of <see cref="Actions"/>, run in order per match.
-    /// Entries are variable indexes (non-negative) or constants encoded as <c>-1 - c</c>. A generated rule's id constants
-    /// are indexes into the program's pool of root ids until <see cref="Resolve"/> replaces them with the ids.
+    /// A body of <see cref="Atoms"/> and <see cref="Filters"/>, and a head of <see cref="Actions"/>, run in order per
+    /// match. Entries are variable indexes (non-negative) or constants encoded as <c>-1 - c</c>. A generated rule's id
+    /// constants are indexes into the program's pool of root ids until <see cref="Resolve"/> replaces them with the
+    /// ids.
     /// </para>
     /// <para>
-    /// Every rule is semi-naive. Its watermark may be inherited (§10.2, X41) unless it reads a table in an action
-    /// (<see cref="ReadsTables"/>), which the reference decides for itself from the rule rather than from the engine's
-    /// <see cref="ActionReadAnalysis"/>.
+    /// Every rule is semi-naive. A child may inherit its watermark from an ancestor unless it reads a table in an
+    /// action (<see cref="ReadsTables"/>), which the reference decides for itself from the rule rather than from the
+    /// engine's <see cref="ActionReadAnalysis"/>.
     /// </para>
     /// </remarks>
     sealed class ColorRule
@@ -62,7 +63,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets whether an action reads a table (<see cref="ColorActionKind.Read"/>): the rule's actions are not
-        /// query-determined, so its watermark is never inherited (X41).
+        /// query-determined (a descendant can change the row read), so its watermark is never inherited.
         /// </summary>
         public bool ReadsTables => Actions.Any(a => a.Kind == ColorActionKind.Read);
 
@@ -87,9 +88,9 @@ namespace Eggnog.Relations.Tests
         public IEnumerable<int> WrittenTables() => Actions.Where(a => a.Kind is ColorActionKind.Set or ColorActionKind.Mint).Select(a => a.Table);
 
         /// <summary>
-        /// Gets the rule's id constants in a fixed order (atoms, then actions), as the engine's K lists them in its own
-        /// order (X19, §9.8): the reference compares a run's canonical forms of them with those of the run that set a
-        /// watermark.
+        /// Gets the rule's id constants in a fixed order (atoms, then actions), as the engine lists a rule's constants
+        /// in an order of its own: every context runs a rule's id constants in their canonical form there, and the
+        /// reference compares a run's canonical forms of them with those of the run that set a watermark.
         /// </summary>
         public List<ulong> IdConstants()
         {
@@ -126,10 +127,10 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         /// <remarks>
         /// With <paramref name="countFullBindings"/>, the body also calls <see cref="ColorSchema.Keep"/> on every body
-        /// variable. That changes nothing the rule derives, and it does not read a table, but every variable is then used,
-        /// so the executor enumerates distinct full bindings and the reported match counts are those: otherwise a full run
-        /// counts the distinct bindings of the variables the actions use, while a semi-naive run sums that over its
-        /// variants, which can count one projected binding more than once.
+        /// variable. That changes nothing the rule derives, and it does not read a table, but every variable is then
+        /// used, so the executor enumerates distinct full bindings and the reported match counts are those: otherwise a
+        /// full run counts the distinct bindings of the variables the actions use, while a semi-naive run sums that
+        /// over its variants, which can count one projected binding more than once.
         /// </remarks>
         /// <param name="schema">The schema.</param>
         /// <param name="countFullBindings">Whether match counts are to be distinct full bindings.</param>
@@ -155,10 +156,10 @@ namespace Eggnog.Relations.Tests
 
             RuleEntry[] Row(int table, long[] entries)
             {
-                var spike = schema.Tables[table];
-                var row = new RuleEntry[entries.Length + (spike.HasOutput ? 0 : 1)];
+                var shape = schema.Tables[table];
+                var row = new RuleEntry[entries.Length + (shape.HasOutput ? 0 : 1)];
                 for (var c = 0; c < entries.Length; c++)
-                    row[c] = Entry(entries[c], spike.IsId[c]);
+                    row[c] = Entry(entries[c], shape.IsId[c]);
 
                 return row;
             }

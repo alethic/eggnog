@@ -6,33 +6,33 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// One context of an <see cref="EGraph"/>: the bridge's side of a storage <see cref="Relations.Context"/>
-    /// (colored-contexts spec §10.1). It runs rules with semi-naive progress of its own (<see cref="RunRules"/>), stages
-    /// and flushes host writes (<see cref="StageRow"/>, <see cref="FlushUpdates"/>), answers reads in its view
-    /// (<see cref="Find"/>, <see cref="TryLookup"/>), and creates, freezes and disposes contexts
-    /// (<see cref="CreateChild"/>, <see cref="Freeze"/>, <see cref="Dispose"/>).
+    /// One context of an <see cref="EGraph"/>: the bridge's side of a storage <see cref="Relations.Context"/>. It runs
+    /// rules with semi-naive progress of its own (<see cref="RunRules"/>), stages and flushes host writes
+    /// (<see cref="StageRow"/>, <see cref="FlushUpdates"/>), answers reads in its view (<see cref="Find"/>,
+    /// <see cref="TryLookup"/>), and creates, freezes and disposes contexts (<see cref="CreateChild"/>,
+    /// <see cref="Freeze"/>, <see cref="Dispose"/>).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// State (§10.1): the context's <see cref="RuleProgress"/> per rule (its watermarks, §10.2), its staged host writes
-    /// (<see cref="HostWrites"/>, §10.4) and its context-local values (<see cref="GetLocal{T}"/>). Everything else is
-    /// storage's: the context's rows, union-find, flags and lifecycle (§3.3), which the properties forward.
+    /// State: the context's <see cref="RuleProgress"/> per rule (its watermarks), its staged host writes
+    /// (<see cref="HostWrites"/>) and its context-local values (<see cref="GetLocal{T}"/>). Everything else is
+    /// storage's: the context's rows, union-find, flags and lifecycle, which the properties forward.
     /// </para>
     /// <para>
     /// Semantics: a child starts as a copy of its parent and costs in proportion to what it touches (context = copy). Its
-    /// runs see the parent's rows read-through, and rules may seed their watermarks from an ancestor's progress when their
-    /// actions are query-determined (§10.2, X41). Every Id constant of a rule runs in its canonical form in the context
-    /// (X19). The root is egglog's database; the e-graph's egglog-compatible API runs on it.
+    /// runs see the parent's rows read-through, and rules may seed their watermarks from an ancestor's progress when
+    /// their actions are query-determined. Every Id constant of a rule runs in its canonical form in the context. The
+    /// root is egglog's database; the e-graph's egglog-compatible API runs on it.
     /// </para>
     /// <para>
-    /// Errors (§8.4, X12): an exception escaping a child's write, run, rebuild or freeze faults the child, after which only
-    /// <see cref="Dispose"/> is allowed; refusals made before anything changes do not fault. A failure a panic or merge
-    /// function recorded is not an exception: the operation that observes it takes it and throws
-    /// <see cref="PanicException"/> (<see cref="RunRules"/>, <see cref="FlushUpdates"/>, <see cref="CreateChild"/>,
-    /// <see cref="Freeze"/>).
+    /// Errors: an exception escaping a child's write, run, rebuild or freeze faults the child (a hide whose copy was
+    /// never merged cannot be repaired), after which only <see cref="Dispose"/> is allowed; refusals made before
+    /// anything changes do not fault. A failure a panic or merge function recorded is not an exception: the operation
+    /// that observes it takes it and throws <see cref="PanicException"/> (<see cref="RunRules"/>,
+    /// <see cref="FlushUpdates"/>, <see cref="CreateChild"/>, <see cref="Freeze"/>).
     /// </para>
     /// <para>
-    /// Threading (§8.3): a context that is not frozen and every descendant created under it are one thread domain; every
+    /// Threading: a context that is not frozen and every descendant created under it are one thread domain; every
     /// operation enters it, so a second thread fails fast. Children of a frozen context get their own domains and may run
     /// concurrently; a frozen context is read from any thread.
     /// </para>
@@ -68,7 +68,7 @@ namespace Eggnog.Relations
         public EGraph Owner => owner;
 
         /// <summary>
-        /// Gets the parent context, or <c>null</c> for the root (rule-layer E7).
+        /// Gets the parent context, or <c>null</c> for the root.
         /// </summary>
         public EGraphContext? Parent => parent;
 
@@ -93,17 +93,17 @@ namespace Eggnog.Relations
         public ContextOptions Options => context.Options;
 
         /// <summary>
-        /// Gets when the context's own operations (rule sets, rebuilds, merges, index builds) go parallel, and on how many
-        /// threads (colored-contexts spec §10.9): the root's are the e-graph's; a child's are
-        /// <see cref="ContextOptions.Parallelism"/> when given, otherwise <see cref="ParallelHeuristics.Serial"/> for a child
-        /// of a frozen context (siblings may run concurrently, <see cref="ConcurrentChildren"/>) and its parent's for a child
-        /// of a context that is not frozen (the two never run concurrently). Fixed at creation.
+        /// Gets when the context's own operations (rule sets, rebuilds, merges, index builds) go parallel, and on how
+        /// many threads: the root's are the e-graph's; a child's are <see cref="ContextOptions.Parallelism"/> when
+        /// given, otherwise <see cref="ParallelHeuristics.Serial"/> for a child of a frozen context (siblings may run
+        /// concurrently, <see cref="ConcurrentChildren"/>) and its parent's for a child of a context that is not frozen
+        /// (the two never run concurrently). Fixed at creation.
         /// </summary>
         public ParallelHeuristics Parallelism => context.Database.Parallelism;
 
         /// <summary>
-        /// Gets the context's change stamp (X30, rule-layer D16): it moves when a merge adds or removes rows, a clear
-        /// empties a table, a hide is added or a contradiction stops the context, and not for no-ops or redundant unions.
+        /// Gets the context's change stamp: it moves when a merge adds or removes rows, a clear empties a table, a hide
+        /// is added or a contradiction stops the context, and not for no-ops or redundant unions.
         /// </summary>
         public long Version => context.Version;
 
@@ -123,26 +123,26 @@ namespace Eggnog.Relations
         public bool IsDisposed => context.IsDisposed;
 
         /// <summary>
-        /// Gets whether an exception escaped one of the child's operations (X12, rule-layer E7): only
+        /// Gets whether an exception escaped one of the child's operations: only
         /// <see cref="Dispose"/> is then allowed. Never true at the root.
         /// </summary>
         public bool IsFaulted => context.IsFaulted;
 
         /// <summary>
-        /// Gets whether a contradiction stopped the context (§6.9; only with
+        /// Gets whether a contradiction stopped the context (only with
         /// <see cref="ContextOptions.StopOnContradiction"/>): it then answers only <see cref="IsContradictory"/>.
         /// </summary>
         public bool IsStopped => context.IsContradicted;
 
         /// <summary>
-        /// Gets the number of rows the context stores itself (rule-layer E7, D42's <c>RowLimit</c>): its database's size
-        /// estimate, which in a child sums its own layers only (X26). O(1).
+        /// Gets the number of rows the context stores itself (what the rule layer's row limit counts): its database's
+        /// size estimate, which in a child sums its own layers only. O(1).
         /// </summary>
         public long OwnRowCount => context.Database.TotalSizeEstimate;
 
         /// <summary>
-        /// Gets whether the context may be read (§10.5): its storage context is clean (§7.5), it has no host writes staged,
-        /// and the same holds for every ancestor up to the first frozen one. O(ancestors that are not frozen).
+        /// Gets whether the context may be read: its storage context is clean, it has no host writes staged, and the
+        /// same holds for every ancestor up to the first frozen one. O(ancestors that are not frozen).
         /// </summary>
         public bool IsClean
         {
@@ -160,19 +160,19 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates a child: a context that starts as a copy of this one (colored-contexts spec §8.2; rule-layer E7).
+        /// Creates a child: a context that starts as a copy of this one.
         /// </summary>
         /// <remarks>
         /// <para>
         /// A context that is not frozen is brought up to date first (<see cref="EnsureClean"/>: its host writes and its
         /// ancestors' are flushed, and it is rebuilt), so the child starts from what this context holds; the storage
-        /// context then rebuilds and, at the root, settles (§7.6). The child shares this context's thread domain unless
+        /// context then rebuilds and, at the root, settles. The child shares this context's thread domain unless
         /// this context is frozen, in which case it gets its own and may run on another thread.
         /// </para>
         /// <para>
-        /// A failure that this context's rebuild or the root's settle recorded during the creation, or that was pending on
-        /// it, is taken right after (§8.2, §21.9): the new child is disposed and <see cref="PanicException"/> is thrown, as
-        /// a run that observed the failure would throw it. This context stays usable.
+        /// A failure that this context's rebuild or the root's settle recorded during the creation, or that was pending
+        /// on it, is taken right after: the new child is disposed and <see cref="PanicException"/> is thrown, as a run
+        /// that observed the failure would throw it. This context stays usable.
         /// </para>
         /// </remarks>
         /// <param name="options">The child's options; <see cref="ContextOptions.Default"/> if <c>null</c>.</param>
@@ -205,8 +205,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Disposes the child (§8.2; rule-layer E7): it leaves its parent, every ancestor stops counting it, and its rows,
-        /// staged host writes, progress and locals are released. A second call does nothing.
+        /// Disposes the child: it leaves its parent, every ancestor stops counting it, and its rows, staged host
+        /// writes, progress and locals are released. A second call does nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">The context is the root; it has live children; the call comes from
         /// inside another operation of the same thread domain or while a scan of the context runs; or the domain is held
@@ -242,8 +242,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be written, a stopped context aside (its writes and runs are no-ops, §10.3,
-        /// §10.4): not disposed, frozen or faulted.
+        /// Throws unless the context may be written, a stopped context aside (its writes and runs are no-ops): not
+        /// disposed, frozen or faulted.
         /// </summary>
         void ThrowIfUnwritable()
         {
@@ -255,7 +255,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context may be read (§10.5): disposed → <see cref="ObjectDisposedException"/>; faulted or
+        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted or
         /// stopped → <see cref="InvalidOperationException"/>; not clean (<see cref="IsClean"/>) →
         /// <see cref="InvalidOperationException"/> naming <see cref="EnsureClean"/>. Call inside the domain of a context
         /// that is not frozen.
@@ -272,7 +272,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Throws <see cref="InvalidOperationException"/> when the calling thread is inside an operation of the context's
         /// thread domain (a write batch's action, a rule's action or external, a visitor): a structural call there would
-        /// change what the running operation captured (§8.3).
+        /// change what the running operation captured.
         /// </summary>
         void ThrowIfReentrant(string operation)
         {

@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the members of a child's database that need no planning (colored-contexts spec §3.4, X39), once the
-    /// child has layers: schema questions come from the store's schema whatever the child stored, estimates sum the view's
-    /// layers, buffers create layers, clears route to the context, and definitions go through the store.
+    /// Tests for the members of a child's database that need no planning, once the child has layers: schema questions
+    /// come from the store's schema whatever the child stored, estimates sum the view's layers, buffers create layers,
+    /// clears route to the context, and definitions go through the store.
     /// </summary>
     public class ChildSchemaTests
     {
@@ -30,6 +30,10 @@ namespace Eggnog.Relations.Tests
             return (store, f, v, root, ids);
         }
 
+        /// <summary>
+        /// With a layer of its own, a child still answers specs, names, id columns, arities and table ids from the
+        /// store's schema; only its table map entry for the layered table is the layer's.
+        /// </summary>
         [Fact]
         public void SchemaQuestionsIgnoreTheChildsLayers()
         {
@@ -57,6 +61,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<KeyNotFoundException>(() => db.GetTableInfo(v));
         }
 
+        /// <summary>
+        /// A child's size estimates sum the slots of its view's layers, hidden ones included, and a constraint is
+        /// estimated per layer; the union-find has no estimate in a child.
+        /// </summary>
         [Fact]
         public void EstimatesSumTheViewsLayers()
         {
@@ -80,6 +88,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<NotSupportedException>(() => child.Database.EstimateSize(store.UnionFindTable));
         }
 
+        /// <summary>
+        /// A buffer from a child's database creates the child's layer and a notification, and its rows merge; a frozen
+        /// child's or root's database refuses buffers, merges, clears and runs.
+        /// </summary>
         [Fact]
         public void BuffersCreateLayersAndNotify()
         {
@@ -107,12 +119,17 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => root.Database.RunRuleSet(rules));
         }
 
+        /// <summary>
+        /// A clear through a child's database is the context's clear: refused under a writable parent, and under a
+        /// frozen one it hides every visible row of the table in the child only; clearing the union-find is refused.
+        /// </summary>
         [Fact]
         public void ClearsRouteToTheContext()
         {
             var (_, f, _, root, ids) = Setup();
 
-            // Under a writable parent the clear is refused (R1) and changes nothing.
+            // Under a writable parent the clear is refused (a child retracts only under a frozen parent) and changes
+            // nothing.
             var refused = root.CreateChild();
             Assert.Throws<InvalidOperationException>(() => refused.Database.ClearTable(f));
             Assert.Null(refused.Tables!.TryGetLayer(f));
@@ -132,6 +149,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsFaulted);
         }
 
+        /// <summary>
+        /// A child's database refuses definitions, which only the store adds; a table the store adds is visible to the
+        /// child at once.
+        /// </summary>
         [Fact]
         public void DefinitionsGoThroughTheStore()
         {

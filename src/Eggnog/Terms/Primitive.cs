@@ -6,10 +6,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A pure, deterministic, thread-safe function over values (never over classes). An exception thrown by it fails the
-    /// rule (D31); a call into any graph from it throws (D47). Named primitives render by name; lambdas
-    /// (<see cref="Compute"/>, <see cref="RuleBuilder.Where{T1}(Term{T1}, Func{T1, bool})"/>) render as
-    /// <c>&lt;lambda&gt;</c>.
+    /// A pure, deterministic, thread-safe function over values (never over classes). An exception thrown by it fails
+    /// the rule with a <see cref="RuleEvaluationException"/>; a call into any graph from it throws an
+    /// <see cref="InvalidOperationException"/>. Named primitives render by name; lambdas (<see cref="Compute"/>,
+    /// <see cref="RuleBuilder.Where{T1}(Term{T1}, Func{T1, bool})"/>) render as <c>&lt;lambda&gt;</c>.
     /// </summary>
     public abstract class Primitive
     {
@@ -37,7 +37,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the name: an egglog name for the built-ins (<c>set-of</c>, <c>+</c>), <c>&lt;lambda&gt;</c> for lambdas.
+        /// Gets the name: an egglog name for the built-ins (<c>set-of</c>, <c>+</c>), <c>&lt;lambda&gt;</c> for
+        /// lambdas.
         /// </summary>
         public string Name { get; }
 
@@ -129,10 +130,11 @@ namespace Eggnog
         internal bool IsLambda { get; }
 
         /// <summary>
-        /// Gets whether the primitive is partial, as egglog's checked arithmetic is (its <c>-?&gt;</c> primitives, which
-        /// return no result on overflow): an <see cref="OverflowException"/> from it means "no result". In a rule body
-        /// that drops the match silently, as in egglog; in a head it fails the rule (D31), where egglog panics. Only the
-        /// built-in <see cref="Primitives.Add"/> and <see cref="Primitives.Subtract"/> are partial.
+        /// Gets whether the primitive is partial, as egglog's checked arithmetic is (its <c>-?&gt;</c> primitives,
+        /// which return no result on overflow): an <see cref="OverflowException"/> from it means "no result". In a rule
+        /// body that drops the match silently, as in egglog; in a head it fails the rule as any other exception does,
+        /// where egglog panics. Only the built-in <see cref="Primitives.Add"/> and
+        /// <see cref="Primitives.Subtract"/> are partial.
         /// </summary>
         internal bool IsPartial { get; init; }
 

@@ -5,8 +5,8 @@ namespace Eggnog
 
     /// <summary>
     /// Computed values from C# lambdas, which render as <c>&lt;lambda&gt;</c>; prefer named primitives
-    /// (<see cref="Primitive.Create{T1, TResult}(string, Func{T1, TResult})"/>, <see cref="Primitives"/>) where rendering
-    /// matters. Lambdas must be pure, deterministic and thread-safe, and must not call into any graph.
+    /// (<see cref="Primitive.Create{T1, TResult}(string, Func{T1, TResult})"/>, <see cref="Primitives"/>) where
+    /// rendering matters. Lambdas must be pure, deterministic and thread-safe, and must not call into any graph.
     /// </summary>
     public static class Compute
     {
@@ -80,7 +80,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped application of a primitive (D13): one term per parameter, of the parameter's CLR type.
+        /// The untyped application of a primitive: one term per parameter, of the parameter's CLR type.
         /// </summary>
         /// <param name="primitive">The primitive.</param>
         /// <param name="arguments">The arguments.</param>

@@ -81,8 +81,8 @@ namespace Eggnog.Tests.Surface
         }
 
         /// <summary>
-        /// A member's line, or <c>null</c> when it is not public or protected (or is an accessor or a compiler-generated
-        /// member).
+        /// A member's line, or <c>null</c> when it is not public or protected (or is an accessor or a
+        /// compiler-generated member).
         /// </summary>
         static string? Member(MemberInfo member)
         {

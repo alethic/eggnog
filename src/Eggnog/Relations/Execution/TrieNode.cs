@@ -16,19 +16,18 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Rows. A layered row set (colored-contexts spec §9.5, <see cref="LayeredSubset"/>): at a root, and wherever the rows
-    /// lie in one layer, a plain <see cref="Subset"/> and its layer, today's subset behind one flag test; in a child, rows
-    /// of several layers of the atom's view (<see cref="IsMultiLayer"/>), held in the node's
-    /// <see cref="TrieNodeSideState"/>. Rows of different layers are different rows. Keeping the multi-layer rows and the
-    /// spare indexes out of line keeps a node at 64 bytes, as before layered execution, since a parallel root run
-    /// allocates one per frame at positions 0 and 1 (§1 item 8).
+    /// Rows. A layered row set (<see cref="LayeredSubset"/>): at a root, and wherever the rows lie in one layer, a
+    /// plain <see cref="Subset"/> and its layer, behind one flag test; in a child, rows of several layers of the atom's
+    /// view (<see cref="IsMultiLayer"/>), held in the node's <see cref="TrieNodeSideState"/>. Rows of different layers
+    /// are different rows. Keeping the multi-layer rows and the spare indexes out of line keeps a node at 64 bytes, so
+    /// a parallel root run, which allocates one per frame at positions 0 and 1, pays nothing for layers.
     /// </para>
     /// <para>
     /// Caches, both built on first use and kept for the node's life:
     /// <list type="bullet">
     /// <item>per (layer, column), a <see cref="ColumnIndex"/> grouping the node's rows of that layer by that column
     /// (<see cref="GetCachedIndex(ColumnId, int, LayerView)"/>, egglog's <c>get_cached_index</c>), built over the rows the
-    /// layer's view sees. Its slot is the column for a single-layer node (today's slot) and <c>layer × arity + column</c>
+    /// layer's view sees. Its slot is the column for a single-layer node and <c>layer × arity + column</c>
     /// for a multi-layer one. When the caches are reset the index is disposed but its object is kept as a spare for that
     /// slot, and the next build refills it in place
     /// (<see cref="ColumnIndex.RebuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/>), so a recycled node builds its
@@ -38,7 +37,7 @@ namespace Eggnog.Relations
     /// So a (node, slot, value) is refined once per rule execution. The slot (<see cref="ChildSlot"/>) is
     /// <c>selector × arity + column</c>: selector 0 is a refinement over every layer (a probed side, and every refinement
     /// of a single-layer node), selector <c>l + 1</c> one of layer <c>l</c> only (a driver's piece in layer <c>l</c> of a
-    /// multi-layer node), so a slot always names one well-defined row set (§9.6, I28).</item>
+    /// multi-layer node), so a slot always names one well-defined row set.</item>
     /// </list>
     /// </para>
     /// <para>
@@ -155,7 +154,7 @@ namespace Eggnog.Relations
         public bool IsConcurrent => concurrent;
 
         /// <summary>
-        /// Gets a child-cache slot (§9.6): <paramref name="selector"/> × <paramref name="arity"/> + <paramref name="column"/>,
+        /// Gets a child-cache slot: <paramref name="selector"/> × <paramref name="arity"/> + <paramref name="column"/>,
         /// where selector 0 means a refinement over every layer and <c>l + 1</c> one of layer <c>l</c> only.
         /// </summary>
         /// <param name="column">The column refined on.</param>
@@ -258,7 +257,7 @@ namespace Eggnog.Relations
         /// Gets the index of the node's rows of layer <paramref name="layer"/> by <paramref name="column"/>, building it on
         /// first use: egglog's <c>get_cached_index</c>,
         /// <see cref="ColumnIndex.BuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/> over the rows the layer's view
-        /// sees (live and not hidden, §9.3), O(rows) once, refilling the slot's spare index when the node has one, so that a
+        /// sees (live and not hidden), O(rows) once, refilling the slot's spare index when the node has one, so that a
         /// recycled node allocates nothing.
         /// </summary>
         /// <param name="column">The column.</param>

@@ -16,10 +16,11 @@ namespace Eggnog.Relations
     /// many threads may rebuild at once while the union-find does not change.
     /// </para>
     /// <para>
-    /// The loops live in <see cref="CanonicalizeLoops"/>, shared with a child context's <see cref="OverlayCanonicalizer"/>
-    /// (colored-contexts spec §5.5); this class runs them with <see cref="RootIdFinder"/>, a struct the JIT specializes,
-    /// so the machine code is the code these loops had here before. <see cref="RebuildBuffer"/> is specialized for one,
-    /// two and three columns, as egglog's is, and skips tombstones (egglog rewrites them and its caller drops them).
+    /// The loops live in <see cref="CanonicalizeLoops"/>, shared with a child context's
+    /// <see cref="OverlayCanonicalizer"/>; this class runs them with <see cref="RootIdFinder"/>, a struct the JIT
+    /// specializes, so the loops call <see cref="DisplacedUnionFind.FindNaive"/> directly, with no dispatch.
+    /// <see cref="RebuildBuffer"/> is specialized for one, two and three columns, as egglog's is, and skips tombstones
+    /// (egglog rewrites them and its caller drops them).
     /// </para>
     /// </remarks>
     internal sealed class Canonicalizer : Rebuilder

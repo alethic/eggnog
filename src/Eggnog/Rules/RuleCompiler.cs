@@ -5,7 +5,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Checks and normalizes a draft into a program and a compiled rule (§6.3), then lowers the rule's default variant.
+    /// Checks and normalizes a draft into a program and a compiled rule, then lowers the rule's default variant.
     /// Every error is a <see cref="RuleDefinitionException"/> naming the rule. Called under the graph's definition lock.
     /// </summary>
     internal static class RuleCompiler
@@ -18,7 +18,7 @@ namespace Eggnog
         /// <param name="draft">What the builder collected.</param>
         /// <param name="ruleset">The ruleset that schedules the rule.</param>
         /// <param name="owner">The scope the rule is local to; <c>null</c> for a global rule.</param>
-        /// <returns>The compiled rule, its default variant lowered with the written class constants (step 10).</returns>
+        /// <returns>The compiled rule, its default variant lowered with the written class constants.</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule, or the engine rejected it; nothing is
         /// registered then (a mirror its first scoped read created stays, harmlessly).</exception>
         public static CompiledRule Compile(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner)
@@ -46,7 +46,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles a query (§6.6.4): the body as a rule's (§6.3 steps 1 to 7) and a head of one collector of the declared
+        /// Compiles a query: the body checked and normalized as a rule's, and a head of one collector of the declared
         /// variables, then lowers its one variant, naive, with the written class constants. Called under the graph's
         /// definition lock.
         /// </summary>
@@ -87,11 +87,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles a split rule (§6.9.2): checks its shape (one <see cref="SplitBuilder.Cases{T}"/> over a declared set
-        /// variable; a key of declared variables, by default every one but the set) and its assumptions, then compiles the
-        /// body as a rule's (§6.3 steps 1 to 7) into a naive matcher whose head collects the key, the set and every other
-        /// variable an assumption uses (step 9), and lowers its one variant. Class constants follow the global-rule rule:
-        /// only classes from the root. Called under the graph's definition lock.
+        /// Compiles a split rule: checks its shape (one <see cref="SplitBuilder.Cases{T}"/> over a declared set variable; a
+        /// key of declared variables, by default every one but the set) and its assumptions, then compiles the body as a
+        /// rule's into a naive matcher whose head collects the key, the set and every other variable an assumption uses, and
+        /// lowers its one variant. Class constants follow the global-rule rule: only classes from the root. Called under the
+        /// graph's definition lock.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="builder">What the split rule's builder collected.</param>
@@ -137,7 +137,8 @@ namespace Eggnog
                 throw Error($"type {ValueStore.DisplayName(builder.ElementType!)} is not registered; call {ValueStore.RegisterMethod(builder.ElementType!)}", exception);
             }
 
-            // The key: what B6 compares. Declared variables of this split rule, never the case variable.
+            // The key: what a split step compares to skip a request that a live split from the same source already covers
+            // in the scope or an ancestor. Declared variables of this split rule, never the case variable.
             var key = new List<Term>();
             if (builder.KeyTerms is { } explicitKey)
             {

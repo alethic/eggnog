@@ -6,14 +6,16 @@ using System.Threading.Tasks;
 
 using Xunit;
 
+using static Eggnog.Relations.Tests.BridgeTestUtil;
+
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="ConcurrentChildren"/> and the e-graph's <see cref="EGraph.ParallelismBudget"/> (colored-contexts spec
-    /// §10.9, §17 M10.3): the budget caps how many bodies run at once, a single exception comes back unwrapped, children
-    /// that would share a thread domain are refused, and two threads on one domain throw. Also the default parallelism of
-    /// children (§10.9).
+    /// <see cref="ConcurrentChildren"/> and the e-graph's <see cref="EGraph.ParallelismBudget"/>: the budget caps how
+    /// many bodies run at once, the degree is the budget over the widest child, a single exception comes back
+    /// unwrapped, children that would share a thread domain are refused, and two threads on one domain throw. Also the
+    /// default parallelism of children.
     /// </summary>
     [Collection(ThreadPoolProbeCollection.Name)]
     public class ConcurrentChildrenTests
@@ -28,7 +30,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §10.9: a child of a frozen context is serial, a child of a writable context inherits its parent's heuristics (so a
+        /// A child of a frozen context is serial, a child of a writable context inherits its parent's heuristics (so a
         /// grandchild under a writable child of a frozen root is serial too), and the options override both.
         /// </summary>
         [Fact]
@@ -83,8 +85,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The budget caps the bodies running at once: serial children lease one thread each, so at most <c>Total</c> run
-        /// together; children with two threads each lease two, so at most <c>Total / 2</c> do. Every thread comes back.
+        /// The budget caps the bodies running at once: serial children lease one thread each, so at most <c>Total</c>
+        /// run together; children with two threads each lease two, so at most <c>Total / 2</c> do. Every thread comes
+        /// back.
         /// </summary>
         [Theory]
         [InlineData(1, 4)]
@@ -125,8 +128,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A body that throws stops the run and its exception comes back as itself, not wrapped; the budget is whole again
-        /// and the other children are usable.
+        /// A body that throws stops the run and its exception comes back as itself, not wrapped; the budget is whole
+        /// again and the other children are usable.
         /// </summary>
         [Fact]
         public void ASingleExceptionIsRethrownUnwrapped()
@@ -146,7 +149,7 @@ namespace Eggnog.Relations.Tests
             // Through the single-child path too.
             Assert.Same(thrown, Assert.Throws<TimeZoneNotFoundException>(() => ConcurrentChildren.Run([children[0]], _ => throw thrown)));
 
-            // A panic in a child's run is that child's (§10.6) and comes back as the PanicException itself.
+            // A panic in a child's run is that child's and comes back as the PanicException itself.
             var rb = g.EGraph.NewRule("panics", true);
             rb.QueryTable(g.Mark, [rb.NewVar(ColumnTy.Id), rb.NewVar(g.UnitType)], false);
             rb.Panic("child panic");
@@ -191,9 +194,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Children of a writable context share its thread domain (§8.3), so running them concurrently is refused before any
-        /// body runs; so are the root, a child together with its own descendant, a child listed twice, a child of another
-        /// e-graph, a null child and a disposed one.
+        /// Children of a writable context share its thread domain, so running them concurrently is refused before any
+        /// body runs; so are the root, a child together with its own descendant, a child listed twice, a child of
+        /// another e-graph, a null child and a disposed one.
         /// </summary>
         [Fact]
         public void ChildrenThatWouldShareADomainAreRefused()
@@ -237,7 +240,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Two threads on one thread domain throw (§8.3): while one thread is inside a read of a writable child, a second
+        /// Two threads on one thread domain throw: while one thread is inside a read of a writable child, a second
         /// thread's write to that child, to its sibling or to their writable parent is refused, not serialized.
         /// </summary>
         [Fact]
@@ -280,8 +283,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Two bodies of one run never share a domain: children of a frozen root each get their own, so their writes and
-        /// runs go side by side without a refusal.
+        /// Two bodies of one run never share a domain: children of a frozen root each get their own, so their writes
+        /// and runs go side by side without a refusal.
         /// </summary>
         [Fact]
         public void ChildrenOfAFrozenContextHaveDomainsOfTheirOwn()
@@ -306,8 +309,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A body may run grandchildren concurrently in turn; the nested run uses the lease its thread holds, so it cannot
-        /// wait forever on a budget the outer run has leased in full.
+        /// A body may run grandchildren concurrently in turn; the nested run uses the lease its thread holds, so it
+        /// cannot wait forever on a budget the outer run has leased in full.
         /// </summary>
         [Fact]
         public void NestedRunsUseTheLeaseTheyHold()
@@ -354,6 +357,44 @@ namespace Eggnog.Relations.Tests
 
                 current = seen;
             }
+        }
+
+        /// <summary>
+        /// <c>ConcurrentChildren.Run</c> runs <c>max(1, Total / widest child DOP)</c> bodies at once whatever the
+        /// budget holds. Each body hands its lease back while it sleeps; a run with more workers than that degree would
+        /// let a waiting worker take the freed threads and start another body.
+        /// </summary>
+        [Theory]
+        [InlineData(4, 1)]
+        [InlineData(2, 2)]
+        public void TheDegreeIsTheBudgetOverTheWidestChild(int childThreads, int degree)
+        {
+            const int Total = 4;
+            var g = new ContextGraph(new ParallelHeuristics(Total));
+            g.Root.Freeze();
+            var options = new ContextOptions { Parallelism = new ParallelHeuristics(childThreads) };
+            var children = Enumerable.Range(0, 8).Select(_ => g.Root.CreateChild(options)).ToArray();
+            var budget = g.EGraph.ParallelismBudget;
+            var running = 0;
+            var peak = 0;
+
+            ConcurrentChildren.Run(children, child =>
+            {
+                var now = Interlocked.Increment(ref running);
+                for (var seen = Volatile.Read(ref peak); now > seen && Interlocked.CompareExchange(ref peak, now, seen) != seen; seen = Volatile.Read(ref peak))
+                {
+                }
+
+                budget.Release(childThreads);
+                Thread.Sleep(50);
+                _ = budget.Lease(childThreads);
+                Interlocked.Decrement(ref running);
+            });
+
+            Assert.InRange(peak, 1, degree);
+            Assert.Equal(Total, budget.Available);
+            foreach (var child in children)
+                child.Dispose();
         }
 
     }

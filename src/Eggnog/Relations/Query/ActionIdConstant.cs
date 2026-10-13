@@ -2,10 +2,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A constant e-class id in a rule's action program (colored-contexts spec §9.8, X19): operand
-    /// <see cref="Operand"/> of instruction <see cref="Instr"/> is the constant <see cref="Value"/>, and it is an id,
-    /// because it lands in an id column of the instruction's table (or of the store's union-find) or because the rule's
-    /// author flagged it (<see cref="QueryEntry.IdConst"/>).
+    /// A constant e-class id in a rule's action program: operand <see cref="Operand"/> of instruction
+    /// <see cref="Instr"/> is the constant <see cref="Value"/>, and it is an id, because it lands in an id column of the
+    /// instruction's table (or of the store's union-find) or because the rule's author flagged it
+    /// (<see cref="QueryEntry.IdConst"/>).
     /// </summary>
     /// <remarks>
     /// <para>

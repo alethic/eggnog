@@ -94,8 +94,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Sets the bit at <paramref name="index"/> to <paramref name="value"/>, growing the set first if the bit is not
-        /// allocated yet. Concurrent updates to other bits of the same word are never lost.
+        /// Sets the bit at <paramref name="index"/> to <paramref name="value"/>, growing the set first if the bit is
+        /// not allocated yet. Concurrent updates to other bits of the same word are never lost.
         /// </summary>
         /// <param name="index">The bit index.</param>
         /// <param name="value">The new value.</param>

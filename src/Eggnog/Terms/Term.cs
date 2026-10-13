@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// An expression: a variable, a constant, a table application, or a computation. Immutable; renders as an
-    /// s-expression. The untyped constant (<c>Term.Constant</c>) is internal (D13).
+    /// s-expression.
     /// </summary>
     public abstract class Term
     {
@@ -35,7 +35,7 @@ namespace Eggnog
         internal abstract TermShape Shape { get; }
 
         /// <summary>
-        /// The untyped constant of a column type (D13).
+        /// The untyped constant of a column type.
         /// </summary>
         /// <param name="type">The column type.</param>
         /// <param name="value">The value, of the type's CLR type.</param>

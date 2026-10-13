@@ -6,15 +6,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The seed, soak, replay and shrink conventions the rule differentials share (colored-contexts spec §17 M10.3), as
-    /// the storage differentials have them.
+    /// The seed, soak, replay and shrink conventions the rule differentials share, with the environment variables of
+    /// the context differentials (<see cref="ContextDifferentialTests"/>,
+    /// <see cref="UnionFindContextDifferentialTests"/>).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <c>EGGNOG_CONTEXT_SEEDS</c> sets the number of seeds (400 by default). <c>EGGNOG_CONTEXT_SOAK</c> runs a soak of at
-    /// least that many commands per family from <c>EGGNOG_CONTEXT_SEED_BASE</c> (or a random base, printed).
-    /// <c>EGGNOG_CONTEXT_RULE_SEED</c> replays one program, named <c>&lt;A|B&gt;&lt;m|h&gt;:&lt;seed&gt;</c> (family, then
-    /// monotone or history), printing it and what it exercised.
+    /// <c>EGGNOG_CONTEXT_SEEDS</c> sets the number of seeds (400 by default). <c>EGGNOG_CONTEXT_SOAK</c> runs a soak of
+    /// at least that many commands per family from <c>EGGNOG_CONTEXT_SEED_BASE</c> (or a random base, printed).
+    /// <c>EGGNOG_CONTEXT_RULE_SEED</c> replays one program, named <c>&lt;A|B&gt;&lt;m|h&gt;:&lt;seed&gt;</c> (family,
+    /// then monotone or history), printing it and what it exercised.
     /// </para>
     /// <para>
     /// A failing program is shrunk (<see cref="ColorShrinker"/>) and reported with its seed, the replay setting, the
@@ -83,7 +84,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs programs from consecutive seeds until <c>EGGNOG_CONTEXT_SOAK</c> commands ran; skipped when it is not set.
+        /// Runs programs from consecutive seeds until <c>EGGNOG_CONTEXT_SOAK</c> commands ran; skipped when it is not
+        /// set.
         /// </summary>
         /// <param name="family">The family; its <see cref="ColorFamily.History"/> alternates per seed when
         /// <paramref name="alternateHistory"/>.</param>
@@ -110,7 +112,8 @@ namespace Eggnog.Relations.Tests
         /// Replays the program <c>EGGNOG_CONTEXT_RULE_SEED</c> names, printing it; skipped when it is not set.
         /// </summary>
         /// <param name="options">What runs with the engine.</param>
-        /// <param name="deletesOnlyUnwritten">Whether the program is generated for the seeded-versus-unseeded property.</param>
+        /// <param name="deletesOnlyUnwritten">Whether the program is generated for the seeded-versus-unseeded
+        /// property.</param>
         public static void Replay(ColorRunOptions options, bool deletesOnlyUnwritten = false)
         {
             var name = Environment.GetEnvironmentVariable("EGGNOG_CONTEXT_RULE_SEED");

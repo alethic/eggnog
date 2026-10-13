@@ -1,6 +1,3 @@
-[submodule "ext/egg"]
-	path = ext/egg
-	url = https://github.com/egraphs-good/egg
 [submodule "ext/egglog"]
 	path = ext/egglog
 	url = https://github.com/egraphs-good/egglog

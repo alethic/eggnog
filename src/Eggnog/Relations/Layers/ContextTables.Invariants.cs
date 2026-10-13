@@ -9,36 +9,46 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Adds to <paramref name="violations"/> every violation of the tables invariants of the clean context
-        /// (colored-contexts spec §12.3, §12.7 item 2): I12–I19 over what the context holds and hides, the tables part of
-        /// I10, and every own layer adopted with nothing staged.
+        /// Adds to <paramref name="violations"/> every violation of the tables invariants of the clean context: unique
+        /// keys, canonical ids, hidden content, sealing, generations, cursors and stamps over what the context holds
+        /// and hides, no local id of the context in an ancestor layer, and every own layer adopted with nothing staged.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The checks cost in proportion to the context, not to its ancestors, so DEBUG builds can run them at the end of
-        /// every rebuild; ancestors' own invariants are checked by their own checkers, and the context's view of an
-        /// ancestor row only ever loses rows to hides (I20). In order:
+        /// The checks cost in proportion to the context, not to its ancestors, so DEBUG builds can run them at the end
+        /// of every rebuild; ancestors' own invariants are checked by their own checkers, and the context's view of an
+        /// ancestor row only ever loses rows to hides. In order:
         /// </para>
         /// <list type="bullet">
-        /// <item><description>I18: no hidden set awaits a seal, every set is sealed, and every hidden row lies below its
-        /// layer's physical count;</description></item>
-        /// <item><description>I34: every own layer is adopted and has no staged write;</description></item>
-        /// <item><description>I19: each own layer's timestamp column is nondecreasing and every live own row carries a
-        /// timestamp of at least <see cref="Context.CreatedAt"/>;</description></item>
-        /// <item><description>I13: every id cell of every live own row is canonical in the context; no visible ancestor row
-        /// names one of the context's own displacements (through the ancestors' rebuild indexes); and every visible row an
-        /// ancestor appended since the context's creation is canonical in it;</description></item>
-        /// <item><description>I12: no ancestor row with the key of a live own row is visible (an ancestor's own rows are
-        /// unique in its view, and the context's view of them only shrinks);</description></item>
-        /// <item><description>I14: every hidden row is invisible to the parent, or the context retracted rows of the table
-        /// or cleared it, or else a visible row carries its information: the row's key made canonical is visible, with an
-        /// equal output class for a constructor, and the table's merge adds nothing for any other function
-        /// (<see cref="CarrierHolds"/>);</description></item>
-        /// <item><description>I15 (Lemma F): no row with a hidden row's key is visible below its layer;</description></item>
-        /// <item><description>I16: every hidden set is of its layer's generation; I17: every cursor equals its ancestor's
-        /// layer versions and change stamp, and the settled ancestors are frozen;</description></item>
-        /// <item><description>I10: no ancestor layer's rebuild index lists an id of the context's blocks.</description></item>
+        /// <item><description>sealing: no hidden set awaits a seal, every set is sealed, and every hidden row lies
+        /// below its layer's physical count;</description></item>
+        /// <item><description>adoption: every own layer is adopted and has no staged write;</description></item>
+        /// <item><description>stamps: each own layer's timestamp column is nondecreasing and every live own row carries
+        /// a timestamp of at least <see cref="Context.CreatedAt"/>;</description></item>
+        /// <item><description>canonical ids: every id cell of every live own row is canonical in the context; no
+        /// visible ancestor row names one of the context's own displacements (through the ancestors' rebuild indexes);
+        /// and every visible row an ancestor appended since the context's creation is canonical in
+        /// it;</description></item>
+        /// <item><description>unique keys: no ancestor row with the key of a live own row is visible (an ancestor's own
+        /// rows are unique in its view, and the context's view of them only shrinks);</description></item>
+        /// <item><description>hidden content: every hidden row is invisible to the parent, or the context retracted
+        /// rows of the table or cleared it, or else a visible row carries its information: the row's key made canonical
+        /// is visible, with an equal output class for a constructor, and the table's merge adds nothing for any other
+        /// function (<see cref="CarrierHolds"/>);</description></item>
+        /// <item><description>keys below a hide: no row with a hidden row's key is visible below its layer, which the
+        /// point lookups rely on;</description></item>
+        /// <item><description>generations and cursors: every hidden set is of its layer's generation, every cursor
+        /// equals its ancestor's layer versions and change stamp, and the settled ancestors are
+        /// frozen;</description></item>
+        /// <item><description>local ids: no ancestor layer's rebuild index lists an id of the context's
+        /// blocks.</description></item>
         /// </list>
+        /// <para>
+        /// Each violation starts with the name of its check, as listed (<c>sealing:</c>, <c>adoption:</c>,
+        /// <c>stamps:</c>, <c>canonical ids:</c>, <c>unique keys:</c>, <c>hidden content:</c>,
+        /// <c>keys below a hide:</c>, <c>generations:</c>, <c>cursors:</c>, <c>local ids:</c>); a settled ancestor that
+        /// is not frozen is a <c>cursors:</c> violation.
+        /// </para>
         /// <para>
         /// Cost: O(own rows × depth + hidden rows × depth + own displacements × depth + rows appended by ancestors since
         /// the context's creation + reserved local ids × tables × depth) probes; the rebuild indexes of ancestors that are
@@ -50,7 +60,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(violations);
             if (unsealed.Count != 0)
-                Context.Report(violations, $"I18: {unsealed.Count} hidden set(s) await a seal outside a merge");
+                Context.Report(violations, $"sealing: {unsealed.Count} hidden set(s) await a seal outside a merge");
 
             foreach (var layer in Volatile.Read(ref slots))
                 if (layer is not null)
@@ -62,7 +72,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The checks of one own layer: I34, I19, I13 and I12 over its rows, and I18, I16, I14 and I15 over its hides.
+        /// The checks of one own layer: adoption, stamps, canonical ids and unique keys over its rows, and sealing,
+        /// generations, keys below a hide and hidden content over its hides.
         /// </summary>
         void CheckLayer(List<string> violations, TableLayer layer)
         {
@@ -71,12 +82,12 @@ namespace Eggnog.Relations
             var own = layer.Own;
             var find = owner.UnionFind;
             if (layer.IsAdopted == false)
-                Context.Report(violations, $"I34: the layer of table {table} is not adopted outside a search");
+                Context.Report(violations, $"adoption: the layer of table {table} is not adopted outside a search");
 
             if (own.HasPendingWrites)
-                Context.Report(violations, $"I34: the layer of table {table} has staged writes outside a merge");
+                Context.Report(violations, $"adoption: the layer of table {table} has staged writes outside a merge");
 
-            // Own rows: I19, I13, I12.
+            // Own rows: stamps, canonical ids, unique keys.
             var rows = own.Rows;
             var floor = ClearedFloor(table);
             var previous = 0u;
@@ -87,11 +98,11 @@ namespace Eggnog.Relations
                 {
                     var stamp = cells[s.SortColumn];
                     if (stamp < previous)
-                        Context.Report(violations, $"I19: own row {r} of table {table} has timestamp {stamp} below the previous row's {previous}");
+                        Context.Report(violations, $"stamps: own row {r} of table {table} has timestamp {stamp} below the previous row's {previous}");
 
                     previous = Math.Max(previous, stamp);
                     if (rows.IsStale(r) == false && stamp < owner.CreatedAt)
-                        Context.Report(violations, $"I19: own row {r} of table {table} has timestamp {stamp} below the context's creation stamp {owner.CreatedAt}");
+                        Context.Report(violations, $"stamps: own row {r} of table {table} has timestamp {stamp} below the context's creation stamp {owner.CreatedAt}");
                 }
 
                 if (rows.IsStale(r))
@@ -101,7 +112,7 @@ namespace Eggnog.Relations
                 {
                     var id = cells[column.Rep];
                     if (find.Find(id) != id)
-                        Context.Report(violations, $"I13: own row {r} of table {table} names {id} in column {column.Rep}, which is {find.Find(id)} here");
+                        Context.Report(violations, $"canonical ids: own row {r} of table {table} names {id} in column {column.Rep}, which is {find.Find(id)} here");
                 }
 
                 if (s.IsContextPrivate)
@@ -114,11 +125,11 @@ namespace Eggnog.Relations
 
                     var found = ancestor.FindRow(rows.Data, r * own.Arity);
                     if (found >= 0 && HiddenBetween(table, j, found) == false)
-                        Context.Report(violations, $"I12: own row {r} of table {table} and row {found} of the layer at depth {j} both hold key [{string.Join(",", cells[..s.KeyCount].ToArray())}]");
+                        Context.Report(violations, $"unique keys: own row {r} of table {table} and row {found} of the layer at depth {j} both hold key [{string.Join(",", cells[..s.KeyCount].ToArray())}]");
                 }
             }
 
-            // Hides: I18, I16, I14, I15.
+            // Hides: sealing and generations, then each hidden row.
             List<int>? hidden = null;
             for (var j = 0; j < depth; j++)
             {
@@ -127,15 +138,15 @@ namespace Eggnog.Relations
 
                 if (AncestorLayer(j, table) is not { } ancestor)
                 {
-                    Context.Report(violations, $"I18: table {table} hides rows of the layer at depth {j}, which does not exist");
+                    Context.Report(violations, $"sealing: table {table} hides rows of the layer at depth {j}, which does not exist");
                     continue;
                 }
 
                 if (set.IsSealed == false)
-                    Context.Report(violations, $"I18: the hidden set of table {table} over depth {j} is not sealed");
+                    Context.Report(violations, $"sealing: the hidden set of table {table} over depth {j} is not sealed");
 
                 if (set.Generation != ancestor.Version.Major)
-                    Context.Report(violations, $"I16: the hidden set of table {table} over depth {j} is of generation {set.Generation}, the layer of {ancestor.Version.Major}");
+                    Context.Report(violations, $"generations: the hidden set of table {table} over depth {j} is of generation {set.Generation}, the layer of {ancestor.Version.Major}");
 
                 (hidden ??= new List<int>()).Clear();
                 set.CopyTo(hidden);
@@ -143,7 +154,7 @@ namespace Eggnog.Relations
                 {
                     if ((uint)r >= (uint)ancestor.Rows.Count)
                     {
-                        Context.Report(violations, $"I18: table {table} hides row {r} of the layer at depth {j}, which has {ancestor.Rows.Count} rows");
+                        Context.Report(violations, $"sealing: table {table} hides row {r} of the layer at depth {j}, which has {ancestor.Rows.Count} rows");
                         continue;
                     }
 
@@ -153,8 +164,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// I14 and I15 for row <paramref name="row"/> of the ancestor layer at depth <paramref name="j"/>, which
-        /// <paramref name="layer"/> hides.
+        /// The checks of row <paramref name="row"/> of the ancestor layer at depth <paramref name="j"/>, which
+        /// <paramref name="layer"/> hides: no row with its key is visible below its layer, and a visible row carries
+        /// its information.
         /// </summary>
         void CheckHiddenRow(List<string> violations, TableLayer layer, SortedWritesTable ancestor, int j, int row)
         {
@@ -164,7 +176,7 @@ namespace Eggnog.Relations
             var data = ancestor.Rows.Data;
             var offset = row * arity;
 
-            // I15: no row with the hidden row's key is visible below its layer.
+            // No row with the hidden row's key is visible below its layer.
             for (var below = ClearedFloor(table); below < j; below++)
             {
                 if (AncestorLayer(below, table) is not { } lower)
@@ -172,10 +184,10 @@ namespace Eggnog.Relations
 
                 var found = lower.FindRow(data, offset);
                 if (found >= 0 && HiddenBetween(table, below, found) == false)
-                    Context.Report(violations, $"I15: row {row} of table {table} at depth {j} is hidden, yet row {found} with its key is visible at depth {below}");
+                    Context.Report(violations, $"keys below a hide: row {row} of table {table} at depth {j} is hidden, yet row {found} with its key is visible at depth {below}");
             }
 
-            // I14: invisible to the parent, retracted or cleared, or carried by a visible row.
+            // Invisible to the parent, retracted or cleared, or carried by a visible row.
             if (data[offset] == Value.StaleRep || layer.HasRetractions || layer.IsCleared || HiddenAtOrBelow(table, j, row, depth - 1) || j < ClearedFloorAtOrBelow(table, depth - 1))
                 return;
 
@@ -188,20 +200,20 @@ namespace Eggnog.Relations
             var keyHash = TableKeyHash.Hash(copy, 0, s.KeyCount);
             if (TryFindVisible(table, copy, 0, keyHash, depth, out var carrierLayer, out _, out var carrierRow) == false)
             {
-                Context.Report(violations, $"I14: row {row} of table {table} at depth {j} is hidden ({layer.ReasonFor(j, row)?.ToString() ?? "no reason"}), and no visible row holds its canonical key");
+                Context.Report(violations, $"hidden content: row {row} of table {table} at depth {j} is hidden ({layer.ReasonFor(j, row)?.ToString() ?? "no reason"}), and no visible row holds its canonical key");
                 return;
             }
 
             if (CarrierHolds(s, carrierLayer.Rows.GetRow(carrierRow), copy) == false)
-                Context.Report(violations, $"I14: row {row} of table {table} at depth {j} is hidden ({layer.ReasonFor(j, row)?.ToString() ?? "no reason"}), and the visible row with its key does not carry its information");
+                Context.Report(violations, $"hidden content: row {row} of table {table} at depth {j} is hidden ({layer.ReasonFor(j, row)?.ToString() ?? "no reason"}), and the visible row with its key does not carry its information");
         }
 
         /// <summary>
         /// Gets whether the visible row <paramref name="carrier"/> carries the information of the hidden row made
-        /// canonical, <paramref name="hidden"/> (I14): for a constructor, both outputs name one class; for a relation, the
-        /// keys are equal, which the lookup established; for any other function, the table's merge function adds nothing
-        /// when the hidden row is merged into the carrier (run on a scratch catalog; a merge that needs more than its two
-        /// rows is not checked).
+        /// canonical, <paramref name="hidden"/>: for a constructor, both outputs name one class; for a relation, the
+        /// keys are equal, which the lookup established; for any other function, the table's merge function adds
+        /// nothing when the hidden row is merged into the carrier (run on a scratch catalog; a merge that needs more
+        /// than its two rows is not checked).
         /// </summary>
         bool CarrierHolds(LayeredTableSchema s, ReadOnlySpan<uint> carrier, uint[] hidden)
         {
@@ -228,8 +240,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// I13 for ancestor rows: no visible ancestor row names an own displacement of the context, and every visible row
-        /// an ancestor appended since the context's creation is canonical in it.
+        /// Canonical ids in ancestor rows: no visible ancestor row names an own displacement of the context, and every
+        /// visible row an ancestor appended since the context's creation is canonical in it.
         /// </summary>
         void CheckAncestorRows(List<string> violations)
         {
@@ -256,7 +268,7 @@ namespace Eggnog.Relations
 
                         foreach (var r in rows)
                             if (layer.Rows.IsStale(r) == false && HiddenBetween(table, j, r) == false)
-                                Context.Report(violations, $"I13: row {r} of table {table} at depth {j} is visible and names {id}, which the context displaced");
+                                Context.Report(violations, $"canonical ids: row {r} of table {table} at depth {j} is visible and names {id}, which the context displaced");
                     }
 
                     // Rows appended since the context's creation.
@@ -274,7 +286,7 @@ namespace Eggnog.Relations
                         {
                             var id = cells[column.Rep];
                             if (find.Find(id) != id)
-                                Context.Report(violations, $"I13: row {r} of table {table} at depth {j}, appended after the context was created, is visible and names {id}, which is {find.Find(id)} here");
+                                Context.Report(violations, $"canonical ids: row {r} of table {table} at depth {j}, appended after the context was created, is visible and names {id}, which is {find.Find(id)} here");
                         }
                     }
                 }
@@ -282,25 +294,25 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// I16 and I17: the settled ancestors are frozen, and every cursor equals its ancestor's layer versions and change
-        /// stamp, as after every rebuild.
+        /// Cursors and generations: the settled ancestors are frozen, and every cursor equals its ancestor's layer
+        /// versions and change stamp, as after every rebuild.
         /// </summary>
         void CheckCursors(List<string> violations)
         {
             for (var a = 0; a < settled; a++)
                 if (chain[a].IsFrozen == false)
-                    Context.Report(violations, $"I17: the ancestor at depth {a} is settled but not frozen");
+                    Context.Report(violations, $"cursors: the ancestor at depth {a} is settled but not frozen");
 
             for (var a = settled; a < depth; a++)
             {
                 if (cursors[a] is not { } cursor)
                 {
-                    Context.Report(violations, $"I17: the unsettled ancestor at depth {a} has no cursor");
+                    Context.Report(violations, $"cursors: the unsettled ancestor at depth {a} has no cursor");
                     continue;
                 }
 
                 if (cursor.Stamp != chain[a].Database.ChangeStamp)
-                    Context.Report(violations, $"I17: the cursor into depth {a} is at stamp {cursor.Stamp}, the ancestor at {chain[a].Database.ChangeStamp}");
+                    Context.Report(violations, $"cursors: the cursor into depth {a} is at stamp {cursor.Stamp}, the ancestor at {chain[a].Database.ChangeStamp}");
 
                 foreach (var table in schema.FunctionTables)
                 {
@@ -310,15 +322,16 @@ namespace Eggnog.Relations
                     var expected = AncestorLayer(a, table)?.Version ?? default;
                     var seen = cursor.RowsOrDefault(table);
                     if (seen.Major != expected.Major)
-                        Context.Report(violations, $"I16: the cursor into table {table} at depth {a} is of generation {seen.Major}, the layer of {expected.Major}");
+                        Context.Report(violations, $"generations: the cursor into table {table} at depth {a} is of generation {seen.Major}, the layer of {expected.Major}");
                     else if (seen.Minor != expected.Minor)
-                        Context.Report(violations, $"I17: the cursor into table {table} at depth {a} is at row {seen.Minor}, the layer has {expected.Minor}");
+                        Context.Report(violations, $"cursors: the cursor into table {table} at depth {a} is at row {seen.Minor}, the layer has {expected.Minor}");
                 }
             }
         }
 
         /// <summary>
-        /// The tables part of I10: no ancestor layer's rebuild index lists an id of the context's blocks.
+        /// The tables part of the local-id check: no ancestor layer's rebuild index lists an id of the context's
+        /// blocks.
         /// </summary>
         void CheckLocalIdsAbsent(List<string> violations)
         {
@@ -340,7 +353,7 @@ namespace Eggnog.Relations
                     for (var b = 0; b < blocks.BlockCount; b++)
                         for (var id = blocks.BlockStart(b); id < blocks.BlockEnd(b); id++)
                             if (index.TryGetSubset((uint)id, out _))
-                                Context.Report(violations, $"I10: the layer of table {table} at depth {j} names {id}, local to the context at depth {depth}");
+                                Context.Report(violations, $"local ids: the layer of table {table} at depth {j} names {id}, local to the context at depth {depth}");
                 }
             }
         }

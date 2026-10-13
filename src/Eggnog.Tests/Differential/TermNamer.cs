@@ -7,10 +7,10 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Names the classes of a database by their least ground term (§8.2), so that two databases with equal facts render
-    /// equal rows whatever their class ids: least by size (the number of constructor applications), then head name
-    /// (ordinal), then arguments in content order, a class argument by its own name. Both sides of the differential name
-    /// their classes with this one algorithm.
+    /// Names the classes of a database by their least ground term, so that two databases with equal facts render equal
+    /// rows whatever their class ids: least by size (the number of constructor applications), then head name (ordinal),
+    /// then arguments in content order, a class argument by its own name. Both sides of the differential name their
+    /// classes with this one algorithm.
     /// </summary>
     internal static class TermNamer
     {
@@ -18,8 +18,8 @@ namespace Eggnog.Tests.Differential
         /// <summary>
         /// Names every class that a constructor row mentions.
         /// </summary>
-        /// <param name="rows">The constructor rows: the table, the keys (a class id, a <c>long</c>, for a sort column) and
-        /// the output class id.</param>
+        /// <param name="rows">The constructor rows: the table, the keys (a class id, a <c>long</c>, for a sort column)
+        /// and the output class id.</param>
         /// <returns>The names, by class id; a class with no finite term is named <c>&lt;cyclic&gt;</c>.</returns>
         public static Dictionary<long, string> Name(IReadOnlyList<(DiffTable Table, object[] Keys, long Output)> rows)
         {

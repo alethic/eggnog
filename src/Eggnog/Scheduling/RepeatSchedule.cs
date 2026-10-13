@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Up to <see cref="Times"/> passes of the steps in sequence; stops after a pass with no change (§6.5.2).
+    /// Up to <see cref="Times"/> passes of the steps in sequence; stops after a pass with no change.
     /// </summary>
     internal sealed class RepeatSchedule : Schedule
     {

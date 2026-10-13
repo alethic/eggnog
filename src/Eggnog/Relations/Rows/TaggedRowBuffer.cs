@@ -61,7 +61,8 @@ namespace Eggnog.Relations
         /// Initializes an empty buffer whose first allocation holds at least <paramref name="firstCells"/> cells.
         /// </summary>
         /// <param name="arity">The number of cells per row, not counting the tag; may be zero.</param>
-        /// <param name="firstCells">The minimum size of the first allocation; zero for the ordinary growth policy.</param>
+        /// <param name="firstCells">The minimum size of the first allocation; zero for the ordinary growth
+        /// policy.</param>
         TaggedRowBuffer(int arity, int firstCells)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(arity);

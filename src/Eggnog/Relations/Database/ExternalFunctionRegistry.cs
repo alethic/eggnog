@@ -16,11 +16,11 @@ namespace Eggnog.Relations
     /// <see cref="Add"/> takes the most recently freed id if there is one, otherwise the next unused id.
     /// </para>
     /// <para>
-    /// Threading (colored-contexts spec §4.3, X16): the registry is shared by every context of a store, whose
-    /// children may run concurrently while the root registers or frees a function. So the map is copy-on-write: a
-    /// published snapshot is never changed; <see cref="Add"/> and <see cref="Remove"/> take a lock, clone the snapshot,
-    /// change the clone and publish it with a volatile write. Lookups read the current snapshot with one volatile load
-    /// and take no lock, O(1). Adding and removing are O(functions), which is fine for definitions.
+    /// Threading: the registry is shared by every context of a store, whose children may run concurrently while the
+    /// root registers or frees a function. So the map is copy-on-write: a published snapshot is never changed;
+    /// <see cref="Add"/> and <see cref="Remove"/> take a lock, clone the snapshot, change the clone and publish it with
+    /// a volatile write. Lookups read the current snapshot with one volatile load and take no lock, O(1). Adding and
+    /// removing are O(functions), which is fine for definitions.
     /// </para>
     /// </remarks>
     internal sealed class ExternalFunctionRegistry

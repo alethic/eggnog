@@ -7,15 +7,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One host write batch (D30): <c>Make</c>, <c>Assume</c> and <c>Union</c> are batches of one call;
+    /// One host write batch: <c>Make</c>, <c>Assume</c> and <c>Union</c> are batches of one call;
     /// <see cref="Scope.Write"/> makes larger ones. Each call is planned as it is made, reading only (plus minting fresh
     /// ids); <see cref="Commit"/> stages and flushes.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Phase 1 (planning) validates facts, checks class values (D39), encodes constants (interning), resolves existing
+    /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), resolves existing
     /// terms by lookup, mints a fresh id per new term, records only the rows and unions that do not hold already, and
-    /// checks conflicts of functions without a lattice (D32), including those a merge of the batch would cause (see
+    /// checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
     /// <c>HostBatch.Merges.cs</c>). An exception discards the batch: nothing is staged and <see cref="Origin"/> never
     /// commits. A <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
     /// <see cref="Scope.Write"/> then commits nothing, even when its callback caught the exception.
@@ -23,7 +23,7 @@ namespace Eggnog
     /// <para>
     /// Phase 2 (<see cref="Commit"/>) stages the new terms' rows children first, then the rows, then the unions, and
     /// flushes, which merges and rebuilds. A batch whose facts all hold stages nothing and is never flushed, so it moves
-    /// neither the scope's version nor the clock (D30, D49). Not thread-safe: used under the scope's guard, except
+    /// neither the scope's version nor the clock. Not thread-safe: used under the scope's guard, except
     /// <see cref="Reject"/>, which any thread may call.
     /// </para>
     /// </remarks>
@@ -56,7 +56,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the batch's origin (D39): the values its <c>Make</c> calls return are valid in later calls of the batch,
+        /// Gets the batch's origin: the values its <c>Make</c> calls return are valid in later calls of the batch,
         /// and once it commits.
         /// </summary>
         public ScopeOrigin Origin { get; }
@@ -72,8 +72,8 @@ namespace Eggnog
         public bool IsRejected => rejected;
 
         /// <summary>
-        /// Marks the batch rejected: a call of it threw, so nothing of it may be written (§3.1 <c>Scope.Write</c>). Any
-        /// thread may call it, including one that a guard refused.
+        /// Marks the batch rejected: a call of it threw, so nothing of it may be written (see
+        /// <see cref="Scope.Write"/>). Any thread may call it, including one that a guard refused.
         /// </summary>
         public void Reject() => rejected = true;
 
@@ -133,7 +133,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans a ground fact (§6.6.2): a relation row, a function value, a constructor output, or a union. Facts that
+        /// Plans a ground fact: a relation row, a function value, a constructor output, or a union. Facts that
         /// hold already plan nothing.
         /// </summary>
         /// <param name="fact">The fact.</param>
@@ -193,7 +193,7 @@ namespace Eggnog
 
         /// <summary>
         /// Plans a union, unless the classes are equal already; repeated unions are planned once. A union that would
-        /// merge two keys of a function without a lattice holding different values is a conflict (D32).
+        /// merge two keys of a function without a lattice holding different values is a conflict.
         /// </summary>
         /// <param name="a">One class: canonical or fresh.</param>
         /// <param name="b">The other class.</param>
@@ -245,7 +245,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans <c>F.Of(k).Is(v)</c> for a function F and a constant v (§6.6.2, D32).
+        /// Plans <c>F.Of(k).Is(v)</c> for a function F and a constant v. A second value for a key of a function without
+        /// a lattice, stored or planned in the batch, is a conflict; a value the stored one absorbs under the lattice
+        /// plans nothing.
         /// </summary>
         void PlanFunctionWrite(TermShape application, Term value)
         {
@@ -284,7 +286,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans <c>C.Of(k).Is(x)</c> for a constructor C and a class constant x (§6.6.2): a new key becomes a pending term
+        /// Plans <c>C.Of(k).Is(x)</c> for a constructor C and a class constant x: a new key becomes a pending term
         /// whose class is x; an existing key with another class is a row that the union-id merge unions with x.
         /// </summary>
         void PlanConstructorWrite(TermShape application, Term value)
@@ -391,14 +393,14 @@ namespace Eggnog
         ColumnType TypeOf(Type clrType) => graph.Values.TypeOf(clrType);
 
         /// <summary>
-        /// Checks that a table belongs to the scope's graph and is not a read-only scoped view (§6.6.2).
+        /// Checks that a table belongs to the scope's graph and is not a read-only scoped view.
         /// </summary>
         void CheckTable(TableHandle table)
         {
             if (ReferenceEquals(table.Graph, graph) == false)
                 throw new ArgumentException($"Table '{table.Name}' belongs to another graph.");
 
-            // Invariant R: a host write goes to the scope written, never through a scoped view.
+            // Writes are never scoped: a host write goes to the scope written, never through a scoped view.
             if (table.ReadScope is { } tag)
                 throw new ArgumentException($"'{table.Name}@{tag.Name}' is read-only; write '{table.Name}' in the scope itself.");
         }

@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Threading;
 
 using Xunit;
 
@@ -9,7 +11,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for egglog-level panics (egglog-bridge/src/lib.rs:1435-1515): the panic functions, the side channel, the
-    /// interning of messages, and how an <see cref="EGraph"/> reports them.
+    /// interning of messages, and how an <see cref="EGraph"/> and its contexts report them, a failure recorded by a run
+    /// that also stopped its context or by the rebuild after a run included.
     /// </summary>
     public class PanicTests
     {
@@ -153,7 +156,8 @@ namespace Eggnog.Relations.Tests
             var error = Assert.Throws<PanicException>(() => egraph.RunIteration(_ => RuleSetReport.Empty));
             Assert.Equal("engine failure", error.PanicMessage);
 
-            // When both channels hold a failure, the panic channel's is reported and the iteration reports nothing else.
+            // When both channels hold a failure, the panic channel's is reported and the iteration reports nothing
+            // else.
             var panic = egraph.NewPanic("panic first");
             egraph.WithExecutionState(state =>
             {
@@ -204,6 +208,80 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(baseline + 1, egraph.PanicFunctionCount);
             Assert.Equal(keep, egraph.NewPanic("keep"));
             Assert.IsType<PanicFunction>(egraph.Database.GetExternalFunction(keep));
+        }
+
+        /// <summary>
+        /// A relation <c>keyed(id) -&gt; i64</c> whose merge asserts the outputs are equal: a conflict records a
+        /// failure.
+        /// </summary>
+        static FunctionId AssertEqFunction(ContextGraph g)
+        {
+            return g.EGraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, g.I64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.AssertEq,
+                Name = "keyed",
+            });
+        }
+
+        /// <summary>
+        /// A failure recorded by a run that also stopped the context is thrown as <see cref="PanicException"/>; the
+        /// stop does not hide it. A case's rule derives the contradiction and, in the same run, writes an assert-eq
+        /// conflict.
+        /// </summary>
+        [Fact]
+        public void APanicInTheRunThatStopsACaseIsThrown()
+        {
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            var keyed = AssertEqFunction(g);
+            var a = g.Root.FreshId();
+            g.Root.AddValues([(keyed, [a, g.Int(1)])]);
+
+            var rb = g.EGraph.NewRule("stop-and-conflict", true);
+            var x = rb.NewVar(ColumnTy.Id);
+            rb.QueryTable(g.Mark, [x, rb.NewVar(g.UnitType)], false);
+            rb.Set(keyed, [x, RuleEntry.Const(g.Int(2), g.I64)]);
+            rb.Set(g.Bottom, [RuleEntry.Const(g.Unit, g.UnitType)]);
+            var rule = rb.Build();
+            g.Root.Freeze();
+
+            using var @case = g.Root.CreateChild(ContextOptions.Case);
+            g.Assert(@case, g.Mark, a);
+            @case.FlushUpdates();
+            Assert.Throws<PanicException>(() => @case.RunRules(rule));
+            Assert.True(@case.IsStopped);
+            Assert.False(@case.IsFaulted);
+        }
+
+        /// <summary>
+        /// A failure the post-run rebuild records (an assert-eq conflict the run's union exposes) is thrown by that
+        /// run, at the root and in a child, and is taken: the next run does not throw it again.
+        /// </summary>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AFailureThePostRunRebuildRecordsIsThrownByTheRun(bool inChild)
+        {
+            var g = new ContextGraph();
+            var keyed = AssertEqFunction(g);
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            g.Root.AddValues([(keyed, [a, g.Int(1)]), (keyed, [b, g.Int(2)]), (g.Edge, [a, b, g.Unit])]);
+            var unite = g.UnionEdges();
+            EGraphContext? child = null;
+            if (inChild)
+            {
+                g.Root.Freeze();
+                child = g.Root.CreateChild();
+            }
+
+            var context = child ?? g.Root;
+            Assert.Throws<PanicException>(() => context.RunRules(unite));
+            Assert.Equal(context.Find(a), context.Find(b));
+            context.RunRules(unite);
+            child?.Dispose();
         }
 
     }

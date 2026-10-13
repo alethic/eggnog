@@ -5,35 +5,35 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The executor part of the context checker (colored-contexts spec §12.7 item 3, L3): what the layered executor reads
-    /// of a context, checked through the same objects it reads them through, its views (<see cref="TableView"/>,
-    /// <see cref="LayerView"/>) and the layers' catalogs.
+    /// The executor part of the context checker: what the layered executor reads of a context, checked through the same
+    /// objects it reads them through, its views (<see cref="TableView"/>, <see cref="LayerView"/>) and the layers'
+    /// catalogs.
     /// </summary>
     /// <remarks>
     /// <para>
     /// For a clean context (<see cref="Context.CheckInvariants"/> runs it after the union-find and tables parts):
     /// <list type="number">
-    /// <item><b>View coherence</b> (I28, I29): every view of a registered table has one slot per depth up to the level that
+    /// <item><b>View coherence</b>: every view of a registered table has one slot per depth up to the level that
     /// built it, a layer present exactly where the chain has a layer of the table at or above the cleared floor (only the
     /// own layer for a context-private table), each layer view naming that layer's table and catalog entry, and frozen
     /// only if its context is; the hidden rows of each ancestor layer are exactly the hides of the levels above it (every
     /// level's hide is in the view, and every row the view hides is hidden at some level); and the database's view reads
     /// the context's layers at the context's depth and generation.</item>
-    /// <item><b>Frozen catalogs current</b> (I23, I28): every index built in the catalog of a frozen layer is current
-    /// with its table, since frozen catalogs are never reset.</item>
-    /// <item><b>Per-layer sort order</b> (I19): the own layer's sort column is nondecreasing and its run index agrees with
+    /// <item><b>Frozen catalogs current</b>: every index built in the catalog of a frozen layer is current with its
+    /// table, since frozen catalogs are never reset.</item>
+    /// <item><b>Per-layer sort order</b>: the own layer's sort column is nondecreasing and its run index agrees with
     /// every row (the run of each row's stamp contains the row).</item>
-    /// <item><b>Creation stamps</b> (I19): every live own row is stamped at or above the context's creation.</item>
-    /// <item><b>Watermark bounds</b> (C7): the semi-naive floor lies between the context's creation and the clock.</item>
-    /// <item><b>Canonical view</b> (I13): every id cell of every visible own row is canonical in the context.</item>
-    /// <item><b>Unique keys</b> (I12, Lemma F): the view's lookup of every live own row's key finds that row, so no other
-    /// visible row holds it.</item>
-    /// <item><b>Hidden rows in range</b> (I16, I18): every hidden set a view reads is sealed, of its layer's generation,
-    /// and names rows below the layer's physical count.</item>
+    /// <item><b>Creation stamps</b>: every live own row is stamped at or above the context's creation.</item>
+    /// <item><b>Watermark bounds</b>: the semi-naive floor lies between the context's creation and the clock.</item>
+    /// <item><b>Canonical view</b>: every id cell of every visible own row is canonical in the context.</item>
+    /// <item><b>Unique keys</b>: the view's lookup of every live own row's key finds that row, so no other visible row
+    /// holds it.</item>
+    /// <item><b>Hidden rows in range</b>: every hidden set a view reads is sealed, of its layer's generation, and names
+    /// rows below the layer's physical count.</item>
     /// </list>
     /// </para>
     /// <para>
-    /// Cost proportional to the context (§14.2): O(tables × depth) structure, plus the context's own rows and the hides of
+    /// Cost proportional to the context: O(tables × depth) structure, plus the context's own rows and the hides of
     /// its chain. Ancestors' rows are their own checkers' (a frozen ancestor's were checked when it froze). At a root only
     /// the views and the catalogs are checked: its rows are egglog's, and its settled form is <see cref="Context.CheckRootSettled"/>'s.
     /// </para>
@@ -57,7 +57,7 @@ namespace Eggnog.Relations
                 return;
             }
 
-            // Views are built over sealed sets only (I18); the tables part reports an unsealed one.
+            // Views are built over sealed sets only; the tables part reports an unsealed one.
             if (tables.UnsealedCount != 0)
                 return;
 
@@ -129,7 +129,7 @@ namespace Eggnog.Relations
             }
 
             // The view is the one built by the deepest level that touched the table; deeper levels share it. A layer
-            // created and left empty (a write refused after its buffer was made, X37) changes no view and invalidates none,
+            // created and left empty (a write refused after its buffer was made) changes no view and invalidates none,
             // so only a layer that holds rows, hides or a clear must be in the view.
             var top = view.LayerCount - 1;
             for (var level = top + 1; level <= depth; level++)
@@ -195,10 +195,10 @@ namespace Eggnog.Relations
                     continue;
 
                 if (set.IsSealed == false)
-                    Context.Report(violations, $"hidden rows: a hidden set of the view of table {id} over depth {j} is not sealed (I18)");
+                    Context.Report(violations, $"hidden rows: a hidden set of the view of table {id} over depth {j} is not sealed");
 
                 if (set.Generation != generation)
-                    Context.Report(violations, $"hidden rows: a hidden set of the view of table {id} over depth {j} is of generation {set.Generation}, the layer of {generation} (I16)");
+                    Context.Report(violations, $"hidden rows: a hidden set of the view of table {id} over depth {j} is of generation {set.Generation}, the layer of {generation}");
 
                 rows.Clear();
                 set.CopyTo(rows);
@@ -239,11 +239,11 @@ namespace Eggnog.Relations
         {
             foreach (var entry in info.ColumnIndexes.Entries)
                 if (entry.Index.TryGet(out var index) && index.NeedsRefresh(info.Table))
-                    Context.Report(violations, $"frozen catalogs: a column index of table {id} at depth {j} is behind its frozen table (I23)");
+                    Context.Report(violations, $"frozen catalogs: a column index of table {id} at depth {j} is behind its frozen table");
 
             foreach (var entry in info.Indexes.Entries)
                 if (entry.Index.TryGet(out var index) && index.NeedsRefresh(info.Table))
-                    Context.Report(violations, $"frozen catalogs: a tuple index of table {id} at depth {j} is behind its frozen table (I23)");
+                    Context.Report(violations, $"frozen catalogs: a tuple index of table {id} at depth {j} is behind its frozen table");
         }
 
         /// <summary>
@@ -265,24 +265,24 @@ namespace Eggnog.Relations
                 {
                     var stamp = cells[s.SortColumn];
                     if (stamp < previous)
-                        Context.Report(violations, $"sort order: own row {r} of table {id} is stamped {stamp}, below the previous row's {previous} (I19)");
+                        Context.Report(violations, $"sort order: own row {r} of table {id} is stamped {stamp}, below the previous row's {previous}");
 
                     previous = Math.Max(previous, stamp);
                     if (table.BinarySearchSortValue(stamp, out var start, out var end) == false || r < start || r >= end)
-                        Context.Report(violations, $"sort order: the run index of table {id} does not place own row {r} (stamp {stamp}) in its run (I19)");
+                        Context.Report(violations, $"sort order: the run index of table {id} does not place own row {r} (stamp {stamp}) in its run");
                 }
 
                 if (rows.IsStale(r))
                     continue;
 
                 if (s.SortColumn >= 0 && cells[s.SortColumn] < context.CreatedAt)
-                    Context.Report(violations, $"creation stamps: own row {r} of table {id} is stamped {cells[s.SortColumn]}, below the context's creation {context.CreatedAt} (I19)");
+                    Context.Report(violations, $"creation stamps: own row {r} of table {id} is stamped {cells[s.SortColumn]}, below the context's creation {context.CreatedAt}");
 
                 foreach (var column in s.RebuildColumns)
                 {
                     var cell = cells[column.Rep];
                     if (find.Find(cell) != cell)
-                        Context.Report(violations, $"canonical view: own row {r} of table {id} names {cell} in column {column.Rep}, which is {find.Find(cell)} here (I13)");
+                        Context.Report(violations, $"canonical view: own row {r} of table {id} names {cell} in column {column.Rep}, which is {find.Find(cell)} here");
                 }
 
                 if (view.LayerCount <= depth || view.Layers[depth] is null)
@@ -290,14 +290,14 @@ namespace Eggnog.Relations
 
                 var found = view.FindRow(cells[..keyCount], out var layer);
                 if (found != r || layer != depth)
-                    Context.Report(violations, $"unique keys: the view's lookup of own row {r}'s key in table {id} finds row {found} at depth {layer} (I12)");
+                    Context.Report(violations, $"unique keys: the view's lookup of own row {r}'s key in table {id} finds row {found} at depth {layer}");
             }
         }
 
         /// <summary>
         /// Gets whether <paramref name="layer"/> (the layer of the level at <paramref name="level"/>) can change a view:
         /// it holds rows, hides rows of a layer below, or cleared the table. A layer created and left empty cannot, and
-        /// views taken before it exists stay correct (X37).
+        /// views taken before it exists stay correct.
         /// </summary>
         static bool Matters(TableLayer? layer, int level)
         {

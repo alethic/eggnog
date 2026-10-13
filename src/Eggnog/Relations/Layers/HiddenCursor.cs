@@ -5,13 +5,13 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Answers "is this row hidden?" for the two sealed sets of a <see cref="HiddenRows"/> while a scan walks a layer's
-    /// rows in ascending order (colored-contexts spec §6.3): a merge walk with galloping over a sorted set, or one bit test
-    /// over a bitset. A mutable struct; keep it in a local or a field of the scanning struct and pass it by reference.
+    /// rows in ascending order: a merge walk with galloping over a sorted set, or one bit test over a bitset. A mutable
+    /// struct; keep it in a local or a field of the scanning struct and pass it by reference.
     /// </summary>
     /// <remarks>
-    /// Rows asked in nondecreasing order cost O(log gap) each, amortized O(1) over a dense scan. A row asked out of order
-    /// restarts the walk from the beginning, so the answer is always exact. The sets must stay sealed while the cursor
-    /// is in use, which they do outside a merge of their owner (I18).
+    /// Rows asked in nondecreasing order cost O(log gap) each, amortized O(1) over a dense scan. A row asked out of
+    /// order restarts the walk from the beginning, so the answer is always exact. The sets must stay sealed while the
+    /// cursor is in use, which they do outside a merge of their owner.
     /// </remarks>
     internal struct HiddenCursor
     {

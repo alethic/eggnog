@@ -6,7 +6,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// egglog's <c>process_constraints</c> (core-relations/src/free_join/mod.rs:718-761) on one table entry: the split of
-    /// an atom's constraints into fast and slow ones and the rows matching the fast ones (colored-contexts spec §9.4).
+    /// an atom's constraints into fast and slow ones and the rows matching the fast ones.
     /// <see cref="Database.ProcessConstraints(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>
     /// runs it on a database's own entry, and a layered context's view (<see cref="ContextView.Evaluate"/>) runs it once
     /// per present layer, each over that layer's own <see cref="TableInfo"/> and cached indexes.
@@ -78,8 +78,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Sorts <paramref name="constraints"/> exactly as <see cref="Process"/> does, without computing the rows the fast
         /// ones select and without building an index: the classification depends only on the table's kind, its sorted
-        /// column and its cacheable columns, which every layer of a table shares (colored-contexts spec §3.4, §9.4). A
-        /// child's <see cref="IQuerySchema.SplitConstraints"/> runs it on the root's entry.
+        /// column and its cacheable columns, which every layer of a table shares. A child's
+        /// <see cref="IQuerySchema.SplitConstraints"/> runs it on the root's entry.
         /// </summary>
         /// <param name="info">The table entry whose kind and spec classify.</param>
         /// <param name="constraints">The constraints.</param>

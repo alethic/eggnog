@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// Marks the current thread as running a user delegate the engine invoked: a primitive, a filter, a lattice merge or
-    /// a cost function (D47). The call sites that invoke such delegates enter the marker around each invocation, on
+    /// a cost function. The call sites that invoke such delegates enter the marker around each invocation, on
     /// whatever thread runs it, pool threads included, and every graph and scope entry point checks it first, so a
     /// delegate that calls into a graph is refused instead of interleaving with the engine call that invoked it.
     /// </summary>

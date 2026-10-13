@@ -23,9 +23,10 @@ namespace Eggnog.Relations
     /// reserves for all pending rows up front (core-relations table/mod.rs:679-680), so growth is rare.
     /// </para>
     /// <para>
-    /// The vector is a storage array plus a length: <see cref="ReadAccess"/>'s <see cref="ParallelVecReadAccess{T}.Prefix"/>
-    /// is the original length, and <see cref="Finish"/> returns the storage with the logical length. Both
-    /// <see cref="Finish"/> and <see cref="Take"/> need exclusive access: no write or read access may be in flight.
+    /// The vector is a storage array plus a length: <see cref="ReadAccess"/>'s
+    /// <see cref="ParallelVecReadAccess{T}.Prefix"/> is the original length, and <see cref="Finish"/> returns the
+    /// storage with the logical length. Both <see cref="Finish"/> and <see cref="Take"/> need exclusive access: no
+    /// write or read access may be in flight.
     /// </para>
     /// <para>
     /// The storage is always exactly a <c>T[]</c> (never a covariant array of a derived type), so creating a span over
@@ -282,7 +283,8 @@ namespace Eggnog.Relations
         /// Writes the items of <paramref name="items"/> to a newly reserved range of <paramref name="expected"/> slots,
         /// never past it.
         /// </summary>
-        /// <typeparam name="TEnumerator">The enumerator type: a struct for the specialized path, or the interface.</typeparam>
+        /// <typeparam name="TEnumerator">The enumerator type: a struct for the specialized path, or the
+        /// interface.</typeparam>
         /// <param name="items">The enumerator.</param>
         /// <param name="expected">The number of items it claims to yield; not negative.</param>
         /// <returns>The index of the first item.</returns>

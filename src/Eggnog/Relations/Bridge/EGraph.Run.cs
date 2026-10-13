@@ -30,23 +30,22 @@ namespace Eggnog.Relations
         /// <paramref name="runRuleSet"/> receives the run's timestamp <c>T</c>, which every row the run writes must carry;
         /// the clock does not move while it runs. Afterwards, if the union-find recorded no new union, no row can have
         /// become non-canonical: the clock advances to <c>T + 1</c> and the iteration ends. Otherwise the rebuild loop
-        /// runs, its first pass at <c>T</c> (lib.rs:667, X4), so rebuilt rows count as new for the rules just run.
+        /// runs, its first pass at <c>T</c> (lib.rs:667), so rebuilt rows count as new for the rules just run.
         /// </para>
         /// <para>
-        /// A panic recorded during the rule set or the rebuild is thrown at the end, with the writes made before the stop
-        /// merged (map §3.9 item 8). Defect fixed (egglog-bridge/src/lib.rs:597-599; map §8.1 row 22): egglog returns the
-        /// error right after the rule set, before advancing the timestamp or rebuilding, so unions the run merged leave
-        /// the tables non-canonical for whatever runs next (the frontend's <c>fail</c> command continues after such an
-        /// error), and the next run reuses the timestamp. Here the iteration finishes its bookkeeping first and then
-        /// throws the first panic; a panic the rebuild records afterwards belongs to the same failed iteration and is
-        /// dropped.
+        /// A panic recorded during the rule set or the rebuild is thrown at the end, with the writes made before the
+        /// stop merged. egglog returns the error right after the rule set, before advancing the timestamp or rebuilding
+        /// (egglog-bridge/src/lib.rs:597-599), so unions the run merged leave the tables non-canonical for whatever
+        /// runs next (the frontend's <c>fail</c> command continues after such an error), and the next run reuses the
+        /// timestamp. This iteration finishes its bookkeeping first and then throws the first panic; a panic the
+        /// rebuild records afterwards belongs to the same failed iteration and is dropped.
         /// </para>
         /// <para>
-        /// A raw write path (colored-contexts spec §10.4): rows and unions the root staged earlier through the
-        /// <see cref="EGraphContext"/> API are flushed first, in an epoch of their own
-        /// (<see cref="EGraphContext.FlushStagedFirst"/>), so writes land in the order the host issued them. Under egglog's
-        /// API alone that is one emptiness test and the timestamp sequence is egglog's. Refused from inside a callback of
-        /// the root's domain (a raw escape's action, a visitor, §8.3).
+        /// A raw write path: rows and unions the root staged earlier through the <see cref="EGraphContext"/> API are
+        /// flushed first, in an epoch of their own (<see cref="EGraphContext.FlushStagedFirst"/>), so writes land in
+        /// the order the host issued them. Under egglog's API alone that is one emptiness test and the timestamp
+        /// sequence is egglog's. Refused from inside a callback of the root's domain (a raw escape's action, a
+        /// visitor).
         /// </para>
         /// </remarks>
         /// <param name="runRuleSet">Runs the rule set against the root database at the given timestamp and merges its
@@ -112,8 +111,8 @@ namespace Eggnog.Relations
         /// union-find (merging, so collisions union their outputs), then re-stamps rows mentioning containers whose
         /// meaning changed in place, all at the pass's timestamp, which advances after it; passes repeat until one changes
         /// nothing. egglog's native <c>rebuild</c> loop (lib.rs:626-682), through <see cref="Context.Rebuild"/>, which
-        /// runs passes only when the union-find grew since the last rebuild or writes are pending (X42); egglog's
-        /// rule-based fallback is unreachable and not ported (decision 10).
+        /// runs passes only when the union-find grew since the last rebuild or writes are pending; egglog's rule-based
+        /// fallback is unreachable and not ported.
         /// </summary>
         /// <returns>Whether any pass changed a table or container.</returns>
         internal bool Rebuild() => store.Root.Rebuild();

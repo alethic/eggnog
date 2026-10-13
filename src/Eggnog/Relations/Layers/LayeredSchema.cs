@@ -6,23 +6,23 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The store-wide schema every context reads instead of the root database's table map (colored-contexts spec
-    /// §6.1, X16, X39): one <see cref="LayeredTableSchema"/> per function table, the union-find's id, and the
-    /// designated contradiction table.
+    /// The store-wide schema every context reads instead of the root database's table map: one
+    /// <see cref="LayeredTableSchema"/> per function table, the union-find's id, and the designated contradiction
+    /// table.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Children never touch the root database's <c>tables</c> map or catalog, which the root changes in place while it
     /// merges; they reach root tables only through this schema. <see cref="Register"/> runs under the store's
     /// definition lock and publishes copy-on-write arrays with volatile writes, so every read here is lock-free and
-    /// safe while a table is added (a table may be added at any time, X16). Ids are the root database's table ids;
-    /// slot 0 is the union-find, which has no <see cref="LayeredTableSchema"/>.
+    /// safe while a table is added (a table may be added at any time). Ids are the root database's table ids; slot 0 is
+    /// the union-find, which has no <see cref="LayeredTableSchema"/>.
     /// </para>
     /// <para>
-    /// It also holds the root's side of layering (§6.1): the root's retraction guard (<see cref="RootGuard"/>), the
-    /// root's single-layer view of every table (<see cref="RootView"/>, which children whose ancestors never touched a
-    /// table share), and the compaction gate of every shared root table, which keeps the root from renumbering rows its
-    /// descendants hold cursors and hidden sets over (§6.8).
+    /// It also holds the root's side of layering: the root's retraction guard (<see cref="RootGuard"/>), the root's
+    /// single-layer view of every table (<see cref="RootView"/>, which children whose ancestors never touched a table
+    /// share), and the compaction gate of every shared root table, which keeps the root from renumbering rows its
+    /// descendants hold cursors and hidden sets over.
     /// </para>
     /// </remarks>
     internal sealed class LayeredSchema
@@ -73,8 +73,8 @@ namespace Eggnog.Relations
         internal Store Store => store;
 
         /// <summary>
-        /// Gets the root context's retraction guard (§6.7): the root retracts no row of a shared table while it has live
-        /// descendants (decision 1).
+        /// Gets the root context's retraction guard: the root retracts no row of a shared table while it has live
+        /// descendants.
         /// </summary>
         public RetractionGuard RootGuard { get; }
 
@@ -129,7 +129,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the spec of table <paramref name="id"/>: <see cref="DisplacedTable.DisplacedSpec"/> for the union-find,
-        /// otherwise the registered table's (X39).
+        /// otherwise the registered table's.
         /// </summary>
         /// <param name="id">The table id.</param>
         /// <returns>The spec.</returns>
@@ -143,7 +143,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the name of table <paramref name="id"/>, or <c>null</c> when it has none (X39).
+        /// Gets the name of table <paramref name="id"/>, or <c>null</c> when it has none.
         /// </summary>
         /// <param name="id">The table id.</param>
         /// <returns>The name.</returns>
@@ -183,7 +183,7 @@ namespace Eggnog.Relations
                 Array.Copy(tables, grown, tables.Length);
                 grown[id.Index] = schema;
 
-                // §6.8: a shared root table does not compact while the root has live descendants.
+                // A shared root table does not compact while the root has live descendants.
                 if (contextPrivate == false)
                     schema.Root.CompactionGate = store.Root.Gate;
 
@@ -209,16 +209,16 @@ namespace Eggnog.Relations
 
                 // The schema first, then the list: a reader that finds the new id in FunctionTables (a volatile read,
                 // which acquires) then finds its schema, published before by a volatile write (which releases). The
-                // other order lets a lock-free reader see a listed id whose schema is still null (X16).
+                // other order lets a lock-free reader see a listed id whose schema is still null.
                 Volatile.Write(ref byId, grown);
                 Volatile.Write(ref functionTables, nextFunctions);
             }
         }
 
         /// <summary>
-        /// Gets the root's view of table <paramref name="id"/> (§6.1, §6.3): one layer, the root's table, hiding nothing.
-        /// Built once and published with a compare-exchange; frozen once the root is (<see cref="FreezeRoot"/>). Children
-        /// whose chain never touched the table share it. Lock-free, O(1) once built.
+        /// Gets the root's view of table <paramref name="id"/>: one layer, the root's table, hiding nothing. Built once
+        /// and published with a compare-exchange; frozen once the root is (<see cref="FreezeRoot"/>). Children whose
+        /// chain never touched the table share it. Lock-free, O(1) once built.
         /// </summary>
         /// <param name="id">A registered function table.</param>
         /// <returns>The view.</returns>
@@ -242,8 +242,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Builds the root's view of every registered table as frozen (§8.1 step 5): called by the root's freeze, after
-        /// its database froze. Under the schema lock, so a concurrent registration waits.
+        /// Builds the root's view of every registered table as frozen: called by the root's freeze, after its database
+        /// froze. Under the schema lock, so a concurrent registration waits.
         /// </summary>
         internal void FreezeRoot()
         {
@@ -256,8 +256,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Publishes the frozen root view of <paramref name="id"/>, a table just added to a frozen root and frozen
-        /// (§4.3 step 4, X43).
+        /// Publishes the frozen root view of <paramref name="id"/>, a table just added to a frozen root and frozen;
+        /// frozen children answer for it through their parents.
         /// </summary>
         /// <param name="id">The table.</param>
         internal void PublishFrozenRootView(TableId id)

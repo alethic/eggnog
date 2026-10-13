@@ -4,8 +4,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// What the children of the context differential programs exercised (colored-contexts spec §17 M9.4): the row
-    /// catch-up, the copies by reason, step 4, retractions and freezes, accumulated from each child's
+    /// What the children of the context differential programs exercised: the row catch-up, the copies by reason, the
+    /// rebuild's hide-and-copy step, retractions and freezes, accumulated from each child's
     /// <see cref="LayerStatistics"/> and its hides (whose reasons DEBUG builds record).
     /// </summary>
     sealed class Coverage
@@ -17,13 +17,13 @@ namespace Eggnog.Relations.Tests
         public long CatchUpRowsExamined;
 
         /// <summary>
-        /// The ancestor rows step 4 examined.
+        /// The ancestor rows the rebuild's hide-and-copy step examined.
         /// </summary>
         public long AncestorRowsExamined;
 
         /// <summary>
-        /// The ancestor rows copied into children, for any reason (<see cref="LayerStatistics.RowsCopied"/>); counted in
-        /// every build.
+        /// The ancestor rows copied into children, for any reason (<see cref="LayerStatistics.RowsCopied"/>); counted
+        /// in every build.
         /// </summary>
         public long RowsCopied;
 
@@ -40,7 +40,8 @@ namespace Eggnog.Relations.Tests
         public long KeyHeld;
 
         /// <summary>
-        /// The rows copied only to re-stamp them (§7.2 c′); expected to stay zero (I21).
+        /// The rows a catch-up copied only to re-stamp them, because their timestamp lies below the context's
+        /// semi-naive floor; expected to stay zero, since every writer stamps rows with its state's timestamp.
         /// </summary>
         public long RestampedCopies;
 
@@ -57,7 +58,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Adds what <paramref name="pair"/>'s context did, if it is a child.
         /// </summary>
-        public void Add(SpikePair pair)
+        public void Add(ContextPair pair)
         {
             if (pair.Engine.Tables is not { } tables)
                 return;

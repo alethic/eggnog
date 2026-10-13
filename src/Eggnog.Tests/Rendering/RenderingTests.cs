@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Linq;
+
 using Eggnog.Tests.Cosmos;
 using Eggnog.Tests.Cosmos.Literal;
 using Eggnog.Tests.Support;
@@ -15,7 +18,8 @@ namespace Eggnog.Tests.Rendering
     {
 
         /// <summary>
-        /// R3: a split rule renders as written, its case tag last; a split step renders with its rules and in-case schedule.
+        /// A split rule renders as written, its case tag last; a split step renders with its rules and in-case
+        /// schedule.
         /// </summary>
         [Fact]
         public void SplitRulesAndSplitStepsRender()
@@ -205,6 +209,24 @@ namespace Eggnog.Tests.Rendering
         {
             t.Root.Assume(relation.Of());
             return t.Root.Rows(relation)[0].ToString();
+        }
+
+        /// <summary>
+        /// Rows of a nullary function, of the contradiction relation, and of a set-valued function keyed by an enum
+        /// render as s-expressions.
+        /// </summary>
+        [Fact]
+        public void RowsOfNullaryTablesSetsAndEnumsRender()
+        {
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterEnum<Shade>();
+            var f = t.Graph.DefineFunction<long>("f");
+            var dom = t.Graph.DefineFunction<Shade, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            t.Root.Assume(f.Of().Is(5L), t.Graph.Contradiction.Of(), dom.Of(default(Shade)).Is(ValueSet.Of("b", "a")));
+
+            Assert.Equal("(f) = 5", t.Root.Rows(f).Single().ToString());
+            Assert.Equal("(contradiction)", t.Root.Rows(t.Graph.Contradiction).Single().ToString());
+            Assert.Equal(string.Create(CultureInfo.InvariantCulture, $"(dom {default(Shade)}) = (set-of \"a\" \"b\")"), t.Root.Rows(dom).Single().ToString());
         }
 
     }

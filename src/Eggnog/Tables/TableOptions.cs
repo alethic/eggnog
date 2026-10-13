@@ -9,13 +9,13 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the role of a relation or function: <see cref="TableRole.Fact"/> (the default) or
-        /// <see cref="TableRole.Analysis"/>; <see cref="TableRole.Term"/> is rejected. Ignored for constructors, which are
-        /// terms.
+        /// <see cref="TableRole.Analysis"/>; <see cref="TableRole.Term"/> is rejected. Ignored for constructors, which
+        /// are terms.
         /// </summary>
         public TableRole Role { get; init; } = TableRole.Fact;
 
         /// <summary>
-        /// Gets whether lifts copy the table into a case's parent (R3). <c>null</c>: facts yes, analyses no, constructors
+        /// Gets whether lifts copy the table into a case's parent. <c>null</c>: facts yes, analyses no, constructors
         /// yes (term lift).
         /// </summary>
         public bool? Lift { get; init; }

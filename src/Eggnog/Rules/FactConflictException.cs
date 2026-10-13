@@ -7,7 +7,7 @@ namespace Eggnog
 
     /// <summary>
     /// A host write that would give a function without a lattice a second value for one key, against the stored value or
-    /// another write of the same batch (D32). Nothing is written.
+    /// another write of the same batch. Nothing is written.
     /// </summary>
     /// <remarks>
     /// A union of the batch (a host <c>Union</c>, a sort equality, or a constructor write that gives an existing key

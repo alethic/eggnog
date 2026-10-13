@@ -7,17 +7,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Names the classes of a closed view by their least ground term (colored-contexts spec §17 M10.3; the algorithm of
-    /// rule-layer §8.2's <c>TermNamer</c>), so that two views with equal facts render equal rows whatever their ids: the
-    /// engine's, minted from blocks and counters, and the reference's, minted from its own counter. Least by size (the
-    /// number of constructor applications), then head name (ordinal), then arguments in order, an id argument by its own
-    /// name and a value by number. Both sides of family B's comparison name their classes with this one algorithm.
+    /// Names the classes of a closed view by their least ground term (the algorithm of the library differential's
+    /// <see cref="Eggnog.Tests.Differential.TermNamer"/>), so that two views with equal facts render equal rows
+    /// whatever their ids: the engine's, minted from blocks and counters, and the reference's, minted from its own
+    /// counter. Least by size (the number of constructor applications), then head name (ordinal), then arguments in
+    /// order, an id argument by its own name and a value by number. Both sides of family B's comparison name their
+    /// classes with this one algorithm.
     /// </summary>
     /// <remarks>
     /// Every class of a family B program is the output of a constructor term (host terms and rule mints are its only
-    /// sources of ids, and constructor rows are never deleted there), so every class gets a name. A class with no finite
-    /// term would be named <c>&lt;cyclic&gt;</c>, which only weakens the comparison. O(passes × constructor rows) for the
-    /// sizes, then a sort.
+    /// sources of ids, and constructor rows are never deleted there), so every class gets a name. A class with no
+    /// finite term would be named <c>&lt;cyclic&gt;</c>, which only weakens the comparison. O(passes × constructor
+    /// rows) for the sizes, then a sort.
     /// </remarks>
     static class TermNamer
     {
@@ -37,7 +38,7 @@ namespace Eggnog.Relations.Tests
         {
             ArgumentNullException.ThrowIfNull(schema);
             ArgumentNullException.ThrowIfNull(rows);
-            var terms = new List<(SpikeTable Table, ulong[] Row)>();
+            var terms = new List<(LogicalTable Table, ulong[] Row)>();
             for (var t = 0; t < schema.Tables.Count; t++)
                 if (schema.IsConstructor(t))
                     foreach (var row in rows(t))
@@ -91,7 +92,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// The size of a term given its arguments' sizes; <c>null</c> while an argument has none.
         /// </summary>
-        static long? Size(SpikeTable table, ulong[] row, Dictionary<ulong, long> size)
+        static long? Size(LogicalTable table, ulong[] row, Dictionary<ulong, long> size)
         {
             long total = 1;
             for (var c = 0; c < table.KeyCount; c++)
@@ -111,7 +112,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Orders two terms of one size: head name, then arguments in order.
         /// </summary>
-        static int Compare((SpikeTable Table, ulong[] Row) x, (SpikeTable Table, ulong[] Row) y, Func<ulong, string> names)
+        static int Compare((LogicalTable Table, ulong[] Row) x, (LogicalTable Table, ulong[] Row) y, Func<ulong, string> names)
         {
             var order = string.CompareOrdinal(x.Table.Name, y.Table.Name);
             if (order != 0)
@@ -130,7 +131,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Renders a term: <c>(add (num 1) (num 2))</c>.
         /// </summary>
-        static string Render((SpikeTable Table, ulong[] Row) term, Func<ulong, string> names)
+        static string Render((LogicalTable Table, ulong[] Row) term, Func<ulong, string> names)
         {
             var builder = new StringBuilder("(").Append(term.Table.Name);
             for (var c = 0; c < term.Table.KeyCount; c++)

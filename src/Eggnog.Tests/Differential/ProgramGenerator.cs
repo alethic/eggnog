@@ -7,7 +7,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Generates a <see cref="RandomProgram"/> from a seed (§8.2): 2–4 relations over <c>i64</c> and <c>String</c>; 1–2
+    /// Generates a <see cref="RandomProgram"/> from a seed: 2–4 relations over <c>i64</c> and <c>String</c>; 1–2
     /// constructors of the sort <c>Node</c> with value and <c>Node</c> keys; 1–2 functions merged by
     /// <c>ValueLattice.Max&lt;long&gt;()</c> or <c>ValueLattice.Intersect&lt;int&gt;()</c>, and one without a lattice,
     /// written only by host writes with one value per key; 5–12 rules (joins of 1–4 atoms, named primitives and lambdas
@@ -40,10 +40,10 @@ namespace Eggnog.Tests.Differential
 
         // The state of the rule being generated. The compiler shares the output of applications with equal arguments
         // (functions are functional), so a body never repeats an application, and never equates two variables that are
-        // keys of applications: two outputs pinned to different constants would never match, a definition error.
-        // A computation checked against a constant (p(args).Is(c), a check, §6.3) pins the register it shares with every
-        // equal computation of the body, so it is used only when the body has no equal computation, and no later let
-        // repeats it.
+        // keys of applications: two outputs pinned to different constants would never match, a definition error. A
+        // computation checked against a constant (p(args).Is(c), a check) pins the register it shares with every equal
+        // computation of the body, so it is used only when the body has no equal computation, and no later let repeats
+        // it.
         List<(string Name, DiffType Type)> variables = new();
         List<string> headVariables = new();
         HashSet<string> applications = new(StringComparer.Ordinal);
@@ -89,8 +89,8 @@ namespace Eggnog.Tests.Differential
             for (var i = 0; i < early; i++)
                 commands.Add(DiffCommand.Define(GenerateRule()));
 
-            // Queries defined after the first Make may hold the host's classes (D39), and are asked after unions, which
-            // re-lower them in R1 (§6.4.5).
+            // Queries defined after the first Make may hold the host's classes, and are asked after unions, which
+            // change the canonical forms the engine runs those class constants in.
             var defined = queries.Count;
             var rounds = random.Next(2, 6);
             for (var round = 0; round < rounds; round++)
@@ -656,8 +656,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Records a let's computation; <c>false</c> when the body checks an equal computation against a constant, whose
-        /// register a let would share.
+        /// Records a let's computation; <c>false</c> when the body checks an equal computation against a constant,
+        /// whose register a let would share.
         /// </summary>
         bool Computed(DiffTerm computation)
         {
@@ -670,8 +670,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A head item over the body's variables: a relation row, a lattice function write, a <c>Make</c>, a union, or a
-        /// constructor write.
+        /// A head item over the body's variables: a relation row, a lattice function write, a <c>Make</c>, a union, or
+        /// a constructor write.
         /// </summary>
         void HeadItem(List<DiffHead> head)
         {
@@ -764,8 +764,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A head constructor term over the body's variables, earlier <c>Make</c> variables and handles; a <c>C1</c> term
-        /// takes at most one variable of the body, so terms grow at most linearly per iteration.
+        /// A head constructor term over the body's variables, earlier <c>Make</c> variables and handles; a <c>C1</c>
+        /// term takes at most one variable of the body, so terms grow at most linearly per iteration.
         /// </summary>
         DiffTerm HeadConstructor()
         {
@@ -807,8 +807,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A rewrite: a constructor pattern over fresh variables, rewritten to one of its class variables, a constructor
-        /// term over its variables, or a handle; sometimes guarded by an extra atom.
+        /// A rewrite: a constructor pattern over fresh variables, rewritten to one of its class variables, a
+        /// constructor term over its variables, or a handle; sometimes guarded by an extra atom.
         /// </summary>
         void Rewrite(List<DiffFact> body, List<DiffHead> head)
         {

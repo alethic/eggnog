@@ -4,10 +4,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A merge that, on a conflict, writes a row <c>[current, incoming, timestamp]</c> into a log table stamped with the
-    /// execution state's captured timestamp, as a bridge <c>Function</c> merge stamps the rows its
-    /// <c>lookup_or_insert</c> mints (map §4.2 C1: every write of a run or pass, merge functions' included, carries the
-    /// captured epoch), and keeps the incoming row.
+    /// A merge that, on a conflict, writes a row <c>[current, incoming, timestamp]</c> into a log table stamped with
+    /// the execution state's captured timestamp, as a bridge <c>Function</c> merge stamps the rows its
+    /// <c>lookup_or_insert</c> mints (every write of a run or pass, a merge function's included, carries the epoch the
+    /// run captured), and keeps the incoming row.
     /// </summary>
     sealed class StampingMerge : MergeFunction
     {

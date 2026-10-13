@@ -4,11 +4,11 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A split opened in a scope (colored-contexts spec §11.3, B6): its key and request, the source that asked for it, the
-    /// driver that opened it, the depth it was opened at, and its cases. The scope keeps it until
-    /// <see cref="SplitDriver.DisposeRecords"/>; while its cases are not disposed it is live and covers its source's split
-    /// over its key's values in the scope and every descendant, for every driver (B6 compares the source by identity, not
-    /// by its index in a driver's list). Only the driver that opened it runs and lifts its cases again (§11.3 step 6).
+    /// A split opened in a scope: its key and request, the source that asked for it, the driver that opened it, the
+    /// depth it was opened at, and its cases. The scope keeps it until <see cref="SplitDriver.DisposeRecords"/>; while
+    /// its cases are not disposed it is live and covers its source's split over its key's values in the scope and every
+    /// descendant, for every driver (coverage compares the source by identity, not by its index in a driver's list).
+    /// Only the driver that opened it runs and lifts its cases again.
     /// </summary>
     internal sealed class SplitRecord
     {
@@ -60,14 +60,14 @@ namespace Eggnog.Relations
         public int Depth { get; }
 
         /// <summary>
-        /// Gets the driver that opened the split: the only one whose steps run the in-case schedule in its cases and lift
-        /// them (§11.3 step 6), since another driver serving the same scope has its own in-case schedule and lift spec.
+        /// Gets the driver that opened the split: the only one whose steps run the in-case schedule in its cases and
+        /// lift them, since another driver serving the same scope has its own in-case schedule and lift spec.
         /// </summary>
         public SplitDriver Driver { get; }
 
         /// <summary>
         /// Gets whether the record is a split of <paramref name="source"/> over <paramref name="values"/>: the same source
-        /// object (by reference, whatever its index in a driver's list) and the same identifying cells (B6). O(cells).
+        /// object (by reference, whatever its index in a driver's list) and the same identifying cells. O(cells).
         /// </summary>
         /// <param name="source">The source.</param>
         /// <param name="values">The identifying cells.</param>

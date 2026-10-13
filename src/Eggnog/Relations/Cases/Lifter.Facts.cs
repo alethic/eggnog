@@ -15,12 +15,13 @@ namespace Eggnog.Relations
         int[] positions = new int[8];
 
         /// <summary>
-        /// Resolves the spec's tables against the parent's e-graph for this lift: the contradiction function is left out
-        /// (L4 writes it), and so is a table the parent cannot be written (a child parent and a merge that is not a lattice
-        /// merge, decision 2), since no case could hold its own rows of it either.
+        /// Resolves the spec's tables against the parent's e-graph for this lift: the contradiction function is left
+        /// out (<see cref="ContradictParent"/> writes it), and so is a table the parent cannot be written (a child
+        /// parent and a merge that is not a lattice merge, which only the root may write), since no case could hold its
+        /// own rows of it either.
         /// </summary>
         /// <exception cref="ArgumentException">A function is not declared; a constructor's output is not an id; a relation's
-        /// output is an id (it would be written as the seed case's id, which can be local to it, I10); or a case join is
+        /// output is an id (it would be written as the seed case's id, which can be local to it); or a case join is
         /// given for an id output or for a kind other than <see cref="LiftTableKind.Function"/>.</exception>
         void Resolve(EGraphContext parent, LiftSpec spec)
         {
@@ -53,8 +54,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages the facts of every listed table that hold in every live case and not yet in the parent (colored-contexts
-        /// spec §11.2, L1, I33 completeness of facts).
+        /// Stages the facts of every listed table that hold in every live case and not yet in the parent, found through
+        /// the seed case's source rows (<see cref="CollectSources"/>).
         /// </summary>
         /// <param name="parent">The parent; clean.</param>
         /// <param name="seed">The seed case's index in the live cases.</param>
@@ -78,9 +79,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Collects the seed case's source rows of <paramref name="table"/> into <see cref="sources"/>: (a) its own rows;
-        /// (b) every ancestor row it sees whose key names one of its group roots that is a parent id (the winner probe,
-        /// L1), which losers-only marking never copies into the case.
+        /// Collects the seed case's source rows of <paramref name="table"/> into <see cref="sources"/>: (a) its own
+        /// rows; (b) every ancestor row it sees whose key names one of its group roots that is a parent id (the winner
+        /// probe), which losers-only marking never copies into the case.
         /// </summary>
         void CollectSources(LiftedTable table, int seed)
         {
@@ -107,7 +108,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Expands every source row into the parent keys it stands for (§11.2): each id key cell ranges over its member
+        /// Expands every source row into the parent keys it stands for: each id key cell ranges over its member
         /// list, other cells stay. A row with an empty list (a local class with no parent member) stands for no parent key;
         /// a row standing for more than <see cref="LiftOptions.CandidateLimit"/> keys is skipped and its keys counted.
         /// Candidates keep the source row's output.
@@ -166,7 +167,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Decides one candidate parent key by the table's kind and stages what holds in every live case and not yet in
-        /// the parent (§11.2).
+        /// the parent.
         /// </summary>
         /// <param name="parent">The parent.</param>
         /// <param name="table">The table.</param>
@@ -201,7 +202,7 @@ namespace Eggnog.Relations
                         return;
 
                     // A base output (Resolve refuses an id): written only when every live case holds the same value, so
-                    // a value one live case does not hold is never lifted (I33). A unit relation always agrees.
+                    // a value one live case does not hold is never lifted. A unit relation always agrees.
                     for (var j = 0; j < live.Count; j++)
                         if (outputs[j] != outputs[seed])
                             return;

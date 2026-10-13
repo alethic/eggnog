@@ -3,13 +3,14 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Maps an id to its canonical id in some view, without writing: what a canonicalizing rebuilder applies to every
-    /// id cell (colored-contexts spec §5.5). The root's union-find (<see cref="RootIdFinder"/>) and a context's layered
-    /// union-find (<see cref="LayeredIdFinder"/>) implement it.
+    /// id cell. The root's union-find (<see cref="RootIdFinder"/>) and a context's layered union-find
+    /// (<see cref="LayeredIdFinder"/>) implement it.
     /// </summary>
     /// <remarks>
     /// Implement it on a readonly struct and pass the struct as a type parameter constrained to <c>struct</c>
-    /// (<see cref="CanonicalizeLoops"/>), so every per-row loop is specialized for it and the find inlined, the way Rust
-    /// monomorphizes a closure: the root's loops then compile to the same machine code they had before contexts existed.
+    /// (<see cref="CanonicalizeLoops"/>), so every per-row loop is specialized for it and the find inlined, the way
+    /// Rust monomorphizes a closure: the root's loops then compile to the same machine code as loops that call the
+    /// root's union-find directly.
     /// </remarks>
     internal interface IIdFinder
     {

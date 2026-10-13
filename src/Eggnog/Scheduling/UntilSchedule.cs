@@ -4,10 +4,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The body unless every fact of the condition already holds (egglog's <c>:until</c>, D24, §6.5.2): the condition is
-    /// a host check (§6.6.3) in the scope, made each time the node executes, so <c>Saturate(Until(body, facts))</c> runs
-    /// the body until the facts hold or nothing changes. <see cref="Schedule.Until"/> checks that the facts are ground
-    /// host checks, and <c>Scope.Run</c> that they can be read in its scope, before any work.
+    /// The body unless every fact of the condition already holds (egglog's <c>:until</c>): the condition is a host check
+    /// in the scope, made each time the node executes, so <c>Saturate(Until(body, facts))</c> runs the body until the
+    /// facts hold or nothing changes. <see cref="Schedule.Until"/> checks that the facts are ground host checks, and
+    /// <c>Scope.Run</c> that they can be read in its scope, before any work.
     /// </summary>
     internal sealed class UntilSchedule : Schedule
     {
@@ -36,7 +36,7 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
         {
-            // A stopped case answers no read and runs nothing (D45): the body would do nothing either.
+            // A stopped case answers no read and runs nothing: the body would do nothing either.
             scope.Engine.EnsureClean();
             if (scope.Engine.IsStopped)
                 return false;

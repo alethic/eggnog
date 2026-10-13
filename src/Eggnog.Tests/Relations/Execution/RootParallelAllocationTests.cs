@@ -6,9 +6,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Review probe (root cost, colored-contexts spec §1 item 8, §14.1): a parallel root run never recycles the trie nodes
-    /// it creates at positions 0 and 1 (the garbage collector reclaims them), so every such node is allocated per frame.
-    /// Before layered execution a node took 64 bytes; a root run should allocate nothing more than it did.
+    /// What layered execution costs a root run: a parallel root run never recycles the trie nodes it creates at
+    /// positions 0 and 1 (the garbage collector reclaims them), so every such node is allocated per frame. A concurrent
+    /// root node must take at most 64 bytes, what a node without layer support takes, so that layers add nothing to a
+    /// root run's allocation.
     /// </summary>
     [Collection(AllocationProbeCollection.Name)]
     public class RootParallelAllocationTests

@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// returns as an <c>Err</c>.
     /// </summary>
     /// <remarks>
-    /// The run is not rolled back: the writes it made before stopping, and their merge, stay (map §3.9 item 8).
+    /// The run is not rolled back: the writes it made before stopping, and their merge, stay, as in egglog.
     /// </remarks>
     internal sealed class PanicException : Exception
     {

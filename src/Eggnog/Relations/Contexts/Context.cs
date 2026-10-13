@@ -9,53 +9,53 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// One view of a <see cref="Store"/>: its parent's view plus what is asserted in it (colored-contexts spec §1,
-    /// §3.3). The root context is egglog's database; a child context is a copy of its parent that stores only what
-    /// differs, and costs in proportion to what it touches.
+    /// One view of a <see cref="Store"/>: its parent's view plus what is asserted in it. The root context is egglog's
+    /// database; a child context is a copy of its parent that stores only what differs, and costs in proportion to what
+    /// it touches.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Each context owns one <see cref="Relations.Database"/> (X1). The root's is egglog's, unchanged. A child's has
-    /// its own catalog, notification list, pending queues and size estimate, and shares the store's counters, external
-    /// functions, dependency graph and container environments with the root by reference (§3.4).
+    /// Each context owns one <see cref="Relations.Database"/>. The root's is egglog's, unchanged. A child's has its own
+    /// catalog, notification list, pending queues and size estimate, and shares the store's counters, external
+    /// functions, dependency graph and container environments with the root by reference.
     /// </para>
     /// <para>
-    /// Lifecycle (§8). <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its
-    /// thread domain (<see cref="Domain"/>, §8.3), so a non-frozen context and everything below it behave as one
-    /// thread; a second thread entering the domain is refused. Inside an operation that runs a caller's code (a write
-    /// batch's action, a <see cref="ScanMerges{TVisitor}"/> visitor), reads are allowed, but writes to a context of the
-    /// same domain, rebuilds with work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/>
-    /// are refused before they change anything (§8.3). <see cref="Dispose"/> drops a child once it has no live children;
-    /// the root is never disposed. Depth is limited to 31 (X36). Every ancestor's <see cref="Gate"/> counts its live
+    /// Lifecycle. <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its thread
+    /// domain (<see cref="Domain"/>), so a non-frozen context and everything below it behave as one thread; a second
+    /// thread entering the domain is refused. Inside an operation that runs a caller's code (a write batch's action, a
+    /// <see cref="ScanMerges{TVisitor}"/> visitor), reads are allowed, but writes to a context of the same domain,
+    /// rebuilds with work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/> are refused
+    /// before they change anything. <see cref="Dispose"/> drops a child once it has no live children; the root is never
+    /// disposed. Depth is limited to <see cref="MaxDepth"/>. Every ancestor's <see cref="Gate"/> counts its live
     /// descendants.
     /// </para>
     /// <para>
-    /// Union-find (§5, M9.2). The root's union-find is egglog's <see cref="DisplacedTable"/>; a child's is an
+    /// Union-find. The root's union-find is egglog's <see cref="DisplacedTable"/>; a child's is an
     /// <see cref="OverlayDisplacedTable"/>: a <see cref="UnionFindOverlay"/> of the classes it merged over its parent's
     /// canonical ids, and a <see cref="DisplacedJournal"/> of the ids that stopped being canonical in it.
     /// <c>find_C = overlay_C ∘ find_P</c> (<see cref="UnionFind"/>). When the parent's union-find grows, the child
-    /// re-keys its overlay eagerly at its next write or rebuild (<see cref="CatchUpUnionFind"/>), through one cursor into
-    /// the parent's displaced ids.
+    /// re-keys its overlay eagerly at its next write or rebuild (<see cref="CatchUpUnionFind"/>), through one cursor
+    /// into the parent's displaced ids.
     /// </para>
     /// <para>
-    /// Tables (§6, M9.3). A child stores only what it writes, in lazily created layers (<see cref="Tables"/>), and hides
-    /// the ancestor rows it replaces or deletes; it reads every table through a <see cref="TableView"/>
+    /// Tables. A child stores only what it writes, in lazily created layers (<see cref="Tables"/>), and hides the
+    /// ancestor rows it replaces or deletes; it reads every table through a <see cref="TableView"/>
     /// (<see cref="GetView"/>): its ancestors' layers minus what it hides, plus its own. Writes are canonicalized and
-    /// stamped when they merge (X38).
+    /// stamped when they merge.
     /// </para>
     /// <para>
-    /// Rebuild (§7). <see cref="Rebuild"/> is the one rebuild loop of every level: egglog's passes at the root; in a
-    /// child, catch-up with its ancestors (union-find re-key, ancestor appends, container refresh) in the first pass, then
-    /// per pass the rewrite of its own rows, the hide-and-copy of ancestor rows naming its own losers (losers only,
-    /// decision 3) and the merge. Before the root is shared (a child created from it, or a freeze) it settles the rows
-    /// written since its last rebuild (<see cref="Settle"/>, X38).
+    /// Rebuild. <see cref="Rebuild"/> is the one rebuild loop of every level: egglog's passes at the root; in a child,
+    /// catch-up with its ancestors (union-find re-key, ancestor appends, container refresh) in the first pass, then per
+    /// pass the rewrite of its own rows, the hide-and-copy of ancestor rows naming its own losers (losers only) and the
+    /// merge. Before the root is shared (a child created from it, or a freeze) it settles the rows written since its
+    /// last rebuild (<see cref="Settle"/>).
     /// </para>
     /// </remarks>
     internal sealed partial class Context : IDisposable
     {
 
         /// <summary>
-        /// The deepest context: <c>LayeredSubset</c> keeps a 32-bit layer mask, one bit per level (X36).
+        /// The deepest context: <c>LayeredSubset</c> keeps a 32-bit layer mask, one bit per level.
         /// </summary>
         public const int MaxDepth = 31;
 
@@ -76,7 +76,7 @@ namespace Eggnog.Relations
         readonly uint createdAt;
 
         /// <summary>
-        /// The child's layering (§6.2); <c>null</c> at the root.
+        /// The child's layering; <c>null</c> at the root.
         /// </summary>
         readonly ContextTables? tables;
 
@@ -105,13 +105,13 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The number of ids displaced in the parent's view when the child was created: those it inherits rather than
-        /// journals (I8); 0 at the root. <see cref="DisplacedInViewCount"/> adds the journal to it.
+        /// journals; 0 at the root. <see cref="DisplacedInViewCount"/> adds the journal to it.
         /// </summary>
         readonly long displacedInParentView;
 
         /// <summary>
         /// The find this context gives the children it creates: its own chain until it freezes, then its flattened
-        /// form (§5.4, §8.1). Written before the frozen flag, read after it.
+        /// form. Written before the frozen flag, read after it.
         /// </summary>
         LayeredUnionFind finderForChildren;
 
@@ -121,14 +121,14 @@ namespace Eggnog.Relations
         FlattenedUnionFind? flattened;
 
         /// <summary>
-        /// How far into the parent's displaced ids the child has caught up (X7); a child is uf-current when this equals
-        /// the parent's <see cref="DisplacedCount"/>.
+        /// How far into the parent's displaced ids the child has caught up; a child is uf-current when this equals the
+        /// parent's <see cref="DisplacedCount"/>.
         /// </summary>
         int unionFindCursor;
 
         /// <summary>
         /// The displaced count at the end of the last rebuild: rows past it are the next pass's delta, and a context is
-        /// clean only when nothing lies past it (§7.5).
+        /// clean only when nothing lies past it.
         /// </summary>
         int journalMark;
 
@@ -136,18 +136,18 @@ namespace Eggnog.Relations
         long rekeyedMembers;
 
         /// <summary>
-        /// The child's cursor into the store's container dirty log (§7.4): the ids logged before it are refreshed.
+        /// The child's cursor into the store's container dirty log: the ids logged before it are refreshed.
         /// </summary>
         int dirtyCursor;
 
         /// <summary>
-        /// The journal rows the eq-container guard has checked (§7.4, G-b).
+        /// The journal rows the eq-container guard has checked.
         /// </summary>
         int eqCheckedRows;
 
         /// <summary>
-        /// The eq-container version the guard last checked the journal against (§7.4, G-b,
-        /// <see cref="ContainerValues.EqVersion"/>); when the store's version has moved past it, the whole journal is
+        /// The eq-container version the guard last checked the journal against
+        /// (<see cref="ContainerValues.EqVersion"/>); when the store's version has moved past it, the whole journal is
         /// checked again before the child is clean.
         /// </summary>
         long eqCheckedVersion;
@@ -165,7 +165,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// The number of <see cref="ScanMerges{TVisitor}"/> calls running on the context, or <see cref="ScansClosed"/>
         /// once <see cref="Dispose"/> has claimed it. A frozen context is scanned without its domain, so this, not the
-        /// domain, is what refuses a dispose from inside a visitor (§8.3) or during another thread's scan.
+        /// domain, is what refuses a dispose from inside a visitor or during another thread's scan.
         /// </summary>
         int activeScans;
 
@@ -178,7 +178,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The largest epoch the context captured (<see cref="BeginEpoch"/>) or ran rules at (<see cref="UseEpoch"/>):
-        /// with <see cref="semiNaiveFloor"/>, the floor of a rule run's timestamp (I3). Domain thread only.
+        /// with <see cref="semiNaiveFloor"/>, the floor of a rule run's timestamp. Domain thread only.
         /// </summary>
         uint lastEpoch;
         volatile bool frozen;
@@ -229,12 +229,12 @@ namespace Eggnog.Relations
             Array.Copy(parent.ancestors, ancestors, parent.ancestors.Length);
             ancestors[parent.ancestors.Length] = this;
 
-            // §10.9: a child of a frozen context runs serially (siblings may run concurrently); a child of a context
+            // A child of a frozen context runs serially (siblings may run concurrently); a child of a context
             // that is not frozen never runs concurrently with it, so it inherits its heuristics.
             var parallelism = options.Parallelism ?? (parent.IsFrozen ? ParallelHeuristics.Serial : parent.database.Parallelism);
             idBlocks = new IdBlockAllocator(store.Counters, store.IdCounter);
 
-            // §5: the parent is current with its own parent here (CreateChild rebuilt it, or it is frozen), so its find
+            // The parent is current with its own parent here (CreateChild rebuilt it, or it is frozen), so its find
             // is exact and the child starts with an empty overlay and journal over it.
             parentFinder = parent.FinderForChildren;
             overlay = new UnionFindOverlay();
@@ -248,11 +248,11 @@ namespace Eggnog.Relations
             database = new Database(store.Root.Database, this, overlayTable, idBlocks, parallelism);
             domain = parent.IsFrozen ? new ThreadAffinityGuard() : parent.Domain;
 
-            // §7.4 G-b: the journal is empty, so it is checked against the current eq-container version.
+            // The journal is empty, so the eq-container guard starts current with the store's eq-container version.
             containers = database.Containers;
             eqCheckedVersion = containers.EqVersion;
 
-            // §6.2: no layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
+            // No layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
             tables = new ContextTables(store.Schema, this);
             database.AttachLayers(tables);
             dirtyCursor = store.ContainerDirtyLog.End;
@@ -262,7 +262,7 @@ namespace Eggnog.Relations
             createdAt = store.ReadClock();
             semiNaiveFloor = createdAt;
 
-            // §6.9 step 3: a case created where a contradiction is already visible starts stopped.
+            // A case created where a contradiction is already visible starts stopped.
             if (options.StopOnContradiction && store.Schema.Contradiction is { } contradiction && tables.GetView(contradiction).FindRow(ReadOnlySpan<uint>.Empty, out _) >= 0)
                 tables.SetContradicted();
         }
@@ -298,38 +298,38 @@ namespace Eggnog.Relations
         public Database Database => database;
 
         /// <summary>
-        /// Gets the child's layering (§6.2): its layers, hidden sets, views and cursors; <c>null</c> at the root.
+        /// Gets the child's layering: its layers, hidden sets, views and cursors; <c>null</c> at the root.
         /// </summary>
         public ContextTables? Tables => tables;
 
         /// <summary>
-        /// Gets the gate counting the context's live descendants (§6.8).
+        /// Gets the gate counting the context's live descendants.
         /// </summary>
         public DescendantGate Gate => gate;
 
         /// <summary>
-        /// Gets the context's thread domain (§8.3): shared with its parent unless the parent was frozen when this
-        /// context was created (or froze since).
+        /// Gets the context's thread domain: shared with its parent unless the parent was frozen when this context was
+        /// created (or froze since).
         /// </summary>
         public ThreadAffinityGuard Domain => Volatile.Read(ref domain);
 
         /// <summary>
         /// Gets the clock reading taken when the context was created; 0 for the root. Every row this context or a
-        /// descendant writes carries a timestamp at least this large (I19).
+        /// descendant writes carries a timestamp at least this large.
         /// </summary>
         public uint CreatedAt => createdAt;
 
         /// <summary>
-        /// Gets the context's change stamp (rule-layer D16, X30): it moves when a merge adds or removes rows or a clear
-        /// empties a table, and not for no-ops or redundant unions.
+        /// Gets the context's change stamp: it moves when a merge adds or removes rows or a clear empties a table, and
+        /// not for no-ops or redundant unions.
         /// </summary>
         public long Version => database.ChangeStamp;
 
         /// <summary>
-        /// Gets a stamp of the rows the context's views show (§9.1, I29): the sum of <see cref="Version"/> over the context
-        /// and its ancestors. Each only grows, so the sum moves whenever any of them merges rows in or out (a compaction
-        /// included), hides, clears or stops, and only then. A rule set records it when its first header is evaluated, and
-        /// a child's run refuses the rule set once it moved (<see cref="Database.RunRuleSet"/>). O(depth).
+        /// Gets a stamp of the rows the context's views show: the sum of <see cref="Version"/> over the context and its
+        /// ancestors. Each only grows, so the sum moves whenever any of them merges rows in or out (a compaction
+        /// included), hides, clears or stops, and only then. A rule set records it when its first header is evaluated,
+        /// and a child's run refuses the rule set once it moved (<see cref="Database.RunRuleSet"/>). O(depth).
         /// </summary>
         internal long ViewStamp
         {
@@ -359,29 +359,29 @@ namespace Eggnog.Relations
         public bool IsDisposed => disposed;
 
         /// <summary>
-        /// Gets whether an exception escaped one of the child's operations (X12); only <see cref="Dispose"/> is then
-        /// allowed.
+        /// Gets whether an exception escaped one of the child's operations; only <see cref="Dispose"/> is then allowed,
+        /// because a hide whose copy was never merged cannot be repaired.
         /// </summary>
         public bool IsFaulted => faulted;
 
         /// <summary>
-        /// Gets whether a contradiction stopped the context (§6.9; only with
+        /// Gets whether a contradiction stopped the context (only with
         /// <see cref="ContextOptions.StopOnContradiction"/>).
         /// </summary>
         public bool IsContradicted => contradicted;
 
         /// <summary>
-        /// Gets whether the context may be read (§7.5): not disposed or faulted, and either frozen or caught up with
-        /// everything — nothing merged since its last rebuild is left unrebuilt, and, in a child, no write is staged and
-        /// unmerged, its union-find is current with its parent's, and its parent is clean too. The recursion stops at the
-        /// first frozen ancestor, so the cost is O(ancestors that are not frozen) (D16).
+        /// Gets whether the context may be read: not disposed or faulted, and either frozen or caught up with
+        /// everything — nothing merged since its last rebuild is left unrebuilt, and, in a child, no write is staged
+        /// and unmerged, its union-find is current with its parent's, and its parent is clean too. The recursion stops
+        /// at the first frozen ancestor, so the cost is O(ancestors that are not frozen).
         /// </summary>
         /// <remarks>
-        /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in egglog
-        /// (X42). A child is not clean while an ancestor that is not settled changed since it last caught up
+        /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in
+        /// egglog. A child is not clean while an ancestor that is not settled changed since it last caught up
         /// (<see cref="ContextTables.NeedsCatchUp"/>), nor while the store gained an eq-sort container its eq-container
-        /// guard has not checked its displacements against (<see cref="ContainerValues.EqVersion"/>, §7.4 G-b): such a
-        /// container is reconciled only by a rebuild, which refuses the child if the container names one of its losers.
+        /// guard has not checked its displacements against (<see cref="ContainerValues.EqVersion"/>): such a container
+        /// is reconciled only by a rebuild, which refuses the child if the container names one of its losers.
         /// </remarks>
         public bool IsClean
         {
@@ -406,11 +406,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether the context's views show what it sees now (colored-contexts spec §9.1): <see cref="IsClean"/>
-        /// without its term for writes staged and not merged, at every level of the chain. Staged writes are invisible
-        /// until merged (as at a root, X42), so they never make a view stale; a pending own rebuild, an ancestor change
-        /// not caught up with, or an eq-container guard behind do. What rule building, planning and a rule run in a child
-        /// require (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
+        /// Gets whether the context's views show what it sees now: <see cref="IsClean"/> without its term for writes
+        /// staged and not merged, at every level of the chain. Staged writes are invisible until merged (as at a root),
+        /// so they never make a view stale; a pending own rebuild, an ancestor change not caught up with, or an
+        /// eq-container guard behind do. What rule building, planning and a rule run in a child require
+        /// (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
         /// </summary>
         internal bool IsViewCurrent
         {
@@ -435,8 +435,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether a child's eq-container guard has checked its displacements against every eq-sort container the
-        /// store holds (§7.4, G-b): its journal is empty, or the store's eq-container version has not moved since the
-        /// last check. One volatile read. Always <c>true</c> at the root.
+        /// store holds: its journal is empty, or the store's eq-container version has not moved since the last check.
+        /// One volatile read. Always <c>true</c> at the root.
         /// </summary>
         internal bool IsEqGuardCurrent => containers is null || journal!.Count == 0 || eqCheckedVersion == containers.EqVersion;
 
@@ -460,8 +460,8 @@ namespace Eggnog.Relations
         internal IdBlockAllocator? IdBlocks => idBlocks;
 
         /// <summary>
-        /// Gets or sets the displaced count at the end of the last rebuild pass (§7.3): the journal rows past it are the
-        /// next pass's delta, which <see cref="ContextTables.RebuildPass"/> consumes. Domain thread only.
+        /// Gets or sets the displaced count at the end of the last rebuild pass: the journal rows past it are the next
+        /// pass's delta, which <see cref="ContextTables.RebuildPass"/> consumes. Domain thread only.
         /// </summary>
         internal int JournalMark
         {
@@ -493,9 +493,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws unless the context's views may be read by rule building, planning or a rule run (§9.1): disposed →
-        /// <see cref="ObjectDisposedException"/>; faulted or contradicted → <see cref="InvalidOperationException"/>; views
-        /// not current (<see cref="IsViewCurrent"/>) → <see cref="InvalidOperationException"/> naming <see cref="Rebuild"/>.
+        /// Throws unless the context's views may be read by rule building, planning or a rule run: disposed →
+        /// <see cref="ObjectDisposedException"/>; faulted or contradicted → <see cref="InvalidOperationException"/>;
+        /// views not current (<see cref="IsViewCurrent"/>) → <see cref="InvalidOperationException"/> naming
+        /// <see cref="Rebuild"/>.
         /// </summary>
         internal void ThrowIfViewNotCurrent()
         {
@@ -505,11 +506,11 @@ namespace Eggnog.Relations
             if (IsViewCurrent == false)
                 ThrowNotClean();
 
-            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context's views were read with a hidden set not sealed (I18, X40)");
+            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context's views were read with a hidden set not sealed");
         }
 
         /// <summary>
-        /// Throws unless the context may be read (§7.5): disposed → <see cref="ObjectDisposedException"/>; faulted or
+        /// Throws unless the context may be read: disposed → <see cref="ObjectDisposedException"/>; faulted or
         /// contradicted → <see cref="InvalidOperationException"/>; not clean → <see cref="InvalidOperationException"/>
         /// naming <see cref="Rebuild"/>.
         /// </summary>
@@ -521,18 +522,18 @@ namespace Eggnog.Relations
             if (IsClean == false)
                 ThrowNotClean();
 
-            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context was read with a hidden set not sealed (I18, X40)");
+            Debug.Assert(tables is null || tables.UnsealedCount == 0, "a context was read with a hidden set not sealed");
         }
 
         /// <summary>
-        /// Sets the sticky contradiction stop (§6.9); <see cref="ContextTables.SetContradicted"/> decides when.
+        /// Sets the sticky contradiction stop; <see cref="ContextTables.SetContradicted"/> decides when.
         /// </summary>
         internal void MarkContradicted() => contradicted = true;
 
         /// <summary>
-        /// Marks a child faulted: an exception escaped one of its operations and may have left a hide without its copy
-        /// (X12), so every later call except <see cref="Dispose"/> throws. The root keeps <see cref="Relations.Database"/>'s
-        /// own exception guarantee instead and is never faulted.
+        /// Marks a child faulted: an exception escaped one of its operations and may have left a hide without its copy,
+        /// which cannot be repaired, so every later call except <see cref="Dispose"/> throws. The root keeps
+        /// <see cref="Relations.Database"/>'s own exception guarantee instead and is never faulted.
         /// </summary>
         internal void Fault()
         {
@@ -541,7 +542,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws <see cref="InvalidOperationException"/> once the context is faulted (X12).
+        /// Throws <see cref="InvalidOperationException"/> once the context is faulted.
         /// </summary>
         internal void ThrowIfFaulted()
         {
@@ -550,7 +551,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws <see cref="InvalidOperationException"/> once a contradiction stopped the context (§6.9).
+        /// Throws <see cref="InvalidOperationException"/> once a contradiction stopped the context.
         /// </summary>
         internal void ThrowIfContradicted()
         {

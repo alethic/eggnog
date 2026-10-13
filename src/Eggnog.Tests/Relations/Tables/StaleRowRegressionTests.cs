@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Regression tests for egglog's stale-row hole (map §8.1 row 1): its <c>scan_generic_bounded</c> evaluates
-    /// constraints on raw rows without checking for tombstones (core-relations/src/table/mod.rs:429-439, 1018-1025), so
-    /// a deleted, superseded or rebuilt row whose remaining cells satisfy a slow constraint reaches the join. Every path
-    /// that yields rows must skip tombstones.
+    /// Tests for the stale-row hole that egglog has and this engine must not: egglog's <c>scan_generic_bounded</c>
+    /// evaluates constraints on raw rows without checking for tombstones (core-relations/src/table/mod.rs:429-439,
+    /// 1018-1025), so a deleted, superseded or rebuilt row whose remaining cells satisfy a slow constraint reaches the
+    /// join. Here every path that yields rows must skip tombstones.
     /// </summary>
     public class StaleRowRegressionTests
     {

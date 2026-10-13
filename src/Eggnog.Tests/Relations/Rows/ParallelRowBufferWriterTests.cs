@@ -312,6 +312,56 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(Row(511), old.AsSpan(511, 1).ToArray());
         }
 
+        /// <summary>
+        /// Disposes the handle it is given, the way a helper that takes the handle as a parameter and wraps it in
+        /// <c>using</c> would. The handle is a class, so the helper's parameter and the caller's variable are the same
+        /// handle.
+        /// </summary>
+        static void InspectAndClose(ParallelRowBufferReadHandle handle)
+        {
+            using (handle)
+                Assert.False(handle.IsStale(0));
+        }
+
+        /// <summary>
+        /// A helper that disposes a handle it was given, followed by the owner's own <c>Dispose</c>, closes the
+        /// handle's read section once: a resize still waits for another read handle that is open on another thread,
+        /// instead of replacing the storage that handle still reads (and marks stale).
+        /// </summary>
+        [Fact]
+        public async Task DisposingACopiedHandleDoesNotLetAResizeRunUnderAnotherOpenHandle()
+        {
+            var rows = new RowBuffer(1);
+            rows.AddRow(new[] { 1u });
+            var writer = rows.ParallelWriter();
+
+            var mine = writer.ReadHandle();
+            var other = writer.ReadHandle();
+            InspectAndClose(mine);
+
+            // The helper disposed `mine`; its owner still disposes it as usual.
+            mine.Dispose();
+
+            // `other` is still open, so a resize must wait for it.
+            var big = new RowBuffer(1);
+            for (uint i = 0; i < 5000; i++)
+                big.AddRow(new[] { i });
+            var cancellation = TestContext.Current.CancellationToken;
+            var append = Task.Run(() => writer.AppendContents(big), cancellation);
+            var first = await Task.WhenAny(append, Task.Delay(500, cancellation));
+            var resizedWhileOpen = ReferenceEquals(first, append);
+
+            // Only close `other` when the resize correctly waited for it; otherwise the counter is already at zero and
+            // closing it would drive it negative.
+            if (resizedWhileOpen == false)
+            {
+                other.Dispose();
+                await append;
+            }
+
+            Assert.False(resizedWhileOpen, "A resize replaced the storage while a read handle was still open.");
+        }
+
     }
 
 }

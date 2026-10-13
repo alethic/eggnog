@@ -9,8 +9,9 @@ namespace Eggnog.Relations
     /// <c>MutexWriter</c>.
     /// </summary>
     /// <remarks>
-    /// Dispose exactly once, typically with a <c>using</c> statement; a copy of the handle shares the same lock and must
-    /// not be disposed separately. Disposing reopens the lock and wakes every thread that blocked behind the write.
+    /// Dispose exactly once, typically with a <c>using</c> statement; a copy of the handle shares the same lock and
+    /// must not be disposed separately. Disposing reopens the lock and wakes every thread that blocked behind the
+    /// write.
     /// </remarks>
     /// <typeparam name="T">The type of the guarded data.</typeparam>
     internal readonly struct ReadOptimizedLockWriter<T> : IDisposable

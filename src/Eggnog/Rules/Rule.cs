@@ -4,7 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A compiled rule. Made by <see cref="Ruleset.DefineRule(string, System.Action{RuleBuilder})"/>.
+    /// A compiled rule. Made by <see cref="Ruleset.DefineRule(string, System.Action{RuleBuilder})"/> (global) or
+    /// <see cref="Scope.DefineRule(Ruleset, string, System.Action{RuleBuilder})"/> (local to a scope).
     /// </summary>
     public sealed class Rule
     {
@@ -41,19 +42,20 @@ namespace Eggnog
         public Ruleset Ruleset { get; }
 
         /// <summary>
-        /// Gets the scope the rule is local to (§6.7): it is active in that scope and its descendants. <c>null</c> for a
-        /// global rule.
+        /// Gets the scope the rule is local to: it is active in that scope and its descendants. <c>null</c> for a global
+        /// rule.
         /// </summary>
         public Scope? Owner { get; }
 
         /// <summary>
-        /// Gets whether every run matches in full (a naive engine rule, which never inherits watermarks).
+        /// Gets whether every run matches in full: against every row, not only the rows new since the rule last ran
+        /// here or in an ancestor.
         /// </summary>
         public bool IsNaive { get; }
 
         /// <summary>
-        /// Gets the rule's effective licence (D12): its own <see cref="RuleBuilder.Erasing"/> tag, else its ruleset's;
-        /// <c>null</c> when it has none, or when <see cref="RuleBuilder.ReadsOwnFacts"/> exempts it.
+        /// Gets the rule's effective licence, under which it is erasing: its own <see cref="RuleBuilder.Erasing"/> tag,
+        /// else its ruleset's; <c>null</c> when it has none, or when <see cref="RuleBuilder.ReadsOwnFacts"/> exempts it.
         /// </summary>
         public ScopeTag? Licence { get; }
 

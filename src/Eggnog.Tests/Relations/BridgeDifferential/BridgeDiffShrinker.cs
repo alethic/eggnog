@@ -8,14 +8,14 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Shrinks a failing bridge differential program: drops rules, seeds, rule parts and iterations, halves bulk loads,
-    /// and simplifies the schedule and plan settings, keeping each change after which the program still fails with the same kind of exception, until nothing
-    /// more helps or the budget (runs and time) is spent.
+    /// and simplifies the schedule and plan settings, keeping each change after which the program still fails with the
+    /// same kind of exception, until nothing more helps or the budget (runs and time) is spent.
     /// </summary>
     /// <remarks>
     /// Only well-formed programs are tried: a seed is dropped only when no later seed names its class (later references
-    /// are renumbered), and a rule part only when the rule stays well-formed (<see cref="BridgeDiffRule.IsWellFormed"/>).
-    /// Id constants keep their numbers, so dropping a term seed may make one name another term or none; the failure
-    /// decides whether that is kept.
+    /// are renumbered), and a rule part only when the rule stays well-formed
+    /// (<see cref="BridgeDiffRule.IsWellFormed"/>). Id constants keep their numbers, so dropping a term seed may make
+    /// one name another term or none; the failure decides whether that is kept.
     /// </remarks>
     static class BridgeDiffShrinker
     {
@@ -157,8 +157,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Lists simpler versions of a rule: without one action, primitive or atom; with every atom matching rows that are
-        /// not subsumed; with the default plan settings.
+        /// Lists simpler versions of a rule: without one action, primitive or atom; with every atom matching rows that
+        /// are not subsumed; with the default plan settings.
         /// </summary>
         static IEnumerable<BridgeDiffRule> Simplify(BridgeDiffRule rule)
         {

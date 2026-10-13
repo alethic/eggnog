@@ -4,8 +4,7 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The limits and settings of a <see cref="SplitDriver"/> (colored-contexts spec §11.3; rule-layer E8). Immutable once
-    /// built.
+    /// The limits and settings of a <see cref="SplitDriver"/>. Immutable once built.
     /// </summary>
     internal sealed class SplitOptions
     {
@@ -59,9 +58,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the options cases are created with (rule-layer E8: so <see cref="ContextOptions.InheritWatermarks"/>
-        /// reaches them). They must make a case (<see cref="ContextOptions.IsCase"/>) that stops on a contradiction
-        /// (<see cref="ContextOptions.StopOnContradiction"/>, L4). Default <see cref="ContextOptions.Case"/>.
+        /// Gets the options cases are created with (through them, <see cref="ContextOptions.InheritWatermarks"/>
+        /// reaches the cases). They must make a case (<see cref="ContextOptions.IsCase"/>) that stops on a
+        /// contradiction (<see cref="ContextOptions.StopOnContradiction"/>). Default <see cref="ContextOptions.Case"/>.
         /// </summary>
         /// <exception cref="ArgumentException">The options do not make a case that stops on a contradiction.</exception>
         public ContextOptions CaseOptions

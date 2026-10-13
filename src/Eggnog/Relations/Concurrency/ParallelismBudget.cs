@@ -7,28 +7,28 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A counted pool of threads that concurrent work leases from, so that children of a frozen context run side by side
-    /// without oversubscribing the machine (colored-contexts spec §10.9, C9; the M11 part the colors need). An
-    /// <see cref="EGraph"/> holds one, sized by its degree of parallelism (<see cref="EGraph.ParallelismBudget"/>), and
+    /// A counted pool of threads that concurrent work leases from, so that children of a frozen context run side by
+    /// side without oversubscribing the machine. An <see cref="EGraph"/> holds one, sized by its degree of parallelism
+    /// (<see cref="EGraph.ParallelismBudget"/>), and
     /// <see cref="ConcurrentChildren.Run(System.Collections.Generic.IReadOnlyList{EGraphContext}, Action{EGraphContext, int})"/>
     /// runs each child's body under a lease of the child's own degree of parallelism.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Invariant: <c>0 &lt;= Available &lt;= Total</c>, and <c>Total - Available</c> is the sum of the threads of the leases
-    /// not yet released. A lease asks for between one and <see cref="Total"/> threads: a larger request could never be
-    /// granted, so it is refused rather than left to block forever.
+    /// Invariant: <c>0 &lt;= Available &lt;= Total</c>, and <c>Total - Available</c> is the sum of the threads of the
+    /// leases not yet released. A lease asks for between one and <see cref="Total"/> threads: a larger request could
+    /// never be granted, so it is refused rather than left to block forever.
     /// </para>
     /// <para>
     /// Thread-safe. Every change is made under one private lock, and <see cref="Lease"/> waits on it
-    /// (<see cref="Monitor.Wait(object)"/>) until enough threads are released; <see cref="Release"/> wakes every waiter.
-    /// Waiters are not served in arrival order: a large request can wait behind smaller ones that keep fitting. Cost: one
-    /// uncontended lock per lease and per release, which is negligible against the work a lease covers (a child's whole
-    /// body); nothing here is on a per-row path.
+    /// (<see cref="Monitor.Wait(object)"/>) until enough threads are released; <see cref="Release"/> wakes every
+    /// waiter. Waiters are not served in arrival order: a large request can wait behind smaller ones that keep fitting.
+    /// Cost: one uncontended lock per lease and per release, which is negligible against the work a lease covers (a
+    /// child's whole body); nothing here is on a per-row path.
     /// </para>
     /// <para>
-    /// A thread that holds a lease and then blocks on a second one can deadlock once the budget is exhausted; callers that
-    /// nest concurrent work run the nested part under the lease they hold (<see cref="ConcurrentChildren"/> does).
+    /// A thread that holds a lease and then blocks on a second one can deadlock once the budget is exhausted; callers
+    /// that nest concurrent work run the nested part under the lease they hold (<see cref="ConcurrentChildren"/> does).
     /// </para>
     /// </remarks>
     internal sealed class ParallelismBudget
@@ -69,8 +69,8 @@ namespace Eggnog.Relations
         public int Available => Volatile.Read(ref available);
 
         /// <summary>
-        /// Leases <paramref name="threads"/> threads, blocking until that many are available. Dispose the returned lease
-        /// (or call <see cref="Release"/> with the same count) exactly once.
+        /// Leases <paramref name="threads"/> threads, blocking until that many are available. Dispose the returned
+        /// lease (or call <see cref="Release"/> with the same count) exactly once.
         /// </summary>
         /// <param name="threads">The number of threads; between one and <see cref="Total"/>.</param>
         /// <returns>The lease.</returns>
@@ -122,8 +122,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="threads">The number of threads to return; at least one.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="threads"/> is less than one.</exception>
-        /// <exception cref="InvalidOperationException">More threads would be available than the budget holds: a lease was
-        /// released twice, or threads were released that were never leased.</exception>
+        /// <exception cref="InvalidOperationException">More threads would be available than the budget holds: a lease
+        /// was released twice, or threads were released that were never leased.</exception>
         public void Release(int threads)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1);

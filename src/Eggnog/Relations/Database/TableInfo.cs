@@ -108,9 +108,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Switches both index catalogs to serial refresh, because the table's context is freezing (colored-contexts spec
-        /// §8.1 step 4.4, X14): a frozen catalog is never reset again, and an index built lazily for a concurrent
-        /// descendant is built on the thread that needs it, never by parallel work that a waiter would have to run.
+        /// Switches both index catalogs to serial refresh, because the table's context is freezing: a frozen catalog is
+        /// never reset again, and an index built lazily for a concurrent descendant is built on the thread that needs
+        /// it, never by parallel work that a waiter would have to run.
         /// </summary>
         public void FreezeIndexes()
         {

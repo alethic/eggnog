@@ -44,7 +44,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the database may keep a cached index over <paramref name="column"/> of <paramref name="table"/>
         /// (<see cref="TableSpec.IsUncacheable"/>): what <see cref="PlanIndexKeys.Collect"/> lists for a frozen context to
-        /// prebuild (colored-contexts spec §9.10). Every column, unless the schema says otherwise.
+        /// prebuild. Every column, unless the schema says otherwise.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="column">The column.</param>

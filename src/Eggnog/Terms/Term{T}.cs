@@ -33,8 +33,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Disequality: a filter, in a body only (a definition error in a head; <see cref="ArgumentException"/> in a host
-        /// write or check).
+        /// Disequality: a filter, in a body only (a definition error in a head; <see cref="ArgumentException"/> in a
+        /// host write or check).
         /// </summary>
         /// <param name="other">The other side.</param>
         /// <returns>The fact.</returns>
@@ -45,7 +45,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// A constant; for a sort, a class constant, checked where it is used (D39).
+        /// A constant; for a sort, a class constant, checked where it is used: a class is usable only in the scope that
+        /// returned it and that scope's descendants, until that scope is disposed.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>

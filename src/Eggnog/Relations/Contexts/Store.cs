@@ -6,9 +6,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// An e-graph store with colored contexts (colored-contexts spec §3.2): the root <see cref="Context"/> (egglog's
-    /// database, unchanged), the store-wide schema, the union-find table, and the two counters every context shares,
-    /// ids and the clock.
+    /// An e-graph store with colored contexts: the root <see cref="Context"/> (egglog's database, unchanged), the
+    /// store-wide schema, the union-find table, and the two counters every context shares, ids and the clock.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -18,7 +17,7 @@ namespace Eggnog.Relations
     /// <see cref="Database"/> without a store behaves exactly as egglog's.
     /// </para>
     /// <para>
-    /// Definitions. Tables are added through <see cref="AddTable"/> at any time, children or not (X16): under
+    /// Definitions. Tables are added through <see cref="AddTable"/> at any time, children or not: under
     /// <see cref="DefinitionLock"/>, inside the root's thread domain while the root is not frozen, and published to the
     /// schema copy-on-write so running children never see a torn array. The root database's own
     /// <see cref="Database.AddTable"/> is refused, so every table of the store is known to its schema, which children
@@ -26,9 +25,9 @@ namespace Eggnog.Relations
     /// reallocate the counter storage that child threads increment.
     /// </para>
     /// <para>
-    /// Time (C1, §4.1). <see cref="ReadClock"/> returns the current epoch and <see cref="AdvanceClock"/> moves it on; a
-    /// context reads it at the start of each run, pass or write batch and advances it at the end. Ids (§4.2): the root
-    /// mints directly from <see cref="IdCounter"/>, children from blocks reserved on it, so ids are unique store-wide.
+    /// Time. <see cref="ReadClock"/> returns the current epoch and <see cref="AdvanceClock"/> moves it on; a context
+    /// reads it at the start of each run, pass or write batch and advances it at the end. Ids: the root mints directly
+    /// from <see cref="IdCounter"/>, children from blocks reserved on it, so ids are unique store-wide.
     /// </para>
     /// </remarks>
     internal sealed class Store
@@ -93,7 +92,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the log of containers the root rebuilt in place while it had live descendants, from which children
-        /// re-stamp their own rows (§7.4, X31).
+        /// re-stamp their own rows.
         /// </summary>
         public ContainerDirtyLog ContainerDirtyLog { get; } = new();
 
@@ -115,11 +114,11 @@ namespace Eggnog.Relations
 #if DEBUG
         /// <summary>
         /// DEBUG only: whether a caller has written rows through a database's raw execution-state API
-        /// (<see cref="Database.WithExecutionState{TResult}"/>, <see cref="Database.CreateExecutionState"/>), whose rows
-        /// carry the stamps the caller gives them. Only then may a catch-up re-stamp an ancestor row (colored-contexts
-        /// spec §7.2 (c′), §19 item 9): every engine and bridge path stamps with the state's timestamp (I21), so a
-        /// re-stamped copy in a store without raw writes is a defect, which <c>ContextTables</c> asserts. Set once, never
-        /// cleared; not synchronized (a stale read can only skip the assertion).
+        /// (<see cref="Database.WithExecutionState{TResult}"/>, <see cref="Database.CreateExecutionState"/>), whose
+        /// rows carry the stamps the caller gives them. Only then may a catch-up re-stamp an ancestor row: every engine
+        /// and bridge path stamps with the state's timestamp, so a re-stamped copy in a store without raw writes is a
+        /// defect, which <c>ContextTables</c> asserts. Set once, never cleared; not synchronized (a stale read can only
+        /// skip the assertion).
         /// </summary>
         internal bool HasRawWrites { get; set; }
 #endif
@@ -128,9 +127,9 @@ namespace Eggnog.Relations
         /// Gets the current epoch. Thread-safe, one volatile read.
         /// </summary>
         /// <remarks>
-        /// Checked (§3.2, §13 edge 25): the last epoch is <c>uint.MaxValue - 1</c>. <see cref="uint.MaxValue"/> is
-        /// <see cref="Value.StaleRep"/>, which no run could use: a rule reading the clock (egglog's <c>next_ts</c>) would
-        /// be refused by the counter conversion, and a stamp in a row's first cell would mark the row deleted.
+        /// Checked: the last epoch is <c>uint.MaxValue - 1</c>. <see cref="uint.MaxValue"/> is
+        /// <see cref="Value.StaleRep"/>, which no run could use: a rule reading the clock (egglog's <c>next_ts</c>)
+        /// would be refused by the counter conversion, and a stamp in a row's first cell would mark the row deleted.
         /// </remarks>
         /// <returns>The clock's value.</returns>
         /// <exception cref="OverflowException">The clock has reached <see cref="uint.MaxValue"/>.</exception>
@@ -143,8 +142,8 @@ namespace Eggnog.Relations
         public void AdvanceClock() => Counters.Increment(ClockCounter);
 
         /// <summary>
-        /// Adds a function table to the root and registers it with the schema (§4.3, X16). Allowed at any time; runs
-        /// under <see cref="DefinitionLock"/> and, while the root is not frozen, inside the root's thread domain, so it
+        /// Adds a function table to the root and registers it with the schema. Allowed at any time; runs under
+        /// <see cref="DefinitionLock"/> and, while the root is not frozen, inside the root's thread domain, so it
         /// cannot run concurrently with root work. Touches no other context.
         /// </summary>
         /// <param name="table">The table; a <see cref="SortedWritesTable"/> not part of any database.</param>
@@ -152,7 +151,7 @@ namespace Eggnog.Relations
         /// <param name="writeDependencies">The tables its merge function only writes.</param>
         /// <param name="name">The table's name, or <c>null</c>.</param>
         /// <param name="contextPrivate">Whether descendants never read the table: it is then not layered, never gated,
-        /// and may be retracted freely (decision 1).</param>
+        /// and may be retracted freely, even while the context has live descendants.</param>
         /// <returns>The table's id.</returns>
         /// <exception cref="ArgumentException">The table is not a <see cref="SortedWritesTable"/>, is already part of the
         /// database, or a read dependency is not added.</exception>
@@ -184,8 +183,8 @@ namespace Eggnog.Relations
                     var id = root.Database.AddTableCore(table, readDependencies, writeDependencies, name);
                     Schema.Register(id, contextPrivate);
 
-                    // §4.3 step 4 (X43): a table added to a frozen root is frozen at once, empty, and its frozen root
-                    // view is published; frozen children answer for it through their parents.
+                    // A table added to a frozen root is frozen at once, empty, and its frozen root view is published;
+                    // frozen children answer for it through their parents.
                     if (frozenRoot)
                     {
                         var info = root.Database.GetTableInfo(id);
@@ -207,7 +206,7 @@ namespace Eggnog.Relations
         /// Adds a counter to the store, starting at zero.
         /// </summary>
         /// <returns>The counter's id.</returns>
-        /// <exception cref="InvalidOperationException">A child context has been created (X16).</exception>
+        /// <exception cref="InvalidOperationException">A child context has been created.</exception>
         public CounterId AddCounter()
         {
             lock (definitionLock)
@@ -215,8 +214,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Designates <paramref name="table"/>, a registered nullary relation, as the store's contradiction table
-        /// (§6.9). Once per store.
+        /// Designates <paramref name="table"/>, a registered nullary relation, as the store's contradiction table. Once
+        /// per store.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <exception cref="InvalidOperationException">A contradiction table is designated already.</exception>
@@ -234,8 +233,8 @@ namespace Eggnog.Relations
         internal void NoteChildCreated() => hasHadChildren = true;
 
         /// <summary>
-        /// Converts a clock value to an epoch, refusing <see cref="Value.StaleRep"/> and beyond (§3.2): the one bound
-        /// every clock read of the store applies, here and in <see cref="Database"/>'s timestamp defaults.
+        /// Converts a clock value to an epoch, refusing <see cref="Value.StaleRep"/> and beyond: the one bound every
+        /// clock read of the store applies, here and in <see cref="Database"/>'s timestamp defaults.
         /// </summary>
         /// <param name="value">The clock's value.</param>
         /// <returns>The epoch.</returns>

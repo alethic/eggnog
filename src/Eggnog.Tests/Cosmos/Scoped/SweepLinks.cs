@@ -26,9 +26,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         public const string Since = "2026-08-02T12:00:00.000Z";
 
         /// <summary>
-        /// Compiles the container under the graph's frozen root with the theory's <see cref="CosmosTheory.Facts"/>: horn
-        /// and lattice rules, and the schema's split on its discriminator <c>data.type</c> (R3), which opens three cases
-        /// (park, map, spot); then freezes it.
+        /// Compiles the container under the graph's frozen root with the theory's <see cref="CosmosTheory.Facts"/>:
+        /// horn and lattice rules, and the schema's split on its discriminator <c>data.type</c>, which opens three
+        /// cases (park, map, spot); then freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
         /// <returns>The frozen schema scope.</returns>
@@ -81,9 +81,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// The facade probe's queries (07): the map query, park and map written IN and spelt per kind, the offline refresh,
-        /// the facade's own view filter, and the spot query. Those that need a case split to lower do not lower in R2;
-        /// they still exercise the schema.
+        /// The facade probe's queries (07): the map query, park and map written IN and spelt per kind, the offline
+        /// refresh, the facade's own view filter, and the spot query. Those that need a split of the query to lower do
+        /// not lower under <see cref="Ask"/>, which runs none; they still exercise the schema.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <returns>The queries' WHERE clauses.</returns>
@@ -104,8 +104,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
         ];
 
         /// <summary>
-        /// Asks a query in a new child of the schema, tagged as a query, and saturates it with horn, lattice and rewrite
-        /// rules (R2: no split).
+        /// Asks a query in a new child of the schema, tagged as a query, and saturates it with horn, lattice and
+        /// rewrite rules, without a split.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schema">The frozen schema.</param>

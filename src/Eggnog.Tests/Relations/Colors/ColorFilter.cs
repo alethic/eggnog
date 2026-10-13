@@ -3,7 +3,7 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A filter of a <see cref="ColorRule"/>'s body over two id variables, applied after the join (a primitive, as
-    /// egglog's <c>query_prim</c>): the history family's non-monotone conditions (colored-contexts spec §17 M10.3).
+    /// egglog's <c>query_prim</c>): the history family's non-monotone conditions.
     /// </summary>
     /// <param name="Kind">The condition.</param>
     /// <param name="A">The first variable.</param>

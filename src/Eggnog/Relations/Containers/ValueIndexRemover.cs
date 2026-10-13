@@ -5,8 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Removes every value of a container, recorded under its id, from a <see cref="ContainerValueIndex"/>: what a
-    /// container leaving the hash-cons does to keep the index exact. egglog never removes from its index (map §8.1 row
-    /// 13).
+    /// container leaving the hash-cons does to keep the index exact. egglog never removes from its index, which goes
+    /// stale after a rebuild that only renames a container (core-relations/src/containers/mod.rs:553-558, 618-623).
     /// </summary>
     internal readonly struct ValueIndexRemover : IContainerElementVisitor
     {

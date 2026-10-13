@@ -5,10 +5,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The rows of one ancestor layer that a view does not see (colored-contexts spec §6.3, X20): at most two sealed
-    /// <see cref="HiddenSet"/>s, <see cref="Frozen"/> (every frozen level's hides folded into one set, precomputed when the
-    /// deepest of them froze) and <see cref="Live"/> (the hides of the levels that are not frozen: one set, or their
-    /// union). A view's own layer, and every layer of the root, hide nothing: <see cref="None"/>.
+    /// The rows of one ancestor layer that a view does not see: at most two sealed <see cref="HiddenSet"/>s,
+    /// <see cref="Frozen"/> (every frozen level's hides folded into one set, precomputed when the deepest of them
+    /// froze) and <see cref="Live"/> (the hides of the levels that are not frozen: one set, or their union). A view's
+    /// own layer, and every layer of the root, hide nothing: <see cref="None"/>.
     /// </summary>
     /// <remarks>
     /// A cleared level is not expressed here: it makes the layers below it absent from the view instead. Probing costs at
@@ -24,8 +24,8 @@ namespace Eggnog.Relations
         /// <param name="live">The other levels' hides, sealed, or <c>null</c>.</param>
         public HiddenRows(HiddenSet? frozen, HiddenSet? live)
         {
-            Debug.Assert(frozen is null || frozen.IsSealed, "a view was built over a hidden set that is not sealed (X40)");
-            Debug.Assert(live is null || live.IsSealed, "a view was built over a hidden set that is not sealed (X40)");
+            Debug.Assert(frozen is null || frozen.IsSealed, "a view was built over a hidden set that is not sealed");
+            Debug.Assert(live is null || live.IsSealed, "a view was built over a hidden set that is not sealed");
             Frozen = frozen;
             Live = live;
         }

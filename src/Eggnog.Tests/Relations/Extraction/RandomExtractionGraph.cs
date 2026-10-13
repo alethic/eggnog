@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A small random e-graph over one e-class sort <c>E</c>, with leaves, a base-valued constructor, unary and binary
-    /// constructors and a constructor over vectors of <c>E</c>, random unions and random subsumptions; and an independent
-    /// reference for its extraction: costs by a Bellman-Ford fixpoint over the rows, and the cheapest terms of bounded
-    /// depth by brute-force enumeration.
+    /// constructors and a constructor over vectors of <c>E</c>, random unions and random subsumptions; and an
+    /// independent reference for its extraction: costs by a Bellman-Ford fixpoint over the rows, and the cheapest terms
+    /// of bounded depth by brute-force enumeration.
     /// </summary>
     sealed class RandomExtractionGraph
     {
@@ -29,7 +29,8 @@ namespace Eggnog.Relations.Tests
         /// <param name="positiveCosts">Whether head costs are drawn from 1 to 4 rather than 0 to 3 (some seeds also use
         /// a third of <see cref="long.MaxValue"/>).</param>
         /// <param name="costChoices">When given, the head costs to draw from instead, uniformly; the functions are then
-        /// also declared in a random order, so that D10's function order does not always put leaves first.</param>
+        /// also declared in a random order, so that the extractor's tie-break by function does not always put leaves
+        /// first.</param>
         public RandomExtractionGraph(int seed, bool positiveCosts, long[]? costChoices = null)
         {
             var random = new Random(seed);
@@ -116,22 +117,51 @@ namespace Eggnog.Relations.Tests
             ReferenceCosts = BellmanFord();
         }
 
+        /// <summary>
+        /// Gets the fixture that owns the e-graph and the extraction schema.
+        /// </summary>
         public ExtractionFixture Fx { get; }
 
+        /// <summary>
+        /// Gets the e-class sort.
+        /// </summary>
         public EqSort E { get; }
 
+        /// <summary>
+        /// Gets the sort of vectors of <see cref="E"/>.
+        /// </summary>
         public TestVecSort Vec { get; }
 
+        /// <summary>
+        /// Gets the function of each kind, by kind: <c>L0</c>, <c>L1</c>, <c>Num(i64)</c>, <c>U(E)</c>, <c>W(E)</c>,
+        /// <c>B(E, E)</c> and <c>V(VecE)</c>.
+        /// </summary>
         public FunctionId[] Functions { get; }
 
+        /// <summary>
+        /// Gets the name of each kind's function.
+        /// </summary>
         public string[] Names { get; }
 
+        /// <summary>
+        /// Gets the head cost of each kind's function.
+        /// </summary>
         public long[] Costs { get; }
 
+        /// <summary>
+        /// Gets the nodes: every row that is not subsumed, by function kind, with canonical cells (the <c>Num</c>
+        /// literal as stored).
+        /// </summary>
         public List<(int Function, Value[] Row)> Nodes { get; }
 
+        /// <summary>
+        /// Gets every class among the rows' outputs and the nodes' children, ascending.
+        /// </summary>
         public uint[] Classes { get; }
 
+        /// <summary>
+        /// Gets the reference cost of every class that has a finite term, from the Bellman-Ford fixpoint.
+        /// </summary>
         public Dictionary<uint, long> ReferenceCosts { get; }
 
         /// <summary>

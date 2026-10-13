@@ -4,9 +4,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Collects one query (§6.6.4): its variables, and a body of <see cref="When"/> facts and <c>Where</c> filters, as in a
-    /// rule. A match binds every declared variable, so each one must be bound by the body. Usable only inside the
-    /// definition's callback.
+    /// Collects one query: its variables, and a body of <see cref="When"/> facts and <c>Where</c> filters, as in a rule. A
+    /// match binds every declared variable, so each one must be bound by the body. Usable only inside the definition's
+    /// callback.
     /// </summary>
     public sealed class QueryBuilder
     {
@@ -70,7 +70,7 @@ namespace Eggnog
         /// filters.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void When(params Fact[] facts)
         {
             ThrowIfClosed();
@@ -111,7 +111,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Declares an untyped variable of a column type (D13).
+        /// Declares an untyped variable of a column type, for the internal untyped layer.
         /// </summary>
         /// <param name="type">The column type.</param>
         /// <param name="name">The name, unique in the query.</param>

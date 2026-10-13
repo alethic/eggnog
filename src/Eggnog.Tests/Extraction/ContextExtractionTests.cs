@@ -8,8 +8,9 @@ namespace Eggnog.Tests.Extraction
 {
 
     /// <summary>
-    /// Extraction over a scope's context (E5, §6.10): a child's extraction sees inherited and own rows and the child's
-    /// equalities; a change in a writable parent makes a child's extractor stale, and a query in the child does not.
+    /// Extraction over a scope's context: a child's extraction sees inherited and own rows and the child's equalities.
+    /// A change in a writable ancestor that the extractor reads makes a child's extractor stale; a query in the child,
+    /// or an ancestor's write the extractor does not read, does not.
     /// </summary>
     public sealed class ContextExtractionTests
     {
@@ -48,7 +49,8 @@ namespace Eggnog.Tests.Extraction
             var extractor = child.CreateExtractor();
             Assert.Equal("(Lit 1)", extractor.Extract(one).ToString());
 
-            // A query in the child, a query at the root, a run that changes nothing, and writes that hold already keep it.
+            // A query in the child, a query at the root, a run that changes nothing, and writes that hold already keep
+            // it.
             Assert.Equal(1, child.Count(lits));
             Assert.Equal(1, t.Root.Count(lits));
             child.Run(t.Rules);
@@ -84,6 +86,55 @@ namespace Eggnog.Tests.Extraction
 
             for (var i = 0; i < terms.Length; i++)
                 Assert.All(rendered, r => Assert.Equal($"(Wrap (Add (Lit {i}) (Lit {i + 1})))", r[i]));
+        }
+
+        /// <summary>
+        /// Reads, queries and writes that change nothing the extractor reads never invalidate it: an ancestor's write
+        /// of a relation the extractor does not read, caught up by the extraction itself, leaves the extractor of a
+        /// plain writable grandchild usable and its <see cref="Scope.Version"/> unchanged.
+        /// </summary>
+        [Fact]
+        public void AnAncestorWriteTheExtractorDoesNotReadLeavesAPlainChildsExtractorUsable()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var outer = t.Root.CreateChild();
+            var inner = outer.CreateChild();
+            inner.Union(a, b);
+            var extractor = inner.CreateExtractor();
+            var first = extractor.Extract(a).ToString();
+            var version = inner.Version;
+
+            outer.Assume(t.Tag.Of(a), t.Tag.Of(b));
+
+            Assert.Equal(first, extractor.Extract(a).ToString());
+            Assert.True(extractor.TryGetCost(b, out _));
+            Assert.Equal(version, inner.Version);
+            Assert.True(inner.Check(t.Tag.Of(b)));
+        }
+
+        /// <summary>
+        /// A write in a writable ancestor that changes what the extractor reads makes it stale, with
+        /// <see cref="InvalidOperationException"/> and no fault, whether or not the extraction caught the scope up.
+        /// </summary>
+        [Fact]
+        public void AnAncestorWriteTheExtractorReadsMakesAPlainChildsExtractorStale()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var outer = t.Root.CreateChild();
+            var inner = outer.CreateChild();
+            var extractor = inner.CreateExtractor();
+            Assert.Equal("(A)", extractor.Extract(a).ToString());
+            var version = inner.Version;
+
+            outer.Make(t.Wrap.Of(a));
+
+            Assert.Throws<InvalidOperationException>(() => extractor.Extract(a));
+            Assert.False(inner.IsFaulted);
+            Assert.Equal(version, inner.Version);
+            Assert.Equal("(A)", inner.CreateExtractor().Extract(a).ToString());
         }
 
     }

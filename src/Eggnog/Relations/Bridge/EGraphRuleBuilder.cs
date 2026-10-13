@@ -16,14 +16,13 @@ namespace Eggnog.Relations
     /// each match: left-hand-side primitives (<see cref="QueryPrim"/>, filters evaluated after the join), lookups that
     /// mint terms (<see cref="Lookup"/>), writes (<see cref="Set"/>, <see cref="Union"/>, <see cref="Remove"/>,
     /// <see cref="Subsume"/>), external calls (<see cref="CallExternalFunc"/>) and panics (<see cref="Panic"/>). Every
-    /// row a run writes is stamped with the run's timestamp. Nothing is lowered or planned until the rule first runs
-    /// (map §1.2 A-B).
+    /// row a run writes is stamped with the run's timestamp. Nothing is lowered or planned until the rule first runs.
     /// </para>
     /// <para>
-    /// Primitives and capability contexts (decision 12, as egglog does): external functions receive the raw
-    /// <see cref="ExecutionState"/>, and the engine enforces no capability. egglog's frontend registers a primitive once
-    /// per context it is valid in (pure, read, write, full) and picks the id per call site: for a semi-naive rule, pure on
-    /// the left-hand side and write on the right; for a naive rule, read and full; write in merge functions (map §3.7).
+    /// Primitives and capability contexts, as in egglog: external functions receive the raw
+    /// <see cref="ExecutionState"/>, and the engine enforces no capability. egglog's frontend registers a primitive
+    /// once per context it is valid in (pure, read, write, full) and picks the id per call site: for a semi-naive rule,
+    /// pure on the left-hand side and write on the right; for a naive rule, read and full; write in merge functions.
     /// What this builder guarantees is the evaluation discipline those contexts rely on: a left-hand-side primitive
     /// (<see cref="QueryPrim"/>) runs after the join on every match of every variant, and a result of nothing drops the
     /// match silently; a right-hand-side call (<see cref="CallExternalFunc"/>) that produces nothing panics; writes are
@@ -51,7 +50,7 @@ namespace Eggnog.Relations
         /// <param name="egraph">The e-graph.</param>
         /// <param name="description">The rule's description.</param>
         /// <param name="query">The empty rule.</param>
-        /// <param name="generation">The generation of the rule's reserved id (colored-contexts spec §10.2).</param>
+        /// <param name="generation">The generation of the rule's reserved id.</param>
         internal EGraphRuleBuilder(EGraph egraph, string description, BridgeQuery query, int generation)
         {
             ArgumentNullException.ThrowIfNull(egraph);
@@ -189,7 +188,7 @@ namespace Eggnog.Relations
         /// with the other actions. If the last entry is a variable that no atom and no earlier primitive bound, it is bound
         /// to the result; otherwise the match is kept only where the result equals it. A match where the function
         /// produces nothing is dropped silently. The frontend passes a primitive registered for the pure context in a
-        /// semi-naive rule and for the read context in a naive one (decision 12).
+        /// semi-naive rule and for the read context in a naive one.
         /// </remarks>
         /// <param name="function">The primitive.</param>
         /// <param name="entries">The arguments followed by the result.</param>
@@ -214,7 +213,7 @@ namespace Eggnog.Relations
         /// <remarks>
         /// The panic is a lazy panic function created for this call (<see cref="EGraph.NewPanicLazy"/>), so the message is
         /// built only if the call fails; it belongs to the rule and is freed with it. The frontend passes a primitive
-        /// registered for the write context in a semi-naive rule and for the full context in a naive one (decision 12).
+        /// registered for the write context in a semi-naive rule and for the full context in a naive one.
         /// </remarks>
         /// <param name="function">The external function.</param>
         /// <param name="args">The arguments.</param>
@@ -243,8 +242,7 @@ namespace Eggnog.Relations
         /// rules create terms; for <see cref="DefaultValKind.Const"/> a row with the constant; for
         /// <see cref="DefaultValKind.Fail"/> the rule panics with the message <paramref name="panicMessage"/> builds.
         /// Within one run, one execution state mints one id per missing key; the run's writes merge afterwards, and the
-        /// function's union-id merge reconciles ids minted for the same key elsewhere (map §1.2 E). Inserted rows are not
-        /// subsumed.
+        /// function's union-id merge reconciles ids minted for the same key elsewhere. Inserted rows are not subsumed.
         /// </remarks>
         /// <param name="function">The function.</param>
         /// <param name="keys">The key, one entry per key column.</param>
@@ -311,8 +309,8 @@ namespace Eggnog.Relations
         /// <remarks>
         /// A lookup that inserts a subsumed row for a missing key, then a read of the key's subsumption cell, then an
         /// insertion of the subsumed row where the cell is not yet subsumed; subsumption is sticky, as merges keep the
-        /// larger cell. Unlike egglog, a key the table lacks does not halt the rest of the rule's actions (map §8.1 row
-        /// 19; see <see cref="RuleAction"/>).
+        /// larger cell. Unlike egglog, a key the table lacks does not halt the rest of the rule's actions (see
+        /// <see cref="RuleAction"/>).
         /// </remarks>
         /// <param name="function">The function; it must be able to subsume.</param>
         /// <param name="keys">The key, one entry per key column.</param>
@@ -355,7 +353,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <returns>The rule's id.</returns>
         /// <exception cref="InvalidOperationException">An action reads a variable that no atom binds and no earlier
-        /// action defines (egglog leaves this undefined), or the rule was already built.</exception>
+        /// action defines (egglog leaves this undefined), or the rule is already built.</exception>
         public EGraphRuleId Build()
         {
             ThrowIfBuilt();

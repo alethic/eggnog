@@ -7,7 +7,7 @@ namespace Eggnog
     /// <summary>
     /// Collects one rule: <see cref="When"/> and <c>Where</c> make the body; <see cref="Then"/>, <see cref="Make{TSort}"/>
     /// and <see cref="Rewrite{TSort}"/> make the head. Body calls are unordered; head items are lowered in the order the
-    /// builder calls were made (§6.3). Usable only inside the definition's callback.
+    /// builder calls were made. Usable only inside the definition's callback.
     /// </summary>
     public sealed class RuleBuilder
     {
@@ -92,7 +92,7 @@ namespace Eggnog
         /// filters.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void When(params Fact[] facts)
         {
             ThrowIfClosed();
@@ -165,7 +165,7 @@ namespace Eggnog
         /// and unions of classes.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void Then(params Fact[] facts)
         {
             ThrowIfClosed();
@@ -212,7 +212,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Makes every run match in full (a naive engine rule, which never inherits watermarks).
+        /// Makes every run match in full: against every row, not only the rows new since the rule last ran here or in
+        /// an ancestor.
         /// </summary>
         public void Naive()
         {
@@ -221,9 +222,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Makes this rule erasing under <paramref name="licence"/>, whatever its ruleset says (D12, §6.3 step 6): every
-        /// atom over a fact table must read the licence scope (<c>In(licence)</c>), unless the rule calls
-        /// <see cref="ReadsOwnFacts"/>.
+        /// Makes this rule erasing under <paramref name="licence"/>, whatever its ruleset says: every atom over a fact
+        /// table must read the licence scope (<c>In(licence)</c>), unless the rule calls <see cref="ReadsOwnFacts"/>.
         /// </summary>
         /// <param name="licence">The licence tag.</param>
         /// <exception cref="ArgumentNullException"><paramref name="licence"/> is <c>null</c>.</exception>
@@ -236,10 +236,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Exempts this rule from its licence (D12): it may read fact tables in the running scope.
-        /// <paramref name="reason"/> says why that is sound, and <see cref="Rule.ToString"/> renders it. The rule must have
-        /// a licence, its ruleset's or its own (a <see cref="RuleDefinitionException"/> otherwise), and the reason must not
-        /// be empty.
+        /// Exempts this rule from its licence: it may read fact tables in the running scope. <paramref name="reason"/>
+        /// says why that is sound, and <see cref="Rule.ToString"/> renders it. The rule must have a licence, its
+        /// ruleset's or its own (a <see cref="RuleDefinitionException"/> otherwise), and the reason must not be empty.
         /// </summary>
         /// <param name="reason">Why reading the running scope's facts is sound for this rule.</param>
         public void ReadsOwnFacts(string reason)
@@ -249,7 +248,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Declares an untyped variable of a column type (D13).
+        /// Declares an untyped variable of a column type, for the internal untyped layer.
         /// </summary>
         /// <param name="type">The column type.</param>
         /// <param name="name">The name, unique in the rule.</param>

@@ -4,21 +4,21 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Computes <b>K</b>, the executed constants of a rule in a context (colored-contexts spec §9.8, X19, I30): every Id
-    /// constant of the rule's query (<see cref="IdConstant"/>) and actions (<see cref="ActionIdConstant"/>), in that
-    /// order, in its canonical form in the context that runs it.
+    /// Computes <b>K</b>, the executed constants of a rule in a context: every Id constant of the rule's query
+    /// (<see cref="IdConstant"/>) and actions (<see cref="ActionIdConstant"/>), in that order, in its canonical form in
+    /// the context that runs it.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A store-backed context, the root included, canonicalizes through its view
     /// (<see cref="ContextView.TryCanonicalize"/>); a bare database has no designated union-find and runs the constants
     /// as written. The written vector (<see cref="Written"/>) is returned itself, not a copy, whenever nothing changes, so
-    /// a rule whose constants are all canonical costs O(constants) finds and allocates nothing per run (§14.1).
+    /// a rule whose constants are all canonical costs O(constants) finds and allocates nothing per run.
     /// </para>
     /// <para>
-    /// Defect fixed (proposed map §8.1 row 25; egglog-bridge/src/lib.rs:1397-1420): egglog plans a rule once and bakes
-    /// its Id constants into the cached plan, so after a constant loses a union the rule silently stops matching. Here
-    /// every run substitutes K (<see cref="CachedPlan.GetVariantFor"/>), at a store-backed root as in a child.
+    /// egglog plans a rule once and bakes its Id constants into the cached plan (egglog-bridge/src/lib.rs:1397-1420), so
+    /// after a constant loses a union the rule silently stops matching. Here every run substitutes K
+    /// (<see cref="CachedPlan.GetVariantFor"/>), at a store-backed root as in a child.
     /// </para>
     /// <para>
     /// Cold path: once per rule per rule-set build.

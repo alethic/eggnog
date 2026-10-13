@@ -111,10 +111,10 @@ namespace Eggnog.Relations.Tests
             });
             mask.Fill(ref producer, output, 0, int.MaxValue);
 
-            // We should filter the mask for the entries for which we returned 'None'.
+            // The mask drops the lanes for which the producer returned null (egglog's None).
             Assert.Equal(offs.Where(x => x % 2 == 0).Select(x => (int)x), Lanes(mask));
 
-            // The output should have int.MaxValue at the odd indexes.
+            // The odd lanes get the default, int.MaxValue.
             for (var i = 0; i < output.Length; i++)
                 Assert.Equal(i % 2 == 0 ? (uint)i : int.MaxValue, output[i]);
 

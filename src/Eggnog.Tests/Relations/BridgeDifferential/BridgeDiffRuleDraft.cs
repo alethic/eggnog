@@ -11,24 +11,24 @@ namespace Eggnog.Relations.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Up to five atoms, chained: every atom after the first reuses a variable an earlier atom bound (a join on an id, an
-    /// output nested into a key, as a pattern <c>(F x (G y))</c> lowers, or an integer), and columns sometimes repeat a
-    /// variable (<c>(F x x)</c>) or hold a constant (an integer or one of the seeds' ids). A relation atom's output is a
-    /// fresh variable, as the frontend lowers <c>(R a b)</c>, or sometimes the output of an earlier atom of the same
-    /// relation, as egglog's tests/relation-query-allowed.egg joins <c>(= (R 1) (R 2))</c>. The primitives are filters
-    /// (<c>!=</c>, <c>&lt;</c>) and <c>+</c> binding or checking a result.
+    /// Up to five atoms, chained: every atom after the first reuses a variable an earlier atom bound (a join on an id,
+    /// an output nested into a key, as a pattern <c>(F x (G y))</c> lowers, or an integer), and columns sometimes
+    /// repeat a variable (<c>(F x x)</c>) or hold a constant (an integer or one of the seeds' ids). A relation atom's
+    /// output is a fresh variable, as the frontend lowers <c>(R a b)</c>, or sometimes the output of an earlier atom of
+    /// the same relation, as egglog's tests/relation-query-allowed.egg joins <c>(= (R 1) (R 2))</c>. The primitives are
+    /// filters (<c>!=</c>, <c>&lt;</c>) and <c>+</c> binding or checking a result.
     /// </para>
     /// <para>
     /// The actions are rewrites (build a term from the matched variables with nested constructor lookups and union it
-    /// with a matched class, or set a constructor row's output to it), Datalog-style relation inserts, lattice writes of
-    /// matched, constant or computed integers, id-function writes, unions, plain term creation, subsumption, and reads of
-    /// functions without a default (<c>(lo x)</c> on the right-hand side), mostly at keys an atom matched, so they cannot
-    /// fail, and rarely at other bound keys (<see cref="TryRiskyRead"/>), which panics where the function lacks the key. A
-    /// rule without atoms builds and writes from constants only, like a top-level egglog command.
+    /// with a matched class, or set a constructor row's output to it), Datalog-style relation inserts, lattice writes
+    /// of matched, constant or computed integers, id-function writes, unions, plain term creation, subsumption, and
+    /// reads of functions without a default (<c>(lo x)</c> on the right-hand side), mostly at keys an atom matched, so
+    /// they cannot fail, and rarely at other bound keys (<see cref="TryRiskyRead"/>), which panics where the function
+    /// lacks the key. A rule without atoms builds and writes from constants only, like a top-level egglog command.
     /// </para>
     /// <para>
-    /// Two rules in three come instead from templates of the rules egglog programs write (<see cref="TryTemplate"/>), when
-    /// the signature fits one. One instance per rule; not thread-safe.
+    /// Two rules in three come instead from templates of the rules egglog programs write (<see cref="TryTemplate"/>),
+    /// when the signature fits one. One instance per rule; not thread-safe.
     /// </para>
     /// </remarks>
     sealed partial class BridgeDiffRuleDraft
@@ -60,7 +60,8 @@ namespace Eggnog.Relations.Tests
         /// <param name="random">The source of randomness.</param>
         /// <param name="functions">The program's functions.</param>
         /// <param name="sortCount">The number of eq sorts.</param>
-        /// <param name="constants">The ids the seeds mint before the rules run, with their sorts, which atoms may name.</param>
+        /// <param name="constants">The ids the seeds mint before the rules run, with their sorts, which atoms may
+        /// name.</param>
         public BridgeDiffRuleDraft(Random random, BridgeDiffFunction[] functions, int sortCount, IReadOnlyList<(uint Id, int Sort)> constants)
         {
             this.random = random;
@@ -175,7 +176,8 @@ namespace Eggnog.Relations.Tests
                     }
                     default:
                     {
-                        // Bound already includes this atom's earlier columns, so reuse can repeat a variable in the atom.
+                        // Bound already includes this atom's earlier columns, so reuse can repeat a variable in the
+                        // atom.
                         var roll = random.Next(100);
                         var existing = Bound(sort);
                         var named = constants.Where(k => k.Sort == sort).ToList();
@@ -376,14 +378,14 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Reads a function without a default at keys no atom guarantees, bound variables of its key sorts (none for a
         /// global). Where the function lacks the key the rule panics; the runner checks that every evaluation panics in
-        /// the same iteration, which does not depend on the evaluation, as a match whose read misses is new when it first
-        /// exists.
+        /// the same iteration, which does not depend on the evaluation, as a match whose read misses is new when it
+        /// first exists.
         /// </summary>
         /// <remarks>
         /// An id function's output is used, as it only ever changes by a union, so a read made once stays right modulo
-        /// equivalence. A lattice's is not: its value can change later without a row the rule's atoms match changing, and
-        /// then naive evaluation, which re-fires the match, legitimately writes something semi-naive evaluation does not
-        /// (egglog rules read lattices in their queries for this reason).
+        /// equivalence. A lattice's is not: its value can change later without a row the rule's atoms match changing,
+        /// and then naive evaluation, which re-fires the match, legitimately writes something semi-naive evaluation
+        /// does not (egglog rules read lattices in their queries for this reason).
         /// </remarks>
         /// <returns><c>false</c> when no such function's keys can be filled.</returns>
         bool TryRiskyRead()
@@ -406,8 +408,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Uses variable <paramref name="read"/>, the output of a read of <paramref name="function"/>: unions an id with a
-        /// class of its sort, or writes a lattice with an integer that may be it.
+        /// Uses variable <paramref name="read"/>, the output of a read of <paramref name="function"/>: unions an id
+        /// with a class of its sort, or writes a lattice with an integer that may be it.
         /// </summary>
         void UseRead(BridgeDiffFunction function, int read)
         {
@@ -528,8 +530,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Adds a variable of <paramref name="sort"/>. Every variable is bound where it is created (by the atom, primitive
-        /// or action the caller is adding), so later parts of the rule may read it.
+        /// Adds a variable of <paramref name="sort"/>. Every variable is bound where it is created (by the atom,
+        /// primitive or action the caller is adding), so later parts of the rule may read it.
         /// </summary>
         int NewVar(int sort)
         {

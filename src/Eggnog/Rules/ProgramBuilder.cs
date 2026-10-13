@@ -8,9 +8,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The mutable state of one compilation (§6.3): the registers and their union-find, the body's atoms and steps, the
-    /// class constants, and the head. <see cref="RuleCompiler"/> drives it; every error is a
-    /// <see cref="RuleDefinitionException"/> naming the rule, with the exact messages of §6.3.
+    /// The mutable state of one compilation: the registers and their union-find, the body's atoms and steps, the class
+    /// constants, and the head. <see cref="RuleCompiler"/> drives it; every error is a
+    /// <see cref="RuleDefinitionException"/> naming the rule, with a fixed message saying what is wrong.
     /// </summary>
     /// <remarks>
     /// Before the body is resolved, operands name raw registers, which unification merges into classes; a class may be
@@ -61,12 +61,12 @@ namespace Eggnog
         /// <param name="graph">The graph.</param>
         /// <param name="draft">The draft.</param>
         /// <param name="owner">The rule's owner scope; <c>null</c> for a global rule or a query.</param>
-        /// <param name="query">Whether the draft is a query's (R1b): its class constants are checked at each call,
-        /// against the scope it runs in, rather than against an owner here (§6.3 step 3, §6.6.4).</param>
-        /// <param name="licence">The rule's licence (D12): its own <c>Erasing</c> tag, else its ruleset's; <c>null</c>
-        /// for none.</param>
-        /// <param name="caseVariable">A split rule's case variable (R3, <see cref="SplitBuilder.Cases{T}"/>): bound per
-        /// case, so its use in the body is an error; <c>null</c> for any other draft.</param>
+        /// <param name="query">Whether the draft is a query's: its class constants are checked at each call, against the
+        /// scope it runs in, rather than against an owner here.</param>
+        /// <param name="licence">The rule's licence, under which it is erasing: its own <c>Erasing</c> tag, else its
+        /// ruleset's; <c>null</c> for none.</param>
+        /// <param name="caseVariable">A split rule's case variable (<see cref="SplitBuilder.Cases{T}"/>): bound per case,
+        /// so its use in the body is an error; <c>null</c> for any other draft.</param>
         public ProgramBuilder(EGraph graph, RuleDraft draft, Scope? owner, bool query = false, ScopeTag? licence = null, Term? caseVariable = null)
         {
             this.graph = graph;
@@ -79,9 +79,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles the draft into a program: variables (step 1), body normalization with scoped reads (steps 2 and 3),
-        /// range restriction and step order (step 4), the licence (step 6), the head (step 8) and the analysis-writer check
-        /// (step 7).
+        /// Compiles the draft into a program: variables, body normalization with scoped reads, range restriction and step
+        /// order, the licence, the head and the analysis-writer check; the mirrors of the scoped reads last.
         /// </summary>
         /// <returns>The program.</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
@@ -114,10 +113,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles a query's draft (§6.6.4): the body as a rule's (steps 1 to 7), and a head of one
-        /// <see cref="HeadOpKind.Collect"/> of the declared variables in declaration order (step 9). Each declared
-        /// variable must be bound by the body or by an equality with a constant; a constant-bound one collects the
-        /// constant.
+        /// Compiles a query's draft: the body checked and normalized as a rule's, and a head of one
+        /// <see cref="HeadOpKind.Collect"/> of the declared variables in declaration order. Each declared variable must be
+        /// bound by the body or by an equality with a constant; a constant-bound one collects the constant.
         /// </summary>
         /// <returns>The program.</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid query.</exception>
@@ -143,10 +141,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compiles a split rule's matcher (§6.9.2, step 9): the body as a rule's (steps 1 to 7), and a head of one
+        /// Compiles a split rule's matcher: the body checked and normalized as a rule's, and a head of one
         /// <see cref="HeadOpKind.Collect"/> of <paramref name="columns"/>, the key variables, the set variable and every other
         /// variable an assumption uses. Each must be bound by the body, or equated with a constant, which the collector then
-        /// collects. Class constants follow the global-rule rule (§6.3 step 3): only classes from the root.
+        /// collects. Class constants follow the global-rule rule: only classes from the root.
         /// </summary>
         /// <param name="columns">The declared variables to collect, in column order.</param>
         /// <returns>The matcher's program.</returns>
@@ -173,7 +171,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 1: a register per declared variable, in declaration order; duplicate names and unknown types are errors.
+        /// Makes a register per declared variable, in declaration order, and records the <c>Make</c> variables; duplicate
+        /// names and unknown types are errors.
         /// </summary>
         void DeclareVariables()
         {
@@ -202,8 +201,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 3: normalizes one body fact into atoms, unifications, constant bindings and steps; inside
-        /// <see cref="Fact.In"/>, every table application reads <paramref name="enclosing"/> (step 2).
+        /// Normalizes one body fact into atoms, unifications, constant bindings and steps; inside <see cref="Fact.In"/>,
+        /// every table application reads <paramref name="enclosing"/>.
         /// </summary>
         void AddBodyFact(Fact fact, ScopeTag? enclosing)
         {
@@ -266,9 +265,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 3: turns a body term into an operand, creating atoms for applications and lets for computations; an
-        /// application with a read scope (its handle's, or <paramref name="enclosing"/>) becomes an atom over its mirror
-        /// (step 2).
+        /// Turns a body term into an operand, creating atoms for applications and lets for computations; an application
+        /// with a read scope (its handle's, or <paramref name="enclosing"/>) becomes an atom over its mirror.
         /// </summary>
         Operand FlattenBody(Term term, ScopeTag? enclosing)
         {
@@ -345,7 +343,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 3: equates two operands: unifies registers, binds a constant, or evaluates two constants now.
+        /// Equates two operands: unifies registers, binds a constant, or evaluates two constants now.
         /// </summary>
         void Equate(Operand left, Operand right)
         {
@@ -401,8 +399,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 4: resolves the register classes, places the steps in rounds, and checks that every step's inputs are
-        /// bound.
+        /// Resolves the register classes, places the steps in rounds, and checks that every step's inputs are bound (range
+        /// restriction).
         /// </summary>
         void ResolveBody()
         {
@@ -495,7 +493,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 8: processes one head item.
+        /// Processes one head item.
         /// </summary>
         void AddHeadItem(HeadItem item)
         {
@@ -517,7 +515,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 8: turns a head fact into writes and unions.
+        /// Turns a head fact into writes and unions.
         /// </summary>
         void AddHeadFact(Fact fact)
         {
@@ -583,7 +581,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 8: turns a head term into an operand: a bound register, a constant, a get-or-add or a computation.
+        /// Turns a head term into an operand: a bound register, a constant, a get-or-add or a computation.
         /// </summary>
         Operand EvalHead(Term term)
         {
@@ -653,7 +651,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 7 (invariant A): a rule that writes an analysis table reads no fact table.
+        /// Checks that a rule that writes an analysis table reads no fact table and no scoped atom, so analyses depend only
+        /// on terms.
         /// </summary>
         /// <returns>Whether the rule writes an analysis table.</returns>
         bool CheckAnalysisWriters()
@@ -684,7 +683,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 2: the table an atom over <paramref name="table"/> reads, with its read scope: the handle's own
+        /// Gets the table an atom over <paramref name="table"/> reads, with its read scope: the handle's own
         /// (<c>In(tag)</c>) or <paramref name="enclosing"/> (<see cref="Fact.In"/>). A scoped read is of a value-only table;
         /// the atom keeps the source table until <see cref="ReadMirrors"/> moves it onto its mirror once every other check
         /// has passed, so that a refused definition registers no mirror. The tag is recorded in the program's read scopes,
@@ -711,14 +710,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 2, last: moves each scoped atom onto the mirror of its table under its tag (§6.8), creating the mirrors this
-        /// definition reads first. Called once every other check has passed; the creation is all or nothing
-        /// (<see cref="MirrorRegistry.GetOrCreateAll"/>), so a refused definition registers no mirror and does not count as
-        /// a first read (§6.3).
+        /// Moves each scoped atom onto the mirror of its table under its tag, creating the mirrors this definition
+        /// reads first. Called once every other check has passed; the creation is all or nothing
+        /// (<see cref="MirrorRegistry.GetOrCreateAll"/>), so a refused definition registers no mirror and does not
+        /// count as a first read.
         /// </summary>
         /// <exception cref="RuleDefinitionException">A mirror would be new and a live frozen scope carries its tag.</exception>
-        /// <exception cref="InvalidOperationException">A mirror would be new and another thread is using the writable root
-        /// (a table definition, D6).</exception>
+        /// <exception cref="InvalidOperationException">A mirror would be new and another thread is using the writable root:
+        /// a new mirror is a table definition, which a writable root refuses while another thread uses it.</exception>
         void ReadMirrors()
         {
             List<(TableHandle Table, ScopeTag Tag)>? reads = null;
@@ -736,7 +735,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 8 (invariant R): a head never writes a scoped view.
+        /// Checks that a head never writes a scoped view: actions write only to the running scope.
         /// </summary>
         void CheckWritable(TableHandle table)
         {
@@ -745,8 +744,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 6 (D12): with a licence and no <c>ReadsOwnFacts</c>, every atom over a fact table reads the licence scope;
-        /// <c>ReadsOwnFacts</c> needs a reason and a licence.
+        /// Checks the licence: with a licence and no <c>ReadsOwnFacts</c>, every atom over a fact table reads the licence
+        /// scope; <c>ReadsOwnFacts</c> needs a reason and a licence.
         /// </summary>
         void CheckLicence()
         {
@@ -775,7 +774,9 @@ namespace Eggnog
         static string SourceName(ProgramAtom atom) => (atom.Table.Source ?? atom.Table).Name;
 
         /// <summary>
-        /// Step 3: turns a constant into a value constant or a class constant, checking a class (D39).
+        /// Turns a constant into a value constant or a class constant. A class must name a class of this graph; outside a
+        /// query, the scope that returned it must also be committed (for a batch), not disposed, and one the rule may hold
+        /// classes from.
         /// </summary>
         Operand ConstantOperand(TermShape shape)
         {
@@ -791,7 +792,7 @@ namespace Eggnog
                 if (ReferenceEquals(origin.Graph, graph) == false)
                     throw Error($"class {id} belongs to another graph");
 
-                // A query's constants are checked at each call, against the scope it runs in (§6.6.4).
+                // A query's constants are checked at each call, against the scope it runs in.
                 if (query)
                     return IdConstant(id, origin, type);
 
@@ -840,7 +841,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the column types of a primitive's parameters and result; step 5: none may be a sort.
+        /// Gets the column types of a primitive's parameters and result; none may be a sort.
         /// </summary>
         (ColumnType[] Parameters, ColumnType Result) CheckPrimitive(Primitive primitive)
         {
@@ -856,7 +857,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the column type of a CLR type; step 1: an unknown type is an error.
+        /// Gets the column type of a CLR type; an unknown type is an error.
         /// </summary>
         ColumnType ResolveType(Type clrType)
         {
@@ -889,7 +890,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Step 1: a variable belongs to this rule's builder.
+        /// Checks that a variable belongs to this rule's builder.
         /// </summary>
         void CheckOwner(TermShape shape)
         {
@@ -992,16 +993,18 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether two constant operands may be equal (§6.3, <c>c1.Is(c2)</c>). Value constants compare by cell, now
-        /// (invariant V): different cells never match. Class constants are never refused: a global rule runs in every scope a
-        /// run reaches and a local rule in its owner's descendants (§6.5.2), and a child may union two classes that differ
-        /// where the rule's constants come from (context = copy). When the two are already one class there (D39: in the owner
-        /// for a local rule, N8; in the root for a global rule) and that can be read now, the union holds in every scope the
-        /// rule runs in, and the caller keeps the first constant. Otherwise (different classes, a scope that cannot be read
-        /// without racing another thread (D6, D47), or a query, whose classes may come from any scope (§6.6.4)) an
+        /// Gets whether two constant operands may be equal (<c>c1.Is(c2)</c>, directly or through unification). Value
+        /// constants compare by cell, now: equal values of one column type have equal cells, so different cells never
+        /// match. Class constants are never refused: a global rule runs in every scope a run reaches and a local rule in its
+        /// owner's descendants, and a child, which starts as a copy of its parent, may union two classes that differ where
+        /// the rule's constants come from. When the two are already one class there (in the owner for a local rule; in the
+        /// root for a global rule) and that can be read now, the union holds in every scope the rule runs in, and the caller
+        /// keeps the first constant. Otherwise (different classes, a scope that cannot be read without racing another
+        /// thread, or a query, whose classes may come from any scope and are checked against the scope it runs in) an
         /// <see cref="ProgramStepKind.Equal"/> step keeps only the matches where the two constants are one class in the
-        /// running context, whose canonical forms the engine substitutes (X19), and this returns <c>true</c>. Cost: one
-        /// <c>Find</c> per class at definition, and one comparison per match when the step is added (N63, N86).
+        /// running context, whose canonical forms the engine substitutes, and this returns <c>true</c>. So a definition's
+        /// outcome never depends on another thread. Cost: one <c>Find</c> per class at definition, and one comparison per
+        /// match when the step is added.
         /// </summary>
         bool SameConstant(Operand x, Operand y)
         {

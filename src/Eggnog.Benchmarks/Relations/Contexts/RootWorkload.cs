@@ -4,10 +4,9 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// A root for the per-child benchmarks of colored contexts (colored-contexts spec §17 M9.4, L6, B4): a
-    /// <see cref="Store"/> whose root holds <see cref="Rows"/> ids, <c>f(x) → v</c> for each (a lattice function,
-    /// merged by the larger value) and <c>r(x, x+1)</c> for each (a relation), loaded in one batch, and frozen unless
-    /// asked otherwise.
+    /// A root for the per-child benchmarks of colored contexts: a <see cref="Store"/> whose root holds
+    /// <see cref="Rows"/> ids, <c>f(x) → v</c> for each (a lattice function, merged by the larger value) and
+    /// <c>r(x, x+1)</c> for each (a relation), loaded in one batch, and frozen unless asked otherwise.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -16,8 +15,9 @@ namespace Eggnog.Relations.Benchmarks
     /// </para>
     /// <para>
     /// A frozen root built its rebuild indexes at its freeze and shares them with every child, and its children may run
-    /// concurrently. A root that is not frozen settles and brings its rebuild indexes up to date when it creates a child
-    /// (root work, §1 item 11, §7.6); its children share its thread domain and run one at a time.
+    /// concurrently. A root that is not frozen settles and brings its rebuild indexes up to date when it creates a
+    /// child (root work, covering the root's writes since it last did so, not a per-child cost); its children share its
+    /// thread domain and run one at a time.
     /// </para>
     /// </remarks>
     internal sealed class RootWorkload

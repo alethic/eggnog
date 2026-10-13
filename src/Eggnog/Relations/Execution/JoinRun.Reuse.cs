@@ -14,13 +14,13 @@ namespace Eggnog.Relations
         const int RetainedLeafCells = 1 << 16;
 
         /// <summary>
-        /// Readies a serial join kept from an earlier run for a run whose states share <paramref name="runSignals"/>.
+        /// Readies a serial join kept from a previous run for a run whose states share <paramref name="runSignals"/>.
         /// The database keeps its serial join between rule sets, so the node pool (with each node's per-column indexes,
         /// refilled in place), the frame buffers, probers, scan buffers and scratch nodes are reused instead of being
         /// reallocated for every run; egglog takes the same storage from its thread-local pools.
         /// </summary>
         /// <param name="runSignals">The stop signal of the new run's states.</param>
-        /// <param name="runViews">The new rule set's pinned views (colored-contexts spec §9.1).</param>
+        /// <param name="runViews">The new rule set's pinned views.</param>
         public void Rebind(ExecutionSignals runSignals, ViewSnapshot runViews)
         {
             ArgumentNullException.ThrowIfNull(runSignals);

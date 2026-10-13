@@ -9,9 +9,10 @@ namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// Runs a split-oracle program in the scoped encoding with engine splits (§8.2): the schema compiled in its own scope
-    /// with the theory's <see cref="CosmosTheory.Facts"/> and frozen; the query in a child of it, with the prototype's
-    /// schedule, facts settled before the split, and the unguarded schema split, so that both encodings split the same keys.
+    /// Runs a split-oracle program in the scoped encoding with engine splits: the schema compiled in its own scope with
+    /// the theory's <see cref="CosmosTheory.Facts"/> and frozen; the query in a child of it, with the prototype's
+    /// schedule, facts settled before the split, and the unguarded schema split, so that both encodings split the same
+    /// keys.
     /// </summary>
     public static class SplitOracleScoped
     {

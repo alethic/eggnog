@@ -10,7 +10,7 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// The depth limit of a scope tree (colors X36): the root is at depth 0.
+        /// The depth limit of a scope tree, which the engine's 32-bit layer masks set: the root is at depth 0.
         /// </summary>
         internal const int MaxDepth = 31;
 
@@ -30,20 +30,20 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the scope's tag: <see cref="EGraph.RootTag"/> for the root, the one given to <see cref="CreateChild"/>
-        /// otherwise (<c>null</c> for none). Scoped atoms resolve a tag to the nearest ancestor-or-self carrying it (§6.7).
+        /// otherwise (<c>null</c> for none). Scoped atoms resolve a tag to the nearest ancestor-or-self carrying it.
         /// </summary>
         public ScopeTag? Tag { get; }
 
         /// <summary>
-        /// Gets whether the scope is frozen (colors §10.8): it never changes again; reads, queries and extractors on it
+        /// Gets whether the scope is frozen: it never changes again; reads, queries and extractors on it
         /// are thread-safe, and its children each have their own thread domain and may run concurrently.
         /// </summary>
         public bool IsFrozen => Engine.IsFrozen;
 
         /// <summary>
-        /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step (R3), in
+        /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step, in
         /// creation order (a snapshot). Disposed children are not listed, even while their release waits, and neither are
-        /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope (D34).
+        /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope.
         /// </summary>
         public IReadOnlyList<Scope> Children
         {
@@ -67,7 +67,7 @@ namespace Eggnog
         public IReadOnlyList<Rule> LocalRules => Volatile.Read(ref localRulesView);
 
         /// <summary>
-        /// Creates a child scope (§6.7): it starts as a copy of this scope and costs in proportion to what it touches.
+        /// Creates a child scope: it starts as a copy of this scope and costs in proportion to what it touches.
         /// Thread-safe on a frozen scope, whose children each get their own thread domain; a child of a writable scope
         /// shares its thread domain.
         /// </summary>
@@ -77,12 +77,13 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The options' degree of parallelism is less than 1.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The scope is faulted, at depth 31 (colors X36), or in use on another
-        /// thread; or the call comes from a run observer (a structural call, §6.11), or from a primitive, lattice, filter or
-        /// cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted, at depth 31 (the deepest a scope tree
+        /// goes), or in use on another thread; or the call comes from a run observer (a structural call), or from a
+        /// primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
-        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
+        /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
+        /// under one.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
         {
             if (tag is not null)
@@ -98,13 +99,13 @@ namespace Eggnog
             var held = EnterRead();
             try
             {
-                // Only a writable scope can be running, so only its guard can be inside a run observer (§6.11).
+                // Only a writable scope can be running, so only its guard can be inside a run observer.
                 if (held && Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
                 ThrowIfStopped();
                 if (Depth() >= MaxDepth)
-                    throw new InvalidOperationException($"Scope '{Path}' is at depth {MaxDepth}, the deepest a scope tree goes (colors X36).");
+                    throw new InvalidOperationException($"Scope '{Path}' is at depth {MaxDepth}, the deepest a scope tree goes.");
 
                 var contextOptions = new Relations.ContextOptions
                 {
@@ -131,8 +132,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings this scope's mirrors current (D48), then freezes it (colors §10.8): the engine flushes, rebuilds, plans
-        /// the rules this scope's descendants can run on its statistics (E10), and freezes storage. The parent must be
+        /// Brings this scope's mirrors current, then freezes it: the engine flushes, rebuilds, plans
+        /// the rules this scope's descendants can run on its statistics, and freezes storage. The parent must be
         /// frozen. Local rules are fixed from here on, and each live child subtree that shared this scope's thread domain
         /// gets its own; a child another thread created once the scope read as frozen keeps the domain it was given. A
         /// second call does nothing.
@@ -142,8 +143,9 @@ namespace Eggnog
         /// thread; or the call comes from a run observer ("Not allowed inside a run observer"), from inside another call of
         /// its thread domain (a query callback, a write), or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A merge the freeze ran failed, or a lattice merge threw in the catch-up
-        /// the freeze makes first (N113); the scope is then faulted.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
+        /// the freeze makes first; the scope is then faulted.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
+        /// under one.</exception>
         public void Freeze()
         {
             EngineCallMarker.ThrowIfActive();
@@ -165,13 +167,13 @@ namespace Eggnog
                     return;
 
                 // A scope with a writable parent is caught up for the check (a case contradicted through its parent is
-                // stopped, I25), and is refused either way; the root and children of frozen scopes are never under a case.
+                // stopped), and is refused either way; the root and children of frozen scopes are never under a case.
                 CatchUpAndThrowIfStopped();
                 if (Parent is { IsFrozen: false })
                     throw new InvalidOperationException("A scope can be frozen only once its parent is");
 
-                // A child catches up with what its parent wrote before it froze, left out of Version as at any entry (N87).
-                // The root is left to the engine's freeze, which rebuilds it as before.
+                // A child catches up with what its parent wrote before it froze, left out of Version as at any entry.
+                // The root is left to the engine's freeze, which rebuilds it.
                 if (IsRoot == false)
                 {
                     Runtime.TakeFailure();
@@ -186,7 +188,7 @@ namespace Eggnog
                 }
 
                 // The definition lock keeps a first scoped read of this scope's tag from creating a mirror between the sync
-                // and the count of frozen scopes (§6.8, D38): such a read is refused from then on.
+                // and the count of frozen scopes: such a read is refused from then on.
                 lock (Graph.DefinitionLock)
                 {
                     if (Tag is { } tag && Graph.Mirrors.CopyRules(tag).Length > 0)
@@ -201,9 +203,10 @@ namespace Eggnog
                 }
 
                 // Each child subtree that shares this scope's guard gets a guard of its own, as the engine gives each a
-                // domain (colors §8.1 step 7). This thread holds the shared guard and no other call of the domain is in
-                // progress, so none of those subtrees is in use. A child that another thread created once the engine
-                // context froze (IsFrozen was already true) has a guard of its own, which a call may hold: it keeps it.
+                // domain of its own when the parent freezes. This thread holds the shared guard and no other call of
+                // the domain is in progress, so none of those subtrees is in use. A child that another thread created
+                // once the engine context froze (IsFrozen was already true) has a guard of its own, which a call may
+                // hold: it keeps it.
                 var shared = Guard;
                 lock (childrenLock)
                     foreach (var child in children)
@@ -217,9 +220,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Defines a rule local to this scope (§6.7): active in it and its descendants, scheduled with
-        /// <paramref name="ruleset"/>, whose licence it takes (D12). The engine rule is global; only the schedule's choice
-        /// of rules makes it local. Its class constants may come from this scope or its ancestors (D39). It is freed when
+        /// Defines a rule local to this scope: active in it and its descendants, scheduled with
+        /// <paramref name="ruleset"/>, whose licence it takes. The engine rule is global; only the schedule's choice
+        /// of rules makes it local. Its class constants may come from this scope or its ancestors. It is freed when
         /// the scope is released.
         /// </summary>
         /// <param name="ruleset">The ruleset that schedules it.</param>
@@ -232,8 +235,9 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
-        /// writable ancestor (N113); the scope is faulted, and so is the ancestor.</exception>
-        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
+        /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
+        /// under one.</exception>
         public Rule DefineRule(Ruleset ruleset, string name, Action<RuleBuilder> define)
         {
             ArgumentNullException.ThrowIfNull(ruleset);
@@ -256,7 +260,7 @@ namespace Eggnog
                 if (Guard.InObserver)
                     throw new InvalidOperationException("Not allowed inside a run observer");
 
-                // Brought up to date first: a case its parent's contradiction reached since its last call is stopped (I25).
+                // Brought up to date first: a case its parent's contradiction reached since its last call is stopped.
                 CatchUpAndThrowIfStopped();
                 var builder = new RuleBuilder(Graph, name);
                 try
@@ -295,7 +299,7 @@ namespace Eggnog
         internal CompiledRule[] LocalCompiled => Volatile.Read(ref localCompiled);
 
         /// <summary>
-        /// Gets whether the mirrors of <paramref name="tag"/> in this scope are current (§6.8): synced when the rows this
+        /// Gets whether the mirrors of <paramref name="tag"/> in this scope are current: synced when the rows this
         /// scope's views show were as they are now, with every copy rule the tag has now. The rows are stamped with the
         /// view stamp (the change stamps of this scope and its ancestors), not <see cref="Version"/>: a write into a
         /// writable ancestor changes this scope's view of a table without moving its own version. Called on the scope's
@@ -322,8 +326,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Creates a transient child for one query on this frozen scope (D34): a new engine child, counted in this scope's
-        /// transient children so that it defers the release (D40), and not listed in <see cref="Children"/>. Its runtime's
+        /// Creates a transient child for one query on this frozen scope: a new engine child, counted in this scope's
+        /// transient children so that it defers the release, and not listed in <see cref="Children"/>. Its runtime's
         /// owner is this scope, so that the classes a query returns carry this scope's origin. Thread-safe.
         /// </summary>
         /// <returns>The child's engine side; give it back with <see cref="ReleaseTransient"/>.</returns>
@@ -366,7 +370,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Releases the scope once nothing defers it (D40): it must be disposed, have no live or transient children and no
+        /// Releases the scope once nothing defers it: it must be disposed, have no live or transient children and no
         /// call in progress, and its thread domain must not be in use on another thread (then the release is handed to the
         /// domain's guard, whose last exit runs it). The release frees the local rules' variants, disposes the engine
         /// context, uncounts a frozen tag, leaves the parent, and releases the parent if it is disposed. Runs on whichever
@@ -435,7 +439,7 @@ namespace Eggnog
                 }
                 catch (InvalidOperationException)
                 {
-                    // Disposal never throws (D40). The checks above leave nothing that can refuse it.
+                    // Disposal never throws. The checks above leave nothing that can refuse it.
                 }
 
                 if (frozenWithTag)
@@ -451,7 +455,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gives this scope and its descendants a new guard: the subtree becomes its own thread domain, after its parent
-        /// froze (colors §8.1 step 7).
+        /// froze, as the engine gives the subtree's contexts a domain of their own.
         /// </summary>
         void AssignGuard(ScopeGuard next)
         {
@@ -488,7 +492,7 @@ namespace Eggnog
 
         /// <summary>
         /// Creates an engine child, turning a failure recorded on this scope into a <see cref="RuleEvaluationException"/>
-        /// that faults it (D18).
+        /// that faults it.
         /// </summary>
         ContextEngineScope CreateEngineChild(Relations.ContextOptions options)
         {
@@ -504,13 +508,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Freezes the engine context with the plans of E10: none for the root, whose statistics are empty by design;
-        /// otherwise the default variants of every rule a descendant can run: every global rule, the local rules of this
-        /// scope and its ancestors, every live query, every mirror copy rule, and every split matcher (R3). Other
-        /// containers' local rules are left to be planned on their own statistics. The listed queries are held
-        /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread meanwhile
-        /// cannot free a listed variant; one disposed before the list is built is left out. Global rules, ancestors' local
-        /// rules, copy rules and split matchers are never freed while this scope lives.
+        /// Freezes the engine context, planning a chosen set of rules: none for the root, whose statistics are empty by
+        /// design; otherwise the default variants of every rule a descendant can run: every global rule, the local
+        /// rules of this scope and its ancestors, every live query, every mirror copy rule, and every split matcher.
+        /// Other containers' local rules are left to be planned on their own statistics. The listed queries are held
+        /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread
+        /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. Global rules,
+        /// ancestors' local rules, copy rules and split matchers are never freed while this scope lives.
         /// </summary>
         void FreezeEngine()
         {
@@ -536,7 +540,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Lists the default variants of the rules this scope's descendants can run (§6.7, E10), holding each listed query in
+        /// Lists the default variants of the rules this scope's descendants can run, holding each listed query in
         /// <paramref name="held"/>.
         /// </summary>
         List<Relations.EGraphRuleId> CollectPlanRules(List<CompiledQuery> held)
@@ -577,7 +581,7 @@ namespace Eggnog
             foreach (var rule in Graph.Mirrors.AllCopyRules())
                 Add(rule.Variants.Default);
 
-            // Split matchers (R3) run in any scope a split step reaches, as naive rules; they live as long as the graph.
+            // Split matchers run in any scope a split step reaches, as naive rules; they live as long as the graph.
             foreach (var split in Graph.SplitRules)
                 Add(split.Program.Variants.Default);
 
@@ -586,7 +590,7 @@ namespace Eggnog
 
         /// <summary>
         /// Turns a failure the engine recorded on this scope into a <see cref="RuleEvaluationException"/>, with the
-        /// runtime's record of it when there is one, and faults the scope (D18).
+        /// runtime's record of it when there is one, and faults the scope.
         /// </summary>
         /// <param name="panic">The engine's panic.</param>
         /// <returns>The exception, to throw.</returns>

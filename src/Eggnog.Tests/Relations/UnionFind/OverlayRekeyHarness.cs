@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A <see cref="UnionFindOverlay"/> over a parent <see cref="DisplacedUnionFind"/>, with a journal and a catch-up
-    /// cursor, driven exactly as a child context drives its union-find (colored-contexts spec §5.5, §5.6): child unions
-    /// map both ids through the parent's find and journal the loser; a catch-up re-keys every new parent displacement
-    /// with its final parent canonical and journals each lost id once.
+    /// cursor, driven exactly as a child context drives its union-find: child unions map both ids through the parent's
+    /// find and journal the loser; a catch-up re-keys every new parent displacement with its final parent canonical and
+    /// journals each lost id once.
     /// </summary>
     sealed class OverlayRekeyHarness
     {

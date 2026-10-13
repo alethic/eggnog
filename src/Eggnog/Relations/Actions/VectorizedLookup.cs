@@ -20,8 +20,8 @@ namespace Eggnog.Relations
     /// <see cref="Mask.Fill{TProducer}"/> specialized for that probe: no virtual call per lane.
     /// </para>
     /// <para>
-    /// In a child context (colored-contexts spec §6.5) the lookups run over the context's <see cref="TableView"/>
-    /// instead, with the <c>LayeredKey*Lookup</c> probes: the first layer whose key index holds the key decides.
+    /// In a child context the lookups run over the context's <see cref="TableView"/> instead, with the
+    /// <c>LayeredKey*Lookup</c> probes: the first layer whose key index holds the key decides.
     /// </para>
     /// <para>
     /// The result goes into a new segment of the bindings for the output variable, with
@@ -69,7 +69,7 @@ namespace Eggnog.Relations
         /// Binds <paramref name="output"/> to column <paramref name="column"/> of the row a child context sees with key
         /// <paramref name="args"/> in each live lane, and drops the lanes whose key is missing: the layered form of
         /// <see cref="LookupRow(Table, ref Mask, Bindings, ReadOnlySpan{QueryEntry}, ColumnId, Variable)"/> over the
-        /// context's view (colored-contexts spec §6.5).
+        /// context's view.
         /// </summary>
         /// <param name="view">The context's view of the table.</param>
         /// <param name="mask">The live lanes; lanes whose key is missing are dropped.</param>

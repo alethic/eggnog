@@ -10,8 +10,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The release of a disposed frozen scope waits for every call in progress on it (D40), including calls that take no
-    /// guard and make no transient child: an extraction on another thread.
+    /// <see cref="Scope.Dispose"/> returns at once, and the release of a disposed frozen scope waits for every call in
+    /// progress on it, including calls that take no guard and make no transient child: an extraction on another thread.
     /// </summary>
     public sealed class DeferredReleaseTests
     {

@@ -22,8 +22,9 @@ namespace Eggnog.Relations
     /// (egglog's <c>Arc</c>) or immutable.
     /// </para>
     /// <para>
-    /// One virtual call per invocation, as egglog's <c>dyn ExternalFunction</c>; the actions milestone batches calls
-    /// per binding set. Compiled plans call the array overload, which cannot take a span.
+    /// One virtual call per invocation, as egglog's <c>dyn ExternalFunction</c>; rule actions call it once per live
+    /// lane of a batch of bindings (<see cref="ExternalCallProducer"/>), as egglog's <c>invoke_batch</c> does.
+    /// Compiled plans call the array overload, which cannot take a span.
     /// </para>
     /// </remarks>
     internal abstract class ExternalFunction
@@ -48,9 +49,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the function reads table contents through its execution state (a lookup, a scan, a row count):
         /// what it returns or writes may then depend on rows a descendant context can add or change, not only on its
-        /// arguments and the context's equalities (colored-contexts spec §10.2, X41). A rule whose actions call such a
-        /// function never inherits a semi-naive watermark from an ancestor (<see cref="ActionReadAnalysis"/>). Default
-        /// <c>false</c>: a pure function of its arguments, as primitives are. Read once per rule, when it is planned.
+        /// arguments and the context's equalities. A rule whose actions call such a function never inherits a
+        /// semi-naive watermark from an ancestor (<see cref="ActionReadAnalysis"/>). Default <c>false</c>: a pure
+        /// function of its arguments, as primitives are. Read once per rule, when it is planned.
         /// </summary>
         public virtual bool ReadsTables => false;
 

@@ -4,9 +4,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The limits of a lift (§6.9, colors §11.2): of <see cref="CaseSet.Lift"/>, and of the lifts a split step makes
-    /// (<see cref="RunOptions.Lift"/>). Immutable. A lift cut short by a limit is sound, with fewer facts; it leaves no memo,
-    /// so a later lift with larger limits runs in full.
+    /// The limits of a lift: of <see cref="CaseSet.Lift"/>, and of the lifts a split step makes
+    /// (<see cref="RunOptions.Lift"/>). Immutable. A lift cut short by a limit is sound, with fewer facts; it is not
+    /// remembered as complete, so a later lift with larger limits runs in full.
     /// </summary>
     public sealed class LiftOptions
     {
@@ -37,8 +37,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the most parent-level candidates one case row may stand for (the product of the member lists of its class
-        /// columns); a row over the limit is skipped and counted (<see cref="LiftReport.Skipped"/>,
-        /// <see cref="RunReport.LiftRowsSkipped"/>). Default 64; at least 1.
+        /// columns); a row over the limit is skipped, and its candidates (that product, not 1) are added to
+        /// <see cref="LiftReport.Skipped"/> and <see cref="RunReport.LiftRowsSkipped"/>. Default 64; at least 1.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">The value is less than 1.</exception>
         public int CandidateLimit

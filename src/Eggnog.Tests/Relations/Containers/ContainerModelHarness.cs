@@ -9,15 +9,15 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A database with containers driven the way egglog-bridge drives one, and a naive model of what it must hold, run in
-    /// lockstep: the container part of the root congruence oracle.
+    /// A database with containers driven the way egglog-bridge drives one, and a naive model of what it must hold, run
+    /// in lockstep: the container part of the root congruence oracle.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Schema: the union-find; vectors and sets interned with the bridge's merge and the shared id counter; a function
     /// <c>holder(container) -&gt; id</c> with the union-id merge. Containers are interned with canonical elements and
-    /// rows staged with canonical keys, as the frontend does. Rebuilds run the bridge's loop pass by pass, checking each
-    /// pass's dirty ids: closed upward over the live containers, and every row mentioning one re-stamped.
+    /// rows staged with canonical keys, as the frontend does. Rebuilds run the bridge's loop pass by pass, checking
+    /// each pass's dirty ids: closed upward over the live containers, and every row mentioning one re-stamped.
     /// </para>
     /// <para>
     /// The model is a partition of every id (<see cref="PartitionReference"/>, whose canonical id is the class minimum,
@@ -327,8 +327,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Fails with <paramref name="message"/> and the trace unless <paramref name="condition"/> holds; the message is
-        /// built only on failure.
+        /// Fails with <paramref name="message"/> and the trace unless <paramref name="condition"/> holds; the message
+        /// is built only on failure.
         /// </summary>
         void Require(bool condition, Func<string> message)
         {

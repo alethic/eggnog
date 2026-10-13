@@ -57,9 +57,10 @@ namespace Eggnog.Relations
         /// <see cref="MergeAll"/> rejects as soon as any union carried a later timestamp.
         /// </para>
         /// <para>
-        /// A store's root has a designated clock, which execution states pin to their timestamp (C1). There an omitted
-        /// timestamp is the clock's current value: the value egglog's merge reads from the counter, so a
-        /// <see cref="UnionContainerMerge"/> reading the clock through the pinned state stamps what egglog stamps.
+        /// A store's root has a designated clock, which execution states pin to their timestamp: a state that reads the
+        /// clock counter reads the timestamp it carries. There an omitted timestamp is the clock's current value: the
+        /// value egglog's merge reads from the counter, so a <see cref="UnionContainerMerge"/> reading the clock
+        /// through the pinned state stamps what egglog stamps.
         /// </para>
         /// </remarks>
         /// <param name="unionFind">The union-find table, which provides the rebuilder.</param>
@@ -69,7 +70,7 @@ namespace Eggnog.Relations
         /// <returns>What changed; nothing when no container type was ever registered.</returns>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or it is taken out.</exception>
         /// <exception cref="InvalidOperationException">This is a child context's database: children never rebuild
-        /// containers (colored-contexts spec §7.4).</exception>
+        /// containers; or the database is frozen.</exception>
         public ContainerRebuildSummary RebuildContainers(TableId unionFind, uint? timestamp = null)
         {
             ThrowIfChildRebuild(nameof(RebuildContainers));
@@ -109,22 +110,22 @@ namespace Eggnog.Relations
         /// lib.rs:633-665).
         /// </para>
         /// <para>
-        /// Defect fixed (egglog-bridge/src/lib.rs:666-668; core-relations/src/free_join/mod.rs:357-388; map §8.1 row 23):
-        /// egglog stages the container unions and lets the table rebuild's merge apply them, but the table rebuild
-        /// canonicalizes rows against the union-find as it was before those unions. So in the comment's own scenario a
-        /// function without a merge mapping <c>x2</c> and <c>x3</c> to <c>vec[x2]</c> and <c>vec[x3]</c> collapses to
-        /// two rows for <c>x2</c> with the still-distinct vector ids, and reports a merge conflict. Here the container
-        /// unions are merged into the union-find first (only when the containers changed), so the table rebuild sees
-        /// them.
+        /// egglog stages the container unions and lets the table rebuild's merge apply them
+        /// (egglog-bridge/src/lib.rs:666-668; core-relations/src/free_join/mod.rs:357-388), but the table rebuild
+        /// canonicalizes rows against the union-find as it was before those unions. So in the bridge comment's own
+        /// scenario a function without a merge mapping <c>x2</c> and <c>x3</c> to <c>vec[x2]</c> and <c>vec[x3]</c>
+        /// collapses to two rows for <c>x2</c> with the still-distinct vector ids, and egglog reports a merge conflict.
+        /// Here the container unions are merged into the union-find first (only when the containers changed), so the
+        /// table rebuild sees them.
         /// </para>
         /// </remarks>
         /// <param name="unionFind">The union-find table.</param>
         /// <param name="tables">The function tables to rebuild and refresh; distinct, and not the union-find.</param>
         /// <param name="nextTimestamp">The pass's timestamp; <c>null</c> for the store clock's current value, or zero
-        /// without a store (colored-contexts spec §4.1).</param>
+        /// without a store.</param>
         /// <returns>Whether the pass changed anything: a table rebuild, a refresh or a container change.</returns>
         /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
-        /// context (§3.4).</exception>
+        /// context; or the database is frozen.</exception>
         public bool RebuildPass(TableId unionFind, ReadOnlySpan<TableId> tables, uint? nextTimestamp = null)
         {
             ThrowIfChildRebuild(nameof(RebuildPass));
@@ -134,9 +135,9 @@ namespace Eggnog.Relations
             if (containerRebuild.Changed)
                 MergeAll(next);
 
-            // Colored contexts (§7.4, C13 interim): while the root has live descendants, the ids of containers rebuilt in
-            // place go to the store's dirty log, from which each child re-stamps its own rows (its root rows arrive as
-            // appends). One compare at the root when nothing is dirty.
+            // Colored contexts: while the root has live descendants, the ids of containers rebuilt in place go to the
+            // store's dirty log, from which each child re-stamps its own rows (its root rows arrive as appends). One
+            // compare at the root when nothing is dirty.
             if (containerRebuild.DirtyCount > 0 && owner is { IsRoot: true } root && root.Gate.HasLiveDescendants)
                 root.Store.ContainerDirtyLog.Append(containerRebuild.DirtyIds);
 
@@ -156,7 +157,7 @@ namespace Eggnog.Relations
         /// <param name="timestampCounter">The bridge's timestamp counter.</param>
         /// <returns>The number of passes run, at least one.</returns>
         /// <exception cref="InvalidOperationException">This is a child context's database, which rebuilds through its
-        /// context (colored-contexts spec §3.4).</exception>
+        /// context; or the database is frozen.</exception>
         public int Rebuild(TableId unionFind, ReadOnlySpan<TableId> tables, CounterId timestampCounter)
         {
             ThrowIfChildRebuild(nameof(Rebuild));

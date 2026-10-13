@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A normalized rational number of 64-bit parts, the stand-in for Rust's <c>Rational64</c> in egglog-bridge's
-    /// <c>math_test</c>: interned as a base value through <see cref="InternedCodec{T}"/>. The denominator is positive and
-    /// coprime with the numerator, so equal numbers are equal values.
+    /// <c>math_test</c>: interned as a base value through <see cref="InternedCodec{T}"/>. The denominator is positive
+    /// and coprime with the numerator, so equal numbers are equal values.
     /// </summary>
     readonly record struct Rational
     {

@@ -9,17 +9,16 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The rule layer's differential test (§8.2): random programs run three ways, Eggnog semi-naive, Eggnog with every
-    /// rule's naive twin (the internal <c>RunOptions.SemiNaive = false</c>), and the <see cref="ReferenceInterpreter"/>,
-    /// and every command's observation must agree: after every run its report (iterations, stop reason, saturation,
-    /// change) and every table's rows (<see cref="Scope.Rows(TableHandle)"/>, values decoded and classes named by
+    /// The rule layer's differential test: random programs run three ways, Eggnog semi-naive, Eggnog with every rule's
+    /// naive twin (the internal <c>RunOptions.SemiNaive = false</c>), and the <see cref="ReferenceInterpreter"/>, and
+    /// every command's observation must agree: after every run its report (iterations, stop reason, saturation, change)
+    /// and every table's rows (<see cref="Scope.Rows(TableHandle)"/>, values decoded and classes named by
     /// <see cref="TermNamer"/>), after every host write the rows, and every query's answer. 300 seeds by default;
     /// <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself as C# source.
     /// </summary>
     /// <remarks>
-    /// The 5000-seed run R1b's done-when asks for (<c>EGGNOG_SEEDS=5000</c>, this generator, with lets checked against
-    /// constants and queries defined after the host's writes) passed when R1b landed: on net10.0 in 39.0 s and on net8.0
-    /// in 39.4 s.
+    /// A deeper check sets <c>EGGNOG_SEEDS=5000</c>; with this generator (lets checked against constants, and queries
+    /// defined after the host's writes) it runs in about 39 s on net10.0 and on net8.0.
     /// </remarks>
     public sealed class RuleLayerDifferentialTests
     {
@@ -34,6 +33,10 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         const long RowCap = 2500;
 
+        /// <summary>
+        /// Every seed's program observes the same in all three runs: semi-naive, naive and the reference. At most three
+        /// failing programs are reported.
+        /// </summary>
         [Fact]
         public void EggnogAgreesWithItsNaiveTwinAndTheReference()
         {
@@ -46,8 +49,16 @@ namespace Eggnog.Tests.Differential
             Assert.True(failures.Count == 0, string.Join("\n\n", failures));
         }
 
+        /// <summary>
+        /// The generator produces every shape the comparison relies on: two to four relations, one or two constructors
+        /// and lattice functions, one host-only table and five to twelve rules per program; naive rules; rewrite, make
+        /// and class-union heads; bodies of four atoms or more; lambda and non-lambda primitives, as terms and as
+        /// filters; disequalities and class constants in bodies; saturate, repeat, sequence and until schedules; host
+        /// unions and queries in every program; lets checked against constants in rules and queries; queries defined
+        /// after the host made classes; and a query asked after a union.
+        /// </summary>
         [Fact]
-        public void TheProgramsCoverWhatTheSpecLists()
+        public void TheGeneratedProgramsCoverEveryShapeUnderTest()
         {
             var programs = Enumerable.Range(0, DefaultSeeds).Select(RandomProgram.Generate).ToList();
             var rules = programs.SelectMany(p => p.Commands.Where(c => c.Kind == DiffCommandKind.DefineRule).Select(c => c.Rule!)).ToList();
@@ -77,7 +88,7 @@ namespace Eggnog.Tests.Differential
             Assert.Contains(programs, p => p.Commands.Any(c => c.Kind == DiffCommandKind.Union));
             Assert.All(programs, p => Assert.Contains(p.Commands, c => c.Kind == DiffCommandKind.Query));
 
-            // Lets checked against constants (§6.3: p(args).Is(c)), in rules and in queries; and queries defined after the
+            // Lets checked against constants (p(args).Is(c)), in rules and in queries; and queries defined after the
             // host made classes, holding some, asked after a union.
             var lateQueries = programs.SelectMany(p => p.Commands.Where(c => c.Kind == DiffCommandKind.DefineQuery).Select(c => c.Rule!)).ToList();
             var queries = programs.SelectMany(p => p.Queries).Concat(lateQueries).ToList();
@@ -123,6 +134,9 @@ namespace Eggnog.Tests.Differential
             return false;
         }
 
+        /// <summary>
+        /// A program prints itself as C# source, starting with its seed, and the same seed prints the same source.
+        /// </summary>
         [Fact]
         public void AProgramPrintsItselfAsCSharp()
         {

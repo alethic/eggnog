@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Passes of the steps in sequence until one changes nothing (§6.5.2).
+    /// Passes of the steps in sequence until one changes nothing.
     /// </summary>
     internal sealed class SaturateSchedule : Schedule
     {

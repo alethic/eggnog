@@ -27,6 +27,9 @@ namespace Eggnog.Relations.Tests
             RebuildValues = rebuildValues;
         }
 
+        /// <summary>
+        /// Initializes a map over keys that are already sorted and distinct, taking ownership of both arrays.
+        /// </summary>
         MapContainer(bool rebuildValues, uint[] keys, uint[] values)
         {
             this.keys = keys;
@@ -34,12 +37,22 @@ namespace Eggnog.Relations.Tests
             RebuildValues = rebuildValues;
         }
 
+        /// <summary>
+        /// Gets whether the values are ids that rebuilding canonicalizes.
+        /// </summary>
         public bool RebuildValues { get; }
 
+        /// <summary>
+        /// Gets the keys, ascending.
+        /// </summary>
         public ReadOnlySpan<uint> Keys => keys;
 
+        /// <summary>
+        /// Gets the values, in the order of <see cref="Keys"/>.
+        /// </summary>
         public ReadOnlySpan<uint> Values => values;
 
+        /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();
@@ -54,6 +67,7 @@ namespace Eggnog.Relations.Tests
             return hasher.Finish();
         }
 
+        /// <inheritdoc />
         public bool TryRebuild(Rebuilder rebuilder, out MapContainer rebuilt)
         {
             if (RebuildValues == false || Values.Length == 0)
@@ -71,6 +85,7 @@ namespace Eggnog.Relations.Tests
             return changed;
         }
 
+        /// <inheritdoc />
         public void ForEachValue<TVisitor>(ref TVisitor visitor)
             where TVisitor : struct, IContainerElementVisitor
         {
@@ -81,10 +96,13 @@ namespace Eggnog.Relations.Tests
                 visitor.Visit(value);
         }
 
+        /// <inheritdoc />
         public bool Equals(MapContainer other) => RebuildValues == other.RebuildValues && Keys.SequenceEqual(other.Keys) && Values.SequenceEqual(other.Values);
 
+        /// <inheritdoc />
         public override bool Equals(object? obj) => obj is MapContainer other && Equals(other);
 
+        /// <inheritdoc />
         public override int GetHashCode() => (int)ComputeHash();
 
     }

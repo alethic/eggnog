@@ -8,7 +8,9 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// The engine rule a program lowers to (§6.4), read through the bridge's rule (<c>Relations.BridgeQuery</c>).
+    /// The engine rule a program lowers to, read through the bridge's rule (<c>Relations.BridgeQuery</c>): atoms, steps
+    /// in placement order, head operations, and the descriptions of the variants of rules, local rules and mirror copy
+    /// rules.
     /// </summary>
     public sealed class LoweringTests
     {
@@ -172,6 +174,59 @@ namespace Eggnog.Tests.Rules
         /// Gets the bridge rule of a rule's default variant.
         /// </summary>
         static Relations.BridgeQuery QueryOf(NodeTheory t, Rule rule) => t.Graph.Engine.GetRuleInfo(rule.Compiled.Variants.Default!.Id).Query;
+
+        /// <summary>
+        /// A let whose target feeds a filter declared before it: steps are placed in rounds, so the filter runs once
+        /// the let has bound its target.
+        /// </summary>
+        [Fact]
+        public void AFilterOverALetDeclaredAfterItIsPlaced()
+        {
+            var t = new NodeTheory();
+            var hit = t.Graph.DefineRelation<long>("hit");
+            t.Root.Assume(t.Num.Of(4L), t.Num.Of(9L));
+            t.Rules.DefineRule("plus one above five", r =>
+            {
+                var (n, m) = r.Vars<long, long>("n", "m");
+                r.When(t.Num.Of(n));
+                r.Where(Primitives.Greater.Of(m, 5L));
+                r.When(m.Is(Primitives.Add.Of(n, 1L)));
+                r.Then(hit.Of(m));
+            });
+            t.Root.Run(Schedule.Saturate(t.Rules));
+            Assert.True(t.Root.Check(hit.Of(10L)));
+            Assert.False(t.Root.Check(hit.Of(5L)));
+        }
+
+        /// <summary>
+        /// A local rule's variant is described <c>{scope path}:{ruleset}/{name}#{serial}</c> and a mirror copy rule's
+        /// <c>$mirror/{mirror name}#{serial}</c>; copy rules are never listed in a run's report.
+        /// </summary>
+        [Fact]
+        public void LocalAndCopyRulesAreDescribedAsSpecified()
+        {
+            var t = new ScopeTheory();
+            var copies = new OuterCopies(t);
+            var outer = t.Root.CreateChild(t.Outer);
+            var local = outer.DefineRule(t.Rules, "local", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            Assert.Equal($"{outer.Path}:rules/local#{local.Compiled.Serial}", local.Compiled.Variants.Default!.Description);
+
+            var mirror = t.Graph.Mirrors.Get(t.Fact, t.Outer);
+            var copy = mirror.CopyRule;
+            Assert.Equal($"$mirror/fact@outer#{copy.Serial}", copy.Variants.Default!.Description);
+
+            outer.Assume(t.Fact.Of("a"));
+            var report = outer.Run(Schedule.Saturate(t.Rules));
+            Assert.True(outer.Check(copies.Facts.Of("a"), t.Seen.Of("a")));
+            Assert.DoesNotContain(copy.Rule, report.Rules.Keys);
+            Assert.DoesNotContain(report.Rules.Keys, r => r.Ruleset.Name == "$mirror");
+            Assert.Contains(local, report.Rules.Keys);
+        }
 
     }
 

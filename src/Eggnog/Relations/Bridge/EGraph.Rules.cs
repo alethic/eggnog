@@ -8,8 +8,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The registered rules, by id. egglog's <c>rules</c>, a <c>DenseIdMapWithReuse</c> (lib.rs:120): an id is
-        /// reserved when a builder starts and filled when it builds; each reservation of an id has a new generation
-        /// (colored-contexts spec §10.2).
+        /// reserved when a builder starts and filled when it builds; each reservation of an id has a new generation.
         /// </summary>
         readonly RuleTable rules = new();
 
@@ -32,7 +31,7 @@ namespace Eggnog.Relations
         /// as in egglog. A semi-naive rule's runs consider only matches that involve a row new since its last run in the
         /// running context; a rule that is not semi-naive considers every match on every run (egglog's <c>:naive</c> rules
         /// and one-shot commands). Rules are definitions of the e-graph, not of a context: every context may run every
-        /// rule. Thread-safe (rule-layer D6).
+        /// rule. Thread-safe.
         /// </remarks>
         /// <param name="description">The rule's description, which keys its reports.</param>
         /// <param name="semiNaive">Whether runs consider only matches involving new rows.</param>
@@ -45,15 +44,15 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Removes a rule; its id may be handed out again, with a new generation, so no context applies the freed rule's
-        /// progress to the new one (§13 edge 29). egglog's <c>free_rule</c> (egglog-bridge/src/rule.rs:158-161). An
-        /// unknown id is ignored. Thread-safe.
+        /// Removes a rule; its id may be handed out again, with a new generation, so no context applies the freed
+        /// rule's progress to the new one. egglog's <c>free_rule</c> (egglog-bridge/src/rule.rs:158-161). An unknown id
+        /// is ignored. Thread-safe.
         /// </summary>
         /// <remarks>
-        /// Defect fixed (egglog-bridge/src/rule.rs:159-161, 397, 584): egglog keeps the lazy panic functions a rule's
-        /// lookups and external calls created, so the frontend's one-shot rules (<c>check</c>, <c>eval</c>), built and
-        /// freed per command, grow the external function registry without bound. Here they belong to the rule and are
-        /// freed with it.
+        /// egglog keeps the lazy panic functions a rule's lookups and external calls created
+        /// (egglog-bridge/src/rule.rs:159-161, 397, 584), so the frontend's one-shot rules (<c>check</c>, <c>eval</c>),
+        /// built and freed per command, grow the external function registry without bound. Here they belong to the rule
+        /// and are freed with it.
         /// </remarks>
         /// <param name="rule">The rule.</param>
         public void FreeRule(EGraphRuleId rule)
@@ -109,17 +108,17 @@ namespace Eggnog.Relations
         /// a rule listed again runs with <c>T</c>. Every rule matches against the same snapshot; their writes, all stamped
         /// <c>T</c>, merge at the end, and the iteration then advances the timestamp, or rebuilds if the run made an
         /// effective union, with the first rebuild pass at <c>T</c>. Rows written by the run or its rebuild are therefore
-        /// new to the next run. The rules' watermarks become <c>T</c> once the run has merged without a recorded failure
-        /// (X18).
+        /// new to the next run. The rules' watermarks become <c>T</c> once the run has merged without a recorded
+        /// failure.
         /// </para>
         /// <para>
         /// The report's <see cref="IterationReport.Changed"/> is whether the rules' writes changed the database; what the
-        /// rebuild changed is reported separately (decision 11). Match counts are in the rule set report, by description
+        /// rebuild changed is reported separately. Match counts are in the rule set report, by description
         /// (every variant of a rule shares its rule's description).
         /// </para>
         /// <para>
         /// A panic recorded by an action throws <see cref="PanicException"/> after the run's writes merged and the
-        /// iteration's bookkeeping finished, with the rules' watermarks left as they were (X18: egglog advances them).
+        /// iteration's bookkeeping finished, with the rules' watermarks left as they were (egglog advances them).
         /// </para>
         /// <para>
         /// Any other exception thrown while the rules run (an external function throwing, say) undoes the run: the

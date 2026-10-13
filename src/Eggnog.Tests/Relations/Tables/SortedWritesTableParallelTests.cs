@@ -9,9 +9,10 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Serial-versus-parallel tests of <see cref="SortedWritesTable"/> above the 20000-row threshold: inserts with
-    /// merges that change values, deletes, compaction and rebuild must give the same contents on both paths, with the
-    /// parallel insert storing the merge output (egglog drops it: core-relations/src/table/mod.rs:902-907) and reporting
-    /// only real changes (egglog reports every staged row: mod.rs:871).
+    /// merges that change values, deletes, compaction and rebuild give the same contents on both paths, with the
+    /// parallel insert storing the merge output (egglog drops it: core-relations/src/table/mod.rs:902-907) and
+    /// reporting only real changes (egglog reports every staged row: mod.rs:871); and a parallel insert that fails
+    /// leaves the table consistent.
     /// </summary>
     public class SortedWritesTableParallelTests
     {
@@ -142,7 +143,8 @@ namespace Eggnog.Relations.Tests
                 StageAll(table, Enumerable.Range(0, Large).Select(i => R((uint)i, (uint)i, 1)));
                 Assert.Equal(new TableChange(true, false), table.Merge(state));
 
-                // Re-deriving existing facts (and larger values) changes nothing; egglog's parallel path reports a change.
+                // Re-deriving existing facts (and larger values) changes nothing; egglog's parallel path reports a
+                // change.
                 StageAll(table, Enumerable.Range(0, 25_000).Select(i => R((uint)i, (uint)i + (uint)(i % 2), 2)));
                 Assert.Equal(new TableChange(false, false), table.Merge(state));
                 Assert.False(state.Changed);
@@ -238,7 +240,8 @@ namespace Eggnog.Relations.Tests
 
             AssertSameContents(tables[0], tables[1]);
 
-            // The runs and fast subsets agree, though rows within a run are ordered by shard after a parallel compaction.
+            // The runs and fast subsets agree, though rows within a run are ordered by shard after a parallel
+            // compaction.
             foreach (var ts in new uint[] { 0, 1, 2, 3, 4 })
             {
                 var expected = Contents(tables[0]).Where(x => x.Value.Ts >= ts).Select(x => x.Key).Order().ToList();
@@ -303,6 +306,90 @@ namespace Eggnog.Relations.Tests
             }
 
             AssertSameContents(results[0], results[1]);
+        }
+
+        static int ShardOf(SortedWritesTable table, uint key) => table.Parallelism.ShardData.ShardOf(TableKeyHash.Hash(R(key), 1));
+
+        /// <summary>
+        /// <c>ParallelInsert</c> hands the table's row buffer to a <see cref="ParallelRowBufferWriter"/>
+        /// (<c>data.ParallelWriter()</c> empties the buffer object) and puts the rows back with <c>data =
+        /// writer.Finish()</c> in a <c>finally</c>, so an exception inside a shard task (here the sort-order check;
+        /// equally a merge function that throws) does not leave the table with an empty row buffer while its key index
+        /// still names thousands of rows, which later point lookups would read past through the unchecked
+        /// <c>Key*Match</c> structs. The serial path stays consistent after the same misuse.
+        /// </summary>
+        [Fact]
+        public void ParallelSortViolationKeepsTheTablesRows()
+        {
+            var state = TableTestUtil.EmptyState();
+            var table = new SortedWritesTable(1, 3, C(2), ReadOnlySpan<ColumnId>.Empty, ClosureMerge.TakeNew, Parallel4);
+            StageAll(table, Enumerable.Range(0, 30_000).Select(i => R((uint)i, (uint)i, 2)));
+            table.Merge(state);
+            Assert.Equal(30_000, table.Count);
+
+            // New keys with a timestamp below the last run: every shard's pre-pass rejects them.
+            StageAll(table, Enumerable.Range(30_000, 30_000).Select(i => R((uint)i, (uint)i, 1)));
+            Assert.ThrowsAny<Exception>(() => table.Merge(state));
+
+            Assert.Equal(30_000, table.Rows.Count);
+            Assert.Equal(30_000, table.Count);
+            using (new DebugAssertScope())
+                Assert.Equal(R(5, 5, 2), table.GetRow(R(5))!.Value.Values);
+        }
+
+        /// <summary>
+        /// Each shard sees one sort value but the shards disagree. <c>ParallelInsert</c> checks the shards against each
+        /// other before any write and throws with the table untouched; checked only after every row was appended,
+        /// merged and indexed, the mismatch would leave an inexact stale count (zero here, so scans would take the
+        /// no-tombstone fast path and emit tombstones) and rows that no timestamp fast subset can see.
+        /// </summary>
+        [Fact]
+        public void ParallelCrossShardSortMismatchLeavesTheTableConsistent()
+        {
+            var state = TableTestUtil.EmptyState();
+            var table = new SortedWritesTable(1, 3, C(2), ReadOnlySpan<ColumnId>.Empty, ClosureMerge.TakeNew, Parallel4);
+            StageAll(table, Enumerable.Range(0, 30_000).Select(i => R((uint)i, (uint)i, 1)));
+            table.Merge(state);
+            Assert.Equal(0, table.StaleCount);
+
+            // Shard 0: new keys at timestamp 2. Shard 1: new keys at timestamp 3. Shards 2 and up: existing keys at
+            // timestamp 2, which would tombstone their old rows. No shard's own check fails; the shards disagree with
+            // each other.
+            var rows = new List<uint[]>();
+            var fresh = new[] { 0, 0 };
+            for (var key = 30_000u; fresh[0] < 2_000 || fresh[1] < 2_000; key++)
+            {
+                var shard = ShardOf(table, key);
+                if (shard < 2 && fresh[shard] < 2_000)
+                {
+                    rows.Add(R(key, key, shard == 0 ? 2u : 3u));
+                    fresh[shard]++;
+                }
+            }
+
+            for (var key = 0u; key < 30_000; key++)
+            {
+                if (ShardOf(table, key) >= 2)
+                    rows.Add(R(key, key + 1, 2));
+            }
+
+            Assert.True(rows.Count > ParallelHeuristics.TableOpThreshold);
+            StageAll(table, rows);
+            Assert.ThrowsAny<Exception>(() => table.Merge(state));
+
+            // The stale count must stay exact, and no scan may return a tombstone.
+            var tombstones = Enumerable.Range(0, table.Rows.Count).Count(r => table.Rows.IsStale(r));
+            Assert.Equal(tombstones, table.StaleCount);
+            Assert.DoesNotContain(TableTestUtil.LiveRows(table), row => row[0] == Value.StaleRep);
+
+            // Fast subsets on the sort column must agree with a filtered scan.
+            foreach (var ts in new uint[] { 2, 3 })
+            {
+                Assert.True(table.TryFastSubset(Constraint.GeConst(C(2), ts), out var fast));
+                var viaFast = TableTestUtil.DumpSubset(table, fast.AsRef()).Count;
+                var viaScan = TableTestUtil.LiveRows(table).Count(r => r[2] >= ts);
+                Assert.Equal(viaScan, viaFast);
+            }
         }
 
     }

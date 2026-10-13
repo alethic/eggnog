@@ -14,8 +14,8 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Counters are global to the store: every execution state and, later, every context reads and advances the same
-    /// ones. <see cref="Increment"/> is egglog's <c>fetch_add(1, Release)</c> and returns the value before the
+    /// Counters are global to the store: every execution state and every context reads and advances the same ones.
+    /// <see cref="Increment"/> is egglog's <c>fetch_add(1, Release)</c> and returns the value before the
     /// increment; <see cref="Read"/> is an <c>Acquire</c> load. Here the increment is an interlocked add (a full fence)
     /// and the read a volatile load.
     /// </para>
@@ -23,7 +23,7 @@ namespace Eggnog.Relations
     /// Threading: <see cref="Increment"/>, <see cref="IncrementBy"/> and <see cref="Read"/> may run on any number of
     /// threads at once. <see cref="Add"/> and <see cref="Clone"/> need exclusive access (egglog's
     /// <c>&amp;mut Database</c> and <c>Clone</c>), because adding may move the storage; a <see cref="Store"/> therefore
-    /// refuses new counters once it has had a child context (X16), whose threads may increment concurrently.
+    /// refuses new counters once it has had a child context, whose threads may increment concurrently.
     /// </para>
     /// </remarks>
     internal sealed class CounterSet
@@ -43,6 +43,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Initializes a copy holding <paramref name="values"/>, for <see cref="Clone"/>.
         /// </summary>
+        /// <param name="values">The counters' values, which the copy takes over.</param>
+        /// <param name="count">The number of counters.</param>
         CounterSet(long[] values, int count)
         {
             this.values = values;
@@ -86,7 +88,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Advances <paramref name="counter"/> by <paramref name="amount"/> and returns its previous value: reserves the
         /// <paramref name="amount"/> consecutive values starting there in one atomic step. Child contexts reserve their
-        /// id blocks this way (<see cref="IdBlockAllocator"/>, colored-contexts spec §4.2). Thread-safe, O(1).
+        /// id blocks this way (<see cref="IdBlockAllocator"/>). Thread-safe, O(1).
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <param name="amount">How many values to reserve; not negative.</param>

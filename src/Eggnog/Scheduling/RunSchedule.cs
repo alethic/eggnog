@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One iteration over the union of rulesets' rules (§6.5.2): skipped on a contradictory scope when the run stops on
-    /// contradiction, which a case always does (D11).
+    /// One iteration over the union of rulesets' rules: skipped on a contradictory scope when the run stops on
+    /// contradiction, which a case always does.
     /// </summary>
     internal sealed class RunSchedule : Schedule
     {
@@ -27,11 +27,11 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
         {
-            // A case always stops on contradiction (D11), whether a split made it or a host's CaseSet, and so does a run in
-            // a case of a split. The scope is brought up to date first: a case's parent may have changed since its last
-            // iteration (a lift between a split's phases), and a stopped case reads as contradictory without one (D45). The
-            // iteration would bring it up to date anyway, so this costs nothing more, and nothing at all when the run
-            // does not stop on contradiction.
+            // A case always stops on contradiction, whether a split made it or a host's CaseSet, and so does a run in a case
+            // of a split. The scope is brought up to date first: a case's parent may have changed since its last iteration
+            // (a lift between a split's phases), and a stopped case reads as contradictory without one. The iteration would
+            // bring it up to date anyway, so this costs nothing more, and nothing at all when the run does not stop on
+            // contradiction.
             if ((inCase || scope.IsCase || executor.Options.StopOnContradiction) && IsContradictory(scope.Engine))
             {
                 if (ReferenceEquals(scope, executor.Top))

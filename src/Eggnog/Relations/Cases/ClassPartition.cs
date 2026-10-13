@@ -6,8 +6,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The meet of the live cases' partitions of their parent's ids (colored-contexts spec §11.1, §11.2, I33): the
-    /// equalities between parent ids that hold in every live case, which the lift writes into the parent.
+    /// The meet of the live cases' partitions of their parent's ids: the equalities between parent ids that hold in
+    /// every live case, which the lift writes into the parent.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -26,9 +26,9 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Appends to <paramref name="blocks"/> the blocks of the meet of the live cases' partitions (§11.1): for each group
-        /// of <paramref name="seed"/>, the runs of at least two members whose canonical ids agree in every other live case,
-        /// each block ascending. Deterministic: groups in root order, blocks in signature order.
+        /// Appends to <paramref name="blocks"/> the blocks of the meet of the live cases' partitions: for each group of
+        /// <paramref name="seed"/>, the runs of at least two members whose canonical ids agree in every other live
+        /// case, each block ascending. Deterministic: groups in root order, blocks in signature order.
         /// </summary>
         /// <param name="seed">The member map of <paramref name="live"/>[<paramref name="seedIndex"/>].</param>
         /// <param name="live">The live cases, all clean and caught up with their parent.</param>

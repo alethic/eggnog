@@ -6,10 +6,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Containers on the bridge's paths (colored-contexts spec §10.7, §7.4, decision 9, §17 M10.3): registration passes
-    /// whether a container type holds ids; a child cannot intern an eq-sort container (G-a) and is refused at its rebuild
-    /// when an eq-sort container holds its own loser (G-b); containers over base values work in every context. Named
-    /// apart from the storage <c>ContainerContextTests</c>.
+    /// Containers on the bridge's paths. Eq-sort containers (containers of e-classes) are not supported in child
+    /// contexts: registration passes whether a container type holds ids; a child cannot intern an eq-sort container and
+    /// is refused at its rebuild when an eq-sort container holds one of its own losers; containers over base values
+    /// work in every context. Named apart from the storage <c>ContainerContextTests</c>.
     /// </summary>
     public class BridgeContainerContextTests
     {
@@ -30,7 +30,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G-a on the bridge's path: interning an eq-sort container in a child throws before anything changes, and the
+        /// On the bridge's path, interning an eq-sort container in a child throws before anything changes, and the
         /// child stays usable; a container over base values interns in a child with the id the root gives it.
         /// </summary>
         [Fact]
@@ -56,9 +56,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// G-b on the bridge's path: a child whose own union displaces an element of an eq-sort container is refused at
-        /// the flush's rebuild with <see cref="NotSupportedException"/> and faulted (decision 9: eq containers in children
-        /// come after M10).
+        /// On the bridge's path, a child whose own union displaces an element of an eq-sort container is refused at the
+        /// flush's rebuild with <see cref="NotSupportedException"/> and faulted: the child cannot rebuild the
+        /// container, and the elements of eq-sort containers must stay canonical in every clean child.
         /// </summary>
         [Fact]
         public void AChildDisplacingAnEqContainerElementIsRefused()

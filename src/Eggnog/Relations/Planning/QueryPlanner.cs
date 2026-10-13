@@ -21,12 +21,12 @@ namespace Eggnog.Relations
     /// in ascending id order and every tie-break is explicit. Cold path: roughly O(V² · A · arity) for decomposition.
     /// </para>
     /// <para>
-    /// egglog defects fixed here (map §8.1): row 5 (a decomposed plan could lose a join constraint,
-    /// <see cref="BuildResultBlock"/>), row 6 (<c>all_children[1..]</c> orphaned a child, and the continuation's
-    /// pathwidth score unioned the wrong bags, <see cref="TopologicallySortBags"/>), row 7 (Free Join with
-    /// decomposition and MinCover with a variable-free atom panicked, <see cref="GetNextFreeJoinStage"/> and
-    /// <see cref="BucketQueue"/>), and row 2 on the planner's side (variable-free atoms get an explicit
-    /// <see cref="ExistenceCheck"/> and keep their headers under decomposition).
+    /// Where egglog's planner is wrong, this one departs from it: a decomposed egglog plan can lose a join constraint
+    /// (<see cref="BuildResultBlock"/> keeps it); egglog's <c>all_children[1..]</c> orphans a child and its
+    /// continuation's pathwidth score unions the wrong bags (<see cref="TopologicallySortBags"/>); egglog panics on
+    /// Free Join with decomposition and on MinCover with a variable-free atom (<see cref="GetNextFreeJoinStage"/> and
+    /// <see cref="BucketQueue"/>); and variable-free atoms, which egglog checks only for a non-empty header, get an
+    /// explicit <see cref="ExistenceCheck"/> and keep their headers under decomposition.
     /// </para>
     /// </remarks>
     internal static partial class QueryPlanner
@@ -117,8 +117,8 @@ namespace Eggnog.Relations
                     headerByAtom[h.Atom.Index] ??= h;
             }
 
-            // Fix (core-relations/src/free_join/plan.rs:498-506, 591-596): atoms without variables belong to no bag, so
-            // egglog's decomposed plan drops their headers. Keep them; their existence checks are in `checks`.
+            // Atoms without variables belong to no bag, so egglog's decomposed plan drops their headers
+            // (core-relations/src/free_join/plan.rs:498-506, 591-596). Keep them; their existence checks are in `checks`.
             foreach (var check in checks)
             {
                 var info = ctx.Atoms[check.Atom];
@@ -152,7 +152,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Lists the atoms without variables, which no stage scans (map §8.1 row 2).
+        /// Lists the atoms without variables, which no stage scans, so the executor checks each one explicitly.
         /// </summary>
         static ExistenceCheck[] CollectExistenceChecks(PlanningContext ctx)
         {

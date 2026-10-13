@@ -14,9 +14,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// One code point as a <c>char</c> and as a one-character <c>str</c>. Covers a code point newer than .NET's
-        /// Unicode tables (U+088F, printed raw although .NET calls it unassigned), a spacing mark that extends graphemes
-        /// (U+09BE), a halfwidth sound mark Rust prints raw (U+FF9E), a variation selector (U+E0100), a noncharacter
-        /// (U+10FFFF) and a supplementary emoji.
+        /// Unicode tables (U+088F, printed raw although .NET calls it unassigned), a spacing mark that extends
+        /// graphemes (U+09BE), a halfwidth sound mark Rust prints raw (U+FF9E), a variation selector (U+E0100), a
+        /// noncharacter (U+10FFFF) and a supplementary emoji.
         /// </summary>
         [Theory]
         [InlineData(0x88F, "'\u088f'", "\"\u088f\"")]

@@ -4,15 +4,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The head action of a query (R1b) or a split matcher (R3): adds its arguments, one match, to the
+    /// The head action of a query or a split matcher: adds its arguments, one match, to the
     /// <see cref="ScopeRuntime.QueryMatches"/> of the scope the engine call runs in, and produces the unit value. For a
     /// query asked with <c>Any</c> (<see cref="ScopeRuntime.StopAtFirstQueryMatch"/>) it triggers the engine's early stop
-    /// after the first match. It stages nothing, so a query writes nothing (D49).
+    /// after the first match. It stages nothing, so a query writes nothing.
     /// </summary>
     /// <remarks>
-    /// No user code runs and nothing is read from a table (invariant Q); the buffer's <c>Add</c> is thread-safe, so rule
-    /// tasks may call it concurrently. Outside a query (no buffer set) it collects nothing. Never fails: the bridge would
-    /// otherwise call the panic function of its call.
+    /// No user code runs and nothing is read from a table, so the action depends only on its match; the buffer's
+    /// <c>Add</c> is thread-safe, so rule tasks may call it concurrently. Outside a query (no buffer set) it collects
+    /// nothing. Never fails: the bridge would otherwise call the panic function of its call.
     /// </remarks>
     internal sealed class MatchCollector : Relations.ExternalFunction
     {

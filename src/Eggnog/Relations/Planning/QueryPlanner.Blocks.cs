@@ -146,11 +146,11 @@ namespace Eggnog.Relations
         /// (each message variable is a value variable of the last later bag holding it).
         /// </para>
         /// <para>
-        /// Fix (map §8.1 row 5, plan.rs:897-904 and 993-995): a block constrains a later bag only if all its message
-        /// variables lie in one later bag, and the result block skips blocks without value variables. A block whose
-        /// message variables are split across later bags and that has no value variables therefore kept only "the
-        /// materialization is non-empty", and egglog derived false matches (<c>lost3.egg</c>). Every such block gets a
-        /// <see cref="MatScanMode.Lookup"/> of its message variables here, appended and then lifted by
+        /// A block constrains a later bag only if all its message variables lie in one later bag, and egglog's result
+        /// block skips blocks without value variables (plan.rs:897-904 and 993-995). In egglog a block whose message
+        /// variables are split across later bags and that has no value variables therefore keeps only "the
+        /// materialization is non-empty", and the plan derives false matches (<c>lost3.egg</c>). Here every such block
+        /// gets a <see cref="MatScanMode.Lookup"/> of its message variables, appended and then lifted by
         /// <see cref="LoopLifting"/>.
         /// </para>
         /// </remarks>

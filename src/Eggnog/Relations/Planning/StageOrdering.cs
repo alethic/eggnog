@@ -18,31 +18,31 @@ namespace Eggnog.Relations
     /// between barriers are sorted independently and barriers never move.
     /// </para>
     /// <para>
-    /// Within a segment a selection sort picks, at each position, among the eligible stages (see the second fix below)
-    /// the one with the smallest key (<c>-refined</c>, <c>estimated size</c>, <c>-relations</c>): stages touching atoms
-    /// already refined most, then the smallest, then those joining the most relations.
+    /// Within a segment a selection sort picks, at each position, among the eligible stages (see the eligibility rule
+    /// below) the one with the smallest key (<c>-refined</c>, <c>estimated size</c>, <c>-relations</c>): stages
+    /// touching atoms already refined most, then the smallest, then those joining the most relations.
     /// </para>
     /// <para>
-    /// Fix (map §8.1 row 18, execute.rs:2413): egglog seeds the refinement counts from the stages at plan indexes below
-    /// the segment, not from the stages actually scheduled there. Here they are seeded from the scheduled stages
-    /// (positions below the segment in the current order). Performance only; any order is correct.
+    /// egglog seeds the refinement counts from the stages at plan indexes below the segment, not from the stages
+    /// actually scheduled there (execute.rs:2413). Here they are seeded from the scheduled stages (positions below the
+    /// segment in the current order). Performance only; any order is correct.
     /// </para>
     /// <para>
-    /// Fix (execute.rs:2399-2470, egglog's <c>sort_plan_by_size_inner</c>): a Free Join stage's cover is refined only by
-    /// the stages that probe it, which the planner wires for its own order: a stage probes the atoms whose stages come
-    /// after it, so the probes form an acyclic relation that the planned order follows. egglog moves stages freely by
-    /// size; a stage moved ahead of one that probes its cover scans that cover in full, and the prober then scans its
-    /// own cover in full for every frame, refined by nothing: a product of the two covers where the planned order costs
-    /// one scan with probes. (Found by the differential suite: a cached three-atom path whose middle table grew a little
-    /// past the outer ones ran ~400M row visits for 6k matches, 58 s in a debug build; a cached two-atom join after a
-    /// load ran 39 s.) Running the probed stage first never helps, since nothing refines the prober's cover, so here a
+    /// A Free Join stage's cover is refined only by the stages that probe it, which the planner wires for its own order:
+    /// a stage probes the atoms whose stages come after it, so the probes form an acyclic relation that the planned
+    /// order follows. egglog's <c>sort_plan_by_size_inner</c> moves stages freely by size (execute.rs:2399-2470); a
+    /// stage moved ahead of one that probes its cover scans that cover in full, and the prober then scans its own cover
+    /// in full for every frame, refined by nothing: a product of the two covers where the planned order costs one scan
+    /// with probes. (Under egglog's order a cached three-atom path whose middle table is a little larger than the outer
+    /// ones takes ~400M row visits for 6k matches, 58 s in a debug build; a cached two-atom join after a load takes
+    /// 39 s.) Running the probed stage first never helps, since nothing refines the prober's cover, so here a
     /// <see cref="FusedIntersectStage"/> is eligible only when no unscheduled stage of its segment probes its cover atom;
     /// among eligible stages egglog's key decides. Intersections and materialization scans are always eligible, so plans
     /// without probes sort exactly as in egglog. Any order stays correct. Eligibility is kept incrementally, as a count
     /// per atom of the probes of the segment's unscheduled stages (a stage leaves the counts once scheduled), so the sort
-    /// stays O(stages²) key evaluations, as egglog's is, plus O(stages × probes) per segment for the counts. (The first
-    /// version rescanned the unscheduled stages for every comparison, O(stages³ × probes) on the executor's per-frame
-    /// path.)
+    /// stays O(stages²) key evaluations, as egglog's is, plus O(stages × probes) per segment for the counts, instead of
+    /// the O(stages³ × probes) that rescanning the unscheduled stages for every comparison would cost on the executor's
+    /// per-frame path.
     /// </para>
     /// <para>
     /// No allocation: the caller supplies the refinement-count and prober-count scratch arrays (the overload without the
@@ -346,7 +346,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether <paramref name="stage"/> may run next: unless it is a <see cref="FusedIntersectStage"/> whose
         /// cover atom some other unscheduled stage of the segment probes, and which would therefore scan that cover
-        /// unrefined (see the fix in the remarks). <paramref name="probedBy"/> counts the probes of every unscheduled
+        /// unrefined (see the class remarks). <paramref name="probedBy"/> counts the probes of every unscheduled
         /// stage, the stage's own included, so its own probes of its cover atom are discounted: a stage never waits for
         /// itself. O(1) when nothing probes the cover, else O(probes).
         /// </summary>

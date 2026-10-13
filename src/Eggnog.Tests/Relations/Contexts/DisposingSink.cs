@@ -4,8 +4,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// An <see cref="IRowSink"/> that tries to dispose a context from inside a scan of it, and records what that threw:
-    /// the dispose-during-scan refusal of colored-contexts spec §8.2–§8.3.
+    /// An <see cref="IRowSink"/> that tries to dispose a context from inside a scan of it, and records what that threw,
+    /// to check that a dispose during a scan of the context is refused.
     /// </summary>
     struct DisposingSink : IRowSink
     {

@@ -11,15 +11,12 @@
     <File Path="global.json" />
     <File Path="LICENSE" />
     <File Path="NOTICE" />
-    <File Path="PORT.md" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Eggnog/Eggnog.csproj" />
     <Project Path="src/Eggnog.Tests/Eggnog.Tests.csproj" />
     <Project Path="src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj" />
-    <Project Path="src/Eggnog.Storage/Eggnog.Storage.csproj" />
-    <Project Path="src/Eggnog.Storage.Tests/Eggnog.Storage.Tests.csproj" />
   </Folder>
   <Folder Name="/src/dist/">
     <Project Path="src/dist-nuget/dist-nuget.csproj" />

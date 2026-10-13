@@ -11,9 +11,9 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Disposal (D40): <see cref="Scope.Dispose"/> never throws and makes a scope unusable at once; its engine state and
+    /// Disposal: <see cref="Scope.Dispose"/> never throws and makes a scope unusable at once; its engine state and
     /// local rules are released once no live child (transient query children included) and no call on another thread of
-    /// its domain defers it.
+    /// its domain defers it. The identity members of a disposed scope still answer.
     /// </summary>
     public sealed class DisposeTests
     {
@@ -211,7 +211,6 @@ namespace Eggnog.Tests.Scopes
             Assert.True(child.Engine.IsDisposed);
         }
 
-
         [Fact]
         public void ADisposeFromAPrimitiveIsDeferredUntilTheRunEnds()
         {
@@ -240,7 +239,7 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// R3: an open <see cref="CaseSet"/> defers its parent's release (D40): its cases are children of the parent.
+        /// An open <see cref="CaseSet"/> defers its parent's release: its cases are children of the parent.
         /// </summary>
         [Fact]
         public void AnOpenCaseSetDefersItsParentsRelease()
@@ -264,6 +263,160 @@ namespace Eggnog.Tests.Scopes
             Assert.Empty(t.Root.Children);
             Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
         }
+
+        /// <summary>
+        /// The identity members of a disposed, released scope still answer; only use throws.
+        /// </summary>
+        [Fact]
+        public void TheIdentityOfAReleasedScopeStillAnswers()
+        {
+            var t = new ScopeTheory();
+            var child = t.Root.CreateChild(t.Outer);
+            child.Dispose();
+
+            Assert.True(child.IsDisposed);
+            Assert.Same(t.Root, child.Parent);
+            Assert.Same(t.Outer, child.Tag);
+            Assert.Equal("root/outer#1", child.Path);
+            Assert.False(child.IsFaulted);
+            Assert.Null(child.Failure);
+            Assert.False(child.IsFrozen);
+            Assert.Empty(child.Children);
+            Assert.Empty(child.LocalRules);
+            Assert.Throws<ObjectDisposedException>(() => child.Check(t.Fact.Of("a")));
+            Assert.Throws<ObjectDisposedException>(() => child.CreateChild());
+            _ = child.Version;
+        }
+
+        /// <summary>
+        /// A child of the running scope disposed from a run observer is released at once, mid-run: the observer runs on
+        /// the thread that holds the domain's guard and between engine calls, so nothing defers the release.
+        /// </summary>
+        [Fact]
+        public void ADisposeFromARunObserverReleasesAChildAtOnce()
+        {
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("seen", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            });
+            var scope = t.Root.CreateChild(t.Outer);
+            var child = scope.CreateChild(t.Inner);
+            scope.Assume(t.Fact.Of("a"));
+            bool? releasedInObserver = null;
+            scope.Run(Schedule.Saturate(t.Rules), new RunOptions
+            {
+                Observer = _ =>
+                {
+                    if (releasedInObserver is not null)
+                        return;
+
+                    child.Dispose();
+                    releasedInObserver = child.Engine.IsDisposed;
+                },
+            });
+
+            Assert.True(releasedInObserver);
+        }
+
+        /// <summary>
+        /// The identity and tree members of a disposed, released scope answer without throwing.
+        /// </summary>
+        [Fact]
+        public void TheIdentityMembersOfAReleasedScopeAnswer()
+        {
+            var t = new ScopeTheory();
+            var child = t.Root.CreateChild(t.Outer);
+            child.Assume(t.Fact.Of("a"));
+            child.Dispose();
+            Assert.True(child.Engine.IsDisposed);
+
+            var answers = new List<Exception?>
+            {
+                Record.Exception(() => _ = child.IsFrozen),
+                Record.Exception(() => _ = child.Children),
+                Record.Exception(() => _ = child.LocalRules),
+                Record.Exception(() => _ = child.Tag),
+                Record.Exception(() => _ = child.Parent),
+                Record.Exception(() => _ = child.IsFaulted),
+                Record.Exception(() => _ = child.Failure),
+                Record.Exception(() => _ = child.Path),
+            };
+
+            Assert.All(answers, Assert.Null);
+        }
+
+        /// <summary>
+        /// A frozen schema disposed while 8 queries run beneath it on other threads is released after the last query,
+        /// not before: the queries end one at a time, and the schema's local rule is freed with the last.
+        /// </summary>
+        [Fact]
+        public void AFrozenSchemaIsReleasedOnlyAfterItsLastQueryEnds()
+        {
+            const int Queries = 8;
+            var t = new ScopeTheory();
+            var entered = new CountdownEvent(Queries);
+            var gates = new ManualResetEventSlim[Queries];
+            for (var i = 0; i < Queries; i++)
+                gates[i] = new ManualResetEventSlim();
+
+            t.Rules.DefineRule("wait", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Where(x, v =>
+                {
+                    if (v.StartsWith('q'))
+                    {
+                        entered.Signal();
+                        gates[v[1] - '0'].Wait(TimeSpan.FromSeconds(30));
+                    }
+
+                    return true;
+                });
+                r.Then(t.Seen.Of(x));
+            });
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild(t.Outer);
+            var local = schema.DefineRule(t.Rules, "local", r => r.When(t.Seen.Of(r.Var<string>("x"))));
+            schema.Freeze();
+            var description = local.Compiled.Variants.Default!.Description;
+
+            var runs = new Task[Queries];
+            for (var i = 0; i < Queries; i++)
+            {
+                var value = "q" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                runs[i] = Task.Factory.StartNew(() =>
+                {
+                    using var query = schema.CreateChild();
+                    query.Assume(t.Fact.Of(value));
+                    query.Run(Schedule.Saturate(t.Rules));
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            }
+
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(30)));
+            schema.Dispose();
+            for (var i = 0; i < Queries - 1; i++)
+            {
+                gates[i].Set();
+                runs[i].GetAwaiter().GetResult();
+                Assert.False(schema.Engine.IsDisposed);
+                Assert.True(t.Graph.VariantsByDescription.ContainsKey(description));
+            }
+
+            gates[Queries - 1].Set();
+            runs[Queries - 1].GetAwaiter().GetResult();
+            Assert.True(schema.Engine.IsDisposed);
+            Assert.False(t.Graph.VariantsByDescription.ContainsKey(description));
+            Assert.Empty(t.Root.Children);
+            foreach (var gate in gates)
+                gate.Dispose();
+
+            entered.Dispose();
+        }
+
     }
 
 }

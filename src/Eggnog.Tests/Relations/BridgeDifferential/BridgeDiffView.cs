@@ -5,15 +5,15 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// What one evaluation of a bridge differential program holds at a point in time: the canonical id of every id it
-    /// minted, every function's rows, and the classes its term seeds produced. <see cref="BridgeDiffComparer"/> compares
-    /// two views modulo a renaming of ids.
+    /// minted, every function's rows, and the classes its term seeds produced. <see cref="BridgeDiffComparer"/>
+    /// compares two views modulo a renaming of ids.
     /// </summary>
     /// <remarks>
     /// Ids are minted densely from zero by every evaluation, so the view lists the canonical id of each id below
-    /// <see cref="IdCount"/>. The ids minted before the first rule runs are the same in every evaluation (each term seed
-    /// and relation insertion mints exactly one, <see cref="BridgeDiffSeed.MintedIds"/>), which <see cref="InitialIds"/>
-    /// records; later ids depend on how each evaluation batched its matches. Immutable once built: a row's cells are never
-    /// changed, so keys can wrap them (<see cref="BridgeDiffKey"/>).
+    /// <see cref="IdCount"/>. The ids minted before the first rule runs are the same in every evaluation (each term
+    /// seed and relation insertion mints exactly one, <see cref="BridgeDiffSeed.MintedIds"/>), which
+    /// <see cref="InitialIds"/> records; later ids depend on how each evaluation batched its matches. Immutable once
+    /// built: a row's cells are never changed, so keys can wrap them (<see cref="BridgeDiffKey"/>).
     /// </remarks>
     sealed class BridgeDiffView
     {
@@ -27,8 +27,8 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         /// <param name="find">The canonical id of each id; owned by the view.</param>
         /// <param name="rows">The rows of each function; owned by the view.</param>
-        /// <param name="seedIds">The id each seed produced (<see cref="uint.MaxValue"/> for seeds that are neither terms nor
-        /// relation insertions, or did not run yet); owned by the view.</param>
+        /// <param name="seedIds">The id each seed produced (<see cref="uint.MaxValue"/> for seeds that are neither
+        /// terms nor relation insertions, or did not run yet); owned by the view.</param>
         /// <param name="initialIds">The number of ids minted before the rules first ran.</param>
         public BridgeDiffView(uint[] find, List<BridgeDiffRow>[] rows, uint[] seedIds, int initialIds)
         {

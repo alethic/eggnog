@@ -4,11 +4,11 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/06-guard-deletion.egg</c>, as written: guard deletion and tautologies as rewrites plus
-    /// extraction. A declared type makes a weakened ordering comparison exact; a required const deletes its tautology; a
-    /// const that is not required does not, because tautologies are judged in <c>(Schema)</c>, never on the query's own
-    /// conjuncts. Each <c>(push)</c> block is a fresh graph; the expected figures are the egglog CLI's (vendored
-    /// <c>ext/egglog</c> at 5e655cae).
+    /// <c>prototypes/cosmos-facts/06-guard-deletion.egg</c>, as written: guard deletion and tautologies as rewrites
+    /// plus extraction. A declared type makes a weakened ordering comparison exact; a required const deletes its
+    /// tautology; a const that is not required does not, because tautologies are judged in <c>(Schema)</c>, never on
+    /// the query's own conjuncts. Each <c>(push)</c> block is a fresh graph; the expected figures are the egglog CLI's
+    /// (vendored <c>ext/egglog</c> at 5e655cae).
     /// </summary>
     public sealed class Literal06GuardDeletionTests
     {

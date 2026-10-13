@@ -5,12 +5,13 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The tables a lift may write into the cases' parent, and how (colored-contexts spec §11.2; rule-layer §6.9.1, E8).
-    /// Immutable; built once and shared by every lift over the same tables.
+    /// The tables a lift may write into the cases' parent, and how. Immutable; built once and shared by every lift over
+    /// the same tables.
     /// </summary>
     /// <remarks>
-    /// The e-graph's contradiction function is skipped if listed: an all-vacuous lift writes it on its own terms (L4).
-    /// A function is listed at most once. The lift checks each table against the e-graph's definitions when it runs.
+    /// The e-graph's contradiction function is skipped if listed: a lift whose cases are all vacuous writes it on its
+    /// own terms. A function is listed at most once. The lift checks each table against the e-graph's definitions when
+    /// it runs.
     /// </remarks>
     internal sealed class LiftSpec
     {

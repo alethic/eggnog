@@ -10,11 +10,11 @@ namespace Eggnog.Relations.Benchmarks
 
     /// <summary>
     /// Constrained scans of one <see cref="SortedWritesTable"/> through
-    /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>,
-    /// and <see cref="Table.RefineLive"/>, on tables with and without tombstones. Part of the root benchmark set that
-    /// colored contexts are gated on (colored-contexts spec §17, M9.0): it exercises the scan loops (the unconstrained
-    /// fast loop, the tombstone and constraint loops, dense and sparse subsets), the <see cref="TableKind"/> dispatch
-    /// and the refinement filter.
+    /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>, and
+    /// <see cref="Table.RefineLive"/>, on tables with and without tombstones. Part of the root benchmark set, which
+    /// measures the root on the engine paths colored contexts extend, so that a cost contexts add to the root shows as
+    /// a regression: it exercises the scan loops (the unconstrained fast loop, the tombstone and constraint loops,
+    /// dense and sparse subsets), the <see cref="TableKind"/> dispatch and the refinement filter.
     /// </summary>
     /// <remarks>
     /// <para>

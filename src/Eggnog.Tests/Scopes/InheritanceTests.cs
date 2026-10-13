@@ -6,15 +6,15 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Watermark inheritance (D4, colors §10.2): a child's first run of a rule its frozen parent saturated matches only
-    /// through the rows new to the child, and naive rules never inherit.
+    /// Watermark inheritance: a child's first run of a rule its frozen parent saturated matches only through the rows
+    /// new to the child, since the parent matched every older row already; naive rules never inherit.
     /// </summary>
     public sealed class InheritanceTests
     {
 
         /// <summary>
-        /// A chain of <paramref name="length"/> edges saturated into paths in a frozen parent, and a child that adds one edge;
-        /// returns the step rule's matches in the child's run.
+        /// A chain of <paramref name="length"/> edges saturated into paths in a frozen parent, and a child that adds
+        /// one edge; returns the step rule's matches in the child's run.
         /// </summary>
         static (long Matches, Scope Child, ScopeTheory T) ChildRun(int length, bool inherit, bool naive)
         {

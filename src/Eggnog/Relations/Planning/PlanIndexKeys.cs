@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Lists the cached indexes a plan may read (colored-contexts spec §9.10), so a freezing context can build them before
-    /// it is shared (<see cref="FreezeWarmup.From"/>, §8.1): its concurrent descendants then rarely build one lazily under
-    /// the frozen catalogs' serial refresh (X14).
+    /// Lists the cached indexes a plan may read, so a freezing context can build them before it is shared
+    /// (<see cref="FreezeWarmup.From"/>): its concurrent descendants then rarely build one lazily under the frozen
+    /// catalogs' serial refresh, where each lazy build runs on its caller's thread without parallel work.
     /// </summary>
     /// <remarks>
     /// <para>

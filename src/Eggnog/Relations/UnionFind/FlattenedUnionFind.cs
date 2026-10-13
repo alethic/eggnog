@@ -7,8 +7,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A frozen chain of overlay levels collapsed into one immutable map from root-canonical ids to the chain's
-    /// canonical ids (colored-contexts spec §5.4): what a frozen context gives its children, so their finds cost one
-    /// probe above the root however deep the frozen ancestry is.
+    /// canonical ids: what a frozen context gives its children, so their finds cost one probe above the root however
+    /// deep the frozen ancestry is.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -61,8 +61,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Flattens <paramref name="chain"/>: tabulates <see cref="LayeredUnionFind.MapAboveRoot"/> over the chain's
-        /// prefix keys and level members (§8.1, step 6 of a child's freeze). Every level must be current with its parent,
-        /// as a freezing context's chain is. O(domain).
+        /// prefix keys and level members, when a child context freezes. Every level must be current with its parent, as
+        /// a freezing context's chain is. O(domain).
         /// </summary>
         /// <param name="chain">The chain of a context being frozen.</param>
         /// <returns>The map, or <c>null</c> when the chain moves no id.</returns>

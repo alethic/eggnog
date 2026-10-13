@@ -34,8 +34,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the number of rows the last <see cref="ApplyRebuild"/> (or <see cref="SettleAppends"/>) handed its
         /// rebuilder: the rows gathered by the incremental path, or the physical rows the full path scanned. For
-        /// diagnostics and tests (colored-contexts spec §17 M9.4: a child's incremental rebuild examines only the rows
-        /// naming its new losers); one field store per rebuild.
+        /// diagnostics and tests, such as checking that a child's incremental rebuild examines only the rows naming its
+        /// new losers; one field store per rebuild.
         /// </summary>
         internal int LastRebuildRows => lastRebuildRows;
 
@@ -86,12 +86,12 @@ namespace Eggnog.Relations
         /// The body of <see cref="ApplyRebuild"/>: picks the incremental or the full path and stages the rewrites.
         /// </summary>
         /// <remarks>
-        /// A child context's layer (colored-contexts spec §7.3, R2-12) takes the incremental path whenever the rebuilder's
-        /// delta is no larger than its row count (or 64), instead of egglog's rule, which requires more than 10 000 rows:
-        /// a child's layers are small, and their full path would rewrite every own row on every pass. Refreshing a small
-        /// layer's rebuild index is cheap, and the incremental path also gathers the rows written since the last rebuild,
-        /// so both paths stage the same writes (<see cref="RebuildIncremental"/>). The root keeps egglog's rule; it pays one
-        /// null test per table rebuild.
+        /// A child context's layer takes the incremental path whenever the rebuilder's delta is no larger than its row
+        /// count (or 64), instead of egglog's rule, which requires more than 10 000 rows: a child's layers are small,
+        /// and their full path would rewrite every own row on every pass. Refreshing a small layer's rebuild index is
+        /// cheap, and the incremental path also gathers the rows written since the last rebuild, so both paths stage
+        /// the same writes (<see cref="RebuildIncremental"/>). The root keeps egglog's rule; it pays one null test per
+        /// table rebuild.
         /// </remarks>
         /// <returns>Whether anything was staged.</returns>
         bool RebuildWith(Rebuilder rebuilder, TableId rebuilderTableId, Table rebuilderTable, uint nextTimestamp, ExecutionState state)
@@ -105,15 +105,10 @@ namespace Eggnog.Relations
                     : ShouldRebuildIncrementally(size, data.Count, parallelism.ParallelizeRebuild(size));
                 if (incremental)
                 {
-                    var handled = false;
-                    var changed = false;
-                    RebuildIncremental(rebuilderTableId, rebuilderTable, rebuilder, hintColumn, toScan.AsRef(), nextTimestamp, state, ref handled, ref changed);
-                    if (handled)
-                    {
-                        lastRebuildIncremental = true;
-                        toScan.Dispose();
-                        return changed;
-                    }
+                    var changed = RebuildIncremental(rebuilderTableId, rebuilderTable, rebuilder, hintColumn, toScan.AsRef(), nextTimestamp, state);
+                    lastRebuildIncremental = true;
+                    toScan.Dispose();
+                    return changed;
                 }
 
                 toScan.Dispose();
@@ -131,8 +126,7 @@ namespace Eggnog.Relations
         /// staged in row order (egglog iterates a hash set).
         /// </para>
         /// <para>
-        /// egglog finds the rows through its rebuild index. Until the indexes milestone implements
-        /// <see cref="CollectRowsMentioning"/>, this scans the live rows, which finds the same rows.
+        /// egglog finds the rows through its rebuild index, and so does this table (<see cref="CollectRowsMentioning"/>).
         /// </para>
         /// </remarks>
         public override bool RefreshRowsForValues(ReadOnlySpan<uint> dirtyIds, uint nextTimestamp)
@@ -145,11 +139,7 @@ namespace Eggnog.Relations
                 dirty.Add(id);
 
             var candidates = new List<int>();
-            var handled = false;
-            CollectRowsMentioning(dirty, candidates, ref handled);
-            if (handled == false)
-                CollectRowsMentioningByScan(dirty, candidates);
-
+            CollectRowsMentioning(dirty, candidates);
             if (candidates.Count == 0)
                 return false;
 
@@ -177,38 +167,6 @@ namespace Eggnog.Relations
             writes.Flush();
             return changed;
         }
-
-        /// <summary>
-        /// INCREMENTAL REBUILD HOOK. The indexes milestone implements this partial method (egglog's
-        /// <c>rebuild_incremental</c>, core-relations/src/table/rebuild.rs:120-195) in its own file: refresh the rebuild
-        /// index (value to rows over <see cref="RebuildColumns"/>), project <paramref name="hintColumn"/> of
-        /// <paramref name="toScan"/> of the providing table to get the displaced ids, have
-        /// <see cref="Rebuilder.RebuildSubset"/> rewrite the rows that mention each one, and stage remove-and-insert
-        /// for the changed rows exactly as <see cref="StageRebuiltRows"/> does, reporting only real changes (egglog's
-        /// serial path reports any non-empty subset, rebuild.rs:182; map §8.1 row 17). Set <paramref name="handled"/>
-        /// to true when it ran. Without an implementation the call is compiled away and the full path runs.
-        /// </summary>
-        /// <param name="rebuilderTableId">The providing table's id, which keys its rebuild mark (<see cref="MarkRebuilt"/>).</param>
-        /// <param name="rebuilderTable">The providing table.</param>
-        /// <param name="rebuilder">The rebuilder.</param>
-        /// <param name="hintColumn">The providing table's column naming changed values.</param>
-        /// <param name="toScan">The providing table's rows appended since the last rebuild.</param>
-        /// <param name="nextTimestamp">The timestamp rewritten rows get.</param>
-        /// <param name="state">The execution state.</param>
-        /// <param name="handled">Set to true if the incremental rebuild ran.</param>
-        /// <param name="changed">Set to whether it staged anything.</param>
-        partial void RebuildIncremental(TableId rebuilderTableId, Table rebuilderTable, Rebuilder rebuilder, ColumnId hintColumn, SubsetRef toScan, uint nextTimestamp, ExecutionState state, ref bool handled, ref bool changed);
-
-        /// <summary>
-        /// REBUILD INDEX HOOK. The indexes milestone implements this partial method to add to
-        /// <paramref name="candidates"/> the rows its rebuild index lists under each value of <paramref name="values"/>
-        /// (stale rows and duplicates allowed), and sets <paramref name="handled"/>. Without an implementation the call
-        /// is compiled away and <see cref="RefreshRowsForValues"/> scans the table instead.
-        /// </summary>
-        /// <param name="values">The values sought in the rebuildable columns.</param>
-        /// <param name="candidates">Receives row ids.</param>
-        /// <param name="handled">Set to true if the index answered.</param>
-        partial void CollectRowsMentioning(HashSet<uint> values, List<int> candidates, ref bool handled);
 
         /// <summary>
         /// Gets whether a rebuild should take the incremental path: egglog's <c>incremental_rebuild</c>
@@ -303,12 +261,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Settles the rows written since the table last rebuilt against <paramref name="unionFind"/> (colored-contexts
-        /// spec §7.6, X38): rewrites every live row of <c>[FirstRowSinceRebuild, Rows.Count)</c> that names a
-        /// non-canonical id, as egglog's rebuild rewrites a row (stage the removal of its key and the canonical row stamped
-        /// <paramref name="timestamp"/>), and moves the table's rebuild mark to its end. Called on the root, before it is
-        /// shared (<see cref="Context.Settle"/>), through <see cref="SettleTableOperation"/>, so the database notifies a
-        /// table that staged anything and the next merge applies the rewrites.
+        /// Settles the rows written since the table last rebuilt against <paramref name="unionFind"/>: rewrites every
+        /// live row of <c>[FirstRowSinceRebuild, Rows.Count)</c> that names a non-canonical id, as egglog's rebuild
+        /// rewrites a row (stage the removal of its key and the canonical row stamped <paramref name="timestamp"/>),
+        /// and moves the table's rebuild mark to its end. Called on the root, before it is shared
+        /// (<see cref="Context.Settle"/>), through <see cref="SettleTableOperation"/>, so the database notifies a table
+        /// that staged anything and the next merge applies the rewrites.
         /// </summary>
         /// <remarks>
         /// Rows before the mark were canonical at the last rebuild and are kept canonical by the journal-driven rebuilds
@@ -360,32 +318,6 @@ namespace Eggnog.Relations
             }
 
             return changed;
-        }
-
-        /// <summary>
-        /// Adds to <paramref name="candidates"/> every live row whose rebuildable columns hold one of
-        /// <paramref name="values"/>, in row order. O(physical rows × rebuildable columns).
-        /// </summary>
-        void CollectRowsMentioningByScan(HashSet<uint> values, List<int> candidates)
-        {
-            var cells = data.Data;
-            var count = data.Count;
-            var arity = Arity;
-            for (var row = 0; row < count; row++)
-            {
-                var offset = row * arity;
-                if (cells[offset] == Value.StaleRep)
-                    continue;
-
-                foreach (var column in toRebuild)
-                {
-                    if (values.Contains(cells[offset + column]))
-                    {
-                        candidates.Add(row);
-                        break;
-                    }
-                }
-            }
         }
 
     }

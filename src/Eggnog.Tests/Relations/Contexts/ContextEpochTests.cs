@@ -11,14 +11,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the clock and the epoch pin (colored-contexts spec §4.1, C1, X3, X4): an execution state reads the
-    /// store clock as its own timestamp, so every write of a run carries the run's epoch however far other contexts
-    /// advance the clock, and a root that runs alone numbers its rows exactly as egglog does.
+    /// Tests for the clock and the epoch pin: an execution state reads the store clock as its own timestamp, so every
+    /// write of a run carries the run's epoch however far other contexts advance the clock, and a root that runs alone
+    /// numbers its rows exactly as egglog does.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class ContextEpochTests
     {
 
+        /// <summary>
+        /// Gets the execution modes, as theory data.
+        /// </summary>
         public static IEnumerable<object[]> ModesData => ExecutionTestUtil.Modes.Select(m => new object[] { m });
 
         /// <summary>
@@ -33,6 +36,10 @@ namespace Eggnog.Relations.Tests
         static SortedWritesTable Add(TableId uf, ParallelHeuristics p) =>
             new(2, 4, C(3), [C(0), C(1), C(2)], new UnionIdMerge(C(2), uf, C(3)), p);
 
+        /// <summary>
+        /// A root state, its clone and a child's state each read the clock as their own epoch while a sibling advances
+        /// the clock on another thread; other counters read live, and a database without a store pins nothing.
+        /// </summary>
         [Fact]
         public void ReadingTheClockReturnsTheStatesEpochWhileASiblingAdvancesIt()
         {
@@ -91,6 +98,9 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0u, bare.CreateExecutionState().Timestamp);
         }
 
+        /// <summary>
+        /// A state created without a timestamp, at the root or in a child, takes the store clock's value.
+        /// </summary>
         [Fact]
         public void NullTimestampsResolveToTheStoreClock()
         {
@@ -141,6 +151,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(11u, Stamp(store.Root.Database, store.UnionFindTable, store.IdCounter, store.ClockCounter));
         }
 
+        /// <summary>
+        /// Every row and union a rule run writes carries the run's epoch, in every execution mode, while an external
+        /// function the rule calls advances the clock on every match.
+        /// </summary>
         [Theory]
         [MemberData(nameof(ModesData))]
         public void EveryRowOfARunHasTheRunsEpoch(string mode)
@@ -209,11 +223,16 @@ namespace Eggnog.Relations.Tests
             Assert.All(unions.Timestamps.ToArray(), ts => Assert.Equal(epoch, ts));
         }
 
+        /// <summary>
+        /// A store's root that runs alone stamps its rows and unions exactly as a bare database laid out the same way,
+        /// which reads every counter live as egglog does: pinning the clock to each state's epoch changes no timestamp
+        /// at a root.
+        /// </summary>
         [Fact]
         public void RootTimestampsAreIdenticalToThePreChangeSequence()
         {
             // The same program on a bare database laid out as a store (no clock designated, so every counter reads
-            // live, as before contexts existed) and on a store's root (the clock pinned to each state's timestamp).
+            // live, as in egglog) and on a store's root (the clock pinned to each state's timestamp).
             var bare = new Database(ParallelHeuristics.Serial);
             var bareUf = bare.AddTable(new DisplacedTable(), name: "$uf");
             var bareIds = bare.AddCounter();
@@ -229,9 +248,10 @@ namespace Eggnog.Relations.Tests
 
             Assert.Equal((bareUf, bareIds, bareClock, bareNum, bareAdd), (store.UnionFindTable, store.IdCounter, store.ClockCounter, num, add));
 
-            // Each run starts from empty table pools on this thread: a pooled hash table keeps the slots it last grew to,
-            // and its iteration order with them, so tables left in the pool by whatever ran on this thread before would
-            // change the order in which the rules match, and so the ids they mint (not what the programs compute).
+            // Each run starts from empty table pools on this thread: a pooled hash table keeps the slots it last grew
+            // to, and its iteration order with them, so tables left in the pool by whatever ran on this thread before
+            // would change the order in which the rules match, and so the ids they mint (not what the programs
+            // compute).
             DrainTablePools();
             var bareLog = RunAcProgram(bare, bareUf, bareIds, bareClock, bareNum, bareAdd, storeRoot: false);
             DrainTablePools();

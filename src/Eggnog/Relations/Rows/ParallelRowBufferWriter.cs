@@ -8,9 +8,10 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Lets many threads append whole batches of rows to one row buffer at once, read rows back, and mark rows stale:
-    /// egglog's <c>ParallelRowBufWriter</c> over <c>ParallelVecWriter</c> (core-relations/src/row_buffer/mod.rs:533-605,
-    /// concurrency/src/parallel_writer.rs). The parallel merge of a table uses it: each shard's thread stages its
-    /// output rows, appends them with one call, then points its hash entries at them.
+    /// egglog's <c>ParallelRowBufWriter</c> over <c>ParallelVecWriter</c>
+    /// (core-relations/src/row_buffer/mod.rs:533-605, concurrency/src/parallel_writer.rs). The parallel merge of a
+    /// table uses it: each shard's thread stages its output rows, appends them with one call, then points its hash
+    /// entries at them.
     /// </summary>
     /// <remarks>
     /// <para>

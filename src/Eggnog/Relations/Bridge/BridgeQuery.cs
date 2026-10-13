@@ -16,11 +16,11 @@ namespace Eggnog.Relations
     /// One e-graph rule becomes one core rule, planned once (<see cref="BuildCachedPlan(Database, string, ValueTuple{TableId, ExternalFunctionId}?)"/>), which every run instantiates
     /// as several core rules, its semi-naive variants (<see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo, uint[])"/>): each variant constrains the
     /// timestamp columns of some atoms, so that together they visit exactly the matches that involve at least one row
-    /// new since the rule's last run (map §3.4).
+    /// new since the rule's last run.
     /// </para>
     /// <para>
     /// Left-hand-side primitives are not join atoms: they are actions (<see cref="RuleActionKind.QueryPrim"/>), filters
-    /// evaluated after the join on every match of every variant, and take no part in the variants (map §3.3).
+    /// evaluated after the join on every match of every variant, and take no part in the variants.
     /// </para>
     /// <para>
     /// Mutable while its builder records it, then immutable: a built rule's query may be planned and instantiated from
@@ -204,15 +204,15 @@ namespace Eggnog.Relations
         public CachedPlanInfo BuildCachedPlan(Database db, string description) => BuildCachedPlan(db, description, null);
 
         /// <summary>
-        /// <see cref="BuildCachedPlan(Database, string)"/>, with the early stop of colored-contexts spec §10.6: when
+        /// <see cref="BuildCachedPlan(Database, string)"/>, with the contradiction early stop: when
         /// <paramref name="stopOnContradiction"/> is given, every head insert into its table (the e-graph's contradiction
         /// function) is followed by a call to its function (<see cref="StopOnContradictionFunction"/>).
         /// </summary>
         /// <remarks>
         /// Constants of table columns are e-class ids exactly where the column is one, which the core reads from the
         /// table; constants without a column (external arguments, comparisons) written as ids are lowered through
-        /// <see cref="QueryEntry.IdConst"/> (<see cref="RuleBindings.ConvertLoose"/>, colored-contexts spec §9.8, X19). A
-        /// store-backed context runs every one of them in its canonical form.
+        /// <see cref="QueryEntry.IdConst"/> (<see cref="RuleBindings.ConvertLoose"/>). A store-backed context runs
+        /// every one of them in its canonical form.
         /// </remarks>
         /// <param name="db">The database.</param>
         /// <param name="description">The rule's description.</param>
@@ -289,7 +289,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// <see cref="AddRulesFromCached(RuleSetBuilder, uint, CachedPlanInfo)"/> with the rule's executed Id constants
-        /// <paramref name="canonical"/> (K, colored-contexts spec §9.8) computed once for every variant; <c>null</c>
+        /// <paramref name="canonical"/> (K) computed once for every variant; <c>null</c>
         /// lets the builder compute them per variant (<see cref="RuleSetBuilder.AddRuleFromCachedPlan"/>).
         /// </summary>
         /// <param name="ruleSet">The rule set being built for the run.</param>

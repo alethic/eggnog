@@ -6,7 +6,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// Keeps the journal rows of an <see cref="OverlayDisplacedTable"/> that satisfy one constraint, with the canonical
     /// column computed on the fly: the filter behind <see cref="OverlayDisplacedTable.RefineOne"/>, mirroring
-    /// <see cref="DisplacedConstraintFilter"/> (colored-contexts spec §5.5). The union-find table has no tombstones.
+    /// <see cref="DisplacedConstraintFilter"/>. The union-find table has no tombstones.
     /// </summary>
     internal readonly struct OverlayDisplacedConstraintFilter : IOffsetFilter
     {

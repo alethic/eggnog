@@ -5,12 +5,12 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A split rule compiled (§6.9.2): its matcher, a naive program whose head is one collector of the key variables, the
+    /// A split rule compiled: its matcher, a naive program whose head is one collector of the key variables, the
     /// set variable and every other variable an assumption uses; the matcher's engine variant; and the assumption template.
     /// </summary>
     /// <remarks>
-    /// The matcher is lowered once, naive, with its class constants as written (the engine canonicalizes them per context,
-    /// X19), and lives as long as the graph, like a global rule (§6.4.6). Immutable once built; thread-safe.
+    /// The matcher is lowered once, naive, with its class constants as written (the engine canonicalizes them per
+    /// context), and lives as long as the graph, like a global rule. Immutable once built; thread-safe.
     /// </remarks>
     internal sealed class SplitProgram
     {
@@ -53,7 +53,7 @@ namespace Eggnog
         public RuleProgram Matcher { get; }
 
         /// <summary>
-        /// Gets the matcher's engine variants: the naive one only, described <c>$split/{name}#{serial}</c> (§6.4.3).
+        /// Gets the matcher's engine variants: the naive one only, described <c>$split/{name}#{serial}</c>.
         /// </summary>
         public RuleVariants Variants { get; }
 
@@ -68,12 +68,13 @@ namespace Eggnog
         public int Width => Columns.Length;
 
         /// <summary>
-        /// Gets the columns whose cells are classes, ascending: the ones a match is canonicalized on (§6.6.4).
+        /// Gets the columns whose cells are classes, ascending: the ones a match is canonicalized on.
         /// </summary>
         public int[] SortColumns { get; }
 
         /// <summary>
-        /// Gets the key's positions in a match: the cells of a request's <c>SplitKey</c> (B6).
+        /// Gets the key's positions in a match: the cells of a request's <c>SplitKey</c>, which a split step compares to
+        /// skip a request a live split already covers.
         /// </summary>
         public int[] KeyColumns { get; }
 

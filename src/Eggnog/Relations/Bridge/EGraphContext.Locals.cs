@@ -13,14 +13,14 @@ namespace Eggnog.Relations
         readonly object localsGate = new();
 
         /// <summary>
-        /// The context-local values, by slot index (§10.1); published whole when the array grows, each element with a
-        /// volatile write.
+        /// The context-local values, by slot index; published whole when the array grows, each element with a volatile
+        /// write.
         /// </summary>
         object?[] locals = Array.Empty<object?>();
 
         /// <summary>
-        /// Gets the context's value for <paramref name="slot"/>, building it with the slot's factory the first time
-        /// (colored-contexts spec §10.1; rule-layer §13 item 4). Thread-safe: the context's rule tasks may ask too.
+        /// Gets the context's value for <paramref name="slot"/>, building it with the slot's factory the first time.
+        /// Thread-safe: the context's rule tasks may ask too.
         /// </summary>
         /// <remarks>
         /// Lock-free once the value exists (one volatile read). The factory runs outside the lock, so it may read the

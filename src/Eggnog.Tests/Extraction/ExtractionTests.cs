@@ -8,7 +8,8 @@ namespace Eggnog.Tests.Extraction
 {
 
     /// <summary>
-    /// Extraction (§6.10, D10): costs, ties, unextractable heads, sharing, staleness, and the extracted term's API.
+    /// Extraction: costs, ties, unextractable heads, sharing, staleness, the extracted term's API, and the classes and
+    /// literals an extracted term holds.
     /// </summary>
     public sealed class ExtractionTests
     {
@@ -142,7 +143,7 @@ namespace Eggnog.Tests.Extraction
             var extractor = t.Root.CreateExtractor();
             Assert.Equal("(A)", extractor.Extract(a).ToString());
 
-            // A write to a table extraction does not read keeps the extractor current (engine E5); a term does not.
+            // A write to a table extraction does not read keeps the extractor current; a term does not.
             t.Root.Assume(t.Num.Of(1L));
             Assert.Equal("(A)", extractor.Extract(a).ToString());
             t.Root.Make(t.B.Of());
@@ -232,6 +233,76 @@ namespace Eggnog.Tests.Extraction
             Assert.Equal("(T \"kind\")", root.Extract(root.Make(text.Of("kind"))).ToString());
             Assert.Equal("(S (set-of \"a\" \"b\") (set-of 1 3) (set-of))",
                 root.Extract(root.Make(sets.Of(ValueSet.Of("b", "a"), ValueSet.Of(3L, 1L), ValueSet<int>.Empty))).ToString());
+        }
+
+        /// <summary>
+        /// Enum values extract and render as their member names.
+        /// </summary>
+        [Fact]
+        public void EnumsExtractByMemberName()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            graph.Values.RegisterEnum<Shade>();
+            var e = graph.DefineConstructor<Shade, Node>("E");
+            var root = graph.Root;
+            Assert.Equal("(E Dark)", root.Extract(root.Make(e.Of(Shade.Dark))).ToString());
+        }
+
+        /// <summary>
+        /// The classes of an extracted term are canonical in the extractor's scope: after the union of <c>B</c> and
+        /// <c>A</c>, the term's child, the argument <c>TryMatch</c> binds and the child's <c>Value</c> all name the
+        /// canonical class.
+        /// </summary>
+        [Fact]
+        public void ChildClassesAreCanonical()
+        {
+            var t = new NodeTheory();
+            var root = t.Root;
+            var b = root.Make(t.B.Of());
+            var wrapped = root.Make(t.Wrap.Of(t.A.Of()));
+            var a = root.Make(t.A.Of());
+            root.Union(b, a);
+            var canonical = root.Find(a);
+            var term = root.Extract(wrapped);
+            Assert.Equal(canonical.Id, term.Child(0).Class);
+            Assert.True(term.TryMatch(t.Wrap, out var child));
+            Assert.Equal(canonical, child.Value);
+            Assert.Equal(canonical, term.Value<Node>(0));
+            Assert.Equal(root.Find(wrapped).Id, term.Class);
+        }
+
+        /// <summary>
+        /// A value cost set for <c>int</c> applies to <c>int</c> cells only, not to <c>long</c> ones.
+        /// </summary>
+        [Fact]
+        public void IntAndLongValueCostsAreSeparate()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var both = graph.DefineConstructor<int, long, Node>("Both");
+            var n = graph.Root.Make(both.Of(1, 2L));
+            var costs = CostModel.Default.WithValueCost(graph.Values.TypeOf<int>(), 10);
+            Assert.Equal(12, graph.Root.Extract(n, costs).Cost);
+            Assert.Equal(3, graph.Root.Extract(n).Cost);
+        }
+
+        /// <summary>
+        /// An extractor of the root keeps working across root writes it does not read, and the root's
+        /// <see cref="Scope.Version"/> moves only with those writes: the root has no ancestor to catch up with.
+        /// </summary>
+        [Fact]
+        public void TheRootsExtractorSurvivesWritesItDoesNotRead()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var extractor = t.Root.CreateExtractor();
+            Assert.Equal("(A)", extractor.Extract(a).ToString());
+            var version = t.Root.Version;
+            Assert.Equal("(A)", extractor.Extract(a).ToString());
+            Assert.Equal(version, t.Root.Version);
+            t.Root.Assume(t.Tag.Of(a));
+            Assert.Equal("(A)", extractor.Extract(a).ToString());
         }
 
     }

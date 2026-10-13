@@ -70,8 +70,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether merging the value of cell <paramref name="incoming"/> into the stored value of cell
-        /// <paramref name="stored"/> leaves the stored value unchanged: whether a host write of it holds already (§6.6.1).
-        /// Calls <c>Merge</c> on the calling thread.
+        /// <paramref name="stored"/> leaves the stored value unchanged: whether a host write of it holds already. Calls
+        /// <c>Merge</c> on the calling thread.
         /// </summary>
         /// <param name="type">The function's output type.</param>
         /// <param name="stored">The stored value's cell.</param>
@@ -80,7 +80,7 @@ namespace Eggnog
         internal abstract bool Absorbs(ColumnType type, uint stored, uint incoming);
 
         /// <summary>
-        /// Creates the merge external function of a function with this lattice (§6.1).
+        /// Creates the merge external function of a function with this lattice.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="functionName">The function's name, for messages.</param>
@@ -89,8 +89,8 @@ namespace Eggnog
         internal abstract Relations.ExternalFunction CreateMerge(EGraph graph, string functionName, ColumnType type);
 
         /// <summary>
-        /// Creates the case join a lift uses for a function with this lattice (§6.9.1, R3), over cells; <c>null</c> when the
-        /// lattice has none, so that a lift requires every live case to agree.
+        /// Creates the case join a lift uses for a function with this lattice, over cells; <c>null</c> when the lattice
+        /// has none, so that a lift requires every live case to agree.
         /// </summary>
         /// <param name="type">The function's output type.</param>
         /// <param name="functionName">The function's name, for messages.</param>

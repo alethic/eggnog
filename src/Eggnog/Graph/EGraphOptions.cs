@@ -13,8 +13,8 @@ namespace Eggnog
         public static EGraphOptions Default { get; } = new();
 
         /// <summary>
-        /// Gets the degree of parallelism of rule tasks and rebuilds at the root (D46). 1, the default: serial and
-        /// deterministic, extraction ties included (decision 4). More: the facts are equal modulo renaming of classes, but
+        /// Gets the degree of parallelism of rule tasks and rebuilds at the root. 1, the default: serial and
+        /// deterministic, extraction ties included. More: the facts are equal modulo renaming of classes, but
         /// fresh ids, and so extraction ties, may differ between runs. Must be at least 1
         /// (<see cref="System.ArgumentOutOfRangeException"/> at graph construction).
         /// </summary>
@@ -22,7 +22,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether each rule's query plan is recorded in <see cref="RuleStatistics.Plan"/>: the graph's engine then
-        /// reports at its plan level, set at graph construction (D41). Off by default, because rendering a plan costs a
+        /// reports at its plan level, set at graph construction. Off by default, because rendering a plan costs a
         /// little on every iteration.
         /// </summary>
         public bool RecordPlans { get; init; }

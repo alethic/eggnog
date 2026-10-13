@@ -87,10 +87,10 @@ namespace Eggnog.Relations
         /// determine the value-column variables.
         /// </summary>
         /// <remarks>
-        /// Fix (core-relations/src/query.rs:448-460): egglog passes a wildcard into the functional dependency as if it
-        /// were a variable; in a consequent it would be inserted into the closure (index <c>u32::MAX</c>). Here a
-        /// dependency whose key holds a wildcard is dropped, since the remaining key variables do not determine the
-        /// values, and wildcards are left out of consequents.
+        /// egglog passes a wildcard into the functional dependency as if it were a variable
+        /// (core-relations/src/query.rs:448-460); in a consequent it would be inserted into the closure (index
+        /// <c>u32::MAX</c>). Here a dependency whose key holds a wildcard is dropped, since the remaining key variables
+        /// do not determine the values, and wildcards are left out of consequents.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="entries">One entry per column.</param>

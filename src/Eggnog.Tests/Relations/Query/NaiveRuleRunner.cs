@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A slow reference for running a <see cref="RuleSet"/>, standing in for egglog's <c>run_rule_set</c>
-    /// (core-relations/src/free_join/execute.rs:347-635) until the executor exists: for every rule it intersects each
+    /// A slow reference for running a <see cref="RuleSet"/> without the executor, in place of egglog's
+    /// <c>run_rule_set</c> (core-relations/src/free_join/execute.rs:347-635): for every rule it intersects each
     /// atom's live rows with the rule's header subsets, filters them by the atom's slow constraints, enumerates the
     /// distinct bindings by nested loops in atom order, runs the action program over them in batches through
     /// <see cref="ExecutionState.RunInstrs(Instr[], Bindings)"/>, and finally merges the database.

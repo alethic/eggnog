@@ -4,8 +4,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Thrown by <see cref="BridgeDiffRunner"/> when two evaluations of a bridge differential program disagree: different
-    /// classes or rows modulo renaming, a non-canonical or duplicate row, or different change flags.
+    /// Thrown by <see cref="BridgeDiffRunner"/> when two evaluations of a bridge differential program disagree:
+    /// different classes or rows modulo renaming, a non-canonical or duplicate row, or different change flags.
     /// </summary>
     sealed class BridgeDiffMismatchException : Exception
     {

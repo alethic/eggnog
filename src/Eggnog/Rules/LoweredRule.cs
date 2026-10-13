@@ -2,8 +2,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One engine variant of a program (D36): the bridge rule, the constants it was lowered with, and the external
-    /// functions it owns.
+    /// One engine variant of a program: the bridge rule, the constants it was lowered with, and the external functions it
+    /// owns.
     /// </summary>
     internal sealed class LoweredRule
     {
@@ -36,7 +36,7 @@ namespace Eggnog
         public Relations.EGraphRuleId Id { get; }
 
         /// <summary>
-        /// Gets the description: unique in the graph, it keys the engine's statistics (§6.4.3).
+        /// Gets the description: unique in the graph, it keys the engine's statistics.
         /// </summary>
         public string Description { get; }
 
@@ -61,8 +61,8 @@ namespace Eggnog
         public Rule? Rule { get; }
 
         /// <summary>
-        /// Gets the collector of a query or split matcher (R1b, R3): the head action that hands each match to the scope's
-        /// runtime; <c>null</c> for a rule or a copy rule.
+        /// Gets the collector of a query or split matcher: the head action that hands each match to the scope's runtime;
+        /// <c>null</c> for a rule or a copy rule.
         /// </summary>
         public MatchCollector? Collector { get; }
 

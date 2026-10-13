@@ -112,8 +112,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the id of <paramref name="key"/> if it has been interned, without interning it. egglog has no such
-        /// member; it serves host reads, which must not grow a pool with values they only look up (rule-layer D15,
-        /// request E1). Thread-safe; never appends to the store.
+        /// member; it serves host reads, which must not grow a pool with values they only look up. Thread-safe; never
+        /// appends to the store.
         /// </summary>
         /// <remarks>
         /// Costs one key hash, the key's shard lock and one expected-O(1) probe, as <see cref="Intern"/> does for a key

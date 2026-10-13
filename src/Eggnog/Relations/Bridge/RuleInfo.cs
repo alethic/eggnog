@@ -6,20 +6,20 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// What an <see cref="EGraph"/> keeps about a registered rule: egglog-bridge's <c>RuleInfo</c>
-    /// (egglog-bridge/src/lib.rs:966-972), split for colored contexts (colored-contexts spec §10.1-§10.2): the recorded
-    /// query, its plan once the rule is first planned, its description, its generation, and whether it may inherit a
-    /// watermark. The per-context semi-naive progress (egglog's <c>last_run_at</c>) lives in each
-    /// <see cref="EGraphContext"/> as a <see cref="RuleProgress"/>.
+    /// (egglog-bridge/src/lib.rs:966-972), split for colored contexts: the recorded query, its plan once the rule is
+    /// first planned, its description, its generation, and whether it may inherit a watermark. The per-context
+    /// semi-naive progress (egglog's <c>last_run_at</c>) lives in each <see cref="EGraphContext"/> as a
+    /// <see cref="RuleProgress"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The plan is built once, by whichever context first runs or pre-plans the rule, on that context's statistics
-    /// (§9.7), and shared by every context: <see cref="GetOrBuildCachedPlan"/> double-checks under the rule's plan gate,
-    /// so concurrent children of a frozen parent plan a rule once. The plan is immutable (<see cref="CachedPlanInfo"/>).
+    /// The plan is built once, by whichever context first runs or pre-plans the rule, on that context's statistics, and
+    /// shared by every context: <see cref="GetOrBuildCachedPlan"/> double-checks under the rule's plan gate, so
+    /// concurrent children of a frozen parent plan a rule once. The plan is immutable (<see cref="CachedPlanInfo"/>).
     /// </para>
     /// <para>
-    /// <see cref="AllowInheritance"/> (X41) is computed with the plan: a naive rule never inherits (D4), and a semi-naive
-    /// rule inherits only when its lowered actions are query-determined (<see cref="ActionReadAnalysis"/>). The bridge has
+    /// <see cref="AllowInheritance"/> is computed with the plan: a naive rule never inherits, and a semi-naive rule
+    /// inherits only when its lowered actions are query-determined (<see cref="ActionReadAnalysis"/>). The bridge has
     /// no split or callback rules; the rule layer runs those as naive rules.
     /// </para>
     /// <para>
@@ -70,15 +70,15 @@ namespace Eggnog.Relations
         public EGraphRuleId Id => Query.RuleId;
 
         /// <summary>
-        /// Gets the generation of the rule's id: progress recorded for an earlier rule with the same id has another
-        /// generation and is ignored (§13 edge 29).
+        /// Gets the generation of the rule's id: progress recorded for a freed rule whose id this rule reuses has
+        /// another generation and is ignored.
         /// </summary>
         public int Generation { get; }
 
         /// <summary>
         /// Gets the timestamp of the rule's last successful run in the e-graph's root context, zero if it never ran
-        /// there: egglog's <c>last_run_at</c>, read from the root's <see cref="RuleProgress"/>. A view kept for the root's
-        /// egglog-compatible API; each context keeps its own progress (§10.2).
+        /// there: egglog's <c>last_run_at</c>, read from the root's <see cref="RuleProgress"/>. A view kept for the
+        /// root's egglog-compatible API; each context keeps its own progress.
         /// </summary>
         public uint LastRunAt => owner?.Root.CommittedLastRunAt(Id, Generation) ?? 0;
 
@@ -94,8 +94,8 @@ namespace Eggnog.Relations
         public CachedPlanInfo? CachedPlan => Volatile.Read(ref cachedPlan);
 
         /// <summary>
-        /// Gets whether the rule may seed its watermark in a context from an ancestor's (§10.2, X41): it is semi-naive
-        /// and its actions are query-determined. <c>false</c> until the rule is planned.
+        /// Gets whether the rule may seed its watermark in a context from an ancestor's: it is semi-naive and its
+        /// actions are query-determined. <c>false</c> until the rule is planned.
         /// </summary>
         public bool AllowInheritance => allowInheritance;
 
@@ -105,7 +105,7 @@ namespace Eggnog.Relations
         public string Description { get; }
 
         /// <summary>
-        /// Gets the rule's plan, building it on <paramref name="database"/>'s statistics the first time (§9.7): egglog's
+        /// Gets the rule's plan, building it on <paramref name="database"/>'s statistics the first time: egglog's
         /// planning at a rule's first run (lib.rs:1404-1409). Double-checked under the rule's plan gate, so a rule is
         /// planned once whatever the number of contexts and threads that ask; the plan is shared by all of them.
         /// </summary>
@@ -113,7 +113,7 @@ namespace Eggnog.Relations
         /// Computes <see cref="AllowInheritance"/> with the plan, from the plan's lowered actions and the store's schema
         /// (<see cref="ActionReadAnalysis"/>); a rule planned on a database without a store never inherits. When the
         /// e-graph has a contradiction function, a head insert into it is followed by the early-stop call
-        /// (<see cref="StopOnContradictionFunction"/>, §10.6). Cold path.
+        /// (<see cref="StopOnContradictionFunction"/>). Cold path.
         /// </remarks>
         /// <param name="database">The database of the context that plans the rule; its views must be current in a
         /// child.</param>

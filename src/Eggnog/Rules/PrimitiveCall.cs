@@ -10,8 +10,8 @@ namespace Eggnog
     /// and encodes the result.
     /// </summary>
     /// <remarks>
-    /// An exception from the primitive is recorded with the rule, the primitive and the decoded arguments (D31), reported
-    /// with <c>ExecutionState.ReportFailure</c> (which stops the engine call early and ends it in a panic), and the call
+    /// An exception from the primitive is recorded with the rule, the primitive and the decoded arguments, reported with
+    /// <c>ExecutionState.ReportFailure</c> (which stops the engine call early and ends it in a panic), and the call
     /// produces nothing. The exception is a partial primitive's "no result" (<see cref="Primitive.IsPartial"/>, an
     /// <see cref="OverflowException"/>) in a let: the call then produces nothing and records nothing, which drops the
     /// match, as egglog drops a body match whose <c>-?&gt;</c> primitive returns no result. Immutable and thread-safe:
@@ -78,7 +78,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Records a primitive's failure in the scope's runtime and reports it to the engine (D31).
+        /// Records a primitive's failure in the scope's runtime and reports it to the engine, which stops the engine call
+        /// early and ends it in a panic.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="state">The execution state.</param>

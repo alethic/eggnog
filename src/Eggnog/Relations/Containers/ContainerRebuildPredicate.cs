@@ -17,7 +17,7 @@ namespace Eggnog.Relations
     /// rebuilt container is queued for reinsertion under the rebuilt id, in the outbox list of the hash-cons shard it
     /// will land in. An entry whose id alone changed is renamed in place (its content hash, and so its slot, stays),
     /// together with its reverse-map entry and its index occurrences, which egglog leaves stale (mod.rs:553-558,
-    /// 618-623; map §8.1 row 13).
+    /// 618-623).
     /// </para>
     /// <para>
     /// A struct, so the shard walk is specialized and the container calls are direct; per entry it makes the two

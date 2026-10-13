@@ -5,23 +5,37 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One engine context with the rule layer's state for it: where facts are written, rules run, reads answered and
-    /// terms extracted. The graph's <see cref="EGraph.Root"/> is one; <see cref="CreateChild"/> makes children, which
-    /// start as copies of their parent and cost in proportion to what they touch (§2.4).
+    /// One context of the graph: where facts are written, rules run, reads answered and terms extracted. The graph's
+    /// <see cref="EGraph.Root"/> is one; <see cref="CreateChild"/> makes children, which start as copies of their
+    /// parent and cost in proportion to what they touch.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Not thread-safe (D47): scopes that share a thread domain (a writable scope and everything created under it) are
+    /// Not thread-safe: scopes that share a thread domain (a writable scope and everything created under it) are
     /// used from one thread at a time, and a second thread gets <see cref="InvalidOperationException"/> instead of
     /// interleaving. Children of a frozen scope each have their own thread domain, and reads, queries and extractors of a
     /// frozen scope are thread-safe.
     /// </para>
     /// <para>
-    /// After a <see cref="RuleEvaluationException"/> from a run or a write the scope is faulted (D18), and every later call
+    /// After a <see cref="RuleEvaluationException"/> from a run or a write the scope is faulted, and every later call
     /// except <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that
-    /// throws in the catch-up a call makes first, a read's, query's or extraction's included (N113).
-    /// <see cref="Dispose"/> never throws (D40): it makes the scope unusable at once, and releases its engine state once
+    /// throws in the catch-up a call makes first, a read's, query's or extraction's included.
+    /// <see cref="Dispose"/> never throws: it makes the scope unusable at once, and releases its engine state once
     /// nothing defers it.
+    /// </para>
+    /// <para>
+    /// A child starts as a copy of its parent and keeps seeing what its writable ancestors write later. A call into a
+    /// scope first catches it up: it brings the rows the scope holds itself (its own rows, as against those it reads
+    /// from its ancestors) in line with what a writable ancestor wrote since. The catch-up merges into the scope, so a
+    /// lattice merge can run in it, and an exception it throws faults the scope and the ancestor: this is the
+    /// "catch-up the call makes first" of the members' exception clauses. A scoped read (<c>T.In(tag)</c>) in a rule
+    /// or query reads a mirror: an internal copy of the table that copy rules keep equal to the view of the nearest
+    /// ancestor-or-self carrying the tag, synced just before a rule, query or freeze reads it.
+    /// </para>
+    /// <para>
+    /// Every member that enters the scope (its reads, writes, runs, extraction and tree operations) throws
+    /// <see cref="ObjectDisposedException"/> once the scope is disposed, and <see cref="InvalidOperationException"/>
+    /// once it is faulted, with the cause as the inner exception (<see cref="Failure"/>).
     /// </para>
     /// </remarks>
     public sealed partial class Scope : IDisposable
@@ -56,14 +70,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Initializes a child scope over an engine child (§6.7).
+        /// Initializes a child scope over an engine child.
         /// </summary>
         /// <param name="parent">The parent scope.</param>
         /// <param name="tag">The child's tag, of the parent's graph; <c>null</c> for none.</param>
         /// <param name="engine">The engine child.</param>
         /// <param name="guard">The parent's guard when the parent is writable, a new one when it is frozen.</param>
         /// <param name="path">The child's path.</param>
-        /// <param name="isCase">Whether the child is a case (R3): made by a split or a <see cref="CaseSet"/>, whose engine
+        /// <param name="isCase">Whether the child is a case: made by a split or a <see cref="CaseSet"/>, whose engine
         /// set owns its context until it releases it (<see cref="ReleaseCase"/>).</param>
         internal Scope(Scope parent, ScopeTag? tag, ContextEngineScope engine, ScopeGuard guard, string path, bool isCase = false)
         {
@@ -91,9 +105,11 @@ namespace Eggnog
         public bool IsRoot { get; }
 
         /// <summary>
-        /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> from a run or a write
-        /// (D18), or from a lattice merge that threw in the catch-up of any call into this scope or a descendant (N113), or
-        /// after the engine faulted the scope's context (X12).
+        /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> from a run or a write,
+        /// or from a lattice merge that threw in the catch-up of any call into this scope or a descendant, or after the
+        /// engine faulted the scope's context because an exception escaped one of its writes, runs or rebuilds (an
+        /// ancestor row the scope stopped seeing before its rewritten copy was merged would stay lost, so the scope
+        /// cannot be repaired).
         /// </summary>
         public bool IsFaulted => Failure is not null;
 
@@ -121,28 +137,27 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether <see cref="Dispose"/> has been called (D40), even while the release waits for live children or a
+        /// Gets whether <see cref="Dispose"/> has been called, even while the release waits for live children or a
         /// call in progress. Never true for the root.
         /// </summary>
         /// <remarks>
-        /// A case (R3) is also disposed once the engine set that owns it disposed its context: a vacuous case a lift or a
-        /// split step dropped (L4), or every case of a split when the run that made them ends.
+        /// A case is also disposed once the set of cases that owns it released it: a vacuous case a lift or a
+        /// split step dropped, or every case of a split when the run that made them ends.
         /// </remarks>
         public bool IsDisposed => Volatile.Read(ref disposed) != 0 || (ownedByCases && Engine.IsDisposed);
 
         /// <summary>
-        /// Gets the scope's change stamp: the engine's (X30) without the moves of its upkeep (N62, N87). It moves on every
-        /// effective change that a write, run or freeze of this scope makes to its own layer, including the catch-up copies
-        /// that hide an ancestor's rows when one of this scope's classes merges in that call. Queries, reads and writes that
-        /// change nothing never move it. Two kinds of upkeep are left out, because neither is a change of this scope's own:
-        /// the sync of the internal mirror tables that a run or query reading this scope's tag makes first (§6.8), and the
-        /// catch-up a call into this scope or a descendant makes first, which brings this scope's layer in line with what a
-        /// writable ancestor wrote since (colors §10.3). A write into an ancestor therefore never moves it, whether or not
-        /// this scope's layer needs copies to follow that write.
+        /// Gets the scope's change stamp. It moves on every effective change that a write, run or freeze of this scope
+        /// makes to its own rows, including the rewritten copies of ancestor rows that a merge of one of this scope's
+        /// classes makes in that call (the copies replace those rows in this scope's view). Queries, reads and writes
+        /// that change nothing never move it. Two kinds of maintenance are left out, because neither is a change of
+        /// this scope's own: the mirror sync that a run or query reading this scope's tag makes first, and the catch-up
+        /// a call into this scope or a descendant makes first (see the remarks on <see cref="Scope"/>). A write into an
+        /// ancestor therefore never moves it, whether or not this scope needs copies to follow that write.
         /// </summary>
         /// <remarks>
-        /// Read from another thread while the scope's domain is in use, the answer may be torn by an upkeep in progress; a
-        /// frozen scope has none.
+        /// Read from another thread while the scope's domain is in use, the answer may be torn by maintenance in
+        /// progress; a frozen scope has none.
         /// </remarks>
         public long Version => Engine.Version - Volatile.Read(ref upkeepStamps);
 
@@ -152,11 +167,11 @@ namespace Eggnog
         public string Path { get; }
 
         /// <summary>
-        /// Disposes the scope (D40): never throws. It makes the scope unusable at once and invalidates the class values it
-        /// returned (D39). Its local rules and engine context are released once it has no live children (transient query
+        /// Disposes the scope: never throws. It makes the scope unusable at once and invalidates the class values it
+        /// returned. Its local rules and engine state are released once it has no live children (transient query
         /// children included) and no call is in progress in it or, on another thread, in its thread domain; whichever thread
         /// removes the last obstacle releases it. A second call does nothing; on the root it does nothing, because the root
-        /// lives as long as the graph. A case (R3) belongs to the set that made it: disposing it marks it disposed at once,
+        /// lives as long as the graph. A case belongs to the set that made it: disposing it marks it disposed at once,
         /// and its release waits for its <see cref="CaseSet"/> to be disposed, or for the run whose split made it to end.
         /// </summary>
         public void Dispose()
@@ -186,7 +201,7 @@ namespace Eggnog
         internal ScopeRuntime Runtime { get; }
 
         /// <summary>
-        /// Gets the guard of the scope's thread domain (D47). Reassigned only when the scope's nearest writable ancestor
+        /// Gets the guard of the scope's thread domain. Reassigned only when the scope's nearest writable ancestor
         /// freezes, on that domain's thread, while it holds the guard and no other call of the domain is in progress (see
         /// <see cref="Freeze"/>); so the guard of a scope a call has entered never changes until the call leaves it. Enter it
         /// through <see cref="EnterGuard"/>, which re-reads it once entered.
@@ -194,12 +209,12 @@ namespace Eggnog
         internal ScopeGuard Guard => guard;
 
         /// <summary>
-        /// Gets the origin of the class values the scope returns (D39).
+        /// Gets the origin of the class values the scope returns.
         /// </summary>
         internal ScopeOrigin Origin { get; }
 
         /// <summary>
-        /// Faults the scope (D18); the first cause is kept.
+        /// Faults the scope; the first cause is kept.
         /// </summary>
         /// <param name="cause">What faulted it.</param>
         internal void Fault(Exception cause)
@@ -224,10 +239,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the stopped case this scope is or lies under (D45, §6.6.8, N104): this scope when it is a case whose
-        /// contradiction stopped it, else the nearest writable ancestor that is one; <c>null</c> when there is none. A scope
-        /// under a stopped case has no model either, and the engine refuses to catch it up with its stopped ancestor (colors
-        /// §6.9), so it answers as the stopped case does. Current once the scope has caught up (<see cref="CatchUp"/>).
+        /// Gets the stopped case this scope is or lies under: this scope when it is a case whose contradiction stopped
+        /// it, else the nearest writable ancestor that is one; <c>null</c> when there is none. A scope under a stopped
+        /// case has no model either, and the engine refuses to catch it up with its stopped ancestor, so it answers as
+        /// the stopped case does. Current once the scope has caught up (<see cref="CatchUp"/>).
         /// </summary>
         /// <remarks>
         /// Cost: one volatile read per scope from here up to the first frozen one or the root; one at the root, and at a
@@ -258,7 +273,7 @@ namespace Eggnog
 
         /// <summary>
         /// Throws <see cref="ScopeContradictedException"/> when the scope is a case whose contradiction stopped it, or lies
-        /// under one (D45, §6.6.8, N104): every entry point that needs a model checks it after
+        /// under one: every entry point that needs a model checks it after
         /// <see cref="ThrowIfNotUsable"/> and the catch-up of its entry. One volatile read per writable scope up to the first
         /// frozen one (<see cref="StoppedCase"/>).
         /// </summary>
@@ -270,16 +285,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings the scope up to date, then throws <see cref="ScopeContradictedException"/> when that left it stopped
-        /// (D45): for the entry points that enter without a catch-up (<see cref="OpenCases"/>, <see cref="DefineRule"/>,
+        /// Brings the scope up to date, then throws <see cref="ScopeContradictedException"/> when that left it stopped:
+        /// for the entry points that enter without a catch-up (<see cref="OpenCases"/>, <see cref="DefineRule"/>,
         /// <see cref="Freeze"/>, <see cref="CaseSet.Add"/>, and the queries of an <see cref="Extractor"/> of a writable
-        /// scope, N112), so that a case contradicted through its parent since its last call answers as stopped (I25). A
+        /// scope), so that a case contradicted through its parent since its last call answers as stopped. A
         /// scope whose parent is frozen, or the root, is never under a case and is not caught up here. Called on the
         /// domain's thread, with its guard held.
         /// </summary>
         /// <exception cref="ScopeContradictedException">The scope is a stopped case, or lies under one.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge the catch-up ran threw, in this scope or a writable
-        /// ancestor (N113), or a failure the catch-up's flush recorded; the scope is faulted.</exception>
+        /// ancestor, or a failure the catch-up's flush recorded; the scope is faulted.</exception>
         internal void CatchUpAndThrowIfStopped()
         {
             if (Parent is not { IsFrozen: false })
@@ -315,7 +330,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Leaves the stamp moves of a mirror sync (D48) out of <see cref="Version"/>: mirror tables are internal, so a sync
+        /// Leaves the stamp moves of a mirror sync out of <see cref="Version"/>: mirror tables are internal, so a sync
         /// is not a change a caller can see. Called on the scope's domain thread, right after the sync.
         /// </summary>
         /// <param name="moved">How far the sync moved the engine's change stamp.</param>
@@ -326,23 +341,23 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings the scope up to date at the entry of a call (colors §10.3, X42), leaving the catch-up out of
-        /// <see cref="Version"/> (N87). Each writable ancestor is brought up to date first, outermost first, and its
-        /// catch-up is left out of its own <see cref="Version"/>; then this scope's staged writes are flushed (there are
-        /// none between calls: every batch flushes before it returns, D30) and its layer is rebuilt against its ancestors.
-        /// The root is brought up to date as before, its stamp untouched (colors §14.1). Called on the domain's thread,
-        /// with its guard held. Cost: two reads of the change stamp and one volatile read of the recorded failure per writable
-        /// scope from here up to the first frozen one or the root, beyond the engine's own catch-up, which this call makes in
+        /// Brings the scope up to date at the entry of a call, leaving the catch-up out of <see cref="Version"/>. Each
+        /// writable ancestor is brought up to date first, outermost first, and its catch-up is left out of its own
+        /// <see cref="Version"/>; then this scope's staged writes are flushed (there are none between calls: every
+        /// batch flushes before it returns) and its layer is rebuilt against its ancestors. The root is only made
+        /// clean, and nothing is left out of its <see cref="Version"/>. Called on the domain's thread, with its guard
+        /// held. Cost: two reads of the change stamp and one volatile read of the recorded failure per writable scope
+        /// from here up to the first frozen one or the root, beyond the engine's own catch-up, which this call makes in
         /// the order the engine would.
         /// </summary>
         /// <exception cref="Relations.PanicException">The flush of host writes recorded a failure.</exception>
         /// <exception cref="RuleEvaluationException">A merge of a scope's catch-up recorded a failure: a lattice delegate that
         /// threw while the rebuild merged an ancestor's rows into that scope's layer, which the engine records and does not
-        /// throw (N113). The scope whose catch-up failed and this scope are faulted with it, as a failure in a case faults
-        /// the case and the scope <c>Run</c> was called on (N94); the walk stops there.</exception>
+        /// throw. The scope whose catch-up failed and this scope are faulted with it, as a failure in a case faults
+        /// the case and the scope <c>Run</c> was called on; the walk stops there.</exception>
         /// <remarks>
-        /// A scope under a stopped case is not caught up (N104): the engine refuses to catch a context up with a stopped
-        /// parent unless it stops too (colors §6.9), and such a scope has no model anyway, so it answers as stopped
+        /// A scope under a stopped case is not caught up: the engine refuses to catch a context up with a stopped
+        /// parent unless it stops too, and such a scope has no model anyway, so it answers as stopped
         /// (<see cref="StoppedCase"/>). The walk stops at the first stopped ancestor.
         /// </remarks>
         internal void CatchUp() => CatchUpCore(this);
@@ -353,18 +368,18 @@ namespace Eggnog
         /// <param name="called">The scope the call was made on: this scope or a descendant in its thread domain.</param>
         /// <returns>Whether the scope is a stopped case or lies under one, once caught up.</returns>
         /// <exception cref="RuleEvaluationException">A merge of this scope's catch-up, or of an ancestor's, recorded a
-        /// failure (N113); the scope where it happened and <paramref name="called"/> are faulted.</exception>
+        /// failure; the scope where it happened and <paramref name="called"/> are faulted.</exception>
         bool CatchUpCore(Scope called)
         {
             // The root is never behind its own writes: every flush there rebuilds and takes what its merges recorded, so its
-            // catch-up records nothing and is not checked (colors §14.1).
+            // catch-up records nothing and is not checked.
             if (IsRoot)
             {
                 Engine.EnsureClean();
                 return false;
             }
 
-            // A stopped ancestor cannot be caught up with, and leaves this scope without a model (N104).
+            // A stopped ancestor cannot be caught up with, and leaves this scope without a model.
             if (Parent is { IsFrozen: false } parent && parent.CatchUpCore(called))
                 return true;
 
@@ -374,8 +389,8 @@ namespace Eggnog
             if (moved != 0)
                 Interlocked.Add(ref upkeepStamps, moved);
 
-            // The rebuild records a lattice merge that throws and goes on (D31): the layer kept the old value, so the
-            // failure is taken here, at the call that ran the merge, rather than left for the scope's next write (N113).
+            // The rebuild records a lattice merge that throws and goes on: the layer kept the old value, so the
+            // failure is taken here, at the call that ran the merge, rather than left for the scope's next write.
             if (Engine.TryTakeRecordedFailure(out var message))
                 throw FaultCatchUp(message, called);
 
@@ -384,7 +399,7 @@ namespace Eggnog
 
         /// <summary>
         /// Turns a failure this scope's catch-up recorded into a <see cref="RuleEvaluationException"/>, with the runtime's
-        /// record of it when there is one, and faults this scope and <paramref name="called"/> with it (D18, N113).
+        /// record of it when there is one, and faults this scope and <paramref name="called"/> with it.
         /// </summary>
         /// <param name="message">The engine's failure message.</param>
         /// <param name="called">The scope the call was made on.</param>
@@ -400,8 +415,8 @@ namespace Eggnog
 
         /// <summary>
         /// Counts a <see cref="Write"/> batch opened (<paramref name="delta"/> 1) or ended (-1) on this scope in each of its
-        /// writable ancestors, which share its thread domain and refuse writes and runs while their count is positive
-        /// (N88). Called on the domain's thread, with its guard held. Cost: one increment per writable ancestor; none at the
+        /// writable ancestors, which share its thread domain and refuse writes and runs while their count is positive.
+        /// Called on the domain's thread, with its guard held. Cost: one increment per writable ancestor; none at the
         /// root.
         /// </summary>
         /// <param name="delta">1 when the batch opens, -1 when it ends.</param>
@@ -412,10 +427,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Enters the guard of the scope's thread domain (D47) and returns it. The guard is read again once entered: a freeze
-        /// of the nearest writable ancestor may have given this scope a new one between the read and the entry (§6.7
-        /// Freeze), and the entry then moves to the new guard, so that no call ever holds a guard its scope no longer has.
-        /// One compare-and-swap, and one read of the field.
+        /// Enters the guard of the scope's thread domain and returns it. The guard is read again once entered: a freeze
+        /// of the nearest writable ancestor may have given this scope a new one between the read and the entry (see
+        /// <see cref="Freeze"/>), and the entry then moves to the new guard, so that every call holds its scope's
+        /// current guard. One compare-and-swap, and one read of the field.
         /// </summary>
         /// <returns>The guard entered; the caller leaves it with <see cref="ScopeGuard.Exit"/>.</returns>
         /// <exception cref="InvalidOperationException">Another thread is using the domain.</exception>
@@ -433,7 +448,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Counts a call in progress on the scope: a disposed scope is not released while one runs (D40). One interlocked
+        /// Counts a call in progress on the scope: a disposed scope is not released while one runs. One interlocked
         /// increment.
         /// </summary>
         internal void BeginCall() => Interlocked.Increment(ref calls);
@@ -483,7 +498,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Enters the scope for a read (§6.6.3): a frozen scope takes no guard, since its reads are thread-safe; a writable
+        /// Enters the scope for a read: a frozen scope takes no guard, since its reads are thread-safe; a writable
         /// one is entered as by <see cref="Enter"/>, then brought current. The caller ends it with
         /// <see cref="Exit"/>(result).
         /// </summary>
@@ -522,8 +537,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Enters the scope for one query of an extractor (§6.10): a frozen scope takes no guard, so any number of extractors
-        /// may run on it from any threads (E5); a writable one takes its guard. The caller ends it with
+        /// Enters the scope for one query of an extractor: a frozen scope takes no guard, so any number of extractors
+        /// may run on it from any threads; a writable one takes its guard. The caller ends it with
         /// <see cref="Exit"/>(result).
         /// </summary>
         /// <returns>Whether the guard was taken.</returns>
@@ -550,7 +565,7 @@ namespace Eggnog
 
         /// <summary>
         /// Enters the scope for a write or a run: as <see cref="Enter"/>, and the scope must be writable and no descendant of
-        /// it may have a <see cref="Write"/> batch open (N88). The caller ends it with <see cref="Exit"/>(<c>true</c>).
+        /// it may have a <see cref="Write"/> batch open. The caller ends it with <see cref="Exit"/>(<c>true</c>).
         /// </summary>
         /// <exception cref="InvalidOperationException">The scope may not be written or run now.</exception>
         internal void EnterWrite()
@@ -568,8 +583,8 @@ namespace Eggnog
             {
                 ThrowIfNotWritable();
 
-                // An open batch's plan was checked against this scope as it stands (D32): a write or a run here would
-                // change what the batch read, so it waits until the batch ends (N88). One read of a field.
+                // An open batch's plan was checked against this scope as it stands: a write or a run here would
+                // change what the batch read, so it waits until the batch ends. One read of a field.
                 if (batchesBelow > 0)
                     throw new InvalidOperationException($"Scope '{Path}' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch.");
 

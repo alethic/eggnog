@@ -10,6 +10,10 @@ namespace Eggnog.Relations.Tests
     sealed class SplitWorld
     {
 
+        /// <summary>
+        /// Initializes the world: designates <c>bottom</c> as the contradiction, defines <c>copy</c>, mints the ids and
+        /// flushes the two edges at the root.
+        /// </summary>
         public SplitWorld()
         {
             G = new ContextGraph();
@@ -21,18 +25,39 @@ namespace Eggnog.Relations.Tests
             G.Root.FlushUpdates();
         }
 
+        /// <summary>
+        /// Gets the context graph.
+        /// </summary>
         public ContextGraph G { get; }
 
+        /// <summary>
+        /// Gets the rule <c>edge(x, y) → path(x, y)</c>.
+        /// </summary>
         public EGraphRuleId Copy { get; }
 
+        /// <summary>
+        /// Gets <c>t</c>, the true branch of the boolean split, with <c>edge(t, c)</c>.
+        /// </summary>
         public Value T { get; }
 
+        /// <summary>
+        /// Gets <c>f</c>, the false branch of the boolean split, with <c>edge(f, c)</c>.
+        /// </summary>
         public Value F { get; }
 
+        /// <summary>
+        /// Gets <c>c</c>, the target of both edges.
+        /// </summary>
         public Value C { get; }
 
+        /// <summary>
+        /// Gets <c>b</c>, the id the boolean split makes <c>t</c> or <c>f</c>.
+        /// </summary>
         public Value B { get; }
 
+        /// <summary>
+        /// Gets <c>d</c>, the id of the nested split.
+        /// </summary>
         public Value D { get; }
 
         /// <summary>
@@ -51,6 +76,9 @@ namespace Eggnog.Relations.Tests
                 G.Assert(@case, G.Edge, D, C);
         });
 
+        /// <summary>
+        /// Gets a spec that lifts <c>edge</c>, <c>path</c> and <c>mark</c> as relations.
+        /// </summary>
         public LiftSpec Spec => new(
             new LiftTable(G.Edge, LiftTableKind.Relation),
             new LiftTable(G.Path, LiftTableKind.Relation),

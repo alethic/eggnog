@@ -53,8 +53,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Collects every row the index lists under <paramref name="value"/>: one probe, as <see cref="AddRow"/> makes for
-        /// a scanned one-cell row (colored-contexts spec §7.3 step 4, §6.10: a child's own losers probed in an ancestor's
-        /// rebuild index). O(1) expected plus the rows listed.
+        /// a scanned one-cell row. A child context probes an ancestor layer's rebuild index with it: when it rebuilds,
+        /// with each id its own unions displaced, and when it lifts, with one canonical id. O(1) expected plus the rows
+        /// listed.
         /// </summary>
         /// <param name="value">The value.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

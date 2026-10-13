@@ -5,19 +5,18 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Collects one split rule (§6.9.2): a body of <see cref="When"/> facts and <c>Where</c> filters, the element set to
-    /// split over (<see cref="Cases{T}"/>), the key (<see cref="Key"/>; by default every declared variable except the set),
+    /// Collects one split rule: a body of <see cref="When"/> facts and <c>Where</c> filters, the element set to split
+    /// over (<see cref="Cases{T}"/>), the key (<see cref="Key"/>; by default every declared variable except the set),
     /// and the assumptions written into each case (<see cref="Assume"/>). Usable only inside the definition's callback.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Coverage is the caller's obligation: whenever the body matches in a scope C, C must entail "for the elements of the
     /// set at this match, one of the cases' assumptions holds", and that must stay true as C grows, as it does for a
-    /// domain narrowed by a lattice meet (§6.9.5). The body is also the split's demand (D43): a key it does not match is
-    /// never split.
+    /// domain narrowed by a lattice meet. The body is also the split's demand: a key it does not match is never split.
     /// </para>
     /// <para>
-    /// Assumptions are ground once a match and an element are bound: host-write facts (§6.6.2) over constants, the declared
+    /// Assumptions are ground once a match and an element are bound: host-write facts over constants, the declared
     /// variables, the case variable, constructor applications and computations of those; a scoped handle, a
     /// <see cref="Fact.In"/>, or a function read in a term is a definition error.
     /// </para>
@@ -89,11 +88,11 @@ namespace Eggnog
 
         /// <summary>
         /// Adds body facts: relation rows and applications to join, equalities to unify or check, disequalities and
-        /// filters, as in a rule (§6.3). Scoped reads (<c>In(tag)</c>, <see cref="Fact.In"/>) read the tagged ancestor's
-        /// view through its mirror (§6.8).
+        /// filters, as in a rule. Scoped reads (<c>In(tag)</c>, <see cref="Fact.In"/>) read the tagged ancestor's view
+        /// through its mirror.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void When(params Fact[] facts)
         {
             ThrowIfClosed();
@@ -162,7 +161,7 @@ namespace Eggnog
 
         /// <summary>
         /// Sets the split's key: what identifies it, so that a split step skips a key a live split of the same rule covers
-        /// in the scope or an ancestor (B6). By default, every declared body variable except the set, in declaration order.
+        /// in the scope or an ancestor. By default, every declared body variable except the set, in declaration order.
         /// Calls add to the key.
         /// </summary>
         /// <param name="variables">Declared body variables of this split rule.</param>
@@ -176,12 +175,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Adds the assumptions written into each case, as one host batch (§6.6.1): relation rows, function values
+        /// Adds the assumptions written into each case, as one host batch: relation rows, function values
         /// (<c>F.Of(k).Is(v)</c>, merged by F's lattice), constructor outputs and unions, over the declared variables and the
         /// case variable.
         /// </summary>
         /// <param name="facts">The facts.</param>
-        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
         public void Assume(params Fact[] facts)
         {
             ThrowIfClosed();

@@ -13,9 +13,9 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Nothing here canonicalizes: keys and rows are used as given (map §3.6). Reads see the committed table;
-    /// writes are staged into the state and land at the next merge. Rows written get the current value of the
-    /// e-graph's timestamp counter, which at the root equals the epoch the running batch captured (map §4.2 C1).
+    /// Nothing here canonicalizes: keys and rows are used as given. Reads see the committed table; writes are staged
+    /// into the state and land at the next merge. Rows written get the current value of the e-graph's timestamp
+    /// counter, which at the root equals the epoch the running batch captured.
     /// </para>
     /// <para>
     /// Immutable and stateless, so one instance serves any number of threads, each with its own state. Every method is
@@ -81,8 +81,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Looks up the output for <paramref name="key"/> in the committed table: egglog's <c>lookup</c>, a pure read
-        /// that never inserts, whatever the function's default. One hash probe at a root; in a child context, the row the
-        /// child sees (colored-contexts spec §6.5, <see cref="ExecutionState.TryLookupColumn"/>): one probe per layer.
+        /// that never inserts, whatever the function's default. One hash probe at a root; in a child context, the row
+        /// the child sees (<see cref="ExecutionState.TryLookupColumn"/>): one probe per layer.
         /// </summary>
         /// <param name="state">The execution state.</param>
         /// <param name="key">The key; one cell per key column.</param>

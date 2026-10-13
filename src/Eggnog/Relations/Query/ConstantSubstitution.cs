@@ -5,10 +5,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The Id constants of a rule whose executed form K differs from the written one (colored-contexts spec §9.8): query
-    /// entries <c>(atom, column, written, canonical)</c> and action entries <c>(instruction, operand, written,
-    /// canonical)</c>. <see cref="TemplateSubstituter"/> and <see cref="ActionSubstituter"/> rewrite exactly these
-    /// positions (I30).
+    /// The Id constants of a rule whose executed form K differs from the written one: query entries
+    /// <c>(atom, column, written, canonical)</c> and action entries <c>(instruction, operand, written, canonical)</c>.
+    /// <see cref="TemplateSubstituter"/> and <see cref="ActionSubstituter"/> rewrite exactly these positions, so the run
+    /// matches and writes exactly K.
     /// </summary>
     /// <remarks>
     /// Immutable. Cold path: built at most once per (rule, distinct K) and cached in the rule's

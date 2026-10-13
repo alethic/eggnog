@@ -7,9 +7,9 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Generates a <see cref="ScopedProgram"/> from a seed. Values come from small domains (<c>i64</c> 0 to 3, strings a to
-    /// c), so programs stay small; every rule is valid: head variables are bound by the body, and a local rule's scoped
-    /// atoms read only tags that resolve from its owner.
+    /// Generates a <see cref="ScopedProgram"/> from a seed. Values come from small domains (<c>i64</c> 0 to 3, strings
+    /// a to c), so programs stay small; every rule is valid: head variables are bound by the body, and a local rule's
+    /// scoped atoms read only tags that resolve from its owner.
     /// </summary>
     internal sealed class ScopedProgramGenerator
     {
@@ -209,9 +209,9 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Adds the body atom <paramref name="make"/> makes, unless it applies a function or constructor already applied to
-        /// the same keys in the same scope (equal applications share one output, §6.3 step 3, so a second one would bind
-        /// nothing new); the variables a refused atom introduced are dropped.
+        /// Adds the body atom <paramref name="make"/> makes, unless it applies a function or constructor already
+        /// applied to the same keys in the same scope (the rule compiler gives equal applications one output, so a
+        /// second one would bind nothing new); the variables a refused atom introduced are dropped.
         /// </summary>
         static void AddBodyAtom(List<ScopedAtomSpec> body, List<string> bound, Func<ScopedAtomSpec> make)
         {
@@ -227,8 +227,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A body atom: a value table's row or value, scoped to one of <paramref name="tags"/> at times; in programs with
-        /// constructors, also a constructor's value or a node relation's row.
+        /// A body atom: a value table's row or value, scoped to one of <paramref name="tags"/> at times; in programs
+        /// with constructors, also a constructor's value or a node relation's row.
         /// </summary>
         ScopedAtomSpec BodyAtom(List<string> bound, int[] tags, bool valueOnly = false)
         {
@@ -245,10 +245,11 @@ namespace Eggnog.Tests.Differential
 
             var tag = tags.Length > 0 && random.Next(5) < 2 ? tags[random.Next(tags.Length)] : -1;
             var keys = spec.StringKeys.Select(s => BodyTerm(bound, s)).ToArray();
-            // A function's value is read into a fresh variable only (u for a max function, w for a min one), which heads
-            // write only into functions merged the same way: a value read before it settled then never matters, because
-            // the final value bounds every earlier one. Joining, filtering or recording such a value would depend on when
-            // rules ran, which differs between scopes and the literal encoding (and between seeded and unseeded runs).
+            // A function's value is read into a fresh variable only (u for a max function, w for a min one), which
+            // heads write only into functions merged the same way: a value read before it settled then never matters,
+            // because the final value bounds every earlier one. Joining, filtering or recording such a value would
+            // depend on when rules ran, which differs between scopes and the literal encoding (and between seeded and
+            // unseeded runs).
             ScopedTermSpec? output = null;
             if (spec.Kind == ScopedTableKind.Function)
             {
@@ -281,8 +282,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// A head atom writing a value table (or, with constructors, a node row of a made term) from bound variables and
-        /// constants.
+        /// A head atom writing a value table (or, with constructors, a node row of a made term) from bound variables
+        /// and constants.
         /// </summary>
         ScopedAtomSpec HeadAtom(List<string> bound)
         {

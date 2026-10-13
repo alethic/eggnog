@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Named built-in primitives, with egglog's names, made once per element type. Arithmetic is checked and partial, as
-    /// egglog's is: an overflow is no result, which drops the match in a rule body and fails the rule in a head (D31).
+    /// Named built-in primitives, with egglog's names, made once per element type. Arithmetic is checked and partial,
+    /// as egglog's is: an overflow is no result, which drops the match in a rule body and fails the rule in a head.
     /// </summary>
     public static class Primitives
     {
@@ -82,15 +82,15 @@ namespace Eggnog
 
         /// <summary>
         /// Gets <c>+</c> over <c>i64</c>: partial, like egglog's (<c>checked_add</c>). An overflow has no result: in a
-        /// rule body the match is dropped; in a head the rule fails (D31). <see cref="Primitive{T1, T2, TResult}.Function"/>
-        /// throws <see cref="OverflowException"/>.
+        /// rule body the match is dropped; in a head the rule fails.
+        /// <see cref="Primitive{T1, T2, TResult}.Function"/> throws <see cref="OverflowException"/>.
         /// </summary>
         public static Primitive<long, long, long> Add { get; } = new("+", static (a, b) => checked(a + b), false) { IsPartial = true };
 
         /// <summary>
         /// Gets <c>-</c> over <c>i64</c>: partial, like egglog's (<c>checked_sub</c>). An overflow has no result: in a
-        /// rule body the match is dropped; in a head the rule fails (D31). <see cref="Primitive{T1, T2, TResult}.Function"/>
-        /// throws <see cref="OverflowException"/>.
+        /// rule body the match is dropped; in a head the rule fails.
+        /// <see cref="Primitive{T1, T2, TResult}.Function"/> throws <see cref="OverflowException"/>.
         /// </summary>
         public static Primitive<long, long, long> Subtract { get; } = new("-", static (a, b) => checked(a - b), false) { IsPartial = true };
 
@@ -125,7 +125,8 @@ namespace Eggnog
         public static Primitive<long, long, bool> GreaterOrEqual { get; } = new(">=", static (a, b) => a >= b, false);
 
         /// <summary>
-        /// Gets the internal <c>is-true</c> filter of a boolean term that is not a computation (§6.3, step 3).
+        /// Gets the internal <c>is-true</c> filter a rule body applies to a <see cref="Fact.True"/> condition that is
+        /// not a computation.
         /// </summary>
         internal static Primitive<bool, bool> IsTrue { get; } = new("is-true", static b => b, false);
 

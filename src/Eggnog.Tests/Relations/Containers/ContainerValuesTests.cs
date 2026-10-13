@@ -11,8 +11,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="ContainerValues"/>: type registration, interning and lookups by type, and
-    /// <see cref="ContainerValues.RebuildAll"/> with its incremental heuristic, its parallel arm and the dirty-id closure
-    /// (egglog's core-relations/src/containers/mod.rs:124-257).
+    /// <see cref="ContainerValues.RebuildAll"/> with its incremental heuristic, its parallel arm and the dirty-id
+    /// closure (egglog's core-relations/src/containers/mod.rs:124-257).
     /// </summary>
     public class ContainerValuesTests
     {
@@ -248,8 +248,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Environments rebuild in parallel when there is more than one and more than one thread (egglog's
-        /// <c>parallelize_inter_container_op</c>); the outcome, including the order of the dirty ids, matches the serial
-        /// rebuild.
+        /// <c>parallelize_inter_container_op</c>); the outcome (every container, its id and the union-find) matches the
+        /// serial rebuild, and both report dirty ids, though not necessarily the same ones.
         /// </summary>
         [Fact]
         public void ParallelRebuildAcrossEnvironmentsMatchesSerial()

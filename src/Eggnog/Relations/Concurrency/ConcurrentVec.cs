@@ -18,13 +18,13 @@ namespace Eggnog.Relations
     /// <c>write_lock</c>.
     /// </para>
     /// <para>
-    /// The Rust guards its storage with a <c>ReadOptimizedLock</c> so that a reallocation can wait for readers. Here the
-    /// garbage collector provides that grace period instead: growth copies the published prefix into a larger array
+    /// The Rust guards its storage with a <c>ReadOptimizedLock</c> so that a reallocation can wait for readers. Here
+    /// the garbage collector provides that grace period instead: growth copies the published prefix into a larger array
     /// and publishes it, while readers holding the old array keep reading valid, identical elements. Reads therefore
-    /// take no lock at all. The price is that elements are immutable once published: the Rust allows interior
-    /// mutation through a read guard (egglog's <c>NotificationList</c> flips an <c>AtomicBool</c> in place), but a write
-    /// into a slot of an array that has just been copied would be lost. Store a reference type when published elements
-    /// must carry mutable state, or use storage that never moves, as <see cref="NotificationList{TKey}"/> and
+    /// take no lock at all. The price is that elements are immutable once published: the Rust allows interior mutation
+    /// through a read guard (egglog's <c>NotificationList</c> flips an <c>AtomicBool</c> in place), but a write into a
+    /// slot of an array that has just been copied would be lost. Store a reference type when published elements must
+    /// carry mutable state, or use storage that never moves, as <see cref="NotificationList{TKey}"/> and
     /// <see cref="ConcurrentBitSet"/> do.
     /// </para>
     /// <para>
@@ -147,10 +147,10 @@ namespace Eggnog.Relations
         /// takes no lock.
         /// </summary>
         /// <remarks>
-        /// egglog's <c>resize_with</c> (concurrent_vec.rs:58-73) only writes slot <c>new_len - 1</c> when the storage is
-        /// already long enough, relying on reallocation to have initialized the slots in between. After a <c>push</c>
-        /// has grown the storage with uninitialized slots, that publishes uninitialized memory. This port fills every
-        /// slot from the old length to <paramref name="newLength"/>, so <see cref="Push"/> and
+        /// egglog's <c>resize_with</c> (concurrent_vec.rs:58-73) only writes slot <c>new_len - 1</c> when the storage
+        /// is already long enough, relying on reallocation to have initialized the slots in between. After a
+        /// <c>push</c> has grown the storage with uninitialized slots, that publishes uninitialized memory. This port
+        /// fills every slot from the old length to <paramref name="newLength"/>, so <see cref="Push"/> and
         /// <see cref="ResizeWith"/> can be mixed freely and the factory runs exactly once per new element.
         /// </remarks>
         /// <param name="newLength">The length to grow to.</param>

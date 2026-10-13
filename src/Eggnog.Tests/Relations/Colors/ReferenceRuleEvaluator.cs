@@ -4,23 +4,24 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The naive rule evaluation of <see cref="ReferenceRuleContext"/> (colored-contexts spec §17 M10.3): enumerates a
-    /// <see cref="ColorRule"/>'s matches over a closed <see cref="SpikeReferenceView"/> by nested loops in atom order,
-    /// keeps those its filters pass and, for a semi-naive run, those that use a row the rule has not seen, and runs the
-    /// rule's actions on each, collecting what they derive.
+    /// The naive rule evaluation of <see cref="ReferenceRuleContext"/>: enumerates a <see cref="ColorRule"/>'s matches
+    /// over a closed <see cref="ReferenceContextView"/> by nested loops in atom order, keeps those its filters pass
+    /// and, for a semi-naive run, those that use a row the rule has not seen, and runs the rule's actions on each,
+    /// collecting what they derive.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The view is canonical, so bindings are canonical ids. Id constants run in their canonical form in the view, as a
-    /// store-backed context runs them (X19, §9.8); value constants run as written. A read (<see cref="ColorActionKind.Read"/>)
+    /// store-backed context runs them; value constants run as written. A read (<see cref="ColorActionKind.Read"/>)
     /// sees the view, as the engine's actions see the committed rows, not the iteration's writes; so does a mint, which
     /// reuses the view's term or the iteration's earlier mint of it.
     /// </para>
     /// <para>
     /// Semi-naive selection is by content: <c>seen</c> holds the rows (<see cref="RowKey"/>) present, with the same
-    /// canonical content, at the rule's watermark and ever since (<see cref="ReferenceRuleContext"/>); a match fires when
-    /// one of its rows is not among them, which is the engine's "some atom's row is stamped at or after the watermark",
-    /// since the engine stamps a row exactly when its canonical content changes (I21). <c>null</c> fires every match.
+    /// canonical content, at the rule's watermark and ever since (<see cref="ReferenceRuleContext"/>); a match fires
+    /// when one of its rows is not among them, which is the engine's "some atom's row is stamped at or after the
+    /// watermark", since the engine stamps a row exactly when its canonical content changes. <c>null</c> fires every
+    /// match.
     /// </para>
     /// </remarks>
     static class ReferenceRuleEvaluator
@@ -35,7 +36,7 @@ namespace Eggnog.Relations.Tests
         /// <param name="seen">The rows the rule has seen, or <c>null</c> for a full run.</param>
         /// <param name="output">Receives what the fired matches derive.</param>
         /// <returns>The number of matches that fired.</returns>
-        public static int Evaluate(ColorSchema schema, ColorRule rule, SpikeReferenceView view, HashSet<string>? seen, ReferenceRuleDerivations output)
+        public static int Evaluate(ColorSchema schema, ColorRule rule, ReferenceContextView view, HashSet<string>? seen, ReferenceRuleDerivations output)
         {
             var atoms = new List<(ColorAtom Atom, List<ulong[]> Rows, string[] Keys)>();
             foreach (var atom in rule.Atoms)
@@ -124,12 +125,12 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the content key of a canonical logical row: the table's name and the cells.
         /// </summary>
-        public static string RowKey(SpikeTable table, ulong[] row) => table.Name + ":" + string.Join(",", row);
+        public static string RowKey(LogicalTable table, ulong[] row) => table.Name + ":" + string.Join(",", row);
 
         /// <summary>
         /// Runs the actions of one fired match.
         /// </summary>
-        static void Apply(ColorSchema schema, ColorRule rule, SpikeReferenceView view, ulong[] binding, ReferenceRuleDerivations output)
+        static void Apply(ColorSchema schema, ColorRule rule, ReferenceContextView view, ulong[] binding, ReferenceRuleDerivations output)
         {
             ulong Value(long e, bool isId) => e >= 0 ? binding[e] : Cell(view, e, isId);
 
@@ -173,7 +174,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the cell a constant entry runs as: an id constant's canonical form in the view, or the value.
         /// </summary>
-        static ulong Cell(SpikeReferenceView view, long entry, bool isId)
+        static ulong Cell(ReferenceContextView view, long entry, bool isId)
         {
             var value = ColorRule.Decode(entry);
             return isId ? view.Find(value) : value;

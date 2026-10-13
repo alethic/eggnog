@@ -173,9 +173,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The multi-column sort-based build: egglog collects pairs column by column, so with at least 64 pairs a value
-        /// held in column 1 of an early row and column 0 of a later row gets an unsorted subset, and a row holding a
-        /// value in both columns is listed twice unless the two pairs end up adjacent (map §8.1 row 8). The fixed
+        /// The multi-column sort-based build: egglog collects pairs column by column and, from 64 pairs up, sorts them
+        /// by value only, so a value held in column 1 of an early row and column 0 of a later row gets an unsorted
+        /// subset, and a row holding a value in both columns is listed twice unless the two pairs end up adjacent. This
         /// build lists every value's rows sorted and once.
         /// </summary>
         [Fact]

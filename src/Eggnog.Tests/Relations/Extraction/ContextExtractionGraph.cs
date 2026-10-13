@@ -2,10 +2,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A small store-backed e-graph with an extraction schema over one e-class sort <c>E</c>, for the context extraction
-    /// tests (colored-contexts spec §10.10): constructors <c>leaf(i64)</c>, <c>wrap(E)</c> and <c>pair(E, E)</c>, each
-    /// of cost 1; a declared custom function <c>weight(E) -&gt; i64</c>, which extraction never uses; and an undeclared
-    /// function <c>mark(E) -&gt; i64</c>.
+    /// A small store-backed e-graph with an extraction schema over one e-class sort <c>E</c>, for the context
+    /// extraction tests: constructors <c>leaf(i64)</c>, <c>wrap(E)</c> and <c>pair(E, E)</c>, each of cost 1; a
+    /// declared custom function <c>weight(E) -&gt; i64</c>, which extraction never uses; and an undeclared function
+    /// <c>mark(E) -&gt; i64</c>.
     /// </summary>
     sealed class ContextExtractionGraph
     {
@@ -30,22 +30,49 @@ namespace Eggnog.Relations.Tests
             });
         }
 
+        /// <summary>
+        /// Gets the fixture that owns the e-graph and the extraction schema.
+        /// </summary>
         public ExtractionFixture Fx { get; }
 
+        /// <summary>
+        /// Gets the e-class sort.
+        /// </summary>
         public EqSort E { get; }
 
+        /// <summary>
+        /// Gets the constructor <c>leaf(i64)</c>.
+        /// </summary>
         public FunctionId Leaf { get; }
 
+        /// <summary>
+        /// Gets the constructor <c>wrap(E)</c>.
+        /// </summary>
         public FunctionId Wrap { get; }
 
+        /// <summary>
+        /// Gets the constructor <c>pair(E, E)</c>.
+        /// </summary>
         public FunctionId Pair { get; }
 
+        /// <summary>
+        /// Gets the declared custom function <c>weight(E) -&gt; i64</c>.
+        /// </summary>
         public FunctionId Weight { get; }
 
+        /// <summary>
+        /// Gets the undeclared function <c>mark(E) -&gt; i64</c>.
+        /// </summary>
         public FunctionId Mark { get; }
 
+        /// <summary>
+        /// Gets the e-graph's root context.
+        /// </summary>
         public EGraphContext Root => Fx.EGraph.Root;
 
+        /// <summary>
+        /// Gets the extraction schema.
+        /// </summary>
         public ExtractionSchema Schema => Fx.Schema;
 
         /// <summary>

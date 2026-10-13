@@ -14,18 +14,18 @@ namespace Eggnog
         /// <summary>
         /// Defines a compiled conjunctive query for host reads (<see cref="Scope.Any(Query)"/>,
         /// <see cref="Scope.Count(Query)"/>, <see cref="Scope.ForEachMatch(Query, QueryCallback)"/>), compiled
-        /// immediately like a rule body (§6.6.4). Any thread, any time (D6). Define a reusable query once; dispose one made
-        /// for a single request (D49).
+        /// immediately like a rule body. Any thread, any time. Define a reusable query once; dispose one made for a
+        /// single request.
         /// </summary>
         /// <param name="name">The query's name, unique among the graph's live queries.</param>
         /// <param name="define">Declares the variables (the columns of a match) and the body.</param>
         /// <returns>The query.</returns>
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or a live query has it.</exception>
-        /// <exception cref="RuleDefinitionException">The query is not valid (the messages of §6.3); nothing is
+        /// <exception cref="RuleDefinitionException">The query is not valid (the checks of a rule body); nothing is
         /// registered.</exception>
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or the
-        /// query's first scoped read of a table creates its mirror, which is a table definition (D6, §6.8), while another
+        /// query's first scoped read of a table creates its mirror, which is a table definition, while another
         /// thread is using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
         public Query DefineQuery(string name, Action<QueryBuilder> define)
         {
@@ -54,7 +54,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the live queries (a snapshot), for the plans of a freeze (R2) and for tests.
+        /// Gets the live queries (a snapshot), for the plans of a freeze and for tests.
         /// </summary>
         internal IReadOnlyCollection<Query> Queries => new List<Query>(queriesByName.Values);
 

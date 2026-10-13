@@ -11,12 +11,12 @@ namespace Eggnog.Relations
         /// <summary>
         /// Extracts up to <paramref name="count"/> variants of the class of <paramref name="value"/>: egglog's
         /// <c>extract_variants_with_sort</c> (src/extract.rs:647-733). The class's nodes are ordered by their cost (the
-        /// node's head plus its children's cheapest terms) and then by content (rule-layer decision D10), except that the
-        /// class's choice comes first, and each of the first <paramref name="count"/> is extracted with its children's
-        /// cheapest terms. So the first variant is always the term <c>TryExtractBest</c> gives. The choice is the least of
-        /// the cheapest nodes in content order whenever head costs are positive and nothing saturates; with zero or
-        /// saturated costs Knuth's algorithm may choose another node of the same cost, because a node is queued only once
-        /// its children are final.
+        /// node's head plus its children's cheapest terms) and then by content, except that the class's choice comes
+        /// first, and each of the first <paramref name="count"/> is extracted with its children's cheapest terms. So
+        /// the first variant is always the term <c>TryExtractBest</c> gives. The choice is the least of the cheapest
+        /// nodes in content order whenever head costs are positive and nothing saturates; with zero or saturated costs
+        /// Knuth's algorithm may choose another node of the same cost, because a node is queued only once its children
+        /// are final.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -25,9 +25,10 @@ namespace Eggnog.Relations
         /// once.
         /// </para>
         /// <para>
-        /// Defect fixed (src/extract.rs:691): egglog unwraps every root node's cost and so panics on a node with a child
-        /// that has no finite term. Such a node has no finite term either, so it is skipped. egglog orders equal-cost
-        /// variants by function name and then raw row values; here they follow D10's order, the extractor's own.
+        /// egglog unwraps every root node's cost (src/extract.rs:691) and so panics on a node with a child that has no
+        /// finite term; here such a node, which has no finite term either, is skipped. egglog orders equal-cost
+        /// variants by function name and then raw row values; here they follow the extractor's own content order
+        /// (<see cref="CompareNodes"/>).
         /// </para>
         /// </remarks>
         /// <param name="sort">The value's sort.</param>

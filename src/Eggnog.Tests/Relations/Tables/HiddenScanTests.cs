@@ -8,7 +8,7 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the hidden-aware scans and refinements of every table kind (colored-contexts spec §9.3, T2):
+    /// Tests for the hidden-aware scans and refinements of every table kind:
     /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
     /// <see cref="Table.ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>, both <c>ScanProject</c> forms,
     /// <see cref="Table.ForEachColumn{TSink}(SubsetRef, ColumnId, HiddenRows, ref TSink)"/>,
@@ -20,7 +20,7 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// The chunk sizes T2 lists; <see cref="int.MaxValue"/> is unbounded.
+        /// The chunk sizes every scan is checked at; <see cref="int.MaxValue"/> is unbounded.
         /// </summary>
         static readonly int[] Chunks = [1, 7, 64, int.MaxValue];
 

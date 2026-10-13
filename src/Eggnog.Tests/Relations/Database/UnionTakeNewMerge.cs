@@ -4,9 +4,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The merge of egglog's <c>basic_math_egraph</c> test tables (core-relations/src/tests.rs:969-1009): when the id in
-    /// <see cref="ValueColumn"/> differs, stage the union <c>[current, incoming, incoming ts]</c> into the union-find
-    /// and take the incoming row ("picking b as the presumed winner").
+    /// The merge of egglog's <c>basic_math_egraph</c> test tables (core-relations/src/tests.rs:969-1009): when the id
+    /// in <see cref="ValueColumn"/> differs, stage the union <c>[current, incoming, incoming ts]</c> into the
+    /// union-find and take the incoming row ("picking b as the presumed winner").
     /// </summary>
     sealed class UnionTakeNewMerge : MergeFunction
     {

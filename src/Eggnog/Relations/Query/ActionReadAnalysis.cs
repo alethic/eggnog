@@ -4,10 +4,11 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Decides whether a rule's action program is <i>query-determined</i> (colored-contexts spec §10.2, X41): whether what
-    /// it writes depends only on the match and on the running context's equalities, never on table contents a descendant
-    /// context can change. Only a rule whose actions are query-determined may inherit a semi-naive watermark from an
-    /// ancestor (I31's precondition, enforced rather than assumed).
+    /// Decides whether a rule's action program is <i>query-determined</i>: whether what it writes depends only on the
+    /// match and on the running context's equalities, never on table contents a descendant context can change. Only a
+    /// rule whose actions are query-determined may inherit a semi-naive watermark from an ancestor: the inherited
+    /// watermark skips the matches the ancestor already applied, which is sound only when each would write the same in
+    /// the descendant, so the condition is checked here rather than assumed.
     /// </summary>
     /// <remarks>
     /// <para>

@@ -5,20 +5,20 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What the layered executor did to the rows of each kind of layer (colored-contexts spec §14.2, §17 M10.2): rows its
-    /// cover scans, drivers and existence checks enumerated, rows it put into indexes built for one stage or node (sparse,
-    /// per-node and per-stage tuple indexes), cached-index pieces, and probes joined across layers, split between the
-    /// context's own layer and its ancestors' layers.
+    /// What the layered executor did to the rows of each kind of layer: rows its cover scans, drivers and existence
+    /// checks enumerated, rows it put into indexes built for one stage or node (sparse, per-node and per-stage tuple
+    /// indexes), cached-index pieces, and probes joined across layers, split between the context's own layer and its
+    /// ancestors' layers.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Per-child cost must not grow with the root (§14.2): a child's run may touch an ancestor's rows only through shared
-    /// cached indexes (free), through the rows its own work reaches (probe results and their refinements, at most what it
-    /// probed), and through the rows of a semi-naive variant's new side (<c>ts ≥ W</c>). So ancestor rows are counted in
-    /// two kinds. <see cref="AncestorRowsScanned"/> and <see cref="AncestorDynamicIndexRows"/> count ancestor rows of an
-    /// atom's root node (the layer's rows narrowed by the headers, before any refinement), which is the work that would
-    /// grow with the root: once a rule's watermark is at or above every root stamp, both are 0 for a child's run (the done
-    /// condition of M10.2). <see cref="AncestorRefinedRowsScanned"/> and <see cref="AncestorRefinedIndexRows"/> count
+    /// Per-child cost must not grow with the root: a child's run may touch an ancestor's rows only through shared
+    /// cached indexes (free), through the rows its own work reaches (probe results and their refinements, at most what
+    /// it probed), and through the rows of a semi-naive variant's new side (<c>ts ≥ W</c>). So ancestor rows are
+    /// counted in two kinds. <see cref="AncestorRowsScanned"/> and <see cref="AncestorDynamicIndexRows"/> count
+    /// ancestor rows of an atom's root node (the layer's rows narrowed by the headers, before any refinement), which is
+    /// the work that would grow with the root: once a rule's watermark is at or above every root stamp, both are 0 for
+    /// a child's run. <see cref="AncestorRefinedRowsScanned"/> and <see cref="AncestorRefinedIndexRows"/> count
     /// ancestor rows reached through a refinement, bounded by the run's probe results.
     /// </para>
     /// <para>

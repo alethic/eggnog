@@ -1,16 +1,20 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 
 using Xunit;
+
+using static Eggnog.Relations.Tests.BridgeTestUtil;
 
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="EGraphContext.CheckInvariants"/> (colored-contexts spec §12.7): it passes on consistent contexts at every
-    /// level, and catches deliberate corruptions of the bridge's parts C1, C2, C5 and C7 with
-    /// <see cref="ContextInvariantException"/>.
+    /// <see cref="EGraphContext.CheckInvariants"/>: it passes on consistent contexts at every level, and catches
+    /// deliberate corruptions of the bridge's parts with <see cref="ContextInvariantException"/>, each reported under
+    /// the name of the part it breaks: rule progress, frozen state, the stop flag and the tree (the link between bridge
+    /// and storage contexts).
     /// </summary>
     public class EGraphContextInvariantsTests
     {
@@ -48,10 +52,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// C1: a watermark after the clock or above the floor, or with the wrong number of constants.
+        /// Rule progress: a watermark after the clock or above the floor, or with the wrong number of constants.
         /// </summary>
         [Fact]
-        public void C1CatchesCorruptProgress()
+        public void CorruptRuleProgressIsReported()
         {
             var g = new ContextGraph();
             var rule = g.EdgeToPath();
@@ -59,16 +63,16 @@ namespace Eggnog.Relations.Tests
             var info = g.EGraph.GetRuleInfo(rule);
             g.Root.SetProgress(rule, new RuleProgress(g.EGraph.NextTimestamp + 100, [1, 2], info.Generation));
             var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("C1:") && v.Contains("after the clock"));
-            Assert.Contains(error.Violations, v => v.StartsWith("C1:") && v.Contains("constant"));
+            Assert.Contains(error.Violations, v => v.StartsWith("rule progress:") && v.Contains("after the clock"));
+            Assert.Contains(error.Violations, v => v.StartsWith("rule progress:") && v.Contains("constant"));
         }
 
         /// <summary>
-        /// C2: a frozen context holding host writes (corrupt state: a frozen context cannot stage any) is reported as a C2
-        /// violation, not refused as an unclean context.
+        /// Frozen state: a frozen context holding host writes (corrupt state: a frozen context cannot stage any) is
+        /// reported as a frozen-state violation, not refused as an unclean context.
         /// </summary>
         [Fact]
-        public void C2CatchesAFrozenContextWithHostWrites()
+        public void AFrozenContextWithHostWritesIsReported()
         {
             var g = new ContextGraph();
             var a = g.Root.FreshId();
@@ -79,14 +83,14 @@ namespace Eggnog.Relations.Tests
             Assert.False(g.Root.IsClean);
 
             var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("C2:") && v.Contains("host writes"));
+            Assert.Contains(error.Violations, v => v.StartsWith("frozen state:") && v.Contains("host writes"));
         }
 
         /// <summary>
-        /// C2: a frozen context holding a failure nobody took.
+        /// Frozen state: a frozen context holding a failure nobody took.
         /// </summary>
         [Fact]
-        public void C2CatchesAFrozenContextWithAFailure()
+        public void AFrozenContextWithAFailureIsReported()
         {
             var g = new ContextGraph();
             g.Root.Freeze();
@@ -95,14 +99,14 @@ namespace Eggnog.Relations.Tests
             state.ReportFailure("late");
             database.RecordFailure(state);
             var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("C2:"));
+            Assert.Contains(error.Violations, v => v.StartsWith("frozen state:"));
         }
 
         /// <summary>
-        /// C5: a stopped context that sees no contradiction row.
+        /// The stop flag: a stopped context that sees no contradiction row.
         /// </summary>
         [Fact]
-        public void C5CatchesAStopWithoutAContradiction()
+        public void AStopWithoutAContradictionIsReported()
         {
             var g = new ContextGraph();
             g.EGraph.DesignateContradiction(g.Bottom);
@@ -110,26 +114,26 @@ namespace Eggnog.Relations.Tests
             using var child = g.Root.CreateChild();
             child.Context.MarkContradicted();
             var error = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("C5:"));
+            Assert.Contains(error.Violations, v => v.StartsWith("stop flag:"));
         }
 
         /// <summary>
-        /// C7: a storage child created under a bridge context without a bridge context of its own.
+        /// The tree: a storage child created under a bridge context without a bridge context of its own.
         /// </summary>
         [Fact]
-        public void C7CatchesAChildOutsideTheBridge()
+        public void AChildOutsideTheBridgeIsReported()
         {
             var g = new ContextGraph();
             var stray = g.Root.Context.CreateChild();
             var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
-            Assert.Contains(error.Violations, v => v.StartsWith("C7:"));
-            Assert.Equal(0, error.Violations.Count(v => v.StartsWith("C7:") == false));
+            Assert.Contains(error.Violations, v => v.StartsWith("tree:"));
+            Assert.Equal(0, error.Violations.Count(v => v.StartsWith("tree:") == false));
             stray.Dispose();
             g.Root.CheckInvariants();
         }
 
         /// <summary>
-        /// The storage parts are reported too: the bridge composes the storage checker (here its gate item, §12.7 1.7).
+        /// The storage parts are reported too: the bridge composes the storage checker (here its descendant-gate item).
         /// </summary>
         [Fact]
         public void StorageViolationsAreReported()
@@ -149,6 +153,48 @@ namespace Eggnog.Relations.Tests
             }
 
             g.Root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// Rule progress: a committed run above the context's semi-naive floor (but not after the clock) is reported
+        /// twice: as the recorded progress and as the watermark a run would use.
+        /// </summary>
+        [Fact]
+        public void RuleProgressAboveTheFloorIsReported()
+        {
+            var g = new ContextGraph();
+            var rule = g.EdgeToPath();
+            g.Root.RunRules(rule);
+            var info = g.EGraph.GetRuleInfo(rule);
+            var floor = g.Root.Context.SemiNaiveFloor;
+            Assert.True(floor + 1 <= g.EGraph.NextTimestamp);
+            g.Root.SetProgress(rule, new RuleProgress(floor + 1, null, info.Generation));
+
+            var error = Assert.Throws<ContextInvariantException>(() => g.Root.CheckInvariants());
+            Assert.Contains(error.Violations, v => v.StartsWith("rule progress:") && v.Contains("above the context's semi-naive floor"));
+            Assert.Contains(error.Violations, v => v.StartsWith("rule progress:") && v.Contains("would run from"));
+            Assert.DoesNotContain(error.Violations, v => v.Contains("after the clock"));
+        }
+
+        /// <summary>
+        /// Rule progress: a child's own progress older than its creation is reported.
+        /// </summary>
+        [Fact]
+        public void AChildsRuleProgressBeforeItsCreationIsReported()
+        {
+            var g = new ContextGraph();
+            var rule = g.EdgeToPath();
+            g.Root.RunRules(rule);
+            g.Root.Freeze();
+            using var child = g.Root.CreateChild();
+            child.RunRules(rule);
+            child.CheckInvariants();
+            var info = g.EGraph.GetRuleInfo(rule);
+            Assert.True(child.CreatedAt > 0);
+            child.SetProgress(rule, new RuleProgress(child.CreatedAt - 1, null, info.Generation));
+
+            var error = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
+            Assert.Contains(error.Violations, v => v.StartsWith("rule progress:") && v.Contains("before the context was created"));
         }
 
     }

@@ -17,7 +17,7 @@ namespace Eggnog.Relations
     /// starts a thread-pool worker that drains the scope's queue. <see cref="Wait"/> drains the queue on the calling
     /// thread too, and returns once every spawned item, including items spawned by items, has finished. Because the
     /// waiter helps with its own scope's items, a scope nested inside a task (a decomposed plan's block inside a rule)
-    /// cannot starve: its items run on the waiting thread if no worker takes them (map §5.5).
+    /// cannot starve: its items run on the waiting thread if no worker takes them.
     /// </para>
     /// <para>
     /// At most <c>degreeOfParallelism</c> threads run a scope's items: its workers plus the waiter. Nested scopes have

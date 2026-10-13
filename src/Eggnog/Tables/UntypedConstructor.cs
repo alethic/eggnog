@@ -2,8 +2,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A constructor of any arity, made by the untyped <c>EGraph.DefineConstructor</c> overload (D13) and applied with
-    /// <see cref="ConstructorHandle.Apply"/>. Internal until a consumer needs more than four columns.
+    /// A constructor of any arity, made by the untyped <c>EGraph.DefineConstructor</c> overload and applied with
+    /// <see cref="ConstructorHandle.Apply"/>. Internal; the public typed handles take up to four key columns.
     /// </summary>
     internal sealed class UntypedConstructor : ConstructorHandle
     {

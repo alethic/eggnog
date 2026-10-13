@@ -6,8 +6,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The find of a context: the root's union-find, then an optional flattened prefix for a frozen chain of ancestors,
-    /// then one <see cref="UnionFindOverlay"/> per remaining level (colored-contexts spec §5.4):
-    /// <c>find_C = overlay_C ∘ find_P</c>, unrolled.
+    /// then one <see cref="UnionFindOverlay"/> per remaining level: <c>find_C = overlay_C ∘ find_P</c>, unrolled.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -15,12 +14,13 @@ namespace Eggnog.Relations
     /// contexts' overlays as they are now; that is correct whenever every level is current with its parent, which reads
     /// require (a context's reads need it clean; its writes and runs catch up first; a frozen context's parent is
     /// frozen). Keys that a parent displaced break a lazy "alternating chase", which is why contexts re-key eagerly
-    /// (§5.4, §5.6).
+    /// when they catch up with their parents.
     /// </para>
     /// <para>
-    /// Cost of <see cref="Find"/>: the root's <see cref="DisplacedUnionFind.FindNaive"/> (one hop once the root is frozen
-    /// and compressed), at most one dense load or probe for the prefix, and one probe per non-empty level below it. Never
-    /// writes, so any number of threads may find concurrently while no level changes. Nothing is allocated per find.
+    /// Cost of <see cref="Find"/>: the root's <see cref="DisplacedUnionFind.FindNaive"/> (one hop once the root is
+    /// frozen and compressed), at most one dense load or probe for the prefix, and one probe per non-empty level below
+    /// it. Never writes, so any number of threads may find concurrently while no level changes. Nothing is allocated
+    /// per find.
     /// </para>
     /// </remarks>
     internal sealed class LayeredUnionFind
@@ -78,8 +78,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the find that a frozen context gives its children (§5.4, §8.1): the root's union-find followed by the
-        /// frozen chain's flattened map, one probe however deep the chain is.
+        /// Gets the find that a frozen context gives its children: the root's union-find followed by the frozen chain's
+        /// flattened map, one probe however deep the chain is.
         /// </summary>
         /// <param name="root">The root's union-find.</param>
         /// <param name="prefix">The frozen chain flattened, or <c>null</c> when it maps every id to itself.</param>
@@ -93,7 +93,7 @@ namespace Eggnog.Relations
         /// Gets the canonical id of <paramref name="id"/> in the chain's context. Never writes.
         /// </summary>
         /// <param name="id">The id.</param>
-        /// <returns>The canonical id: the minimum of its class in the context (I7).</returns>
+        /// <returns>The canonical id: the minimum of its class in the context.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint Find(uint id)
         {

@@ -5,7 +5,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <see cref="Scope.CountRows(TableHandle)"/> and <see cref="Scope.Rows(TableHandle)"/> (§6.11): a table's rows in a
+    /// <see cref="Scope.CountRows(TableHandle)"/> and <see cref="Scope.Rows(TableHandle)"/>: a table's rows in a
     /// scope's view, counted or decoded. Called under the scope's guard; never interns and never creates terms.
     /// </summary>
     internal static class RowReader
@@ -83,7 +83,7 @@ namespace Eggnog
             type.Kind == ColumnKind.Sort ? new ClassId(cell, scope.Origin) : type.DecodeObject(cell, scope);
 
         /// <summary>
-        /// Gets the scope whose view of a table is read (§6.11): the scope itself, or for a scoped view the nearest
+        /// Gets the scope whose view of a table is read: the scope itself, or for a scoped view the nearest
         /// ancestor-or-self tagged so, read directly. A table of another graph and a mirror handle are refused.
         /// </summary>
         /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>

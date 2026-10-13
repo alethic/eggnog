@@ -16,8 +16,9 @@ namespace Eggnog.Relations
     /// Sorts stably by the value half only, in one to four passes of eight bits chosen from the largest value, so only
     /// the bits in use cost anything. Pairs arrive in non-decreasing row order (<see cref="ColumnPairSink"/> emits them
     /// row by row), and stability keeps that order within each value, so the result is sorted by the whole packed word:
-    /// by (value, row). That is the fix for egglog's multi-column build (map §8.1 row 8), which collects pairs column by
-    /// column and therefore leaves a value's rows unsorted.
+    /// by (value, row). egglog's multi-column build collects pairs column by column
+    /// (core-relations/src/hash_index/mod.rs:341-382) and therefore leaves a value's rows unsorted; emitting row by row
+    /// and sorting stably keeps them sorted.
     /// </para>
     /// <para>
     /// Below <see cref="SmallSortThreshold"/> pairs it sorts the packed words directly, as egglog falls back to

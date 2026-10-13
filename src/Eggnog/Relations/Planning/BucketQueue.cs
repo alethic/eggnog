@@ -16,13 +16,13 @@ namespace Eggnog.Relations
     /// <c>BTreeMap</c>; with empty buckets dropped, "highest non-empty bucket" and "last key" agree.
     /// </para>
     /// <para>
-    /// Fix (map §8.1 row 7, core-relations/src/free_join/plan.rs:1337-1338): an atom without variables sits in bucket
-    /// 0; popping it never changes any count, so egglog never removes the emptied bucket and the next pop unwraps an
-    /// empty set and panics. Here a bucket is dropped as soon as a pop empties it.
+    /// An atom without variables sits in bucket 0; popping it never changes any count, so egglog never removes the
+    /// emptied bucket and the next pop unwraps an empty set and panics (core-relations/src/free_join/plan.rs:1337-1338).
+    /// Here a bucket is dropped as soon as a pop empties it.
     /// </para>
     /// <para>
-    /// Fix (map §8.1 row 7, plan.rs:1344): in a bag, atoms mention variables outside the bag, whose
-    /// <c>var_info</c> lookups panic in egglog. Only the bag's variables enter the per-atom sets.
+    /// In a bag, atoms mention variables outside the bag, whose <c>var_info</c> lookups panic in egglog (plan.rs:1344).
+    /// Only the bag's variables enter the per-atom sets.
     /// </para>
     /// </remarks>
     internal sealed class BucketQueue

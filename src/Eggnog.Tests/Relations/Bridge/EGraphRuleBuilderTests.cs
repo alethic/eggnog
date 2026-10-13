@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Xunit;
@@ -9,9 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for recording and lowering e-graph rules (egglog-bridge/src/rule.rs:125-771): the layout of atoms (timestamp
-    /// and subsumption entries), input checks, the core instructions each action lowers to, and the rule-based-rebuild
-    /// helpers (<c>lookup_uf</c>, <c>check_for_update</c>, <c>rebuild_row</c>, sole focus).
+    /// Tests for recording and lowering e-graph rules (egglog-bridge/src/rule.rs:125-771): the layout of atoms
+    /// (timestamp and subsumption entries), input checks, the core instructions each action lowers to, and the
+    /// rule-based-rebuild helpers (<c>lookup_uf</c>, <c>check_for_update</c>, <c>rebuild_row</c>, sole focus).
     /// </summary>
     public class EGraphRuleBuilderTests
     {
@@ -295,7 +296,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void SubsumingAMissingKeyDoesNotHaltTheRestOfTheRule()
         {
-            // Defect fixed (map §8.1 row 19): egglog halts the lane after subsuming a key the table lacks.
+            // egglog halts the lane after subsuming a key the table lacks, which skips the rule's later actions; here
+            // they run.
             var egraph = NewEGraph();
             var i64 = IntType(egraph);
             var f = Constructor(egraph, "f", true, i64);
@@ -480,8 +482,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// egglog's nonincremental rebuild rule (egglog-bridge/src/lib.rs:894-926): every row, canonicalized with
-        /// <c>lookup_uf</c>, kept only where it changed (<c>check_for_update</c>), and rewritten with <c>rebuild_row</c>,
-        /// carrying the subsumption cell over.
+        /// <c>lookup_uf</c>, kept only where it changed (<c>check_for_update</c>), and rewritten with
+        /// <c>rebuild_row</c>, carrying the subsumption cell over.
         /// </summary>
         [Fact]
         public void RuleBasedNonincrementalRebuildChecksForUpdates()
@@ -547,6 +549,74 @@ namespace Eggnog.Relations.Tests
             });
             egraph.Database.MergeAll(egraph.NextTimestamp);
             egraph.IncrementTimestamp();
+        }
+
+        /// <summary>
+        /// Registers an i64 addition primitive that counts its calls.
+        /// </summary>
+        static ExternalFunctionId CountingAdd(EGraph egraph, Action onCall)
+        {
+            return Register(egraph, (state, args) =>
+            {
+                onCall();
+                var a = state.BaseValues.Unwrap<Int64Codec, long>(new Value(args[0]));
+                var b = state.BaseValues.Unwrap<Int64Codec, long>(new Value(args[1]));
+                return state.BaseValues.Get<Int64Codec, long>(a + b).Rep;
+            });
+        }
+
+        /// <summary>
+        /// Subsuming a key the table lacks writes the default row once, as egglog does (it stages the row once and
+        /// halts the lane), so the row holds 5. Were the subsumed row staged twice, once by the lookup that inserts it
+        /// and once by the <c>InsertIfEq</c>, the duplicate would be merged with the function's merge, and a
+        /// non-idempotent primitive merge such as <c>(+ old new)</c> would turn the default 5 into 10.
+        /// </summary>
+        [Fact]
+        public void SubsumingAMissingKeyWritesTheDefaultRowOnce()
+        {
+            var egraph = NewEGraph();
+            var i64 = IntType(egraph);
+            var calls = 0;
+            var add = CountingAdd(egraph, () => calls++);
+            var f = egraph.AddTable(new FunctionConfig
+            {
+                Schema = [i64, i64],
+                Default = DefaultVal.Const(Int(egraph, 5)),
+                Merge = MergeFn.Primitive(add, MergeFn.Old, MergeFn.New),
+                Name = "f",
+                CanSubsume = true,
+            });
+
+            var rb = egraph.NewRule("subsume f(3)", true);
+            rb.Subsume(f, [egraph.BaseValueConstant<Int64Codec, long>(3)]);
+            egraph.RunRules(rb.Build());
+
+            var rows = Rows(egraph, f);
+            Assert.Single(rows);
+            Assert.True(rows[0].Subsumed);
+            Assert.Equal(5, Unint(egraph, rows[0].Values[1]));
+            Assert.Equal(0, calls);
+        }
+
+        /// <summary>
+        /// Every method of <see cref="EGraphRuleBuilder"/> checks its input before recording anything, so a failing
+        /// call leaves the rule unchanged. <c>RebuildRow</c> records two actions, the <c>Remove</c> of the old key and
+        /// the write of the new row, so it checks the new row's entries before recording the removal: a bad entry in
+        /// <c>after</c> throws and records nothing. A removal recorded without its replacement would delete the row.
+        /// </summary>
+        [Fact]
+        public void AFailingRebuildRowRecordsNothing()
+        {
+            var egraph = NewEGraph();
+            var f = Constructor(egraph, "f", false, ColumnTy.Id);
+            var rb = egraph.NewRule("rebuild", true);
+            var v0 = rb.NewVar(ColumnTy.Id);
+            var v1 = rb.NewVar(ColumnTy.Id);
+            rb.QueryTable(f, [v0, v1], false);
+            var foreign = new RuleVariable(new VariableId(40), null);
+
+            Assert.Throws<ArgumentException>(() => rb.RebuildRow(f, [v0, v1], [foreign, v1], null));
+            Assert.Empty(rb.Query.Actions);
         }
 
     }

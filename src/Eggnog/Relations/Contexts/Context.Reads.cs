@@ -8,13 +8,13 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Gets the context's view of <paramref name="table"/> (§6.3, §6.5): the root's single-layer view at the root,
-        /// otherwise the child's layered view, built and cached on first use. A view is immutable; rows appended to the
-        /// context's own layer later show through it, and it is dropped when its structure changes.
+        /// Gets the context's view of <paramref name="table"/>: the root's single-layer view at the root, otherwise the
+        /// child's layered view, built and cached on first use. A view is immutable; rows appended to the context's own
+        /// layer later show through it, and it is dropped when its structure changes.
         /// </summary>
         /// <remarks>
-        /// Requires the context to be clean (§7.5). A context that is not frozen is entered (its domain); a frozen one is
-        /// read from any thread.
+        /// Requires the context to be clean. A context that is not frozen is entered (its domain); a frozen one is read
+        /// from any thread.
         /// </remarks>
         /// <param name="table">A registered function table.</param>
         /// <returns>The view.</returns>
@@ -22,7 +22,7 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is faulted, contradicted or not clean, or its domain is
         /// held by another thread.</exception>
         /// <exception cref="NotSupportedException">The table is the union-find, which is read through
-        /// <see cref="Find"/> and lookups (X23).</exception>
+        /// <see cref="Find"/> and lookups.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">The table is not registered.</exception>
         public TableView GetView(TableId table)
         {
@@ -39,8 +39,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Copies the row of <paramref name="table"/> this context sees with key <paramref name="key"/> into
-        /// <paramref name="destination"/> (§6.5): through the context's view, or, for the union-find, its view-level lookup
-        /// (a row for every id displaced in the context's view). Keys are taken as given: the rows a context sees are
+        /// <paramref name="destination"/>: through the context's view, or, for the union-find, its view-level lookup (a
+        /// row for every id displaced in the context's view). Keys are taken as given: the rows a context sees are
         /// canonical in it, so a stale key finds nothing.
         /// </summary>
         /// <param name="table">The table.</param>
@@ -64,8 +64,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether the context is contradictory (§6.9): a contradiction stopped it, or a row of the store's
-        /// contradiction table is visible in it. The one read a stopped context still answers.
+        /// Gets whether the context is contradictory: a contradiction stopped it, or a row of the store's contradiction
+        /// table is visible in it. The one read a stopped context still answers.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is not stopped and is faulted or not clean, or its
@@ -86,21 +86,20 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every live row the child stored itself in <paramref name="table"/> (§6.10, L1): its own layer's rows,
-        /// canonical in it (I13). Nothing when it has no layer of the table. O(own rows).
+        /// Visits every live row the child stored itself in <paramref name="table"/>: its own layer's rows, canonical
+        /// in it. Nothing when it has no layer of the table. O(own rows).
         /// </summary>
         /// <remarks>
         /// Requires the context to be clean. The sink runs as a callback of the context's thread domain, as a
-        /// <see cref="ScanMerges{TVisitor}"/> visitor does (§8.3): it may read any context, and writes, rebuilds with work
-        /// to do and structural calls are refused there; disposing the context during the scan is refused.
+        /// <see cref="ScanMerges{TVisitor}"/> visitor does: it may read any context, and writes, rebuilds with work to
+        /// do and structural calls are refused there; disposing the context during the scan is refused.
         /// </remarks>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="table">A registered function table.</param>
         /// <param name="sink">Receives each row with its row id in the own layer.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is the root, which has no layer of its own over a
-        /// parent (§13 edge 33); or it is faulted, contradicted or not clean, or its domain is held by another
-        /// thread.</exception>
+        /// parent; or it is faulted, contradicted or not clean, or its domain is held by another thread.</exception>
         public void ScanOwn<TSink>(TableId table, ref TSink sink)
             where TSink : struct, IRowSink
         {
@@ -122,22 +121,22 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every ancestor row of <paramref name="table"/> the child sees that names <paramref name="id"/> in an id
-        /// column (§6.10, L1): the winner probe of the lift, through the ancestors' rebuild indexes, never a scan.
+        /// Visits every ancestor row of <paramref name="table"/> the child sees that names <paramref name="id"/> in an
+        /// id column: the winner probe of the lift, through the ancestors' rebuild indexes, never a scan.
         /// </summary>
         /// <remarks>
-        /// Returns at once for a table without rebuild columns (no id can be named), for a context-private table, and for
-        /// an id local to the child (no ancestor row names one, I10). <paramref name="id"/> must be canonical in the child.
-        /// Requires the context to be clean; the sink runs as a callback, as in <see cref="ScanOwn{TSink}"/>. Cost:
-        /// O(depth) index probes plus the uses of the id.
+        /// Returns at once for a table without rebuild columns (no id can be named), for a context-private table, and
+        /// for an id local to the child (no ancestor row names one). <paramref name="id"/> must be canonical in the
+        /// child. Requires the context to be clean; the sink runs as a callback, as in <see cref="ScanOwn{TSink}"/>.
+        /// Cost: O(depth) index probes plus the uses of the id.
         /// </remarks>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="table">A registered function table.</param>
         /// <param name="id">An id canonical in the child.</param>
         /// <param name="sink">Receives each row with its row id in its layer; layers come from the root up.</param>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The context is the root (§13 edge 33); or it is faulted,
-        /// contradicted or not clean, or its domain is held by another thread.</exception>
+        /// <exception cref="InvalidOperationException">The context is the root; or it is faulted, contradicted or not
+        /// clean, or its domain is held by another thread.</exception>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">The table is not registered.</exception>
         public void ScanAncestorsMentioning<TSink>(TableId table, uint id, ref TSink sink)
             where TSink : struct, IRowSink

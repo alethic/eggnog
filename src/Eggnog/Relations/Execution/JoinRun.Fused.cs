@@ -16,11 +16,12 @@ namespace Eggnog.Relations
         /// As a leaf scan (no later stage reads the atom or the variables), the cover's projected rows become one binding
         /// set and one empty frame, so the cross product is expanded only at the action. Otherwise the cover is scanned
         /// in chunks and every row is its own frame, refining the cover to that row; duplicate projections are not
-        /// merged, as in egglog. Scans skip invisible rows, with or without constraints (map §8.1 row 1).
+        /// merged, as in egglog. Scans skip invisible rows, with or without constraints, where egglog's constrained
+        /// scans skip the tombstone check (core-relations/src/table/mod.rs:429-439).
         /// </para>
         /// <para>
-        /// Layers (colored-contexts spec §9.5): the cover's rows are scanned layer by layer, each with the rows its layer's
-        /// view hides, and a row's frame refines the cover to that row of that layer. A root's cover has one layer.
+        /// Layers: the cover's rows are scanned layer by layer, each with the rows its layer's view hides, and a row's
+        /// frame refines the cover to that row of that layer. A root's cover has one layer.
         /// </para>
         /// </remarks>
         void RunFusedScan<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
@@ -119,7 +120,7 @@ namespace Eggnog.Relations
         /// Runs a <see cref="FusedIntersectStage"/> with probes: a Free Join step. For each row of the cover, bind its
         /// variables, then probe each index with a key built from the row; a miss, or a probe with no visible row
         /// satisfying its constraints, discards the row. egglog's kernel (core-relations/src/free_join/execute.rs:1456-1569).
-        /// The cover is scanned layer by layer (§9.5), and each probe joins its hits across the probed atom's layers.
+        /// The cover is scanned layer by layer, and each probe joins its hits across the probed atom's layers.
         /// </summary>
         void RunFusedIntersect<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink

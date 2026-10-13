@@ -12,10 +12,11 @@ namespace Eggnog.Relations
         /// separate loops for one, two and more scans.
         /// </summary>
         /// <remarks>
-        /// Layers (colored-contexts spec §9.5): the driving scan enumerates each piece of its prober in turn, one frame per
-        /// (piece, key), refining its atom to that layer's rows; the probed scans join their hits across layers. A key
-        /// present in several layers of the driver yields several frames, which partition the driver's rows with that key
-        /// (I27; decision 6 allows the multiplicity).
+        /// Layers: the driving scan enumerates each piece of its prober in turn, one frame per (piece, key), refining
+        /// its atom to that layer's rows; the probed scans join their hits across layers. A key present in several
+        /// layers of the driver yields several frames, which partition the driver's rows with that key: the distinct
+        /// bindings are those of a join over the visible rows, and only the match count, which need not agree with
+        /// egglog's, sees the multiplicity.
         /// </remarks>
         void RunIntersect<TSink>(int cur, IntersectStage stage, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink

@@ -13,9 +13,10 @@ namespace Eggnog.Relations
     /// <remarks>
     /// <para>
     /// A full batch (<see cref="Bindings.DefaultBatchSize"/> matches) runs on a fresh clone of the root execution state
-    /// (fresh mutation buffers and an empty predicted-value cache, decision 5), which is flushed afterwards: inline
-    /// when the buffer has no <see cref="WorkScope"/> (or the scope is backlogged), otherwise as a task of the scope,
-    /// with the batch handed over and replaced. <see cref="Flush"/> runs the partial batches left at the end.
+    /// (fresh mutation buffers and an empty predicted-value cache: as in egglog, predictions of fresh ids live per
+    /// batch, and the merge unions the duplicates this can mint), which is flushed afterwards: inline when the buffer
+    /// has no <see cref="WorkScope"/> (or the scope is backlogged), otherwise as a task of the scope, with the batch
+    /// handed over and replaced. <see cref="Flush"/> runs the partial batches left at the end.
     /// </para>
     /// <para>
     /// Not thread-safe: each join task owns its buffer (<see cref="CreateTaskLocal"/>). The match counter is shared.

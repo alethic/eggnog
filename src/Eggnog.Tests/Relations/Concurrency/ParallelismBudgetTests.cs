@@ -8,10 +8,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="ParallelismBudget"/> and <see cref="ParallelismLease"/> (colored-contexts spec §10.9, §17 M10.3): leases
-    /// take threads and give them back, <see cref="ParallelismBudget.Lease"/> blocks until enough are free,
-    /// <see cref="ParallelismBudget.TryLease"/> never blocks, impossible requests and over-releases are refused, and
-    /// concurrent leases never hold more than the total.
+    /// <see cref="ParallelismBudget"/>, the pool of threads that concurrent children of a frozen context lease from,
+    /// and <see cref="ParallelismLease"/>: leases take threads and give them back,
+    /// <see cref="ParallelismBudget.Lease"/> blocks until enough are free, <see cref="ParallelismBudget.TryLease"/>
+    /// never blocks, impossible requests and over-releases are refused, and concurrent leases never hold more than the
+    /// total.
     /// </summary>
     public class ParallelismBudgetTests
     {

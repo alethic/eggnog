@@ -7,8 +7,7 @@ namespace Eggnog.Relations
     /// A free list of <see cref="TrieNode"/>s owned by one join task: frames create a node for every sparse refinement
     /// and release it after their recursion, so recycling them keeps the join from allocating per candidate (egglog
     /// allocates an <c>Arc&lt;TrieNode&gt;</c> each time). It also owns the task's <see cref="SubsetArrayPool"/>
-    /// (<see cref="Layers"/>), the per-layer arrays of the multi-layer row sets of a child's run (colored-contexts spec
-    /// §9.2, §9.5).
+    /// (<see cref="Layers"/>), the per-layer arrays of the multi-layer row sets of a child's run.
     /// </summary>
     /// <remarks>
     /// Released nodes keep their cache arrays, small child maps and disposed per-column indexes (refilled in place on

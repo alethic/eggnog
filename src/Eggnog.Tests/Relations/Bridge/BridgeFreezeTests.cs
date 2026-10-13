@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Xunit;
@@ -10,9 +11,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The bridge's freeze (colored-contexts spec §10.8, §17 M10.3; rule-layer E10): it flushes, rebuilds, refuses a
-    /// recorded failure, plans the rules descendants will run (all live rules, or exactly the given ones), warms their
-    /// indexes and freezes the storage context. Named apart from the storage <c>FreezeTests</c>.
+    /// The bridge's freeze: it flushes, rebuilds, refuses a recorded failure, plans the rules descendants will run (all
+    /// live rules, or exactly the given ones), warms their indexes and freezes the storage context, which merges raw
+    /// writes still pending at the root. Named apart from the storage <c>FreezeTests</c>.
     /// </summary>
     public class BridgeFreezeTests
     {
@@ -53,8 +54,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rule-layer E10: given a collection, the freeze plans exactly those rules (and only those without a plan);
-        /// the others stay unplanned, to be planned on the statistics of the context that first runs them.
+        /// Given a collection, the freeze plans exactly those rules (and only those without a plan); the others stay
+        /// unplanned, to be planned on the statistics of the context that first runs them.
         /// </summary>
         [Fact]
         public void FreezeWithACollectionPlansExactlyThoseRules()
@@ -74,8 +75,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The freeze warms the indexes of the planned rules' plans (§8.1, §9.10): a frozen root's catalogs hold them,
-        /// current, before any child runs.
+        /// The freeze warms the indexes of the planned rules' plans: a frozen root's catalogs hold them, current,
+        /// before any child runs.
         /// </summary>
         [Fact]
         public void FreezeWarmsThePlansIndexes()
@@ -125,8 +126,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A failure recorded and not taken, before the freeze or by its flush or rebuild, refuses the freeze with
-        /// <see cref="PanicException"/>: the context stays unfrozen and usable, and freezes once the failure is taken
-        /// (§10.8 step 3, §13 edge 22).
+        /// <see cref="PanicException"/>, since a failure frozen into a context would be shared by all its descendants:
+        /// the context stays unfrozen and usable, and freezes once the failure is taken.
         /// </summary>
         [Fact]
         public void AFailureRefusesTheFreezeWithoutFreezing()
@@ -210,6 +211,73 @@ namespace Eggnog.Relations.Tests
             Assert.Empty(ContextGraph.Keys(middle, g.Path));
             Assert.Equal(2, middle.TableSize(g.Edge));
             middle.Dispose();
+        }
+
+        /// <summary>
+        /// The bridge freeze rebuilds and takes the failure its rebuild records as <see cref="PanicException"/>, before
+        /// the storage freeze, which would refuse an untaken failure with a plain
+        /// <see cref="InvalidOperationException"/>. The union is merged raw (staged through an execution state), so no
+        /// flush or earlier rebuild exposes the conflict.
+        /// </summary>
+        [Fact]
+        public void FreezeTakesTheFailureItsRebuildRecordsAsAPanic()
+        {
+            var g = new ContextGraph();
+            var keyed = AssertEqFunction(g);
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            g.Root.AddValues([(keyed, [a, g.Int(1)]), (keyed, [b, g.Int(2)])]);
+            g.Root.WithExecutionState(state =>
+            {
+                state.StageInsert(g.EGraph.UnionFindTable, [a.Rep, b.Rep, g.EGraph.NextTimestamp]);
+                return 0;
+            });
+
+            Assert.Throws<PanicException>(() => g.Root.Freeze());
+            Assert.False(g.Root.IsFrozen);
+            g.Root.Freeze();
+            Assert.True(g.Root.IsFrozen);
+            g.Root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A relation <c>keyed(id) -&gt; i64</c> whose merge asserts the outputs are equal: a conflict records a
+        /// failure.
+        /// </summary>
+        static FunctionId AssertEqFunction(ContextGraph g)
+        {
+            return g.EGraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, g.I64],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.AssertEq,
+                Name = "keyed",
+            });
+        }
+
+        /// <summary>
+        /// The freeze flushes first, and skips that flush when nothing is staged bridge-side; the storage freeze merges
+        /// raw pending writes. A row staged at the root through <see cref="EGraph.WithExecutionState{TResult}"/> and
+        /// not flushed is in the frozen root, visible to a child.
+        /// </summary>
+        [Fact]
+        public void FreezeMergesARowStagedRawAtTheRoot()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var edge = new TableAction(g.EGraph, g.Edge);
+            g.EGraph.WithExecutionState(state =>
+            {
+                edge.Insert(state, [a.Rep, b.Rep, g.Unit.Rep]);
+                return 0;
+            });
+
+            g.Root.Freeze();
+            Assert.Equal([$"{a.Rep} {b.Rep}"], ContextGraph.Keys(g.Root, g.Edge));
+            using var child = g.Root.CreateChild();
+            Assert.Equal([$"{a.Rep} {b.Rep}"], ContextGraph.Keys(child, g.Edge));
+            g.Root.CheckInvariants();
         }
 
     }

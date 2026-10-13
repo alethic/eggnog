@@ -8,20 +8,32 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A child pays in proportion to what it touches (colored-contexts spec §17 M9.4 gate, §14.2, L6, B4): the same child
-    /// workload over roots of 20k and 200k rows examines and copies exactly the same ancestor rows, and allocates within
-    /// 1.5× as much.
+    /// A child pays in proportion to what it touches: the same child workload over roots of 20k and 200k rows examines
+    /// and copies exactly the same ancestor rows, and allocates within 1.5× as much, also for the first child of a
+    /// writable root.
     /// </summary>
     /// <remarks>
-    /// The root holds <c>f(x) → v</c> for every id and <c>r(x, x+1)</c> for every id; the child unions the first 200 ids
-    /// in pairs (100 unions), which makes 100 of them its own losers, and rebuilds. Step 4 then finds, through the frozen
-    /// root's rebuild indexes, exactly the rows naming those losers (one <c>f</c> row and two <c>r</c> rows each), whatever
-    /// the root's size, and never scans. The catch-up case appends a fixed number of rows to a root that is not frozen.
+    /// The root holds <c>f(x) → v</c> for every id and <c>r(x, x+1)</c> for every id; the child unions the first 200
+    /// ids in pairs (100 unions), which makes 100 of them its own losers, and rebuilds. The rebuild then finds, through
+    /// the frozen root's rebuild indexes, exactly the rows naming those losers (one <c>f</c> row and two <c>r</c> rows
+    /// each), whatever the root's size, and never scans. The catch-up case appends a fixed number of rows to a root
+    /// that is not frozen.
     /// </remarks>
     [Trait("Category", "Performance")]
     [Collection(AllocationProbeCollection.Name)]
     public class PerChildCostTests
     {
+
+        readonly ITestOutputHelper output;
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="output">The test output.</param>
+        public PerChildCostTests(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
 
         /// <summary>
         /// The number of unions the child makes.
@@ -98,9 +110,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// One hundred unions and a rebuild in a child of a 20k-row and of a 200k-row frozen root: step 4 examines and
-        /// copies the same 300 rows (one f and two r rows per loser), the catch-up reads nothing, and the larger root
-        /// costs at most 1.5 times the bytes.
+        /// One hundred unions and a rebuild in a child of a 20k-row and of a 200k-row frozen root: the rebuild examines
+        /// and copies the same 300 rows (one f and two r rows per loser), the catch-up reads nothing, and the larger
+        /// root costs at most 1.5 times the bytes.
         /// </summary>
         [Fact]
         public void AChildsRebuildCostDoesNotGrowWithTheRoot()
@@ -108,7 +120,7 @@ namespace Eggnog.Relations.Tests
             var small = Measure(20_000);
             var large = Measure(200_000);
 
-            // Step 4 examines and copies the rows naming the losers: one f row and two r rows per loser.
+            // The rebuild examines and copies the rows naming the losers: one f row and two r rows per loser.
             Assert.Equal(3 * Unions, small.Statistics.AncestorRowsExamined);
             Assert.Equal(small.Statistics.AncestorRowsExamined, large.Statistics.AncestorRowsExamined);
             Assert.Equal(small.Statistics.RowsCopied, large.Statistics.RowsCopied);
@@ -119,10 +131,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The same workload under a root that is not frozen, with no warm-up child: the first child of a 20k-row and of a
-        /// 200k-row writable root examines and copies the same rows and allocates within 1.5 times as much, measured from
-        /// after its creation. Building the root's rebuild indexes is the root's work when it creates the child (§1 item
-        /// 11), so step 4 never builds a whole ancestor index on the child's path (§14.2).
+        /// The same workload under a root that is not frozen, with no warm-up child: the first child of a 20k-row and
+        /// of a 200k-row writable root examines and copies the same rows and allocates within 1.5 times as much,
+        /// measured from after its creation. Building the root's rebuild indexes is the root's work when it creates the
+        /// child, so the child's rebuild never builds a whole ancestor index on its path.
         /// </summary>
         [Fact]
         public void TheFirstChildOfAWritableRootDoesNotPayForTheRootsSize()
@@ -224,6 +236,83 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(small.CatchUpRowsExamined, large.CatchUpRowsExamined);
             Assert.Equal(small.RowsCopied, large.RowsCopied);
             Assert.Equal(1, large.RowsCopied);
+        }
+
+        static (Store Store, TableId F, uint[] Ids) WritableRoot(int rows)
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var ids = new uint[rows];
+            for (var i = 0; i < rows; i++)
+                ids[i] = root.NewId();
+
+            root.Write(state =>
+            {
+                for (var i = 0; i < ids.Length; i++)
+                    state.StageInsert(f, [ids[i], (uint)(i % 7), state.Timestamp]);
+
+                return 0;
+            });
+            return (store, f, ids);
+        }
+
+        /// <summary>
+        /// Bytes and time of one child of a writable root: one union of two root ids, then a rebuild (which probes the
+        /// root's rebuild index). Measured from after CreateChild, so the root's settle is excluded.
+        /// </summary>
+        static (long Bytes, double Ms, long Examined) ChildUnion(Store store, uint a, uint b)
+        {
+            var child = store.Root.CreateChild();
+            GC.Collect();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            child.Union(a, b);
+            child.Rebuild();
+            var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+            watch.Stop();
+            var examined = child.Tables!.Statistics.AncestorRowsExamined;
+            child.Dispose();
+            return (bytes, watch.Elapsed.TotalMilliseconds, examined);
+        }
+
+        /// <summary>
+        /// The first single-union child of a writable root examines as many ancestor rows over 20,000 rows as over
+        /// 200,000, and allocates within 1.5 times as much, the root's rebuild index included; the second child is
+        /// reported beside it.
+        /// </summary>
+        [Fact]
+        public void FirstChildOfAWritableRootPaysForTheRootsRebuildIndex()
+        {
+            var (smallStore, _, smallIds) = WritableRoot(20_000);
+            var (largeStore, _, largeIds) = WritableRoot(200_000);
+
+            var small1 = ChildUnion(smallStore, smallIds[0], smallIds[1]);
+            var large1 = ChildUnion(largeStore, largeIds[0], largeIds[1]);
+            var small2 = ChildUnion(smallStore, smallIds[2], smallIds[3]);
+            var large2 = ChildUnion(largeStore, largeIds[2], largeIds[3]);
+            output.WriteLine($"first child:  20k {small1.Bytes} B {small1.Ms:F2} ms examined {small1.Examined}; 200k {large1.Bytes} B {large1.Ms:F2} ms examined {large1.Examined}");
+            output.WriteLine($"second child: 20k {small2.Bytes} B {small2.Ms:F2} ms examined {small2.Examined}; 200k {large2.Bytes} B {large2.Ms:F2} ms examined {large2.Examined}");
+            Assert.Equal(small1.Examined, large1.Examined);
+            Assert.True(large1.Bytes <= small1.Bytes * 3 / 2, $"first child: {small1.Bytes} B over 20k rows, {large1.Bytes} B over 200k rows");
+        }
+
+        /// <summary>
+        /// With the root's rebuild index built beforehand, the first child of a writable root allocates within 1.5
+        /// times as much over 200,000 rows as over 20,000.
+        /// </summary>
+        [Fact]
+        public void WithTheRootsRebuildIndexPrebuiltTheFirstChildIsFlat()
+        {
+            var (smallStore, sf, smallIds) = WritableRoot(20_000);
+            var (largeStore, lf, largeIds) = WritableRoot(200_000);
+            Assert.Null(typeof(SortedWritesTable).GetField("rebuildIndex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(largeStore.Schema[lf]!.Root));
+            smallStore.Schema[sf]!.Root.SharedRebuildIndex();
+            largeStore.Schema[lf]!.Root.SharedRebuildIndex();
+            var small1 = ChildUnion(smallStore, smallIds[0], smallIds[1]);
+            var large1 = ChildUnion(largeStore, largeIds[0], largeIds[1]);
+            output.WriteLine($"first child (index prebuilt): 20k {small1.Bytes} B {small1.Ms:F2} ms; 200k {large1.Bytes} B {large1.Ms:F2} ms");
+            Assert.True(large1.Bytes <= small1.Bytes * 3 / 2, $"first child: {small1.Bytes} B over 20k rows, {large1.Bytes} B over 200k rows");
         }
 
     }

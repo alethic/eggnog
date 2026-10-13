@@ -6,21 +6,21 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Host-driven cases under one parent (§6.9.4), made by <see cref="Scope.OpenCases"/>: add cases, make each assume its
-    /// part and run, then <see cref="Lift"/> into the parent what every live case proves.
+    /// Host-driven cases under one parent, made by <see cref="Scope.OpenCases"/>: add cases, make each assume its part and
+    /// run, then <see cref="Lift"/> into the parent what every live case proves.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Coverage is the caller's obligation: the cases must cover the parent (every model of the parent satisfies some
-    /// case's assumptions), or a lift is unsound. A case stops on contradiction (D11); a lift leaves such a vacuous case
-    /// out, disposes it, and when every case is vacuous declares the parent contradictory (L4).
+    /// case's assumptions), or a lift is unsound. A case stops on contradiction; a lift leaves such a vacuous case out,
+    /// disposes it, and when every case is vacuous declares the parent contradictory.
     /// </para>
     /// <para>
     /// The set owns its cases: disposing a case directly marks it disposed, and its release waits for the set, whose
     /// <see cref="Lift"/> then refuses to lift over cases that no longer cover the parent. The cases are children of the
-    /// parent and share its thread domain; an open set defers the parent's release (D40). <see cref="Add"/> and
-    /// <see cref="Lift"/> enter the parent's thread domain, as its own calls do (D47); <see cref="Dispose"/> may be called
-    /// from any thread and never throws. The list of cases is guarded by a private lock, held only to read or change it.
+    /// parent and share its thread domain; an open set defers the parent's release. <see cref="Add"/> and
+    /// <see cref="Lift"/> enter the parent's thread domain, as its own calls do; <see cref="Dispose"/> may be called from
+    /// any thread and never throws. The list of cases is guarded by a private lock, held only to read or change it.
     /// </para>
     /// </remarks>
     public sealed class CaseSet : IDisposable
@@ -65,20 +65,20 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Adds a case: a new child of the parent that stops on contradiction (<see cref="Scope.IsCase"/>, D11), starting as
-        /// a copy of the parent. Make it assume its part (<see cref="Scope.Assume"/>) and run it.
+        /// Adds a case: a new child of the parent that stops on contradiction (<see cref="Scope.IsCase"/>), starting as a
+        /// copy of the parent. Make it assume its part (<see cref="Scope.Assume"/>) and run it.
         /// </summary>
         /// <param name="tag">The case's tag; <c>null</c> for none.</param>
         /// <returns>The case.</returns>
-        /// <exception cref="ArgumentException">The tag belongs to another graph (D38), or it is the root's.</exception>
+        /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
         /// <exception cref="ObjectDisposedException">The set or the parent is disposed.</exception>
-        /// <exception cref="ScopeContradictedException">The parent is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
-        /// <exception cref="InvalidOperationException">The parent is frozen, faulted, at depth 31 (colors X36), has a
-        /// <c>Write</c> batch open, or is in use on another thread; or the call comes from a run observer, or from a
-        /// primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="ScopeContradictedException">The parent is a case whose contradiction stopped it, or lies under one.</exception>
+        /// <exception cref="InvalidOperationException">The parent is frozen, faulted, at depth 31 (the deepest a scope
+        /// tree goes), has a <c>Write</c> batch open, or is in use on another thread; or the call comes from a run
+        /// observer, or from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="RuleEvaluationException">A failure the parent recorded surfaced when the case was created, or a
-        /// lattice merge threw in the catch-up the call makes first, in the parent or a writable ancestor of it (N113); the
-        /// parent is faulted, and so is that ancestor.</exception>
+        /// lattice merge threw in the catch-up the call makes first, in the parent or a writable ancestor of it; the parent
+        /// is faulted, and so is that ancestor.</exception>
         public Scope Add(ScopeTag? tag = null)
         {
             var graph = Parent.Graph;
@@ -89,8 +89,8 @@ namespace Eggnog
                     throw new ArgumentException("The root tag is the root's; tag a case with a tag of its own.", nameof(tag));
             }
 
-            // A structural call, as CreateChild: allowed while a batch below the parent is open (N88), since adding a case
-            // changes nothing the batch read.
+            // A structural call, as CreateChild: allowed while a batch below the parent is open, since adding a case changes
+            // nothing the batch read.
             EngineCallMarker.ThrowIfActive();
             Parent.Enter();
             try
@@ -103,10 +103,10 @@ namespace Eggnog
                     throw new InvalidOperationException($"Scope '{Parent.Path}' is frozen; open cases in a child of it");
 
                 if (Parent.Depth() >= Scope.MaxDepth)
-                    throw new InvalidOperationException($"Scope '{Parent.Path}' is at depth {Scope.MaxDepth}, the deepest a scope tree goes (colors X36).");
+                    throw new InvalidOperationException($"Scope '{Parent.Path}' is at depth {Scope.MaxDepth}, the deepest a scope tree goes.");
 
                 // Brought up to date before the check: a parent case its own parent's contradiction reached since its last
-                // call stops at this catch-up (I25), and the engine would refuse to add a case under it.
+                // call stops at this catch-up, and the engine would refuse to add a case under it.
                 Parent.CatchUpAndThrowIfStopped();
                 Parent.Runtime.TakeFailure();
                 Relations.EGraphContext context;
@@ -151,32 +151,33 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Lifts into the parent what every live case proves (§6.9.4, colors §11.2, I33): the equalities between the
-        /// parent's classes, and the rows of every table that lifts (<see cref="TableHandle.Lift"/>; relations, constructors,
-        /// and functions with their lattice's case join or, without one, the value every live case agrees on). Then the
-        /// cases found contradictory are disposed and leave <see cref="Cases"/>; when every case is vacuous, the parent's
-        /// <see cref="EGraph.Contradiction"/> is written (L4). May be called repeatedly: a lift over cases and a parent that
-        /// have not changed since the last one costs one check (the engine's memo).
+        /// Lifts into the parent what every live case proves: the equalities between the parent's classes, and the rows of
+        /// every table that lifts (<see cref="TableHandle.Lift"/>; relations, constructors, and functions with their
+        /// lattice's case join or, without one, the value every live case agrees on). Then the cases found contradictory are
+        /// disposed and leave <see cref="Cases"/>; when every case is vacuous, the parent's
+        /// <see cref="EGraph.Contradiction"/> is written. May be called repeatedly: a lift over cases and a parent that have
+        /// not changed since the last one costs one check (the set remembers what its last full lift read).
         /// </summary>
         /// <remarks>
-        /// The engine's lift catches every case up with the parent before it reads the case. A lattice merge that throws in
-        /// that catch-up is recorded in the case, which keeps its old value; the lift reads that value, which is sound
-        /// (N110), and the found-vacuous check after it takes the record and faults the case, not the parent (N113, N114).
+        /// The lift catches every case up with the parent (see the remarks on <see cref="Scope"/>) before it reads the
+        /// case. A lattice merge that throws in that catch-up is recorded in the case, which keeps its old value; the
+        /// lift reads that value, which is sound (it carries less information), and the found-vacuous check after it
+        /// takes the record and faults the case, not the parent.
         /// </remarks>
         /// <param name="options">The limits; <c>null</c> for <see cref="LiftOptions.Default"/>.</param>
         /// <param name="cancellationToken">Checked before every round of the lift.</param>
         /// <returns>What the lift did.</returns>
         /// <exception cref="ObjectDisposedException">The set or the parent is disposed.</exception>
-        /// <exception cref="ScopeContradictedException">The parent is a case whose contradiction stopped it, or lies under one (D45, N104).</exception>
+        /// <exception cref="ScopeContradictedException">The parent is a case whose contradiction stopped it, or lies under one.</exception>
         /// <exception cref="InvalidOperationException">The set has no case and none was found vacuous ("A lift needs at least
-        /// one case"; with none, the parent would be declared contradictory, D9); a case was disposed directly, so the rest
+        /// one case"; with none, the parent would be declared contradictory); a case was disposed directly, so the rest
         /// no longer cover the parent; the parent is frozen, faulted, has a <c>Write</c> batch open in it or below it, or is
         /// in use on another thread; or the call comes from a run observer, or from a primitive, lattice, filter or cost
         /// function.</exception>
         /// <exception cref="OperationCanceledException">The token was cancelled between rounds.</exception>
         /// <exception cref="RuleEvaluationException">A merge of the lifted writes failed (the parent is faulted); a case join
         /// threw (nothing of that round is written; the parent is not faulted); or a lattice merge threw in the catch-up the
-        /// call makes first, in the parent or a writable ancestor of it (N113): the parent is faulted, and so is the
+        /// call makes first, in the parent or a writable ancestor of it: the parent is faulted, and so is the
         /// ancestor.</exception>
         public LiftReport Lift(LiftOptions? options = null, CancellationToken cancellationToken = default)
         {
@@ -218,7 +219,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Disposes every case (D40): never throws. Each case is released once nothing defers it (a child of it, a call in
+        /// Disposes every case: never throws. Each case is released once nothing defers it (a child of it, a call in
         /// progress); the parent's release, which the open set deferred, can then proceed. A second call does nothing. A case
         /// that an <see cref="Add"/> in progress on another thread makes meanwhile is released by that call, which then
         /// throws <see cref="ObjectDisposedException"/>.
@@ -243,10 +244,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Disposes the cases a lift found contradictory (L4): their descendants first, then the engine set disposes their
+        /// Disposes the cases a lift found contradictory: their descendants first, then the engine set disposes their
         /// contexts, then their scopes are released and leave the list. A vacuous case whose descendant a call in progress
-        /// keeps alive (a callback on this thread) stays with the engine set, disposed in the rule layer, until a later lift
-        /// or the set's disposal. O(cases).
+        /// keeps alive (a callback on this thread) is disposed as a scope but stays with the engine set until a later lift or
+        /// the set's disposal. O(cases).
         /// </summary>
         void DisposeVacuousCases()
         {
@@ -292,10 +293,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether a case is vacuous: stopped by its contradiction, or contradictory once brought up to date (left out
-        /// of its <see cref="Scope.Version"/>, N87). A lattice merge that threw in the case's catch-up, the one the engine's
-        /// lift made before reading the case (which records it and goes on) or this one, faults the case here (N113, N114)
-        /// and is not rethrown: the case is caught up by then, the failure is the case's, not the lift's, and a lift goes on
-        /// over a faulted case as over any other (N110).
+        /// of its <see cref="Scope.Version"/>). A lattice merge that threw in the case's catch-up, the one the engine's lift
+        /// made before reading the case (which records it and goes on) or this one, faults the case here and is not
+        /// rethrown: the case is caught up by then, the failure is the case's, not the lift's, and a lift goes on over a
+        /// faulted case as over any other.
         /// </summary>
         static bool IsVacuous(Scope @case)
         {
@@ -308,7 +309,7 @@ namespace Eggnog
             }
             catch (RuleEvaluationException)
             {
-                // The case is faulted with it (N113); its next call reports it.
+                // The case is faulted with it; its next call reports it.
             }
 
             return @case.IsStopped || @case.Engine.IsContradictory;

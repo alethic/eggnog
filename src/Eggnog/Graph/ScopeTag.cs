@@ -3,8 +3,8 @@ namespace Eggnog
 
     /// <summary>
     /// A label a scope carries: a scoped atom (<c>handle.In(tag)</c>, <see cref="Fact.In"/>) names the nearest
-    /// ancestor-or-self of the running scope that carries it (D23). Made by <see cref="EGraph.DefineScopeTag"/> and owned by
-    /// that graph (D38); compared by reference. The root carries <see cref="EGraph.RootTag"/>.
+    /// ancestor-or-self of the running scope that carries it. Made by <see cref="EGraph.DefineScopeTag"/> and owned by
+    /// that graph; compared by reference. The root carries <see cref="EGraph.RootTag"/>.
     /// </summary>
     /// <remarks>
     /// Immutable. Every member that takes a tag refuses another graph's with <see cref="System.ArgumentException"/>, so

@@ -14,7 +14,8 @@ namespace Eggnog.Tests.Differential
         /// <summary>
         /// Initializes a key over <paramref name="cells"/>, which the key now owns.
         /// </summary>
-        /// <param name="cells">The cells: <c>long</c>, <c>string</c>, <c>ValueSet&lt;int&gt;</c>, or a class id.</param>
+        /// <param name="cells">The cells: <c>long</c>, <c>string</c>, <c>ValueSet&lt;int&gt;</c>, or a class
+        /// id.</param>
         public RowKey(object[] cells)
         {
             Cells = cells;

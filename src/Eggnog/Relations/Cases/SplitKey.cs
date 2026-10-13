@@ -4,12 +4,11 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What a split is about (colored-contexts spec §11.3, B6; rule-layer E8): the index of the source that asked for it
-    /// and the cells that identify the split (for a rule split, its key variables' values). Within one driver, two requests
-    /// with equal keys split the same thing. Across drivers the index means nothing (each driver numbers its own sources
-    /// from 0), so B6 coverage compares the record's source object by reference and the cells
-    /// (<see cref="SplitRecord.Splits"/>): a split covered by a live record in a scope or any of its ancestors is not split
-    /// again.
+    /// What a split is about: the index of the source that asked for it and the cells that identify the split (for a
+    /// rule split, its key variables' values). Within one driver, two requests with equal keys split the same thing.
+    /// Across drivers the index means nothing (each driver numbers its own sources from 0), so coverage compares the
+    /// record's source object by reference and the cells (<see cref="SplitRecord.Splits"/>): a split covered by a live
+    /// record in a scope or any of its ancestors is not split again.
     /// </summary>
     /// <remarks>
     /// The key takes ownership of <c>values</c>: the caller must not change the array afterwards. Equality compares the

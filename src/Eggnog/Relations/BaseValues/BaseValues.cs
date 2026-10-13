@@ -33,9 +33,10 @@ namespace Eggnog.Relations
     /// values are never freed: the store is append-only, as in egglog.
     /// </para>
     /// <para>
-    /// Two members egglog lacks serve readers that must not grow the store (request E1 of the rule-layer spec):
-    /// <see cref="TryGetExisting{TCodec, T}"/> finds a value's <see cref="Value"/> without interning it, and
-    /// <see cref="InternedCount"/> reports how many values have been interned.
+    /// Two members egglog lacks serve readers that must not grow the store, such as host reads of constants that are
+    /// only looked up: <see cref="TryGetExisting{TCodec, T}"/> finds a value's <see cref="Value"/> without interning
+    /// it, and <see cref="InternedCount"/> reports how many values have been interned, so a host can tell how much the
+    /// store has grown.
     /// </para>
     /// <para>
     /// egglog finds a type's table by hashing its <c>TypeId</c> on every interned <c>get</c> and <c>unwrap</c>. Here each
@@ -239,7 +240,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the <see cref="Value"/> that stores <paramref name="value"/> if it boxes inline or has already been
         /// interned, without interning it. egglog has no such member: it serves readers that must not grow the store
-        /// with values they only look up (rule-layer D15, request E1). Thread-safe.
+        /// with values they only look up. Thread-safe.
         /// </summary>
         /// <remarks>
         /// The inline path is <see cref="Get{TCodec, T}"/>'s and needs no registration: a value that boxes inline always
@@ -268,7 +269,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the number of base values interned in this registry's intern tables, summed over every registered type:
-        /// how much the append-only store has grown (rule-layer D15, request E1). Values stored inline are not counted.
+        /// how much the append-only store has grown. Values stored inline are not counted.
         /// </summary>
         /// <remarks>
         /// Lock-free; costs one read per registered type. Never decreases. A clone (<see cref="Clone"/>) shares the

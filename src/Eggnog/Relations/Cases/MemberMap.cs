@@ -4,16 +4,16 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The classes a case merged over its parent's ids, as the lift reads them (colored-contexts spec §11.1, L2, G1(a),
-    /// X29, I32): for every class of the case's union-find overlay with at least one member that is not local to the
-    /// case, the class's canonical id in the case (its <em>group root</em>) and those members, ascending.
+    /// The classes a case merged over its parent's ids, as the lift reads them: for every class of the case's
+    /// union-find overlay with at least one member that is not local to the case, the class's canonical id in the case
+    /// (its <em>group root</em>) and those members, ascending.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Meaning (I32): <see cref="Members"/>(<c>c</c>) is exactly the set of ids <c>m</c> that are canonical in the
-    /// parent, not local to the case, and have <c>Find_K(m) = c</c>. A group's list includes its root when the root is a
-    /// parent id. For a case-canonical id in no group the list is <c>[c]</c> when <c>c</c> is a parent id and empty when
-    /// it is local: a local class with no parent member cannot be named in the parent.
+    /// Meaning: <see cref="Members"/>(<c>c</c>) is exactly the set of ids <c>m</c> that are canonical in the parent,
+    /// not local to the case, and have <c>Find_K(m) = c</c>. A group's list includes its root when the root is a parent
+    /// id. For a case-canonical id in no group the list is <c>[c]</c> when <c>c</c> is a parent id and empty when it is
+    /// local: a local class with no parent member cannot be named in the parent.
     /// </para>
     /// <para>
     /// Representation: the roots ascending, and the members of all groups in one array, group by group; a lookup is a
@@ -77,8 +77,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the parent ids the case-canonical id <paramref name="caseCanonical"/> stands for (I32): its group's
-        /// members; else <c>[c]</c> if it is not local to the case; else nothing. O(log groups).
+        /// Gets the parent ids the case-canonical id <paramref name="caseCanonical"/> stands for: its group's members;
+        /// else <c>[c]</c> if it is not local to the case; else nothing. O(log groups).
         /// </summary>
         /// <remarks>
         /// The one-element answer is a span over the argument itself, so it lives as long as the variable passed in.
@@ -109,8 +109,8 @@ namespace Eggnog.Relations
         public bool IsLocal(uint id) => localIds.Contains(id);
 
         /// <summary>
-        /// Builds the member map of the child <paramref name="k"/> afresh (§11.1), without its cache. Requires the child to
-        /// be clean.
+        /// Builds the member map of the child <paramref name="k"/> afresh, without its cache. Requires the child to be
+        /// clean.
         /// </summary>
         /// <param name="k">A child context.</param>
         /// <returns>The map.</returns>
@@ -123,7 +123,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Builds the map of <paramref name="overlay"/>'s classes, leaving out the members <paramref name="localIds"/>
-        /// holds. The overlay must be current with its parent (its members canonical there, I6) and must not change
+        /// holds. The overlay must be current with its parent (its members canonical there) and must not change
         /// meanwhile.
         /// </summary>
         /// <param name="overlay">The case's overlay.</param>

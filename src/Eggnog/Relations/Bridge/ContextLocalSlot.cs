@@ -4,10 +4,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A slot of per-context state that the layer above the bridge keeps in every <see cref="EGraphContext"/>
-    /// (colored-contexts spec §10.1; rule-layer §13 item 4): one value of type <typeparamref name="T"/> per context,
-    /// created on first use by the slot's factory and read with <see cref="EGraphContext.GetLocal{T}"/>. The rule layer
-    /// keeps its scope runtime here, and schedulers keep their collect-matches buffers here (map §8.1 row 10).
+    /// A slot of per-context state that the layer above the bridge keeps in every <see cref="EGraphContext"/>: one
+    /// value of type <typeparamref name="T"/> per context, created on first use by the slot's factory and read with
+    /// <see cref="EGraphContext.GetLocal{T}"/>. The rule layer keeps its scope runtime here, and schedulers keep their
+    /// collect-matches buffers here.
     /// </summary>
     /// <remarks>
     /// Made by <see cref="EGraph.NewLocalSlot{T}"/>, which numbers the slots of an e-graph densely. Immutable. The

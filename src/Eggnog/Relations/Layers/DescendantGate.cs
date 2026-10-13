@@ -5,10 +5,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Counts a context's live descendants (colored-contexts spec §6.8): every <see cref="Context"/> owns one, and
-    /// creating a child enters the gate of every ancestor, disposing it exits them. While the count is positive the
-    /// context's shared rows must stay where descendants read them: its layers do not compact (C12, X27) and it does
-    /// not retract shared rows (decision 1, §6.7), and its database cannot be cloned (§4.3).
+    /// Counts a context's live descendants: every <see cref="Context"/> owns one, and creating a child enters the gate
+    /// of every ancestor, disposing it exits them. While the count is positive the context's shared rows must stay
+    /// where descendants read them: its layers do not compact (a compaction would renumber the rows that descendants'
+    /// cursors and hidden sets name) and it does not retract shared rows, and its database cannot be cloned.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -17,14 +17,14 @@ namespace Eggnog.Relations
     /// concurrent creation and disposal has returned.
     /// </para>
     /// <para>
-    /// Change tracking. Creating or disposing a descendant changes both the count and the context tree (a child list,
-    /// a disposed flag), in separate steps. Each such change is bracketed by <see cref="BeginChange"/> and
+    /// Change tracking. Creating or disposing a descendant changes both the count and the context tree (a child list, a
+    /// disposed flag), in separate steps. Each such change is bracketed by <see cref="BeginChange"/> and
     /// <see cref="EndChange"/> on every gate it affects, so a reader that must compare the count with the tree (the
-    /// invariant checker, §12.7 item 7) can tell whether it saw one consistent state: it reads <see cref="Changes"/>,
-    /// requires <see cref="IsChanging"/> to be false before and after its reads, and <see cref="Changes"/> to be
-    /// unchanged after them. Under a frozen context descendants come and go on many threads, so such a reader may have
-    /// to retry. Every operation is interlocked (sequentially consistent); cost: three more interlocked operations per
-    /// gate per creation or disposal.
+    /// invariant checker) can tell whether it saw one consistent state: it reads <see cref="Changes"/>, requires
+    /// <see cref="IsChanging"/> to be false before and after its reads, and <see cref="Changes"/> to be unchanged after
+    /// them. Under a frozen context descendants come and go on many threads, so such a reader may have to retry. Every
+    /// operation is interlocked (sequentially consistent); cost: three more interlocked operations per gate per
+    /// creation or disposal.
     /// </para>
     /// </remarks>
     internal sealed class DescendantGate

@@ -2,7 +2,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A compiled rule-layer rule: its program and its engine variants (D36).
+    /// A compiled rule: its program and its engine variants.
     /// </summary>
     internal sealed class CompiledRule
     {

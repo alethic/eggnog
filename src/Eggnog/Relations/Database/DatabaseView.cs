@@ -86,7 +86,7 @@ namespace Eggnog.Relations
         /// <returns>The table.</returns>
         /// <exception cref="KeyNotFoundException">No such table, or the database has taken it out.</exception>
         /// <exception cref="InvalidOperationException">The view is a child context's: a child's tables are layered, and
-        /// read through its views (colored-contexts spec §3.4, §6.5).</exception>
+        /// read through its views.</exception>
         public Table GetTable(TableId table)
         {
             if (isChild)
@@ -126,14 +126,15 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the representation of the store's clock counter, which execution states over this view pin to their
-        /// timestamp (C1), or −1 when the database has no clock.
+        /// timestamp (a state that reads the clock reads the timestamp it carries), or −1 when the database has no
+        /// clock.
         /// </summary>
         public int ClockCounterRep => database.ClockCounterRep;
 
         /// <summary>
         /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>.
         /// Thread-safe. In a child context's view, the store's id counter is redirected to the child's id blocks
-        /// (<see cref="Database.IncrementCounterInView"/>, colored-contexts spec §4.2): one null test at the root.
+        /// (<see cref="Database.IncrementCounterInView"/>): one null test at the root.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
@@ -142,7 +143,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Increments <paramref name="counter"/> on the shared counters, never redirected to a child's id blocks: for
-        /// ids that must not be local to any context, such as interned container ids (§4.2). Thread-safe.
+        /// ids that must not be local to any context, such as interned container ids. Thread-safe.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>

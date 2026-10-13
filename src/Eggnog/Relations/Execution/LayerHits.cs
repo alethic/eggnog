@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The hits of one probe of a prober with several pieces (colored-contexts spec §9.5): for each piece whose layer
-    /// holds the key, the rows there. The probed side of a layered join is the union of these, one row set per layer,
-    /// which the stage refines for visibility and constraints into a <see cref="LayeredSubset"/>.
+    /// The hits of one probe of a prober with several pieces: for each piece whose layer holds the key, the rows there.
+    /// The probed side of a layered join is the union of these, one row set per layer, which the stage refines for
+    /// visibility and constraints into a <see cref="LayeredSubset"/>.
     /// </summary>
     /// <remarks>
     /// Per-position scratch of a join task: filled by one probe and read by that probe's refinement before the position

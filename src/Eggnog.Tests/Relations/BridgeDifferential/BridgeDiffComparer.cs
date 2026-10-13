@@ -9,22 +9,22 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Compares two <see cref="BridgeDiffView"/>s of one program modulo a renaming of ids: the views agree when some
-    /// bijection between their classes maps the classes of the seeds onto each other and every function's rows onto each
-    /// other, cell for cell (integers and the unit value as they are), subsumption flags included.
+    /// bijection between their classes maps the classes of the seeds onto each other and every function's rows onto
+    /// each other, cell for cell (integers and the unit value as they are), subsumption flags included.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The bijection is not searched for; it is derived. The ids the seeds minted before the rules ran are numbered alike
-    /// in every evaluation, and later seeds name their classes, so those classes correspond by construction. Every other
-    /// class was minted by a rule as the output of a constructor or relation row whose keys were existing classes, so the
-    /// rest of the bijection follows by propagation: a row of the expected view whose keys are mapped must have a
-    /// counterpart in the actual view with the mapped keys, and the two outputs correspond. The propagation is a worklist
-    /// (a row is ready once its id keys are mapped), linear in the rows. A class neither seeded nor derived this way, a
-    /// correspondence that is not one-to-one, or a row without its counterpart is a disagreement.
+    /// The bijection is not searched for; it is derived. The ids the seeds minted before the rules ran are numbered
+    /// alike in every evaluation, and later seeds name their classes, so those classes correspond by construction.
+    /// Every other class was minted by a rule as the output of a constructor or relation row whose keys were existing
+    /// classes, so the rest of the bijection follows by propagation: a row of the expected view whose keys are mapped
+    /// must have a counterpart in the actual view with the mapped keys, and the two outputs correspond. The propagation
+    /// is a worklist (a row is ready once its id keys are mapped), linear in the rows. A class neither seeded nor
+    /// derived this way, a correspondence that is not one-to-one, or a row without its counterpart is a disagreement.
     /// </para>
     /// <para>
-    /// Each view is first checked on its own: every id cell canonical, every key held by one row. That catches an engine
-    /// that leaves rows behind after a rebuild, which a renaming could otherwise hide.
+    /// Each view is first checked on its own: every id cell canonical, every key held by one row. That catches an
+    /// engine that leaves rows behind after a rebuild, which a renaming could otherwise hide.
     /// </para>
     /// </remarks>
     static class BridgeDiffComparer
@@ -61,15 +61,16 @@ namespace Eggnog.Relations.Tests
             CheckWellFormed(program, expected, expectedName, Fail);
             var actualIndex = CheckWellFormed(program, actual, actualName, Fail);
 
-            // The propagation's worklist (set up once the seeds' pairs are bound): the expected rows whose output is an id,
-            // how many of each row's id keys are not mapped yet, the rows waiting for each class, and the rows ready.
+            // The propagation's worklist (set up once the seeds' pairs are bound): the expected rows whose output is an
+            // id, how many of each row's id keys are not mapped yet, the rows waiting for each class, and the rows
+            // ready.
             var pending = new List<(int Function, BridgeDiffRow Row)>();
             var missing = new List<int>();
             var waiting = new Dictionary<uint, List<int>>();
             var ready = new Queue<int>();
 
-            // Returns whether the pair is new; fails, with the reason why() gives, when it contradicts an earlier pair. A
-            // new pair readies the rows waiting for the class.
+            // Returns whether the pair is new; fails, with the reason why() gives, when it contradicts an earlier pair.
+            // A new pair readies the rows waiting for the class.
             bool Bind(uint e, uint a, Func<string> why)
             {
                 var hasForward = forward.TryGetValue(e, out var mappedA);
@@ -207,8 +208,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Fails unless every id cell of <paramref name="view"/> is a canonical id it knows and every key is held by one
-        /// row, and returns each function's rows indexed by their keys.
+        /// Fails unless every id cell of <paramref name="view"/> is a canonical id it knows and every key is held by
+        /// one row, and returns each function's rows indexed by their keys.
         /// </summary>
         static Dictionary<BridgeDiffKey, BridgeDiffRow>[] CheckWellFormed(BridgeDiffProgram program, BridgeDiffView view, string name, Action<string> fail)
         {

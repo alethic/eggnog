@@ -6,17 +6,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Seeded watermarks change nothing but the work (colored-contexts spec §17 M10.3, I31, X41): random programs of both
-    /// families run on two engines in lockstep, the second creating every child with
-    /// <see cref="ContextOptions.InheritWatermarks"/> off; the views are equal at every checkpoint, and the seeded engine
-    /// matches at most as often as the unseeded one.
+    /// Seeded watermarks change nothing but the work: a run with a watermark inherited from an ancestor still applies
+    /// every match of the context's view, in the context or in an ancestor whose effects it sees. Random programs of
+    /// both families run on two engines in lockstep, the second creating every child with
+    /// <see cref="ContextOptions.InheritWatermarks"/> off; the views are equal at every checkpoint, and the seeded
+    /// engine matches at most as often as the unseeded one.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Odd seeds run the history family (assert-ne and id-order filters, table reads in actions, deletes and clears), with
-    /// deletes and clears limited to tables no rule writes. A child's delete of a fact a rule derived is the one place the
-    /// two schedules differ by design: the unseeded child's first run re-derives the fact from the ancestor's unchanged
-    /// rows, the seeded one, like egglog after a push, does not. The operational reference governs that case
+    /// Odd seeds run the history family (assert-ne and id-order filters, table reads in actions, deletes and clears),
+    /// with deletes and clears limited to tables no rule writes. A child's delete of a fact a rule derived is the one
+    /// place the two schedules differ by design: the unseeded child's first run re-derives the fact from the ancestor's
+    /// unchanged rows, the seeded one, like egglog after a push, does not. The operational reference governs that case
     /// (<see cref="ContextRuleDifferentialTests"/>).
     /// </para>
     /// <para>
@@ -76,11 +77,13 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// R1-4's counterexample: <c>(rule ((h x)) ((set (g x) (f x))))</c>, where the action reads <c>f</c>. The root holds
-        /// <c>h(a)</c> and <c>f(a) = 5</c>, runs the rule (<c>g(a) = 5</c>) and is frozen; a child raises <c>f(a)</c> in the
-        /// lattice (to 2, under the minimum) and runs the rule. Its action reads a table a descendant can change, so the
-        /// rule does not inherit the root's watermark (X41), and the child derives <c>g(a) = 2</c>, as an unseeded child
-        /// does. Also through a primitive that reads <c>f</c> (<see cref="ExternalFunction.ReadsTables"/>).
+        /// <c>(rule ((h x)) ((set (g x) (f x))))</c>, where the action reads <c>f</c>: a rule that would miss a fact if
+        /// it inherited a watermark. The root holds <c>h(a)</c> and <c>f(a) = 5</c>, runs the rule (<c>g(a) = 5</c>)
+        /// and is frozen; a child raises <c>f(a)</c> in the lattice (to 2, under the minimum) and runs the rule. Its
+        /// action reads a table a descendant can change, so the rule does not inherit the root's watermark, and the
+        /// child derives <c>g(a) = 2</c>, as an unseeded child does; with the root's watermark, the match of
+        /// <c>h(a)</c> would never fire again. Also through a primitive that reads <c>f</c>
+        /// (<see cref="ExternalFunction.ReadsTables"/>).
         /// </summary>
         [Theory]
         [InlineData(false)]

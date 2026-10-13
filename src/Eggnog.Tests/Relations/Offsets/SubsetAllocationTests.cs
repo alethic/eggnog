@@ -14,17 +14,29 @@ namespace Eggnog.Relations.Tests
     public class SubsetAllocationTests
     {
 
+        /// <summary>
+        /// Gets the bytes <paramref name="body"/> allocates on this thread over 200 calls once warm, as the smallest of up
+        /// to five rounds. The shared array pool trims its cached arrays after a full collection when the machine is
+        /// under memory pressure, so one round can pay to refill it; an allocation in the body itself shows in every
+        /// round (at least 200 objects), so taking the smallest round keeps the check exact for the operations measured.
+        /// </summary>
         static long Run(Action body)
         {
             // Warm up so JIT tiering, static constructors and the pool's thread-local buckets are settled.
             for (var i = 0; i < 3; i++)
                 body();
 
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < 200; i++)
-                body();
+            var least = long.MaxValue;
+            for (var round = 0; round < 5 && least > 0; round++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                for (var i = 0; i < 200; i++)
+                    body();
 
-            return GC.GetAllocatedBytesForCurrentThread() - before;
+                least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
+            }
+
+            return least;
         }
 
         [Fact]

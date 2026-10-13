@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// An in-case schedule for the split tests: records every call (case, depth, nested splits allowed, phase order) and
-    /// runs an optional body, whose result it returns.
+    /// An in-case schedule for the split tests: records every call (case, depth, nested splits allowed, phase order)
+    /// and runs an optional body, whose result it returns.
     /// </summary>
     sealed class RecordingSchedule : ICaseSchedule
     {

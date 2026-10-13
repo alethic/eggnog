@@ -4,10 +4,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Tells whether what an <see cref="Extractor"/> reads changed since it was created (colored-contexts spec §10.10,
-    /// rule-layer E5): the rows of its functions' tables and the union-find, at every level of its context's chain that
-    /// was not frozen when it was created. Never the clock, so a rule run, a query or a write batch that changes nothing
-    /// keeps an extractor current (rule-layer D49).
+    /// Tells whether what an <see cref="Extractor"/> reads changed since it was created: the rows of its functions'
+    /// tables and the union-find, at every level of its context's chain that was not frozen when it was created. Never
+    /// the clock, so a rule run, a query or a write batch that changes nothing keeps an extractor current.
     /// </summary>
     /// <remarks>
     /// <para>

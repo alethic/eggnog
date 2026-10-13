@@ -8,8 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests that <see cref="DependencyGraph.LevelOf"/> is safe while tables are added (colored-contexts spec §4.3,
-    /// X16): child contexts merge concurrently, reading the shared graph, while the store adds tables to a frozen root.
+    /// Tests that <see cref="DependencyGraph.LevelOf"/> is safe while tables are added, as a store may add tables at
+    /// any time: child contexts merge concurrently, reading the shared graph, while the store adds tables to a frozen
+    /// root.
     /// </summary>
     public class DependencyGraphConcurrencyTests
     {

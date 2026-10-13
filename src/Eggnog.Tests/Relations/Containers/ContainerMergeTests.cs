@@ -8,8 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="UnionContainerMerge"/> (egglog-bridge/src/lib.rs:242-257) and
-    /// <see cref="ContainerRebuildSummary"/> (core-relations/src/containers/mod.rs:76-122).
+    /// Tests for <see cref="UnionContainerMerge"/> (egglog-bridge/src/lib.rs:242-257),
+    /// <see cref="ContainerRebuildSummary"/> (core-relations/src/containers/mod.rs:76-122) and
+    /// <see cref="OrderedValueSet"/>, which holds a summary's dirty ids.
     /// </summary>
     public class ContainerMergeTests
     {

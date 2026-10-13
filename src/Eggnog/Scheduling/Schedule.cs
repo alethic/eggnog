@@ -5,7 +5,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// egglog's schedules, plus case splits (R3): what <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/>
+    /// egglog's schedules, plus case splits: what <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/>
     /// runs. A ruleset converts to <see cref="Run(Ruleset[])"/> of itself. Immutable; renders as an egglog schedule.
     /// </summary>
     public abstract class Schedule
@@ -55,7 +55,7 @@ namespace Eggnog
 
         /// <summary>
         /// Runs <paramref name="body"/> unless every fact of <paramref name="condition"/> already holds (egglog's
-        /// <c>:until</c>, D24). The condition is a host check (<see cref="Scope.Check(Fact[])"/>) made each time the step
+        /// <c>:until</c>). The condition is a host check (<see cref="Scope.Check(Fact[])"/>) made each time the step
         /// runs, so <c>Saturate(Until(body, facts))</c> runs the body until the facts hold or it changes nothing.
         /// <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/> checks, before any work, that
         /// every fact can be read in its scope (no table, column type or class of another graph, no class it cannot use).
@@ -82,10 +82,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// A split step (§6.9.3, R3): where the split rule's body matches in the scope, it opens one case per element of the
-        /// matched set (each assuming its element), runs <paramref name="inCase"/> in each case, and lifts into the scope
-        /// what every live case proves; a case found contradictory is dropped (L4). The cases live until the top-level run
-        /// ends: a later execution of the step skips a key a live split covers in the scope or an ancestor (B6), runs
+        /// A split step: where the split rule's body matches in the scope, it opens one case per element of the matched set
+        /// (each assuming its element), runs <paramref name="inCase"/> in each case, and lifts into the scope what every
+        /// live case proves; a case found contradictory has no model and is dropped. The cases live until the top-level run
+        /// ends: a later execution of the step skips a key a live split covers in the scope or an ancestor, runs
         /// <paramref name="inCase"/> again in the cases it opened, and lifts what they derived from the scope's new facts.
         /// Nested split steps in <paramref name="inCase"/> split the cases further, after the lift (lift before deepening),
         /// up to <see cref="RunOptions.SplitDepthLimit"/>; a split with more cases than <see cref="RunOptions.CaseLimit"/> is
@@ -94,10 +94,10 @@ namespace Eggnog
         /// <remarks>
         /// Run it once the facts its rule reads have settled, as in <c>Saturate(Saturate(horn, lattice), Split(rule,
         /// inCase), rewrite)</c>: a split made before its domain narrowed opens cases that go vacuous later, and its record
-        /// keeps the key until the run ends, so later steps do not split it again more narrowly (D43).
+        /// keeps the key until the run ends, so later steps do not split it again more narrowly.
         /// </remarks>
         /// <param name="rule">The split rule.</param>
-        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction (D11).</param>
+        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction.</param>
         /// <returns>The schedule.</returns>
         public static Schedule Split(SplitRule rule, Schedule inCase)
         {
@@ -106,12 +106,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// A split step over several split rules (§6.9.3): <see cref="Split(SplitRule, Schedule)"/>, with the requests of
-        /// every rule, in order. A live split covers a later request for the same key only when both come from the same rule
-        /// at the same position of a split step's rules (B6).
+        /// A split step over several split rules: <see cref="Split(SplitRule, Schedule)"/>, with the requests of every rule,
+        /// in order. A live split covers a later request for the same key only when both come from the same rule at the same
+        /// position of a split step's rules.
         /// </summary>
         /// <param name="rules">The split rules: at least one, each once.</param>
-        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction (D11).</param>
+        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction.</param>
         /// <returns>The schedule.</returns>
         /// <exception cref="ArgumentException">There is no rule, or a rule is listed twice.</exception>
         public static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase)
@@ -140,19 +140,19 @@ namespace Eggnog
         public override string ToString() => SExpression.Render(this);
 
         /// <summary>
-        /// Executes the schedule in <paramref name="scope"/> (§6.5.2).
+        /// Executes the schedule in <paramref name="scope"/>.
         /// </summary>
         /// <param name="executor">The run's executor.</param>
         /// <param name="scope">The scope to run in.</param>
-        /// <param name="depth">The split depth (R3); 0 at the top level.</param>
-        /// <param name="inCase">Whether the scope is a case of a split (R3).</param>
-        /// <param name="splitsEnabled">Whether split steps run (R3).</param>
+        /// <param name="depth">The split depth; 0 at the top level.</param>
+        /// <param name="inCase">Whether the scope is a case of a split.</param>
+        /// <param name="splitsEnabled">Whether split steps run.</param>
         /// <returns>Whether the schedule changed the scope.</returns>
         internal abstract bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled);
 
         /// <summary>
-        /// Collects the rulesets the schedule reaches, the facts of its <c>Until</c> conditions, and its split rules (R3),
-        /// which <c>Scope.Run</c> checks before any work (§6.5.3).
+        /// Collects the rulesets the schedule reaches, the facts of its <c>Until</c> conditions, and its split rules, which
+        /// <c>Scope.Run</c> checks before any work.
         /// </summary>
         /// <param name="rulesets">The set to add to.</param>
         /// <param name="conditions">The list to add the condition facts to.</param>

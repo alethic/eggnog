@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Unwinds a run that reached a limit (D42): caught by <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/>,
-    /// which reports the reason. Never escapes the rule layer.
+    /// Unwinds a run that reached a limit: caught by <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/>,
+    /// which reports the reason. Never escapes to the caller.
     /// </summary>
     internal sealed class ScheduleStopException : Exception
     {

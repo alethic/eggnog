@@ -13,21 +13,22 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The conformance suite of the bridge's rule layer: every test of egglog-bridge/src/tests.rs, ported with rules built
-    /// through <see cref="EGraphRuleBuilder"/> and <see cref="ExpressionBuilder"/> (the port of the <c>define_rule!</c>
-    /// and <c>add_expressions!</c> macros) and run through <see cref="EGraph.RunRules"/>.
+    /// The conformance suite of the bridge's rule layer: every test of egglog-bridge/src/tests.rs, ported with rules
+    /// built through <see cref="EGraphRuleBuilder"/> and <see cref="ExpressionBuilder"/> (the port of the
+    /// <c>define_rule!</c> and <c>add_expressions!</c> macros) and run through <see cref="EGraph.RunRules"/>.
     /// </summary>
     /// <remarks>
-    /// <c>panic_functions_trigger_early_stop</c> (tests.rs:1480-1506) is <see cref="PanicTests.PanicFunctionsTriggerEarlyStop"/>;
-    /// the compile-time <c>assert_send::&lt;EGraph&gt;</c> (tests.rs:1508-1511) has no C# counterpart, and <see cref="Math"/>
-    /// runs two e-graphs on two threads as egglog does. Rust's <c>Rational64</c> is <see cref="Rational"/>, interned.
+    /// <c>panic_functions_trigger_early_stop</c> (tests.rs:1480-1506) is
+    /// <see cref="PanicTests.PanicFunctionsTriggerEarlyStop"/>; the compile-time <c>assert_send::&lt;EGraph&gt;</c>
+    /// (tests.rs:1508-1511) has no C# counterpart, and <see cref="Math"/> runs two e-graphs on two threads as egglog
+    /// does. Rust's <c>Rational64</c> is <see cref="Rational"/>, interned.
     /// </remarks>
     public class BridgeTests
     {
 
         /// <summary>
-        /// egglog's <c>ac_test</c> (tests.rs:26-94): associativity and commutativity saturate two differently associated
-        /// sums into one class. <paramref name="canSubsume"/> only adds a subsumption column to the tables.
+        /// egglog's <c>ac_test</c> (tests.rs:26-94): associativity and commutativity saturate two differently
+        /// associated sums into one class. <paramref name="canSubsume"/> only adds a subsumption column to the tables.
         /// </summary>
         static void AcTest(bool canSubsume)
         {
@@ -83,8 +84,8 @@ namespace Eggnog.Relations.Tests
         public void AcSubsume() => AcTest(true);
 
         /// <summary>
-        /// egglog's <c>ac_fail</c> (tests.rs:106-181): commutativity restricted to a left operand of <c>num(1)</c> cannot
-        /// reassociate the sums, and a constant in an atom constrains it.
+        /// egglog's <c>ac_fail</c> (tests.rs:106-181): commutativity restricted to a left operand of <c>num(1)</c>
+        /// cannot reassociate the sums, and a constant in an atom constrains it.
         /// </summary>
         [Fact]
         public void AcFail()
@@ -167,15 +168,17 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <see cref="MathTest"/> on a serial e-graph (decision 4: golden numbers come from serial runs).
+        /// <see cref="MathTest"/> on a serial e-graph: serial runs are deterministic, and golden numbers come from
+        /// them.
         /// </summary>
         [Fact]
         public void MathSerial() => MathTest(NewEGraph(), false);
 
         /// <summary>
-        /// egglog's <c>math_test</c> (tests.rs:197-447): the math benchmark of the egg and egglog suites, eight iterations
-        /// of 24 rules over seven expressions; every table must end with exactly the number of rows egglog's original
-        /// implementation produces. <paramref name="canSubsume"/> only adds a subsumption column to the tables.
+        /// egglog's <c>math_test</c> (tests.rs:197-447): the math benchmark of the egg and egglog suites, eight
+        /// iterations of 24 rules over seven expressions; every table must end with exactly the number of rows egglog's
+        /// original implementation produces. <paramref name="canSubsume"/> only adds a subsumption column to the
+        /// tables.
         /// </summary>
         static void MathTest(EGraph egraph, bool canSubsume)
         {
@@ -273,7 +276,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Registers egglog's <c>vec-push</c> test primitive (tests.rs:460-476): a vector with one more element, interned.
+        /// Registers egglog's <c>vec-push</c> test primitive (tests.rs:460-476): a vector with one more element,
+        /// interned.
         /// </summary>
         static ExternalFunctionId RegisterVecPush(EGraph egraph)
         {
@@ -330,8 +334,8 @@ namespace Eggnog.Relations.Tests
         static List<string> Vecs(params uint[][] vecs) => vecs.Select(v => "[" + string.Join(",", v) + "]").OrderBy(s => s, StringComparer.Ordinal).ToList();
 
         /// <summary>
-        /// egglog's <c>container_test</c> (tests.rs:508-709): rules that build vectors through container primitives (one
-        /// of which can fail), and a rule that evaluates additions, whose unions then collapse the vectors through
+        /// egglog's <c>container_test</c> (tests.rs:508-709): rules that build vectors through container primitives
+        /// (one of which can fail), and a rule that evaluates additions, whose unions then collapse the vectors through
         /// container rebuilding.
         /// </summary>
         static void ContainerTest()
@@ -436,10 +440,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's <c>run_query_prim_container_match_case</c> (tests.rs:719-804): a left-hand-side primitive that reads
-        /// the contents of a container must be re-evaluated once rebuilding changes what the container means, which the
-        /// re-stamping of its parent rows achieves (with <paramref name="seedCanonical"/>, the rebuilt contents collide
-        /// with an existing container instead). Returns whether the rules unified <c>l</c>'s output with <c>b</c>.
+        /// egglog's <c>run_query_prim_container_match_case</c> (tests.rs:719-804): a left-hand-side primitive that
+        /// reads the contents of a container must be re-evaluated once rebuilding changes what the container means,
+        /// which the re-stamping of its parent rows achieves (with <paramref name="seedCanonical"/>, the rebuilt
+        /// contents collide with an existing container instead). Returns whether the rules unified <c>l</c>'s output
+        /// with <c>b</c>.
         /// </summary>
         static bool RunQueryPrimContainerMatchCase(bool semiNaive, bool seedCanonical)
         {
@@ -543,7 +548,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's <c>rhs_only_rule</c> (tests.rs:817-853): a rule without atoms mints <c>num(0)</c> and <c>num(1)</c>.
+        /// egglog's <c>rhs_only_rule</c> (tests.rs:817-853): a rule without atoms mints <c>num(0)</c> and
+        /// <c>num(1)</c>.
         /// </summary>
         [Fact]
         public void RhsOnlyRule()
@@ -571,8 +577,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's <c>rhs_only_rule_only_runs_once</c> (tests.rs:855-875): a semi-naive rule without atoms fires on its
-        /// first run only.
+        /// egglog's <c>rhs_only_rule_only_runs_once</c> (tests.rs:855-875): a semi-naive rule without atoms fires on
+        /// its first run only.
         /// </summary>
         [Fact]
         public void RhsOnlyRuleOnlyRunsOnce()
@@ -1020,8 +1026,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Lists the rows of a function of an integer key as sorted (key, output) pairs: the <c>get_entries</c> closures
-        /// of egglog's tests.
+        /// Lists the rows of a function of an integer key as sorted (key, output) pairs: the <c>get_entries</c>
+        /// closures of egglog's tests.
         /// </summary>
         static List<(long, Value)> Entries(EGraph egraph, FunctionId function)
         {

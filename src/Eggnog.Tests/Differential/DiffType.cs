@@ -2,7 +2,8 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The column types of a random program (§8.2): the CLR types <c>long</c>, <c>string</c>, <c>ValueSet&lt;int&gt;</c>, the sort <see cref="Support.Node"/>, and <c>bool</c> for filter results.
+    /// The column types of a random program: the CLR types <c>long</c>, <c>string</c>, <c>ValueSet&lt;int&gt;</c>, the
+    /// sort <see cref="Support.Node"/>, and <c>bool</c> for filter results.
     /// </summary>
     internal enum DiffType
     {

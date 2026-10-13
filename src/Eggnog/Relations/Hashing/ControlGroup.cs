@@ -365,8 +365,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gathers the top bit of each byte of a word whose bytes are <c>0x80</c> or <c>0x00</c> into an 8-bit mask:
         /// shifting the markers to bit 0 and multiplying by the sum of <c>2^(7j+7)</c> for <c>j</c> in <c>[0, 8)</c>
-        /// lands byte <c>k</c>'s marker at bit
-        /// <c>56 + k</c>, and every other partial product stays below bit 56 without colliding, so nothing carries.
+        /// lands byte <c>k</c>'s marker at bit <c>56 + k</c>, and every other partial product stays below bit 56
+        /// without colliding, so nothing carries.
         /// </summary>
         /// <param name="markers">The marker word.</param>
         /// <returns>The 8-bit mask.</returns>

@@ -39,8 +39,9 @@ namespace Eggnog.Relations.Tests
         /// The lost-constraint shape (PlannerDecompositionTests): eight to ten atoms over three tables of four, one and
         /// three columns, nearly every column one of nine variables (repeating within and across atoms), a few
         /// constants, and only a few variables read by the action. Its tree decompositions often have a block whose
-        /// message variables no single later bag holds and that has no value variables, which only a materialization
-        /// lookup in the result block keeps (map §8.1 row 5).
+        /// message variables no single later bag holds and that has no value variables: only a materialization lookup
+        /// in the result block keeps that block's join constraint, which egglog's planner loses
+        /// (core-relations/src/free_join/plan.rs:897-904, 993-995).
         /// </summary>
         Dense,
 

@@ -14,9 +14,9 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// A constant may be flagged as an e-class id (<see cref="IdConst"/>, <see cref="IsIdConstant"/>): a store-backed
-    /// context then runs it in its canonical form (colored-contexts spec §9.8, X19) even where no table column says it
-    /// is an id (comparisons, external-function arguments). The flag does not take part in equality: a flagged and an
-    /// unflagged entry of one value are the same operand.
+    /// context then runs it in its canonical form, so an id that has lost a union still matches its class, even where no
+    /// table column says it is an id (comparisons, external-function arguments). The flag does not take part in
+    /// equality: a flagged and an unflagged entry of one value are the same operand.
     /// </para>
     /// </remarks>
     internal readonly record struct QueryEntry
@@ -46,8 +46,8 @@ namespace Eggnog.Relations
         public Value Constant { get; }
 
         /// <summary>
-        /// Gets whether the entry is a constant flagged as an e-class id (<see cref="IdConst"/>, colored-contexts spec
-        /// §9.8): always <c>false</c> for a variable.
+        /// Gets whether the entry is a constant flagged as an e-class id (<see cref="IdConst"/>): always <c>false</c> for
+        /// a variable.
         /// </summary>
         public bool IsIdConstant { get; }
 
@@ -71,9 +71,9 @@ namespace Eggnog.Relations
         public static QueryEntry Const(Value constant) => new(false, default, constant);
 
         /// <summary>
-        /// Creates a constant entry flagged as an e-class id (colored-contexts spec §9.8): a store-backed context runs it
-        /// in its canonical form, wherever it appears in a rule's actions (comparisons, external-function arguments, and
-        /// the columns of a table that are not id columns). The bridge lowers every id-typed constant through it.
+        /// Creates a constant entry flagged as an e-class id: a store-backed context runs it in its canonical form,
+        /// wherever it appears in a rule's actions (comparisons, external-function arguments, and the columns of a table
+        /// that are not id columns). The bridge lowers every id-typed constant through it.
         /// </summary>
         /// <param name="constant">The id.</param>
         /// <returns>The entry.</returns>

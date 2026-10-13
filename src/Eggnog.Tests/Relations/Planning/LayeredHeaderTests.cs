@@ -10,10 +10,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T6 (colored-contexts spec §9.4, I29): header evaluation per layer. A context's view evaluates a header's fast
-    /// constraints over each present layer's own entry and indexes (a time range is one binary search per layer); a header
-    /// is empty iff it is empty in every layer, and then the variant is dropped before an action id is taken; the
-    /// single-table <see cref="PlanTemplate.Instantiate{TEvaluator}"/> puts everything in layer 0.
+    /// Header evaluation per layer. A context's view evaluates a header's fast constraints over each present layer's
+    /// own entry and indexes (a time range is one binary search per layer); a header is empty iff it is empty in every
+    /// layer, and then the variant is dropped before an action id is taken; the single-table
+    /// <see cref="PlanTemplate.Instantiate{TEvaluator}"/> puts everything in layer 0.
     /// </summary>
     public class LayeredHeaderTests
     {

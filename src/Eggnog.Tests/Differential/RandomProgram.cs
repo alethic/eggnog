@@ -4,7 +4,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// A random rule-layer program (§8.2): tables, rulesets, queries, and a sequence of commands (host writes, rule
+    /// A random rule-layer program: tables, rulesets, queries, and a sequence of commands (host writes, rule
     /// definitions, runs, queries) that the differential test runs three ways.
     /// </summary>
     internal sealed class RandomProgram

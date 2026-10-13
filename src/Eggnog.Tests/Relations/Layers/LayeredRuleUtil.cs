@@ -6,10 +6,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Helpers for running rules in a context at the storage level (colored-contexts spec §9, M10.2), as the bridge's
-    /// <c>RunRules</c> will (§10.3): rebuild the context, begin an epoch, note the run (the semi-naive floor), build the
-    /// rule set on the context's database and run it at the epoch, end the epoch, and rebuild when the run grew the
-    /// union-find.
+    /// Helpers for running rules in a context at the storage level, as the bridge's <c>RunRules</c> does: rebuild the
+    /// context, begin an epoch, note the run (the semi-naive floor), build the rule set on the context's database and
+    /// run it at the epoch, end the epoch, and rebuild when the run grew the union-find.
     /// </summary>
     static class LayeredRuleUtil
     {

@@ -4,8 +4,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A <see cref="LiftTable"/> resolved against the e-graph's definitions for one lift (colored-contexts spec §11.2):
-    /// the function's layout, which key columns hold ids, and whether its output does.
+    /// A <see cref="LiftTable"/> resolved against the e-graph's definitions for one lift: the function's layout, which
+    /// key columns hold ids, and whether its output does.
     /// </summary>
     internal sealed class LiftedTable
     {

@@ -9,13 +9,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="IdBlockAllocator"/> (colored-contexts spec §4.2, X5): child ids come from blocks reserved on
-    /// the store's one id counter, so ids are distinct store-wide (I1) and <see cref="IdBlockAllocator.Contains"/> is
-    /// exact (I2).
+    /// Tests for <see cref="IdBlockAllocator"/>: child ids come from blocks reserved on the store's one id counter, so
+    /// ids are distinct store-wide and <see cref="IdBlockAllocator.Contains"/> is exact.
     /// </summary>
     public class IdBlockAllocatorTests
     {
 
+        /// <summary>
+        /// Eight allocators on eight threads, with root mints from the same counter interleaved, hand out a million
+        /// distinct ids, and each allocator contains exactly its own.
+        /// </summary>
         [Fact]
         public void EightAllocatorsAndRootMintsOnEightThreadsHandOutDistinctIds()
         {
@@ -72,6 +75,9 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// One allocator called from eight threads at once hands out each id once and contains them all.
+        /// </summary>
         [Fact]
         public void OneAllocatorSharedByEightThreadsHandsOutEachIdOnce()
         {
@@ -98,6 +104,10 @@ namespace Eggnog.Relations.Tests
             Assert.All(all.Where((_, i) => i % 101 == 0), id => Assert.True(allocator.Contains(id)));
         }
 
+        /// <summary>
+        /// <see cref="IdBlockAllocator.Contains"/> is true exactly for the ids of the allocator's reserved blocks,
+        /// minted or not, whatever other allocators and root mints take in between.
+        /// </summary>
         [Fact]
         public void ContainsMatchesTheReservedBlocksExactly()
         {
@@ -140,6 +150,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(new IdBlockAllocator(counters, ids).Contains(0));
         }
 
+        /// <summary>
+        /// The first block holds <see cref="IdBlockAllocator.FirstBlockSize"/> ids, and each next block twice the total
+        /// reserved so far, up to <see cref="IdBlockAllocator.MaxBlockSize"/>.
+        /// </summary>
         [Fact]
         public void BlocksStartAtSixteenAndDoubleTheReservedTotalUpToTheCap()
         {
@@ -172,6 +186,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(reserved, counters.Read(ids));
         }
 
+        /// <summary>
+        /// A block that would pass the union-find's maximum id is not reserved, and every mint that needs it throws
+        /// <see cref="OverflowException"/>.
+        /// </summary>
         [Fact]
         public void ABlockPastTheUnionFindMaximumOverflows()
         {
@@ -192,6 +210,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(1, allocator.BlockCount);
         }
 
+        /// <summary>
+        /// <see cref="CounterSet.IncrementBy"/> returns the first of the values it reserves and refuses a negative
+        /// count or an unknown counter.
+        /// </summary>
         [Fact]
         public void IncrementByReservesConsecutiveValues()
         {

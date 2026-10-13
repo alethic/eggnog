@@ -4,19 +4,19 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The index warm-up of a freeze (colored-contexts spec §8.1 step 4, §9.10) builds indexes current with the frozen
-    /// tables. Found by the M10.3 rule differentials: planning before the freeze refreshed an index, the table's freeze
-    /// then compacted the stale rows a rebuild had left, and the warm-up reused the index cell refreshed against the
-    /// uncompacted table (no merge re-armed it), so the frozen catalog published an index whose row ids no longer named
-    /// the table's rows.
+    /// The index warm-up of a freeze builds indexes current with the frozen tables. Planning before the freeze
+    /// refreshes an index; the table's freeze then compacts the stale rows a rebuild left, which renumbers the rows
+    /// without a merge. Unless the freeze re-arms the indexes of a table it compacted, the warm-up reuses the index
+    /// cell refreshed against the uncompacted table, and the frozen catalog, which is never reset again, publishes an
+    /// index whose row ids do not name the table's rows.
     /// </summary>
     public class FreezeIndexWarmupTests
     {
 
         /// <summary>
-        /// <c>mark(#c) → path(#c, #c)</c>, planned at the freeze; the root's union of <c>c</c> into <c>a</c> left the stale
-        /// row of <c>mark(c)</c>, which the freeze compacts. The warmed index is current, and a child of the frozen root
-        /// runs the rule (its constant canonically <c>a</c>) through it and derives <c>path(a, a)</c>.
+        /// <c>mark(#c) → path(#c, #c)</c>, planned at the freeze; the root's union of <c>c</c> into <c>a</c> left the
+        /// stale row of <c>mark(c)</c>, which the freeze compacts. The warmed index is current, and a child of the
+        /// frozen root runs the rule (its constant canonically <c>a</c>) through it and derives <c>path(a, a)</c>.
         /// </summary>
         [Fact]
         public void TheWarmUpBuildsIndexesAgainstTheCompactedTables()

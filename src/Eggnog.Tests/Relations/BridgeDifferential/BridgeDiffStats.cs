@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// What the bridge differential programs exercised, summed over programs: so the suite can check that its generator
-    /// keeps reaching what it is meant to test, and the soak can report it. One instance per program while it runs, summed
-    /// with <see cref="Add"/> (which locks the target), so programs can run in parallel.
+    /// keeps reaching what it is meant to test, and the soak can report it. One instance per program while it runs,
+    /// summed with <see cref="Add"/> (which locks the target), so programs can run in parallel.
     /// </summary>
     sealed class BridgeDiffStats
     {
@@ -35,7 +35,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>Gets or sets the programs stopped at the row cap.</summary>
         public long Capped { get; set; }
 
-        /// <summary>Gets or sets the programs stopped because an iteration exceeded the oracle's match budget.</summary>
+        /// <summary>Gets or sets the programs stopped when an iteration exceeded the oracle's match budget.</summary>
         public long OverBudget { get; set; }
 
         /// <summary>Gets or sets the programs that panicked, in the same iteration in every evaluation.</summary>
@@ -65,7 +65,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>Gets or sets the relation rows at the end of the programs.</summary>
         public long RelationRows { get; set; }
 
-        /// <summary>Gets or sets the rows of functions without keys (egglog's globals) at the end of the programs.</summary>
+        /// <summary>Gets or sets the rows of keyless functions (egglog's globals) at the end of the programs.</summary>
         public long KeylessRows { get; set; }
 
         /// <summary>Gets or sets the rows of functions with more than three keys at the end of the programs.</summary>
@@ -76,8 +76,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Gets or sets the programs whose e-graphs ran with parallel settings: four threads and the parallel rule-set
-        /// executor, which they take whatever the size of the database (<see cref="BridgeDiffBridge"/>). Table operations
-        /// go parallel only above the engine's thresholds, which only bulk programs reach.
+        /// executor, which they take whatever the size of the database (<see cref="BridgeDiffBridge"/>). Table
+        /// operations go parallel only above the engine's thresholds, which only bulk programs reach.
         /// </summary>
         public long ParallelPrograms { get; set; }
 

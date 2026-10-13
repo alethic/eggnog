@@ -4,9 +4,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/05-intervals.egg with scopes as contexts (gap 4): the schema bounds n to [0, 100]; a query
-    /// beyond the bound contradicts the schema in the query scope, and the predicate becomes false; one inside the range
-    /// is left alone.
+    /// prototypes/cosmos-facts/05-intervals.egg with scopes as contexts: the schema bounds n to [0, 100]; a
+    /// query beyond the bound contradicts the schema in the query scope, and the predicate becomes false; one inside
+    /// the range is left alone.
     /// </summary>
     public sealed class Scenario05IntervalsTests
     {

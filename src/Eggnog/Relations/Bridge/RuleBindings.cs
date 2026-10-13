@@ -76,8 +76,8 @@ namespace Eggnog.Relations
         public void Ground(VariableId variable) => grounded.Insert(variable.Index);
 
         /// <summary>
-        /// Sets the early stop of colored-contexts spec §10.6: every head insert into <paramref name="table"/>, the
-        /// e-graph's contradiction function, is followed by a call to <paramref name="stop"/>
+        /// Sets the contradiction early stop: every head insert into <paramref name="table"/>, the e-graph's
+        /// contradiction function, is followed by a call to <paramref name="stop"/>
         /// (<see cref="StopOnContradictionFunction"/>, <see cref="TryGetStop"/>).
         /// </summary>
         /// <param name="table">The contradiction function's table.</param>
@@ -90,7 +90,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the early-stop function to call after a head insert into <paramref name="table"/> (§10.6).
+        /// Gets the early-stop function to call after a head insert into <paramref name="table"/>.
         /// </summary>
         /// <param name="table">The table inserted into.</param>
         /// <param name="stop">The early-stop function.</param>
@@ -105,11 +105,11 @@ namespace Eggnog.Relations
         /// Translates <paramref name="entry"/> into a core entry for a table column. egglog's <c>convert</c>.
         /// </summary>
         /// <remarks>
-        /// A constant stays a plain constant: whether it is an e-class id is decided by the column it lands in, which the
-        /// core reads from the table (<see cref="Database.GetIdColumns"/>, colored-contexts spec §9.8), so a store-backed
-        /// context runs a constant of an id column in its canonical form there (X19) and a value column's constant as
-        /// written. A constant's <see cref="ColumnTy"/> is a diagnostic only, as in egglog, and is not relied on here.
-        /// Operands without a table column go through <see cref="ConvertLoose"/>.
+        /// A constant stays a plain constant: whether it is an e-class id is decided by the column it lands in, which
+        /// the core reads from the table (<see cref="Database.GetIdColumns"/>), so a store-backed context runs a
+        /// constant of an id column in its canonical form there and a value column's constant as written. A constant's
+        /// <see cref="ColumnTy"/> is a diagnostic only, as in egglog, and is not relied on here. Operands without a
+        /// table column go through <see cref="ConvertLoose"/>.
         /// </remarks>
         /// <param name="entry">The entry.</param>
         /// <returns>The variable's current core entry, or the constant.</returns>
@@ -125,10 +125,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Translates <paramref name="entry"/> into a core entry for an operand that lands in no table column: an
-        /// external function's argument, a comparison's operand, a lookup's default. A constant written as an e-class id
-        /// (<see cref="ColumnTy.Id"/>) is flagged so (<see cref="QueryEntry.IdConst"/>, colored-contexts spec §9.8, X19),
-        /// since no column says it is one: a store-backed context then runs it in its canonical form, as the table columns'
-        /// constants are run.
+        /// external function's argument, a comparison's operand, a lookup's default. A constant written as an e-class
+        /// id (<see cref="ColumnTy.Id"/>) is flagged so (<see cref="QueryEntry.IdConst"/>), since no column says it is
+        /// one: a store-backed context then runs it in its canonical form, as the table columns' constants are run.
         /// </summary>
         /// <param name="entry">The entry.</param>
         /// <returns>The variable's current core entry, or the constant, flagged when it is an id.</returns>

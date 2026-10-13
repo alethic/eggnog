@@ -195,7 +195,7 @@ namespace Eggnog.Relations
         /// probed atom. egglog's <c>prune_probers</c> (core-relations/src/free_join/execute.rs:1676-1715): a key position
         /// below the key length reads the key, the rest read the row offset by the key length; without a key
         /// (<paramref name="keyLength"/> negative) every position reads the row. A prober of several pieces joins its hits
-        /// across layers (colored-contexts spec §9.5).
+        /// across layers.
         /// </summary>
         /// <returns><c>false</c> on a miss or an empty refinement; the caller rolls the frame back.</returns>
         bool PruneProbers(int cur, FrameUpdates updates, Probe[] probes, Prober[] ps, uint[] keys, int keyOffset, int keyLength, uint[] row, int rowOffset)

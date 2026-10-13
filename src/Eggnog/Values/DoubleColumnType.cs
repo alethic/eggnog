@@ -5,9 +5,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>. Encoding maps −0.0 to +0.0 and rejects NaN (D20), because
-    /// <c>DoubleCodec</c> treats −0.0 and +0.0 as one value and decodes whichever was interned first, and NaN equals
-    /// nothing: invariant V needs equal values to have equal cells.
+    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>. Encoding maps −0.0 to +0.0 and rejects NaN, because
+    /// equal values must have equal cells: <c>DoubleCodec</c> treats −0.0 and +0.0 as one value and decodes whichever
+    /// was interned first, and NaN equals nothing.
     /// </summary>
     internal sealed class DoubleColumnType : ColumnType<double>
     {

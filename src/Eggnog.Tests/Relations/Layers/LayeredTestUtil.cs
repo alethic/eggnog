@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Helpers shared by the layered-table tests (colored-contexts spec §6): lattice tables of the shapes the tests use,
-    /// and one-row writes through <see cref="Context.Write{TResult}(Func{ExecutionState, TResult})"/>.
+    /// Helpers shared by the layered-table tests: lattice tables of the shapes the tests use, and one-row writes
+    /// through <see cref="Context.Write{TResult}(Func{ExecutionState, TResult})"/>.
     /// </summary>
     static class LayeredTestUtil
     {

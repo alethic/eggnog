@@ -10,11 +10,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The done condition of colored-contexts spec §17 M10.2, with <c>EGGNOG_COUNTERS</c> (<see cref="ExecutorCounters"/>,
-    /// which the suite turns on, <see cref="ExecutorCountersSetup"/>): once a rule's watermark W is at or above every root
-    /// stamp, a child's semi-naive run scans no ancestor row of an atom's root rows and builds no index over one. It reads
-    /// the root's rows only through the root's shared cached indexes (zero build cost, §14.2) and through the results of
-    /// its probes, whatever the root's size.
+    /// A child's semi-naive run does not pay for the root's size, measured with <c>EGGNOG_COUNTERS</c>
+    /// (<see cref="ExecutorCounters"/>, which the suite turns on, <see cref="ExecutorCountersSetup"/>): once a rule's
+    /// watermark W is at or above every root stamp, a child's semi-naive run scans no ancestor row of an atom's root
+    /// rows and builds no index over one. It reads the root's rows only through the root's shared cached indexes, which
+    /// cost the child nothing to build, and through the results of its probes, whatever the root's size.
     /// </summary>
     public class LayeredRunCountersTests
     {

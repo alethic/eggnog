@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A rule that cannot be compiled: the message says what is wrong (the messages of the rule-layer spec §6.3, exact),
-    /// and <see cref="RuleName"/> which rule. Nothing is registered when a definition throws it.
+    /// A rule, query or split rule that cannot be compiled: the message says what is wrong, and
+    /// <see cref="RuleName"/> which rule, query or split rule. Nothing is registered when a definition throws it.
     /// </summary>
     public sealed class RuleDefinitionException : Exception
     {
@@ -23,7 +23,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the rule's name.
+        /// Gets the name of the rule, query or split rule.
         /// </summary>
         public string RuleName { get; }
 

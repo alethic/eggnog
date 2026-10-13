@@ -8,16 +8,16 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// Looks a function up and binds its output (<see cref="EGraphRuleBuilder.Lookup"/>): a constructor or a relation
-        /// mints a fresh id for a missing key, which is how rules build terms and insert relation rows; a function without
-        /// a default panics on a missing key.
+        /// Looks a function up and binds its output (<see cref="EGraphRuleBuilder.Lookup"/>): a constructor or a
+        /// relation mints a fresh id for a missing key, which is how rules build terms and insert relation rows; a
+        /// function without a default panics on a missing key.
         /// </summary>
         Lookup,
 
         /// <summary>
-        /// Writes a row, merged with the function's merge (<see cref="EGraphRuleBuilder.Set"/>); a relation's row written
-        /// without an output (<see cref="BridgeDiffFunction.IsNoOutput"/>), egglog's <c>(R a b)</c> action, is a lookup
-        /// that inserts the key.
+        /// Writes a row, merged with the function's merge (<see cref="EGraphRuleBuilder.Set"/>); a relation's row
+        /// written without an output (<see cref="BridgeDiffFunction.IsNoOutput"/>), egglog's <c>(R a b)</c> action, is
+        /// a lookup that inserts the key.
         /// </summary>
         Set,
 

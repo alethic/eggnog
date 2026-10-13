@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// The fixture of <see cref="ActionReadAnalysisTests"/>: a <see cref="ContextGraph"/> plus a core constructor (a
-    /// <see cref="UnionIdMerge"/> table), a context-private constructor, and two externals, one that reads no tables and one
-    /// that declares <see cref="ExternalFunction.ReadsTables"/>.
+    /// <see cref="UnionIdMerge"/> table), a context-private constructor, and two externals, one that reads no tables
+    /// and one that declares <see cref="ExternalFunction.ReadsTables"/>.
     /// </summary>
     sealed class ActionReadAnalysisSetup
     {
@@ -75,7 +75,8 @@ namespace Eggnog.Relations.Tests
         public TableId Table(FunctionId f) => Graph.EGraph.GetTable(f);
 
         /// <summary>
-        /// Gets whether <paramref name="instr"/> alone is query-determined (<see cref="ActionReadAnalysis.IsQueryDetermined(Instr, LayeredSchema, ExternalFunctionRegistry)"/>).
+        /// Gets whether <paramref name="instr"/> alone is query-determined
+        /// (<see cref="ActionReadAnalysis.IsQueryDetermined(Instr, LayeredSchema, ExternalFunctionRegistry)"/>).
         /// </summary>
         public bool Determined(Instr instr) => ActionReadAnalysis.IsQueryDetermined(instr, Schema, Externals);
 

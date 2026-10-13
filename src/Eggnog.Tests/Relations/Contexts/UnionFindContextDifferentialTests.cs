@@ -8,12 +8,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The union-find context differential (colored-contexts spec §17 M9.2): random programs of id mints, unions,
-    /// rebuilds, child creation (three deep), random freezes and disposal, with ancestors changing after their children
-    /// exist, run on the engine and on two oracles at once (<see cref="UnionFindContextPair"/>): the naive
-    /// <see cref="ReferenceUnionFindContext"/> for exact canonical ids, <see cref="Context.ScanMerges{TVisitor}"/>,
-    /// <see cref="Context.IsLocalId"/>, journal completeness and own displacements; and the spike
-    /// (<c>Eggnog.Storage</c>), compared modulo renaming. The engine's invariant checker runs at every check.
+    /// The union-find context differential: random programs of id mints, unions, rebuilds, child creation (three deep),
+    /// random freezes and disposal, with ancestors changing after their children exist, run on the engine and on an
+    /// oracle at once (<see cref="UnionFindContextPair"/>): the naive <see cref="ReferenceUnionFindContext"/>, for
+    /// exact canonical ids, <see cref="Context.ScanMerges{TVisitor}"/>, <see cref="Context.IsLocalId"/>, journal
+    /// completeness and own displacements. The engine's invariant checker runs at every check.
     /// </summary>
     /// <remarks>
     /// Environment variables: <c>EGGNOG_CONTEXT_SEEDS</c> sets the number of seeds (400 by default);
@@ -36,6 +35,9 @@ namespace Eggnog.Relations.Tests
             return data;
         }
 
+        /// <summary>
+        /// Random programs of 150 steps agree with the reference at every check.
+        /// </summary>
         [Theory]
         [MemberData(nameof(Seeds))]
         public void RandomProgramsAgree(int seed)
@@ -54,7 +56,8 @@ namespace Eggnog.Relations.Tests
             for (var seed = 0; seed < 40; seed++)
                 Run(100_000 + seed, 600, coverage);
 
-            // The programs exercise what they are meant to: imports, re-keyed canonicals, own unions and frozen children.
+            // The programs exercise what they are meant to: imports, re-keyed canonicals, own unions and frozen
+            // children.
             Assert.True(coverage[0] > 0, "no context imported a parent displacement");
             Assert.True(coverage[1] > 0, "no context re-keyed a merged class");
             Assert.True(coverage[2] > 0, "no context made a union of its own");
@@ -68,8 +71,7 @@ namespace Eggnog.Relations.Tests
         const int Coverage = 4;
 
         /// <summary>
-        /// A soak against the spike: programs of 600 steps from consecutive seeds until <c>EGGNOG_CONTEXT_SOAK</c> steps
-        /// have run (the M9.2 gate is 10⁵ steps).
+        /// A soak: programs of 600 steps from consecutive seeds until <c>EGGNOG_CONTEXT_SOAK</c> steps have run.
         /// </summary>
         [Fact]
         public void Soak()
@@ -93,7 +95,8 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         /// <param name="seed">The program's seed.</param>
         /// <param name="steps">The number of steps.</param>
-        /// <param name="coverage">Accumulates the <see cref="Coverage"/> counters of every child, or <c>null</c>.</param>
+        /// <param name="coverage">Accumulates the <see cref="Coverage"/> counters of every child, or
+        /// <c>null</c>.</param>
         /// <returns>The number of steps run.</returns>
         static int Run(int seed, int steps, long[]? coverage = null)
         {
@@ -141,6 +144,10 @@ namespace Eggnog.Relations.Tests
             coverage[3] += pair.IsFrozen ? 1 : 0;
         }
 
+        /// <summary>
+        /// One random step of <paramref name="pair"/>: a mint, a union, a child, a rebuild, a freeze, a check of every
+        /// live pair, or the disposal of a leaf.
+        /// </summary>
         static void Step(Random random, UnionFindContextPair pair, List<UnionFindContextPair> live, Dictionary<uint, ReferenceUnionFindContext> minted, long[]? coverage)
         {
             var roll = random.Next(100);

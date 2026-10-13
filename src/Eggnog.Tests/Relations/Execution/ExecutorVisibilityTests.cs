@@ -10,8 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The executor never lets a row the table no longer shows reach an action (decisions: visibility on every path):
-    /// egglog's stale-row holes (map §8.1 rows 1 and 2) and the cached-index paths that must refine for visibility.
+    /// The executor never lets a row the table does not show reach an action, on any path: egglog's two stale-row holes
+    /// (an atom without variables checks only that its header is non-empty, and a scan with constraints does not skip
+    /// tombstones) and the cached-index paths that must refine for visibility.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class ExecutorVisibilityTests
@@ -20,9 +21,10 @@ namespace Eggnog.Relations.Tests
         public static IEnumerable<object[]> ModesData => ExecutionTestUtil.Modes.Select(m => new object[] { m });
 
         /// <summary>
-        /// Map §8.1 row 2: <c>T(1, 2) =&gt; U(7)</c> after <c>T(1, 2)</c> was deleted. The atom has no variables, so no
-        /// stage scans it, and its header subset (the cached column index's rows for the constant, refreshed
-        /// incrementally) still lists the tombstone; egglog fires the rule.
+        /// An atom without variables checks that a visible row exists: <c>T(1, 2) =&gt; U(7)</c> must not fire after
+        /// <c>T(1, 2)</c> is deleted. The atom has no variables, so no stage scans it, and its header subset (the
+        /// cached column index's rows for the constant, refreshed incrementally) still lists the tombstone; egglog,
+        /// which checks only that the header is non-empty, fires the rule.
         /// </summary>
         [Theory]
         [MemberData(nameof(ModesData))]
@@ -68,8 +70,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Map §8.1 row 2, slow constraints: an atom of wildcards with a constraint no live row satisfies must not let
-        /// the rule fire, though its header is the whole non-empty table.
+        /// The same existence check with slow constraints: an atom of wildcards with a constraint no live row satisfies
+        /// must not let the rule fire, though its header is the whole non-empty table.
         /// </summary>
         [Theory]
         [MemberData(nameof(ModesData))]
@@ -139,8 +141,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Map §8.1 row 1: a scan with a slow constraint on a column other than 0 must skip tombstones (whose other
-        /// cells still hold their values), in a plain scan and as the cover of a Free Join step.
+        /// A scan with a slow constraint on a column other than 0 must skip tombstones (whose other cells still hold
+        /// their values), in a plain scan and as the cover of a Free Join step; egglog's constrained scans skip the
+        /// tombstone check.
         /// </summary>
         [Theory]
         [MemberData(nameof(ModesData))]

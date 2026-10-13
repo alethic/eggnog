@@ -27,7 +27,8 @@ namespace Eggnog.Relations
         /// egglog's per-destination <c>SegQueue</c>s fill in whatever order the tasks run. Here each source writes its
         /// own row of lists and each destination reads them in source order, so the reinsertion order, and with it which
         /// ids end up dirty, is the same from run to run; ids still depend on the parallel schedule of the rest of the
-        /// engine, as decision 4 allows. Dirty ids are reported by destination shard, then in queue order.
+        /// engine, which parallel execution allows: it must produce the same facts, but may number ids differently.
+        /// Dirty ids are reported by destination shard, then in queue order.
         /// </para>
         /// </remarks>
         /// <param name="rebuilder">The rebuilder.</param>

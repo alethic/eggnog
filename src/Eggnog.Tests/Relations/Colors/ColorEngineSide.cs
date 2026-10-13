@@ -4,15 +4,16 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// One engine a <see cref="ColorRunner"/> drives: its e-graph, its rules and queries, and its contexts and ids by slot.
-    /// The runner drives two in lockstep for the seeded-versus-unseeded property, the second creating every child with
-    /// <see cref="ContextOptions.InheritWatermarks"/> off.
+    /// One engine a <see cref="ColorRunner"/> drives: its e-graph, its rules and queries, and its contexts and ids by
+    /// slot. The runner drives two in lockstep for the seeded-versus-unseeded property, the second creating every child
+    /// with <see cref="ContextOptions.InheritWatermarks"/> off.
     /// </summary>
     sealed class ColorEngineSide
     {
 
         /// <summary>
-        /// Initializes a side over a fresh schema; children inherit watermarks unless <paramref name="inherit"/> is false.
+        /// Initializes a side over a fresh schema; children inherit watermarks unless <paramref name="inherit"/> is
+        /// false.
         /// </summary>
         public ColorEngineSide(bool inherit)
         {

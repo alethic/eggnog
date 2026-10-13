@@ -8,11 +8,11 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Freezes the context's layering (§8.1 step 5): seals every hidden set, drops the views built so far, and builds
-        /// the view of every table registered now, eagerly, folding every level's hides into each layer's frozen part (a
-        /// frozen view has no live part). From then on the arrays never change: a table added later is answered through
-        /// the parent (X43), and the views may be read from any thread. Called by <see cref="Context.Freeze"/> on the
-        /// domain thread, after the database froze its tables.
+        /// Freezes the context's layering: seals every hidden set, drops the views built so far, and builds the view of
+        /// every table registered now, eagerly, folding every level's hides into each layer's frozen part (a frozen
+        /// view has no live part). From then on the arrays never change: a table added later is answered through the
+        /// parent, and the views may be read from any thread. Called by <see cref="Context.Freeze"/> on the domain
+        /// thread, after the database froze its tables.
         /// </summary>
         /// <remarks>Cost: O(tables × depth) plus the folds, once.</remarks>
         internal void Freeze()

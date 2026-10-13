@@ -4,8 +4,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// Gap 5 (D37), which the prototype lacks: an integer enum against a bound. The schema declares n present with the
-    /// integer domain <c>idom</c>; a query's bounds narrow the domain in the query scope, and an empty domain contradicts.
+    /// An integer enum against a bound, which the prototype does not model. The schema declares n present with the
+    /// integer domain <c>idom</c>; a query's bounds narrow the domain in the query scope, and an empty domain
+    /// contradicts.
     /// </summary>
     public sealed class Scenario08IntegerDomainTests
     {

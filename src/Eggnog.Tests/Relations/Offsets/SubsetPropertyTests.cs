@@ -269,7 +269,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void SparseSparseStrategyBoundariesMatchModel()
         {
-            // Lengths straddling the 16-element and 4x thresholds of the strategy choice (mod.rs:447-448).
+            // Lengths straddling the 16-element and 4x thresholds of the strategy choice
+            // (core-relations/src/offsets/mod.rs:447-448).
             var random = new Random(77);
             var lengths = new[] { 0, 1, 3, 4, 5, 15, 16, 17, 63, 64, 65, 68, 256, 257 };
             foreach (var n in lengths)

@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the port of egglog-bridge's rule macros (egglog-bridge/src/macros.rs): <see cref="ExpressionBuilder"/>,
-    /// <see cref="RuleTerm"/>, <see cref="RuleFact"/> and <see cref="RuleCommand"/>.
+    /// Tests for the port of egglog-bridge's rule macros (egglog-bridge/src/macros.rs):
+    /// <see cref="ExpressionBuilder"/>, <see cref="RuleTerm"/>, <see cref="RuleFact"/> and <see cref="RuleCommand"/>.
     /// </summary>
     public class ExpressionBuilderTests
     {

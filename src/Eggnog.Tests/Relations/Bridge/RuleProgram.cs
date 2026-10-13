@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// The e-graph a <see cref="RandomRule"/> program runs on: the constructor <c>f(id) -&gt; id</c>, the relation
     /// <c>r(id, id)</c> (its output is the unit value, its default inserts it, and it can subsume, so its atoms carry a
-    /// subsumption entry), <c>low(id) -&gt; value</c> merged by the minimum of the raw values (a lattice), a fixed pool of
-    /// fresh ids, a pool of values, and the external function behind the rules' "different" filter. Two programs created
-    /// alike hold the same ids and values.
+    /// subsumption entry), <c>low(id) -&gt; value</c> merged by the minimum of the raw values (a lattice), a fixed pool
+    /// of fresh ids, a pool of values, and the external function behind the rules' "different" filter. Two programs
+    /// created alike hold the same ids and values.
     /// </summary>
     sealed class RuleProgram
     {

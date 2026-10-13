@@ -8,8 +8,8 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// One test per definition error of §6.3 that R1a can reach, with the exact message. A failed definition registers
-    /// nothing.
+    /// One test per definition error of a rule, with the exact message. A failed definition registers nothing: no rule,
+    /// no variant, and no mirror.
     /// </summary>
     public sealed class RuleDefinitionTests
     {
@@ -79,9 +79,9 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// §6.3 <c>c1.Is(c2)</c> of class constants (N63, N86): never refused. Classes that differ at the root are compared
-        /// where the rule runs, so the rule does not match at the root and matches in a child that unions them; classes
-        /// already one class at the root are merged, and the rule keeps the first.
+        /// <c>c1.Is(c2)</c> of class constants is never refused. Classes that differ at the root are compared where the
+        /// rule runs, so the rule does not match at the root and matches in a child that unions them; classes already
+        /// one class at the root are merged, and the rule keeps the first.
         /// </summary>
         [Fact]
         public void ClassConstantsAreComparedByClassWhereTheRuleRuns()
@@ -431,7 +431,7 @@ namespace Eggnog.Tests.Rules
             var b = schema.Make(t.B.Of());
             schema.Union(a, b);
 
-            // a and b are one class in the owner, though not in the root (N8).
+            // a and b are one class in the owner, though not in the root.
             schema.DefineRule(t.Rules, "equated", r =>
             {
                 r.When(t.Num.Of(1L), ((Term<Node>)a).Is(b));
@@ -467,6 +467,79 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(before, t.Rules.Rules.Count);
             Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
             return e;
+        }
+
+        /// <summary>
+        /// A rule that writes an analysis table may read no scoped atom.
+        /// </summary>
+        [Fact]
+        public void AnAnalysisWriterReadingAScopedAtomIsRefused()
+        {
+            var t = new ScopeTheory();
+            var source = t.Graph.DefineRelation<string>("source", new TableOptions { Role = TableRole.Analysis });
+            var analysis = t.Graph.DefineRelation<string>("analysis", new TableOptions { Role = TableRole.Analysis });
+            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("analysis from scoped", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(source.In(t.Outer).Of(x));
+                r.Then(analysis.Of(x));
+            }));
+            Assert.Equal("analysis from scoped", e.RuleName);
+            Assert.Equal("rule writes analysis table 'analysis' and may not read scoped atoms; it reads 'source@outer'", e.Message);
+            Assert.Empty(t.Rules.Rules);
+        }
+
+        /// <summary>
+        /// A definition that fails registers nothing: a rule whose body reads a scoped atom and whose head uses an
+        /// unbound variable, and a query with an unbound variable over a scoped atom, leave no mirror and no variant.
+        /// </summary>
+        [Fact]
+        public void AFailedDefinitionWithAScopedReadRegistersNoMirror()
+        {
+            var t = new ScopeTheory();
+            var variants = t.Graph.VariantsByDescription.Count;
+            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("unbound head", r =>
+            {
+                var (x, y) = r.Vars<string, string>("x", "y");
+                r.When(t.Fact.In(t.Outer).Of(x));
+                r.Then(t.Seen.Of(y));
+            }));
+            Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineQuery("unbound query", q =>
+            {
+                var k = q.Var<string>("k");
+                q.When(t.Best.In(t.Inner).Of("k").Is(5L));
+                q.Where(k, _ => true);
+            }));
+
+            Assert.Empty(t.Graph.Mirrors.AllCopyRules());
+            Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
+        }
+
+        /// <summary>
+        /// A failed definition does not count as the first scoped read of a table: after only a failed definition read
+        /// <c>fact@outer</c>, freezing a scope tagged outer still refuses the first real reader.
+        /// </summary>
+        [Fact]
+        public void AFailedDefinitionDoesNotCountAsTheFirstScopedRead()
+        {
+            var t = new ScopeTheory();
+            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("unbound head", r =>
+            {
+                var (x, y) = r.Vars<string, string>("x", "y");
+                r.When(t.Fact.In(t.Outer).Of(x));
+                r.Then(t.Seen.Of(y));
+            }));
+            t.Root.Freeze();
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Freeze();
+
+            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("late reader", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.In(t.Outer).Of(x));
+                r.Then(t.Seen.Of(x));
+            }));
+            Assert.Contains("first read in scope 'outer'", e.Message);
         }
 
     }

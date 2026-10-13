@@ -11,10 +11,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A child's rules on the parallel executor (colored-contexts spec §17 M10.2, X37, I34; review findings R1-2, R2-2):
-    /// rule tasks and action batches stage into tables the child never wrote, creating its layers during the search, and
-    /// look up tables it never wrote through the rule set's pinned views. The run equals the serial one, a lookup that hits
-    /// creates no layer, and nothing drops a view while the search runs.
+    /// A child's rules on the parallel executor: rule tasks and action batches stage into tables the child never wrote,
+    /// creating its layers during the search off the domain thread (a new layer changes no view and no view generation,
+    /// and is adopted into the child's tables after the search), and look up tables it never wrote through the rule
+    /// set's pinned views. The run equals the serial one, a lookup that hits creates no layer, and nothing drops a view
+    /// while the search runs.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class LayeredParallelRunTests
@@ -116,7 +117,8 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(LayeredRuleUtil.Visible(serial.Child, serial.Best), LayeredRuleUtil.Visible(parallel.Child, parallel.Best));
             Assert.True(LayeredRuleUtil.Visible(parallel.Child, parallel.Out).Count >= Nodes);
 
-            // The search read pinned views: nothing dropped one while it ran (I29, I34).
+            // The search read pinned views: nothing dropped one while it ran, so the view generation every probe call
+            // saw is the one before the run.
             Assert.NotEmpty(generations);
             Assert.All(generations, g => Assert.Equal(before, g));
 

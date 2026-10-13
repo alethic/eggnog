@@ -6,8 +6,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// <see cref="Scope.Children"/> lists live children only (§6.7): a disposed child whose release waits for a live child
-    /// of its own is no longer listed, although its engine state is kept.
+    /// <see cref="Scope.Children"/> lists live children only: a disposed child whose release waits for a live child of
+    /// its own is not listed, although its engine state is kept.
     /// </summary>
     public sealed class DisposedChildListingTests
     {

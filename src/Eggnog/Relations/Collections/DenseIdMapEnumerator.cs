@@ -18,6 +18,12 @@ namespace Eggnog.Relations
         readonly int idCount;
         int index;
 
+        /// <summary>
+        /// Initializes an enumerator positioned before the first identifier.
+        /// </summary>
+        /// <param name="values">The map's values, indexed by identifier.</param>
+        /// <param name="present">Which identifiers hold a value.</param>
+        /// <param name="idCount">The number of identifiers to visit.</param>
         internal DenseIdMapEnumerator(TValue[] values, bool[] present, int idCount)
         {
             this.values = values;

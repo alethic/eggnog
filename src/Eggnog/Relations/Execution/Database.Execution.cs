@@ -22,9 +22,9 @@ namespace Eggnog.Relations
         ExecutorCounters? executorCounts;
 
         /// <summary>
-        /// Gets the counts the database's rule runs add to (colored-contexts spec §17 M10.2), or <c>null</c> unless the
-        /// process runs with <c>EGGNOG_COUNTERS</c> (<see cref="ExecutorCounters.Enabled"/>). One instance per database, so
-        /// a context's counts are its own.
+        /// Gets the counts the database's rule runs add to, or <c>null</c> unless the process runs with
+        /// <c>EGGNOG_COUNTERS</c> (<see cref="ExecutorCounters.Enabled"/>). One instance per database, so a context's
+        /// counts are its own.
         /// </summary>
         internal ExecutorCounters? ExecutorCounts
         {
@@ -65,9 +65,9 @@ namespace Eggnog.Relations
         /// <para>
         /// Serial mode, when the database holds at most <see cref="ParallelHeuristics.DbLevelThreshold"/> rows or the
         /// degree of parallelism is one, runs the rules in rule order on one thread with one action buffer and is
-        /// deterministic (decision 4). Parallel mode runs one task per rule, forks morsels of frames at join positions 0
-        /// and 1, and runs full action batches as tasks; it produces the same facts, but fresh ids, match counts and
-        /// the order of staged writes may differ.
+        /// deterministic for a given program. Parallel mode runs one task per rule, forks morsels of frames at join
+        /// positions 0 and 1, and runs full action batches as tasks; it produces the same facts, but fresh ids, match
+        /// counts and the order of staged writes may differ.
         /// </para>
         /// <para>
         /// Early stop: an action that calls <see cref="ExecutionState.TriggerEarlyStop"/> stops the join at the next
@@ -81,26 +81,26 @@ namespace Eggnog.Relations
         /// right before running it. Requires exclusive access to the database.
         /// </para>
         /// <para>
-        /// Views (colored-contexts spec §9.1, X21, X22). The run reads every table through the views the rule set pinned
-        /// when it was built on this database's <see cref="View"/> (<see cref="RuleSet.Views"/>), which a root's run reads
-        /// as its single-layer tables. A rule set built on another database's view is refused: its header subsets describe
-        /// other tables. In a child context the run is the context's (§8.3, X12, X37): it enters the context's thread
-        /// domain (refused from inside a write batch's action or a visitor of the domain), requires the context's views to be
-        /// current (<see cref="Context.ThrowIfViewNotCurrent"/>) and unchanged since the rule set's first header was
-        /// evaluated (<see cref="RuleSet.ViewGeneration"/> and <see cref="RuleSet.ViewStamp"/>, I29), requires the
-        /// timestamp to keep the context's epochs nondecreasing and at or above its floor (<see cref="Context.UseEpoch"/>),
-        /// marks the search (<see cref="ContextTables.InSearch"/>, so layers its tasks create are adopted at the merge) as a
-        /// callback of the domain (writes and rebuilds of the domain are refused inside it), and faults the context when an
-        /// exception escapes. A refusal happens before anything runs and does not fault. The root pays one reference compare
-        /// and one null test per run.
+        /// Views. The run reads every table through the views the rule set pinned when it was built on this database's
+        /// <see cref="View"/> (<see cref="RuleSet.Views"/>), which a root's run reads as its single-layer tables. A
+        /// rule set built on another database's view is refused: its header subsets describe other tables. In a child
+        /// context the run is the context's: it enters the context's thread domain (refused from inside a write batch's
+        /// action or a visitor of the domain), requires the context's views to be current
+        /// (<see cref="Context.ThrowIfViewNotCurrent"/>) and unchanged since the rule set's first header was evaluated
+        /// (<see cref="RuleSet.ViewGeneration"/> and <see cref="RuleSet.ViewStamp"/>, so the headers and the run read
+        /// the same rows), requires the timestamp to keep the context's epochs nondecreasing and at or above its floor
+        /// (<see cref="Context.UseEpoch"/>), marks the search (<see cref="ContextTables.InSearch"/>, so layers its
+        /// tasks create are adopted at the merge) as a callback of the domain (writes and rebuilds of the domain are
+        /// refused inside it), and faults the context when an exception escapes. A refusal happens before anything runs
+        /// and does not fault. The root pays one reference compare and one null test per run.
         /// </para>
         /// </remarks>
         /// <param name="ruleSet">The rules.</param>
         /// <param name="reportLevel">How much to report per rule.</param>
         /// <param name="timestamp">The timestamp the run's execution states and its merge carry
         /// (<see cref="ExecutionState.Timestamp"/>, <see cref="MergeAll"/>); <c>null</c> for the store clock's current
-        /// value, or zero without a store (colored-contexts spec §4.1). Reading the store clock from an action
-        /// (<see cref="ReadCounterInstr"/>) returns it, however far other contexts advance the clock meanwhile (C1).</param>
+        /// value, or zero without a store. Reading the store clock from an action (<see cref="ReadCounterInstr"/>)
+        /// returns it, however far other contexts advance the clock meanwhile.</param>
         /// <returns>What the run did. An empty rule set returns <see cref="RuleSetReport.Empty"/> without merging, as
         /// egglog does.</returns>
         /// <exception cref="ArgumentException">The rule set was built on another database's view.</exception>
@@ -136,21 +136,21 @@ namespace Eggnog.Relations
         /// <para>
         /// All or nothing: if an action or an external function throws, every write the run staged is discarded before
         /// the exception propagates, including those of the action batches that finished and flushed before it, so the
-        /// tables' staged writes are as they were before the run (writes staged earlier stay). Fresh ids the run minted,
-        /// values and containers it interned, and the counters it advanced stay, as nothing refers to them.
+        /// tables' staged writes are as they were before the run (writes staged before it stay). Fresh ids the run
+        /// minted, values and containers it interned, and the counters it advanced stay, as nothing refers to them.
         /// </para>
         /// <para>
-        /// Not in egglog (core-relations/src/free_join/execute.rs:347-636), where a panic in a primitive unwinds through
-        /// the run and the dropped buffers flush into the pending queues. The port kept that: the next
-        /// <see cref="MergeAll"/> applied the batches of the failed run that had finished, and a caller that ran the
-        /// rules again applied their matches twice. Marking the staged writes costs O(tables × shards) per run and
-        /// allocates only for the tables with writes staged before the run.
+        /// egglog does not discard them (core-relations/src/free_join/execute.rs:347-636): a panic in a primitive
+        /// unwinds through the run and the dropped buffers flush into the pending queues, so the next merge applies the
+        /// batches of the failed run that had finished, and a caller that runs the rules again applies their matches
+        /// twice. Marking the staged writes costs O(tables × shards) per run and allocates only for the tables with
+        /// writes staged before the run.
         /// </para>
         /// </remarks>
         /// <param name="ruleSet">The rules.</param>
         /// <param name="reportLevel">How much to report per rule.</param>
         /// <param name="timestamp">The timestamp the run's execution states carry; <c>null</c> for the store clock's
-        /// current value, or zero without a store (colored-contexts spec §4.1).</param>
+        /// current value, or zero without a store.</param>
         /// <returns>The run's report, not merged yet: <see cref="RuleSetReport.Changed"/> is <c>false</c> and
         /// <see cref="RuleSetReport.MergeTime"/> zero. <see cref="RuleSetReport.Empty"/> for an empty rule set.</returns>
         /// <exception cref="ArgumentException">The rule set was built on another database's view.</exception>
@@ -171,9 +171,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the views a run of <paramref name="ruleSet"/> reads (§9.1): the ones it pinned when it was built on this
+        /// Gets the views a run of <paramref name="ruleSet"/> reads: the ones it pinned when it was built on this
         /// database's view, or, for a rule set assembled by hand from a root's rules, the root's views of the tables it
-        /// reads, pinned now.
+        /// reads, pinned by this call.
         /// </summary>
         /// <exception cref="ArgumentException">The rule set was built on another database's view, or assembled by hand for
         /// a layered database, whose runs need the views header evaluation read.</exception>
@@ -194,18 +194,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// A run of a child context's database (§8.3, §9.1, X12, X37): see <see cref="RunRuleSet"/>. The search is a
-        /// callback of the context's thread domain and runs with <see cref="ContextTables.InSearch"/> set; an exception
-        /// faults the context.
+        /// A run of a child context's database: see <see cref="RunRuleSet"/>. The search is a callback of the context's
+        /// thread domain and runs with <see cref="ContextTables.InSearch"/> set; an exception faults the context.
         /// </summary>
         /// <remarks>
-        /// The failed-run decision (colored-contexts spec §21.9, decided in M10.3): an exception escaping a child's
-        /// <see cref="RunRuleSet"/> or <see cref="ExecuteRuleSet"/> (an action, an external or a merge function throwing)
-        /// keeps faulting the child (X12), the rule layer's direct <see cref="ExecuteRuleSet"/> calls included. In addition
-        /// every write the failed search staged is discarded, in the layers it created as well (they wait on the deferred
-        /// list, outside the table map that the rollback walks, <see cref="ContextTables.DiscardDeferredStaged"/>), and
-        /// <see cref="MergeAll"/> and <see cref="MergeTable"/> refuse a faulted child, so nothing a failed run staged can
-        /// ever merge. Both additions are child-only and cost the root nothing on its paths.
+        /// A failed run: an exception escaping a child's <see cref="RunRuleSet"/> or <see cref="ExecuteRuleSet"/> (an
+        /// action, an external or a merge function throwing) faults the child, the rule layer's direct
+        /// <see cref="ExecuteRuleSet"/> calls included, since a hide whose copy was never merged cannot be repaired.
+        /// Every write the failed search staged is discarded, in the layers it created as well (they wait on the
+        /// deferred list, outside the table map that the rollback walks,
+        /// <see cref="ContextTables.DiscardDeferredStaged"/>), and <see cref="MergeAll"/> and <see cref="MergeTable"/>
+        /// refuse a faulted child, so nothing a failed run staged can ever merge. The discard of the created layers'
+        /// writes and the refusal are child-only and cost the root nothing on its paths.
         /// </remarks>
         RuleSetReport RunInChild(ContextTables tables, RuleSet ruleSet, ViewSnapshot views, ReportLevel reportLevel, uint timestamp, bool merge)
         {
@@ -217,14 +217,16 @@ namespace Eggnog.Relations
             Context.ThrowIfInCallback(domain, nameof(RunRuleSet));
             context.ThrowIfViewNotCurrent();
 
-            // I29: the header subsets were evaluated against the views as they were at the rule set's first header. A
-            // dropped view (the generation) or a merge, hide, clear or stop anywhere on the chain (the stamp: header subsets
-            // name rows, which a compaction moves) since then makes them describe other rows than the snapshot shows.
+            // The header subsets were evaluated against the views as they were at the rule set's first header. A
+            // dropped view (the generation) or a merge, hide, clear or stop anywhere on the chain (the stamp: header
+            // subsets name rows, which a compaction moves) since then makes them describe other rows than the snapshot
+            // shows.
             var generation = View.Generation;
             if (ruleSet.ViewGeneration != generation || ruleSet.ViewStamp != context.ViewStamp)
                 throw new InvalidOperationException("The context's views changed since the rule set's headers were evaluated (a merge, rebuild, clear or freeze of the context or an ancestor); build the rule set again.");
 
-            // I3, I19, I21: the run stamps every row it merges with the timestamp (X38).
+            // The run stamps every row it merges with the timestamp, so the timestamp must keep every layer's sort
+            // column nondecreasing and the context's new rows at or above its floor.
             context.UseEpoch(timestamp);
             try
             {
@@ -241,7 +243,8 @@ namespace Eggnog.Relations
                     tables.InSearch = false;
                 }
 
-                // I29, I34: nothing drops a view while the search runs; layer creation never does (X37).
+                // Nothing drops a view while the search runs, layer creation included, so the headers and the run read
+                // the same views.
                 Debug.Assert(View.Generation == generation, "a context's views changed during a rule search");
                 return merge ? MergeRuleSetCore(executed, timestamp) : executed;
             }
@@ -280,8 +283,8 @@ namespace Eggnog.Relations
             {
                 // Every task has finished (WorkScope.Wait returns only then), so nothing flushes any more. In a child the
                 // layers the search created wait on the deferred list, outside the table map: their writes are dropped
-                // too, so nothing the failed run staged can ever merge (the failed-run decision, §21.9). One null test at
-                // the root, on the exception path only.
+                // too, so nothing the failed run staged can ever merge. One null test at the root, on the exception
+                // path only.
                 DiscardStagedWritesSince(marks);
                 layers?.DiscardDeferredStaged();
                 throw;
@@ -316,8 +319,8 @@ namespace Eggnog.Relations
         /// <returns>The report, with whether the merge changed the database and how long it took.</returns>
         /// <remarks>
         /// In a child context the merge enters the context's thread domain, refuses a timestamp below the context's floor
-        /// (<see cref="Context.UseEpoch"/>, before anything is merged) and faults the context when an exception escapes
-        /// (X12), as <see cref="RunRuleSet"/> does.
+        /// (<see cref="Context.UseEpoch"/>, before anything is merged) and faults the context when an exception
+        /// escapes, as <see cref="RunRuleSet"/> does.
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">In a child, the timestamp is below the context's creation, its
         /// last noted rule run or its latest epoch.</exception>

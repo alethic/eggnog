@@ -6,9 +6,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Cost arithmetic: non-negative <see cref="long"/> costs added with saturation (rule-layer decision D19), egglog's
-    /// <c>Cost::combine</c> for integers (<c>saturating_add</c>, src/extract.rs:65-77). A saturated cost is still the cost
-    /// of a finite term, as in egglog, where <c>u64::MAX</c> is an ordinary cost.
+    /// Cost arithmetic: non-negative <see cref="long"/> costs added with saturation, egglog's <c>Cost::combine</c> for
+    /// integers (<c>saturating_add</c>, src/extract.rs:65-77). A saturated cost is still the cost of a finite term, as
+    /// in egglog, where <c>u64::MAX</c> is an ordinary cost.
     /// </summary>
     internal static class CostMath
     {
@@ -30,8 +30,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Checks a cost a cost model computed: costs must not be negative (rule-layer decision D19). Allocation-free on
-        /// success: the message is built only when the check fails, so per-row callers pass its parts, not the message.
+        /// Checks a cost a cost model computed: costs must not be negative. Allocation-free on success: the message is
+        /// built only when the check fails, so per-row callers pass its parts, not the message.
         /// </summary>
         /// <param name="cost">The cost.</param>
         /// <param name="what">What kind of thing was costed, for the message: "a row of", "a value of", ...</param>

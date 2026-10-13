@@ -7,10 +7,10 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Late parent mints (colored-contexts spec §17 M10.4, L7, G2, §4.2): a parent that is not frozen lifts terms after
-    /// its cases built them, so each lifted term gets a parent id larger than the cases' local ids for the same term, and
-    /// smaller-id-wins makes the parent id lose in every case. The workload reports what that costs: the cases' parent-id
-    /// losers (<see cref="UnionFindStatistics.ParentIdLosers"/>), the rows they copy per lift round, and the growth of the
+    /// Late parent mints: a parent that is not frozen lifts terms after its cases built them, so each lifted term gets
+    /// a parent id larger than the cases' local ids for the same term, and smaller-id-wins makes the parent id lose in
+    /// every case. The workload reports what that costs: the cases' parent-id losers
+    /// (<see cref="UnionFindStatistics.ParentIdLosers"/>), the rows they copy per lift round, and the growth of the
     /// root's id array caused by the cases' reserved id blocks.
     /// </summary>
     /// <remarks>

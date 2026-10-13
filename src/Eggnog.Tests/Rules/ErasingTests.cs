@@ -6,9 +6,9 @@ namespace Eggnog.Tests.Rules
 {
 
     /// <summary>
-    /// Erasing rules (D12, §6.3 step 6, invariant E): a ruleset's licence makes every rule erasing; a rule reads fact
-    /// tables only through the licence scope unless it says why it may read its own; term and analysis tables are
-    /// unrestricted.
+    /// Erasing rules, which keep a conjunct from proving itself redundant: a ruleset's licence makes every rule
+    /// erasing; a rule reads fact tables only through the licence scope unless it says why it may read its own; term
+    /// and analysis tables are unrestricted.
     /// </summary>
     public sealed class ErasingTests
     {
@@ -142,7 +142,8 @@ namespace Eggnog.Tests.Rules
         [Fact]
         public void AnErasingRuleJudgesOnTheLicenceScopeOnly()
         {
-            // The conjunct's own consequence in the query never deletes it (D12): only the outer scope's fact does.
+            // A conjunct never proves itself redundant: its own consequence in the query never deletes it; only the
+            // outer scope's fact does.
             var (t, licensed, term, _) = Theory();
             licensed.DefineRule("declared", r =>
             {

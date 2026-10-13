@@ -165,8 +165,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void MaskHelpersAgreeForBothStrides()
         {
-            // Byte-wise (x64, scalar) masks put byte i at bit i; nibble masks (ARM64) at bit 4i + 3. Check both encodings
-            // on every platform through the stride-parameterized helpers.
+            // Byte-wise (x64, scalar) masks put byte i at bit i; nibble masks (ARM64) at bit 4i + 3. Check both
+            // encodings on every platform through the stride-parameterized helpers.
             var random = new Random(4);
             for (var n = 0; n < Iterations; n++)
             {

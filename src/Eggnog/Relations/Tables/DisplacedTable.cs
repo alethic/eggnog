@@ -25,15 +25,15 @@ namespace Eggnog.Relations
     /// <para>
     /// Versions: <see cref="TableVersion.Minor"/> is the row count, so a table's rebuild finds the ids displaced since
     /// its last one as a suffix. egglog's <c>clear</c> keeps the version and the child-to-row lookup
-    /// (core-relations/src/uf/mod.rs:286-289; map §8.1 row 12); here clearing a nonempty table empties the lookup and
-    /// starts a new generation, so trackers and indexes see the change.
+    /// (core-relations/src/uf/mod.rs:286-289); here clearing a nonempty table empties the lookup and starts a new
+    /// generation, so trackers and indexes see the change.
     /// </para>
     /// <para>
     /// Threading: reads run concurrently while no merge runs; <see cref="Merge"/> and <see cref="Clear"/> are
     /// exclusive.
     /// </para>
     /// <para>
-    /// Colored contexts (colored-contexts spec §5.1). Each merge compresses the paths of the ids it displaced
+    /// Colored contexts. Each merge compresses the paths of the ids it displaced
     /// (<see cref="DisplacedUnionFind.CompressRows"/>), which no result can observe: roots and the
     /// <c>parents[i] &lt;= i</c> invariant are unchanged, so every find returns what it returned before, and children's
     /// finds, which walk the root's array, stay short. <see cref="Freeze"/> compresses every path and seals the table:
@@ -44,9 +44,9 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The spec every union-find table shares: one key (the displaced id), two values (its canonical id, never
-        /// cacheable, and the timestamp), no deletes. Child contexts answer the union-find's spec from it without a
-        /// table (colored-contexts spec §3.4, X39).
+        /// The schema every union-find table shares: one key (the displaced id), two values (its canonical id, never
+        /// cacheable, and the timestamp), no deletes. Child contexts answer schema questions about their union-find
+        /// from it without a table.
         /// </summary>
         internal static readonly TableSpec DisplacedSpec = new(1, 2, false, [new ColumnId(1)]);
 
@@ -204,7 +204,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Visits the rows at positions <c>[start, start + count)</c> of <paramref name="subset"/> that are not in
-        /// <paramref name="hidden"/> and satisfy every constraint (colored-contexts spec §9.3): the plain scan through a
+        /// <paramref name="hidden"/> and satisfy every constraint: the plain scan through a
         /// <see cref="HiddenSkippingSink{TSink}"/>, since the table has no tombstones. Hides the hidden-aware
         /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
         /// which dispatches here; with <see cref="HiddenRows.None"/> it is the plain scan.
@@ -214,7 +214,7 @@ namespace Eggnog.Relations
         /// <param name="start">The first position.</param>
         /// <param name="count">The number of positions to visit.</param>
         /// <param name="constraints">The constraints rows must satisfy.</param>
-        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed.</param>
         /// <param name="sink">Receives each expanded visible row with its row id; must not keep the span.</param>
         /// <returns>The next position, or -1.</returns>
         public new int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
@@ -248,7 +248,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan.</param>
-        /// <param name="hidden">The rows hidden from the reader; sealed (I18).</param>
+        /// <param name="hidden">The rows hidden from the reader; sealed.</param>
         /// <param name="sink">Receives each expanded visible row with its row id.</param>
         public new void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
@@ -410,8 +410,8 @@ namespace Eggnog.Relations
         /// <remarks>
         /// egglog's <c>merge</c> (core-relations/src/uf/mod.rs:446-459): applies each staged <c>[a, b, ts]</c> in queue
         /// and staging order with <see cref="DisplacedUnionFind.Union"/>. A row counts as both added and removed, since
-        /// unions change rows in place. Afterwards the paths of the ids this merge displaced are compressed
-        /// (colored-contexts spec §5.1, C2): one cheap pass no result can observe.
+        /// unions change rows in place. Afterwards the paths of the ids this merge displaced are compressed: one cheap
+        /// pass no result can observe.
         /// </remarks>
         /// <exception cref="InvalidOperationException">The table is frozen.</exception>
         public override TableChange Merge(ExecutionState state)
@@ -446,8 +446,8 @@ namespace Eggnog.Relations
         /// <inheritdoc />
         /// <remarks>
         /// Drops staged unions, resets the union-find and its rows, and, if there were rows, starts a new generation.
-        /// egglog keeps the lookup and the version (core-relations/src/uf/mod.rs:286-289; map §8.1 row 12) and leaves
-        /// staged unions queued.
+        /// egglog keeps the lookup and the version (core-relations/src/uf/mod.rs:286-289) and leaves staged unions
+        /// queued.
         /// </remarks>
         /// <exception cref="InvalidOperationException">The table is frozen.</exception>
         public override void Clear()
@@ -475,10 +475,9 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>
-        /// Colored-contexts spec §5.1, §8.1 (X13): compresses every path (<see cref="DisplacedUnionFind.CompressAll"/>),
-        /// so a find by any reader of the frozen root is one hop, and seals the pending state, so staging a union
-        /// throws. Afterwards <see cref="Merge"/> and <see cref="Clear"/> throw. A second call does nothing.
-        /// O(ids).
+        /// Compresses every path (<see cref="DisplacedUnionFind.CompressAll"/>), so a find by any reader of the frozen
+        /// root is one hop, and seals the pending state, so staging a union throws. Afterwards <see cref="Merge"/> and
+        /// <see cref="Clear"/> throw. A second call does nothing. O(ids).
         /// </remarks>
         /// <exception cref="InvalidOperationException">Unions are staged and not merged.</exception>
         public override void Freeze()

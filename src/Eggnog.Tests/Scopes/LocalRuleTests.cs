@@ -11,7 +11,7 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Local rules (§6.7): active in their scope and its descendants, fixed once it freezes, freed when it is released.
+    /// Local rules: active in their scope and its descendants, fixed once it freezes, freed when it is released.
     /// </summary>
     public sealed class LocalRuleTests
     {

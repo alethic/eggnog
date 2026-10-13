@@ -69,8 +69,8 @@ namespace Eggnog.Relations
         public JoinHeaderSpec[] Headers { get; }
 
         /// <summary>
-        /// Gets the atoms without variables, which no stage scans and the executor checks once (map §8.1 row 2).
-        /// Callers must not modify the array.
+        /// Gets the atoms without variables, which no stage scans and the executor checks once for a visible row that
+        /// satisfies their slow constraints. Callers must not modify the array.
         /// </summary>
         public ExistenceCheck[] ExistenceChecks { get; }
 
@@ -84,8 +84,7 @@ namespace Eggnog.Relations
         /// (core-relations/src/query.rs:191-243). Each extra constraint becomes a header of its own, followed by each of
         /// the template's headers re-evaluated against the current tables. Forwards to
         /// <see cref="InstantiateLayered{TEvaluator}"/> through <see cref="SingleLayerEvaluator{TEvaluator}"/>, so every
-        /// header subset lies in layer 0 (colored-contexts spec §9.4; C# cannot overload on constraints alone, hence the
-        /// second name).
+        /// header subset lies in layer 0 (C# cannot overload on constraints alone, hence the second name).
         /// </summary>
         /// <typeparam name="TEvaluator">The evaluator type; a struct type argument specializes the calls.</typeparam>
         /// <param name="evaluator">Evaluates constraints against the current tables.</param>
@@ -111,8 +110,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Evaluates the headers for one run in a context whose tables may lie in several layers (colored-contexts spec
-        /// §9.4): egglog's <c>get_rule_with_extra_constraints</c> with every header subset a <see cref="LayeredSubset"/>.
+        /// Evaluates the headers for one run in a context whose tables may lie in several layers: egglog's
+        /// <c>get_rule_with_extra_constraints</c> with every header subset a <see cref="LayeredSubset"/>.
         /// A header is empty iff it is empty in every layer; the run is then skipped before an action id is taken.
         /// </summary>
         /// <typeparam name="TEvaluator">The evaluator type: a context's <see cref="ContextView"/>, or a wrapped

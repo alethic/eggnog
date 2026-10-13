@@ -13,12 +13,12 @@ namespace Eggnog.Relations
         const int MinProgressCapacity = 8;
 
         /// <summary>
-        /// The keys of the context's progress map (§10.2, X17): a rule's index plus one, 0 for a free slot. Open addressing
-        /// with linear probing, a power-of-two capacity, at most half full; parallel to <see cref="progressValues"/>.
+        /// The keys of the context's progress map: a rule's index plus one, 0 for a free slot. Open addressing with
+        /// linear probing, a power-of-two capacity, at most half full; parallel to <see cref="progressValues"/>.
         /// </summary>
         /// <remarks>
-        /// A map rather than an array indexed by rule id, so a context pays for the rules it ran, not for every rule the
-        /// e-graph defines (§14.2: the rule layer defines one rule per query, and a child that ran a high-index rule would
+        /// A map rather than an array indexed by rule id, so a context pays for the rules it ran, not for every rule
+        /// the e-graph defines (the rule layer defines one rule per query, and a child that ran a high-index rule would
         /// otherwise allocate a slot per lower index). Written on the domain thread only, both arrays replaced together
         /// when they grow; read by descendants, which share the domain or read it frozen (immutable since the freeze).
         /// </remarks>
@@ -37,17 +37,18 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets rule <paramref name="rule"/>'s watermark in this context for a run whose executed constants are
-        /// <paramref name="constants"/> (colored-contexts spec §10.2, C7, D3, D4, X41).
+        /// <paramref name="constants"/>.
         /// </summary>
         /// <remarks>
         /// <para>
         /// The context's own progress decides when it has any for the rule's generation: its last run's timestamp, or 0
-        /// (a full run) when the constants differ (I30). Otherwise, for a rule that may inherit
-        /// (<see cref="RuleInfo.AllowInheritance"/>) in a context that inherits (<see cref="ContextOptions.InheritWatermarks"/>),
-        /// the watermark is seeded lazily from the nearest ancestor with progress: <c>min(W_a, CreatedAt of the ancestor's
-        /// child on the path)</c>, or 0 when the constants differ. So an inherited watermark is at most this context's
-        /// <see cref="CreatedAt"/>, which its semi-naive floor relies on (§7.2), and I31's Case 2 applies: every visible row
-        /// older than it lies in the ancestor's layer or above and was seen, unchanged, by the ancestor's run.
+        /// (a full run) when the constants differ. Otherwise, for a rule that may inherit
+        /// (<see cref="RuleInfo.AllowInheritance"/>) in a context that inherits
+        /// (<see cref="ContextOptions.InheritWatermarks"/>), the watermark is seeded lazily from the nearest ancestor
+        /// with progress: <c>min(W_a, CreatedAt of the ancestor's child on the path)</c>, or 0 when the constants
+        /// differ. So an inherited watermark is at most this context's <see cref="CreatedAt"/>, which its semi-naive
+        /// floor relies on, and it is sound: every visible row older than it lies in the ancestor's layer or above and
+        /// was seen, unchanged, by the ancestor's run.
         /// </para>
         /// <para>
         /// O(depth). Reading an ancestor's progress is safe: the ancestor is frozen (immutable) or shares this domain.
@@ -93,7 +94,7 @@ namespace Eggnog.Relations
         /// <param name="rule">The rule's id.</param>
         /// <param name="generation">The rule's generation.</param>
         /// <param name="value">The progress.</param>
-        /// <returns><c>false</c> when the context holds no progress for the rule, or holds another generation's (§10.2).
+        /// <returns><c>false</c> when the context holds no progress for the rule, or holds another generation's.
         /// O(1) expected.</returns>
         internal bool TryOwn(EGraphRuleId rule, int generation, out RuleProgress value)
         {
@@ -109,7 +110,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Sets this context's own progress for <paramref name="rule"/>: the commit of one rule's run (X18), and the
+        /// Sets this context's own progress for <paramref name="rule"/>: the commit of one rule's run, and the
         /// checker tests' way to corrupt it. Domain thread only. O(1) amortized; the map doubles when half full.
         /// </summary>
         /// <param name="rule">The rule's id.</param>
@@ -135,7 +136,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Commits the progress a run staged (X18), in listing order, so a rule listed twice keeps its last staging.
+        /// Commits the progress a run staged, in listing order, so a rule listed twice keeps its last staging.
         /// Domain thread only; O(rules run).
         /// </summary>
         void Commit(ReadOnlySpan<EGraphRuleId> rules, RuleProgress[] staged)

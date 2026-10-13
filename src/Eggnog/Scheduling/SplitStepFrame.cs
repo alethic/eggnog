@@ -2,10 +2,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One split step in progress (§6.11, R3), on the run's stack of split steps: its scope and report, the lifts already
-    /// recorded as steps, and the scope's <see cref="Scope.Version"/> and the time when the last of its cases finished
-    /// running. The driver lifts between case runs, so a lift shows as the report's lift count moving between two of
-    /// them; the version and the time say whether it changed the scope and how long it took.
+    /// One split step in progress, on the run's stack of split steps: its scope and report, the lifts already recorded
+    /// as steps, and the scope's <see cref="Scope.Version"/> and the time when the last of its cases finished running.
+    /// The driver lifts between case runs, so a lift shows as the report's lift count moving between two of them; the
+    /// version and the time say whether it changed the scope and how long it took.
     /// </summary>
     internal sealed class SplitStepFrame
     {

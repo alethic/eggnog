@@ -7,7 +7,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A union-find that logs every identifier it displaces: the storage half of egglog's <c>DisplacedTable</c>
-    /// (<c>core-relations/src/uf/mod.rs</c>), independent of the table machinery that will wrap it.
+    /// (<c>core-relations/src/uf/mod.rs</c>), independent of the table machinery (<see cref="DisplacedTable"/>) that
+    /// wraps it.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -25,8 +26,9 @@ namespace Eggnog.Relations
     /// <para>
     /// Threading: the read-only members (<see cref="FindNaive"/>, <see cref="TryGetRow"/>,
     /// <see cref="TimestampBounds"/>, the row accessors and the <see cref="UnionFind"/> view) never write and may run
-    /// on many threads at once while no thread mutates. <see cref="Union"/>, <see cref="Find"/> and <see cref="Clear"/> need exclusive access, as
-    /// egglog's <c>&amp;mut self</c> merge does.
+    /// on many threads at once while no thread mutates. <see cref="Union"/>, <see cref="Find"/>,
+    /// <see cref="CompressRows"/>, <see cref="CompressAll"/> and <see cref="Clear"/> need exclusive access, as egglog's
+    /// <c>&amp;mut self</c> merge does.
     /// </para>
     /// <para>
     /// Layout: rows are kept as two parallel arrays (structure of arrays) so the timestamp binary search touches
@@ -209,8 +211,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Compresses the path of every identifier displaced by rows <c>[firstRow, Count)</c>, so a chain of
-        /// displacements built by one merge collapses to one hop (colored-contexts spec §5.1, C2: "compress at the end of
-        /// each merge"). O(rows × path). Invisible to every result: roots are unchanged
+        /// displacements built by one merge collapses to one hop; the displaced table calls it at the end of each
+        /// merge. O(rows × path). Invisible to every result: roots are unchanged
         /// (<see cref="Relations.UnionFind.CompressPath"/>). Needs exclusive access.
         /// </summary>
         /// <param name="firstRow">The first row whose displaced identifier is compressed.</param>
@@ -228,8 +230,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Points every identifier straight at its root (<see cref="Relations.UnionFind.CompressAll"/>), so that every
-        /// later find is one hop: done when the owning context freezes (colored-contexts spec §5.1, §8.1). O(identifiers).
-        /// Needs exclusive access.
+        /// later find is one hop: done when the owning context freezes. O(identifiers). Needs exclusive access.
         /// </summary>
         public void CompressAll() => uf.CompressAll();
 
@@ -259,7 +260,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="row">The row.</param>
         /// <returns>The identifier that the row's union displaced.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetChild(int row)
         {
@@ -274,7 +276,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="row">The row.</param>
         /// <returns>The canonical identifier.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetCanonical(int row) => uf.FindNaive(GetChild(row));
 
@@ -283,7 +286,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="row">The row.</param>
         /// <returns>The timestamp of the union that appended it.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetTimestamp(int row)
         {
@@ -301,7 +305,8 @@ namespace Eggnog.Relations
         /// <param name="child">The displaced identifier.</param>
         /// <param name="canonical">Its canonical identifier.</param>
         /// <param name="timestamp">The timestamp.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Expand(int row, out uint child, out uint canonical, out uint timestamp)
         {
@@ -436,7 +441,8 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The timestamp sought.</param>
         /// <param name="strict">Whether to skip timestamps equal to <paramref name="timestamp"/>.</param>
         /// <returns>The index.</returns>
-        /// <remarks>Shared with <see cref="DisplacedJournal.TimestampBounds"/>, whose rows are ordered the same way.</remarks>
+        /// <remarks>Shared with <see cref="DisplacedJournal.TimestampBounds"/>, whose rows are ordered the same
+        /// way.</remarks>
         internal static int Search(uint[] ts, int from, int to, uint timestamp, bool strict)
         {
             var lo = from;

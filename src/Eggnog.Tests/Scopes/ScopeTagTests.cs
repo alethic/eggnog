@@ -11,8 +11,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Scope tags belong to their graph (D38): unique names, the reserved root tag, refusal of another graph's tag
-    /// everywhere one is taken, and no state shared between graphs.
+    /// Scope tags belong to their graph: unique names, the reserved root tag, refusal of another graph's tag everywhere
+    /// one is taken, and no state shared between graphs.
     /// </summary>
     public sealed class ScopeTagTests
     {
@@ -61,7 +61,7 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Fact.Of("a"));
             }));
 
-            // R3: the tag of a split's cases, and of a host-driven case.
+            // The tag of a split's cases, and of a host-driven case.
             Assert.Throws<ArgumentException>(() => t.Graph.DefineSplit("foreign cases", s => { }, foreign));
             var parent = t.Root.CreateChild();
             using (var cases = parent.OpenCases())
@@ -94,8 +94,8 @@ namespace Eggnog.Tests.Scopes
             Assert.True(Ask(d));
             Assert.True(Ask(c));
 
-            // Every scenario's container compiles and every scenario query passes, in both orders: A's schemas all freeze
-            // before B's theory is defined, and E's theory is defined before F's schemas freeze.
+            // Every scenario's container compiles and every scenario query passes, in both orders: A's schemas all
+            // freeze before B's theory is defined, and E's theory is defined before F's schemas freeze.
             var reference = Reference();
             var theoryA = new CosmosTheory(new EGraph());
             var schemasA = ScopedScenarioCases.CompileAll(theoryA);
@@ -191,8 +191,8 @@ namespace Eggnog.Tests.Scopes
         static bool CompileAndAsk() => Ask(Compile());
 
         /// <summary>
-        /// Every scenario's answers in a graph of its own, which no other graph touches: no case fails, and one line per
-        /// sweep query.
+        /// Every scenario's answers in a graph of its own, which no other graph touches: no case fails, and one line
+        /// per sweep query.
         /// </summary>
         static List<string> Reference()
         {
@@ -200,6 +200,29 @@ namespace Eggnog.Tests.Scopes
             var lines = ScopedScenarioCases.AskAll(c, ScopedScenarioCases.CompileAll(c));
             Assert.DoesNotContain(lines, line => line.StartsWith("failed: ", StringComparison.Ordinal));
             return lines;
+        }
+
+        /// <summary>
+        /// Another graph's tag passed to <c>Fact.In</c> is an <see cref="ArgumentException"/> at that call, inside the
+        /// definition of a rule or a query.
+        /// </summary>
+        [Fact]
+        public void FactInWithAnotherGraphsTagIsAnArgumentException()
+        {
+            var t = new ScopeTheory();
+            var foreign = new EGraph().DefineScopeTag("outer");
+
+            Assert.Throws<ArgumentException>(() => t.Rules.DefineRule("foreign tag", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x), Fact.In(foreign, x.Is("a")));
+                r.Then(t.Seen.Of(x));
+            }));
+            Assert.Throws<ArgumentException>(() => t.Graph.DefineQuery("foreign tag", q =>
+            {
+                var x = q.Var<string>("x");
+                q.When(t.Fact.Of(x), Fact.In(foreign, x.Is("a")));
+            }));
         }
 
     }

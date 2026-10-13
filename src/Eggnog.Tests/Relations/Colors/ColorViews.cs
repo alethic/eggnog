@@ -7,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Renders the views the rule differentials compare (colored-contexts spec §17 M10.3) as sorted text, one line per
-    /// row, and compares two renderings: family A cell for cell (canonical ids as numbers), family B with every id
-    /// replaced by its class's <see cref="TermNamer"/> name.
+    /// Renders the views the rule differentials compare as sorted text, one line per row, and compares two renderings:
+    /// family A cell for cell (canonical ids as numbers), family B with every id replaced by its class's
+    /// <see cref="TermNamer"/> name.
     /// </summary>
     static class ColorViews
     {
@@ -48,12 +48,12 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Renders a reference view.
         /// </summary>
-        public static List<string> Reference(ColorSchema schema, SpikeReferenceView view, bool byNames) => Render(schema, t => view.Rows(schema.Tables[t]), byNames);
+        public static List<string> Reference(ColorSchema schema, ReferenceContextView view, bool byNames) => Render(schema, t => view.Rows(schema.Tables[t]), byNames);
 
         /// <summary>
         /// Renders one row: <c>table(cells)</c>, a function's output after <c>=</c>.
         /// </summary>
-        public static string Line(SpikeTable table, ulong[] row, Dictionary<ulong, string>? names)
+        public static string Line(LogicalTable table, ulong[] row, Dictionary<ulong, string>? names)
         {
             var builder = new StringBuilder(table.Name).Append('(');
             for (var c = 0; c < table.KeyCount; c++)
@@ -72,8 +72,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Throws with the rows each side lacks unless <paramref name="expected"/> and <paramref name="actual"/> are equal
-        /// as multisets.
+        /// Throws with the rows each side lacks unless <paramref name="expected"/> and <paramref name="actual"/> are
+        /// equal as multisets.
         /// </summary>
         /// <param name="expected">The oracle's rendering.</param>
         /// <param name="actual">The engine's rendering.</param>
@@ -95,7 +95,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Renders a cell: an id by name or number, a value by number.
         /// </summary>
-        static string Cell(SpikeTable table, ulong[] row, int column, Dictionary<ulong, string>? names)
+        static string Cell(LogicalTable table, ulong[] row, int column, Dictionary<ulong, string>? names)
         {
             var cell = row[column];
             if (table.IsId[column] && names is not null)
@@ -105,7 +105,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Gets the lines of <paramref name="a"/> not matched by a line of <paramref name="b"/>, multiplicities counted.
+        /// Gets the lines of <paramref name="a"/> not matched by a line of <paramref name="b"/>, multiplicities
+        /// counted.
         /// </summary>
         static List<string> Subtract(List<string> a, List<string> b)
         {

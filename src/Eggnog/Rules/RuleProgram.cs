@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The engine-independent normal form of a rule (§6.3): its registers, atoms, body steps and head operations, and its
-    /// class constants. Immutable once built.
+    /// The engine-independent normal form of a rule: its registers, atoms, body steps and head operations, and its class
+    /// constants. Immutable once built.
     /// </summary>
     internal sealed class RuleProgram
     {
@@ -20,7 +20,8 @@ namespace Eggnog
         /// <param name="head">The head operations, in builder-call order.</param>
         /// <param name="writtenIdConstants">The class constants' cells as written, by <see cref="OperandKind.IdConstant"/>
         /// index.</param>
-        /// <param name="idConstantOrigins">The class constants' origins (D39), same indexing.</param>
+        /// <param name="idConstantOrigins">The class constants' origins (the scopes that returned them), same
+        /// indexing.</param>
         /// <param name="namedRegisters">The registers of the declared body variables, then of the <c>Make</c> variables;
         /// -1 for a variable bound to a constant or unused.</param>
         /// <param name="writesAnalysis">Whether the head writes an analysis table.</param>
@@ -71,7 +72,7 @@ namespace Eggnog
         public uint[] WrittenIdConstants { get; }
 
         /// <summary>
-        /// Gets the class constants' origins (D39), same indexing.
+        /// Gets the class constants' origins (the scopes that returned them), same indexing.
         /// </summary>
         public ScopeOrigin[] IdConstantOrigins { get; }
 
@@ -83,12 +84,13 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the distinct tags the scoped atoms read, in first-use order: the tags whose mirrors are synced before the
-        /// program runs (D48) and that must resolve from the running scope.
+        /// program runs and that must resolve from the running scope.
         /// </summary>
         public ScopeTag[] ReadScopes { get; }
 
         /// <summary>
-        /// Gets whether the head writes an analysis table (invariant A).
+        /// Gets whether the head writes an analysis table; such a program reads no fact table and no scoped atom, so
+        /// analyses depend only on terms.
         /// </summary>
         public bool WritesAnalysis { get; }
 

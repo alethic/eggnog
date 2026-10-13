@@ -6,7 +6,8 @@ namespace Eggnog.Tests.Support
     /// <summary>
     /// A graph with a frozen root and a writable child of it (<see cref="Parent"/>), a constructor, a relation, and a
     /// function whose lattice (max, named <c>throwing max</c>) throws <see cref="InvalidOperationException"/>
-    /// ("merge refused") once <see cref="Arm"/> is called: for the catch-up failures of N113.
+    /// ("merge refused") once <see cref="Arm"/> is called: for the tests of a merge that throws in the catch-up a call
+    /// makes first.
     /// </summary>
     public sealed class ThrowingLatticeWorld
     {
@@ -16,7 +17,8 @@ namespace Eggnog.Tests.Support
         /// <summary>
         /// Defines the graph, freezes its root and creates <see cref="Parent"/>.
         /// </summary>
-        /// <param name="refuses">Which merges (old value, new value) throw once armed; <c>null</c> for every one.</param>
+        /// <param name="refuses">Which merges (old value, new value) throw once armed; <c>null</c> for every
+        /// one.</param>
         public ThrowingLatticeWorld(Func<long, long, bool>? refuses = null)
         {
             Graph = new EGraph();

@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// The tables an <see cref="ExecutionState"/> can stage writes into, by <see cref="TableId"/>: the part of egglog's
     /// <c>DbView</c> (<c>table_info</c> plus <c>notification_list</c>, core-relations/src/free_join/mod.rs) that the
-    /// table layer needs. The database milestone builds on it.
+    /// table layer needs. <see cref="Database"/> builds on it.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -21,7 +21,7 @@ namespace Eggnog.Relations
     /// Staging resolves tables through <see cref="GetForStaging"/>: the catalog's own table, or else what the
     /// <see cref="Resolver"/> supplies. A child context's catalog has a resolver that supplies the context's union-find
     /// and lazily creates the context's layer of a table on its first write, which it then publishes here
-    /// (<see cref="Publish"/>; colored-contexts spec §6.2, X37); a root or bare catalog has none.
+    /// (<see cref="Publish"/>); a root or bare catalog has none.
     /// </para>
     /// <para>
     /// Reads (<see cref="this[TableId]"/>, <see cref="TryGetTable"/>, <see cref="GetForStaging"/>) are safe from many
@@ -50,7 +50,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Initializes an empty catalog whose notification flags are allocated on the first staged write when
-        /// <paramref name="lazyNotifications"/> is set: a child context's (colored-contexts spec §14.2).
+        /// <paramref name="lazyNotifications"/> is set: a child context's.
         /// </summary>
         /// <param name="lazyNotifications">Whether the notification list allocates its flags on first use.</param>
         public TableCatalog(bool lazyNotifications)
@@ -65,7 +65,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the function that supplies a table the catalog does not hold when a write is staged into it, or
-        /// <c>null</c> (a root or bare catalog). Set by a child context's database (§6.2).
+        /// <c>null</c> (a root or bare catalog). Set by a child context's database.
         /// </summary>
         public Func<TableId, Table>? Resolver { get; init; }
 
@@ -104,9 +104,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Adds <paramref name="table"/> at <paramref name="id"/> copy-on-write (colored-contexts spec §6.2, X37): clones
-        /// the map, inserts, and publishes the clone with a volatile write, so readers on other threads see the old map or
-        /// the new one, never a torn one. The caller serializes publications (a child context's layer lock). O(tables).
+        /// Adds <paramref name="table"/> at <paramref name="id"/> copy-on-write: clones the map, inserts, and publishes
+        /// the clone with a volatile write, so readers on other threads see the old map or the new one, never a torn
+        /// one. The caller serializes publications (a child context's layer lock). O(tables).
         /// </summary>
         /// <param name="id">The table id.</param>
         /// <param name="table">The table.</param>

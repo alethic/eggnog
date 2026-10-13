@@ -33,7 +33,7 @@ namespace Eggnog
         Filter,
 
         /// <summary>
-        /// <see cref="Fact.In"/>: facts whose table applications read a tagged scope (R2).
+        /// <see cref="Fact.In"/>: facts whose table applications read a tagged scope.
         /// </summary>
         Scoped,
 

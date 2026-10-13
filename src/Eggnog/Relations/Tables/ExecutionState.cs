@@ -5,11 +5,12 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The context that merge functions, rebuilds and (later) rule actions run in: egglog's <c>ExecutionState</c>
+    /// The context that merge functions, rebuilds and rule actions run in: egglog's <c>ExecutionState</c>
     /// (core-relations/src/action/mod.rs:360-596). This part holds what the table layer needs: staging writes into
     /// other tables through a <see cref="TableCatalog"/>, the <see cref="Changed"/> flag, a captured
-    /// <see cref="Timestamp"/>, and the stop and failure signals shared by all clones. Later milestones extend the
-    /// class in further partial files (predicted values, counters, external functions, bindings).
+    /// <see cref="Timestamp"/>, and the stop and failure signals shared by all clones. Further partial files add
+    /// the database view and its counters, predicted values, the action instructions (bindings and external
+    /// functions), base values, containers and the context-layer state.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -59,9 +60,8 @@ namespace Eggnog.Relations
 
             Timestamp = parent.Timestamp;
 
-            // Colored contexts (colored-contexts spec §6.5): the clone reads and guards as its parent does, and never falls
-            // back to finding its view through the catalog (declared in Actions/ExecutionState.Database.cs and
-            // Layers/ExecutionState.Layers.cs).
+            // Colored contexts: the clone reads and guards as its parent does, and never falls back to finding its view
+            // through the catalog (declared in Actions/ExecutionState.Database.cs and Layers/ExecutionState.Layers.cs).
             view = parent.view;
             viewResolved = parent.viewResolved;
             layers = parent.layers;
@@ -135,9 +135,9 @@ namespace Eggnog.Relations
         /// <c>stage_remove</c>.
         /// </summary>
         /// <remarks>
-        /// In a store the removal first passes the state's retraction guard (colored-contexts spec §6.7), decided when the
-        /// removal is staged: at a store's root without live descendants, one volatile read of the root's gate; in a bare
-        /// database, one null test.
+        /// In a store the removal first passes the state's retraction guard (<see cref="RetractionGuard"/>), which
+        /// refuses the retractions the context may not make, decided when the removal is staged: at a store's root
+        /// without live descendants, one volatile read of the root's gate; in a bare database, one null test.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key; copied.</param>
@@ -158,7 +158,7 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="source">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>
-        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal (§6.7).</exception>
+        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal.</exception>
         public void StageRemove(TableId table, uint[] source, int offset)
         {
             guard?.CheckRemove(table);
@@ -215,7 +215,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Creates and records this state's buffer for <paramref name="table"/>, resolving the table through
         /// <see cref="TableCatalog.GetForStaging"/>: the catalog's table, or in a child context the layer its resolver
-        /// supplies (colored-contexts spec §6.2). One volatile load more than a plain lookup, per (state, table).
+        /// supplies. One volatile load more than a plain lookup, per (state, table).
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
         MutationBuffer CreateBuffer(TableId table)

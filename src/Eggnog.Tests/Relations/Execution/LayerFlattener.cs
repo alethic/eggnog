@@ -5,10 +5,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// What a layered view shows, as one flat table (colored-contexts spec §17 M10.2, T8): the rows of every present layer
-    /// that are live and that the view does not hide. The oracle side of the layered executor's property tests: a join of
-    /// the visible rows (a nested loop, or the flat executor over <see cref="Flatten"/>'s database) must give the layered
-    /// executor's distinct bindings (I27).
+    /// What a layered view shows, as one flat table: the rows of every present layer that are live and that the view
+    /// does not hide. The oracle side of the layered executor's property tests: the layered executor must emit the same
+    /// distinct bindings as a join of the visible rows (a nested loop, or the flat executor over
+    /// <see cref="Flatten"/>'s database).
     /// </summary>
     static class LayerFlattener
     {
@@ -35,9 +35,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Builds a bare database holding, at each id of <paramref name="tables"/>, a table of the same shape with exactly
-        /// the rows <paramref name="views"/> shows of it; a view must show at most one row per key (S6), as a context's
-        /// does. Rows are merged in timestamp order, one merge per stamp, so a sorted column stays sorted.
+        /// Builds a bare database holding, at each id of <paramref name="tables"/>, a table of the same shape with
+        /// exactly the rows <paramref name="views"/> shows of it; a view must show at most one row per key, as a
+        /// context's does. Rows are merged in timestamp order, one merge per stamp, so a sorted column stays sorted.
         /// </summary>
         /// <param name="tables">The tables, in id order from 0, each with its shape: key count, arity and sort column.</param>
         /// <param name="views">The views.</param>

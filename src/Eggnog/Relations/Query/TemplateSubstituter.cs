@@ -4,14 +4,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Rewrites a plan template's Id constants into their canonical form in a context (colored-contexts spec §9.8, X19):
-    /// every <see cref="ConstraintKind.EqConst"/> that a <see cref="ConstantSubstitution"/> query entry names (atom,
-    /// column and written constant), wherever the planner placed it: the atoms, the headers, the existence checks, and
-    /// the scans and probes of every stage and block.
+    /// Rewrites a plan template's Id constants into their canonical form in a context: every
+    /// <see cref="ConstraintKind.EqConst"/> that a <see cref="ConstantSubstitution"/> query entry names (atom, column and
+    /// written constant), wherever the planner placed it: the atoms, the headers, the existence checks, and the scans and
+    /// probes of every stage and block.
     /// </summary>
     /// <remarks>
     /// The stage order and everything else the planner chose stay as planned (on the written constants' statistics);
-    /// only the compared values change, so the plan runs the canonical constants (I30). Unchanged sub-objects (atoms,
+    /// only the compared values change, so the plan runs exactly the canonical constants. Unchanged sub-objects (atoms,
     /// specs, stages, stage arrays) are shared with the written template; a changed stage array is new, so it gets its
     /// own <see cref="PreparedBlock"/>. Cold path: once per (rule, distinct K), cached in a <see cref="ConstantVariant"/>.
     /// </remarks>

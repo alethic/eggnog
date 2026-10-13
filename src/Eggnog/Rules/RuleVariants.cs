@@ -4,18 +4,18 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The engine variants of one compiled rule, query or mirror copy rule (D36): the semi-naive variant (or the naive one
-    /// for a naive program) and, on demand, the naive twin of a semi-naive program, which differential tests use.
+    /// The engine variants of one compiled rule, query or mirror copy rule: the semi-naive variant (or the naive one for a
+    /// naive program) and, on demand, the naive twin of a semi-naive program, which differential tests use.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Each variant is lowered once, with the class constants as written: the engine runs every Id constant in its
-    /// canonical form in the running context and gates watermarks on them (X19, I30), so a variant never changes once
-    /// lowered (§6.4.4). R1's re-lowering under <c>/k{generation}</c> (§6.4.5) is gone with the bare root.
+    /// canonical form in the running context, and uses a watermark only with the constants it was stored with, so a
+    /// variant never changes once lowered.
     /// </para>
     /// <para>
     /// Thread-safe: a lock-free read of the cached variant, then a double check under a per-rule lock. Lowering registers
-    /// engine definitions, which the bridge publishes copy-on-write (X16), so no engine lock is needed.
+    /// engine definitions, which the bridge publishes copy-on-write, so no engine lock is needed.
     /// </para>
     /// </remarks>
     internal sealed class RuleVariants
@@ -34,7 +34,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="program">The program.</param>
         /// <param name="rule">The rule; <c>null</c> for a query, a split matcher or a copy rule.</param>
-        /// <param name="description">The base description (§6.4.3).</param>
+        /// <param name="description">The base description, unique in the graph; the naive twin of a semi-naive program
+        /// appends <c>/naive</c>.</param>
         /// <param name="naive">Whether the program is naive: its default variant is the naive one.</param>
         public RuleVariants(RuleProgram program, Rule? rule, string description, bool naive)
         {
@@ -65,8 +66,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the default variant (semi-naive, or naive for a naive program), for E10's plan list; <c>null</c> before it
-        /// exists or once the variants are freed.
+        /// Gets the default variant (semi-naive, or naive for a naive program), for the list of rules a freeze plans;
+        /// <c>null</c> before it exists or once the variants are freed.
         /// </summary>
         public LoweredRule? Default => naive ? naiveVariant : semiNaiveVariant;
 
@@ -108,7 +109,7 @@ namespace Eggnog
 
         /// <summary>
         /// Frees every variant: <c>FreeRule</c>, then <c>FreeExternalFunction</c> of its owned call sites. The caller
-        /// guarantees that no engine call is using them (§6.4.6).
+        /// guarantees that no engine call is using them.
         /// </summary>
         /// <param name="graph">The graph.</param>
         public void Free(EGraph graph)

@@ -7,9 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Id constants of rules in contexts (colored-contexts spec §9.8, §10.2, X19, I30, §17 M10.3): every store-backed
-    /// context runs a rule's id constants (query, action and primitive operands) in their canonical form in that context,
-    /// and a watermark set under other canonical forms is not used.
+    /// Id constants of rules in contexts: every store-backed context, the root included, runs a rule's id constants
+    /// (query, action and primitive operands) in their canonical form in that context, and a watermark set under other
+    /// canonical forms is not used, so a constant that lost a union forces a full run.
     /// </summary>
     public class IdConstantContextTests
     {
@@ -53,8 +53,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <c>mark(x) → path(x, #c)</c> and <c>mark(x) → union(x, #c)</c>: in a child where <c>c</c> lost to <c>b</c>, the
-        /// action constants are written as <c>b</c>; the root writes them as <c>c</c>.
+        /// <c>mark(x) → path(x, #c)</c> and <c>mark(x) → union(x, #c)</c>: in a child where <c>c</c> lost to <c>b</c>,
+        /// the action constants are written as <c>b</c>; the root writes them as <c>c</c>.
         /// </summary>
         [Fact]
         public void ActionConstantsAreWrittenCanonicallyInAChild()
@@ -97,10 +97,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <c>edge(x, y), y != #c → mark(x)</c>, the constant an operand of a primitive (flagged as an id, §9.8): over the
-        /// frozen root's <c>edge(a, b)</c>, a child in which <c>b</c> and <c>c</c> are one class filters the match out,
-        /// whichever of them is canonical, while a sibling derives <c>mark(a)</c>; a root that unions them filters it out
-        /// too (X19 holds at the root).
+        /// <c>edge(x, y), y != #c → mark(x)</c>, the constant an operand of a primitive (flagged as an id, since a
+        /// primitive's operand has no table column to say so): over the frozen root's <c>edge(a, b)</c>, a child in
+        /// which <c>b</c> and <c>c</c> are one class filters the match out, whichever of them is canonical, while a
+        /// sibling derives <c>mark(a)</c>; a root that unions them filters it out too (the root canonicalizes its
+        /// constants as a child does).
         /// </summary>
         [Theory]
         [InlineData(false)]
@@ -148,9 +149,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A grandchild C inherits a rule's watermark from the root G through P (§10.2); when the rule's constant lost a
-        /// union in P after G ran, K differs, the seed is refused, and C's full run matches the old row of the
-        /// constant's new class (I30).
+        /// A grandchild C inherits a rule's watermark from the root G through P; when the rule's constant lost a union
+        /// in P after G ran, the canonical forms of the rule's constants differ from those G's run stored, the seed is
+        /// refused, and C's full run matches the old row of the constant's new class.
         /// </summary>
         [Fact]
         public void AnInheritedWatermarkIsRefusedWhenAConstantLostAUnionOnThePath()
@@ -178,7 +179,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(1, report.RuleSetReport.NumMatches("mark-c"));
             Assert.Equal([$"{b.Rep} {a.Rep}"], ContextGraph.Keys(child, g.Path));
 
-            // With the same K, the seed holds: a sibling of P that never unioned matches nothing new.
+            // With the same canonical constants, the seed holds: a sibling of P that never unioned matches nothing new.
             using var q = g.Root.CreateChild();
             Assert.Equal(0, q.RunRules(rule).RuleSetReport.NumMatches("mark-c"));
             child.CheckInvariants();
@@ -186,8 +187,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A rule defined after a child minted a local id, with that id as a constant: the root, which never saw the id,
-        /// matches nothing; the child matches its own row; after the child unions the local id into a root id, the
+        /// A rule defined after a child minted a local id, with that id as a constant: the root, which never saw the
+        /// id, matches nothing; the child matches its own row; after the child unions the local id into a root id, the
         /// constant runs as the root id and matches the root's row too.
         /// </summary>
         [Fact]
@@ -226,7 +227,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Siblings in which a constant lost unions to different ids each run it in their own canonical form, from one
-        /// cached plan (its constant variants, §9.8), and neither disturbs the other or the root.
+        /// cached plan (its constant variants, one per vector of canonical constants), and neither disturbs the other
+        /// or the root.
         /// </summary>
         [Fact]
         public void SiblingsRunTheirOwnCanonicalForms()
@@ -266,8 +268,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Random family A programs whose rules are rich in constants: the differential's checks, with every rule carrying
-        /// id constants from the pool, in contexts that union pool ids.
+        /// Random family A programs whose rules are rich in constants: the differential's checks, with every rule
+        /// carrying id constants from the pool, in contexts that union pool ids.
         /// </summary>
         [Fact]
         public void ConstantRichProgramsAgreeWithTheReference()

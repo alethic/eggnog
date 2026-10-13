@@ -5,7 +5,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A cached plan's template and action program with its Id constants replaced by one canonical vector K
-    /// (colored-contexts spec §9.8): what a context in which some constant has lost a union runs. Cached per K by
+    /// (<see cref="CanonicalConstants"/>): what a context in which some constant has lost a union runs. Cached per K by
     /// <see cref="CachedPlan.GetVariantFor"/>, so the rewrite happens once per distinct K, not per run.
     /// </summary>
     /// <param name="Key">K: the executed constants, query constants first.</param>

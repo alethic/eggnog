@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -375,6 +376,36 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal((int)expected[i].Physical[arity], live[i].RowId);
                 Assert.Equal(expected[i].Physical.Take(arity).ToArray(), live[i].Row);
             }
+        }
+
+        /// <summary>
+        /// Growth drops the old storage to the garbage collector instead of returning it to the shared pool, so an
+        /// in-place rewrite through a non-stale enumerator started before the growth (egglog's <c>non_stale_mut</c>
+        /// pattern) lands in the old storage, never in an array someone else rented.
+        /// </summary>
+        [Fact]
+        public void TaggedNonStaleEnumeratorWritesIntoAnArraySomeoneElseOwnsAfterGrowth()
+        {
+            var rows = new TaggedRowBuffer(1);
+            for (var i = 0; i < 256; i++)
+                rows.AddRow(i, new[] { (uint)i });
+            Assert.Equal(512, rows.Data.Length);
+
+            var e = rows.EnumerateNonStale();
+            Assert.True(e.MoveNext());
+
+            // Grows and leaves the 512-cell array to the garbage collector, not to the shared pool.
+            rows.AddRow(256, new[] { 256u });
+            var foreign = ArrayPool<uint>.Shared.Rent(512);
+            Array.Clear(foreign);
+
+            // An in-place rewrite through the enumerator (egglog's non_stale_mut pattern) lands in the old storage, so
+            // the array rented from the pool stays zero.
+            e.Current.Values[0] = 42;
+            var corrupted = foreign[0];
+            ArrayPool<uint>.Shared.Return(foreign);
+
+            Assert.Equal(0u, corrupted);
         }
 
     }

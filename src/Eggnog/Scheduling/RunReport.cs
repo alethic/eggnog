@@ -6,7 +6,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// What a run did (D41): its iterations and changes, why it ended, and each rule's statistics. Immutable.
+    /// What a run did: its iterations and changes, why it ended, and each rule's statistics. Immutable.
     /// </summary>
     public sealed class RunReport
     {
@@ -55,15 +55,15 @@ namespace Eggnog
         public int Iterations { get; }
 
         /// <summary>
-        /// Gets whether an iteration, split step or lift of the run changed the scope (the engine's change flags, §6.5.1;
-        /// for a split step, whether its lifts moved the scope's <see cref="Scope.Version"/>: cases opened and dropped
-        /// change nothing there, N106).
+        /// Gets whether an iteration, split step or lift of the run changed the scope (the engine's change flags; for a
+        /// split step, whether its lifts moved the scope's <see cref="Scope.Version"/>: cases opened and dropped change
+        /// nothing there).
         /// </summary>
         public bool Changed { get; }
 
         /// <summary>
         /// Gets whether the run completed and its last iteration or split step in the scope made no progress: the iteration
-        /// changed nothing, or the split step opened no case and its lifts changed nothing (N106).
+        /// changed nothing, or the split step opened no case and its lifts changed nothing.
         /// </summary>
         public bool Saturated { get; }
 
@@ -78,8 +78,7 @@ namespace Eggnog
         public TimeSpan Elapsed { get; }
 
         /// <summary>
-        /// Gets every rule that ran, with its statistics. Match counts are the engine's and may differ from egglog's
-        /// (decision 6).
+        /// Gets every rule that ran, with its statistics. Match counts are the engine's and may differ from egglog's.
         /// </summary>
         public IReadOnlyDictionary<Rule, RuleStatistics> Rules { get; }
 
@@ -99,33 +98,33 @@ namespace Eggnog
         public TimeSpan RebuildTime { get; }
 
         /// <summary>
-        /// Gets every step of the run, in order, when <see cref="RunOptions.RecordSteps"/> is set; otherwise empty (§6.11).
+        /// Gets every step of the run, in order, when <see cref="RunOptions.RecordSteps"/> is set; otherwise empty.
         /// </summary>
         public IReadOnlyList<RunStep> Steps { get; }
 
         /// <summary>
-        /// Gets the cases the run's split steps opened, in every scope of the run (R3).
+        /// Gets the cases the run's split steps opened, in every scope of the run.
         /// </summary>
         public int CasesOpened { get; }
 
         /// <summary>
-        /// Gets the split requests the run's split steps found and did not take (R3): over
-        /// <see cref="RunOptions.CaseLimit"/>, covered by a live split of the same rule at the same position in the scope or
-        /// an ancestor (B6; counted at each execution of the step that finds it covered), or an empty element set. Sound:
-        /// fewer facts. A split below <see cref="RunOptions.SplitDepthLimit"/> is never looked for, so it is not counted
-        /// (N107).
+        /// Gets the split requests the run's split steps found and did not take: over <see cref="RunOptions.CaseLimit"/>,
+        /// covered by a live split of the same rule at the same position in the scope or an ancestor (counted at each
+        /// execution of the step that finds it covered), or an empty element set. Sound: fewer facts. A split below
+        /// <see cref="RunOptions.SplitDepthLimit"/> is never looked for, so it is not counted.
         /// </summary>
         public int SplitsSkipped { get; }
 
         /// <summary>
-        /// Gets the lifts the run's split steps ran (R3), including those the engine's memo answered at once because
-        /// nothing they read had changed.
+        /// Gets the lifts the run's split steps ran, including those answered at once because nothing they read had
+        /// changed since the last full lift.
         /// </summary>
         public int Lifts { get; }
 
         /// <summary>
-        /// Gets the candidate rows those lifts did not examine because they stood for more than
-        /// <see cref="LiftOptions.CandidateLimit"/> parent keys (R3).
+        /// Gets the parent-level candidate rows those lifts did not examine: each case row that stood for more than
+        /// <see cref="LiftOptions.CandidateLimit"/> parent keys adds the number of keys it stood for, so this counts
+        /// candidates, not skipped case rows.
         /// </summary>
         public long LiftRowsSkipped { get; }
 

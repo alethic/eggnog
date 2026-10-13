@@ -6,23 +6,22 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The oracle of the bridge differential suite: a naive e-graph and a naive rule evaluator. The e-graph is the spike's
-    /// <c>ReferenceView</c> (src/Eggnog.Storage.Tests/Reference/ReferenceView.cs; ported for the database tests as
-    /// <see cref="ReferenceView"/>) extended to the bridge's functions: a union-find that keeps the smallest id
-    /// canonical, one dictionary of rows per function keyed by canonical keys of any length (<see cref="BridgeDiffKey"/>),
-    /// and <see cref="Close"/>, which canonicalizes every row and merges rows that meet on a key until no merge unions
-    /// anything. Merges follow the function's kind: union for id outputs (constructors, relations, whose rows have ids of
-    /// their own, and id functions), minimum or maximum for the integer lattices, and the maximum of the subsumption
-    /// flags.
+    /// The oracle of the bridge differential suite: a naive e-graph and a naive rule evaluator. The e-graph is the
+    /// database tests' <see cref="ReferenceView"/> extended to the bridge's functions: a union-find that keeps the
+    /// smallest id canonical, one dictionary of rows per function keyed by canonical keys of any length
+    /// (<see cref="BridgeDiffKey"/>), and <see cref="Close"/>, which canonicalizes every row and merges rows that meet
+    /// on a key until no merge unions anything. Merges follow the function's kind: union for id outputs (constructors,
+    /// relations, whose rows have ids of their own, and id functions), minimum or maximum for the integer lattices, and
+    /// the maximum of the subsumption flags.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Nothing here is incremental, timestamped, planned or batched, which is the point: <see cref="Step"/> re-matches
     /// every rule against the whole closed e-graph by nested loops (<see cref="Match"/>), applies every action of every
-    /// match, and closes again. That is the bridge's semantics with none of its machinery: Jacobi iterations (every rule
-    /// matches the same snapshot, lookups read the snapshot, and writes land together afterwards), a fresh id per missing
-    /// constructor or relation key, and congruence closure. The bridge is tested by agreeing with it after every seed
-    /// phase and every iteration, modulo the choice of ids (<see cref="BridgeDiffComparer"/>).
+    /// match, and closes again. That is the bridge's semantics with none of its machinery: Jacobi iterations (every
+    /// rule matches the same snapshot, lookups read the snapshot, and writes land together afterwards), a fresh id per
+    /// missing constructor or relation key, and congruence closure. The bridge is tested by agreeing with it after
+    /// every seed phase and every iteration, modulo the choice of ids (<see cref="BridgeDiffComparer"/>).
     /// </para>
     /// <para>
     /// The only coupling to the bridge is numbering: ids are minted densely from zero, one per term seed and relation
@@ -118,7 +117,8 @@ namespace Eggnog.Relations.Tests
                     case BridgeDiffSeedKind.Term:
                     case BridgeDiffSeedKind.Set when seed.IsInsertion(program.Functions):
                     {
-                        // AddTerm mints an id even for a term that exists, and the merge unions it into the term's class.
+                        // AddTerm mints an id even for a term that exists, and the merge unions it into the term's
+                        // class.
                         var id = Mint();
                         var keys = args.Take(program.Functions[seed.Function].KeyCount);
                         Write(seed.Function, keys.Append(id).ToArray(), false);
@@ -164,9 +164,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Closes the e-graph: canonicalizes every row and merges rows that meet on a key, until a pass unions nothing.
-        /// The <c>Close</c> of <see cref="ReferenceView"/>, with the bridge's merges. Without a union since the last close
-        /// the tables are closed already (<see cref="Write"/> keeps keys canonical and merges in place), and nothing is
-        /// done.
+        /// The <c>Close</c> of <see cref="ReferenceView"/>, with the bridge's merges. Without a union since the last
+        /// close the tables are closed already (<see cref="Write"/> keeps keys canonical and merges in place), and
+        /// nothing is done.
         /// </summary>
         void Close()
         {
@@ -206,10 +206,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Writes a row (keys then output) into function <paramref name="f"/>, merging it with the row the function holds
-        /// for the key. Does not close.
+        /// Writes a row (keys then output) into function <paramref name="f"/>, merging it with the row the function
+        /// holds for the key. Does not close.
         /// </summary>
-        /// <returns>Whether the write changed anything: a new key, a union, a new lattice value or a new subsumption.</returns>
+        /// <returns>Whether the write changed anything: a new key, a union, a new lattice value or a new
+        /// subsumption.</returns>
         bool Write(int f, uint[] cells, bool subsumed)
         {
             var function = program.Functions[f];

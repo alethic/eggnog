@@ -8,7 +8,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The oracle of <c>ScopeDifferentialTests</c> (§8.2): a value-only <see cref="ScopedProgram"/> translated into the
+    /// The oracle of <c>ScopeDifferentialTests</c>: a value-only <see cref="ScopedProgram"/> translated into the
     /// literal encoding and run at one root. Every table gains a leading context key and every scope becomes a context
     /// constant; inheritance rules <c>parent(k, c), T(c, x…) → T(k, x…)</c> copy a parent's rows into each child; and
     /// every rule active in a scope is instantiated for it, its scoped atoms resolved statically to the tagged scope's
@@ -130,8 +130,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Defines, for a new scope, an instance of every rule active in it: the global rules, then the local rules of the
-        /// scope and its ancestors.
+        /// Defines, for a new scope, an instance of every rule active in it: the global rules, then the local rules of
+        /// the scope and its ancestors.
         /// </summary>
         void Instantiate(int scope)
         {

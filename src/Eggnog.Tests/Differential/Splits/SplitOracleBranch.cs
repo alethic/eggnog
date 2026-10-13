@@ -5,7 +5,7 @@ namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// One discriminated branch of a split-oracle schema (§8.2): under <c>discriminator = value</c>, its governed paths are
+    /// One discriminated branch of a split-oracle schema: under <c>discriminator = value</c>, its governed paths are
     /// present, use stored forms, or hold values from a domain.
     /// </summary>
     /// <param name="Discriminator">The discriminator's path.</param>

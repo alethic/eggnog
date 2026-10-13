@@ -7,41 +7,42 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// egglog's push/pop programs, translated by hand (colored-contexts spec §17 M10.3; the M10 gate of map §6): a push is
-    /// <see cref="EGraphContext.CreateChild"/> and a pop <see cref="EGraphContext.Dispose"/> (see
-    /// <see cref="EggPushPopProgram"/> for the command mapping). Every rule of these programs may inherit watermarks, so
-    /// egglog's push, which copies <c>last_run_at</c>, coincides with inheritance; each test asserts it.
+    /// egglog's push/pop programs, translated by hand: a push is <see cref="EGraphContext.CreateChild"/> and a pop
+    /// <see cref="EGraphContext.Dispose"/> (see <see cref="EggPushPopProgram"/> for the command mapping). Every rule of
+    /// these programs may inherit watermarks, so egglog's push, which copies <c>last_run_at</c>, coincides with
+    /// inheritance; each test asserts it.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The expected values come from egglog itself: the <c>egglog</c> CLI (egglog 2.0.0) built from a copy of
-    /// <c>ext/egglog</c> with <c>cargo +1.91.0 build --release --bin egglog</c>. Each test names the file and the command.
-    /// The instrumented copies add <c>(print-size)</c> around pushes and pops, and iteration counts are the
-    /// <c>Finished ruleset</c> lines that <c>RUST_LOG=debug</c> prints once per iteration. Ids are not compared (a child
-    /// mints from its own blocks, egglog from one counter), only sizes, iteration counts and checks.
+    /// <c>ext/egglog</c> with <c>cargo +1.91.0 build --release --bin egglog</c>. Each test names the file and the
+    /// command. The instrumented copies add <c>(print-size)</c> around pushes and pops, and iteration counts are the
+    /// <c>Finished ruleset</c> lines that <c>RUST_LOG=debug</c> prints once per iteration. Ids are not compared (a
+    /// child mints from its own blocks, egglog from one counter), only sizes, iteration counts and checks.
     /// </para>
     /// <para>
     /// The other push/pop programs of <c>ext/egglog/tests</c> need features the bridge lacks, and are not translated:
     /// <c>container-rebuild.egg</c>, <c>container-fail.egg</c> and <c>vec.egg</c> intern or rebuild <c>Vec</c>
-    /// containers of e-classes inside a push (eq-sort containers in children are refused, decision 9 and G-a/G-b, §7.4),
-    /// and <c>vec.egg</c> also needs <c>UnstableFn</c>; <c>python_array_optimize.egg</c> and
-    /// <c>stresstest_large_expr.egg</c> need <c>UnstableFn</c>, <c>String</c> and <c>Vec</c> sorts and rulesets of the
-    /// frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue #113) only type-check <c>Map</c> sorts over
-    /// <c>String</c>, which the bridge does not have.
+    /// containers of e-classes inside a push (children refuse eq-sort containers: they cannot intern one, and a child
+    /// union that displaces an element of one is refused), and <c>vec.egg</c> also needs <c>UnstableFn</c>;
+    /// <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need <c>UnstableFn</c>, <c>String</c> and
+    /// <c>Vec</c> sorts and rulesets of the frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue
+    /// #113) only type-check <c>Map</c> sorts over <c>String</c>, which the bridge does not have.
     /// </para>
     /// </remarks>
     public class EggPushPopTests
     {
 
         /// <summary>
-        /// <c>ext/egglog/tests/calc.egg</c>: group axioms with a generator of order four, four push/pop blocks each running
-        /// until a goal equality holds.
+        /// <c>ext/egglog/tests/calc.egg</c>: group axioms with a generator of order four, four push/pop blocks each
+        /// running until a goal equality holds.
         /// </summary>
         /// <remarks>
         /// Expected values: <c>calc-observed.egg</c> (<c>calc.egg</c> with <c>(print-size)</c> before every
-        /// <c>(push)</c> and before and after every <c>(pop)</c>), run as <c>RUST_LOG=debug egglog calc-observed.egg</c>.
-        /// Blocks: 0, 1, 2 and 1 iterations; <c>g*</c> sizes 3, 11, 39 and 12 and <c>inv</c> sizes 0, 0, 2 and 1 in the
-        /// push; <c>g* 3</c>, <c>inv 0</c> and one row in each nullary constructor at the root before and after each.
+        /// <c>(push)</c> and before and after every <c>(pop)</c>), run as
+        /// <c>RUST_LOG=debug egglog calc-observed.egg</c>. Blocks: 0, 1, 2 and 1 iterations; <c>g*</c> sizes 3, 11, 39
+        /// and 12 and <c>inv</c> sizes 0, 0, 2 and 1 in the push; <c>g* 3</c>, <c>inv 0</c> and one row in each nullary
+        /// constructor at the root before and after each.
         /// </remarks>
         [Fact]
         public void Calc()
@@ -185,18 +186,18 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <c>ext/egglog/tests/tricky-type-checking.egg</c>, blocks one to six (each a push/pop): rules over literals and
-        /// primitives without atoms, and issue #80's category typing with conditional birewrites.
+        /// <c>ext/egglog/tests/tricky-type-checking.egg</c>, blocks one to six (each a push/pop): rules over literals
+        /// and primitives without atoms, and issue #80's category typing with conditional birewrites.
         /// </summary>
         /// <remarks>
-        /// Expected values: <c>tricky-observed.egg</c> (the file with <c>(print-size)</c> before every <c>(pop)</c>), run
-        /// as <c>RUST_LOG=debug egglog tricky-observed.egg</c>, and <c>egglog tricky-type-checking.egg</c> for the
+        /// Expected values: <c>tricky-observed.egg</c> (the file with <c>(print-size)</c> before every <c>(pop)</c>),
+        /// run as <c>RUST_LOG=debug egglog tricky-observed.egg</c>, and <c>egglog tricky-type-checking.egg</c> for the
         /// <c>print-function</c> output. Blocks one to five: one iteration each, which changes nothing in blocks one to
         /// three and adds one row in four and five; <c>f</c> ends empty, <c>R</c> with one row. Block six: five
         /// iterations (the fifth changes nothing); sizes <c>AConst</c>, <c>BConst</c>, <c>Ob</c>, <c>fConst</c>,
-        /// <c>gConst</c> 1, <c>Hom</c> 4, <c>compose</c> 9, <c>id</c> 2, <c>type</c> 7; <c>type</c> maps <c>(AConst)</c> and
-        /// <c>(BConst)</c> to <c>(Ob)</c>, <c>(compose (gConst) (fConst))</c> to <c>(Hom (BConst) (BConst))</c> and
-        /// <c>(id X)</c> to <c>(Hom X X)</c>.
+        /// <c>gConst</c> 1, <c>Hom</c> 4, <c>compose</c> 9, <c>id</c> 2, <c>type</c> 7; <c>type</c> maps
+        /// <c>(AConst)</c> and <c>(BConst)</c> to <c>(Ob)</c>, <c>(compose (gConst) (fConst))</c> to
+        /// <c>(Hom (BConst) (BConst))</c> and <c>(id X)</c> to <c>(Hom X X)</c>.
         /// </remarks>
         [Fact]
         public void TrickyTypeChecking()
@@ -306,7 +307,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The issue #80 block of <c>tricky-type-checking.egg</c>, run in the current (pushed) context; returns its rules.
+        /// The issue #80 block of <c>tricky-type-checking.egg</c>, run in the current (pushed) context; returns its
+        /// rules.
         /// </summary>
         static EGraphRuleId[] Issue80(EggPushPopProgram p)
         {
@@ -541,9 +543,9 @@ namespace Eggnog.Relations.Tests
         /// (run 1)
         /// (print-size)
         /// </code>
-        /// Runs: 1 iteration (changed), 1 (unchanged), 3 (the third unchanged), 1 (unchanged), 1 (changed). Sizes
-        /// (Add, Mul, Num): 3 3 3; 2 2 3; 6 5 4; 2 2 3 after the inner pop and after its run; 3 3 3 after the outer pop;
-        /// 4 3 3 at the end.
+        /// Runs: 1 iteration (changed), 1 (unchanged), 3 (the third unchanged), 1 (unchanged), 1 (changed).
+        /// Sizes (Add, Mul, Num): 3 3 3; 2 2 3; 6 5 4; 2 2 3 after the inner pop and after its run; 3 3 3 after the
+        /// outer pop; 4 3 3 at the end.
         /// </remarks>
         [Fact]
         public void PushInheritsProgress()

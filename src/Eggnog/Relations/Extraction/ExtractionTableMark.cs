@@ -3,7 +3,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// What an <see cref="ExtractionWatch"/> records of one table at one level of a context chain: enough to tell, without
-    /// the clock, whether the rows that level contributes to the table changed (colored-contexts spec §10.10).
+    /// the clock, whether the rows that level contributes to the table changed.
     /// </summary>
     /// <remarks>
     /// <para>

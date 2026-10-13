@@ -7,17 +7,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Split-driver behaviours (colored-contexts spec §11.3, rule-layer E8) that <see cref="SplitDriverTests"/> leaves
-    /// unchecked: the phase B lift, the end of a step whose lift contradicts the scope, the disposal of cases a lift finds
-    /// vacuous, and the record a failed <c>Assume</c> leaves for <see cref="SplitDriver.DisposeRecords"/>.
+    /// Split-driver behaviours that <see cref="SplitDriverTests"/> leaves unchecked: the phase B lift, the end of a
+    /// step whose lift contradicts the scope, the disposal of cases a lift finds vacuous, and the record a failed
+    /// <c>Assume</c> leaves for <see cref="SplitDriver.DisposeRecords"/>.
     /// </summary>
     public class SplitDriverOracleTests
     {
 
         /// <summary>
-        /// Phase B (§11.3 step 7): every top case gains <c>mark(d)</c> only from its own nested split of d (both nested
-        /// cases assert it, and phase A of the nested step lifts it into the top case). The top lift of phase A runs
-        /// before that, so only the lift after deepening brings <c>mark(d)</c> into the root.
+        /// Phase B, the lift after deepening: every top case gains <c>mark(d)</c> only from its own nested split of d
+        /// (both nested cases assert it, and phase A of the nested step lifts it into the top case). The top lift of
+        /// phase A runs before that, so only the lift after deepening brings <c>mark(d)</c> into the root.
         /// </summary>
         [Fact]
         public void PhaseBLiftsWhatNestedSplitsBroughtUp()
@@ -40,7 +40,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A lift that contradicts the scope ends the step: the scope (a case) stops, and the step's later record is
-        /// neither run nor lifted into the stopped scope; its cases are left for <see cref="SplitDriver.DisposeRecords"/>.
+        /// neither run nor lifted into the stopped scope; its cases are left for
+        /// <see cref="SplitDriver.DisposeRecords"/>.
         /// </summary>
         [Fact]
         public void AContradictingLiftEndsTheStep()
@@ -65,8 +66,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A case that becomes contradictory while its schedule runs in phase A is left out of the lift (L4) and disposed
-        /// after it; the live case's facts are lifted.
+        /// A case that becomes contradictory while its schedule runs in phase A stops, is left out of the lift and is
+        /// disposed after it; the live case's facts are lifted.
         /// </summary>
         [Fact]
         public void ACaseThatTurnsVacuousInItsRunIsDisposedAfterTheLift()
@@ -99,9 +100,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A source whose <c>Assume</c> throws: the exception propagates, and the split's record is already registered, so
-        /// <see cref="SplitDriver.DisposeRecords"/> disposes the cases opened before the failure (E8: exceptions propagate
-        /// and the records stay for <c>DisposeRecords</c>).
+        /// A source whose <c>Assume</c> throws: the exception propagates, and the split's record is already registered,
+        /// so <see cref="SplitDriver.DisposeRecords"/> disposes the cases opened before the failure. The driver lets
+        /// exceptions from its sources and schedule propagate and leaves the records it opened for
+        /// <c>DisposeRecords</c>, and the scope is not faulted.
         /// </summary>
         [Fact]
         public void AnAssumeFailureLeavesTheRecordForDisposal()

@@ -11,8 +11,10 @@ namespace Eggnog.Tests.Concurrency
 {
 
     /// <summary>
-    /// Threads at the root (D6, D47, §6.12): one thread domain, definitions from other threads, and user delegates that
-    /// call back into a graph.
+    /// Threads at the root: the root is one thread domain, so a call from a second thread while another holds it fails
+    /// fast; a rule defined from another thread during a run joins the run's next iteration, while a table definition
+    /// throws as long as another thread uses the unfrozen root; and user delegates the engine invokes (primitives,
+    /// lattice merges, filters and cost functions, on the calling thread or on pool threads) may not call into a graph.
     /// </summary>
     [Collection(Relations.Tests.ThreadPoolProbeCollection.Name)]
     public sealed class RootThreadingTests
@@ -188,8 +190,8 @@ namespace Eggnog.Tests.Concurrency
                         threads[Environment.CurrentManagedThreadId] = Thread.CurrentThread.IsThreadPoolThread;
                         refusals.Add(Assert.Throws<InvalidOperationException>(() => t.Root.Check(t.Num.Of(1L))));
 
-                        // Hold this rule until a second thread runs one. Under load the pool may otherwise run every rule
-                        // inline on the calling thread, and the test would not observe a pool thread at all.
+                        // Hold this rule until a second thread runs one. Under load the pool may otherwise run every
+                        // rule inline on the calling thread, and the test would not observe a pool thread at all.
                         SpinWait.SpinUntil(() => threads.Count >= 2, TimeSpan.FromSeconds(10));
                         return true;
                     });
@@ -211,7 +213,8 @@ namespace Eggnog.Tests.Concurrency
         public void LatticeMergesOnPoolThreadsAreRefusedToo()
         {
             // More than ParallelHeuristics.TableOpThreshold (20,000) writes into one lattice table in one merge: at a
-            // degree of parallelism above 1 the table merges them on parallel tasks, so the lattice runs on pool threads.
+            // degree of parallelism above 1 the table merges them on parallel tasks, so the lattice runs on pool
+            // threads.
             const int count = 25_000;
             var t = new NodeTheory(new EGraphOptions { DegreeOfParallelism = 4 });
             var refusals = new ConcurrentDictionary<int, Exception?>();

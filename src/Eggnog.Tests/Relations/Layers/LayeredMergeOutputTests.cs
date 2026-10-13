@@ -8,12 +8,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The layered merge stores the merge function's output (colored-contexts spec §6.6, I14), on every path that merges
-    /// into a child: a write over a visible ancestor row, a write over an own row, a catch-up copy folded into an own row
-    /// (§7.2 branch (b)), and a step-4 copy that lands on a key an ancestor holds (§7.3). The table joins bit sets
-    /// (<see cref="OrMerge"/>), whose output is neither input, so storing the incoming row in place of the output loses
-    /// bits; the differential's merges (min, max, union of ids) all output the incoming row whenever they change
-    /// anything, so they cannot tell the two apart.
+    /// The layered merge stores the merge function's output, on every path that merges into a child, so the visible row
+    /// carries the information of every row it hides: a write over a visible ancestor row, a write over an own row, a
+    /// catch-up copy folded into an own row (catch-up branch (b)), and a copy of the rebuild's hide-and-copy step that
+    /// lands on a key an ancestor holds. The table joins bit sets (<see cref="OrMerge"/>), whose output is neither
+    /// input, so storing the incoming row in place of the output loses bits; the differential's merges (min, max, union
+    /// of ids) all output the incoming row whenever they change anything, so they cannot tell the two apart.
     /// </summary>
     public class LayeredMergeOutputTests
     {
@@ -83,8 +83,8 @@ namespace Eggnog.Relations.Tests
             root.Freeze();
             var child = root.CreateChild();
 
-            // ids[1] loses to ids[0] in the child: step 4 copies bits(ids[1]) as bits(ids[0]), which merges with the
-            // root's visible bits(ids[0]).
+            // ids[1] loses to ids[0] in the child: the rebuild's hide-and-copy step copies bits(ids[1]) as
+            // bits(ids[0]), which merges with the root's visible bits(ids[0]).
             child.Union(ids[0], ids[1]);
             child.Rebuild();
             Assert.Equal(0b11u, Row(child, f, ids[0])![1]);

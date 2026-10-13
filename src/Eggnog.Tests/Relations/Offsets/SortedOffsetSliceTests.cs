@@ -156,6 +156,31 @@ namespace Eggnog.Relations.Tests
 
 #endif
 
+        [Fact]
+        public void ScanForOffsetNeverReachesOutsideTheSlice()
+        {
+            // egglog's scan_for_offset takes a usize cursor, so it can never look before the slice. Here the cursor is
+            // an int relative to Start, and ScanForOffset rejects a negative one: forwarded as Start + from, it would
+            // search the owner's array before the slice.
+            var array = new[] { 1, 2, 10, 20, 30 };
+            var slice = new SortedOffsetSlice(array, 2, 5);
+
+            var threw = false;
+            var found = false;
+            var index = 0;
+            try
+            {
+                found = slice.ScanForOffset(-2, 1, out index);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                threw = true;
+            }
+
+            Assert.True(threw || (found == false && index >= 0 && index <= slice.Length),
+                $"row 1 is not in the slice {slice}, yet ScanForOffset(-2, 1) returned found={found}, index={index}");
+        }
+
     }
 
 }

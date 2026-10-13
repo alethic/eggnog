@@ -8,8 +8,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The rows of one ancestor layer that one child context hides (colored-contexts spec §6.3): a set of row ids of that
-    /// layer, within one of its generations, that only grows while its owner lives (I20).
+    /// The rows of one ancestor layer that one child context hides: a set of row ids of that layer, within one of its
+    /// generations, that only grows while its owner lives.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -20,8 +20,8 @@ namespace Eggnog.Relations
     /// publishes it by reference, so a reader holding the old one keeps a consistent snapshot.
     /// </para>
     /// <para>
-    /// Sealing discipline (X40, I18). Hides happen only on the owning context's domain thread, inside its merge or right
-    /// before the merge of the same pass, and every merge epilogue seals what it touched; so outside a merge of its owner
+    /// Sealing discipline. Hides happen only on the owning context's domain thread, inside its merge or right before
+    /// the merge of the same pass, and every merge epilogue seals what it touched; so outside a merge of its owner
     /// every set is sealed, and the read paths (<see cref="ContainsSealed"/>, <see cref="HiddenCursor"/>,
     /// <see cref="Union"/>) agree with the write path's <see cref="Contains"/>, which also reads the tail. A frozen
     /// context's sets never change, and may be read from any thread.
@@ -76,7 +76,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the layer generation the row ids belong to (I16).
+        /// Gets the layer generation the row ids belong to.
         /// </summary>
         public int Generation => generation;
 
@@ -101,7 +101,7 @@ namespace Eggnog.Relations
         public bool IsBitset => bits is not null;
 
         /// <summary>
-        /// Gets the sealed rows, sorted ascending, for compiled kernels (M12); <c>null</c> for a bitset. Exactly
+        /// Gets the sealed rows, sorted ascending, for compiled kernels; <c>null</c> for a bitset. Exactly
         /// <see cref="SortedCount"/> long.
         /// </summary>
         internal int[]? SortedRows => bits is null ? sorted : null;
@@ -125,7 +125,7 @@ namespace Eggnog.Relations
         /// <returns><c>false</c> if the row was in the set already.</returns>
         public bool Add(int row, int layerRowCount)
         {
-            Debug.Assert(row >= 0 && row < layerRowCount, "a hidden row lies outside its layer (I18)");
+            Debug.Assert(row >= 0 && row < layerRowCount, "a hidden row lies outside its layer");
             if (SealedContains(row))
                 return false;
 
@@ -156,7 +156,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ContainsSealed(int row)
         {
-            Debug.Assert(IsSealed, "a reader probed a hidden set that is not sealed (I18, X40)");
+            Debug.Assert(IsSealed, "a reader probed a hidden set that is not sealed");
             return SealedContains(row);
         }
 
@@ -204,9 +204,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Builds the union of <paramref name="sets"/>, all sealed and over one generation of one layer, as a new sealed
-        /// set (§6.3: the live sets of the non-frozen levels of a view, or a frozen fold). O(Σ n), or O(layer / 64) for
-        /// bitsets.
+        /// Builds the union of <paramref name="sets"/>, all sealed and over one generation of one layer, as a new
+        /// sealed set (the live sets of the non-frozen levels of a view, or a frozen fold). O(Σ n), or O(layer / 64)
+        /// for bitsets.
         /// </summary>
         /// <param name="sets">The sets; at least one.</param>
         /// <param name="layerRowCount">The layer's physical row count.</param>
@@ -222,8 +222,8 @@ namespace Eggnog.Relations
             var maxRow = -1;
             foreach (var set in sets)
             {
-                Debug.Assert(set.IsSealed, "a hidden set was unioned before it was sealed (X40)");
-                Debug.Assert(set.generation == generation, "hidden sets of different generations were unioned (I16)");
+                Debug.Assert(set.IsSealed, "a hidden set was unioned before it was sealed");
+                Debug.Assert(set.generation == generation, "hidden sets of different generations were unioned");
                 total += set.count;
                 anyBits |= set.bits is not null;
                 maxRow = Math.Max(maxRow, set.maxRow);

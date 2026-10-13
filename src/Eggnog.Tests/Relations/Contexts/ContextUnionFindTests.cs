@@ -7,13 +7,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for a context's union-find API (colored-contexts spec §5.6, §5.7, §17 M9.2 interim): unions, finds and the
-    /// cleanliness they need, catch-up after a parent change with its statistics, own displacements, the minimal write,
-    /// faulting, the union-find-only freeze and the finders it hands to children.
+    /// Tests for a context's union-find API: unions, finds and the cleanliness they need, catch-up after a parent
+    /// change with its statistics, own displacements, the minimal write, faulting, the union-find part of freezing and
+    /// the finders it hands to children.
     /// </summary>
     public class ContextUnionFindTests
     {
 
+        /// <summary>
+        /// A root union makes the root unclean, so finds throw until a rebuild, which takes one epoch; a clean root's
+        /// rebuild does nothing.
+        /// </summary>
         [Fact]
         public void RootUnionsNeedARebuildBeforeTheyAreRead()
         {
@@ -38,13 +42,16 @@ namespace Eggnog.Relations.Tests
             Assert.True(root.AreEqual(a, b));
             Assert.Equal(clock + 1, store.ReadClock());
 
-            // A clean root rebuilds nothing and leaves the clock alone (X42).
+            // A clean root rebuilds nothing and leaves the clock alone, so its timestamps stay egglog's.
             Assert.False(root.Rebuild());
             Assert.Equal(clock + 1, store.ReadClock());
             Assert.Equal(new UnionFindStatistics(1, 0, 0, 0), root.UnionFindStatistics);
             Assert.False(root.IsOwnDisplacement(b));
         }
 
+        /// <summary>
+        /// A root rebuild rewrites a row naming the loser of a union to name the winner.
+        /// </summary>
         [Fact]
         public void ARootRebuildRewritesItsRows()
         {
@@ -65,6 +72,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new[] { a }, rows.Select(row => row[0]).ToArray());
         }
 
+        /// <summary>
+        /// A child's union of an id with a parent's non-canonical id merges the parent's class in the child only, and
+        /// the child's own loser is its only displacement.
+        /// </summary>
         [Fact]
         public void AChildUnionsOverItsParentsCanonicalIds()
         {
@@ -95,6 +106,10 @@ namespace Eggnog.Relations.Tests
             child.CheckInvariants();
         }
 
+        /// <summary>
+        /// Parent unions made after a child's own make the child unclean; its next rebuild imports them, re-keys its
+        /// own class under the parent's new canonical id, and counts each kind of change.
+        /// </summary>
         [Fact]
         public void AChildCatchesUpWithItsParentAtItsNextRebuild()
         {
@@ -128,6 +143,9 @@ namespace Eggnog.Relations.Tests
             child.CheckInvariants();
         }
 
+        /// <summary>
+        /// A write to a child that is behind its unrebuilt parent rebuilds both before it stages.
+        /// </summary>
         [Fact]
         public void WritesCatchUpFirst()
         {
@@ -146,6 +164,9 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new[] { ids[1], ids[2] }, child.DisplacedIds.ToArray());
         }
 
+        /// <summary>
+        /// Creating a child of an unclean parent rebuilds the parent first, so the child starts clean.
+        /// </summary>
         [Fact]
         public void CreateChildRebuildsADirtyParent()
         {
@@ -161,6 +182,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(a, child.Find(b));
         }
 
+        /// <summary>
+        /// An exception escaping a child's write batch faults the child, which then refuses unions, rebuilds and finds;
+        /// an exception at the root leaves it unfaulted.
+        /// </summary>
         [Fact]
         public void AnExceptionInAChildsWriteFaultsIt()
         {
@@ -168,7 +193,8 @@ namespace Eggnog.Relations.Tests
             var f = store.AddTable(StoreTests.Function(store), [], [store.UnionFindTable], "f");
             var child = store.Root.CreateChild();
 
-            // An exception escaping the batch, after something was staged, faults the child (X12).
+            // An exception escaping the batch, after something was staged, faults the child: a hide whose copy was
+            // never merged cannot be repaired.
             Assert.Throws<ArgumentException>(() => child.Write<int>(s =>
             {
                 s.StageInsert(f, [1, 2, 3]);
@@ -186,6 +212,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(store.Root.IsFaulted);
         }
 
+        /// <summary>
+        /// A union staged in a child with a timestamp below one the child already holds is rejected, and the child is
+        /// faulted.
+        /// </summary>
         [Fact]
         public void UnionsInAChildRejectOutOfOrderTimestampsAndFaultIt()
         {
@@ -204,6 +234,10 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsFaulted);
         }
 
+        /// <summary>
+        /// A child freezes only under a frozen parent; freezing makes the union-find read-only, and the children of a
+        /// frozen child find through a flattened chain.
+        /// </summary>
         [Fact]
         public void FreezeNeedsAFrozenParentAndFreezesTheUnionFind()
         {
@@ -248,6 +282,9 @@ namespace Eggnog.Relations.Tests
             child.Dispose();
         }
 
+        /// <summary>
+        /// Freezing a root with staged, unmerged unions throws and leaves the root writable and unfaulted.
+        /// </summary>
         [Fact]
         public void FreezingWithUnmergedUnionsThrows()
         {
@@ -260,12 +297,16 @@ namespace Eggnog.Relations.Tests
             Assert.False(store.Root.IsFaulted);
         }
 
+        /// <summary>
+        /// Inside a write batch's action, writes, rebuilds with work and structural calls are refused; reads and
+        /// rebuilds with nothing to do are allowed.
+        /// </summary>
         [Fact]
         public void WritesAndRebuildsWithWorkAreRefusedInsideAWriteAction()
         {
-            // §8.3, I3: a nested write, or a rebuild with work, inside a batch's action would run an epoch inside the
-            // batch's or change the parent it caught up with. It is refused before it changes anything; the batch
-            // completes and nothing is faulted.
+            // A nested write, or a rebuild with work, inside a batch's action would run an epoch inside the batch's or
+            // change the parent it caught up with. It is refused before it changes anything; the batch completes and
+            // nothing is faulted.
             var store = new Store();
             var root = store.Root;
             var ids = Enumerable.Range(0, 8).Select(_ => root.NewId()).ToArray();
@@ -307,10 +348,13 @@ namespace Eggnog.Relations.Tests
             sibling.CheckInvariants();
         }
 
+        /// <summary>
+        /// Clearing the root's union-find is refused while any descendant lives, and allowed once none does.
+        /// </summary>
         [Fact]
         public void TheRootUnionFindIsClearedOnlyWithoutLiveDescendants()
         {
-            // I9: a child's cursor indexes the root's displaced ids, so they cannot shrink while it lives (§6.7).
+            // A child's cursor indexes the root's displaced ids, so they cannot shrink while it lives.
             var store = new Store();
             var root = store.Root;
             var ids = Enumerable.Range(0, 4).Select(_ => root.NewId()).ToArray();
@@ -329,6 +373,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, root.DisplacedCount);
         }
 
+        /// <summary>
+        /// <see cref="Context.ScanMerges{TVisitor}"/> and <see cref="Context.IsLocalId"/>, which only a child answers,
+        /// throw at the root.
+        /// </summary>
         [Fact]
         public void ScanMergesAndIsLocalIdAreRefusedAtTheRoot()
         {
@@ -338,6 +386,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => store.Root.IsLocalId(0));
         }
 
+        /// <summary>
+        /// Disposing a child empties its overlay and journal, and its union-find members then throw
+        /// <see cref="ObjectDisposedException"/>.
+        /// </summary>
         [Fact]
         public void DisposeReleasesTheUnionFind()
         {

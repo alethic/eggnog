@@ -2,7 +2,7 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What one lift did (colored-contexts spec §11.2). The counts are of writes staged into the parent.
+    /// What one lift did. The counts are of writes staged into the parent.
     /// </summary>
     internal sealed class LiftReport
     {
@@ -18,14 +18,14 @@ namespace Eggnog.Relations
         public int LiveCases { get; internal set; }
 
         /// <summary>
-        /// Gets the number of vacuous (contradictory) cases in the last round examined (L4). A case set whose cases were
-        /// all disposed as vacuous before its lift reports those.
+        /// Gets the number of vacuous (contradictory) cases in the last round examined. A case set whose cases were all
+        /// disposed as vacuous before its lift reports those.
         /// </summary>
         public int VacuousCases { get; internal set; }
 
         /// <summary>
         /// Gets whether every case was vacuous, so the parent is contradictory under the cases' coverage: its
-        /// contradiction function was written when it has one and the parent did not see it yet (L4).
+        /// contradiction function was written when it has one and the parent did not see it yet.
         /// </summary>
         public bool ParentContradicted { get; internal set; }
 

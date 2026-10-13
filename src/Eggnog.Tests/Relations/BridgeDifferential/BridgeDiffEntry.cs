@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
     /// </summary>
     /// <remarks>
     /// In a rule, a variable is an index into the rule's variables (<see cref="BridgeDiffRule.VarSorts"/>). In a seed
-    /// (<see cref="BridgeDiffSeed"/>), a "variable" names the e-class an earlier term seed produced, by the seed's index.
-    /// A constant is a raw cell: an integer's value, the unit value, or (in atoms only) an id the seeds minted.
+    /// (<see cref="BridgeDiffSeed"/>), a "variable" names the e-class an earlier term seed produced, by the seed's
+    /// index. A constant is a raw cell: an integer's value, the unit value, or (in atoms only) an id the seeds minted.
     /// </remarks>
     /// <param name="IsVar">Whether the entry is a variable (a seed reference, in a seed).</param>
     /// <param name="Var">The variable's index, or -1.</param>

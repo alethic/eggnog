@@ -18,9 +18,9 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Holds no row subsets, so it stays valid however the tables change, and it is immutable apart from its cache of
-    /// constant variants, which is thread-safe: one instance may be
-    /// added to any number of rule sets, on any thread, in any context (the executor's per-context header evaluation
-    /// and the executed form of the Id constants, K, are what differ between contexts: <see cref="GetVariantFor"/>).
+    /// constant variants, which is thread-safe: one instance may be added to any number of rule sets, on any thread, in
+    /// any context (the executor's per-context header evaluation and the executed form of the Id constants, K, are what
+    /// differ between contexts: <see cref="GetVariantFor"/>).
     /// </para>
     /// </remarks>
     internal sealed class CachedPlan
@@ -54,9 +54,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The most variants a cached plan keeps (§9.8). A new variant beyond them replaces the oldest, so the variant of
-        /// the most recent K is always cached: a store-backed root has one current K per rule, and a rule whose constant
-        /// changed its canonical form many times keeps paying O(constants) per run (§14.1).
+        /// The most variants a cached plan keeps. A new variant beyond them replaces the oldest, so the variant of the
+        /// most recent K is always cached: a store-backed root has one current K per rule, and a rule whose constant has
+        /// changed its canonical form many times keeps paying O(constants) per run, not a rebuild of its variant.
         /// </summary>
         public const int MaxVariants = 16;
 
@@ -98,9 +98,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the written values of the rule's Id constants, query constants (<see cref="IdConstants"/>) first and then
-        /// action constants (<see cref="ActionInfo.IdConstants"/>), or <c>null</c> when it has none (colored-contexts spec
-        /// §9.8). <see cref="CanonicalConstants.Compute"/> returns this very array when every constant is canonical.
-        /// Callers must not modify it.
+        /// action constants (<see cref="ActionInfo.IdConstants"/>), or <c>null</c> when it has none.
+        /// <see cref="CanonicalConstants.Compute"/> returns this very array when every constant is canonical. Callers
+        /// must not modify it.
         /// </summary>
         public uint[]? WrittenConstants { get; }
 
@@ -110,12 +110,12 @@ namespace Eggnog.Relations
         internal int VariantCount => Volatile.Read(ref variants).Length;
 
         /// <summary>
-        /// Gets the template and action program to run for the executed constants <paramref name="canonical"/>
-        /// (colored-contexts spec §9.8, X19): the written ones when K is <c>null</c> or equals
-        /// <see cref="WrittenConstants"/>; otherwise a <see cref="ConstantVariant"/> with the changed constants rewritten
-        /// (<see cref="TemplateSubstituter"/>, <see cref="ActionSubstituter"/>), cached copy-on-write per K, at most
-        /// <see cref="MaxVariants"/> of them (inserted under a lock, then double-checked; when the cache is full the oldest
-        /// variant makes room for the new one).
+        /// Gets the template and action program to run for the executed constants <paramref name="canonical"/>: the
+        /// written ones when K is <c>null</c> or equals <see cref="WrittenConstants"/>; otherwise a
+        /// <see cref="ConstantVariant"/> with the changed constants rewritten (<see cref="TemplateSubstituter"/>,
+        /// <see cref="ActionSubstituter"/>), cached copy-on-write per K, at most <see cref="MaxVariants"/> of them
+        /// (inserted under a lock, then double-checked; when the cache is full the oldest variant makes room for the new
+        /// one).
         /// </summary>
         /// <remarks>
         /// Thread-safe: concurrent contexts may ask for variants of one cached plan. Lock-free once a K's variant exists.

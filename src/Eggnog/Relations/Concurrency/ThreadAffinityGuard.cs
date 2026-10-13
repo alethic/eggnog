@@ -9,9 +9,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Admits one thread at a time, re-entrantly, and refuses a second thread instead of waiting: the "thread domain"
-    /// of colored contexts (colored-contexts spec §8.3, X15). A context that is not frozen shares one guard with every
-    /// descendant created under it, so the whole non-frozen chain behaves as a single thread; each child of a frozen
-    /// context gets a guard of its own, which is what lets siblings under a frozen parent run concurrently.
+    /// of colored contexts. A context that is not frozen shares one guard with every descendant created under it, so
+    /// the whole non-frozen chain behaves as a single thread; each child of a frozen context gets a guard of its own,
+    /// which is what lets siblings under a frozen parent run concurrently.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -50,7 +50,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets how deeply the calling thread holds the guard: zero when it does not hold it (whether the guard is free
         /// or held by another thread). Structural context operations refuse to run when this is positive, because they
-        /// would then run inside another operation of the same domain (§8.3).
+        /// would then run inside another operation of the same domain.
         /// </summary>
         public int Depth
         {
@@ -66,7 +66,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the calling thread holds the guard and is running a caller's code inside one of the domain's
         /// operations (a write batch's action, a <c>ScanMerges</c> visitor). Operations that change a context of the
-        /// domain refuse to run while this is true (§8.3). <c>false</c> on a thread that does not hold the guard.
+        /// domain refuse to run while this is true. <c>false</c> on a thread that does not hold the guard.
         /// </summary>
         public bool InCallback
         {
@@ -126,8 +126,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Marks the end of a caller's code run that <see cref="EnterCallback"/> started. Call it in a <c>finally</c>, on
-        /// the thread that entered, before the enclosing hold is exited.
+        /// Marks the end of a caller's code run that <see cref="EnterCallback"/> started. Call it in a <c>finally</c>,
+        /// on the thread that entered, before the enclosing hold is exited.
         /// </summary>
         /// <exception cref="InvalidOperationException">The calling thread does not hold the guard, or is not inside a
         /// callback.</exception>

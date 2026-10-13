@@ -9,10 +9,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the action wiring in a child (colored-contexts spec §6.5, X25, X37): the lookup instructions read the
-    /// context's view through the <c>LayeredKey*Lookup</c> probes (every key width), <c>LookupOrInsertDefault</c> creates
-    /// its buffer only at a miss, predictions use the write-phase lookup, the union-find is read through the child's
-    /// union-find table, and committed tables are never read as single tables.
+    /// Tests for the action wiring in a child: the lookup instructions read the context's view through the
+    /// <c>LayeredKey*Lookup</c> probes (every key width), <c>LookupOrInsertDefault</c> creates its buffer only at a
+    /// miss, predictions use the write-phase lookup, the union-find is read through the child's union-find table,
+    /// committed tables are never read as single tables, and <see cref="ExecutionState.VisibleRowCount"/> counts what
+    /// the context sees, for the union-find as for any table.
     /// </summary>
     public class LayeredLookupTests
     {
@@ -141,7 +142,8 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ArgumentException>(() => state.PredictColumn(f[1], [ids[5]], defaults, C(1)));
             Assert.Equal(4, state.VisibleRowCount(f[0]));
 
-            // The union-find counts the ids displaced in the child's view: the root's one (context = copy).
+            // The union-find counts the ids displaced in the child's view: the root's one, as a copy of the context
+            // would.
             Assert.Equal(1, state.VisibleRowCount(store.UnionFindTable));
         }
 
@@ -170,11 +172,75 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => state.GetTable(f[0]));
             Assert.Throws<InvalidOperationException>(() => state.Clone().GetTable(f[0]));
 
-            // The root's states read single tables as before.
+            // The root's states read single tables.
             var rootState = store.Root.Database.CreateExecutionState();
             Assert.False(rootState.InChildContext);
             Assert.Same(store.Schema[f[0]]!.Root, rootState.GetTable(f[0]));
             Assert.Equal(3, rootState.VisibleRowCount(f[0]));
+        }
+
+        /// <summary>
+        /// A child that writes nothing counts the union-find rows its parent counts, as a copy of the context would.
+        /// </summary>
+        [Fact]
+        public void AnUntouchedChildCountsTheUnionFindRowsItSees()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            root.Union(a, b);
+            root.Rebuild();
+            root.Freeze();
+            var child = root.CreateChild();
+            var uf = store.UnionFindTable;
+
+            // The child sees the root's displacement row...
+            var row = new uint[3];
+            Assert.True(child.TryGetRow(uf, [b], row));
+            Assert.Equal(a, row[1]);
+
+            // ...so it counts it, as the root does.
+            var rootCount = root.Database.CreateExecutionState().VisibleRowCount(uf);
+            Assert.Equal(1, rootCount);
+            Assert.Equal(rootCount, child.Database.CreateExecutionState().VisibleRowCount(uf));
+        }
+
+        /// <summary>
+        /// <see cref="ExecutionState.VisibleRowCount"/> of the union-find in a child counts the ids that are not
+        /// canonical in the child's view, the displacements its ancestors made before it was created included, as a
+        /// copy of the context would; it is not the count of the child's own journal rows. The union-find has no view
+        /// in a child, so a refusal (<see cref="NotSupportedException"/>) passes too. A child that unions nothing
+        /// reports what its root, whose rows it sees, reports: 1.
+        /// </summary>
+        [Fact]
+        public void AChildsUnionFindRowCountIsNotItsJournalCount()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            root.Union(a, b);
+            root.Rebuild();
+            root.Freeze();
+            var child = root.CreateChild();
+            Assert.Equal(a, child.Find(b));
+
+            var rootCount = root.Database.CreateExecutionState().VisibleRowCount(store.UnionFindTable);
+            Assert.Equal(1, rootCount);
+
+            long childCount;
+            try
+            {
+                childCount = child.Database.CreateExecutionState().VisibleRowCount(store.UnionFindTable);
+            }
+            catch (NotSupportedException)
+            {
+                // The union-find has no view in a child.
+                return;
+            }
+
+            Assert.Equal(rootCount, childCount);
         }
 
     }

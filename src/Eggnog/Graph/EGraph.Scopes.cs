@@ -19,7 +19,7 @@ namespace Eggnog
         ReadOnlyCollection<ScopeTag> scopeTagsView;
 
         /// <summary>
-        /// Gets the root's tag, named <c>root</c>. Every graph has its own (D38).
+        /// Gets the root's tag, named <c>root</c>. Every graph has its own.
         /// </summary>
         public ScopeTag RootTag { get; }
 
@@ -29,8 +29,8 @@ namespace Eggnog
         public IReadOnlyList<ScopeTag> ScopeTags => Volatile.Read(ref scopeTagsView);
 
         /// <summary>
-        /// Defines a scope tag of this graph (D38): a label a scope carries, which scoped atoms resolve to the nearest
-        /// ancestor-or-self carrying it. Any thread, any time (D6).
+        /// Defines a scope tag of this graph: a label a scope carries, which scoped atoms resolve to the nearest
+        /// ancestor-or-self carrying it. Any thread, any time.
         /// </summary>
         /// <param name="name">The tag's name: non-empty, unique among the graph's tags; <c>root</c> is the root's.</param>
         /// <returns>The tag.</returns>
@@ -63,7 +63,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a named ruleset whose rules are erasing under <see cref="RulesetOptions.Licence"/> unless they call
-        /// <see cref="RuleBuilder.ReadsOwnFacts"/> (D12). Any thread, any time (D6).
+        /// <see cref="RuleBuilder.ReadsOwnFacts"/>. Any thread, any time.
         /// </summary>
         /// <param name="name">The name, unique among the graph's rulesets.</param>
         /// <param name="options">The ruleset's options.</param>
@@ -80,7 +80,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a tag belongs to this graph (D38).
+        /// Checks that a tag belongs to this graph.
         /// </summary>
         /// <param name="tag">The tag.</param>
         /// <param name="parameter">The parameter name for the exception.</param>
@@ -94,8 +94,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that every <see cref="Fact.In"/> tag in a fact given to a rule or query builder belongs to this graph
-        /// (D38, §6.3): <see cref="Fact.In"/> itself can compare its tag only with the tables inside it, so a foreign tag
+        /// Checks that every <see cref="Fact.In"/> tag in a fact given to a rule or query builder belongs to this
+        /// graph: <see cref="Fact.In"/> itself can compare its tag only with the tables inside it, so a foreign tag
         /// over facts without an application is caught here, at the builder call. O(nesting) for a scoped fact; nothing
         /// for any other.
         /// </summary>
@@ -113,10 +113,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Defines the mirror table of <paramref name="source"/> under <paramref name="tag"/> (§6.8): an engine function
+        /// Defines the mirror table of <paramref name="source"/> under <paramref name="tag"/>: an engine function
         /// named <c>{source}@{tag}</c> with the source's layout (a lattice function gets its own lattice merge), and an
         /// internal handle of the source's kind over it, which is listed neither in <see cref="Tables"/> nor in extraction.
-        /// A table definition (D6): while the root is writable it enters the root's guard. Called by the mirror registry
+        /// A table definition: while the root is writable it enters the root's guard. Called by the mirror registry
         /// under the definition lock.
         /// </summary>
         /// <param name="source">The value-only table read scoped.</param>

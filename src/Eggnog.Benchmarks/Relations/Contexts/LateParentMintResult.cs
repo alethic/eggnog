@@ -4,8 +4,7 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// The counters of one late-parent-mint workload (<see cref="LateParentMintBenchmarks"/>, colored-contexts spec §17
-    /// M10.4, L7, G2, §4.2).
+    /// The counters of one late-parent-mint workload (<see cref="LateParentMintBenchmarks"/>).
     /// </summary>
     internal sealed class LateParentMintResult
     {
@@ -31,7 +30,7 @@ namespace Eggnog.Relations.Benchmarks
         public int TermsLifted { get; init; }
 
         /// <summary>
-        /// Gets the cases' own unions whose loser was a parent id beaten by a local id (G2), summed over the cases.
+        /// Gets the cases' own unions whose loser is a parent id beaten by a local id, summed over the cases.
         /// </summary>
         public long ParentIdLosers { get; init; }
 
@@ -46,7 +45,8 @@ namespace Eggnog.Relations.Benchmarks
         public long RootMinted { get; init; }
 
         /// <summary>
-        /// Gets the ids the cases reserved in blocks (§4.2), whether they minted them or not.
+        /// Gets the ids the cases reserved, in blocks taken from the store's id counter, whether they minted them or
+        /// not.
         /// </summary>
         public long CaseReserved { get; init; }
 

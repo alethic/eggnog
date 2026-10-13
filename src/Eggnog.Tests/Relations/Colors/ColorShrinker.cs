@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Shrinks a failing <see cref="ColorProgram"/> by dropping commands (colored-contexts spec §17 M10.3): chunks of
-    /// halving size, keeping a removal while the program still fails, so the printed program is short enough to read.
-    /// Commands that lose their context or ids are skipped by the runner, so every candidate runs.
+    /// Shrinks a failing <see cref="ColorProgram"/> by dropping commands: chunks of halving size, keeping a removal
+    /// while the program still fails, so the printed program is short enough to read. Commands that lose their context
+    /// or ids are skipped by the runner, so every candidate runs.
     /// </summary>
     static class ColorShrinker
     {

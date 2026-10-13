@@ -50,7 +50,9 @@ namespace Eggnog.Relations.Tests
         /// <param name="a">An element.</param>
         /// <param name="b">Another element.</param>
         /// <param name="parent">The canonical element of the merged class.</param>
-        /// <param name="child">The canonical element that was displaced; equal to <paramref name="parent"/> if none.</param>
+        /// <param name="child">
+        /// The canonical element that was displaced; equal to <paramref name="parent"/> if none.
+        /// </param>
         /// <returns>Whether the classes were distinct.</returns>
         public bool Union(uint a, uint b, out uint parent, out uint child)
         {

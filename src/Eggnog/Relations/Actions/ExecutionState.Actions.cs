@@ -208,9 +208,9 @@ namespace Eggnog.Relations
         /// <c>key ++ defaults</c>, stage it and remember it; then write the destination column of the row. Drops no lane.
         /// </summary>
         /// <remarks>
-        /// In a child context (colored-contexts spec §6.5, X37) the lookup reads the context's view, and the table's
-        /// buffer is created only at the first miss, so a lookup that hits creates no layer of the table; the row width
-        /// is checked against the store's schema.
+        /// In a child context the lookup reads the context's view, and the table's buffer is created only at the first
+        /// miss, because creating it creates the context's layer of the table: a lookup that hits creates no layer. The
+        /// row width is checked against the store's schema.
         /// </remarks>
         void RunLookupOrInsertDefault(ref Mask mask, LookupOrInsertDefaultInstr instr, Bindings bindings)
         {
@@ -269,9 +269,9 @@ namespace Eggnog.Relations
                         staged = true;
                         catalog.Notifications.Notify(instr.Table);
 
-                        // egglog stages the default row without setting `changed` (core-relations/src/action/mod.rs:707,
-                        // map §8.1 row 16), so a merge function that inserts through this path under-reports its change.
-                        // Like every other staging path here, staging a row sets the flag.
+                        // egglog stages the default row without setting `changed`
+                        // (core-relations/src/action/mod.rs:707), so a merge function that inserts through this path
+                        // under-reports its change. Here, as on every other staging path, staging a row sets the flag.
                         Changed = true;
                     }
                 }
@@ -351,7 +351,9 @@ namespace Eggnog.Relations
         {
             Debug.Assert(mask.IsEmpty == false, "the interpreter stops before an instruction with no live lane");
 
-            // A rule's delete is a retraction (colored-contexts spec §6.7): it passes the state's guard, once per batch.
+            // A rule's delete is a retraction, so it passes the state's retraction guard, once per batch: the guard
+            // refuses removals from a shared table while the context has live descendants, or in a child whose parent
+            // is not frozen.
             if (remove)
                 guard?.CheckRemove(table);
 

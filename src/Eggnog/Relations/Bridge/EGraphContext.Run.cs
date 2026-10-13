@@ -15,35 +15,35 @@ namespace Eggnog.Relations
         const int RepeatScanLimit = 16;
 
         /// <summary>
-        /// Runs the given rules once in this context, as one iteration, and rebuilds (colored-contexts spec §10.3):
-        /// egglog's <c>run_rules</c> (lib.rs:583-624, 1397-1420), per context.
+        /// Runs the given rules once in this context, as one iteration, and rebuilds: egglog's <c>run_rules</c>
+        /// (lib.rs:583-624, 1397-1420), per context.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The context is brought up to date first (<see cref="EnsureClean"/>). Each rule is planned at its first run in
-        /// any context (on the statistics of the context that plans it, §9.7). The run captures an epoch <c>T</c> and notes
-        /// it as the context's semi-naive floor (<see cref="Context.NoteRuleRun"/>). Each rule contributes its semi-naive
-        /// variants for its watermark in this context (<see cref="GetWatermark"/>: its own progress, or one seeded from an
-        /// ancestor, §10.2) with its Id constants in their canonical form here (K, X19); a rule listed again runs with
-        /// <c>T</c>. Every rule matches the same view; their writes, stamped <c>T</c>, merge at the end
+        /// The context is brought up to date first (<see cref="EnsureClean"/>). Each rule is planned at its first run
+        /// in any context (on the statistics of the context that plans it). The run captures an epoch <c>T</c> and
+        /// notes it as the context's semi-naive floor (<see cref="Context.NoteRuleRun"/>). Each rule contributes its
+        /// semi-naive variants for its watermark in this context (<see cref="GetWatermark"/>: its own progress, or one
+        /// seeded from an ancestor) with its Id constants in their canonical form here (K); a rule listed again runs
+        /// with <c>T</c>. Every rule matches the same view; their writes, stamped <c>T</c>, merge at the end
         /// (<see cref="Database.ExecuteRuleSet"/>, <see cref="Database.MergeRuleSet"/>, which run within the context's
         /// floor, <see cref="Context.UseEpoch"/>).
         /// </para>
         /// <para>
-        /// Progress (X18): each rule's <c>(T, K, generation)</c> is staged when the rule set is built and committed once the
-        /// run has merged and no failure was recorded, before the rebuild. Then, if the run grew the union-find, the context
-        /// rebuilds with its first pass at <c>T</c> (X4); otherwise the clock advances. A stopped context runs nothing and
-        /// reports <see cref="IterationReport.Stopped"/>.
+        /// Progress: each rule's <c>(T, K, generation)</c> is staged when the rule set is built and committed once the
+        /// run has merged and no failure was recorded, before the rebuild. Then, if the run grew the union-find, the
+        /// context rebuilds with its first pass at <c>T</c>; otherwise the clock advances. A stopped context runs
+        /// nothing and reports <see cref="IterationReport.Stopped"/>.
         /// </para>
         /// <para>
         /// Failures. A panic (a failure an action or a merge recorded) is thrown as <see cref="PanicException"/> after the
-        /// iteration's bookkeeping, with no progress committed. An exception thrown while the rules run undoes the run (no
-        /// write it staged survives, no progress, the clock unchanged); in a child it also faults the context (X12, the
-        /// failed-run decision). An exception thrown while the run's writes merge cannot be undone: at the root the rules'
-        /// progress is committed (unless a failure was recorded), so no match is applied twice; a child is faulted.
+        /// iteration's bookkeeping, with no progress committed. An exception thrown while the rules run undoes the run
+        /// (no write it staged survives, no progress, the clock unchanged); in a child it also faults the context. An
+        /// exception thrown while the run's writes merge cannot be undone: at the root the rules' progress is committed
+        /// (unless a failure was recorded), so no match is applied twice; a child is faulted.
         /// </para>
         /// <para>
-        /// The report is at the e-graph's <see cref="EGraph.ReportLevel"/> (rule-layer E7).
+        /// The report is at the e-graph's <see cref="EGraph.ReportLevel"/>.
         /// </para>
         /// </remarks>
         /// <param name="rules">The rules.</param>
@@ -57,8 +57,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Runs <paramref name="rules"/> until they saturate: an iteration in which neither the rules nor the rebuild
-        /// changed anything (decision 11), a contradiction stops the context, or <paramref name="maxIterations"/>
-        /// iterations ran (colored-contexts spec §10.3).
+        /// changed anything, a contradiction stops the context, or <paramref name="maxIterations"/> iterations ran.
         /// </summary>
         /// <param name="rules">The rules.</param>
         /// <param name="maxIterations">The most iterations to run; zero runs none.</param>
@@ -82,11 +81,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Brings the context up to date (colored-contexts spec §10.3, X42): brings a parent that is not frozen up to date,
-        /// flushes the host writes staged here (<see cref="FlushUpdates"/>), then rebuilds. At the root it rebuilds only
-        /// when its union-find grew since its last rebuild, so writes staged at the root and not flushed stay pending into
-        /// the next run, as in egglog, and the root adds no pass and no epoch at rest. Nothing for a frozen or stopped
-        /// context.
+        /// Brings the context up to date: brings a parent that is not frozen up to date, flushes the host writes staged
+        /// here (<see cref="FlushUpdates"/>), then rebuilds. At the root it rebuilds only when its union-find grew
+        /// since its last rebuild, so writes staged at the root and not flushed stay pending into the next run, as in
+        /// egglog, and the root adds no pass and no epoch at rest. Nothing for a frozen or stopped context.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
         /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
@@ -120,9 +118,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Rebuilds the context (§7.1, X10: <see cref="Context.Rebuild"/>, the one loop of every level): catches a child up
-        /// with its ancestors and makes its rows canonical, or runs egglog's passes at the root. Host writes staged here
-        /// are not flushed (<see cref="EnsureClean"/> does both).
+        /// Rebuilds the context (<see cref="Context.Rebuild"/>, the one loop of every level): catches a child up with
+        /// its ancestors and makes its rows canonical, or runs egglog's passes at the root. Host writes staged here are
+        /// not flushed (<see cref="EnsureClean"/> does both).
         /// </summary>
         /// <returns>Whether any pass changed anything.</returns>
         public bool Rebuild() => context.Rebuild();
@@ -217,8 +215,8 @@ namespace Eggnog.Relations
                 }
                 catch
                 {
-                    // A merge cannot be undone: what merged stays, so the matches are committed and never applied twice,
-                    // unless a failure was recorded (X18). A child is faulted (X12) and runs nothing again.
+                    // A merge cannot be undone: what merged stays, so the matches are committed and never applied
+                    // twice, unless a failure was recorded. A child is faulted and runs nothing again.
                     if (database.Failure is null)
                         Commit(rules, staged);
 
@@ -230,8 +228,8 @@ namespace Eggnog.Relations
                 ruleSet?.Dispose();
             }
 
-            // X18: committed when the run merged and recorded no failure; before the rebuild (I31: every row the run
-            // wrote has ts >= T).
+            // Progress is committed when the run merged and recorded no failure, before the rebuild, which is sound
+            // because every row the run wrote has ts >= T.
             var failed = TakeFailure(out var message);
             if (failed == false)
                 Commit(rules, staged);
@@ -255,13 +253,13 @@ namespace Eggnog.Relations
                 return new IterationReport(report, TimeSpan.Zero, false, 0, false);
             }
 
-            // X4: the first pass reads the clock again, which gives T (lib.rs:667).
+            // The first pass reads the clock again, which gives T (lib.rs:667).
             var start = Stopwatch.GetTimestamp();
             var rebuildChanged = context.Rebuild();
             var rebuildTime = Stopwatch.GetElapsedTime(start);
             if (failed)
             {
-                // A failure the rebuild records belongs to the same failed iteration (map §8.1 row 22).
+                // A failure the rebuild records belongs to the same failed iteration.
                 TakeFailure(out _);
                 throw new PanicException(message);
             }
@@ -275,17 +273,17 @@ namespace Eggnog.Relations
         /// <summary>
         /// Merges, at the root, what is staged and not merged when every rule of the run was pruned (an empty rule set):
         /// rows and unions staged raw through <see cref="WithExecutionState{TResult}"/> or a database buffer land at the
-        /// run's <c>T</c>, the epoch whose progress the run commits (colored-contexts spec §10.3, X42).
+        /// run's <c>T</c>, the epoch whose progress the run commits.
         /// </summary>
         /// <remarks>
-        /// Defect fixed (egglog core-relations/src/free_join/execute.rs:349, map §8.1): egglog's <c>run_rule_set</c>
-        /// returns before its <c>merge_all</c> when the rule set is empty, yet <c>run_rules</c> still records the run's
-        /// timestamp as every rule's <c>last_run_at</c>. A raw row staged before such runs keeps the stamp it was staged
-        /// with, so once two of them have run it lies below every rule's watermark when a later flush or run merges it,
-        /// and no rule ever matches it (I31 Case 1 at the root, and Case 2 in every child that inherits the root's
-        /// watermarks). Merging here keeps the run's watermark at or below the stamp of every row it did not see. Costs
-        /// one pass over the notification list when nothing is staged; a child needs none of this, since it stamps rows
-        /// at the merge (X38) and is clean before it runs.
+        /// egglog's <c>run_rule_set</c> returns before its <c>merge_all</c> when the rule set is empty
+        /// (core-relations/src/free_join/execute.rs:349), yet <c>run_rules</c> still records the run's timestamp as
+        /// every rule's <c>last_run_at</c>. A raw row staged before such runs keeps the stamp it was staged with, so
+        /// once two of them have run it lies below every rule's watermark when a later flush or run merges it, and no
+        /// rule ever matches it, at the root or in any child that inherits the root's watermarks. Merging here keeps
+        /// the run's watermark at or below the stamp of every row it did not see. Costs one pass over the notification
+        /// list when nothing is staged; a child needs none of this, since it stamps rows at the merge and is clean
+        /// before it runs.
         /// </remarks>
         static RuleSetReport MergePendingAtRoot(Database database, RuleSetReport executed, uint timestamp)
         {

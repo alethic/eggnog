@@ -113,7 +113,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal([0, 1], Get(byTimestamp, 1));
             Assert.Equal([2], Get(byTimestamp, 2));
 
-            // Clearing a nonempty union-find starts a new generation (egglog keeps the version; map §8.1 row 12).
+            // Clearing a nonempty union-find starts a new generation (egglog's union-find stays at generation zero).
             uf.Clear();
             byChild.Refresh(uf);
             Assert.Equal(0, byChild.Count);

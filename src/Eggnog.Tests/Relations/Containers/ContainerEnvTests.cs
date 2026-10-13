@@ -9,8 +9,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="ContainerEnv{TContainer}"/>: the ported unit tests of egglog's
-    /// core-relations/src/containers/tests.rs, and regression tests for the egglog defects the port fixes (map §8.1
-    /// rows 13-15).
+    /// core-relations/src/containers/tests.rs, and tests for the egglog defects this environment does not share (an
+    /// element index left behind by an id-only rename, a parallel threshold counted in environments, a lookup that
+    /// takes one lock twice).
     /// </summary>
     public class ContainerEnvTests
     {
@@ -236,10 +237,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Map §8.1 row 13: egglog's full rebuild renames a container whose id alone changed without moving its element
-        /// index entries (core-relations/src/containers/mod.rs:553-558), so a later incremental rebuild that starts from
-        /// one of its elements looks up the old id, finds nothing and skips the container. Here the index follows the
-        /// rename, and the incremental rebuild finds and rebuilds the container.
+        /// egglog's full rebuild renames a container whose id alone changed without moving its element index entries
+        /// (core-relations/src/containers/mod.rs:553-558), so a later incremental rebuild that starts from one of its
+        /// elements looks up the old id, finds nothing and skips the container. Here the index follows the rename, and
+        /// the incremental rebuild finds and rebuilds the container.
         /// </summary>
         [Fact]
         public void AnIdOnlyRenameKeepsTheIndexExactForIncrementalRebuilds()
@@ -289,8 +290,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A rename onto another container's id leaves two containers sharing the id, as in egglog; every structure stays
-        /// exact, lookups by either container find the id, and a later rebuild takes both out.
+        /// A rename onto another container's id leaves two containers sharing the id, as in egglog; every structure
+        /// stays exact, lookups by either container find the id, and a later rebuild takes both out.
         /// </summary>
         [Fact]
         public void ContainersSharingAnIdStayExact()
@@ -357,9 +358,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Map §8.1 row 15: egglog's full rebuild goes parallel above the threshold for the number of environments (more
-        /// than one container, mod.rs:526). Here it goes parallel only above the per-environment threshold of 1000
-        /// containers: below it, merges run on the caller's state; above it, on a parallel task's clone.
+        /// egglog's full rebuild goes parallel above the threshold for the number of environments (more than one
+        /// container, mod.rs:526). Here it goes parallel only above the per-environment threshold of 1000 containers:
+        /// below it, merges run on the caller's state; above it, on a parallel task's clone.
         /// </summary>
         [Theory]
         [InlineData(2, false)]
@@ -409,9 +410,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Map §8.1 row 14: egglog's lookup by id takes the same shard read lock twice and returns a guard, which can
-        /// deadlock against a queued writer. Here it takes one lock once and returns the immutable container. Readers
-        /// and writers hammer the environment together; every lookup of a published id succeeds.
+        /// egglog's lookup by id takes the same shard read lock twice and returns a guard, which can deadlock against a
+        /// queued writer. Here it takes one lock once and returns the immutable container. Readers and writers hammer
+        /// the environment together; every lookup of a published id succeeds.
         /// </summary>
         [Fact]
         public void LookupsByIdRunAlongsideConcurrentInterning()

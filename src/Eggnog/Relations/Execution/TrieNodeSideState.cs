@@ -3,9 +3,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The state of a <see cref="TrieNode"/> that the nodes of a parallel root run never need: the per-layer rows of a
-    /// multi-layer node (colored-contexts spec §9.5) and the spare indexes a recycled node refills. Kept out of the node so
-    /// that a node whose rows lie in one layer, which is every node of a root run, stays as small as it was before layered
-    /// execution (§1 item 8, §14.1): a parallel run allocates a fresh node per frame at positions 0 and 1.
+    /// multi-layer node and the spare indexes a recycled node refills. Kept out of the node so that a node whose rows
+    /// lie in one layer, which is every node of a root run, stays at 64 bytes and a root run pays nothing for layers: a
+    /// parallel run allocates a fresh node per frame at positions 0 and 1.
     /// </summary>
     /// <remarks>
     /// <para>

@@ -10,9 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for a child context's database (colored-contexts spec §3.4, §4.2, §6.2): definitions go through the store,
-    /// schema questions come from the store's schema, ids come from the child's blocks while container ids stay shared,
-    /// and staging reaches the child's union-find and creates the child's layer of a table on first use.
+    /// Tests for a child context's database: definitions go through the store, schema questions come from the store's
+    /// schema, ids come from the child's blocks while container ids stay shared, and staging reaches the child's
+    /// union-find and creates the child's layer of a table on first use.
     /// </summary>
     public class ChildDatabaseTests
     {
@@ -24,6 +24,10 @@ namespace Eggnog.Relations.Tests
             return (store, f, store.Root.CreateChild());
         }
 
+        /// <summary>
+        /// A child's database refuses to define tables, counters and external functions, which only the store adds, so
+        /// every context shares one schema.
+        /// </summary>
         [Fact]
         public void DefinitionsGoThroughTheStore()
         {
@@ -42,6 +46,11 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(f, child.Store.Schema.FunctionTables[0]);
         }
 
+        /// <summary>
+        /// A child's database answers table counts, specs, names, id columns and arities from the store's schema,
+        /// tables added afterwards included, while its own table map holds only its union-find and the layers it
+        /// created.
+        /// </summary>
         [Fact]
         public void SchemaQuestionsAreAnsweredFromTheStoresSchema()
         {
@@ -81,14 +90,18 @@ namespace Eggnog.Relations.Tests
             Assert.Equal("g", db.GetTableName(g));
         }
 
+        /// <summary>
+        /// The first staging into a table creates the child's layer of it, once; the union-find id resolves to the
+        /// child's own union-find; the root stages into its own tables.
+        /// </summary>
         [Fact]
         public void StagingIntoAChildCreatesItsLayerOfTheTable()
         {
             var (store, f, child) = Setup();
             var db = child.Database;
 
-            // M9.3 (§6.2, X37): the first staging into a table creates the child's layer, published to the catalog and
-            // adopted into the table map; the layer is an ordinary single-shard table of the same shape.
+            // The first staging into a table creates the child's layer, published to the catalog and adopted into the
+            // table map; the layer is an ordinary single-shard table of the same shape.
             Assert.Null(child.Tables!.TryGetLayer(f));
             Assert.False(db.TryGetTableInfo(f, out _));
             var state = db.CreateExecutionState();
@@ -122,17 +135,17 @@ namespace Eggnog.Relations.Tests
             Assert.False(db.Catalog.Notifications.IsEmpty);
             Assert.False(db.MergeAll(1));
 
-            // The root stages as before, and its catalog has no resolver.
+            // The root stages into its own tables, and its catalog has no resolver.
             Assert.Null(store.Root.Database.Catalog.Resolver);
             Assert.NotNull(db.Catalog.Resolver);
             Assert.Throws<KeyNotFoundException>(() => store.Root.Database.NewBuffer(new TableId(9)));
         }
 
         /// <summary>
-        /// Context = copy (§1, §3.4, X23): the child's entry for the union-find is its own union-find layer (its own
-        /// displacements only, from M9.2), not the union-find it sees, so no query member answers from it. The
-        /// union-find is never a query atom in a child; headers are never evaluated as one table there; and rules do not
-        /// run in a child before its views exist (M10.2). The root's query members are unchanged.
+        /// Context = copy: the child's entry for the union-find is its own union-find layer (its own displacements
+        /// only), not the union-find it sees, so no query member answers from it. The union-find is never a query atom
+        /// in a child; headers are never evaluated as one table there; and a rule set built on another database's view
+        /// is refused. The root's query members answer from its tables.
         /// </summary>
         [Fact]
         public void AChildAnswersNoQueryFromItsOwnLayersAsIfTheyWereItsView()
@@ -165,7 +178,8 @@ namespace Eggnog.Relations.Tests
                 return rsb.Build();
             }
 
-            // X23: the union-find is not a query atom in a child, for planning, statistics or estimates.
+            // The union-find is not a query atom in a child, for planning, statistics or estimates: only its lookups
+            // reach a child's union-find.
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             Assert.Throws<NotSupportedException>(() => OverUnionFind(db, uf));
@@ -174,18 +188,18 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<NotSupportedException>(() => db.EstimateSize(uf));
             Assert.Throws<NotSupportedException>(() => new ColumnCardEstimator(db).GetColumnUniqueness(uf, C(0)));
 
-            // Function tables are answered through the child's view (sum over the view's layers, M10.2); never from the
+            // Function tables are answered through the child's view (sum over the view's layers); never from the
             // child's own layer alone, so the single-table members refuse them.
             Assert.Equal(0, db.EstimateSize(f));
             Assert.Throws<NotSupportedException>(() => db.ProcessConstraints(f, []));
             Assert.Throws<NotSupportedException>(() => new ColumnCardEstimator(db).GetColumnUniqueness(f, C(0)));
 
-            // §3.4: a child never evaluates a header as a single table.
+            // A child never evaluates a header as a single table.
             Assert.Throws<InvalidOperationException>(() => ((IHeaderEvaluator)db).Evaluate(uf, [], fast, slow));
             Assert.Throws<InvalidOperationException>(() => ((IHeaderEvaluator)db).Evaluate(f, [], fast, slow));
 
-            // A rule set built at the root is not run against the child's tables (M10.2: it was built on another view);
-            // the child runs its own.
+            // A rule set built at the root is not run against the child's tables (it was built on another view); the
+            // child runs its own.
             using (var rootRules = OverUnionFind(root.Database, uf))
             {
                 Assert.Throws<ArgumentException>(() => db.RunRuleSet(rootRules));
@@ -195,7 +209,7 @@ namespace Eggnog.Relations.Tests
             using (var empty = db.NewRuleSet().Build())
                 Assert.Same(RuleSetReport.Empty, db.RunRuleSet(empty));
 
-            // The root's query members answer as before.
+            // The root's query members answer from its tables.
             Assert.Equal(1, root.Database.EstimateSize(uf));
             var evaluated = ((IHeaderEvaluator)root.Database).Evaluate(uf, [], fast, slow);
             Assert.Equal(1, evaluated.Size);
@@ -204,6 +218,10 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(1, processed.Rows.Size);
         }
 
+        /// <summary>
+        /// A catalog's resolver is asked only for ids the catalog does not hold; without a resolver a missing id
+        /// throws.
+        /// </summary>
         [Fact]
         public void TheCatalogResolvesOnlyWhatItDoesNotHold()
         {
@@ -226,6 +244,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<KeyNotFoundException>(() => new TableCatalog().GetForStaging(new TableId(0)));
         }
 
+        /// <summary>
+        /// A child's database refuses the database-level rebuild entry points, since a child rebuilds through its
+        /// context; the root's still run.
+        /// </summary>
         [Fact]
         public void RebuildEntryPointsAreTheContextsInAChild()
         {
@@ -239,10 +261,15 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<InvalidOperationException>(() => db.RebuildPass(uf, [f]));
             Assert.Throws<InvalidOperationException>(() => db.Rebuild(uf, [f], store.ClockCounter));
 
-            // The root's entry points are unchanged.
+            // The root's entry points run.
             Assert.False(store.Root.Database.RebuildPass(uf, [f]));
         }
 
+        /// <summary>
+        /// Every way a child mints a term id (directly, through its database, a state or a cloned state) draws from the
+        /// child's own id blocks, so its ids are local to it; root mints, shared mints and other counters are not
+        /// redirected.
+        /// </summary>
         [Fact]
         public void AChildMintsTermIdsFromItsOwnBlocks()
         {
@@ -282,12 +309,16 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.IsLocalId(siblingId));
         }
 
+        /// <summary>
+        /// A container a child interns gets its id from the shared counter, not the child's blocks: container ids are
+        /// global, so the root interning the same container finds the same id.
+        /// </summary>
         [Fact]
         public void ContainerIdsAreMintedOnTheSharedCounterInAChild()
         {
             var store = new Store();
             var root = store.Root;
-            // A container over base values (holdsIds: false), which a child may intern (§10.7, G-a).
+            // A container over base values (holdsIds: false), which a child may intern; one that holds ids it may not.
             root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter), holdsIds: false);
             var child = root.CreateChild();
             Assert.Same(root.Database.Containers, child.Database.Containers);
@@ -301,10 +332,14 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(container, root.Database.WithExecutionState(s => s.Containers.RegisterValue(new VecContainer(1, 2, 3), s)));
         }
 
+        /// <summary>
+        /// A counter value equal to the stale-row marker is rejected when a row would be written with it.
+        /// </summary>
         [Fact]
         public void ACounterValueAtTheStaleMarkerIsRejected()
         {
-            // Defect fixed (numeric-id/src/lib.rs:528-531): egglog's from_usize accepts u32::MAX, the stale-row marker.
+            // egglog's from_usize accepts u32::MAX, the stale-row marker (numeric-id/src/lib.rs:528-531); here a
+            // counter value at the marker throws.
             var db = new Database();
             var c = db.AddCounter();
             var t = db.AddTable(new SortedWritesTable(1, 2, null, [], new KeepCurrentMerge()));
@@ -314,6 +349,9 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<OverflowException>(() => state.PredictRow(t, [2], [MergeVal.FromCounter(c)]));
         }
 
+        /// <summary>
+        /// The root mints ids up to the union-find's maximum and refuses the next, and so does a child created then.
+        /// </summary>
         [Fact]
         public void TheRootRefusesNewIdsPastTheUnionFindMaximum()
         {

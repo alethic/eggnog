@@ -9,7 +9,8 @@ namespace Eggnog.Tests.Differential
     /// One step of a <see cref="ScopedProgram"/>. Scopes are numbered in creation order; 0 is the root.
     /// </summary>
     /// <param name="Kind">What the step does.</param>
-    /// <param name="Scope">The scope it acts on: the new scope's number for <see cref="ScopedCommandKind.Create"/>.</param>
+    /// <param name="Scope">The scope it acts on: the new scope's number for
+    /// <see cref="ScopedCommandKind.Create"/>.</param>
     /// <param name="Parent">The parent of a new scope.</param>
     /// <param name="Tag">The tag of a new scope; -1 for none.</param>
     /// <param name="Facts">The ground facts of an <see cref="ScopedCommandKind.Assume"/>.</param>

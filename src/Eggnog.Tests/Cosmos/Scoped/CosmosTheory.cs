@@ -3,8 +3,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
 
     /// <summary>
     /// The theory of prototypes/cosmos-facts/prelude.egg, defined once per graph and shared by every container compiled
-    /// into it. The prototype's context argument and its inheritance rules are gone: scopes are the contexts. One theory
-    /// per graph: it defines the graph's scope tags.
+    /// into it. It has none of the prelude's context arguments or inheritance rules: scopes are the contexts. One
+    /// theory per graph: it defines the graph's scope tags.
     /// </summary>
     public sealed partial class CosmosTheory
     {
@@ -12,8 +12,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
 
         /// <summary>
-        /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen
-        /// (§6.8).
+        /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen:
+        /// the first read of a table in a scope creates its mirror, which is refused once a scope of that tag is
+        /// frozen.
         /// </summary>
         /// <param name="graph">The graph.</param>
         public CosmosTheory(EGraph graph)
@@ -21,11 +22,13 @@ namespace Eggnog.Tests.Cosmos.Scoped
             Graph = graph;
             graph.DefineSort<Pred>("Pred");
 
-            // The graph's own tags (D38): a container's schema scope, and a query scope.
+            // The graph's own tags (a tag belongs to the graph that defines it): a container's schema scope, and a
+            // query scope.
             Schema = graph.DefineScopeTag("schema");
             Query = graph.DefineScopeTag("query");
 
-            // Claims about a path. Value-only, so the schema's view of each can be read from a query (D1).
+            // Claims about a path. Value-only, so a query can read the schema's view of each: a scoped read may name
+            // only a value-only table, which it reads through a mirror.
             Present = graph.DefineRelation<string>("present");
             Form = graph.DefineRelation<string, string>("form");
             Ne = graph.DefineRelation<string, string>("ne");
@@ -63,7 +66,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
 
             Horn = graph.DefineRuleset("horn");
             Lattice = graph.DefineRuleset("lattice");
-            // Every rewrite reads facts only from the schema, unless it says why it may read the query's (D12).
+            // Every rewrite reads facts only from the schema, so that a conjunct never proves itself redundant, unless
+            // the rule says why it may read the query's.
             Rewrite = graph.DefineRuleset("rewrite", new RulesetOptions { Licence = Schema });
             DefineHorn();
             DefineLattice();
@@ -71,7 +75,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             DefineCases();
         }
 
-        /// <summary>Defines the split members; implemented from R3 on (CosmosTheory.Cases.cs).</summary>
+        /// <summary>Defines the split members (CosmosTheory.Cases.cs).</summary>
         partial void DefineCases();
 
         /// <summary>Gets the graph.</summary>
@@ -107,7 +111,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// <summary>Gets an upper bound on a numeric path.</summary>
         public Function<string, long> Hi { get; }
 
-        /// <summary>Gets the integers a numeric path can hold, if present (gap 5).</summary>
+        /// <summary>Gets the integers a numeric path can hold, if present.</summary>
         public Function<string, ValueSet<long>> IDom { get; }
 
         /// <summary>Gets the true predicate.</summary>
@@ -177,8 +181,9 @@ namespace Eggnog.Tests.Cosmos.Scoped
         public Ruleset Rewrite { get; }
 
         /// <summary>
-        /// What a schema compiler emits for one discriminated branch: under path = value, the consequences hold. The rule
-        /// is local to the container's schema scope, so containers sharing this theory never see each other's branches.
+        /// What a schema compiler emits for one discriminated branch: under path = value, the consequences hold. The
+        /// rule is local to the container's schema scope, so containers sharing this theory never see each other's
+        /// branches.
         /// </summary>
         /// <param name="schema">The container's schema scope, not yet frozen.</param>
         /// <param name="path">The discriminator path.</param>
@@ -344,7 +349,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 
         void DefineRewrite()
         {
-            // These four judge on the query's own facts, and say why that is sound (D12).
+            // These four judge on the query's own facts, and each says why that is sound.
             Rewrite.DefineRule("lower uuid", r =>
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");

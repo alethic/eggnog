@@ -8,23 +8,23 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// The rules of an <see cref="EGraph"/>, by id: egglog-bridge's <c>rules</c>, a <c>DenseIdMapWithReuse</c>
-    /// (egglog-bridge/src/lib.rs:120), made safe for definitions from any thread (colored-contexts spec §10.2, X16;
-    /// rule-layer D6: rules are never sealed and may be defined while other threads run).
+    /// (egglog-bridge/src/lib.rs:120), made safe for definitions from any thread: rules are never sealed and may be
+    /// defined while other threads run.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// An id is reserved when a builder starts (<see cref="Reserve"/>) and filled when it builds (<see cref="Publish"/>);
-    /// a freed id is handed out again, last freed first, as egglog's <c>reserve_slot</c> does. Each reservation of a slot
-    /// gets the next <b>generation</b> of that slot (starting at 1), which a <see cref="RuleInfo"/> carries and every
-    /// context's <see cref="RuleProgress"/> records: progress of a freed rule never applies to the rule that reuses its id
-    /// (§13 edge 29).
+    /// An id is reserved when a builder starts (<see cref="Reserve"/>) and filled when it builds
+    /// (<see cref="Publish"/>); a freed id is handed out again, last freed first, as egglog's <c>reserve_slot</c> does.
+    /// Each reservation of a slot gets the next <b>generation</b> of that slot (starting at 1), which a
+    /// <see cref="RuleInfo"/> carries and every context's <see cref="RuleProgress"/> records: progress of a freed rule
+    /// never applies to the rule that reuses its id.
     /// </para>
     /// <para>
     /// Threading: writers serialize on a lock; readers (<see cref="TryGet"/>, run on any thread, also by the rule tasks of
-    /// concurrent children) are lock-free. The slot array is copied and published whole when it grows (copy-on-write), and
-    /// a slot is written with a volatile write, so a reader sees either a complete rule or none. Deviation from the spec's
-    /// "copy-on-write" table: a definition copies the array only when it grows, not on every change, so defining n rules
-    /// costs O(n) and not O(n²) (the rule layer defines a rule per query, D49).
+    /// concurrent children) are lock-free. The slot array is copied and published whole when it grows (copy-on-write),
+    /// and a slot is written with a volatile write, so a reader sees either a complete rule or none. A definition
+    /// copies the array only when it grows, not on every change, so defining n rules costs O(n), not O(n²); the rule
+    /// layer defines a rule per query.
     /// </para>
     /// </remarks>
     internal sealed class RuleTable
@@ -167,8 +167,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Adds every built rule to <paramref name="into"/>, in id order: a snapshot (§10.8 step 4, the invariant checker).
-        /// O(capacity).
+        /// Adds every built rule to <paramref name="into"/>, in id order: a snapshot, for a freeze that plans every
+        /// live rule and for the invariant checker. O(capacity).
         /// </summary>
         /// <param name="into">Receives the rules.</param>
         public void CopyLive(List<RuleInfo> into)

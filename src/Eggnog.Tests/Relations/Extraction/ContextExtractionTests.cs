@@ -9,10 +9,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Extraction over a context (colored-contexts spec §10.10, rule-layer E5): a child sees its parent's terms and its
-    /// own, a class merged in the child extracts the child's cheapest member, staleness follows the extraction tables and
-    /// the union-find of the context and its non-frozen ancestors and never the clock, and a frozen context serves any
-    /// number of extractors on any threads.
+    /// Extraction over a context: a child sees its parent's terms and its own, a class merged in the child extracts the
+    /// child's cheapest member, staleness follows the extraction tables and the union-find of the context and its
+    /// non-frozen ancestors and never the clock, and a frozen context serves any number of extractors on any threads.
     /// </summary>
     public class ContextExtractionTests
     {
@@ -96,8 +95,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A union in the child makes the class extract the child's cheapest member, whichever side wins: when the
-        /// expensive side loses, the parent's rows naming it are hidden in the child and copied canonically, and discovery
-        /// must read the copies, not the hidden rows. The parent's extraction is unchanged.
+        /// expensive side loses, the parent's rows naming it are hidden in the child and copied canonically, and
+        /// discovery must read the copies, not the hidden rows. The parent's extraction is unchanged.
         /// </summary>
         [Theory]
         [InlineData(false)]
@@ -171,10 +170,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Engine defect fixed (colored-contexts spec §8.1): an extraction at the root refreshes the output-column indexes
-        /// after the last merge; the root's freeze then compacts the tables it rebuilt, renumbering their rows. The frozen
-        /// catalogs must not keep the indexes over the old row ids, which a child's extraction (or a child's rules) would
-        /// otherwise probe.
+        /// An extraction at the root refreshes the output-column indexes after the last merge; the root's freeze then
+        /// compacts the tables it rebuilt, renumbering their rows. The frozen catalogs must not keep indexes over the
+        /// old row ids, which a child's extraction (or a child's rules) would otherwise probe: the freeze rebuilds
+        /// them.
         /// </summary>
         [Fact]
         public void AnIndexReadBeforeTheFreezeIsRebuiltWhenTheFreezeCompacts()
@@ -214,7 +213,8 @@ namespace Eggnog.Relations.Tests
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(inChild, p));
 
             // Writes to a declared function extraction never uses and to an undeclared one, in the child and in its
-            // parent, which is not frozen. The child is then behind its parent, and still reads only what it read before.
+            // parent, which is not frozen. The child is then behind its parent, and still reads only what it read
+            // before.
             child.AddValues([(g.Weight, [a, g.Int(3)]), (g.Mark, [p, g.Int(4)])]);
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(inChild, p));
             g.Root.AddValues([(g.Weight, [p, g.Int(5)]), (g.Mark, [a, g.Int(6)])]);
@@ -228,8 +228,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rule-layer D49: flushes with nothing staged, batches that restate rows already there, rule runs that derive
-        /// nothing and <c>EnsureClean</c> tick the clock, but change nothing an extractor reads.
+        /// Flushes with nothing staged, batches that restate rows already there, rule runs that derive nothing and
+        /// <c>EnsureClean</c> tick the clock, but change nothing an extractor reads, so its extractors stay current.
         /// </summary>
         [Fact]
         public void NoOpBatchesAndRunsKeepAnExtractorCurrent()
@@ -403,9 +403,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Eight threads extract from one frozen context at once, each with extractors of its own and in an order of its
-        /// own; the frozen layers' output-column indexes are built lazily by whichever thread needs them first. Every
-        /// answer equals the serial one. Root extractors over the frozen root run alongside.
+        /// Eight threads extract from one frozen context at once, each with extractors of its own and in an order of
+        /// its own; the frozen layers' output-column indexes are built lazily by whichever thread needs them first.
+        /// Every answer equals the serial one. Root extractors over the frozen root run alongside.
         /// </summary>
         [Fact]
         public void AFrozenContextServesEightThreadsExtractingConcurrently()

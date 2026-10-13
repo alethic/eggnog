@@ -4,15 +4,15 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// How far a child context has read one ancestor (colored-contexts spec §6.2, §7.2): the version of every layer of
-    /// the ancestor when the child last caught up with it, and the ancestor's change stamp then. A child keeps one per
-    /// ancestor that is not settled (not a frozen ancestor it has read in full); the union-find has its own cursor (X7).
+    /// How far a child context has read one ancestor: the version of every layer of the ancestor when the child last
+    /// caught up with it, and the ancestor's change stamp then. A child keeps one per ancestor that is not settled (not
+    /// a frozen ancestor it has read in full); the union-find has its own cursor.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <see cref="RowsOrDefault"/> is <c>(0, 0)</c> for a table the ancestor had no layer of, or that did not exist,
     /// when the cursor was taken: every row of such a layer counts as new. The ancestor's rows appended since are
-    /// <c>[RowsOrDefault(t).Minor, layer.Version.Minor)</c> while the generation is unchanged (I16, I17).
+    /// <c>[RowsOrDefault(t).Minor, layer.Version.Minor)</c> while the generation is unchanged.
     /// </para>
     /// <para>
     /// A catch-up records what it read as pending (<see cref="SetPendingRows"/>, <see cref="SetPendingStamp"/>) and

@@ -4,10 +4,10 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/02-query-disjunction.egg</c>, as written (gap 1): <c>kind IN ('order', 'invoice')</c>
-    /// lowers the UUID comparison on <c>ref</c> only through the prototype's case split, written as rules, and the schema
-    /// alone still proves nothing about <c>ref</c>, because a note carries none. The expected figures are the egglog
-    /// CLI's (vendored <c>ext/egglog</c> at 5e655cae).
+    /// <c>prototypes/cosmos-facts/02-query-disjunction.egg</c>, as written: <c>kind IN ('order', 'invoice')</c>
+    /// lowers the UUID comparison on <c>ref</c> only through the prototype's case split, written as rules, and the
+    /// schema alone still proves nothing about <c>ref</c>, because a note carries none. The expected figures are the
+    /// egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
     /// </summary>
     public sealed class Literal02QueryDisjunctionTests
     {

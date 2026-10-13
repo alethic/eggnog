@@ -5,21 +5,21 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A function of a bridge differential program: its name, kind, key sorts and output sort, and whether its rows can be
-    /// subsumed. Immutable.
+    /// A function of a bridge differential program: its name, kind, key sorts and output sort, and whether its rows can
+    /// be subsumed. Immutable.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Any number of keys, none included (an egglog global): the oracle and the comparison key rows by
-    /// <see cref="BridgeDiffKey"/>. The output sort follows from the kind: an eq sort for constructors and id functions,
-    /// integers for the lattices, and <see cref="BridgeDiffSort.Unit"/> for relations.
+    /// <see cref="BridgeDiffKey"/>. The output sort follows from the kind: an eq sort for constructors and id
+    /// functions, integers for the lattices, and <see cref="BridgeDiffSort.Unit"/> for relations.
     /// </para>
     /// <para>
     /// A relation's output is written as the unit sort because egglog's syntax gives a relation none, but its cells are
-    /// ids: the frontend desugars <c>(relation R (A B))</c> into a constructor into a fresh sort of its own, which nothing
-    /// unions (egglog/src/ast/desugar.rs:396-427), so each row has an id of its own (<see cref="IsIdColumn"/>). Where a
-    /// program writes the unit constant as a relation's output it means egglog's <c>(R a b)</c>: in an atom, any output
-    /// (a fresh variable); in a set or a fact, an insertion of the key (<see cref="IsNoOutput"/>).
+    /// ids: the frontend desugars <c>(relation R (A B))</c> into a constructor into a fresh sort of its own, which
+    /// nothing unions (egglog/src/ast/desugar.rs:396-427), so each row has an id of its own (<see cref="IsIdColumn"/>).
+    /// Where a program writes the unit constant as a relation's output it means egglog's <c>(R a b)</c>: in an atom,
+    /// any output (a fresh variable); in a set or a fact, an insertion of the key (<see cref="IsNoOutput"/>).
     /// </para>
     /// </remarks>
     sealed class BridgeDiffFunction

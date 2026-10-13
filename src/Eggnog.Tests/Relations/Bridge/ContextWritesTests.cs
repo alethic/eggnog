@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 using Xunit;
 
@@ -9,16 +11,24 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Host writes and the bridge's action handles in a child (colored-contexts spec §10.4, §6.5, §6.7, decision 2):
-    /// terms and rows through the context API, raw states, clears, the lattice rule, and <see cref="TableAction"/> reading
-    /// the row the running context sees.
+    /// Host writes and the bridge's action handles: terms and rows through the context API, raw states, clears, the
+    /// lattice rule in a child, <see cref="TableAction"/> reading the row the running context sees, and the flush of a
+    /// parent's staged writes when it creates a child.
     /// </summary>
+    /// <remarks>
+    /// egglog's <c>clear_table</c> (egglog-bridge/src/lib.rs:409-424) drops "any rows staged for this table by an
+    /// in-flight <c>MutationBuffer</c> ... along with the table contents", and <see cref="EGraph.ClearTable"/> removes
+    /// every row of the function and every write staged for it. A context stages host rows bridge-side until its next
+    /// flush, so a clear issued after <see cref="EGraphContext.StageRow"/> drops those rows too; otherwise the
+    /// operations would take effect out of order, the clear first and the earlier write after it. Rows staged raw into
+    /// database buffers are dropped the same way.
+    /// </remarks>
     public class ContextWritesTests
     {
 
         /// <summary>
-        /// <see cref="EGraphContext.AddTerm"/> in a child mints a local id for a new key, and returns the visible term's
-        /// class for a key the parent holds (the constructor's union merge reconciles the fresh id).
+        /// <see cref="EGraphContext.AddTerm"/> in a child mints a local id for a new key, and returns the visible
+        /// term's class for a key the parent holds (the constructor's union merge reconciles the fresh id).
         /// </summary>
         [Fact]
         public void AddTermInAChildReusesTheParentsTerms()
@@ -39,8 +49,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Decision 2: a function whose merge is not a lattice merge can be written only at the root; the child refuses
-        /// the row when it is staged, before anything changes, and stays usable.
+        /// A function whose merge is not a lattice merge can be written only at the root; the child refuses the row
+        /// when it is staged, before anything changes, and stays usable.
         /// </summary>
         [Fact]
         public void AChildRefusesNonLatticeFunctionsWhenStaging()
@@ -69,8 +79,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A clear in a child needs a frozen parent (R1) and no live descendants (decision 1); then the parent's rows of
-        /// the function disappear from the child's view only.
+        /// A clear in a child needs a frozen parent and no live descendants, since a context may not retract rows a
+        /// writable parent or a live descendant shares; then the parent's rows of the function disappear from the
+        /// child's view only.
         /// </summary>
         [Fact]
         public void ClearTableFollowsTheRetractionRules()
@@ -96,7 +107,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A raw execution state of a child stages into the child's layers; the next flush merges it, canonicalized and
-        /// stamped at the merge (X38).
+        /// stamped at the merge.
         /// </summary>
         [Fact]
         public void WithExecutionStateStagesIntoTheChild()
@@ -123,7 +134,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The bridge's <see cref="TableAction"/> reads the row the running context sees (§6.5): a primitive that looks up
+        /// The bridge's <see cref="TableAction"/> reads the row the running context sees: a primitive that looks up
         /// <c>low</c> in a child's rule gets the child's own, lowered value, and a row count counts the child's view.
         /// </summary>
         [Fact]
@@ -189,6 +200,142 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(a, child.Find(b));
             child.CheckInvariants();
             Assert.Throws<InvalidOperationException>(() => g.EGraph.ClearTable(g.Path));
+        }
+
+        /// <summary>
+        /// A row staged raw at the root and not merged, then the e-graph's clear of its function, then a flush.
+        /// egglog's <c>clear_table</c> drops what in-flight buffers staged for the table (lib.rs:409-424), so the
+        /// function is empty.
+        /// </summary>
+        [Fact]
+        public void TheRootsClearDropsARowStagedRawBeforeIt()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var edge = new TableAction(g.EGraph, g.Edge);
+            g.EGraph.WithExecutionState(state =>
+            {
+                edge.Insert(state, [a.Rep, b.Rep, g.Unit.Rep]);
+                return 0;
+            });
+
+            g.EGraph.ClearTable(g.Edge);
+            g.EGraph.FlushUpdates();
+
+            Assert.Empty(ContextGraph.Keys(g.Root, g.Edge));
+        }
+
+        /// <summary>
+        /// The same in a child of a frozen root, where a clear is allowed: a row the child staged raw, then the child's
+        /// clear, then a flush. The child's view of the function is empty.
+        /// </summary>
+        [Fact]
+        public void AChildsClearDropsARowItStagedRawBeforeIt()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var c = g.Root.FreshId();
+            g.Assert(g.Root, g.Edge, a, c);
+            g.Root.FlushUpdates();
+            g.Root.Freeze();
+
+            using var child = g.Root.CreateChild();
+            var edge = new TableAction(g.EGraph, g.Edge);
+            child.WithExecutionState(state =>
+            {
+                edge.Insert(state, [a.Rep, b.Rep, g.Unit.Rep]);
+                return 0;
+            });
+
+            child.ClearTable(g.Edge);
+            child.FlushUpdates();
+
+            Assert.Empty(ContextGraph.Keys(child, g.Edge));
+        }
+
+        /// <summary>
+        /// <c>CreateChild</c> of a writable context flushes the host writes staged on it first, so the child starts as
+        /// a copy of everything the parent was given, and both are readable at once.
+        /// </summary>
+        [Fact]
+        public void CreateChildFlushesTheParentsStagedWrites()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            g.Assert(g.Root, g.Edge, a, b);
+            g.Root.StageUnion(a, b);
+            Assert.False(g.Root.IsClean);
+
+            using var child = g.Root.CreateChild();
+            Assert.True(g.Root.IsClean);
+            Assert.True(child.IsClean);
+            Assert.Equal(1, child.TableSize(g.Edge));
+            Assert.Equal(child.Find(a), child.Find(b));
+            Assert.Equal(1, g.Root.TableSize(g.Edge));
+            child.CheckInvariants();
+        }
+
+        /// <summary>
+        /// At the root: a row staged through the context API, then the egglog API's clear of its function, then a
+        /// flush. The clear came last, so the function must be empty, as egglog's <c>clear_table</c> and the
+        /// documentation of <see cref="EGraph.ClearTable"/> say.
+        /// </summary>
+        [Fact]
+        public void TheRootsClearDropsRowsStagedBeforeIt()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+
+            g.Assert(g.Root, g.Edge, a, b);
+            g.EGraph.ClearTable(g.Edge);
+            g.Root.FlushUpdates();
+
+            Assert.Empty(ContextGraph.Keys(g.Root, g.Edge));
+        }
+
+        /// <summary>
+        /// The same through the context API at the root: <see cref="EGraphContext.ClearTable"/> after
+        /// <see cref="EGraphContext.StageRow"/> leaves the function empty once flushed.
+        /// </summary>
+        [Fact]
+        public void TheContextApiClearDropsRowsStagedBeforeItAtTheRoot()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+
+            g.Assert(g.Root, g.Edge, a, b);
+            g.Root.ClearTable(g.Edge);
+            g.Root.FlushUpdates();
+
+            Assert.Empty(ContextGraph.Keys(g.Root, g.Edge));
+        }
+
+        /// <summary>
+        /// In a child of a frozen root, where a clear is allowed: a row the child staged, then the child's clear of the
+        /// function, then a flush. The child's view of the function is empty.
+        /// </summary>
+        [Fact]
+        public void AChildsClearDropsRowsItStagedBeforeIt()
+        {
+            var g = new ContextGraph();
+            var a = g.Root.FreshId();
+            var b = g.Root.FreshId();
+            var c = g.Root.FreshId();
+            g.Assert(g.Root, g.Edge, a, c);
+            g.Root.FlushUpdates();
+            g.Root.Freeze();
+
+            using var child = g.Root.CreateChild();
+            g.Assert(child, g.Edge, a, b);
+            child.ClearTable(g.Edge);
+            child.FlushUpdates();
+
+            Assert.Empty(ContextGraph.Keys(child, g.Edge));
         }
 
     }

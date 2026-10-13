@@ -2,10 +2,12 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The per-table step of the root's settle (colored-contexts spec §7.6, X38): rewrite, against the root's union-find,
-    /// the rows of one table written since it last rebuilt (<see cref="SortedWritesTable.SettleAppends"/>). The
-    /// counterpart of <see cref="RebuildTableOperation"/>, run through <see cref="Database.RunWithTakenOut{TOperation}"/>
-    /// so the database notifies every table that staged a rewrite and the following merge applies it.
+    /// The per-table step of the root's settle, which runs before the root is shared (when it creates a child or
+    /// freezes) so that a child's view starts canonical: rewrite, against the root's union-find, the rows of one table
+    /// written since it last rebuilt (<see cref="SortedWritesTable.SettleAppends"/>), which raw writes may have left
+    /// stale. The counterpart of <see cref="RebuildTableOperation"/>, run through
+    /// <see cref="Database.RunWithTakenOut{TOperation}"/> so the database notifies every table that staged a rewrite
+    /// and the following merge applies it.
     /// </summary>
     /// <remarks>
     /// Each table gets a fresh execution state carrying the settle's epoch, flushed afterwards, its failure recorded, as

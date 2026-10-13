@@ -16,8 +16,8 @@ namespace Eggnog.Relations
     /// (lib.rs:1460-1463).
     /// </para>
     /// <para>
-    /// As <see cref="PanicFunction"/>: the failure is the calling state's (per context, colored-contexts spec §10.6),
-    /// and the optional root side channel is written only for root states.
+    /// As <see cref="PanicFunction"/>: the failure is the calling state's (per context), and the optional root side
+    /// channel is written only for root states.
     /// </para>
     /// </remarks>
     internal sealed class LazyPanicFunction : ExternalFunction

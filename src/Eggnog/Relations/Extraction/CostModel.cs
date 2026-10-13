@@ -8,7 +8,7 @@ namespace Eggnog.Relations
     /// How extraction costs terms: egglog's <c>TreeAdditiveCostModel</c> (src/extract.rs:102-124) with egglog's
     /// <c>CostModel</c> hooks (src/extract.rs:16-50) as overrides. A term's cost is the saturating sum of its head's cost
     /// and its children's costs; a base value costs 1 unless overridden; a container costs its own cost (0 unless
-    /// overridden) plus its elements' costs. All costs are non-negative <see cref="long"/>s (rule-layer decision D19).
+    /// overridden) plus its elements' costs. All costs are non-negative <see cref="long"/>s.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -20,10 +20,9 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// egglog's <c>fold</c> hook, which may combine a head's and its children's costs arbitrarily, is fixed to the sum:
-    /// the extractor runs Knuth's algorithm (rule-layer decision D10), which is optimal for superior functions (a term
-    /// costs at least as much as each subterm, and more when a subterm costs more), and the saturating sum of
-    /// non-negative costs is one. For the same reason a container's cost is its own cost plus its elements', not an
-    /// arbitrary function of them.
+    /// the extractor runs Knuth's algorithm, which is optimal for superior functions (a term costs at least as much as
+    /// each subterm, and more when a subterm costs more), and the saturating sum of non-negative costs is one. For the
+    /// same reason a container's cost is its own cost plus its elements', not an arbitrary function of them.
     /// </para>
     /// <para>
     /// Immutable: every <c>With</c> method returns a new model. Thread-safe.

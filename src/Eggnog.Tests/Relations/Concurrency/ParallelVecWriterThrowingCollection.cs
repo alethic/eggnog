@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A collection whose enumerator yields 1, 2, ... and then throws <see cref="NotSupportedException"/>, to check that
-    /// <see cref="ParallelVecWriter{T}.WriteContents(IReadOnlyCollection{T})"/> releases its read lock when the
+    /// A collection whose enumerator yields 1, 2, ... and then throws <see cref="NotSupportedException"/>, to check
+    /// that <see cref="ParallelVecWriter{T}.WriteContents(IReadOnlyCollection{T})"/> releases its read lock when the
     /// enumeration fails.
     /// </summary>
     sealed class ParallelVecWriterThrowingCollection : IReadOnlyCollection<int>

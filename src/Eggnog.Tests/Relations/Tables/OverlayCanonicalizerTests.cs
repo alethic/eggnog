@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="OverlayCanonicalizer"/>, a child context's rebuilder (colored-contexts spec §5.5): the
-    /// shared loops of <see cref="CanonicalizeLoops"/> give exactly the root canonicalizer's output when the overlay is
-    /// empty and the child's find otherwise, and a table rebuilds against a child's union-find table on both the full
-    /// and the incremental (hint column) paths.
+    /// Tests for <see cref="OverlayCanonicalizer"/>, a child context's rebuilder: the shared loops of
+    /// <see cref="CanonicalizeLoops"/> give exactly the root canonicalizer's output when the overlay is empty and the
+    /// child's find otherwise, and a table rebuilds against a child's union-find table on both the full and the
+    /// incremental (hint column) paths.
     /// </summary>
     public class OverlayCanonicalizerTests
     {

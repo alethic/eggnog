@@ -5,16 +5,16 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The per-row loops of the canonicalizing rebuilders, generic over the find they apply (colored-contexts spec
-    /// §5.5): egglog's <c>Canonicalizer</c> bodies (core-relations/src/uf/mod.rs:62-196), moved here verbatim from
-    /// <see cref="Canonicalizer"/> with <c>uf.FindNaive</c> replaced by <c>finder.Find</c>.
+    /// The per-row loops of the canonicalizing rebuilders, generic over the find they apply: egglog's
+    /// <c>Canonicalizer</c> bodies (core-relations/src/uf/mod.rs:62-196), with every find a call to
+    /// <c>finder.Find</c>.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The finder is a struct type parameter (<see cref="IIdFinder"/>), so the JIT compiles each loop once per finder
-    /// with the find inlined: <see cref="Canonicalizer"/>'s loops over <see cref="RootIdFinder"/> are the machine code
-    /// they were before contexts existed, and <see cref="OverlayCanonicalizer"/>'s over <see cref="LayeredIdFinder"/> add
-    /// only the overlay probes. Nothing is added per row.
+    /// with the find inlined: <see cref="Canonicalizer"/>'s loops over <see cref="RootIdFinder"/> call
+    /// <see cref="DisplacedUnionFind.FindNaive"/> directly, and <see cref="OverlayCanonicalizer"/>'s over
+    /// <see cref="LayeredIdFinder"/> add only the overlay probes. Nothing is added per row.
     /// </para>
     /// <para>
     /// <see cref="RebuildBuffer{TF}"/> is specialized for one, two and three columns, as egglog's is, and skips

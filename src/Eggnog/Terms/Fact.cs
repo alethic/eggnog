@@ -48,19 +48,20 @@ namespace Eggnog
 
         /// <summary>
         /// Scopes every table application inside <paramref name="facts"/>, nested ones included, to the nearest
-        /// ancestor-or-self of the running scope tagged <paramref name="scope"/> (D1, §6.8): in a rule body, the
-        /// applications read that scope's view through mirrors; in a host check, they read that scope directly. In a rule
-        /// or query, nesting <c>Fact.In</c>, a handle already scoped to a different tag, a table with a sort column (a
-        /// constructor, say), and any use in a head are <see cref="RuleDefinitionException"/>s; a tag of another graph is an
-        /// <see cref="ArgumentException"/> at the builder's <c>When</c> or <c>Then</c>. In a host write it is an
-        /// <see cref="ArgumentException"/> (read-only), and in a host check, nesting or a handle scoped to another tag is
-        /// one too.
+        /// ancestor-or-self of the running scope tagged <paramref name="scope"/>: in a rule body, the applications read
+        /// that scope's view through mirrors; in a host check, they read that scope directly. In a rule or query,
+        /// nesting <c>Fact.In</c>, a handle already scoped to a different tag, a table with a sort column (a
+        /// constructor, say), and any use in a head are <see cref="RuleDefinitionException"/>s; a tag of another graph
+        /// is an <see cref="ArgumentException"/> at the builder's <c>When</c> or <c>Then</c>. In a host write it is an
+        /// <see cref="ArgumentException"/> (read-only), and in a host check, nesting or a handle scoped to another tag
+        /// is one too.
         /// </summary>
         /// <param name="scope">The tag of the scope to read.</param>
         /// <param name="facts">The facts.</param>
         /// <returns>The scoped fact.</returns>
         /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">A table inside the facts belongs to another graph than the tag.</exception>
+        /// <exception cref="ArgumentException">A table inside the facts belongs to another graph than the
+        /// tag.</exception>
         public static Fact In(ScopeTag scope, params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(scope);
@@ -89,7 +90,7 @@ namespace Eggnog
         internal abstract FactKind Kind { get; }
 
         /// <summary>
-        /// The untyped equality (D13): the terms' types are checked where the fact is used.
+        /// The untyped equality: the terms' types are checked where the fact is used.
         /// </summary>
         /// <param name="left">One side.</param>
         /// <param name="right">The other side.</param>
@@ -102,7 +103,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The untyped disequality (D13).
+        /// The untyped disequality.
         /// </summary>
         /// <param name="left">One side.</param>
         /// <param name="right">The other side.</param>

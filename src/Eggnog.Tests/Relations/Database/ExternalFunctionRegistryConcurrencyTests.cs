@@ -9,8 +9,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests that the copy-on-write <see cref="ExternalFunctionRegistry"/> answers lookups lock-free and correctly while
-    /// functions are added and freed (colored-contexts spec §4.3, X16): every context of a store shares one registry.
+    /// Tests that the copy-on-write <see cref="ExternalFunctionRegistry"/> answers lookups lock-free and correctly
+    /// while functions are added and freed: every context of a store shares one registry, and functions may be
+    /// registered while children run.
     /// </summary>
     public class ExternalFunctionRegistryConcurrencyTests
     {

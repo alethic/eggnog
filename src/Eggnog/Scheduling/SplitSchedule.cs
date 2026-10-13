@@ -5,19 +5,19 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A split step (§6.9.3, R3): one step of the run's cached <c>SplitDriver</c> for this node in the scope, which finds
-    /// the requests of its split rules, opens the cases of those worth taking, runs <see cref="InCase"/> in them with nested
-    /// splits disabled, lifts (lift before deepening), then runs it again with nested splits enabled and lifts once more if
-    /// that changed something (colors §11.3).
+    /// A split step: one step of the run's cached <c>SplitDriver</c> for this node in the scope, which finds the requests
+    /// of its split rules, opens the cases of those worth taking, runs <see cref="InCase"/> in them with nested splits
+    /// disabled, lifts (lift before deepening), then runs it again with nested splits enabled and lifts once more if that
+    /// changed something.
     /// </summary>
     /// <remarks>
     /// The step is skipped in phase A of an enclosing split (nested splits disabled) and in a contradictory scope (every
-    /// case would be vacuous). It counts as a step of the run for the limits (D42), and reports progress only when it
+    /// case would be vacuous). It counts as a step of the run for the limits, and reports progress only when it
     /// opened cases or a lift changed the scope, so a <c>Saturate</c> around it ends once its cases have nothing more to
     /// give. Whether it changed the top-level scope, for <see cref="RunReport.Changed"/>, is whether that scope's
-    /// <see cref="Scope.Version"/> moved over the step: opening cases alone changes nothing there (N106). When the step
-    /// ends, a lattice merge that threw while the engine caught one of the run's cases under the scope up, and that nothing
-    /// took since, fails the run (N114).
+    /// <see cref="Scope.Version"/> moved over the step: opening cases alone changes nothing there. When the step ends, a
+    /// lattice merge that threw while the engine caught one of the run's cases under the scope up, and that nothing took
+    /// since, fails the run.
     /// </remarks>
     internal sealed class SplitSchedule : Schedule
     {
@@ -78,14 +78,14 @@ namespace Eggnog
             }
 
             // The engine catches each case up inside the step (a lift's catch-up of every case, the vacuity check after it)
-            // and records a lattice merge that throws there without throwing (D31). One no later iteration of the case took
-            // fails the run here, before the cases are disposed with it (N114).
+            // and records, without throwing, a lattice merge that throws there. A record no later iteration of the case took
+            // fails the run here, before the cases are disposed with it.
             if (executor.TakeCaseCatchUpFailure(scope) is { } failure)
                 throw failure;
 
             if (top)
             {
-                // Progress ends a Saturate; a change is what the step's lifts wrote into the scope (N106).
+                // Progress ends a Saturate; a change is what the step's lifts wrote into the scope.
                 executor.Statistics.LastTopStepChanged = changed;
                 executor.Statistics.TopChanged |= scope.Version != version;
             }

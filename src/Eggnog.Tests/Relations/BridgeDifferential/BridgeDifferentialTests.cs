@@ -13,9 +13,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The randomized whole-program differential suite of the bridge (milestone M8): random signatures, seeds and rules
-    /// (<see cref="BridgeDiffGenerator"/>) run on the bridge with semi-naive rules, on the bridge with naive rules, and on
-    /// a naive oracle that re-matches every rule against the whole closed e-graph each iteration
+    /// The randomized whole-program differential suite of the bridge: random signatures, seeds and rules
+    /// (<see cref="BridgeDiffGenerator"/>) run on the bridge with semi-naive rules, on the bridge with naive rules, and
+    /// on a naive oracle that re-matches every rule against the whole closed e-graph each iteration
     /// (<see cref="BridgeDiffOracle"/>), compared modulo renaming of ids after the seeds and after every iteration
     /// (<see cref="BridgeDiffRunner"/>).
     /// </summary>
@@ -79,9 +79,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs 16 bulk programs (by default), whose tables cross the engine's size thresholds, and checks that they reach
-        /// the incremental rebuild and write a lattice value, a relation row and a subsumption for whole bulk loads, which
-        /// the parallel ones insert, merging conflicting rows, in parallel.
+        /// Runs 16 bulk programs (by default), whose tables cross the engine's size thresholds, and checks that they
+        /// reach the incremental rebuild and write a lattice value, a relation row and a subsumption for whole bulk
+        /// loads, which the parallel ones insert, merging conflicting rows, in parallel.
         /// </summary>
         [Fact]
         public void BulkProgramsAgree()
@@ -139,8 +139,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Runs <paramref name="count"/> programs from seed <paramref name="first"/> in parallel; fails with the smallest
-        /// failing seed, shrunk.
+        /// Runs <paramref name="count"/> programs from seed <paramref name="first"/> in parallel; fails with the
+        /// smallest failing seed, shrunk.
         /// </summary>
         static BridgeDiffStats RunSeeds(int first, int count, bool bulk = false)
         {

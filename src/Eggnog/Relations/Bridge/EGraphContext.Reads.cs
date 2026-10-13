@@ -13,7 +13,7 @@ namespace Eggnog.Relations
         const int ScanBatchSize = 32;
 
         /// <summary>
-        /// Gets the canonical id of <paramref name="id"/> in this context (§10.5): the smallest member of its class here.
+        /// Gets the canonical id of <paramref name="id"/> in this context: the smallest member of its class here.
         /// Requires the context to be clean (<see cref="IsClean"/>). O(depth) probes.
         /// </summary>
         /// <param name="id">The id.</param>
@@ -30,10 +30,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Looks up the output of <paramref name="function"/> for <paramref name="key"/> in this context's view (§10.5):
-        /// the key's id cells are canonicalized here first, then the row the context sees for it is read (the root's
-        /// table at the root; the child's layers through its view, hidden rows filtered, Lemma F). Subsumed rows count.
-        /// Requires the context to be clean. O(id cells × depth) finds plus one probe per layer.
+        /// Looks up the output of <paramref name="function"/> for <paramref name="key"/> in this context's view: the
+        /// key's id cells are canonicalized here first, then the row the context sees for it is read (the root's table
+        /// at the root; the child's layers through its view, hidden rows filtered, where the topmost layer holding the
+        /// key decides). Subsumed rows count. Requires the context to be clean. O(id cells × depth) finds plus one
+        /// probe per layer.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="key">One value per key column.</param>
@@ -92,7 +93,7 @@ namespace Eggnog.Relations
         public Value? LookupId(FunctionId function, ReadOnlySpan<Value> key) => TryLookup(function, key, out var value) ? value : null;
 
         /// <summary>
-        /// Gets the number of rows of <paramref name="function"/> this context sees, subsumed ones included (§10.5):
+        /// Gets the number of rows of <paramref name="function"/> this context sees, subsumed ones included:
         /// egglog's <c>table_size</c> at the root (O(1)); a child's view's exact visible count (O(hidden rows) the first
         /// time per view). Requires the context to be clean.
         /// </summary>
@@ -108,7 +109,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits every row of <paramref name="function"/> this context sees (§10.5): egglog's <c>for_each</c>
+        /// Visits every row of <paramref name="function"/> this context sees: egglog's <c>for_each</c>
         /// (lib.rs:426-434) for a context.
         /// </summary>
         /// <param name="function">The function.</param>
@@ -121,18 +122,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits the rows of <paramref name="function"/> this context sees, until the visitor returns <c>false</c>
-        /// (§10.5): egglog's <c>for_each_while</c> (lib.rs:436-473) for a context. Each row is the function's schema columns
-        /// and whether it is subsumed.
+        /// Visits the rows of <paramref name="function"/> this context sees, until the visitor returns <c>false</c>:
+        /// egglog's <c>for_each_while</c> (lib.rs:436-473) for a context. Each row is the function's schema columns and
+        /// whether it is subsumed.
         /// </summary>
         /// <remarks>
         /// <para>
         /// At the root, the table's rows in table order; in a child, each layer of the context's view from the root up,
-        /// hidden rows skipped (the hidden-aware scan, §9.3), so every visible row is visited once (I12). Rows are read in
-        /// place, in batches of 32 positions; tombstones are skipped. Requires the context to be clean.
+        /// hidden rows skipped (the hidden-aware scan), so every visible row is visited once. Rows are read in place,
+        /// in batches of 32 positions; tombstones are skipped. Requires the context to be clean.
         /// </para>
         /// <para>
-        /// The visitor runs as a callback of a writable context's thread domain (§8.3): it may read, and writes, rebuilds
+        /// The visitor runs as a callback of a writable context's thread domain: it may read, and writes, rebuilds
         /// with work to do and structural calls on the domain are refused inside it. O(rows of the view) plus the visits,
         /// without allocation.
         /// </para>
@@ -172,7 +173,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether the context is contradictory (§6.9, §10.5): a contradiction stopped it, or a row of the
+        /// Gets whether the context is contradictory: a contradiction stopped it, or a row of the
         /// e-graph's contradiction function is visible in it. The one read a stopped context answers.
         /// </summary>
         public bool IsContradictory => context.IsContradictory;

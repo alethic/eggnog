@@ -5,12 +5,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Thrown by <see cref="EGraphContext.CheckInvariants"/> when a context violates an invariant (colored-contexts spec
-    /// §12.7): the debug checker that tests run after every rebuild, rule run and flush. Lists every violation found.
+    /// Thrown by <see cref="EGraphContext.CheckInvariants"/> when a context violates an invariant: the debug checker
+    /// that tests run after every rebuild, rule run and flush. Lists every violation found.
     /// </summary>
     /// <remarks>
     /// An <see cref="InvalidOperationException"/>, so callers that treat any checker failure as a broken context need not
-    /// know the type. The violations name the invariant they break (I4-I35 for the storage parts, C1-C7 for the bridge's).
+    /// know the type. Each violation starts with the name of the invariant or part it breaks, as the storage checker
+    /// names the storage parts and the bridge checker the rest (for example <c>journal:</c> or
+    /// <c>rule progress:</c>).
     /// </remarks>
     internal sealed class ContextInvariantException : InvalidOperationException
     {

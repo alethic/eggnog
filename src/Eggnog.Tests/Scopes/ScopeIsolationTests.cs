@@ -59,7 +59,8 @@ namespace Eggnog.Tests.Scopes
             });
             t.Root.Assume(link.Of(a, 3L), link.Of(b, 1L));
 
-            // b loses a union at the root before the child exists; the child asserts nothing and sees what the root sees.
+            // b loses a union at the root before the child exists; the child asserts nothing and sees what the root
+            // sees.
             Assert.True(t.Root.Union(a, b));
             var child = t.Root.CreateChild();
             child.Run(Schedule.Saturate(t.Rules));

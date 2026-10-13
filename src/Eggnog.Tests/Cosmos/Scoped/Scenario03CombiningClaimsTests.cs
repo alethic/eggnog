@@ -4,7 +4,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/03-combining-claims.egg with scopes as contexts (gap 2): the schema says kind is one of
+    /// prototypes/cosmos-facts/03-combining-claims.egg with scopes as contexts: the schema says kind is one of
     /// order and invoice, the query says it is not invoice, and only together, through the domain lattice in the query,
     /// do they prove the guard kind = 'order'.
     /// </summary>

@@ -8,12 +8,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The lift against its specification (colored-contexts spec §11.2, I33) when the parent mints ids after its cases
-    /// reserved their id blocks (late parent ids, L7, §4.2), and when the parent is a child of a writable root. A late id
-    /// is larger than every local id of the cases, so a case that unions it with a local id keeps the local id as the
-    /// class's canonical id; <see cref="LifterPropertyTests"/> never builds that, since its parent ids all precede the
-    /// cases. What the parent holds after the lift over its ids, the late ones included, must be exactly what held in every
-    /// live case before it, and nothing the parent holds may name a case's local id. 200 seeds.
+    /// The lift is sound and complete when the parent mints ids after its cases reserved their id blocks (late parent
+    /// ids), and when the parent is a child of a writable root. A late id is larger than every local id of the cases,
+    /// so a case that unions it with a local id keeps the local id as the class's canonical id;
+    /// <see cref="LifterPropertyTests"/> never builds that, since its parent ids all precede the cases. What the parent
+    /// holds after the lift over its ids, the late ones included, must be exactly what held in every live case before
+    /// it, and nothing the parent holds may name a case's local id. 200 seeds.
     /// </summary>
     public class LateIdLiftPropertyTests
     {

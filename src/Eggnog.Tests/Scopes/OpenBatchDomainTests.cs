@@ -8,10 +8,10 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Calls into other scopes of a thread domain while one of its scopes has a <see cref="Scope.Write"/> batch open (N88):
+    /// Calls into other scopes of a thread domain while one of its scopes has a <see cref="Scope.Write"/> batch open:
     /// the scopes the batch reads through (its writable ancestors) refuse writes and runs, which would change what the
-    /// batch's calls were checked against (D32); everything else is allowed, and the batch is brought up to date with it
-    /// before each of its calls and before it commits, without moving <see cref="Scope.Version"/> (N87).
+    /// batch's calls were checked against; everything else is allowed, and the batch is brought up to date with it
+    /// before each of its calls and before it commits, without moving <see cref="Scope.Version"/>.
     /// </summary>
     public sealed class OpenBatchDomainTests
     {
@@ -141,8 +141,8 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// How far a batch of two new rows moves a descendant's Version, with the tagged ancestor's query (which syncs its
-        /// mirrors after a write into it) made before the batch, or between the batch's calls.
+        /// How far a batch of two new rows moves a descendant's Version, with the tagged ancestor's query (which syncs
+        /// its mirrors after a write into it) made before the batch, or between the batch's calls.
         /// </summary>
         static long BatchVersionDelta(bool inside)
         {
@@ -169,6 +169,37 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal(4, inner.CountRows(t.Fact));
             Assert.Equal(2, outer.Count(facts));
             return inner.Version - version;
+        }
+
+        /// <summary>
+        /// The ancestor's write made from inside the descendant's batch callback (same thread, same domain) is refused
+        /// with the rule layer's message; the batch's later calls work, it commits its own row, and the ancestor's
+        /// write made after the batch moves no descendant's Version.
+        /// </summary>
+        [Fact]
+        public void AnAncestorWriteInsideADescendantsBatchIsRefused()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var outer = t.Root.CreateChild();
+            var inner = outer.CreateChild();
+            inner.Union(a, b);
+
+            inner.Write(w =>
+            {
+                var refused = Assert.Throws<InvalidOperationException>(() => outer.Assume(t.Tag.Of(a), t.Tag.Of(b)));
+                Assert.Contains("Write batch open", refused.Message);
+                w.Assume(t.Tag.Of(a));
+            });
+            Assert.True(inner.Check(t.Tag.Of(b)));
+            Assert.Equal(1, inner.CountRows(t.Tag));
+            Assert.Equal(0, outer.CountRows(t.Tag));
+
+            var version = inner.Version;
+            outer.Assume(t.Tag.Of(a), t.Tag.Of(b));
+            Assert.Equal(1, inner.CountRows(t.Tag));
+            Assert.Equal(version, inner.Version);
         }
 
     }

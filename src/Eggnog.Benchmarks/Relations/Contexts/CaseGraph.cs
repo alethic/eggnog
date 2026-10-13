@@ -5,11 +5,12 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// A store-backed e-graph for the case-split benchmarks of colored contexts (colored-contexts spec §17 M10.4, L6, L7):
-    /// <c>edge(x, y)</c> and <c>path(x, y)</c> relations (unit output, assert-eq merge), <c>mark(x)</c>, the constructors
-    /// <c>num(i64) → id</c> and <c>add(id, id) → id</c>, the nullary <c>bottom()</c> designated as the contradiction, and
-    /// the rule <c>edge(x, y) ⇒ path(x, y)</c>. The root holds <see cref="Rows"/> ids, <c>edge(x_i, x_{i+1})</c> for each
-    /// and <c>mark(x_i)</c> for every tenth, loaded in one flush.
+    /// A store-backed e-graph for the colored-context benchmarks that run on the bridge (case-split memory, late parent
+    /// mints and the full per-child workload): <c>edge(x, y)</c> and <c>path(x, y)</c> relations (unit output,
+    /// assert-eq merge), <c>mark(x)</c>, the constructors <c>num(i64) → id</c> and <c>add(id, id) → id</c>, the nullary
+    /// <c>bottom()</c> designated as the contradiction, and the rule <c>edge(x, y) ⇒ path(x, y)</c>. The root holds
+    /// <see cref="Rows"/> ids, <c>edge(x_i, x_{i+1})</c> for each and <c>mark(x_i)</c> for every tenth, loaded in one
+    /// flush.
     /// </summary>
     /// <remarks>
     /// Each id is named by two <c>edge</c> rows and at most one <c>mark</c> row, so a case that unions a fixed number of
@@ -126,7 +127,7 @@ namespace Eggnog.Relations.Benchmarks
         public EGraphRuleId Copy { get; }
 
         /// <summary>
-        /// Gets the lift spec over every table but the contradiction.
+        /// Gets the <see cref="LiftSpec"/> over every table but the contradiction.
         /// </summary>
         public LiftSpec Spec => new(
             new LiftTable(Edge, LiftTableKind.Relation),
@@ -138,6 +139,8 @@ namespace Eggnog.Relations.Benchmarks
         /// <summary>
         /// Boxes an i64.
         /// </summary>
+        /// <param name="value">The integer.</param>
+        /// <returns>Its base value.</returns>
         public Value Int(long value) => EGraph.BaseValues.Get<Int64Codec, long>(value);
 
         FunctionId Relation(string name, ColumnTy unitType, params ColumnTy[] keys) => EGraph.AddTable(new FunctionConfig

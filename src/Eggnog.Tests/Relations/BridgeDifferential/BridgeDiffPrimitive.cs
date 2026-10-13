@@ -9,8 +9,8 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// <c>(!= a b)</c>: the unit value when the two cells differ, else nothing. On ids, the cells are canonical, so the
-        /// filter keeps matches whose classes differ, which no renaming of ids changes.
+        /// <c>(!= a b)</c>: the unit value when the two cells differ, else nothing. On ids, the cells are canonical, so
+        /// the filter keeps matches whose classes differ, which no renaming of ids changes.
         /// </summary>
         NotEqual,
 

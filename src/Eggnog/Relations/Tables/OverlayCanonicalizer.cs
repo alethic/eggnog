@@ -6,8 +6,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// A child context's <see cref="Rebuilder"/>: rewrites chosen columns of the child's own rows to their canonical ids
-    /// in the child, through its layered union-find (colored-contexts spec §5.5). Provided by
-    /// <see cref="OverlayDisplacedTable.GetRebuilder"/>.
+    /// in the child, through its layered union-find. Provided by <see cref="OverlayDisplacedTable.GetRebuilder"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -19,7 +18,7 @@ namespace Eggnog.Relations
     /// <see cref="HintColumn"/> is column 0 of the child's union-find table, its displaced journal: the ids that stopped
     /// being canonical in the child since a layer's last rebuild are exactly the journal's rows appended since (its own
     /// losers, the canonicals re-keying lost, and the imports of parent displacements), which gives a layer egglog's
-    /// incremental rebuild (§7.3, X9).
+    /// incremental rebuild.
     /// </para>
     /// </remarks>
     internal sealed class OverlayCanonicalizer : Rebuilder

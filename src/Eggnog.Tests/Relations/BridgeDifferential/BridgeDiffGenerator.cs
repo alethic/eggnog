@@ -22,11 +22,11 @@ namespace Eggnog.Relations.Tests
     /// <para>
     /// The seeds build four to twenty-four terms bottom-up and interleave up to twelve facts: relation rows, lattice
     /// values, id-function and constructor rows over existing classes, and unions. One program in four also has a few
-    /// seeds that run between iterations, as later top-level commands would. Programs have one to seven rules, two in three
-    /// from templates of common egglog rules (<see cref="BridgeDiffRuleDraft"/>), and run two to ten iterations, or until
-    /// they saturate, outgrow <see cref="RowCap"/> rows or panic. Two programs in five run a random subset of their rules
-    /// in each iteration, as a schedule of rule sets does, so a rule's last run falls behind the others'. One program in
-    /// eight runs with parallel settings, which force the parallel rule-set executor.
+    /// seeds that run between iterations, as later top-level commands would. Programs have one to seven rules, two in
+    /// three from templates of common egglog rules (<see cref="BridgeDiffRuleDraft"/>), and run two to ten iterations,
+    /// or until they saturate, outgrow <see cref="RowCap"/> rows or panic. Two programs in five run a random subset of
+    /// their rules in each iteration, as a schedule of rule sets does, so a rule's last run falls behind the others'.
+    /// One program in eight runs with parallel settings, which force the parallel rule-set executor.
     /// </para>
     /// <para>
     /// Bulk programs (<c>bulk</c>) first load 20,500 to 26,000 integer leaves of the first sort in one call, so the
@@ -34,9 +34,9 @@ namespace Eggnog.Relations.Tests
     /// and few unions), and with parallel settings, which half of them use, inserts, index builds and rebuilds of more
     /// than 10,000 or 20,000 rows run in parallel. Their first rule is a chain of unions between leaves; two or three
     /// rules then write a lattice value of every leaf, and often insert a relation row for it or subsume it
-    /// (<see cref="BridgeDiffRuleDraft.GenerateBulkWrite"/>), so that one insert merges more than 20,000 conflicting rows
-    /// and later ones re-confirm them without change; up to two random rules follow. The first iteration runs every rule,
-    /// and programs run two to five iterations.
+    /// (<see cref="BridgeDiffRuleDraft.GenerateBulkWrite"/>), so that one insert merges more than 20,000 conflicting
+    /// rows and later ones re-confirm them without change; up to two random rules follow. The first iteration runs
+    /// every rule, and programs run two to five iterations.
     /// </para>
     /// </remarks>
     static class BridgeDiffGenerator
@@ -103,8 +103,8 @@ namespace Eggnog.Relations.Tests
             while (rules.Count < ruleCount)
                 rules.Add(new BridgeDiffRuleDraft(random, functions, sortCount, constants).Generate("r" + rules.Count));
 
-            // Two programs in five run a random subset of the rules in each iteration, so rules fall behind one another;
-            // a bulk program runs every rule in its first iteration, so its writes conflict in one insert.
+            // Two programs in five run a random subset of the rules in each iteration, so rules fall behind one
+            // another; a bulk program runs every rule in its first iteration, so its writes conflict in one insert.
             var all = Enumerable.Range(0, rules.Count).ToArray();
             var partial = rules.Count > 1 && random.Next(5) < 2;
             var schedule = new int[iterations][];
@@ -305,8 +305,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Picks a seed argument of <paramref name="sort"/>: an existing term's class, a small integer or the unit value
-        /// (a relation's output, which makes the fact an insertion).
+        /// Picks a seed argument of <paramref name="sort"/>: an existing term's class, a small integer or the unit
+        /// value (a relation's output, which makes the fact an insertion).
         /// </summary>
         static BridgeDiffEntry Arg(Random random, List<int>[] terms, int sort) => sort switch
         {

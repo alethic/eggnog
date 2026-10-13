@@ -17,9 +17,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Finds the row of <paramref name="table"/> the context sees with the key at
-        /// <paramref name="key"/>[<paramref name="offset"/>], searching the layers from depth <paramref name="top"/> down
-        /// (§6.5, the write phase: merges, merge functions, catch-up and predictions). The first layer whose key index
-        /// holds the key decides (Lemma F): its row if no level above it hides the row, otherwise none.
+        /// <paramref name="key"/>[<paramref name="offset"/>], searching the layers from depth <paramref name="top"/>
+        /// down (the write phase: merges, merge functions, catch-up and predictions). The first layer whose key index
+        /// holds the key decides: its row if no level above it hides the row, otherwise none, since no row with a
+        /// hidden row's key is visible below the hidden row's layer.
         /// </summary>
         /// <remarks>
         /// Reads hidden sets in any state, so it is exact inside the context's merge, where hides are not sealed yet.
@@ -35,9 +36,9 @@ namespace Eggnog.Relations
         /// <param name="depthFound">The depth of that layer.</param>
         /// <param name="row">The row id in that layer.</param>
         /// <returns><c>true</c> if the context sees a row with the key.</returns>
-        /// <exception cref="InvalidOperationException">The own layer is taken out of the database by a merge in progress:
-        /// a merge function read a table of its own stratum (edge case 16; the root throws
-        /// <see cref="KeyNotFoundException"/>).</exception>
+        /// <exception cref="InvalidOperationException">The own layer is taken out of the database by a merge in
+        /// progress: a merge function read a table of its own stratum (the root throws
+        /// <see cref="KeyNotFoundException"/> instead).</exception>
         internal bool TryFindVisible(TableId table, uint[] key, int offset, ulong keyHash, int top, [NotNullWhen(true)] out SortedWritesTable? layer, out int depthFound, out int row)
         {
             var s = schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.");
@@ -83,6 +84,10 @@ namespace Eggnog.Relations
         /// <param name="key">The key.</param>
         /// <param name="destination">Receives the row; at least as many cells as the table has columns.</param>
         /// <returns><c>true</c> if the context sees a row with the key.</returns>
+        /// <exception cref="KeyNotFoundException">The table is not registered.</exception>
+        /// <exception cref="ArgumentException"><paramref name="destination"/> is too small, or <paramref name="key"/>
+        /// is not as long as the table's key.</exception>
+        /// <exception cref="InvalidOperationException">A merge function read a table of its own stratum.</exception>
         public bool TryGetVisibleRow(TableId table, ReadOnlySpan<uint> key, Span<uint> destination)
         {
             var s = schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.");
@@ -107,6 +112,11 @@ namespace Eggnog.Relations
         /// <param name="column">The column.</param>
         /// <param name="value">The value, or zero.</param>
         /// <returns><c>true</c> if the context sees a row with the key.</returns>
+        /// <exception cref="KeyNotFoundException">The table is not registered.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="column"/> is not a column of the
+        /// table.</exception>
+        /// <exception cref="ArgumentException"><paramref name="key"/> is not as long as the table's key.</exception>
+        /// <exception cref="InvalidOperationException">A merge function read a table of its own stratum.</exception>
         public bool TryGetVisibleColumn(TableId table, ReadOnlySpan<uint> key, ColumnId column, out uint value)
         {
             var s = schema[table] ?? throw new KeyNotFoundException($"Table {table} is not registered with the store.");

@@ -2,9 +2,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Demand-driven splitting (colored-contexts spec §11.3, L5; rule-layer E8, D43): decides, before any case exists,
-    /// whether a split is worth taking, for example only when it unblocks a rule. The rule layer passes none: its split
-    /// bodies are their own demand.
+    /// Demand-driven splitting: decides, before any case exists, whether a split is worth taking, for example only when
+    /// it unblocks a rule. The rule layer passes none: its split bodies are their own demand.
     /// </summary>
     internal interface ISplitDemand
     {

@@ -5,14 +5,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Builds one engine rule from a program with the bridge's rule builder (§6.4.2).
+    /// Builds one engine rule from a program with the bridge's rule builder.
     /// </summary>
     /// <remarks>
     /// Atoms are lowered in program order (the engine's variant order), each relation atom ending with the unit constant;
     /// then the body steps as <c>QueryPrim</c>s in placement order, which the bridge runs after the join on every match;
     /// then the head operations in builder-call order (a query's or split matcher's head is one collector). Every call
     /// site is registered as an external function owned by the variant. Called under the variants' lock; the bridge's
-    /// definitions are thread-safe (X16).
+    /// definitions are thread-safe (published copy-on-write).
     /// </remarks>
     internal static class RuleLowering
     {
@@ -24,8 +24,10 @@ namespace Eggnog
         /// <param name="program">The program.</param>
         /// <param name="rule">The rule, for statistics; <c>null</c> for a query, a split matcher or a copy rule.</param>
         /// <param name="semiNaive">Whether to build a semi-naive engine rule.</param>
-        /// <param name="constants">The values to lower the class constants with (§6.4.1).</param>
-        /// <param name="description">The variant's description, unique in the graph (§6.4.3).</param>
+        /// <param name="constants">The values to lower the class constants with, by <see cref="OperandKind.IdConstant"/>
+        /// index.</param>
+        /// <param name="description">The variant's description, unique in the graph: it keys the engine's
+        /// statistics.</param>
         /// <returns>The variant.</returns>
         public static LoweredRule Lower(EGraph graph, RuleProgram program, Rule? rule, bool semiNaive, ReadOnlySpan<uint> constants, string description)
         {
@@ -184,7 +186,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the entry of a body operand (§6.4.1).
+        /// Gets the entry of a body operand: a register's engine variable, a value constant, or a class constant as an Id
+        /// constant.
         /// </summary>
         static Relations.RuleEntry Entry(Operand operand, Relations.RuleVariable?[] variables, uint[] constants) => operand.Kind switch
         {

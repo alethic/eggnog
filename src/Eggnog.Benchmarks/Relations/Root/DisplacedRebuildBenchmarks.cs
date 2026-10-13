@@ -7,11 +7,12 @@ namespace Eggnog.Relations.Benchmarks
 
     /// <summary>
     /// A batch of unions merged into a <see cref="DisplacedTable"/>, then the bridge's native rebuild loop
-    /// (<see cref="Database.Rebuild"/>) over the function tables until congruence closes, on a term graph of 20,000
-    /// and 200,000 rows, serially and in parallel. Part of the root benchmark set that colored contexts are gated on
-    /// (colored-contexts spec §17, M9.0): it exercises the union-find merge (and its path compression), the table
-    /// rebuilds through <see cref="Database.ApplyRebuild"/> (incremental through the rebuild index where the delta is
-    /// small, full scans elsewhere) and the congruence merges they cause.
+    /// (<see cref="Database.Rebuild"/>) over the function tables until congruence closes, on a term graph of 20,000 and
+    /// 200,000 rows, serially and in parallel. Part of the root benchmark set, which measures the root on the engine
+    /// paths colored contexts extend, so that a cost contexts add to the root shows as a regression: it exercises the
+    /// union-find merge (and its path compression), the table rebuilds through <see cref="Database.ApplyRebuild"/>
+    /// (incremental through the rebuild index where the delta is small, full scans elsewhere) and the congruence merges
+    /// they cause.
     /// </summary>
     /// <remarks>
     /// <para>

@@ -49,14 +49,30 @@ namespace Eggnog.Relations.Tests
             Rules = [commute, rb.Build()];
         }
 
+        /// <summary>
+        /// Gets the program this world runs.
+        /// </summary>
         public ContextExtractionProgram Program { get; }
 
+        /// <summary>
+        /// Gets the fixture that owns the e-graph and the extraction schema.
+        /// </summary>
         public ExtractionFixture Fx { get; }
 
+        /// <summary>
+        /// Gets the e-class sort.
+        /// </summary>
         public EqSort E { get; }
 
+        /// <summary>
+        /// Gets the constructors <c>L0</c>, <c>L1</c>, <c>Num</c>, <c>U</c>, <c>W</c> and <c>B</c>, in the order of
+        /// <see cref="ContextExtractionStep.Function"/>.
+        /// </summary>
         public FunctionId[] Functions { get; }
 
+        /// <summary>
+        /// Gets the two rules: <c>commute</c> and <c>collapse</c>.
+        /// </summary>
         public EGraphRuleId[] Rules { get; }
 
         /// <summary>

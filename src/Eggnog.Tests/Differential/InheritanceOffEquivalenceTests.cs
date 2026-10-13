@@ -9,12 +9,11 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Watermark inheritance changes nothing but the work (§8.2, colors §10.2, I31): random scoped programs with
-    /// constructors in children run with the graph's <c>InheritWatermarks</c> off and on, and every scope's view must be
-    /// equal, modulo renaming of classes, at every check; each seed's seeded match total must be at most its unseeded one,
-    /// and the total over all seeds below. The driver uses every body variable of a rule (a filter or disequality that
-    /// keeps every match), so match counts are distinct full bindings in both runs, as colors §21.9 does with
-    /// <c>ColorSchema.Keep</c>. 300 seeds by default; <c>EGGNOG_SEEDS</c> raises it.
+    /// Watermark inheritance changes nothing but the work: random scoped programs with constructors in children run
+    /// with the graph's <c>InheritWatermarks</c> off and on, and every scope's view must be equal, modulo renaming of
+    /// classes, at every check; each seed's seeded match total must be at most its unseeded one, and the total over all
+    /// seeds below. The driver uses every body variable of a rule (a filter or disequality that keeps every match), so
+    /// match counts are distinct full bindings in both runs. 300 seeds by default; <c>EGGNOG_SEEDS</c> raises it.
     /// </summary>
     public sealed class InheritanceOffEquivalenceTests
     {
@@ -24,6 +23,10 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         const int DefaultSeeds = 300;
 
+        /// <summary>
+        /// Every seed's views agree with inheritance on and off, no seed matches more with it on, and over all seeds it
+        /// matches strictly less. At most three failing programs are reported.
+        /// </summary>
         [Fact]
         public void SeededAndUnseededRunsAgree()
         {
@@ -45,6 +48,10 @@ namespace Eggnog.Tests.Differential
             Assert.True(seeded < unseeded, $"seeded {seeded}, unseeded {unseeded}");
         }
 
+        /// <summary>
+        /// The generator makes terms in children: every program has a constructor, and some programs assume
+        /// constructed keys in a child and create children whose rules construct terms in their heads.
+        /// </summary>
         [Fact]
         public void TheProgramsMakeTermsInChildren()
         {
@@ -57,8 +64,8 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Runs one seed both ways; returns a description of the first disagreement or <c>null</c>, and each way's match
-        /// total.
+        /// Runs one seed both ways; returns a description of the first disagreement or <c>null</c>, and each way's
+        /// match total.
         /// </summary>
         static (string? Failure, long Seeded, long Unseeded) Run(int seed)
         {
@@ -103,6 +110,32 @@ namespace Eggnog.Tests.Differential
             int.TryParse(Environment.GetEnvironmentVariable("EGGNOG_SEEDS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seeds) && seeds > 0
                 ? seeds
                 : DefaultSeeds;
+
+        /// <summary>
+        /// The seeded match total of every one of 300 seeds is at most its unseeded one, seed by seed rather than
+        /// summed; the failure lists the seeds whose seeded total exceeds the unseeded one.
+        /// </summary>
+        [Fact]
+        public void EverySeedsSeededMatchTotalIsAtMostItsUnseededOne()
+        {
+            var over = new List<string>();
+            for (var seed = 0; seed < 300; seed++)
+            {
+                var program = Differential.ScopedProgram.Generate(seed, true);
+                var on = new Differential.ScopedDriver(program, inheritWatermarks: true);
+                var off = new Differential.ScopedDriver(program, inheritWatermarks: false);
+                foreach (var command in program.Commands)
+                {
+                    on.Execute(command, named: true);
+                    off.Execute(command, named: true);
+                }
+
+                if (on.Matches > off.Matches)
+                    over.Add($"seed {seed}: seeded {on.Matches}, unseeded {off.Matches}");
+            }
+
+            Assert.True(over.Count == 0, string.Join("\n", over));
+        }
 
     }
 

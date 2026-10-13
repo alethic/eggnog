@@ -11,8 +11,8 @@ namespace Eggnog.Relations
     /// <remarks>
     /// Owns the subsets: <see cref="Dispose"/> returns their pooled buffers. Header <c>i</c> is
     /// <see cref="Headers"/>[i] with rows <see cref="HeaderSubsets"/>[i], one subset per layer of the table's view
-    /// (colored-contexts spec §9.4; every root header lies in layer 0); the executor intersects each atom's root row set
-    /// with every subset of that atom before the join. Valid only while the tables are not modified.
+    /// (every root header lies in layer 0); the executor intersects each atom's root row set with every subset of that
+    /// atom before the join. Valid only while the tables are not modified.
     /// </remarks>
     internal sealed class PlanInstance : IDisposable
     {

@@ -7,21 +7,23 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The ids a child context displaced, in order: the rows of the child's union-find table (colored-contexts spec
-    /// §5.3), the child's counterpart of the root's <see cref="DisplacedUnionFind"/> rows.
+    /// The ids a child context displaced, in order: the rows of the child's union-find table, the child's counterpart
+    /// of the root's <see cref="DisplacedUnionFind"/> rows.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Definition (I8): the journal holds exactly the ids x with <c>find_C(x) ≠ x</c> that were not displaced in the
+    /// Definition: the journal holds exactly the ids x with <c>find_C(x) ≠ x</c> that were not displaced in the
     /// parent's view when the context was created, each once, in nondecreasing timestamp order. They come from three
     /// sources: the losers of the context's own unions; the canonical ids that lost while re-keying after a parent
-    /// change; and imports, the parent's displacements of ids that were canonical in the context. Canonicity is lost once
-    /// and never regained, so an id is appended at most once.
+    /// change; and imports, the parent's displacements of ids that were canonical in the context. Canonicity is lost
+    /// once and never regained, so an id is appended at most once.
     /// </para>
     /// <para>
     /// The journal is what makes a child's rebuild incremental: a layer rebuilt at journal row r finds every id that
-    /// stopped being canonical since as the suffix from r (the rebuilder's hint column), and a grandchild catches up with
-    /// the child's union-find through one cursor into it (X7).
+    /// stopped being canonical since as the suffix from r (the rebuilder's hint column), and a grandchild catches up
+    /// with the child's union-find through one cursor into it: the journal holds every displacement the child has
+    /// seen since its creation, imports included, so the grandchild's union-find catch-up reads no other ancestor's
+    /// displacements.
     /// </para>
     /// <para>
     /// Layout: ids and timestamps in parallel arrays (the timestamp binary search touches only timestamps), and an
@@ -65,7 +67,8 @@ namespace Eggnog.Relations
         /// Appends the row <c>(id, timestamp)</c>. Amortized O(1).
         /// </summary>
         /// <param name="id">An id that just stopped being canonical in the owning context, not journaled yet.</param>
-        /// <param name="timestamp">The epoch of the union or catch-up; no smaller than <see cref="LastTimestamp"/>.</param>
+        /// <param name="timestamp">The epoch of the union or catch-up; no smaller than
+        /// <see cref="LastTimestamp"/>.</param>
         /// <exception cref="InvalidOperationException"><paramref name="timestamp"/> is smaller than
         /// <see cref="LastTimestamp"/>. Nothing changed.</exception>
         public void Append(uint id, uint timestamp)
@@ -127,7 +130,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="row">The row.</param>
         /// <returns>The id.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetId(int row)
         {
@@ -142,7 +146,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="row">The row.</param>
         /// <returns>The timestamp.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below <see cref="Count"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not below
+        /// <see cref="Count"/>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetTimestamp(int row)
         {
@@ -189,7 +194,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Throws for an append whose timestamp precedes the last row's, with <see cref="DisplacedUnionFind"/>'s message.
+        /// Throws for an append whose timestamp precedes the last row's, with <see cref="DisplacedUnionFind"/>'s
+        /// message.
         /// </summary>
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]

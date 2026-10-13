@@ -22,9 +22,10 @@ namespace Eggnog.Relations
     /// <item><description>the hash-cons, container to id (egglog's <c>to_id</c>), keyed by content hash;</description></item>
     /// <item><description>the reverse map, id to container (egglog's <c>to_container</c>), keyed by the id's hash. It
     /// holds the container itself rather than egglog's (hash, shard) pair, so a lookup by id takes one lock and one probe
-    /// where egglog takes the same read lock twice (mod.rs:704-706; map §8.1 row 14);</description></item>
+    /// where egglog takes the same read lock twice (mod.rs:704-706);</description></item>
     /// <item><description>the element index, value to the ids of containers holding it (egglog's <c>val_index</c>),
-    /// kept exact (<see cref="ContainerValueIndex"/>; map §8.1 row 13).</description></item>
+    /// kept exact (<see cref="ContainerValueIndex"/>), where egglog's goes stale after a rebuild that only renames a
+    /// container (mod.rs:553-558, 618-623).</description></item>
     /// </list>
     /// <para>
     /// Invariants, outside a rebuild in progress: the reverse map holds exactly one entry per hash-cons entry, with the
@@ -168,15 +169,16 @@ namespace Eggnog.Relations
         /// <param name="state">The execution state, which mints the id; it must belong to a database.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
-        /// ids; or the containers hold e-class ids and the state belongs to a child context (colored-contexts spec
-        /// §10.7, G-a, decision 9: eq-sort containers in children come after M10; <see cref="TryGetId"/> stays
-        /// allowed), or the container is new and the state's database is frozen (§7.4, G-b).</exception>
+        /// ids; or the containers hold e-class ids and the state belongs to a child context, which may look such a
+        /// container up (<see cref="TryGetId"/>) but not intern one; or the containers hold e-class ids, the container
+        /// is new and the state's database is frozen, whose descendants never re-run their eq-container guard
+        /// (<see cref="EqContainerGuard"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
 
-            // G-a (colored-contexts spec §10.7): a child interns no eq-sort container. One field test at the root, which
-            // runs in no child.
+            // A child interns no eq-sort container; it may only look one up. One field test at the root, which runs in
+            // no child.
             if (state.InChildContext && HoldsIds)
                 ThrowInternedInChild();
 
@@ -190,7 +192,7 @@ namespace Eggnog.Relations
                 if (slot >= 0)
                     return shard.EntryAt(slot).Id;
 
-                // G-b (§7.4): a new eq-sort container may name an id some child displaced; the children re-run their
+                // A new eq-sort container may name an id some child displaced; the children re-run their eq-container
                 // guard before they are read again. A frozen database interns none: its descendants could not be told.
                 if (HoldsIds)
                     NoteNewEqContainer(state);
@@ -232,7 +234,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the container with id <paramref name="id"/>. egglog's <c>get_container</c> (mod.rs:701-730), which
-        /// returns a guard holding a shard read lock and takes that lock twice (map §8.1 row 14). Here the lookup takes
+        /// returns a guard holding a shard read lock and takes that lock twice (mod.rs:704-706). Here the lookup takes
         /// one lock once and returns the immutable container, so the caller holds no lock afterwards and may keep it.
         /// Thread-safe.
         /// </summary>
@@ -327,7 +329,7 @@ namespace Eggnog.Relations
                 AddById(fresh);
                 shard.InsertInSlot(hash, ~slot, fresh);
 
-                // A rebuilt content may name an id some child displaced (§7.4, G-b).
+                // A rebuilt content may name an id some child displaced: the children re-run their eq-container guard.
                 NoteNewContent();
             }
 
@@ -354,11 +356,11 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowInternedInChild()
         {
-            throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a child context: eq-sort containers in children are not supported yet (decision 9). Look it up with TryGetId, or intern it at the root.");
+            throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a child context: a child may look eq-sort containers up but not intern them. Look it up with TryGetId, or intern it at the root.");
         }
 
         /// <summary>
-        /// The slow path of <see cref="GetOrInsert"/> for a new container of a type that holds e-class ids (§7.4, G-b):
+        /// The slow path of <see cref="GetOrInsert"/> for a new container of a type that holds e-class ids:
         /// refuses a frozen database, whose descendants never re-run their guard, and moves the eq-container version, so
         /// every child re-checks its own displacements against the new content before it is read again. Under the
         /// hash-cons shard's lock; nothing is inserted when it throws.
@@ -368,7 +370,7 @@ namespace Eggnog.Relations
         void NoteNewEqContainer(ExecutionState state)
         {
             if (state.View?.Owner is { IsFrozen: true })
-                throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: a descendant that displaced one of its elements could no longer be refused (decision 9, G-b). Look it up with TryGetId.");
+                throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: its descendants do not re-run their guard against it, so a descendant that displaced one of its elements would not be refused. Look it up with TryGetId.");
 
             NoteNewContent();
         }
@@ -402,6 +404,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Adds a reverse-map entry.
         /// </summary>
+        /// <param name="entry">The entry.</param>
         internal void AddById(in ContainerEntry<TContainer> entry)
         {
             var hash = FxHasher.Hash(entry.Id);
@@ -413,6 +416,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Removes the reverse-map entry of one particular container under one id.
         /// </summary>
+        /// <param name="container">The container.</param>
+        /// <param name="contentHash">Its content hash.</param>
+        /// <param name="id">The id it is stored under.</param>
         /// <returns><c>true</c> if it was present.</returns>
         internal bool RemoveById(in TContainer container, ulong contentHash, uint id)
         {
@@ -428,6 +434,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Records the occurrences of the values of <paramref name="container"/> under <paramref name="id"/>.
         /// </summary>
+        /// <param name="container">The container.</param>
+        /// <param name="id">Its id.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Index(in TContainer container, uint id)
         {
@@ -438,6 +446,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Removes the occurrences of the values of <paramref name="container"/> recorded under <paramref name="id"/>.
         /// </summary>
+        /// <param name="container">The container.</param>
+        /// <param name="id">Its id.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Unindex(in TContainer container, uint id)
         {
@@ -447,9 +457,12 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Mints a fresh id from the counter: egglog's <c>Value::from_usize(exec_state.inc_counter(counter))</c>. On the
-        /// store's shared counter, never a child context's id blocks (colored-contexts spec §4.2): a container is
-        /// interned globally, so its id must not be local to the context that first interned it (L3, C13).
+        /// store's shared counter, never a child context's id blocks: a container is interned globally, so its id must
+        /// not be local to the context that first interned it.
         /// </summary>
+        /// <param name="state">The interning state.</param>
+        /// <returns>The id.</returns>
+        /// <exception cref="InvalidOperationException">The counter has no ids left.</exception>
         uint MintId(ExecutionState state)
         {
             var raw = state.IncrementSharedCounter(counter);

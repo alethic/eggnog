@@ -33,8 +33,8 @@ namespace Eggnog
         Compute,
 
         /// <summary>
-        /// Collects the operands as one match of a query (R1b) or a split matcher (R3): a <see cref="MatchCollector"/>
-        /// call, which stages nothing.
+        /// Collects the operands as one match of a query or a split matcher: a <see cref="MatchCollector"/> call, which
+        /// stages nothing.
         /// </summary>
         Collect,
 

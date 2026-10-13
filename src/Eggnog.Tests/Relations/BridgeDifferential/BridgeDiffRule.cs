@@ -6,13 +6,13 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A rule of a bridge differential program: typed variables, atoms (the join), left-hand-side primitives, and actions,
-    /// plus how the bridge plans it. Plain data, so a rule can be built into an e-graph (<see cref="BridgeDiffBridge"/>),
-    /// evaluated naively (<see cref="BridgeDiffOracle"/>), printed and shrunk.
+    /// A rule of a bridge differential program: typed variables, atoms (the join), left-hand-side primitives, and
+    /// actions, plus how the bridge plans it. Plain data, so a rule can be built into an e-graph
+    /// (<see cref="BridgeDiffBridge"/>), evaluated naively (<see cref="BridgeDiffOracle"/>), printed and shrunk.
     /// </summary>
     /// <remarks>
-    /// Evaluation order is the bridge's: the atoms join, then the primitives filter (or bind their results) in order, then
-    /// the actions run in order, each reading only variables bound before it (<see cref="IsWellFormed"/>).
+    /// Evaluation order is the bridge's: the atoms join, then the primitives filter (or bind their results) in order,
+    /// then the actions run in order, each reading only variables bound before it (<see cref="IsWellFormed"/>).
     /// </remarks>
     /// <param name="Name">The rule's description, unique in its program.</param>
     /// <param name="VarSorts">The sort of each variable.</param>

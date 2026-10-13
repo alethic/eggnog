@@ -30,10 +30,11 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Above <see cref="ParallelHeuristics.TableOpThreshold"/> rows, deletes, inserts and compaction run one task per
-    /// shard. The parallel insert stores the merge function's output and reports only real changes, fixing two egglog
-    /// defects (core-relations/src/table/mod.rs:871 and 902-907; map §8.1 rows 3 and 4). It pre-folds each shard's
-    /// batch before merging into the table, which agrees with the serial fold only for associative merges, and
-    /// requires every row of one parallel merge to carry the same sort value, which it checks before writing anything.
+    /// shard. The parallel insert stores the merge function's output and reports only real changes, where egglog's
+    /// discards the output and reports every staged row (core-relations/src/table/mod.rs:902-907 and 871). It pre-folds
+    /// each shard's batch before merging into the table, which agrees with the serial fold only for associative merges,
+    /// and requires every row of one parallel merge to carry the same sort value, which it checks before writing
+    /// anything.
     /// </para>
     /// <para>
     /// Failures. When a sort check fails or a merge function throws, <see cref="Merge"/> propagates the exception with
@@ -43,7 +44,7 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Reads. Every read that yields rows to a caller skips tombstones, including scans with constraints, which egglog
-    /// does not filter (core-relations/src/table/mod.rs:429-439, 1018-1025; map §8.1 row 1). <see cref="All"/>,
+    /// does not filter (core-relations/src/table/mod.rs:429-439, 1018-1025). <see cref="All"/>,
     /// <see cref="UpdatesSince"/> and <see cref="TryFastSubset"/> return physical ranges that may include tombstones;
     /// whoever reads them through this table gets only live rows.
     /// </para>
@@ -103,8 +104,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Initializes an empty table whose pending queues are created on first use when <paramref name="lazyPending"/>
-        /// is set: a child context's layer (<see cref="CreateLayer"/>, colored-contexts spec §14.2). Otherwise as the
-        /// public constructor.
+        /// is set: a child context's layer (<see cref="CreateLayer"/>). Otherwise as the public constructor.
         /// </summary>
         SortedWritesTable(int keyCount, int arity, ColumnId? sortBy, ReadOnlySpan<ColumnId> toRebuild, MergeFunction merge, ParallelHeuristics? parallelism, bool lazyPending)
             : base(TableKind.SortedWrites, arity)
@@ -247,8 +247,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(state);
 
-            // A child context's layer merges against what the context sees (colored-contexts spec §6.6, X2): one null
-            // test per table merge at the root.
+            // A child context's layer merges against what the context sees: one null test per table merge at the root.
             if (layer is { } owner)
                 return MergeLayered(state, owner);
 

@@ -4,8 +4,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The logical schema of a table for <see cref="ReferenceView"/>: the spike's <c>Table</c>/<c>TableSchema</c>
-    /// (src/Eggnog.Storage/TableSchema.cs). Columns exclude the timestamp the engine's tables add.
+    /// The logical schema of a table for <see cref="ReferenceView"/>. Columns exclude the timestamp the engine's tables
+    /// add.
     /// </summary>
     sealed class ReferenceTable
     {

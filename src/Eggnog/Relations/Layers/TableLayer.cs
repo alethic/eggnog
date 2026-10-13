@@ -7,9 +7,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A child context's layer of one function table (colored-contexts spec §6.2): the rows the context stored itself
-    /// (<see cref="Own"/>, an ordinary single-shard <see cref="SortedWritesTable"/> in the context's database) and the
-    /// rows of each ancestor layer it hides (<see cref="HiddenOver"/>), plus whether it cleared the table.
+    /// A child context's layer of one function table: the rows the context stored itself (<see cref="Own"/>, an
+    /// ordinary single-shard <see cref="SortedWritesTable"/> in the context's database) and the rows of each ancestor
+    /// layer it hides (<see cref="HiddenOver"/>), plus whether it cleared the table.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -19,8 +19,8 @@ namespace Eggnog.Relations
     /// stamps incoming rows, merges with the visible ancestor row of the key and hides it.
     /// </para>
     /// <para>
-    /// Hides (<see cref="Hide"/>) run on the context's domain thread only, inside its merge or right before the merge of
-    /// the same pass (X40); the merge epilogue seals them (<see cref="SealHidden"/>). Hidden sets only grow (I20).
+    /// Hides (<see cref="Hide"/>) run on the context's domain thread only, inside its merge or right before the merge
+    /// of the same pass; the merge epilogue seals them (<see cref="SealHidden"/>). Hidden sets only grow.
     /// </para>
     /// </remarks>
     internal sealed class TableLayer
@@ -53,7 +53,7 @@ namespace Eggnog.Relations
 
 #if DEBUG
         /// <summary>
-        /// Why each row was hidden, by <c>(layer &lt;&lt; 32) | row</c>, for the invariant checker (I14). DEBUG builds only.
+        /// Why each row was hidden, by <c>(layer &lt;&lt; 32) | row</c>, for the invariant checker. DEBUG builds only.
         /// </summary>
         readonly Dictionary<long, HideReason> reasons = new();
 #endif
@@ -94,19 +94,19 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the context's database holds the layer in its table map (<see cref="Database.AdoptLayer"/>). A
-        /// layer created during a search waits for the next merge round to be adopted (X37).
+        /// layer created during a search waits for the next merge round to be adopted.
         /// </summary>
         public bool IsAdopted => isAdopted;
 
         /// <summary>
-        /// Gets whether the context cleared the table: every ancestor layer is absent from its views (§6.3).
+        /// Gets whether the context cleared the table: every ancestor layer is absent from its views.
         /// </summary>
         public bool IsCleared => isCleared;
 
         /// <summary>
-        /// Gets whether the context retracted rows of the table: it staged a delete (§6.7; its own row tombstoned, or a row
+        /// Gets whether the context retracted rows of the table: it staged a delete (its own row tombstoned, or a row
         /// it saw through an ancestor hidden with <see cref="HideReason.Retracted"/>), or a subsumption. A row it hid
-        /// earlier may then have lost its carrier, which I14 allows.
+        /// earlier may then have lost its carrier, which the invariant checker allows.
         /// </summary>
         public bool HasRetractions => hasRetractions;
 
@@ -133,7 +133,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether this context hides any row of any ancestor layer of the table (a set exists only once a row was
-        /// hidden, and sets never shrink, I20). O(depth). Domain thread only.
+        /// hidden, and sets never shrink). O(depth). Domain thread only.
         /// </summary>
         internal bool HasHidden
         {
@@ -149,9 +149,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Hides row <paramref name="row"/> of the ancestor layer at depth <paramref name="layer"/>: the row carries
-        /// information this context holds elsewhere (<paramref name="reason"/>, I14). Moves the layer's version, the
+        /// information this context holds elsewhere (<paramref name="reason"/>). Moves the layer's version, the
         /// context's change stamp and the table's dirty flag. Domain thread only, inside the context's merge or right
-        /// before the merge of the same pass (X40).
+        /// before the merge of the same pass.
         /// </summary>
         /// <param name="layer">An ancestor depth.</param>
         /// <param name="row">A row id of that layer.</param>
@@ -165,7 +165,7 @@ namespace Eggnog.Relations
             if (set is null)
                 hidden[layer] = set = new HiddenSet(ancestor.Version.Major);
 
-            Debug.Assert(set.Generation == ancestor.Version.Major, "a hidden set outlived its layer's generation (I16)");
+            Debug.Assert(set.Generation == ancestor.Version.Major, "a hidden set outlived its layer's generation");
             var wasSealed = set.IsSealed;
             if (set.Add(row, ancestor.Rows.Count) == false)
                 return false;
@@ -203,7 +203,7 @@ namespace Eggnog.Relations
         internal void SetRetracted() => hasRetractions = true;
 
         /// <summary>
-        /// Records that the context cleared the table: its views drop every ancestor layer (§6.7).
+        /// Records that the context cleared the table: its views drop every ancestor layer.
         /// </summary>
         internal void SetCleared()
         {
@@ -217,7 +217,7 @@ namespace Eggnog.Relations
         internal void SetAdopted() => isAdopted = true;
 
         /// <summary>
-        /// Seals every hidden set of the layer (X40).
+        /// Seals every hidden set of the layer.
         /// </summary>
         internal void SealHidden()
         {

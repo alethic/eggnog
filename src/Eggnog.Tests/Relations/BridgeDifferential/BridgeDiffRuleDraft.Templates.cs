@@ -7,10 +7,10 @@ namespace Eggnog.Relations.Tests
     {
 
         /// <summary>
-        /// Generates the first rule of a bulk program, a chain of unions between the bulk-loaded leaves of the program's
-        /// first function: <c>(rule ((= x (NumA k)) (&lt; k c)) ((union x (NumA (+ k d)))))</c>, with <c>c</c> 20 to 400
-        /// past the first key, so its first run unions a few hundred classes of a table of more than 10,000 rows, which the
-        /// rebuild then handles incrementally.
+        /// Generates the first rule of a bulk program, a chain of unions between the bulk-loaded leaves of the
+        /// program's first function: <c>(rule ((= x (NumA k)) (&lt; k c)) ((union x (NumA (+ k d)))))</c>, with
+        /// <c>c</c> 20 to 400 past the first key, so its first run unions a few hundred classes of a table of more than
+        /// 10,000 rows, which the rebuild then handles incrementally.
         /// </summary>
         /// <param name="name">The rule's description.</param>
         /// <returns>The rule.</returns>
@@ -29,17 +29,17 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Generates a rule of a bulk program that writes to every bulk-loaded leaf of the program's first function:
-        /// <c>(rule ((= x (NumA k))) ((set (lo x) (+ k c)) (R x) (subsume (NumA k))))</c>, the lattice value <c>k + c</c>,
-        /// <c>k</c> or a constant, the relation insertion and the subsumption each sometimes left out. The atom sometimes
-        /// matches subsumed leaves too, so the rule keeps matching after another one subsumed them.
+        /// <c>(rule ((= x (NumA k))) ((set (lo x) (+ k c)) (R x) (subsume (NumA k))))</c>, the lattice value
+        /// <c>k + c</c>, <c>k</c> or a constant, the relation insertion and the subsumption each sometimes left out.
+        /// The atom sometimes matches subsumed leaves too, so the rule keeps matching after another one subsumed them.
         /// </summary>
         /// <remarks>
         /// Two or three of these run in a bulk program's first iteration and all write its first lattice over the first
-        /// sort, so a single insert into the lattice (and the relation, and the leaves) stages more than 20,000 rows per
-        /// rule with conflicting keys, which the merge reduces, and which a parallel e-graph inserts in parallel. Later
-        /// iterations re-confirm them without changing anything: every iteration of the naive e-graph, and those of the
-        /// semi-naive one after a subsumption or a union re-stamped the leaves. The program's signature has a lattice and a
-        /// relation over the first sort (<see cref="BridgeDiffGenerator"/>).
+        /// sort, so a single insert into the lattice (and the relation, and the leaves) stages more than 20,000 rows
+        /// per rule with conflicting keys, which the merge reduces, and which a parallel e-graph inserts in parallel.
+        /// Later iterations re-confirm them without changing anything: every iteration of the naive e-graph, and those
+        /// of the semi-naive one after a subsumption or a union re-stamped the leaves. The program's signature has a
+        /// lattice and a relation over the first sort (<see cref="BridgeDiffGenerator"/>).
         /// </remarks>
         /// <param name="name">The rule's description.</param>
         /// <returns>The rule.</returns>
@@ -181,8 +181,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <c>(= r (Op .. x ..)) =&gt; (union r x)</c> where <c>x</c> has the output's sort, sometimes only where another
-        /// key is a leaf (<c>(Op x (Num 0))</c>, <c>(Op x (Leaf))</c>).
+        /// <c>(= r (Op .. x ..)) =&gt; (union r x)</c> where <c>x</c> has the output's sort, sometimes only where
+        /// another key is a leaf (<c>(Op x (Num 0))</c>, <c>(Op x (Leaf))</c>).
         /// </summary>
         bool Absorb()
         {
@@ -326,8 +326,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Lattice propagation along terms: <c>(= r (Op x y)) (= a (L x)) (= b (L y)) =&gt; (set (L r) (+ a b))</c> (or
-        /// <c>min</c>, <c>max</c>, or <c>+</c> a constant from one key), backwards from a term to a key, or from integer
-        /// leaves: <c>(= r (Num n)) =&gt; (set (L r) n)</c>.
+        /// <c>min</c>, <c>max</c>, or <c>+</c> a constant from one key), backwards from a term to a key, or from
+        /// integer leaves: <c>(= r (Num n)) =&gt; (set (L r) n)</c>.
         /// </summary>
         bool Propagate()
         {
@@ -396,8 +396,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Unions related classes: <c>(R x y) =&gt; (union x y)</c> over a binary relation of one sort, or
-        /// <c>(= b (best x)) =&gt; (union b x)</c> over an id function to its key's sort, or two terms that share a key,
-        /// <c>(= a (Op x ..)) (= b (Op' x ..)) =&gt; (union a b)</c>.
+        /// <c>(= b (best x)) =&gt; (union b x)</c> over an id function to its key's sort, or two terms that share a
+        /// key, <c>(= a (Op x ..)) (= b (Op' x ..)) =&gt; (union a b)</c>.
         /// </summary>
         bool UnionRelated()
         {

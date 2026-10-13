@@ -5,32 +5,31 @@ using System.Text;
 
 using Xunit;
 
-using Spike = Eggnog.Storage;
-
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// One context of a union-find differential program (colored-contexts spec §17 M9.2), run three ways at once: the
-    /// engine's <see cref="Context"/>, the naive <see cref="ReferenceUnionFindContext"/> (the oracle for exact canonical
-    /// ids, journals and merges), and the spike's context (a second oracle, compared modulo renaming of ids).
+    /// One context of a union-find differential program, run two ways at once: the engine's <see cref="Context"/> and
+    /// the naive <see cref="ReferenceUnionFindContext"/> (the oracle for exact canonical ids, journals and merges).
     /// </summary>
     /// <remarks>
-    /// Every operation is applied to all three and traced, so a failure prints the program that led to it. Ids are the
-    /// engine's; the spike mints its own, and <see cref="Ids"/> maps each engine id to the spike id minted with it.
+    /// Every operation is applied to both and traced, so a failure prints the program that led to it. Ids are the
+    /// engine's; the reference is told them.
     /// </remarks>
     sealed class UnionFindContextPair
     {
 
         readonly List<UnionFindContextPair> children = new();
 
-        UnionFindContextPair(Context engine, Spike.Context spike, ReferenceUnionFindContext reference, UnionFindContextPair? parent, Dictionary<uint, uint> ids, StringBuilder trace, string name)
+        /// <summary>
+        /// Initializes a pair over <paramref name="engine"/> and <paramref name="reference"/>, tracing into
+        /// <paramref name="trace"/> as <paramref name="name"/>.
+        /// </summary>
+        UnionFindContextPair(Context engine, ReferenceUnionFindContext reference, UnionFindContextPair? parent, StringBuilder trace, string name)
         {
             Engine = engine;
-            SpikeContext = spike;
             Reference = reference;
             Parent = parent;
-            Ids = ids;
             Trace = trace;
             Name = name;
         }
@@ -42,19 +41,13 @@ namespace Eggnog.Relations.Tests
         public static UnionFindContextPair Root()
         {
             var store = new Store(ParallelHeuristics.Serial);
-            var spike = new Spike.Store();
-            return new UnionFindContextPair(store.Root, spike.Root, new ReferenceUnionFindContext(), null, new Dictionary<uint, uint>(), new StringBuilder(), "r");
+            return new UnionFindContextPair(store.Root, new ReferenceUnionFindContext(), null, new StringBuilder(), "r");
         }
 
         /// <summary>
         /// Gets the engine's context.
         /// </summary>
         public Context Engine { get; }
-
-        /// <summary>
-        /// Gets the spike's context.
-        /// </summary>
-        public Spike.Context SpikeContext { get; }
 
         /// <summary>
         /// Gets the naive model.
@@ -70,11 +63,6 @@ namespace Eggnog.Relations.Tests
         /// Gets the live children.
         /// </summary>
         public IReadOnlyList<UnionFindContextPair> Children => children;
-
-        /// <summary>
-        /// Gets the map from every engine id minted in the program to the spike id minted with it.
-        /// </summary>
-        public Dictionary<uint, uint> Ids { get; }
 
         /// <summary>
         /// Gets the program's trace.
@@ -107,82 +95,77 @@ namespace Eggnog.Relations.Tests
         public uint[] VisibleIds() => Reference.VisibleIds();
 
         /// <summary>
-        /// Mints an id in all three.
+        /// Mints an id in both.
         /// </summary>
         /// <returns>The engine's id.</returns>
         public uint NewId()
         {
             var id = Engine.NewId();
-            var spikeId = SpikeContext.NewId().Value;
-            Ids.Add(id, spikeId);
             Reference.Mint(id);
             Trace.AppendLine($"{Name}.NewId() = {id}");
             return id;
         }
 
         /// <summary>
-        /// Unions two visible ids in all three, which must agree on whether the classes were distinct.
+        /// Unions two visible ids in both, which must agree on whether the classes were distinct.
         /// </summary>
         public void Union(uint a, uint b)
         {
             Trace.AppendLine($"{Name}.Union({a}, {b})");
             var expected = Reference.Union(a, b);
             Assert.Equal(expected, Engine.Union(a, b));
-            Assert.Equal(expected, SpikeContext.Union(new Spike.Id(Ids[a]), new Spike.Id(Ids[b])));
         }
 
         /// <summary>
-        /// Rebuilds the engine's and the spike's context.
+        /// Rebuilds the engine's context.
         /// </summary>
         public void Rebuild()
         {
             Trace.AppendLine($"{Name}.Rebuild()");
             Engine.Rebuild();
-            SpikeContext.Rebuild();
         }
 
         /// <summary>
-        /// Creates a child in all three.
+        /// Creates a child in both.
         /// </summary>
         /// <returns>The child.</returns>
         public UnionFindContextPair CreateChild()
         {
             var name = $"{Name}{children.Count}";
             Trace.AppendLine($"{name} = {Name}.CreateChild()");
-            var child = new UnionFindContextPair(Engine.CreateChild(), SpikeContext.CreateChild(), Reference.CreateChild(), this, Ids, Trace, name);
+            var child = new UnionFindContextPair(Engine.CreateChild(), Reference.CreateChild(), this, Trace, name);
             children.Add(child);
             return child;
         }
 
         /// <summary>
-        /// Freezes the engine's and the spike's context.
+        /// Freezes the engine's context and the reference's.
         /// </summary>
         public void Freeze()
         {
             Trace.AppendLine($"{Name}.Freeze()");
             Engine.Freeze();
-            SpikeContext.Freeze();
             Reference.IsFrozen = true;
         }
 
         /// <summary>
-        /// Disposes the engine's and the spike's context; it must have no children.
+        /// Disposes the engine's context; it must have no children.
         /// </summary>
         public void Dispose()
         {
             Trace.AppendLine($"{Name}.Dispose()");
             Engine.Dispose();
-            SpikeContext.Dispose();
             Parent!.children.Remove(this);
         }
 
         /// <summary>
-        /// Rebuilds the pair and compares the engine with both oracles: the engine's invariants hold; canonical ids are
-        /// exactly the reference's; the partition equals the spike's modulo renaming; and in a child, local ids, the
-        /// journal (complete, and minus the ids displaced in the parent's view at creation), own displacements and the
-        /// merges <see cref="Context.ScanMerges{TVisitor}"/> reports are the reference's.
+        /// Rebuilds the pair and compares the engine with the oracle: the engine's invariants hold; canonical ids are
+        /// exactly the reference's; and in a child, local ids, the journal (complete, and minus the ids displaced in
+        /// the parent's view at creation), own displacements and the merges <see cref="Context.ScanMerges{TVisitor}"/>
+        /// reports are the reference's.
         /// </summary>
-        /// <param name="allMinted">Every id minted anywhere in the program, by the reference context that minted it.</param>
+        /// <param name="allMinted">Every id minted anywhere in the program, by the reference context that minted
+        /// it.</param>
         public void Check(IReadOnlyDictionary<uint, ReferenceUnionFindContext> allMinted)
         {
             Trace.AppendLine($"{Name}.Check()");
@@ -195,23 +178,6 @@ namespace Eggnog.Relations.Tests
             foreach (var (id, canonical) in canonicals)
                 Assert.True(canonical == Engine.Find(id), $"{Name}: find({id}) is {Engine.Find(id)}, the reference says {canonical}");
 
-            // The spike's partition, modulo renaming: a bijection between the classes.
-            var spikeToEngine = new Dictionary<uint, uint>();
-            var engineToSpike = new Dictionary<uint, uint>();
-            foreach (var (id, canonical) in canonicals)
-            {
-                var spikeCanonical = SpikeContext.Find(new Spike.Id(Ids[id])).Value;
-                if (spikeToEngine.TryGetValue(spikeCanonical, out var seen))
-                    Assert.True(seen == canonical, $"{Name}: the spike puts {id} with the engine's class {seen}, the engine in {canonical}");
-                else
-                    spikeToEngine.Add(spikeCanonical, canonical);
-
-                if (engineToSpike.TryGetValue(canonical, out var seenSpike))
-                    Assert.True(seenSpike == spikeCanonical, $"{Name}: the engine's class {canonical} is split in the spike");
-                else
-                    engineToSpike.Add(canonical, spikeCanonical);
-            }
-
             if (Parent is null)
             {
                 Assert.Throws<InvalidOperationException>(() => Engine.IsLocalId(0));
@@ -223,7 +189,7 @@ namespace Eggnog.Relations.Tests
             foreach (var (id, owner) in allMinted)
                 Assert.True(Engine.IsLocalId(id) == ReferenceEquals(owner, Reference), $"{Name}: IsLocalId({id}) is wrong");
 
-            // The journal holds exactly the non-canonical ids not displaced in the parent's view at creation (I8).
+            // The journal holds exactly the non-canonical ids not displaced in the parent's view at creation.
             var journal = Engine.DisplacedIds.ToArray();
             Assert.Equal(journal.Length, journal.Distinct().Count());
             var expectedJournal = canonicals.Where(pair => pair.Key != pair.Value && Reference.DisplacedInParentAtCreation.Contains(pair.Key) == false).Select(pair => pair.Key).OrderBy(x => x).ToArray();

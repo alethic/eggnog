@@ -9,8 +9,8 @@ namespace Eggnog.Relations
     /// subsumption entry. One element of egglog-bridge's <c>Query::atoms</c> (egglog-bridge/src/rule.rs:107).
     /// </summary>
     /// <remarks>
-    /// Because every atom carries a fresh timestamp variable, no atom of an e-graph rule is ever free of variables (map
-    /// §3.3), and the semi-naive variants constrain exactly that column (<see cref="SchemaMath.TimestampColumn"/>).
+    /// Because every atom carries a fresh timestamp variable, no atom of an e-graph rule is ever free of variables, and
+    /// the semi-naive variants constrain exactly that column (<see cref="SchemaMath.TimestampColumn"/>).
     /// Immutable; the entry array is owned by the atom.
     /// </remarks>
     internal sealed class RuleAtom

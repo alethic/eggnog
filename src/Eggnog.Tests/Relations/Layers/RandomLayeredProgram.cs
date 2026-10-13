@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A random layered state and its reference (colored-contexts spec §17 M9.3): a store with lattice tables of several
-    /// shapes (functions of 0 to 4 id keys, relations, constructors, a value-only table, a context-private table), a root
-    /// written (with unions and rebuilds) and then, usually, frozen, and a chain of up to three children, each written
-    /// before it creates its child and then frozen or left open, with no unions below the root; sometimes a sibling.
+    /// A random layered state and its reference: a store with lattice tables of several shapes (functions of 0 to 4 id
+    /// keys, relations, constructors, a value-only table, a context-private table), a root written (with unions and
+    /// rebuilds) and then, usually, frozen, and a chain of up to three children, each written before it creates its
+    /// child and then frozen or left open, with no unions below the root; sometimes a sibling.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -22,9 +22,9 @@ namespace Eggnog.Relations.Tests
     /// the egglog-parity suites cover. At the end every context is checked again (isolation), and the chain is disposed.
     /// </para>
     /// <para>
-    /// These states are built as M9.3's were: no ancestor changes after it has children, so no catch-up is needed (the
-    /// context differential, <see cref="ContextDifferentialTests"/>, covers ancestors that change); deletes and clears
-    /// happen only where §6.7 allows them (a root before its first child, a child under a frozen parent before its own
+    /// In these states no ancestor changes after it has children, so no catch-up is needed (the context differential,
+    /// <see cref="ContextDifferentialTests"/>, covers ancestors that change); deletes and clears happen only where the
+    /// retraction guard allows them (a root before its first child, a child under a frozen parent before its own
     /// children).
     /// </para>
     /// </remarks>

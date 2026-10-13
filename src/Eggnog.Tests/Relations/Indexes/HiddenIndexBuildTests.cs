@@ -10,7 +10,7 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the visibility-aware per-subset index builds (colored-contexts spec §9.3, T3):
+    /// Tests for the visibility-aware per-subset index builds:
     /// <see cref="ColumnIndex.BuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/>,
     /// <see cref="ColumnIndex.RebuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/>,
     /// <see cref="ColumnIndex.RebuildFull(Table, ReadOnlySpan{ColumnId}, SubsetRef, HiddenRows)"/>,
@@ -19,7 +19,7 @@ namespace Eggnog.Relations.Tests
     /// <see cref="SparseColumnIndex.Build(Table, SubsetRef, ColumnId, HiddenRows)"/> and the <see cref="TableIndexing"/>
     /// forms: each lists exactly the visible rows of its subset, and with <see cref="HiddenRows.None"/> exactly what the
     /// plain build lists. Catalog indexes stay hidden-agnostic: a layer's cached indexes list every live row, hidden or
-    /// not (C6).
+    /// not.
     /// </summary>
     public class HiddenIndexBuildTests
     {

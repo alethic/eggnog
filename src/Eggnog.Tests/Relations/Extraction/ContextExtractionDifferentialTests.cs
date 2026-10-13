@@ -8,11 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The context extraction differential (colored-contexts spec §10.10, rule-layer E5): random small programs run on a
-    /// chain of contexts, and the deepest context's extraction is compared with extraction at a fresh root that replays
-    /// the chain's steps. Ids differ between the two, so classes are matched through the terms the program made, and the
-    /// extracted terms are compared up to cost ties: equal costs, and each side's term, rebuilt in the other e-graph,
-    /// is a term of the matching class there.
+    /// The context extraction differential: random small programs run on a chain of contexts, and the deepest context's
+    /// extraction is compared with extraction at a fresh root that replays the chain's steps. Ids differ between the
+    /// two, so classes are matched through the terms the program made, and the extracted terms are compared up to cost
+    /// ties: equal costs, and each side's term, rebuilt in the other e-graph, is a term of the matching class there.
     /// </summary>
     public class ContextExtractionDifferentialTests
     {
@@ -80,8 +79,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Rebuilds an extracted term of one e-graph in another, bottom up, by looking each node up there; base values are
-        /// carried over by content.
+        /// Rebuilds an extracted term of one e-graph in another, bottom up, by looking each node up there; base values
+        /// are carried over by content.
         /// </summary>
         /// <returns>The canonical class of the rebuilt term, or <c>null</c> when a node does not exist there.</returns>
         static Value? Rebuild(ExtractedTerm term, ContextExtractionWorld from, ContextExtractionWorld to, Func<FunctionId, Value[], Value?> lookup, Func<Value, Value> find)

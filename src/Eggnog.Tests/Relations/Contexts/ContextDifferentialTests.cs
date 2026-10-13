@@ -8,18 +8,17 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The context differential, the M9 gate (colored-contexts spec §17 M9.4): the spike's <c>DifferentialTests</c>
-    /// ported to the engine (<see cref="SpikePair"/>). Random programs of id mints, unions, constructor get-or-adds, rows of
-    /// functions, lattices and relations, rebuilds, children three deep, ancestors changing after their children exist,
-    /// random freezes, disposal and retractions run on the engine and the naive <see cref="SpikeReferenceContext"/> at
-    /// once; half the seeds also run the spike as a second oracle (and then retract nothing, which the spike cannot).
+    /// The context differential, over <see cref="ContextPair"/>. Random programs of id mints, unions, constructor
+    /// get-or-adds, rows of functions, lattices and relations, rebuilds, children three deep, ancestors changing after
+    /// their children exist, random freezes, disposal and retractions run on the engine and the naive
+    /// <see cref="ReferenceContext"/> at once.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The id pool is kept small so keys collide and congruence cascades. Retractions are attempted anywhere: where §6.7
-    /// allows them (the root without live descendants, a child of a frozen parent without live descendants) they apply;
-    /// elsewhere the engine must refuse without changing anything. Checks compare views (exactly with the reference,
-    /// modulo renaming with the spike), lookups, column scans (through the lift reads in children) and scans since a clock
+    /// The id pool is kept small so keys collide and congruence cascades. Retractions are attempted anywhere: where the
+    /// engine's retraction rule allows them (the root without live descendants, a child of a frozen parent without live
+    /// descendants) they apply; elsewhere the engine must refuse without changing anything. Checks compare views
+    /// (exactly with the reference), lookups, column scans (through the lift reads in children) and scans since a clock
     /// reading; every rebuild runs the engine's invariant checker, and every write the lookup-path comparison.
     /// </para>
     /// <para>
@@ -43,26 +42,27 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Random programs of 150 steps, contexts three deep: the engine agrees with the reference (and, on even seeds,
-        /// with the spike) at every check.
+        /// Random programs of 150 steps, contexts three deep: the engine agrees with the reference at every check. Odd
+        /// seeds pass the rows written in children raw (<see cref="ContextProgram.RawChildWrites"/>).
         /// </summary>
         [Theory]
         [MemberData(nameof(Seeds))]
-        public void RandomProgramsAgreeWithTheOracles(int seed)
+        public void RandomProgramsAgreeWithTheReference(int seed)
         {
-            Run(seed, 150, withSpike: seed % 2 == 0);
+            Run(seed, 150, rawChildWrites: seed % 2 == 1);
         }
 
         /// <summary>
-        /// Longer programs, where classes grow, catch-up and step 4 copy many rows, and deep chains freeze on top of each
-        /// other; the coverage counters show the programs reach every branch of the child's rebuild.
+        /// Longer programs, where classes grow, catch-up and the rebuild's hide-and-copy step copy many rows, and deep
+        /// chains freeze on top of each other; the coverage counters show the programs reach every branch of the
+        /// child's rebuild.
         /// </summary>
         [Fact]
         public void LongProgramsAgree()
         {
             var coverage = new Coverage();
             for (var seed = 0; seed < 24; seed++)
-                Run(100_000 + seed, 600, withSpike: seed % 3 == 0, coverage);
+                Run(100_000 + seed, 600, rawChildWrites: seed % 3 != 0, coverage);
 
             Assert.True(coverage.CatchUpRowsExamined > 0, "no child caught up with an ancestor's rows");
             Assert.True(coverage.RowsCopied > 0, "no ancestor row was copied into a child");
@@ -84,13 +84,13 @@ namespace Eggnog.Relations.Tests
         [MemberData(nameof(Seeds))]
         public void RandomRootProgramsAgree(int seed)
         {
-            var root = SpikePair.Root(withSpike: seed % 2 == 0);
-            var live = new List<SpikePair> { root };
+            var root = ContextPair.Root();
+            var live = new List<ContextPair> { root };
             var random = new Random(seed);
             try
             {
                 for (var step = 0; step < 150; step++)
-                    Step(random, root, live, allowChildren: false, retractions: root.SpikeContext is null);
+                    Step(random, root, live, allowChildren: false, retractions: true);
 
                 root.Check();
             }
@@ -105,14 +105,15 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         /// <param name="seed">The program's seed.</param>
         /// <param name="steps">The number of steps.</param>
-        /// <param name="withSpike">Whether the spike runs too (then nothing is retracted).</param>
+        /// <param name="rawChildWrites">Whether rows written in children are passed raw
+        /// (<see cref="ContextProgram.RawChildWrites"/>).</param>
         /// <param name="coverage">Accumulates what the program exercised, or <c>null</c>.</param>
-        static void Run(int seed, int steps, bool withSpike, Coverage? coverage = null)
+        static void Run(int seed, int steps, bool rawChildWrites, Coverage? coverage = null)
         {
             var random = new Random(seed);
-            var root = SpikePair.Root(withSpike);
-            root.Program.RawChildWrites = withSpike == false;
-            var live = new List<SpikePair> { root };
+            var root = ContextPair.Root();
+            root.Program.RawChildWrites = rawChildWrites;
+            var live = new List<ContextPair> { root };
             var freezeAt = random.Next(3) == 0 ? random.Next(steps / 3, steps) : -1;
             try
             {
@@ -128,7 +129,7 @@ namespace Eggnog.Relations.Tests
                     if (writable.Count == 0)
                         break;
 
-                    Step(random, writable[random.Next(writable.Count)], live, allowChildren: true, retractions: withSpike == false, coverage);
+                    Step(random, writable[random.Next(writable.Count)], live, allowChildren: true, retractions: true, coverage);
                 }
 
                 foreach (var pair in live)
@@ -144,9 +145,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// One random step of <paramref name="pair"/>, the spike's distribution plus freezes and retractions.
+        /// One random step of <paramref name="pair"/>: mints, unions, rows, children, rebuilds and checks, plus freezes
+        /// and retractions.
         /// </summary>
-        internal static void Step(Random random, SpikePair pair, List<SpikePair> live, bool allowChildren, bool retractions, Coverage? coverage = null)
+        internal static void Step(Random random, ContextPair pair, List<ContextPair> live, bool allowChildren, bool retractions, Coverage? coverage = null)
         {
             var schema = pair.Program.Schema;
             var ids = pair.VisibleIds();
@@ -223,7 +225,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// A retraction: of a key (usually one the pair sees), or of a whole table.
         /// </summary>
-        static void Retract(Random random, SpikePair pair, SpikeTestSchema schema, Func<ulong> pick, Coverage? coverage)
+        static void Retract(Random random, ContextPair pair, ContextTestSchema schema, Func<ulong> pick, Coverage? coverage)
         {
             var table = schema.Tables[random.Next(schema.Tables.Count)];
             if (random.Next(8) == 0)

@@ -4,8 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Resolves a scope tag from a scope (§6.7): the first scope in <c>from, from.Parent, …</c> whose tag is the tag, by
-    /// reference. Tags are absolute labels (D23); the root carries <see cref="EGraph.RootTag"/>.
+    /// Resolves a scope tag from a scope: the first scope in <c>from, from.Parent, …</c> whose tag is the tag, by
+    /// reference. Tags are absolute labels, never relative to the scope; the root carries <see cref="EGraph.RootTag"/>.
     /// </summary>
     internal static class ScopeResolver
     {

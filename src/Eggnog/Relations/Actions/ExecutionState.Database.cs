@@ -26,9 +26,8 @@ namespace Eggnog.Relations
         /// its notification list; counters and external functions come from the view.
         /// </summary>
         /// <remarks>
-        /// In a store (colored-contexts spec §6.5, §6.7) the state also takes the child context's layering, through which
-        /// it reads committed tables, and the database's retraction guard (<see cref="Database.GuardForNewState"/>), which
-        /// its removals go through.
+        /// In a store the state also takes the child context's layering, through which it reads committed tables, and
+        /// the database's retraction guard (<see cref="Database.GuardForNewState"/>), which its removals go through.
         /// </remarks>
         /// <param name="view">The database view.</param>
         /// <param name="timestamp">The timestamp of the batch this state executes.</param>
@@ -63,7 +62,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Increments <paramref name="counter"/> and returns its previous value. egglog's <c>inc_counter</c>. In a child
-        /// context, the store's id counter mints from the child's id blocks (colored-contexts spec §4.2).
+        /// context, the store's id counter mints from the blocks the child reserves on the shared counter
+        /// (<see cref="IdBlockAllocator"/>), so ids minted in different contexts never collide.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
@@ -72,7 +72,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the current value of <paramref name="counter"/>. egglog's <c>read_counter</c>, except for the store's
-        /// clock, which reads as this state's <see cref="Timestamp"/> (C1, colored-contexts spec §4.1).
+        /// clock, which reads as this state's <see cref="Timestamp"/>: the epoch its context captured.
         /// </summary>
         /// <remarks>
         /// The pin is what stamps every write of a run, pass or batch with the epoch its context captured, even while a
@@ -133,7 +133,7 @@ namespace Eggnog.Relations
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
         /// <exception cref="InvalidOperationException">The state is not attached to a database, or it runs in a child
-        /// context, whose tables are layered (colored-contexts spec §6.5).</exception>
+        /// context, whose tables are layered.</exception>
         /// <exception cref="KeyNotFoundException">No such table, or it is taken out.</exception>
         public Table GetTable(TableId table) => layers is null ? RequireView().GetTable(table) : ThrowLayeredRead(table);
 

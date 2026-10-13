@@ -4,7 +4,7 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The limits of a lift (colored-contexts spec §11.2). Immutable once built.
+    /// The limits of a lift. Immutable once built.
     /// </summary>
     internal sealed class LiftOptions
     {

@@ -7,8 +7,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="ThreadAffinityGuard"/>, the thread domain of colored contexts (colored-contexts spec §8.3,
-    /// X15): re-entrant on its owner, refusing (never waiting for) a second thread.
+    /// Tests for <see cref="ThreadAffinityGuard"/>, the thread domain of colored contexts: re-entrant on its owner,
+    /// refusing (never waiting for) a second thread, since two threads on one domain is a usage error that waiting
+    /// would hide.
     /// </summary>
     public class ThreadAffinityGuardTests
     {

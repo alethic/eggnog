@@ -12,8 +12,8 @@ namespace Eggnog.Relations
     /// <remarks>
     /// <para>
     /// The row changes only when the incoming id is the smaller one; otherwise the merge returns <c>false</c> but has
-    /// still staged the union, so <see cref="ExecutionState.Changed"/> is set and the merge loop keeps going (decision
-    /// in map §2.3, "the conflict contract"). The output is the incoming row, keeping its timestamp.
+    /// still staged the union, so <see cref="ExecutionState.Changed"/> is set and the merge loop keeps going, as in
+    /// egglog. The output is the incoming row, keeping its timestamp.
     /// </para>
     /// <para>
     /// The union's timestamp comes from <see cref="TimestampColumn"/> of the incoming row when there is one (the

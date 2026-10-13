@@ -3,8 +3,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// One block of ids an <see cref="IdBlockAllocator"/> reserved on the store's id counter: the ids
-    /// <c>[Start, End)</c>, handed out in order by interlocked increments of <see cref="Next"/> (colored-contexts spec
-    /// §4.2).
+    /// <c>[Start, End)</c>, handed out in order by interlocked increments of <see cref="Next"/>.
     /// </summary>
     /// <remarks>
     /// <see cref="Next"/> may run past <see cref="End"/> when several threads race at the end of the block; values at or

@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Xunit;
+
+using static Eggnog.Relations.Tests.BridgeTestUtil;
 
 namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Contradiction in the bridge (colored-contexts spec §6.9, §10.6, §17 M10.3; rule-layer E4, D11): designating the
-    /// contradiction function, the early stop of a case's search, the stop flag a run reports, and contradiction as an
-    /// ordinary fact elsewhere. Named apart from the storage <c>ContradictionTests</c>.
+    /// Contradiction in the bridge: designating the contradiction function (atomically with child creation), the early
+    /// stop of a case's search, the stop flag a run reports, and contradiction as an ordinary fact elsewhere. Named
+    /// apart from the storage <c>ContradictionTests</c>.
     /// </summary>
     public class BridgeContradictionTests
     {
@@ -36,7 +41,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// In a case, a rule that derives the contradiction stops the context: the run reports it, the context answers
-        /// only whether it is contradictory, and later runs and flushes do nothing (L4, X11, rule-layer D45).
+        /// only whether it is contradictory, and later runs and flushes do nothing.
         /// </summary>
         [Fact]
         public void ACaseStopsWhenARuleDerivesTheContradiction()
@@ -62,7 +67,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The early stop (§10.6): the insert into the contradiction function stops a case's search, so the rules after it
+        /// The early stop: the insert into the contradiction function stops a case's search, so the rules after it
         /// match nothing, while in an ordinary child the contradiction is a fact like any other and every rule runs.
         /// </summary>
         [Fact]
@@ -82,8 +87,8 @@ namespace Eggnog.Relations.Tests
             using var @case = g.Root.CreateChild(ContextOptions.Case);
             using var plain = g.Root.CreateChild();
 
-            // More marks than one action batch (Bindings.DefaultBatchSize): the first full batch runs the insert and its
-            // early stop while the search is still going.
+            // More marks than one action batch (Bindings.DefaultBatchSize): the first full batch runs the insert and
+            // its early stop while the search is still going.
             const int Marks = 3 * Bindings.DefaultBatchSize;
             for (var i = 0; i < Marks; i++)
             {
@@ -110,7 +115,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// At the root a contradiction is an ordinary fact (D11): the early-stop function does nothing there, and runs
+        /// At the root a contradiction is an ordinary fact: the early-stop function does nothing there, and runs
         /// continue.
         /// </summary>
         [Fact]
@@ -133,8 +138,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A case created where the contradiction is already visible starts stopped (§6.9 item 3), and a case under a
-        /// stopped writable case stops with it, while an ordinary child of a stopped case is refused, unfaulted.
+        /// A case created where the contradiction is already visible starts stopped, and a case under a stopped
+        /// writable case stops with it, while an ordinary child of a stopped case is refused, unfaulted.
         /// </summary>
         [Fact]
         public void CasesUnderAContradictionStop()
@@ -170,8 +175,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A rule planned before the designation keeps its plan without the early stop (§10.6): the case still stops when
-        /// the contradiction row merges, but the rest of the search runs.
+        /// A rule planned before the designation keeps its plan without the early stop: the case still stops when the
+        /// contradiction row merges, but the rest of the search runs.
         /// </summary>
         [Fact]
         public void ARulePlannedBeforeTheDesignationStopsOnlyAtTheMerge()
@@ -195,6 +200,64 @@ namespace Eggnog.Relations.Tests
             Assert.True(report.Stopped);
             Assert.Equal(Marks, report.RuleSetReport.NumMatches("mark-bottom"));
             Assert.Equal(1, report.RuleSetReport.NumMatches("edge-path"));
+        }
+
+        /// <summary>
+        /// Designating the contradiction is atomic with child creation: a designation racing the first child of a
+        /// frozen root either fails, or lands before the child's creation check, which then sees the contradiction row
+        /// the root holds and stops the case. A designation never succeeds beside a case that missed it.
+        /// </summary>
+        [Fact]
+        public void ADesignationRacingTheFirstChildIsSeenByItOrRefused()
+        {
+            var designated = 0;
+            var refused = 0;
+            for (var i = 0; i < 200; i++)
+            {
+                var g = new ContextGraph();
+                g.Assert(g.Root, g.Bottom);
+                g.Root.FlushUpdates();
+                g.Root.Freeze();
+
+                using var barrier = new Barrier(2);
+                EGraphContext? child = null;
+                var create = Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    child = g.Root.CreateChild(ContextOptions.Case);
+                });
+                var designate = Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    try
+                    {
+                        g.EGraph.DesignateContradiction(g.Bottom);
+                        return true;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return false;
+                    }
+                });
+
+                create.Wait();
+                var won = designate.Result;
+                using (child)
+                {
+                    if (won)
+                    {
+                        designated++;
+                        Assert.True(child!.IsStopped, $"iteration {i}: the designation succeeded, yet the case did not stop");
+                    }
+                    else
+                    {
+                        refused++;
+                        Assert.False(child!.IsStopped);
+                    }
+                }
+            }
+
+            Assert.Equal(200, designated + refused);
         }
 
     }

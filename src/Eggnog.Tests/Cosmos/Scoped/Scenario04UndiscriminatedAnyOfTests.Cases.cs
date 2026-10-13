@@ -7,10 +7,11 @@ namespace Eggnog.Tests.Cosmos.Scoped
     {
 
         /// <summary>
-        /// With the schema's split on the hidden discriminator, the two branches meet: the case join of <c>dom(status)</c>
-        /// is their union, so the schema declares the union of the branch domains, and neither branch's own field is lifted.
-        /// A query that compares status with a value outside the union is refuted; it mentions <c>status</c>, not
-        /// <c>$anyOf/0</c>, so it opens no case of its own (D43).
+        /// With the schema's split on the hidden discriminator, the two branches meet: the case join of
+        /// <c>dom(status)</c> is their union, so the schema declares the union of the branch domains, and neither
+        /// branch's own field is lifted. A query that compares status with a value outside the union is refuted; it
+        /// mentions <c>status</c>, not <c>$anyOf/0</c>, so it opens no case of its own: a query splits only the
+        /// discriminators it mentions.
         /// </summary>
         [Fact]
         public void AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains()

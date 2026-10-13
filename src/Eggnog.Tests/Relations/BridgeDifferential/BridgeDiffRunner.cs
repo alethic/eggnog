@@ -4,9 +4,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Runs a bridge differential program three ways in lockstep, each iteration running the rules its schedule lists, and
-    /// compares them after the seeds and after every iteration: the bridge with semi-naive rules, the bridge with naive
-    /// rules, and the naive oracle (<see cref="BridgeDiffOracle"/>).
+    /// Runs a bridge differential program three ways in lockstep, each iteration running the rules its schedule lists,
+    /// and compares them after the seeds and after every iteration: the bridge with semi-naive rules, the bridge with
+    /// naive rules, and the naive oracle (<see cref="BridgeDiffOracle"/>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -20,8 +20,8 @@ namespace Eggnog.Relations.Tests
     /// Panics: a right-hand-side read of a function without a default at a key it lacks panics. Every evaluation must
     /// panic in the same iteration, which does not depend on the evaluation (a match whose read misses is new when it
     /// first exists, so semi-naive evaluation sees it too). What a panicking iteration merged stays and is rebuilt
-    /// (<see cref="EGraph.RunRules"/>), so each e-graph must still be well formed: canonical ids, one row per key, every
-    /// class derived from the seeds. The run stops there, as the oracle applies nothing of a panicking iteration.
+    /// (<see cref="EGraph.RunRules"/>), so each e-graph must still be well formed: canonical ids, one row per key,
+    /// every class derived from the seeds. The run stops there, as the oracle applies nothing of a panicking iteration.
     /// </para>
     /// <para>
     /// With <see cref="BridgeDiffProgram.Parallel"/>, both e-graphs run with parallel settings

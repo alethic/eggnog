@@ -12,15 +12,31 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the storage part of freezing (colored-contexts spec §8.1, §4.3, X13, X14, X43; review finding R2-5):
-    /// tables without rebuild columns freeze without a rebuild index, frozen databases refuse writes, warm-up builds
-    /// indexes, catalogs refresh serially, compaction at freeze respects the gate, frozen views fold every hide, and a
-    /// table added after a freeze is answered through the frozen contexts' parents, also from concurrent children; and
-    /// the full freeze (§8.1, M9.4): finds on frozen contexts write nothing, from many threads at once.
+    /// Tests for the storage part of freezing: tables without rebuild columns freeze without a rebuild index, frozen
+    /// databases refuse writes, warm-up builds indexes, catalogs refresh serially, compaction at freeze respects the
+    /// gate, frozen views fold every hide, and a table added after a freeze is answered through the frozen contexts'
+    /// parents, also from concurrent children; and the full freeze: finds on frozen contexts write nothing, from many
+    /// threads at once, children working on local ids never write the frozen root's union-find, and no failure nobody
+    /// took is frozen into a context.
     /// </summary>
     public class FreezeTests
     {
 
+        readonly ITestOutputHelper output;
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="output">The test output.</param>
+        public FreezeTests(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
+
+        /// <summary>
+        /// Freezing shares every table and builds a rebuild index only for tables with rebuild columns, at the root and
+        /// in a child; frozen databases refuse every write, and a frozen child's views fold every hide.
+        /// </summary>
         [Fact]
         public void TablesWithoutRebuildColumnsFreezeWithoutARebuildIndex()
         {
@@ -77,6 +93,10 @@ namespace Eggnog.Relations.Tests
             LookupPaths.Check(child);
         }
 
+        /// <summary>
+        /// A freeze with staged, unmerged writes throws and leaves the context, its database, its union-find and its
+        /// tables writable.
+        /// </summary>
         [Fact]
         public void AFreezeWithUnmergedWritesChangesNothing()
         {
@@ -94,6 +114,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(store.Schema[f]!.Root.IsShared);
         }
 
+        /// <summary>
+        /// A freeze builds the indexes its warm-up names, a column index for one column and a tuple index for more,
+        /// skipping keys of tables the context does not have; a key without columns is refused.
+        /// </summary>
         [Fact]
         public void WarmupBuildsTheIndexesAFrozenContextShares()
         {
@@ -109,6 +133,10 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ArgumentException>(() => new CachedIndexKey(f, []).CheckedColumns.ToArray());
         }
 
+        /// <summary>
+        /// A freeze does not compact a table while a live child's hides index its rows, and the child reads through the
+        /// stale slots; without descendants, a freeze compacts.
+        /// </summary>
         [Fact]
         public void CompactionAtFreezeRespectsTheGate()
         {
@@ -170,6 +198,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(64, other.Schema[g]!.Root.Count);
         }
 
+        /// <summary>
+        /// A table added after the root and a child froze is frozen and empty at the root; the frozen child answers for
+        /// it through its parent without a layer, and children of the frozen child write and read it concurrently.
+        /// </summary>
         [Fact]
         public void ATableAddedAfterAFreezeIsAnsweredThroughTheParents()
         {
@@ -183,7 +215,7 @@ namespace Eggnog.Relations.Tests
             Insert(middle, f, ids[1], 1, 0);
             middle.Freeze();
 
-            // X43: the new table is frozen at the root, empty, with a frozen root view; the frozen middle answers for it
+            // The new table is frozen at the root, empty, with a frozen root view; the frozen middle answers for it
             // through its parent and never writes its arrays.
             var g = store.AddTable(MaxFunction(1), name: "g");
             var info = store.Schema[g]!;
@@ -234,11 +266,10 @@ namespace Eggnog.Relations.Tests
             Assert.Same(store.Schema.RootView(g), middle.GetView(g));
         }
 
-
         /// <summary>
-        /// Frozen finds do not write (I11, I23, X34): 8 threads find 10⁵ ids each on a frozen chain (a frozen root with
-        /// unions, a frozen child with its own unions over it, a frozen grandchild with its flattened chain), plus as many
-        /// ids beyond the root's array, while siblings of the frozen grandchild mint, union and rebuild, and find their own
+        /// Frozen finds do not write: 8 threads find 10⁵ ids each on a frozen chain (a frozen root with unions, a
+        /// frozen child with its own unions over it, a frozen grandchild with its flattened chain), plus as many ids
+        /// beyond the root's array, while siblings of the frozen grandchild mint, union and rebuild, and find their own
         /// local ids; the root's parent array (its length included), the overlays and the journals are bit-identical
         /// afterwards, and every find agrees with a serial reading taken before.
         /// </summary>
@@ -290,7 +321,7 @@ namespace Eggnog.Relations.Tests
             grandchild.Rebuild();
             grandchild.Freeze();
 
-            // A frozen root is fully compressed (§5.1), so its parent array is its find.
+            // A frozen root is fully compressed, so its parent array is its find.
             var parents = store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray();
             var overlays = new[] { child, grandchild }.Select(c => (c.Overlay!.Version, c.Overlay.MemberCount, c.Journal!.Ids.ToArray())).ToArray();
             var expected = Enumerable.Range(0, Ids).Select(i => grandchild.Find((uint)i)).ToArray();
@@ -312,8 +343,8 @@ namespace Eggnog.Relations.Tests
                     if (grandchild.Find(beyond) != beyond || child.Find(beyond) != beyond || root.Find(beyond) != beyond)
                         Interlocked.Increment(ref failures);
 
-                    // A sibling under the frozen child mints, writes and rebuilds on its own domain meanwhile, and finds
-                    // its local ids through the frozen chain.
+                    // A sibling under the frozen child mints, writes and rebuilds on its own domain meanwhile, and
+                    // finds its local ids through the frozen chain.
                     if (t == 0 && k % 20_000 == 0)
                     {
                         var sibling = child.CreateChild();
@@ -351,8 +382,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §13 edge 22: freezing refuses a writable parent, a stopped or faulted context and a failure nobody took, and
-        /// changes nothing; a second freeze is a no-op; freezing a context with live children is allowed, and the children
+        /// Freezing refuses a writable parent, a stopped or faulted context and a failure nobody took, and changes
+        /// nothing; a second freeze is a no-op; freezing a context with live children is allowed, and the children
         /// catch up once.
         /// </summary>
         [Fact]
@@ -390,10 +421,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §13 edge 22 for a failure the freeze itself causes: the root's settle (a stale raw write folding into its
-        /// canonical key under an asserting merge) and a child's rebuild (step 4 copies g(b)=2 onto g(a)=1) record a
-        /// failure; the freeze refuses after them, without faulting, and leaves the context unfrozen and clean; once the
-        /// failure is taken, the freeze succeeds.
+        /// A failure the freeze itself causes: the root's settle (a stale raw write folding into its canonical key
+        /// under an asserting merge) and a child's rebuild (which copies g(b)=2 onto g(a)=1) record a failure; the
+        /// freeze refuses after them, without faulting, and leaves the context unfrozen and clean; once the failure is
+        /// taken, the freeze succeeds.
         /// </summary>
         [Fact]
         public void AFailureTheFreezeItselfRecordsIsRefusedWithoutFaulting()
@@ -433,6 +464,104 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsFrozen);
             Assert.Equal(1u, Row(child, g, a)![1]);
         }
+
+        /// <summary>
+        /// Children of a frozen root find, union and rebuild over ids of their own, which lie above every id the root
+        /// reserved, from many threads at once. The root's parent array stays the same object with the same contents: a
+        /// find that reserved or compressed on the way (egglog's writing <c>find</c> in place of <c>FindNaive</c>)
+        /// would grow or rewrite it from many threads at once.
+        /// </summary>
+        [Fact]
+        public void ChildrenWorkingOnLocalIdsNeverWriteTheFrozenRootsUnionFind()
+        {
+            const int Ids = 200;
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var root = store.Root;
+            var ids = Enumerable.Range(0, Ids).Select(_ => root.NewId()).ToArray();
+            for (var i = 0; i + 1 < Ids; i += 3)
+                root.Union(ids[i], ids[i + 1]);
+
+            for (var i = 0; i < Ids; i += 2)
+                Insert(root, f, ids[i], (uint)i, 0);
+
+            root.Rebuild();
+            root.Freeze();
+
+            var before = store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray();
+            var failures = 0;
+            var threads = Enumerable.Range(0, 8).Select(t => new Thread(() =>
+            {
+                try
+                {
+                    var random = new Random(7 + t);
+                    for (var round = 0; round < 20; round++)
+                    {
+                        using var child = root.CreateChild();
+                        var local = Enumerable.Range(0, 6).Select(_ => child.NewId()).ToArray();
+                        child.Union(local[0], local[1]);
+                        child.Union(local[2], ids[random.Next(Ids)]);
+                        child.Union(ids[random.Next(Ids)], ids[random.Next(Ids)]);
+                        Insert(child, f, local[3], 1, 0);
+                        Insert(child, f, local[4], 2, 0);
+                        child.Rebuild();
+                        foreach (var id in local)
+                            child.Find(id);
+
+                        child.CheckInvariants();
+                    }
+                }
+                catch (Exception)
+                {
+                    Interlocked.Increment(ref failures);
+                }
+            })).ToArray();
+
+            foreach (var thread in threads)
+                thread.Start();
+
+            foreach (var thread in threads)
+                thread.Join();
+
+            Assert.Equal(0, failures);
+            Assert.Equal(before, store.RootUnionFind.UnionFind.UnionFind.Parents.ToArray());
+        }
+
+        /// <summary>
+        /// A failure recorded and not taken is never frozen into a context that descendants share, also when the
+        /// freeze's own rebuild records it (a merge conflict the rebuild finds when it copies a row onto its winner's
+        /// key).
+        /// </summary>
+        [Fact]
+        public void FreezeDoesNotFreezeAFailureItsOwnRebuildRecorded()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var g = store.AddTable(new SortedWritesTable(1, 3, C(2), [C(0)], new AssertEqualMerge(C(1), "g"), ParallelHeuristics.Serial), name: "g");
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            Insert(root, g, a, 1, 0);
+            Insert(root, g, b, 2, 0);
+            root.Freeze();
+
+            var child = root.CreateChild();
+            child.Union(a, b);
+            Assert.Null(child.Database.Failure);
+
+            Exception? thrown = null;
+            try
+            {
+                child.Freeze();
+            }
+            catch (InvalidOperationException e)
+            {
+                thrown = e;
+            }
+
+            output.WriteLine($"frozen: {child.IsFrozen}, failure: {child.Database.Failure ?? "<none>"}, threw: {thrown?.Message}");
+            Assert.False(child.IsFrozen && child.Database.Failure is not null, $"the child froze with the failure '{child.Database.Failure}' that its freeze's rebuild recorded");
+        }
+
     }
 
 }

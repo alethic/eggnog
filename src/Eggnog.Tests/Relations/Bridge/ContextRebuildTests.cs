@@ -6,9 +6,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The rebuilds a context's runs and flushes trigger (colored-contexts spec §10.3, §10.4, §17 M10.3, X4): a run's
-    /// first pass reuses the run's timestamp, a flush's rebuild runs at the next epoch, and a child never rebuilds
-    /// containers (§7.4).
+    /// The rebuilds a context's runs and flushes trigger: a run's first rebuild pass reuses the run's timestamp, as
+    /// egglog's rebuild after a run does, a flush's rebuild runs at the next epoch, and a child never rebuilds
+    /// containers.
     /// </summary>
     public class ContextRebuildTests
     {
@@ -49,7 +49,8 @@ namespace Eggnog.Relations.Tests
             Assert.True(report.RebuildChanged);
             Assert.Equal(2, report.RebuildPasses);
 
-            // The rewrite of the child's own row is stamped with the run's T (X4), and each pass then advanced the clock.
+            // The rewrite of the child's own row is stamped with the run's T, as egglog stamps it, and each pass then
+            // advanced the clock.
             Assert.Equal(t, Stamp(child, g.Edge, a, a));
             Assert.Equal(t + 2, g.EGraph.NextTimestamp);
             child.CheckInvariants();
@@ -88,8 +89,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child never rebuilds containers (§7.4, X31): its rebuild reconciles only rows, and its database refuses the
-        /// container rebuild; the root rebuilds them.
+        /// A child never rebuilds containers: its rebuild reconciles only rows, and its database refuses the container
+        /// rebuild; the root rebuilds them.
         /// </summary>
         [Fact]
         public void ContainersAreNeverRebuiltInAChild()
@@ -126,8 +127,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// <see cref="EGraphContext.EnsureClean"/> brings a writable parent up to date first, flushes, and rebuilds; at
-        /// the root it rebuilds only when the union-find grew since the last rebuild (X42), so writes staged at the root
-        /// stay pending into the next run.
+        /// the root it rebuilds only when the union-find grew since the last rebuild, so writes staged at the root stay
+        /// pending into the next run and merge there, as in egglog.
         /// </summary>
         [Fact]
         public void EnsureCleanFlushesUpTheChainAndKeepsRootStagingPending()

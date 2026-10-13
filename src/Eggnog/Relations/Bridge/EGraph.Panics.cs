@@ -8,14 +8,14 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The root's panic side channel (lib.rs:122): the first message a panic function recorded for a root state since
-        /// the last root run reported one. A child's panic never reaches it; children report through their database's
-        /// failure (colored-contexts spec §10.6).
+        /// The root's panic side channel (lib.rs:122): the first message a panic function recorded for a root state
+        /// since the last root run reported one. A child's panic never reaches it; children report through their
+        /// database's failure.
         /// </summary>
         readonly SideChannel<string> panicMessage = new();
 
         /// <summary>
-        /// Serializes the registration of panic functions, so that <see cref="NewPanic"/> is thread-safe (§10.6).
+        /// Serializes the registration of panic functions, so that <see cref="NewPanic"/> is thread-safe.
         /// </summary>
         readonly object registrationGate = new();
 
@@ -51,7 +51,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the external function that panics with <paramref name="message"/>, creating it the first time the message
-        /// is used. egglog's <c>new_panic</c> (lib.rs:1482-1491). Thread-safe (§10.6).
+        /// is used. egglog's <c>new_panic</c> (lib.rs:1482-1491). Thread-safe.
         /// </summary>
         /// <param name="message">The panic message.</param>
         /// <returns>The function's id; the same for the same message.</returns>
@@ -87,7 +87,7 @@ namespace Eggnog.Relations
         /// Registers a low-level external function, which receives the raw execution state. egglog's
         /// <c>register_external_func</c> (lib.rs:275-291): a trust boundary, since the function has unrestricted access.
         /// A function that reads tables must say so (<see cref="ExternalFunction.ReadsTables"/>), so its rules never
-        /// inherit watermarks (colored-contexts spec §10.2). Thread-safe.
+        /// inherit watermarks. Thread-safe.
         /// </summary>
         /// <param name="function">The function.</param>
         /// <returns>Its id; freed ids are reused.</returns>
@@ -101,10 +101,9 @@ namespace Eggnog.Relations
         /// Unregisters an external function; its id may be handed out again. egglog's <c>free_external_func</c>.
         /// </summary>
         /// <remarks>
-        /// Defect fixed (egglog-bridge/src/lib.rs:293-295, 1482-1491; map §8.1 row 24): egglog leaves a freed panic
-        /// function in its message cache, so a later <see cref="NewPanic"/> with that message would return an id that may
-        /// by then belong to an unrelated function. Here freeing a panic function also forgets its message, in constant
-        /// time.
+        /// egglog leaves a freed panic function in its message cache (egglog-bridge/src/lib.rs:293-295, 1482-1491), so
+        /// a later <see cref="NewPanic"/> with that message returns an id that may by then belong to an unrelated
+        /// function. Here freeing a panic function also forgets its message, in constant time.
         /// </remarks>
         /// <param name="function">The function's id.</param>
         public void FreeExternalFunction(ExternalFunctionId function)

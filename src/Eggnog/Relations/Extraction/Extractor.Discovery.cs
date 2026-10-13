@@ -63,13 +63,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Discovers the queued classes in a child context (colored-contexts spec §10.10): for each producing function,
-        /// every present layer of the context's view is probed through that layer's own cached index on the output column
-        /// (shared and lock-free on a frozen layer, §9.5), and the rows found are scanned with the layer's hidden rows
-        /// skipped (§9.3), so exactly the rows the context sees are read (I12): an ancestor's row the context replaced, or
-        /// that names one of its own losers, is hidden, and its canonical copy lies in a later layer. The view is never
-        /// read through <see cref="Database.GetTable"/>. O(layers × index probes + rows found), plus the first build of
-        /// each layer's index.
+        /// Discovers the queued classes in a child context: for each producing function, every present layer of the
+        /// context's view is probed through that layer's own cached index on the output column (shared and lock-free on
+        /// a frozen layer), and the rows found are scanned with the layer's hidden rows skipped, so exactly the rows
+        /// the context sees are read: an ancestor's row the context replaced, or that names one of its own losers, is
+        /// hidden, and its canonical copy lies in a later layer. The view is never read through
+        /// <see cref="Database.GetTable"/>. O(layers × index probes + rows found), plus the first build of each layer's
+        /// index.
         /// </summary>
         /// <param name="tables">The context's layers.</param>
         void DiscoverInLayers(ContextTables tables)

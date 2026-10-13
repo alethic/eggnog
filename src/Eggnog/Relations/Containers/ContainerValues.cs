@@ -26,8 +26,8 @@ namespace Eggnog.Relations
     /// next rebuild sees only the ids displaced since and can rebuild incrementally.
     /// </para>
     /// <para>
-    /// Interning is immediate, global and never rolled back, as in egglog (map §2.10): a container interned while rules
-    /// run exists from then on, whatever happens to the rule's other writes.
+    /// Interning is immediate, global and never rolled back, as in egglog: a container interned while rules run exists
+    /// from then on, whatever happens to the rule's other writes.
     /// </para>
     /// <para>
     /// Threading: <see cref="RegisterValue{TContainer}"/>, <see cref="TryGetValue{TContainer}"/>,
@@ -104,25 +104,26 @@ namespace Eggnog.Relations
         public int TypeCount => envs.IdCount;
 
         /// <summary>
-        /// Gets whether any registered container type holds e-class ids (colored-contexts spec §7.4, §10.7): the quick
-        /// test of the eq guard, which a child's rebuild runs only when it holds. One volatile read.
+        /// Gets whether any registered container type holds e-class ids: the quick test of the eq-container guard
+        /// (<see cref="EqContainerGuard"/>), which a child's rebuild runs only when it holds. One volatile read.
         /// </summary>
         public bool HasEqContainers => hasEqContainers;
 
         /// <summary>
-        /// Gets the eq-container version (colored-contexts spec §7.4, G-b): it moves each time an environment that holds
-        /// e-class ids gains a container whose content it did not hold before (a new intern at the root, or a content a
-        /// root container rebuild produced). A child context records the version its eq-container guard last checked its
-        /// own displacements against, and is not clean while the version has moved since (<see cref="Context.IsClean"/>):
-        /// a new content may name an id the child displaced, which only a container rebuild in the child could
-        /// reconcile, and children never rebuild containers. One volatile read.
+        /// Gets the eq-container version: it moves each time an environment that holds e-class ids gains a container
+        /// whose content it did not hold before (a new intern at the root, or a content a root container rebuild
+        /// produced). A child context records the version its eq-container guard last checked its own displacements
+        /// against, and is not clean while the version has moved since (<see cref="Context.IsClean"/>): a new content
+        /// may name an id the child displaced, which only a container rebuild in the child could reconcile, and
+        /// children never rebuild containers. One volatile read.
         /// </summary>
         public long EqVersion => Volatile.Read(ref eqVersion.Value);
 
         /// <summary>
-        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/> (colored-contexts spec
-        /// §7.4, G-b): a child that displaced such an id would need the container rebuilt in the child, which is not
-        /// supported yet (decision 9). O(types) probes of exact element indexes; thread-safe.
+        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/>: a child that
+        /// displaced such an id would need the container rebuilt in the child, which children never do, so the child's
+        /// eq-container guard refuses it (<see cref="EqContainerGuard"/>). O(types) probes of exact element indexes;
+        /// thread-safe.
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns><c>true</c> if an eq-sort container holds it.</returns>
@@ -149,8 +150,8 @@ namespace Eggnog.Relations
         /// <param name="merge">Resolves the ids of containers that become equal (the bridge's
         /// <see cref="UnionContainerMerge"/>).</param>
         /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers, the default); containers
-        /// over base values pass <c>false</c> and may then be interned in child contexts (colored-contexts spec §10.7,
-        /// <see cref="ContainerEnvBase.HoldsIds"/>).</param>
+        /// over base values pass <c>false</c> and may then be interned in child contexts
+        /// (<see cref="ContainerEnvBase.HoldsIds"/>).</param>
         /// <returns>The type's id.</returns>
         public ContainerTypeId RegisterType<TContainer>(CounterId idCounter, ContainerMergeFunction merge, bool holdsIds = true)
             where TContainer : struct, IContainerValue<TContainer>

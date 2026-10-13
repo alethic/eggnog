@@ -6,7 +6,7 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// A lattice merge, by the larger value in column 1, that first reads another table through the merge's execution
     /// state (<see cref="ExecutionState.PredictColumn(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, ColumnId)"/>),
-    /// for tests of reads of the stratum being merged (colored-contexts spec X2, edge case 16).
+    /// for tests of reads of the stratum being merged.
     /// </summary>
     sealed class StratumReadingMerge : MergeFunction
     {

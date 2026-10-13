@@ -5,12 +5,13 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Threads leased from a <see cref="ParallelismBudget"/>, for a <c>using</c> statement: disposing the lease returns
-    /// them (colored-contexts spec §10.9). The default value holds nothing and its disposal does nothing, which is what a
-    /// failed <see cref="ParallelismBudget.TryLease"/> hands out.
+    /// them. The default value holds nothing and its disposal does nothing, which is what a failed
+    /// <see cref="ParallelismBudget.TryLease"/> hands out.
     /// </summary>
     /// <remarks>
     /// A value type so leasing allocates nothing. Copies share the lease: dispose exactly one of them, exactly once. A
-    /// second disposal is caught by the budget only when it would over-fill it (<see cref="ParallelismBudget.Release"/>).
+    /// second disposal is caught by the budget only when it would over-fill it
+    /// (<see cref="ParallelismBudget.Release"/>).
     /// </remarks>
     internal readonly struct ParallelismLease : IDisposable
     {

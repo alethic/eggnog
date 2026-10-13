@@ -2,7 +2,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Where a class value came from (D39): a scope, or one host write batch of a scope. Every <see cref="ClassId"/> the
+    /// Where a class value came from: a scope, or one host write batch of a scope. Every <see cref="ClassId"/> the
     /// library returns carries the origin of the scope (or batch) that served the call, and every entry point that takes
     /// a class value checks it (<see cref="ClassChecks.Require"/>).
     /// </summary>

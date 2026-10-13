@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// egglog's <c>ac_test_inner</c> (core-relations/src/tests.rs:513-951) on <see cref="Database.RunRuleSet"/>, ported
-    /// from the test project's <c>Relations/Execution/AcSaturation.cs</c>: egglog reimplemented on the engine (rule-based
+    /// egglog's <c>ac_test_inner</c> (core-relations/src/tests.rs:513-951) on <see cref="Database.RunRuleSet"/>, the
+    /// benchmark counterpart of the test project's <c>AcSaturation</c>: egglog reimplemented on the engine (rule-based
     /// rebuilding with incremental and nonincremental variants chosen by size estimates, semi-naive evaluation with
     /// timestamp ranges on the sorted column, and iteration until nothing changes) on the associativity and
     /// commutativity workload, over a <see cref="MathEgraph"/>.

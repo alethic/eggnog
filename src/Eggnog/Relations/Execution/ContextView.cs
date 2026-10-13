@@ -7,11 +7,11 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// What rule building, planning and the executor read of a context (colored-contexts spec §9.1, X21, X22, X39): its
-    /// view of every table, header evaluation per layer, the planner's statistics, size estimates, the rule set's view
-    /// snapshot and the canonical form of Id constants. Every <see cref="Relations.Database"/> has one
-    /// (<see cref="Database.View"/>): a root's is made lazily by <see cref="ForRoot"/> and sees each table as one layer,
-    /// hiding nothing; a child's is attached with its layers and reads the context's <see cref="ContextTables"/>.
+    /// What rule building, planning and the executor read of a context: its view of every table, header evaluation per
+    /// layer, the planner's statistics, size estimates, the rule set's view snapshot and the canonical form of Id
+    /// constants. Every <see cref="Relations.Database"/> has one (<see cref="Database.View"/>): a root's is made lazily
+    /// by <see cref="ForRoot"/> and sees each table as one layer, hiding nothing; a child's is attached with its layers
+    /// and reads the context's <see cref="ContextTables"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -25,8 +25,8 @@ namespace Eggnog.Relations
     /// In a child the members that read rows require the context's views to be current
     /// (<see cref="Context.ThrowIfViewNotCurrent"/>): a context whose own rebuild is pending, or whose ancestors changed
     /// since it caught up, would otherwise plan or snapshot against stale views. Writes staged and not merged do not
-    /// matter, as they are invisible until merged. The union-find has no view in a child (X23): asking for it throws
-    /// <see cref="NotSupportedException"/>.
+    /// matter, as they are invisible until merged. The union-find has no view in a child, where only action lookups
+    /// reach it: asking for it throws <see cref="NotSupportedException"/>.
     /// </para>
     /// <para>
     /// Cold path: planning and rule-set building. Thread-safe for reads while nothing merges; the root's view cache
@@ -84,7 +84,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Creates the view of a root or bare database (§9.1): one layer per table, the database's own entry, hiding
+        /// Creates the view of a root or bare database: one layer per table, the database's own entry, hiding
         /// nothing; each table's view is built once and cached (a table's entry is the same object for the database's
         /// life).
         /// </summary>
@@ -127,18 +127,19 @@ namespace Eggnog.Relations
         public ParallelHeuristics Parallelism => database.Parallelism;
 
         /// <summary>
-        /// Gets the database's size estimate: in a child its own layers only (C9, X26).
+        /// Gets the database's size estimate: in a child its own layers only, so a child's work is measured by what it
+        /// adds, not by its ancestors' rows.
         /// </summary>
         public long SizeEstimate => database.TotalSizeEstimate;
 
         /// <summary>
-        /// Gets the generation of the views (X21): <see cref="ILayerViewSource.ViewGeneration"/> of a layered context,
+        /// Gets the generation of the views: <see cref="ILayerViewSource.ViewGeneration"/> of a layered context,
         /// which moves whenever cached views are dropped; always 0 at a root, whose views never change structure.
         /// </summary>
         public long Generation => source?.ViewGeneration ?? 0;
 
         /// <summary>
-        /// Gets a stamp of the rows a child context's views show (I29): the sum of the <see cref="Database.ChangeStamp"/>s
+        /// Gets a stamp of the rows a child context's views show: the sum of the <see cref="Database.ChangeStamp"/>s
         /// of the context and its ancestors (<see cref="Context.ViewStamp"/>), which moves with every merge that adds or
         /// removes rows, every hide, clear and stop anywhere on the chain, so a header subset taken before it moved may
         /// name rows that are gone or moved (a compaction) or miss rows that arrived. Always 0 at a root and for synthetic
@@ -148,7 +149,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether <see cref="TryCanonicalize"/> can answer: a store-backed context, root or child. A bare database
-        /// has no designated union-find and runs Id constants as written (X19).
+        /// has no designated union-find and runs Id constants as written.
         /// </summary>
         public bool CanCanonicalize => context is not null || database.Owner is { IsRoot: true };
 
@@ -158,13 +159,13 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The view.</returns>
-        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find (X23).</exception>
+        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find.</exception>
         /// <exception cref="KeyNotFoundException">No such table.</exception>
         public TableView GetTableView(TableId table) => source is null ? RootView(table) : source.GetView(table);
 
         /// <summary>
-        /// Pins the views of <paramref name="tables"/> for one rule set (§9.1, X21): the cached instances, so the headers
-        /// evaluated through this view and the trie roots of the run read the same views (I29). O(tables).
+        /// Pins the views of <paramref name="tables"/> for one rule set: the cached instances, so the headers evaluated
+        /// through this view and the trie roots of the run read the same views. O(tables).
         /// </summary>
         /// <param name="tables">The tables the rule set's atoms and lookups read; repeats are allowed.</param>
         /// <returns>The snapshot.</returns>
@@ -196,18 +197,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Pins the views a rule set's rules read (§9.1, X21): every atom's table, and, in a layered context, every table an
-        /// action looks up (<see cref="RuleSet.LookupTable"/>) except <paramref name="skipLookups"/>; the cached instances, as
+        /// Pins the views a rule set's rules read: every atom's table, and, in a layered context, every table an action
+        /// looks up (<see cref="RuleSet.LookupTable"/>) except <paramref name="skipLookups"/>; the cached instances, as
         /// <see cref="Snapshot(ReadOnlySpan{TableId})"/> pins them, without collecting the tables first.
         /// </summary>
         /// <remarks>
-        /// At a root, whose action lookups read the tables themselves and never the snapshot (§6.5), the rule sets share one
+        /// At a root, whose action lookups read the tables themselves and never the snapshot, the rule sets share one
         /// snapshot over the root's view cache (whose entries are only ever filled), so building one allocates nothing once
-        /// the views of its tables exist (§14.1). In a layered context, one array per rule set, O(atoms + instructions).
+        /// the views of its tables exist. In a layered context, one array per rule set, O(atoms + instructions).
         /// </remarks>
         /// <param name="rules">The rules.</param>
         /// <param name="actions">Their action programs.</param>
-        /// <param name="skipLookups">A table whose lookups read no view (a child's union-find, X23), or <c>null</c>.</param>
+        /// <param name="skipLookups">A table whose lookups read no view (a child's union-find), or <c>null</c>.</param>
         /// <returns>The snapshot.</returns>
         /// <exception cref="InvalidOperationException">This is a child's view, some table is read, and the context is not
         /// current.</exception>
@@ -254,7 +255,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the canonical form of <paramref name="id"/> in the context (X19): <see cref="DisplacedTable.FindNaive"/>
+        /// Gets the canonical form of <paramref name="id"/> in the context: <see cref="DisplacedTable.FindNaive"/>
         /// on the store's union-find at a store-backed root, the context's find in a child.
         /// </summary>
         /// <param name="id">The id.</param>
@@ -279,11 +280,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Evaluates a header (§9.4): splits <paramref name="constraints"/> into fast and slow ones and returns the rows
+        /// Evaluates a header: splits <paramref name="constraints"/> into fast and slow ones and returns the rows
         /// matching every fast one, per present layer of the table's view. At a root it is
         /// <see cref="ConstraintProcessor.Process"/> on the table's entry, in layer 0. In a layered context each present
         /// layer is processed over its own entry and cached indexes (a time range is one binary search per layer); a
-        /// constraint is fast overall when it is fast in some layer, and the layers where it was slow refine by it
+        /// constraint is fast overall when it is fast in some layer, and the layers where it is slow refine by it
         /// (<see cref="Table.RefineOne"/>). A view with no present layer selects nothing, after classifying the
         /// constraints on the store's schema.
         /// </summary>
@@ -293,7 +294,7 @@ namespace Eggnog.Relations
         /// <param name="slow">Receives the slow ones.</param>
         /// <returns>The rows, per layer, which the caller owns; they may include tombstones and rows the view hides.</returns>
         /// <exception cref="InvalidOperationException">This is a child's view and the context is not current.</exception>
-        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find (X23).</exception>
+        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find.</exception>
         public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
         {
             ArgumentNullException.ThrowIfNull(fast);
@@ -322,12 +323,12 @@ namespace Eggnog.Relations
         /// <summary>
         /// Estimates the number of rows of <paramref name="table"/> the context sees, or of those matching
         /// <paramref name="constraint"/>: egglog's <c>estimate_size</c> (core-relations/src/free_join/mod.rs:463-482) on
-        /// each present layer, summed, hidden rows included as a root estimate includes tombstones (§3.4).
+        /// each present layer, summed, hidden rows included as a root estimate includes tombstones.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="constraint">The constraint, or <c>null</c>.</param>
         /// <returns>The estimate, at most <see cref="int.MaxValue"/>.</returns>
-        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find (X23).</exception>
+        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find.</exception>
         public int EstimateSize(TableId table, Constraint? constraint)
         {
             var view = GetTableView(table);
@@ -341,7 +342,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the approximate number of rows of the atom's table the context sees that match its fast constraints, as
-        /// egglog's <c>approx_size</c> counts slots, invisible ones included (§9.7): the size of the header
+        /// egglog's <c>approx_size</c> counts slots, invisible ones included: the size of the header
         /// <see cref="Evaluate"/> computes.
         /// </summary>
         /// <param name="atom">The atom's id.</param>
@@ -359,7 +360,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the uniqueness estimate of a column as the context sees the table (§9.7): the row counts and the distinct
+        /// Gets the uniqueness estimate of a column as the context sees the table: the row counts and the distinct
         /// counts of the present layers (<see cref="ColumnCardEstimator.GetColumnUniqueness(TableInfo, ColumnId)"/>),
         /// summed. At a root, egglog's <c>col_uniqueness</c>.
         /// </summary>

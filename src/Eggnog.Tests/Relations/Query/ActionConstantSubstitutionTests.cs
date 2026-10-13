@@ -10,10 +10,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Id constants of actions and cached variants per context (colored-contexts spec §9.8, X19), beyond T7's insert,
-    /// comparison and external-function operands: remove keys, lookup-or-insert keys and entry defaults run in their
-    /// canonical form at a store-backed root, and two contexts whose canonical forms differ each run their own variant
-    /// of one cached plan.
+    /// Id constants of actions and cached variants per context, beyond the insert, comparison and external-function
+    /// operands of <see cref="ConstantSubstitutionTests"/>: remove keys, lookup-or-insert keys and entry defaults run
+    /// in their canonical form at a store-backed root, and two contexts whose canonical forms differ each run their own
+    /// variant of one cached plan.
     /// </summary>
     public class ActionConstantSubstitutionTests
     {

@@ -5,23 +5,23 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The engine's split source for one <see cref="SplitRule"/> at one position of a split step's rules (§6.9.2, E8): it
-    /// finds the splits the rule's body asks for in a scope, and makes each case assume its element.
+    /// The engine's split source for one <see cref="SplitRule"/> at one position of a split step's rules: it finds the
+    /// splits the rule's body asks for in a scope, and makes each case assume its element.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <see cref="FindRequests"/> brings the mirrors the matcher reads current (D48), runs the matcher in the scope as a
-    /// query (§6.6.4: an iteration of the scope that writes nothing), and turns each match, in content order, into a
-    /// request keyed on its key cells, with one case per element of its set (in set order); an empty set is skipped and
-    /// counted. <see cref="Assume"/> wraps the new case context as a case <see cref="Scope"/> of the split scope and writes
-    /// the grounded assumptions into it as one host batch (§6.6.1).
+    /// <see cref="FindRequests"/> brings the mirrors the matcher reads current, runs the matcher in the scope as a
+    /// query (an iteration of the scope that writes nothing), and turns each match, in content order, into a request
+    /// keyed on its key cells, with one case per element of its set (in set order); an empty set is skipped and
+    /// counted. <see cref="Assume"/> wraps the new case context as a case <see cref="Scope"/> of the split scope and
+    /// writes the grounded assumptions into it as one host batch.
     /// </para>
     /// <para>
     /// Stateless beyond its rule and position, so one source serves any number of drivers and runs on any threads; the
-    /// driver calls it on the thread of the run, without holding the scope's engine domain (E8), while the run holds the
-    /// rule layer's guard of the domain (D47). Allocation is per request and per case (a request's key and its copy of the
-    /// match, which the engine's request holds; the grounded facts of a case), never per row the matcher reads: the matches
-    /// themselves go into a pooled buffer, and a set is counted without decoding its elements.
+    /// driver calls it on the thread of the run, without holding the scope's engine domain, while the run holds the
+    /// domain's <see cref="ScopeGuard"/>. Allocation is per request and per case (a request's key and its copy of the
+    /// match, which the engine's request holds; the grounded facts of a case), never per row the matcher reads: the
+    /// matches themselves go into a pooled buffer, and a set is counted without decoding its elements.
     /// </para>
     /// </remarks>
     internal sealed class RuleSplitSource : Relations.ISplitSource
@@ -81,7 +81,7 @@ namespace Eggnog
             }
 
             // Canonical in the scope, deduplicated, and in content order, so that requests, and so cases, are made in an
-            // order that does not depend on the engine's scan order (decision 4).
+            // order that does not depend on the engine's scan order.
             if (engine.CanonicalizeColumns(matches.Cells, matches.Width, program.SortColumns))
                 matches.Deduplicate();
 
@@ -93,7 +93,7 @@ namespace Eggnog
                 var cases = program.CountOf(setType, tuple[program.SetColumn]);
                 if (cases == 0)
                 {
-                    // Nothing to split: the theory's own rules derive the contradiction an empty domain means (D9).
+                    // Nothing to split: the theory's own rules derive the contradiction an empty domain means.
                     report.SplitsSkipped++;
                     continue;
                 }
@@ -109,9 +109,9 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <exception cref="RuleEvaluationException">A primitive of an assumption threw; an assumption gives a function
-        /// without a lattice a second value, or cannot be written (§6.13: a conflicting write during a run, D32; the
-        /// <see cref="FactConflictException"/> is the inner exception and the case is faulted); or a merge of the case's
-        /// batch failed (the case is faulted). <c>Run</c> faults the scope it was called on too (N94).</exception>
+        /// without a lattice a second value, or cannot be written (a conflicting write during a run; the
+        /// <see cref="FactConflictException"/> is the inner exception and the case is faulted); or a merge of the
+        /// case's batch failed (the case is faulted). <c>Run</c> faults the scope it was called on too.</exception>
         public void Assume(Relations.EGraphContext @case, in Relations.SplitRequest request, int caseIndex)
         {
             var parent = OwnerOf(@case.Parent ?? throw new InvalidOperationException("A case has a parent."));
@@ -130,8 +130,8 @@ namespace Eggnog
                 }
                 catch (Exception refused) when (refused is FactConflictException or ArgumentException)
                 {
-                    // The run writes the assumption, so its conflict is a run's write conflict (§6.13, D18): an evaluation
-                    // failure, which Run turns into a fault of its scope as well (N94, N105). Nothing of the batch is written.
+                    // The run writes the assumption, so its conflict is a run's write conflict: an evaluation failure, which
+                    // Run turns into a fault of its scope as well. Nothing of the batch is written.
                     var failure = new RuleEvaluationException(rule.Name, null,
                         $"split '{rule.Name}': case {caseIndex} of '{parent.Path}' assumes {fact}, which cannot be written: {refused.Message}", refused);
                     scope.Fault(failure);

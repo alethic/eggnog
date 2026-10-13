@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="RuleTable"/> (colored-contexts spec §10.2, §17 M10.3): reservation and publication, id reuse last freed
-    /// first with a new generation, lock-free reads, and definitions from many threads.
+    /// <see cref="RuleTable"/>: reservation and publication, id reuse last freed first with a new generation, lock-free
+    /// reads, and definitions from many threads.
     /// </summary>
     public class RuleTableTests
     {
@@ -81,8 +81,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Definitions from many threads (rule-layer D6) get distinct ids, and readers on other threads never see a torn
-        /// table.
+        /// Rules may be defined from any thread at any time: definitions from many threads get distinct ids, and
+        /// readers on other threads never see a torn table.
         /// </summary>
         [Fact]
         public void ConcurrentDefinitionsAndReadsAgree()
@@ -93,7 +93,8 @@ namespace Eggnog.Relations.Tests
             var seen = 0;
             Exception? failure = null;
 
-            // A dedicated thread, so it reads while the definitions run however busy the pool is; it scans at least once.
+            // A dedicated thread, so it reads while the definitions run however busy the pool is; it scans at least
+            // once.
             var reader = new System.Threading.Thread(() =>
             {
                 try
@@ -136,8 +137,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The e-graph's rules live in a rule table: a freed id is reused with a new generation, and the rule info built in
-        /// it carries that generation.
+        /// The e-graph's rules live in a rule table: a freed id is reused with a new generation, and the rule info
+        /// built in it carries that generation.
         /// </summary>
         [Fact]
         public void TheEGraphsRulesCarryTheirGeneration()

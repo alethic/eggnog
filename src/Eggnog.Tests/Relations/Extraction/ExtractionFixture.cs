@@ -6,8 +6,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// An e-graph with an extraction schema, and helpers that declare a function in both at once and build terms the way
-    /// egglog's frontend does (keys canonicalized, as its globals and expressions evaluate to canonical ids).
+    /// An e-graph with an extraction schema, and helpers that declare a function in both at once and build terms the
+    /// way egglog's frontend does (keys canonicalized, as its globals and expressions evaluate to canonical ids).
     /// </summary>
     sealed class ExtractionFixture
     {
@@ -31,16 +31,34 @@ namespace Eggnog.Relations.Tests
             baseColumns.Add(String, ColumnTy.Base(EGraph.BaseValues.RegisterType<StringCodec, string>()));
         }
 
+        /// <summary>
+        /// Gets the e-graph.
+        /// </summary>
         public EGraph EGraph { get; }
 
+        /// <summary>
+        /// Gets the extraction schema over <see cref="EGraph"/>.
+        /// </summary>
         public ExtractionSchema Schema { get; }
 
+        /// <summary>
+        /// Gets the <c>i64</c> base sort.
+        /// </summary>
         public BaseSort<Int64Codec, long> I64 { get; }
 
+        /// <summary>
+        /// Gets the <c>bool</c> base sort.
+        /// </summary>
         public BaseSort<BooleanCodec, bool> Bool { get; }
 
+        /// <summary>
+        /// Gets the <c>f64</c> base sort.
+        /// </summary>
         public BaseSort<DoubleCodec, double> F64 { get; }
 
+        /// <summary>
+        /// Gets the <c>String</c> base sort.
+        /// </summary>
         public BaseSort<StringCodec, string> String { get; }
 
         /// <summary>
@@ -96,8 +114,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Adds the term <paramref name="function"/>(<paramref name="keys"/>), canonicalizing id keys first, and returns
-        /// its canonical id.
+        /// Adds the term <paramref name="function"/>(<paramref name="keys"/>), canonicalizing id keys first, and
+        /// returns its canonical id.
         /// </summary>
         public Value Make(FunctionId function, params Value[] keys)
         {
@@ -149,12 +167,24 @@ namespace Eggnog.Relations.Tests
             EGraph.FlushUpdates();
         }
 
+        /// <summary>
+        /// Boxes an <c>i64</c>.
+        /// </summary>
         public Value Int(long value) => EGraph.BaseValues.Get<Int64Codec, long>(value);
 
+        /// <summary>
+        /// Boxes a <c>bool</c>.
+        /// </summary>
         public Value Boolean(bool value) => EGraph.BaseValues.Get<BooleanCodec, bool>(value);
 
+        /// <summary>
+        /// Boxes an <c>f64</c>.
+        /// </summary>
         public Value Float(double value) => EGraph.BaseValues.Get<DoubleCodec, double>(value);
 
+        /// <summary>
+        /// Boxes a <c>String</c>.
+        /// </summary>
         public Value Str(string value) => EGraph.BaseValues.Get<StringCodec, string>(value);
 
         /// <summary>

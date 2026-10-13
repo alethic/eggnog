@@ -18,8 +18,8 @@ namespace Eggnog.Relations
     /// <para>
     /// A batch never holds more than <see cref="MaxLanes"/> matches (egglog's <c>VAR_BATCH_SIZE</c>,
     /// core-relations/src/free_join/execute.rs:1807), so the mask is two 64-bit words and a length instead of egglog's
-    /// pooled <c>FixedBitSet</c>: copying it is egglog's <c>clone</c> and allocates nothing (the map's §8.1 row 21 notes
-    /// that egglog's bitset pooling is a no-op anyway). Bits at or above <see cref="Length"/> are never set.
+    /// pooled <c>FixedBitSet</c>: copying it is egglog's <c>clone</c> and allocates nothing (egglog's bitset pooling,
+    /// in core-relations/src/pool/mod.rs, is a no-op anyway). Bits at or above <see cref="Length"/> are never set.
     /// </para>
     /// <para>
     /// Iteration visits only live lanes, with <see cref="BitOperations.TrailingZeroCount(ulong)"/> and

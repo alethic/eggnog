@@ -10,9 +10,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Prebuilding at freeze (colored-contexts spec §9.10, §8.1): <see cref="PlanIndexKeys.Collect"/> lists the cached
-    /// indexes a plan reads (scan columns, probe indexes, header equalities; cacheable columns only), and
-    /// <see cref="FreezeWarmup.From"/> builds them when a context freezes, so its descendants find them built.
+    /// Prebuilding at freeze: <see cref="PlanIndexKeys.Collect"/> lists the cached indexes a plan reads (scan columns,
+    /// probe indexes of Free Join plans, a column index for a one-column key and a tuple index otherwise, header
+    /// equalities; cacheable columns only), and <see cref="FreezeWarmup.From"/> builds them when a context freezes, so
+    /// its descendants find them built.
     /// </summary>
     public class PlanIndexKeysTests
     {
@@ -92,7 +93,8 @@ namespace Eggnog.Relations.Tests
             var child = root.CreateChild();
             Insert(child, e, ids[0], ids[5], 0);
 
-            // A plan made in the child, cached, then the child's freeze warms the indexes it reads on the child's layer.
+            // A plan made in the child, cached, then the child's freeze warms the indexes it reads on the child's
+            // layer.
             var rsb = child.Database.NewRuleSet();
             var q = rsb.NewRule();
             q.Strategy = PlanStrategy.Gj;
@@ -118,6 +120,39 @@ namespace Eggnog.Relations.Tests
                 else
                     Assert.Contains(info.Indexes.Entries.ToArray(), entry => entry.Key.SequenceEqual(key.Columns) && entry.Index.IsCompleted);
             }
+        }
+
+        [Theory]
+        [InlineData("PureSize")]
+        [InlineData("MinCover")]
+        public void EveryProbeIndexOfAFreeJoinPlanIsListed(string strategyName)
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var e = store.AddTable(Relation(2), name: "e");
+            var g = store.AddTable(Relation(3), name: "g");
+            var db = store.Root.Database;
+            var rsb = db.NewRuleSet();
+            var q = rsb.NewRule();
+            q.Strategy = Enum.Parse<PlanStrategy>(strategyName);
+            q.NoDecomposition = true;
+            var x = q.NewVariable("x");
+            var y = q.NewVariable("y");
+            var z = q.NewVariable("z");
+            q.AddAtom(e, [x, y, QueryEntry.Wildcard()]);
+            q.AddAtom(g, [x, y, z, QueryEntry.Wildcard()]);
+            q.AddAtom(e, [y, z, QueryEntry.Wildcard()]);
+            var rb = q.Build();
+            rb.AssertEq(x, x);
+            var rule = rb.Build("probes");
+            using var rs = rsb.Build();
+            var template = rs[rule].Template;
+
+            var keys = new List<CachedIndexKey>();
+            PlanIndexKeys.Collect(template, db, keys);
+            var probes = ((SinglePlan)template).Stages.OfType<FusedIntersectStage>().SelectMany(s => s.ToIntersect).ToArray();
+            Assert.NotEmpty(probes);
+            foreach (var probe in probes)
+                Assert.Contains(keys, k => k.Table == template.Atoms[probe.Scan.Atom].Table && k.Columns.SequenceEqual(probe.Scan.ToIndex.Columns));
         }
 
     }

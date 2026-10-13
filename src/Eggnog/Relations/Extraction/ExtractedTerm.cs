@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// children's terms), a base value, or a container applied to its elements' terms. Each subterm carries its sort, its
     /// value (the canonical e-class id, the base value or the container id) and its cost. Subterms for the same value are
     /// the same instance, so the tree is a DAG of shared objects. <see cref="Extractor.TryExtractTerm"/> builds it; the
-    /// rule layer's <c>ExtractedTerm</c> (rule-layer spec §2.2) is a typed view of it.
+    /// rule layer's <c>ExtractedTerm</c> is a typed view of it.
     /// </summary>
     /// <remarks>
     /// Immutable and thread-safe.

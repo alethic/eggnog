@@ -86,8 +86,8 @@ namespace Eggnog.Relations
         public void RefineAtomDense(AtomId atom, OffsetRange range) => RefineAtomDense(atom, 0, range);
 
         /// <summary>
-        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer <paramref name="layer"/>
-        /// (colored-contexts spec §9.5): egglog's <c>refine_atom_dense</c> with the layer the frame's rows lie in.
+        /// Refines <paramref name="atom"/> to the dense rows <paramref name="range"/> of layer
+        /// <paramref name="layer"/>: egglog's <c>refine_atom_dense</c> with the layer the frame's rows lie in.
         /// </summary>
         /// <param name="atom">The atom.</param>
         /// <param name="layer">The layer of the rows: 0 at a root.</param>
@@ -114,9 +114,8 @@ namespace Eggnog.Relations
         public void RefineAtomSubset(AtomId atom, Subset rows, TrieNodePool pool) => RefineAtomSubset(atom, 0, rows, pool);
 
         /// <summary>
-        /// Refines <paramref name="atom"/> to <paramref name="rows"/> of layer <paramref name="layer"/> (colored-contexts
-        /// spec §9.5): a dense refinement when the rows are a range, otherwise a node from <paramref name="pool"/> that the
-        /// frame owns.
+        /// Refines <paramref name="atom"/> to <paramref name="rows"/> of layer <paramref name="layer"/>: a dense
+        /// refinement when the rows are a range, otherwise a node from <paramref name="pool"/> that the frame owns.
         /// </summary>
         /// <param name="atom">The atom.</param>
         /// <param name="layer">The layer of the rows: 0 at a root.</param>
@@ -137,8 +136,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Refines <paramref name="atom"/> to <paramref name="rows"/>, which may lie in several layers (colored-contexts
-        /// spec §9.5, a probed side joined across layers): <see cref="RefineAtomSubset(AtomId, int, Subset, TrieNodePool)"/>
+        /// Refines <paramref name="atom"/> to <paramref name="rows"/>, which may lie in several layers (a probed side
+        /// joined across layers): <see cref="RefineAtomSubset(AtomId, int, Subset, TrieNodePool)"/>
         /// when they lie in one layer, otherwise a multi-layer node from <paramref name="pool"/> that the frame owns.
         /// </summary>
         /// <param name="atom">The atom.</param>

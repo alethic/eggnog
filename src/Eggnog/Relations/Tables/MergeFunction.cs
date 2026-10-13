@@ -10,9 +10,10 @@ namespace Eggnog.Relations
     /// <remarks>
     /// <para>
     /// <see cref="Merge"/> returns <c>true</c> when the row must change; it has then written the whole new row to
-    /// <c>output</c>, which the table stores (in the parallel path too: map §8.1 row 3). It returns <c>false</c> to
-    /// keep the current row, in which case nothing is written and no delta is produced: re-deriving a fact that is
-    /// already present must return <c>false</c> or saturation never ends.
+    /// <c>output</c>, which the table stores, in the parallel path too, where egglog's parallel insert discards the
+    /// merge output (core-relations/src/table/mod.rs:902-907). It returns <c>false</c> to keep the current row, in
+    /// which case nothing is written and no delta is produced: re-deriving a fact that is already present must return
+    /// <c>false</c> or saturation never ends.
     /// </para>
     /// <para>
     /// The output must keep the key columns (the table reuses the key's hash entry) and, in a table sorted by a
@@ -26,7 +27,7 @@ namespace Eggnog.Relations
     /// (<c>r := current; for each incoming q, if Merge(r, q, out) then r := out</c>), but the parallel path first folds
     /// the batch and then merges the result into the table, which agrees with the serial order only for associative
     /// merges; and the order of batches from different threads is not fixed. <see cref="IsLattice"/> declares whether
-    /// the merge is insensitive to all of that (decision 2 in docs/engine/decisions.md).
+    /// the merge is insensitive to all of that.
     /// </para>
     /// <para>
     /// A table calls <see cref="Merge"/> once per conflicting row, through one virtual call, as egglog calls its boxed
@@ -48,7 +49,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the merge is a lattice merge: associative, commutative and idempotent, so that merge order,
         /// batching and repetition do not change the result. Only lattice merges may be written from a context that has
-        /// ancestors (decision 2).
+        /// ancestors.
         /// </summary>
         public bool IsLattice { get; }
 

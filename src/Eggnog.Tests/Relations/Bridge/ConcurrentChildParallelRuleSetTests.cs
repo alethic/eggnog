@@ -6,11 +6,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The colors §21.10 item targeted at M10.4: a child's internal parallel rule set under
-    /// <see cref="ConcurrentChildren"/>, with more than <see cref="ParallelHeuristics.DbLevelThreshold"/> rows of its own,
-    /// so that the child's rule sets go parallel by the heuristics (not forced, as in
-    /// <see cref="ChildParallelRuleSetReviewTests"/>) while sibling children run on other threads. Each child must equal a
-    /// serial replay of its program in a fresh serial child of the same frozen root, and pass its invariant checks.
+    /// A child's internal parallel rule set under <see cref="ConcurrentChildren"/>, with more than
+    /// <see cref="ParallelHeuristics.DbLevelThreshold"/> rows of its own, so that the child's rule sets go parallel by
+    /// the heuristics (not forced, as in <see cref="ChildParallelRuleSetTests"/>) while sibling children run on other
+    /// threads. Each child must equal a serial replay of its program in a fresh serial child of the same frozen root,
+    /// and pass its invariant checks.
     /// </summary>
     public class ConcurrentChildParallelRuleSetTests
     {
@@ -65,8 +65,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Child <paramref name="index"/>'s program: <see cref="Triples"/> chains <c>x → y → z</c> over its own slice of the
-        /// root's ids, so the closure adds one path per chain.
+        /// Child <paramref name="index"/>'s program: <see cref="Triples"/> chains <c>x → y → z</c> over its own slice
+        /// of the root's ids, so the closure adds one path per chain.
         /// </summary>
         static void Program(ContextGraph g, EGraphContext child, Value[] ids, int index)
         {

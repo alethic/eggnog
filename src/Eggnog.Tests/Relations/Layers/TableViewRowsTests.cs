@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the layered-subset members of <see cref="TableView"/> and <see cref="LayerView"/> (colored-contexts spec
-    /// §9.2, §9.3): <see cref="TableView.AllRows"/> (the rows a layered run starts from) and
-    /// <see cref="TableView.AnyVisible"/> (the existence test of a zero-variable atom, map §8.1 row 2), over views with
+    /// Tests for the layered-subset members of <see cref="TableView"/> and <see cref="LayerView"/>:
+    /// <see cref="TableView.AllRows"/> (the rows a layered run starts from) and <see cref="TableView.AnyVisible"/> (the
+    /// existence test of a zero-variable atom, which needs a visible row, not merely a nonempty table), over views with
     /// tombstones, hidden rows and absent layers.
     /// </summary>
     public class TableViewRowsTests

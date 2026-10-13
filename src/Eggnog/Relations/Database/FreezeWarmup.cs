@@ -5,13 +5,14 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The cached indexes a freezing context builds before it is shared (colored-contexts spec §8.1 step 4.3, X13), so
-    /// that its concurrent descendants rarely build one lazily under a frozen catalog's serial refresh (X14).
+    /// The cached indexes a freezing context builds before it is shared, after freezing its tables and before switching
+    /// its index catalogs to serial refresh (<see cref="TableInfo.FreezeIndexes"/>), so that its concurrent descendants
+    /// rarely build one lazily under that serial refresh.
     /// </summary>
     /// <remarks>
-    /// Built from explicit keys, or from plans (<see cref="From"/>, §9.10: every cached plan's index keys, which the
-    /// bridge passes at its freeze, §10.8). Keys for tables the freezing database has no layer of are skipped: an
-    /// ancestor's layers were warmed by its own freeze. Immutable.
+    /// Built from explicit keys, or from plans (<see cref="From"/>: every index key a plan may read, on cacheable
+    /// columns only; the bridge passes every cached plan at its freeze). Keys for tables the freezing database has no
+    /// layer of are skipped: an ancestor's layers were warmed by its own freeze. Immutable.
     /// </remarks>
     internal sealed class FreezeWarmup
     {
@@ -34,8 +35,8 @@ namespace Eggnog.Relations
         public ReadOnlySpan<CachedIndexKey> Keys => keys;
 
         /// <summary>
-        /// Creates the warm-up of every cached index <paramref name="plans"/> may read (§9.10,
-        /// <see cref="PlanIndexKeys.Collect"/>), each key once.
+        /// Creates the warm-up of every cached index <paramref name="plans"/> may read
+        /// (<see cref="PlanIndexKeys.Collect"/>), each key once.
         /// </summary>
         /// <param name="plans">The plans, typically every cached plan of the rules the frozen context's descendants run.</param>
         /// <param name="schema">The schema that says which columns are cacheable: the freezing context's database.</param>

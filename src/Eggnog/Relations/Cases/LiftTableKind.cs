@@ -2,7 +2,7 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// How the lift treats a table (colored-contexts spec §11.2): which facts of the cases it may write into their parent.
+    /// How the lift treats a table: which facts of the cases it may write into their parent.
     /// </summary>
     internal enum LiftTableKind
     {

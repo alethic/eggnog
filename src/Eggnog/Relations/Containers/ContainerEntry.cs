@@ -9,10 +9,10 @@ namespace Eggnog.Relations
     /// <remarks>
     /// egglog's reverse map stores only the content hash and the hash-cons shard, because a second copy of a Rust
     /// container would duplicate its heap storage; a lookup by id then probes the hash-cons shard under a read lock it
-    /// takes twice (mod.rs:701-708; map §8.1 row 14). Containers here are immutable structs whose copies share their
-    /// storage, so the reverse map holds the container itself and a lookup by id takes one lock and one probe. The
-    /// <see cref="Hash"/> is kept so neither table recomputes it when it grows, and so an entry can be found in the
-    /// hash-cons again from the reverse map.
+    /// takes twice (mod.rs:701-708). Containers here are immutable structs whose copies share their storage, so the
+    /// reverse map holds the container itself and a lookup by id takes one lock and one probe. The <see cref="Hash"/>
+    /// is kept so neither table recomputes it when it grows, and so an entry can be found in the hash-cons again from
+    /// the reverse map.
     /// </remarks>
     /// <typeparam name="TContainer">The container type.</typeparam>
     internal struct ContainerEntry<TContainer>

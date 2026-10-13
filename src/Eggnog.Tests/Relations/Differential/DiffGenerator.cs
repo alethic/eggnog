@@ -335,7 +335,8 @@ namespace Eggnog.Relations.Tests
             {
                 var atom = rng.Next(query.Atoms.Length);
                 var table = program.Tables[query.Atoms[atom].Table];
-                // The union-find's canonical column is computed on every read, so no equality on it is fast.
+                // The union-find's canonical column is computed on every read, so an equality on it is never fast: the
+                // pin goes on the child column.
                 var column = table.IsUnionFind ? 0 : rng.Next(table.DataArity);
                 pinned.Add((atom, Constraint.EqConst(new ColumnId(column), new Value(Cell(rng, program)))));
             }
@@ -477,11 +478,11 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The lost-constraint query of PlannerDecompositionTests (found by the planner's random search), which egglog's
-        /// planner answers wrongly and this planner answers with a materialization lookup in its result block, for
-        /// almost any data and almost any choice of read variables: per atom, the role of its table (0: four columns,
-        /// 1: one, 2: three; <see cref="DiffProgram.DenseTables"/>), its entries (a variable <c>0..8</c>,
-        /// <see cref="TemplateWildcard"/> or <see cref="TemplateConstant"/>) and the constraint it had there, if any.
+        /// The lost-constraint query of PlannerDecompositionTests, which egglog's planner answers wrongly and this
+        /// planner answers with a materialization lookup in its result block, for almost any data and almost any choice
+        /// of read variables: per atom, the role of its table (0: four columns, 1: one, 2: three;
+        /// <see cref="DiffProgram.DenseTables"/>), its entries (a variable <c>0..8</c>, <see cref="TemplateWildcard"/>
+        /// or <see cref="TemplateConstant"/>) and the constraint it has there, if any.
         /// </summary>
         static readonly (int Role, int[] Entries, Constraint? Constraint)[] LostConstraintTemplate =
         [

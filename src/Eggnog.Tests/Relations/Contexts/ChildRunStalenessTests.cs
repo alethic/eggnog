@@ -9,17 +9,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The staleness and timestamp guards of a rule run in a child (colored-contexts spec §9.1, I3, I19, I21, I29): a rule
-    /// set whose headers were evaluated before a change anywhere on the chain is refused even once the child is current
-    /// again, a run or merge below the child's latest epoch is refused before anything runs, and a root keeps egglog's
-    /// rule (a stale rule set runs). No refusal faults the child.
+    /// The staleness and timestamp guards of a rule run in a child: a rule set whose headers were evaluated before a
+    /// change anywhere on the chain is refused even once the child is current again, since its headers and root nodes
+    /// must come from the views the search reads; a run or merge below the child's latest epoch is refused before
+    /// anything runs, so new rows are never stamped below a watermark already committed; and a root keeps egglog's rule
+    /// (a stale rule set runs). No refusal faults the child.
     /// </summary>
     public class ChildRunStalenessTests
     {
 
         /// <summary>
-        /// A store with <c>f(x)</c> holding five ids at the root, an empty <c>g(x)</c>, and a child of the root, which is
-        /// left writable.
+        /// A store with <c>f(x)</c> holding five ids at the root, an empty <c>g(x)</c>, and a child of the root, which
+        /// is left writable.
         /// </summary>
         static (Store Store, TableId F, TableId G, Context Root, Context Child) Setup()
         {
@@ -55,6 +56,10 @@ namespace Eggnog.Relations.Tests
             return rsb.Build();
         }
 
+        /// <summary>
+        /// A rule set built before the parent appended a row is refused after the child catches up, although the
+        /// child's views are current again; built again, it runs over the new row.
+        /// </summary>
         [Fact]
         public void ARuleSetBuiltBeforeTheChildCaughtUpWithItsParentIsRefused()
         {
@@ -79,13 +84,18 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A run at an epoch below the child's latest is refused with nothing written; at the clock it runs, and every
+        /// row it writes carries that epoch.
+        /// </summary>
         [Fact]
         public void ARunBelowTheChildsLatestEpochIsRefused()
         {
             var (store, f, g, _, child) = Setup();
             using (child)
             {
-                // Two writes: the child's latest epoch is now above its creation, the floor its rule runs knew of before.
+                // Two writes: the child's latest epoch is above its creation epoch, so a run at the creation epoch is
+                // below it.
                 Insert(child, f, child.NewId(), 0);
                 Insert(child, f, child.NewId(), 0);
                 using var rs = Build(store, f, g, child);
@@ -94,7 +104,8 @@ namespace Eggnog.Relations.Tests
                 Assert.True(child.IsClean);
                 Assert.Empty(LayeredRuleUtil.Visible(child, g));
 
-                // The same rule set runs at the clock, and every row it writes carries that epoch (I3, I19).
+                // The same rule set runs at the clock, and every row it writes carries that epoch (one run's rows carry
+                // one epoch, and a layer's timestamps never decrease).
                 var epoch = store.ReadClock();
                 child.Database.RunRuleSet(rs, ReportLevel.TimeOnly, epoch);
                 Assert.Equal(7, LayeredRuleUtil.Visible(child, g).Count);
@@ -103,6 +114,10 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// Merging an executed rule set at an epoch below the one it ran at is refused without faulting the child; at
+        /// its own epoch the merge lands.
+        /// </summary>
         [Fact]
         public void AMergeBelowItsRunsTimestampIsRefused()
         {
@@ -122,6 +137,9 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A root runs a rule set built before its last change, as egglog does, and finds the new row.
+        /// </summary>
         [Fact]
         public void ARootRunsAStaleRuleSetAsEgglogDoes()
         {

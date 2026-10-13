@@ -44,7 +44,7 @@ namespace Eggnog.Relations
         /// The committed table is read through the database view, so a table the database has taken out (while it
         /// merges or rebuilds) cannot be predicted into, as in egglog. Staging a new row sets <see cref="Changed"/> and
         /// notifies the table. In a child context the committed row is the one the context sees, found by the write-phase
-        /// lookup (<see cref="ContextTables.TryGetVisibleRow"/>, colored-contexts spec §6.5): one null test at the root.
+        /// lookup (<see cref="ContextTables.TryGetVisibleRow"/>): one null test at the root.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key.</param>
@@ -93,7 +93,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// In a child context the committed value is the one the context sees
-        /// (<see cref="ContextTables.TryGetVisibleColumn"/>, colored-contexts spec §6.5): one null test at the root.
+        /// (<see cref="ContextTables.TryGetVisibleColumn"/>): one null test at the root.
         /// </remarks>
         /// <param name="table">The table.</param>
         /// <param name="key">The key.</param>
@@ -201,9 +201,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the table with id <paramref name="table"/> for reading: the single dispatch point for committed-table reads
-        /// (colored-contexts spec §6.5). Every caller takes its layered path first, so this throws in a child context; root
-        /// paths that have already tested for layers call <see cref="ReadRootTable"/>.
+        /// Gets the table with id <paramref name="table"/> for reading: the single dispatch point for committed-table
+        /// reads. Every caller takes its layered path first, so this throws in a child context; root paths that have
+        /// already tested for layers call <see cref="ReadRootTable"/>.
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
@@ -219,9 +219,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the table with id <paramref name="table"/> for reading at a root, in a bare database or over a bare
         /// catalog: through the database view when the state has one (which fails for a table taken out by a merge in
-        /// progress, as egglog's <c>db.table_info[table]</c> does), otherwise from the catalog. The body
-        /// <see cref="ReadTable"/> had before contexts, small enough to inline on the root paths that have already tested
-        /// for layers (§14.1: one null test per call there).
+        /// progress, as egglog's <c>db.table_info[table]</c> does), otherwise from the catalog. Small enough to inline
+        /// on the root paths that have already tested for layers, so a read there costs one null test.
         /// </summary>
         /// <param name="table">The table id.</param>
         /// <returns>The table.</returns>
@@ -233,10 +232,9 @@ namespace Eggnog.Relations
         /// not fit in 32 bits.
         /// </summary>
         /// <remarks>
-        /// Defect fixed (numeric-id/src/lib.rs:528-531, called from core-relations/src/action/mod.rs:547, 700, 877;
-        /// colored-contexts spec §4.2): egglog's <c>from_usize</c> accepts <see cref="uint.MaxValue"/>, which is
-        /// <see cref="Value.StaleRep"/>, the marker of a deleted row when it lands in a row's first cell. A minted id or
-        /// read counter at or past it is rejected.
+        /// egglog's <c>from_usize</c> (numeric-id/src/lib.rs:528-531, called from core-relations/src/action/mod.rs:547,
+        /// 700, 877) accepts <see cref="uint.MaxValue"/>, which is <see cref="Value.StaleRep"/>, the marker of a
+        /// deleted row when it lands in a row's first cell. Here a minted id or read counter at or past it is rejected.
         /// </remarks>
         /// <param name="value">The counter value.</param>
         /// <returns>The cell value.</returns>

@@ -8,22 +8,22 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Makes the context read-only and shareable across threads (colored-contexts spec §10.8, §8.1; rule-layer E10).
-        /// Its parent must be frozen already. A second call does nothing.
+        /// Makes the context read-only and shareable across threads. Its parent must be frozen already. A second call
+        /// does nothing.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Steps (§10.8): (1) flush the host writes staged here; (2) rebuild; (3) take a failure that is recorded and throw
-        /// it (<see cref="PanicException"/>), leaving the context unfrozen and usable; (4) plan the rules the context's
-        /// descendants will run, on this context's statistics (§9.7): with <paramref name="planRules"/> <c>null</c>, every
-        /// live rule without a cached plan; otherwise exactly the given rules that have none (E10: a freeze must not plan
+        /// Steps: (1) flush the host writes staged here; (2) rebuild; (3) take a failure that is recorded and throw it
+        /// (<see cref="PanicException"/>), leaving the context unfrozen and usable; (4) plan the rules the context's
+        /// descendants will run, on this context's statistics: with <paramref name="planRules"/> <c>null</c>, every
+        /// live rule without a cached plan; otherwise exactly the given rules that have none (a freeze must not plan
         /// other scopes' local rules, queries or split matchers on its statistics); (5) freeze the storage context
         /// (<see cref="Context.Freeze"/>), warming the indexes the planned rules' plans use
-        /// (<see cref="FreezeWarmup.From"/>): those of every live rule's plan for <c>null</c>, those of the given rules'
-        /// plans otherwise.
+        /// (<see cref="FreezeWarmup.From"/>): those of every live rule's plan for <c>null</c>, those of the given
+        /// rules' plans otherwise.
         /// </para>
         /// <para>
-        /// Guidance (§14.2): saturate, or run every rule once after the last change, before freezing; otherwise every child
+        /// Guidance: saturate, or run every rule once after the last change, before freezing; otherwise every child
         /// re-matches the parent's last delta.
         /// </para>
         /// </remarks>
@@ -68,7 +68,7 @@ namespace Eggnog.Relations
             if (TakeFailure(out var message))
                 throw new PanicException(message);
 
-            // Step 4: plans are shared by every context and built once (decision 7), here on this context's statistics.
+            // Step 4: plans are shared by every context and built once, here on this context's statistics.
             var database = context.Database;
             var templates = new List<PlanTemplate>(infos.Count);
             foreach (var info in infos)

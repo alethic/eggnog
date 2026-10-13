@@ -5,8 +5,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A split source for the driver tests: its requests and assumptions are lambdas; it logs its calls and counts those
-    /// made while the calling thread held the scope's thread domain (which the driver must never do, rule-layer E8).
+    /// A split source for the driver tests: its requests and assumptions are lambdas; it logs its calls and counts
+    /// those made while the calling thread held the scope's thread domain (which the driver must never do: sources and
+    /// schedules may create children, as nested splits do).
     /// </summary>
     sealed class TestSplitSource : ISplitSource
     {

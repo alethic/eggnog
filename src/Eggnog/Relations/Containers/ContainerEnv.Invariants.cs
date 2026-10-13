@@ -13,7 +13,7 @@ namespace Eggnog.Relations
         /// what a lookup of its container finds; that the reverse map holds exactly one entry per hash-cons entry (same
         /// container, hash and id), each in the shard of its id's hash and found by a lookup of that exact entry; and that
         /// the element index holds exactly the occurrences of every hash-cons entry's values under its id. The part of
-        /// the map's invariant checker (decision L3) that concerns containers at the root.
+        /// the engine's invariant checks that concerns containers at the root.
         /// </remarks>
         public override void CheckInvariants()
         {

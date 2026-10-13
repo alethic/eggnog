@@ -79,7 +79,7 @@ namespace Eggnog.Relations.Tests
                 index.Refresh(table);
                 CheckKeys(table, index, 10);
 
-                // Now get an update to the major version.
+                // Remove and re-add a row until the table's major version changes.
                 var start = table.Version.Major;
                 while (table.Version.Major == start)
                 {
@@ -89,7 +89,7 @@ namespace Eggnog.Relations.Tests
                     table.Merge(state);
                 }
 
-                // Refresh should do the right thing.
+                // The refresh rebuilds the index over the new generation.
                 index.Refresh(table);
                 Assert.Equal(table.Version, index.UpdatedTo);
                 CheckKeys(table, index, 10);

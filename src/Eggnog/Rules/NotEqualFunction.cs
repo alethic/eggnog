@@ -4,8 +4,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The not-equal filter, one per graph: <c>[a, b] → unit</c> when the cells differ (canonical classes or canonical
-    /// values, invariant V), nothing otherwise. No user code runs; immutable and thread-safe.
+    /// The not-equal filter, one per graph: <c>[a, b] → unit</c> when the cells differ, nothing otherwise. Comparing cells
+    /// is sound because the engine passes canonical classes and equal values of one column type have equal cells. No user
+    /// code runs; immutable and thread-safe.
     /// </summary>
     internal sealed class NotEqualFunction : Relations.ExternalFunction
     {

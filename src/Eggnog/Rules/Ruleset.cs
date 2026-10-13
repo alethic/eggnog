@@ -22,7 +22,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="name">The name, unique among the graph's rulesets.</param>
-        /// <param name="licence">The licence under which its rules are erasing (D12); <c>null</c> for none.</param>
+        /// <param name="licence">The licence under which its rules are erasing; <c>null</c> for none.</param>
         internal Ruleset(EGraph graph, string name, ScopeTag? licence = null)
         {
             Graph = graph;
@@ -41,8 +41,8 @@ namespace Eggnog
         public string Name { get; }
 
         /// <summary>
-        /// Gets the tag under which the ruleset's rules are erasing (D12, <see cref="RulesetOptions.Licence"/>);
-        /// <c>null</c> for none.
+        /// Gets the tag under which the ruleset's rules are erasing (<see cref="RulesetOptions.Licence"/>); <c>null</c> for
+        /// none.
         /// </summary>
         public ScopeTag? Licence { get; }
 
@@ -52,8 +52,8 @@ namespace Eggnog
         public IReadOnlyList<Rule> Rules => Volatile.Read(ref rulesView);
 
         /// <summary>
-        /// Defines a global rule, compiled immediately. Any thread, any time (D6): the rule takes part from the next
-        /// iteration of every run.
+        /// Defines a global rule, compiled immediately. Any thread, any time: the rule takes part from the next iteration of
+        /// every run.
         /// </summary>
         /// <param name="name">The rule's name, for rendering, statistics and messages.</param>
         /// <param name="define">Collects the rule: When/Where make the body, Then/Make/Rewrite the head.</param>
@@ -62,8 +62,8 @@ namespace Eggnog
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
         /// <exception cref="RuleDefinitionException">The rule is not valid; nothing is registered.</exception>
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or the
-        /// rule's first scoped read of a table creates its mirror, which is a table definition (D6, §6.8), while another
-        /// thread is using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
+        /// rule's first scoped read of a table creates its mirror, which is a table definition, while another thread is
+        /// using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
         public Rule DefineRule(string name, Action<RuleBuilder> define)
         {
             EngineCallMarker.ThrowIfActive();

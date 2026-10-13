@@ -5,8 +5,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A user-defined codec over <see cref="long"/>, distinct from <see cref="Int64Codec"/>: it boxes only <c>[0, 16)</c>
-    /// inline and interns the rest with <see cref="BaseValues.InternedTag"/>, following the contract of
+    /// A user-defined codec over <see cref="long"/>, distinct from <see cref="Int64Codec"/>: it boxes only
+    /// <c>[0, 16)</c> inline and interns the rest with <see cref="BaseValues.InternedTag"/>, following the contract of
     /// <see cref="IBaseValueCodec{T}"/>. Used to show that two codecs over one .NET type are two base value types.
     /// </summary>
     internal readonly struct BaseValueTestTinyLongCodec : IBaseValueCodec<long>

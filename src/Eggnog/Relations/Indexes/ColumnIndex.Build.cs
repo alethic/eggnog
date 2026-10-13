@@ -16,12 +16,13 @@ namespace Eggnog.Relations
         /// when its rows are contiguous and otherwise one exactly sized arena run, so no subset is ever regrown.
         /// </para>
         /// <para>
-        /// The multi-column defect is fixed (map §8.1 row 8): egglog collects the pairs column by column and sorts by
-        /// value only, so with several columns a value's rows are the first column's rows followed by the second's,
-        /// unsorted, and its adjacent <c>dedup</c> misses repeats. Here the pairs are packed as <c>value &lt;&lt; 32 | row</c>
-        /// and come out sorted by (value, row) (<see cref="ColumnPairSink"/>, <see cref="PairRadixSort"/>), each row
-        /// once per distinct value. The pair array is sized from the subset, not, as egglog does, from the whole table
-        /// (which over-allocates when a large table's small subset is grouped).
+        /// egglog collects the pairs column by column and sorts by value only
+        /// (core-relations/src/hash_index/mod.rs:341-382), so with several columns a value's rows are the first
+        /// column's rows followed by the second's, unsorted, and its adjacent <c>dedup</c> misses repeats. Here the
+        /// pairs are packed as <c>value &lt;&lt; 32 | row</c> and come out sorted by (value, row)
+        /// (<see cref="ColumnPairSink"/>, <see cref="PairRadixSort"/>), each row once per distinct value. The pair
+        /// array is sized from the subset, not, as egglog does, from the whole table (which over-allocates when a large
+        /// table's small subset is grouped).
         /// </para>
         /// <para>
         /// Cost: one scan, O(pairs × passes) to sort (at most four passes), two linear walks over the groups (one to size
@@ -43,14 +44,14 @@ namespace Eggnog.Relations
         /// <summary>
         /// Builds the index from scratch from the rows of <paramref name="subset"/> a view sees (live and not in
         /// <paramref name="hidden"/>): the visibility-aware
-        /// <see cref="RebuildFull(Table, ReadOnlySpan{ColumnId}, SubsetRef)"/> of per-subset builds (colored-contexts
-        /// spec §9.3), the same sort-based grouping over a hidden-aware scan. The index must be empty. With
-        /// <see cref="HiddenRows.None"/> it is the plain build.
+        /// <see cref="RebuildFull(Table, ReadOnlySpan{ColumnId}, SubsetRef)"/> of per-subset builds, the same
+        /// sort-based grouping over a hidden-aware scan. The index must be empty. With <see cref="HiddenRows.None"/> it
+        /// is the plain build.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="columns">The key columns.</param>
         /// <param name="subset">The rows to index.</param>
-        /// <param name="hidden">The rows the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows the view hides; sealed.</param>
         public void RebuildFull(Table table, ReadOnlySpan<ColumnId> columns, SubsetRef subset, HiddenRows hidden)
         {
             if (hidden.IsNone)

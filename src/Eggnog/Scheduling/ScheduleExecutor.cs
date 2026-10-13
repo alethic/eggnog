@@ -9,9 +9,9 @@ namespace Eggnog
 
     /// <summary>
     /// Runs one top-level <see cref="Scope.Run(Schedule, RunOptions, CancellationToken)"/>: chooses the rules of each
-    /// iteration, checks cancellation and limits before each iteration and split step, runs it, records its step (§6.11),
-    /// and accumulates the report (§6.5). From R3 it also keeps one split driver per split node, the run's live cases, and
-    /// the stack of split steps in progress, whose lifts it records as steps.
+    /// iteration, checks cancellation and limits before each iteration and split step, runs it, records its step, and
+    /// accumulates the report. It also keeps one split driver per split node, the run's live cases, and the stack of split
+    /// steps in progress, whose lifts it records as steps.
     /// </summary>
     internal sealed class ScheduleExecutor
     {
@@ -49,7 +49,7 @@ namespace Eggnog
         public Stopwatch Clock { get; }
 
         /// <summary>
-        /// Gets the cases of this run that are alive (R3), in the order they first ran, for
+        /// Gets the cases of this run that are alive, in the order they first ran, for
         /// <see cref="RunOptions.RowLimit"/>: a snapshot. A case leaves once its engine set disposed it (a vacuous case, or
         /// every case when the run ends).
         /// </summary>
@@ -67,8 +67,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether the run observer threw: its exception propagates out of the run without faulting the scope (§6.11),
-        /// even a <see cref="RuleEvaluationException"/> it threw itself.
+        /// Gets whether the run observer threw: its exception propagates out of the run without faulting the scope, even a
+        /// <see cref="RuleEvaluationException"/> it threw itself.
         /// </summary>
         public bool ObserverFailed { get; private set; }
 
@@ -88,11 +88,11 @@ namespace Eggnog
         public RunStatistics Statistics { get; } = new();
 
         /// <summary>
-        /// Gets the rules of an iteration in <paramref name="scope"/> (§6.5.2): the rulesets' global rules (snapshots, in
-        /// definition order), then the local rules belonging to those rulesets of each scope from the root down to
+        /// Gets the rules of an iteration in <paramref name="scope"/>: the rulesets' global rules (snapshots, in definition
+        /// order), then the local rules belonging to those rulesets of each scope from the root down to
         /// <paramref name="scope"/>, deduplicated by reference. Mirror copy rules are never among them; they run only in
-        /// syncs (D48). Recomputed for every iteration, so rules defined meanwhile join the next one (D6). A single ruleset
-        /// on a path without local rules returns its snapshot, allocation-free.
+        /// syncs. Recomputed for every iteration, so rules defined meanwhile, on any thread, join the next one. A single
+        /// ruleset on a path without local rules returns its snapshot, allocation-free.
         /// </summary>
         /// <param name="rulesets">The rulesets of the step.</param>
         /// <param name="scope">The scope the iteration runs in.</param>
@@ -137,7 +137,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks, before an iteration or a split step, cancellation and then the limits (D42): the iteration limit, the time
+        /// Checks, before an iteration or a split step, cancellation and then the limits: the iteration limit, the time
         /// limit (the run's clock against <see cref="RunOptions.TimeLimit"/>), and the row limit (the own rows of the
         /// top-level scope and of the run's live cases against <see cref="RunOptions.RowLimit"/>).
         /// </summary>
@@ -155,7 +155,7 @@ namespace Eggnog
 
             if (Options.RowLimit is { } limit)
             {
-                // The top-level scope's own rows and the live cases' (D42); no allocation.
+                // The top-level scope's own rows and the live cases'; no allocation.
                 var rows = Top.Engine.OwnRowCount;
                 foreach (var @case in cases)
                     if (@case.Engine.IsDisposed == false)
@@ -167,11 +167,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Runs one engine iteration of <paramref name="rules"/> in <paramref name="scope"/> (§6.5.1).
+        /// Runs one engine iteration of <paramref name="rules"/> in <paramref name="scope"/>.
         /// </summary>
         /// <param name="scope">The scope.</param>
         /// <param name="rules">The rules.</param>
-        /// <param name="inCase">Whether the scope is a case (R3).</param>
+        /// <param name="inCase">Whether the scope is a case.</param>
         /// <returns>Whether the iteration changed the scope (its rules' writes or the rebuild).</returns>
         /// <exception cref="RuleEvaluationException">An evaluation failure; the scope is faulted.</exception>
         public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase)
@@ -236,11 +236,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Leaves out of an iteration the rules that read a tag <paramref name="scope"/> cannot resolve. <c>Run</c> refuses
-        /// such a rule before any work when the schedule reaches it at the start (§6.5.3); one defined on another thread
-        /// during the run (D6) cannot be refused then, and failing the run half-way would leave its earlier iterations'
-        /// writes behind and lose its report, so it takes part only in iterations of scopes that resolve its tags. Returns
-        /// <paramref name="rules"/> itself, allocation-free, when every rule's tags resolve.
+        /// Leaves out of an iteration the rules that read a tag <paramref name="scope"/> cannot resolve. <c>Run</c>
+        /// refuses such a rule before any work when the schedule reaches it at the start; one defined on another thread
+        /// during the run cannot be refused then, and failing the run half-way would leave its earlier iterations'
+        /// writes behind and lose its report, so it takes part only in iterations of scopes that resolve its tags.
+        /// Returns <paramref name="rules"/> itself, allocation-free, when every rule's tags resolve.
         /// </summary>
         /// <param name="scope">The scope the iteration runs in.</param>
         /// <param name="rules">The iteration's rules.</param>
@@ -271,9 +271,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings current, just before an iteration, the mirrors its rules read (D48, §6.8): for each tag a rule reads,
-        /// the tagged scope's copy rules run once if it is writable and changed since its last sync. Allocates only when a
-        /// rule reads a scope.
+        /// Brings current, just before an iteration, the mirrors its rules read: for each tag a rule reads, the tagged
+        /// scope's copy rules run once if it is writable and changed since its last sync. Allocates only when a rule
+        /// reads a scope.
         /// </summary>
         /// <param name="scope">The scope the iteration runs in.</param>
         /// <param name="rules">The iteration's rules.</param>
@@ -290,7 +290,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Records a step (§6.11): keeps it with <see cref="RunOptions.RecordSteps"/>, and hands it to
+        /// Records a step: keeps it with <see cref="RunOptions.RecordSteps"/>, and hands it to
         /// <see cref="RunOptions.Observer"/> on the run's thread, with the scope's guard marked so that the observer may
         /// read the run's scopes and nothing else. Every step takes an index, recorded or not.
         /// </summary>
@@ -299,7 +299,7 @@ namespace Eggnog
         /// <param name="changed">Whether it changed the scope.</param>
         /// <param name="elapsed">How long it took.</param>
         /// <param name="rules">For an iteration, the rules that matched in it; <c>null</c> when no step is wanted.</param>
-        /// <param name="casesOpened">For a split step, the cases it opened (R3).</param>
+        /// <param name="casesOpened">For a split step, the cases it opened.</param>
         public void RecordStep(RunStepKind kind, Scope scope, bool changed, TimeSpan elapsed, IReadOnlyList<RuleStatistics>? rules, int casesOpened = 0)
         {
             var index = Statistics.StepCount++;
@@ -330,11 +330,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the run's driver of a split node (§6.9.3), made on first use and kept for the run: its sources are the
-        /// node's rules' sources at their positions (<see cref="SplitRule.SourceAt"/>), its in-case schedule a
-        /// <see cref="ScheduleCaseRunner"/> of the node's, its lift spec the graph's (§6.9.1), with no demand (D43: the
-        /// rules' bodies decide), and the run's limits. Cases are made with <c>IsCase</c>, <c>StopOnContradiction</c>, and
-        /// the graph's <see cref="EGraph.InheritWatermarks"/>.
+        /// Gets the run's driver of a split node, made on first use and kept for the run: its sources are the node's rules'
+        /// sources at their positions (<see cref="SplitRule.SourceAt"/>), its in-case schedule a
+        /// <see cref="ScheduleCaseRunner"/> of the node's, its lift spec the graph's, with no demand (the rules' bodies
+        /// decide which keys split), and the run's limits. Cases are made with <c>IsCase</c>, <c>StopOnContradiction</c>,
+        /// and the graph's <see cref="EGraph.InheritWatermarks"/>.
         /// </summary>
         /// <param name="node">The split node.</param>
         /// <returns>The driver.</returns>
@@ -369,7 +369,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Brings current, just before a split step, the mirrors its rules' matchers read (D48, §6.8), recording a
+        /// Brings current, just before a split step, the mirrors its rules' matchers read, recording a
         /// <see cref="RunStepKind.MirrorSync"/> step for each sync; the matcher's own sync then finds them current. Allocates
         /// only when a matcher reads a scope.
         /// </summary>
@@ -388,7 +388,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Begins a split step (R3): pushes its frame, from which its lifts are recorded as steps (§6.11).
+        /// Begins a split step: pushes its frame, from which its lifts are recorded as steps.
         /// </summary>
         /// <param name="scope">The scope split.</param>
         /// <param name="report">The step's report, which the driver fills.</param>
@@ -397,7 +397,7 @@ namespace Eggnog
 
         /// <summary>
         /// Records, as <see cref="RunStepKind.Lift"/> steps of the split scope, the lifts the current split step made since
-        /// it last ran a case (§6.11): the driver lifts between case runs. Each takes its share of the time since then, and
+        /// it last ran a case: the driver lifts between case runs. Each takes its share of the time since then, and
         /// is marked changed when the scope's <see cref="Scope.Version"/> moved meanwhile (the in-case work changes only the
         /// cases). Called when a case is about to run, and when the step ends.
         /// </summary>
@@ -458,7 +458,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers a case of the run, once, among its live cases (§6.9.3), whose rows count towards
+        /// Registers a case of the run, once, among its live cases, whose rows count towards
         /// <see cref="RunOptions.RowLimit"/>.
         /// </summary>
         /// <param name="case">The case.</param>
@@ -469,10 +469,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Takes, when a split step in <paramref name="scope"/> ends, the first failure a case of the run under it recorded
-        /// in a catch-up the engine made inside the step and no later iteration of the case took (N114;
-        /// <see cref="Scope.TakeCaseCatchUpFailure"/>). The case is faulted; the caller throws the exception, and the run
-        /// faults its scope (N94). Cost: one volatile read per case of <paramref name="scope"/>.
+        /// Takes, when a split step in <paramref name="scope"/> ends, the first failure a case of the run under it
+        /// recorded in a catch-up the engine made inside the step and no later iteration of the case took
+        /// (<see cref="Scope.TakeCaseCatchUpFailure"/>). The case is faulted; the caller throws the exception, and the
+        /// run faults its scope with the same cause. Cost: one volatile read per case of <paramref name="scope"/>.
         /// </summary>
         /// <param name="scope">The scope the step split.</param>
         /// <returns>The exception, to throw; <c>null</c> when nothing was recorded.</returns>

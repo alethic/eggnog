@@ -4,22 +4,23 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The writes a host staged in one <see cref="EGraphContext"/> and has not flushed yet (colored-contexts spec §10.4,
-    /// X24): logical function rows (keys and output, without the timestamp and subsumption cells) and union pairs, kept
-    /// on the bridge side until <see cref="EGraphContext.FlushUpdates"/> replays them into a state stamped with the flush's
-    /// epoch, after the context caught up with its parent.
+    /// The writes a host staged in one <see cref="EGraphContext"/> and has not flushed yet: logical function rows (keys
+    /// and output, without the timestamp and subsumption cells) and union pairs, kept on the bridge side until
+    /// <see cref="EGraphContext.FlushUpdates"/> replays them into a state stamped with the flush's epoch, after the
+    /// context caught up with its parent.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Why bridge-side (X24): a buffer from <c>Database.NewBuffer</c> notifies its table when it is created, so a merge
+    /// Why bridge-side: a buffer from <c>Database.NewBuffer</c> notifies its table when it is created, so a merge
     /// between the staging and the flush would consume the notification; and a row stamped at staging could carry an
-    /// epoch below a later catch-up (I21). Replaying at the flush stamps every row with the flush's epoch by construction.
+    /// epoch below a later catch-up. Replaying at the flush stamps every row with the flush's epoch by construction.
     /// </para>
     /// <para>
-    /// Each row remembers whether its id cells are canonicalized at the replay in the running context: rows staged through
-    /// the context API are (the rule layer's invariant C, at every level, the root included); a row staged as given is
-    /// replayed as given (a child canonicalizes it at its merge anyway, X38). The e-graph's egglog-compatible root API
-    /// does not stage here: its rows go straight into database buffers (<see cref="EGraphContext.AddValuesAtRoot"/>).
+    /// Each row remembers whether its id cells are canonicalized at the replay in the running context: rows staged
+    /// through the context API are, at every level, the root included, so every id the rule layer writes is canonical
+    /// in the target context; a row staged as given is replayed as given (a child canonicalizes it at its merge
+    /// anyway). The e-graph's egglog-compatible root API does not stage here: its rows go straight into database
+    /// buffers (<see cref="EGraphContext.AddValuesAtRoot"/>).
     /// </para>
     /// <para>
     /// Storage: one arena of cells and three parallel arrays per row, grown geometrically. Kept across flushes while small
@@ -121,7 +122,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Stages every row and union into <paramref name="state"/>, in staging order, stamped with
-        /// <paramref name="timestamp"/> and not subsumed (§10.4): rows through their function's table, unions through the
+        /// <paramref name="timestamp"/> and not subsumed: rows through their function's table, unions through the
         /// union-find. The id cells of rows staged through the context API are canonicalized with
         /// <paramref name="finder"/>, which is current once the context prepared for the write. Does not clear.
         /// </summary>

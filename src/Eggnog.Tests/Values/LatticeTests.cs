@@ -6,7 +6,8 @@ namespace Eggnog.Tests.Values
 {
 
     /// <summary>
-    /// Lattices (D25): the laws <see cref="ValueLattice{T}.Verify"/> checks, the built-ins, and merges that fail (D31).
+    /// Lattices: the laws <see cref="ValueLattice{T}.Verify"/> checks, the built-ins, and merges that fail, at the root
+    /// and in children.
     /// </summary>
     public sealed class LatticeTests
     {
@@ -101,6 +102,81 @@ namespace Eggnog.Tests.Values
             Assert.False(graph.Root.IsFaulted);
             Assert.Equal(1L, graph.Root.Get(f.Of("k")));
             Assert.Equal(version, graph.Root.Version);
+        }
+
+        /// <summary>
+        /// A lattice that throws during a rule's merge in a child is recorded in the child's runtime, so the child's
+        /// exception carries it, as at the root; the child is faulted, and the root is not.
+        /// </summary>
+        /// <param name="frozenRoot">Whether the root is frozen before the child is made.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ALatticeThatThrowsDuringAChildsMergeIsReportedThere(bool frozenRoot)
+        {
+            var graph = new EGraph();
+            var boom = new InvalidOperationException("boom");
+            var f = graph.DefineFunction<string, long>("f", new ValueLattice<long>("picky", (a, b) => a == b ? a : throw boom));
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("write two", r => r.Then(f.Of("k").Is(2L)));
+            if (frozenRoot)
+                graph.Root.Freeze();
+
+            var child = graph.Root.CreateChild();
+            child.Assume(f.Of("k").Is(1L));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => child.Run(rules));
+
+            Assert.Null(e.RuleName);
+            Assert.Same(boom, e.InnerException);
+            Assert.Contains("picky", e.Message);
+            Assert.True(child.IsFaulted);
+            Assert.False(graph.Root.IsFaulted);
+        }
+
+        /// <summary>
+        /// A lattice that throws during a rule's merge in a child's run gives a <see cref="RuleEvaluationException"/>
+        /// whose inner exception is the delegate's: the failure is recorded on the child's runtime, and the child is
+        /// faulted.
+        /// </summary>
+        [Fact]
+        public void ALatticeThatThrowsInAChildsRunKeepsItsCause()
+        {
+            var graph = new EGraph();
+            var boom = new InvalidOperationException("boom");
+            var f = graph.DefineFunction<string, long>("f", new ValueLattice<long>("picky", (a, b) => a == b ? a : throw boom));
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("write two", r => r.Then(f.Of("k").Is(2L)));
+            graph.Root.Assume(f.Of("k").Is(1L));
+            graph.Root.Freeze();
+            var child = graph.Root.CreateChild();
+
+            var e = Assert.Throws<RuleEvaluationException>(() => child.Run(rules));
+
+            Assert.Same(boom, e.InnerException);
+            Assert.Contains("picky", e.Message);
+            Assert.True(child.IsFaulted);
+            Assert.False(graph.Root.IsFaulted);
+        }
+
+        /// <summary>
+        /// The same for a host write into a child: a lattice that throws while the write is checked gives the
+        /// delegate's exception inside a <see cref="RuleEvaluationException"/>, and writes nothing.
+        /// </summary>
+        [Fact]
+        public void ALatticeThatThrowsInAChildsHostWriteKeepsItsCause()
+        {
+            var graph = new EGraph();
+            var boom = new InvalidOperationException("boom");
+            var f = graph.DefineFunction<string, long>("f", new ValueLattice<long>("picky", (a, b) => a == b ? a : throw boom));
+            graph.Root.Assume(f.Of("k").Is(1L));
+            var child = graph.Root.CreateChild();
+
+            var e = Assert.Throws<RuleEvaluationException>(() => child.Assume(f.Of("k").Is(2L)));
+
+            Assert.Same(boom, e.InnerException);
+            Assert.Contains("picky", e.Message);
+            Assert.Equal(1L, child.Get(f.Of("k")));
         }
 
     }

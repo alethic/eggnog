@@ -8,7 +8,7 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// A set of value or class tuples (D27).
+        /// A set of value or class tuples, stored as an engine function whose output is the unit value.
         /// </summary>
         Relation,
 

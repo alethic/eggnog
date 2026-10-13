@@ -66,9 +66,9 @@ namespace Eggnog.Relations
         internal abstract bool FitsColumn(EGraph egraph, ColumnTy type);
 
         /// <summary>
-        /// Compares two distinct values of this sort for extraction's tie-break (rule-layer decision D10): content order
-        /// for base values, which <see cref="BaseSort{TCodec, T}"/> overrides, and id order for everything else. Never
-        /// returns 0 for distinct values. Called only when two candidates tie on cost, function and earlier columns.
+        /// Compares two distinct values of this sort for extraction's tie-break: content order for base values, which
+        /// <see cref="BaseSort{TCodec, T}"/> overrides, and id order for everything else. Never returns 0 for distinct
+        /// values. Called only when two candidates tie on cost, function and earlier columns.
         /// </summary>
         /// <param name="baseValues">The registry the values were boxed in.</param>
         /// <param name="left">The first value.</param>

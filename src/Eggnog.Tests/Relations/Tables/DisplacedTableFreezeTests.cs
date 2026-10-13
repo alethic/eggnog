@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for freezing the root's union-find table (colored-contexts spec §5.1, §8.1, X13): every path compressed,
-    /// staged unions refused before and after, merges and clears refused, sealed staging, and reads unchanged.
+    /// Tests for freezing the root's union-find table: every path compressed, staged unions refused before and after,
+    /// merges and clears refused, sealed staging, and reads unchanged.
     /// </summary>
     public class DisplacedTableFreezeTests
     {
@@ -97,7 +97,7 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ASortedWritesTableFreezesWithTheStorageFreeze()
         {
-            // M9.3 (§8.1, X13): a sorted-writes table freezes too: sealed, shared, and no longer clearable.
+            // A sorted-writes table freezes too: sealed, shared, and no longer clearable.
             var table = new SortedWritesTable(1, 2, null, [], new KeepCurrentMerge());
             table.Freeze();
             Assert.True(table.IsShared);

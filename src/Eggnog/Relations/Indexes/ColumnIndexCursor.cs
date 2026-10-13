@@ -5,8 +5,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// An external cursor over the entries of a <see cref="ColumnIndex"/>, in <see cref="ColumnIndex.ForEach{TVisitor}"/>
-    /// order: the iteration compiled plans use in place of egglog's closure-based <c>for_each</c> (map §5.3), since
-    /// expression trees cannot pass a struct visitor by reference.
+    /// order: the iteration compiled plans use in place of egglog's closure-based <c>for_each</c>, since expression
+    /// trees cannot pass a struct visitor by reference.
     /// </summary>
     /// <remarks>
     /// <c>default</c> is positioned before the first entry. The index must not change while the cursor is used.

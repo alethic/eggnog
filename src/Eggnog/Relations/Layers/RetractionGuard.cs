@@ -6,10 +6,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Refuses the retractions a context may not make (colored-contexts spec §6.7, decision 1, refinement R1): a context
-    /// with live descendants retracts no row of a shared table, since its descendants read those rows; and a child
-    /// deletes or clears a shared table's rows only under a frozen parent, since a writable parent could re-assert a row
-    /// after the child's delete, which per-row hides cannot order (X28).
+    /// Refuses the retractions a context may not make: a context with live descendants retracts no row of a shared
+    /// table, since its descendants read those rows; and a child deletes or clears a shared table's rows only under a
+    /// frozen parent, since a writable parent could re-assert a row after the child's delete, which per-row hides
+    /// cannot order.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -18,8 +18,8 @@ namespace Eggnog.Relations
     /// </para>
     /// <list type="table">
     /// <listheader><term>Operation</term><description>Refused when</description></listheader>
-    /// <item><term><see cref="CheckRemove"/></term><description>the context has live descendants; or it is a child whose
-    /// parent is not frozen (R1).</description></item>
+    /// <item><term><see cref="CheckRemove"/></term><description>the context has live descendants; or it is a child
+    /// whose parent is not frozen.</description></item>
     /// <item><term><see cref="CheckClear"/></term><description>as <see cref="CheckRemove"/>.</description></item>
     /// <item><term><see cref="CheckSubsume"/></term><description>the context has live descendants.</description></item>
     /// </list>
@@ -137,7 +137,7 @@ namespace Eggnog.Relations
                 ThrowWritableParent(operation, table);
 
             // A child records that it retracts rows of the table: a row it hid may then have lost its carrier to the
-            // retraction, which the invariant checker allows (I14).
+            // retraction, which the invariant checker allows.
             if (context.Tables is { } tables && table != schema.UnionFind)
                 tables.GetOrCreateLayer(table).SetRetracted();
         }
@@ -146,14 +146,14 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowLiveDescendants(string operation, TableId table, int live)
         {
-            throw new InvalidOperationException($"{operation} table {table} is refused: the context has {live} live descendant(s) that read its rows (decision 1). Dispose them first, or declare the table context-private.");
+            throw new InvalidOperationException($"{operation} table {table} is refused: the context has {live} live descendant(s) that read its rows. Dispose them first, or declare the table context-private.");
         }
 
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowWritableParent(string operation, TableId table)
         {
-            throw new InvalidOperationException($"{operation} table {table} is refused: a child context retracts a shared table's rows only under a frozen parent (refinement R1 of decision 1).");
+            throw new InvalidOperationException($"{operation} table {table} is refused: a child context retracts a shared table's rows only under a frozen parent.");
         }
 
     }

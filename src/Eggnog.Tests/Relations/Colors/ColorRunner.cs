@@ -9,22 +9,22 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Runs a <see cref="ColorProgram"/> on the engine (<see cref="EGraphContext"/>s of a store-backed
-    /// <see cref="EGraph"/>) and, in lockstep, on its oracles, checking at every checkpoint (colored-contexts spec §17
-    /// M10.3, §12.7): the operational <see cref="ReferenceRuleContext"/>, a second engine whose children never inherit
-    /// watermarks, and after the program a fresh root per live context.
+    /// <see cref="EGraph"/>) and, in lockstep, on its oracles, checking at every checkpoint: the operational
+    /// <see cref="ReferenceRuleContext"/>, a second engine whose children never inherit watermarks, and after the
+    /// program a fresh root per live context.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Every write is flushed as it is made (so the reference's ticks follow the engine's epochs), then the context's
     /// invariants are checked (<see cref="EGraphContext.CheckInvariants"/>), its lookup paths compared
-    /// (<see cref="LookupPaths"/>, §12.7), and its view compared with the oracles; so after every run and rebuild. A view
+    /// (<see cref="LookupPaths"/>), and its view compared with the oracles; so after every run and rebuild. A view
     /// comparison also checks that no catch-up copy was re-stamped (<c>RestampedCopies == 0</c>) and, in family A, that
     /// every id the context may use has the same canonical id on every side.
     /// </para>
     /// <para>
-    /// Deletes and clears are attempted wherever the program asks: where §6.7 allows them (no live descendants, and the
-    /// root or a child of a frozen parent) they apply on every side; elsewhere the engine must refuse with
-    /// <see cref="InvalidOperationException"/>, leave the context unfaulted and change nothing.
+    /// Deletes and clears are attempted wherever the program asks: where the engine's retraction rule allows them (no
+    /// live descendants, and the root or a child of a frozen parent) they apply on every side; elsewhere the engine
+    /// must refuse with <see cref="InvalidOperationException"/>, leave the context unfaulted and change nothing.
     /// </para>
     /// <para>
     /// A command whose context or ids are not usable (a shrunk program dropped their creator, or the context is frozen
@@ -366,7 +366,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Deletes a row or clears a table where §6.7 allows it, and checks the refusal elsewhere.
+        /// Deletes a row or clears a table where the engine's retraction rule allows it (no live descendants, and the
+        /// root or a child of a frozen parent), and checks the refusal elsewhere.
         /// </summary>
         void Retract(ColorCommand command)
         {
@@ -430,14 +431,14 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Chooses the key a delete removes on each side: the row at <paramref name="selector"/> (modulo the count) among
-        /// the context's rows of the table in rendered order, found on the other sides by its rendering; or, for an empty
-        /// table, a key of ids the context may use, which no row holds.
+        /// Chooses the key a delete removes on each side: the row at <paramref name="selector"/> (modulo the count)
+        /// among the context's rows of the table in rendered order, found on the other sides by its rendering; or, for
+        /// an empty table, a key of ids the context may use, which no row holds.
         /// </summary>
         ColorKeys SelectKey(int x, int table, int selector)
         {
-            var spike = main.Schema.Tables[table];
-            var keyCount = spike.KeyCount;
+            var shape = main.Schema.Tables[table];
+            var keyCount = shape.KeyCount;
             var lines = Lines(main, x, table);
             if (lines.Count > 0)
             {
@@ -457,7 +458,7 @@ namespace Eggnog.Relations.Tests
             main.Contexts[x]!.EnsureClean();
             unseeded?.Contexts[x]!.EnsureClean();
             var visible = Enumerable.Range(0, owners.Count).Where(i => main.Ids[i] >= 0 && Usable(x, i)).ToList();
-            if (visible.Count == 0 && spike.IsId.Take(keyCount).Any(isId => isId))
+            if (visible.Count == 0 && shape.IsId.Take(keyCount).Any(isId => isId))
             {
                 // No id to name: a key no side holds.
                 var none = Enumerable.Repeat(MissingId, keyCount).ToArray();
@@ -468,20 +469,20 @@ namespace Eggnog.Relations.Tests
             var values = new ulong[keyCount];
             for (var c = 0; c < keyCount; c++)
             {
-                if (spike.IsId[c])
+                if (shape.IsId[c])
                     slots[c] = visible[(selector + c) % visible.Count];
                 else
                     values[c] = (ulong)((selector + c) % 10);
             }
 
-            uint[] EngineKey(ColorEngineSide side) => Enumerable.Range(0, keyCount).Select(c => spike.IsId[c] ? side.Contexts[x]!.Find(new Value((uint)side.Ids[slots[c]])).Rep : (uint)values[c]).ToArray();
+            uint[] EngineKey(ColorEngineSide side) => Enumerable.Range(0, keyCount).Select(c => shape.IsId[c] ? side.Contexts[x]!.Find(new Value((uint)side.Ids[slots[c]])).Rep : (uint)values[c]).ToArray();
             var referenceView = references[x]?.View();
-            ulong[] referenceKey = referenceView is null ? [] : Enumerable.Range(0, keyCount).Select(c => spike.IsId[c] ? referenceView.Find(referenceIds[slots[c]]) : values[c]).ToArray();
+            ulong[] referenceKey = referenceView is null ? [] : Enumerable.Range(0, keyCount).Select(c => shape.IsId[c] ? referenceView.Find(referenceIds[slots[c]]) : values[c]).ToArray();
             return new ColorKeys(EngineKey(main), unseeded is null ? [] : EngineKey(unseeded), referenceKey);
         }
 
         /// <summary>
-        /// Checks a context after a write: invariants and lookup paths on every engine (§12.7), then the views.
+        /// Checks a context after a write: invariants and lookup paths on every engine, then the views.
         /// </summary>
         void AfterWrite(int x)
         {
@@ -517,8 +518,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Compares context <paramref name="x"/>'s view on every side, its canonical ids in family A, and checks that no
-        /// copy was re-stamped.
+        /// Compares context <paramref name="x"/>'s view on every side, its canonical ids in family A, and checks that
+        /// no copy was re-stamped.
         /// </summary>
         void Compare(int x)
         {
@@ -556,9 +557,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// After the program: saturates each live context (a frozen one through a fresh child) and compares it with a fresh
-        /// root that replays the chain's host writes and saturates the same rules; then runs each conjunctive query in a
-        /// child of both and compares their views (§17 M10.3, monotone family).
+        /// After the program: saturates each live context (a frozen one through a fresh child) and compares it with a
+        /// fresh root that replays the chain's host writes and saturates the same rules; then runs each conjunctive
+        /// query in a child of both and compares their views. Monotone family only: a fresh root is no oracle for a
+        /// program with deletes or non-monotone bodies, where facts derived in an ancestor persist.
         /// </summary>
         void CopyAll()
         {
@@ -600,8 +602,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Builds a fresh root that replays the host writes of context <paramref name="x"/>'s chain, root first: family A
-        /// with the same explicit ids, family B with terms re-added and ids mapped.
+        /// Builds a fresh root that replays the host writes of context <paramref name="x"/>'s chain, root first: family
+        /// A with the same explicit ids, family B with terms re-added and ids mapped.
         /// </summary>
         (ColorSchema Schema, EGraphContext Root, EGraphRuleId[] Rules, EGraphRuleId[] Queries) Replay(int x)
         {
@@ -748,8 +750,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Gets whether id slot <paramref name="slot"/> may be used in context <paramref name="x"/>: its owner lives and is
-        /// <paramref name="x"/> or an ancestor.
+        /// Gets whether id slot <paramref name="slot"/> may be used in context <paramref name="x"/>: its owner lives
+        /// and is <paramref name="x"/> or an ancestor.
         /// </summary>
         bool Usable(int x, int slot)
         {

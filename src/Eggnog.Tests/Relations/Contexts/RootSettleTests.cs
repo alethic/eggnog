@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the root's settle (colored-contexts spec §7.6, X38, I35): raw root writes are egglog's (stored as given,
-    /// rewritten by the next rebuild), and before the root is shared, by a child or a freeze, the rows written since its
-    /// last rebuild are canonicalized; a stale root append after a child exists is copied and hidden by the child's
-    /// catch-up instead. A root program that creates no child never settles.
+    /// Tests for the root's settle: raw root writes are egglog's (stored as given, rewritten by the next rebuild), and
+    /// before the root is shared, by a child or a freeze, the rows written since its last rebuild are canonicalized; a
+    /// stale root append after a child exists is copied and hidden by the child's catch-up instead. A root program that
+    /// creates no child never settles.
     /// </summary>
     public class RootSettleTests
     {
@@ -71,8 +71,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A stale root append after the child exists is not settled (the root is not shared anew); the child's catch-up
-        /// copies it canonically and hides it (§7.2 branch a).
+        /// A stale root append after the child exists is not settled (the root is not shared anew); the child's
+        /// catch-up copies it canonically and hides it, since it names an id that is not canonical in the child.
         /// </summary>
         [Fact]
         public void AStaleRootAppendAfterCreationIsCopiedByCatchUp()
@@ -117,8 +117,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A root program that creates no child and does not freeze never settles: its stale raw row stays as written and
-        /// its clock advances only for its own writes and rebuild passes, as egglog's.
+        /// A root program that creates no child and does not freeze never settles: its stale raw row stays as written
+        /// and its clock advances only for its own writes and rebuild passes, as egglog's.
         /// </summary>
         [Fact]
         public void ARootThatCreatesNoChildNeverSettles()

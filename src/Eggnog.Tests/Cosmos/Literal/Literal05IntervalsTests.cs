@@ -4,8 +4,8 @@ namespace Eggnog.Tests.Cosmos.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/05-intervals.egg</c>, as written (gap 4): a bound is two lattice-valued functions with
-    /// <c>max</c> and <c>min</c> as their merges and one contradiction rule, so <c>n &gt; 500</c> against
+    /// <c>prototypes/cosmos-facts/05-intervals.egg</c>, as written: a bound is two lattice-valued functions
+    /// with <c>max</c> and <c>min</c> as their merges and one contradiction rule, so <c>n &gt; 500</c> against
     /// <c>maximum: 100</c> is false, and <c>n &gt; 50</c> is left alone. Each <c>(push)</c> block is a fresh graph; the
     /// expected figures are the egglog CLI's (vendored <c>ext/egglog</c> at 5e655cae).
     /// </summary>

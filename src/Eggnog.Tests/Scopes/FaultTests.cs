@@ -8,7 +8,8 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// Faults in children (D18, X12): a child faulted by a <see cref="RuleEvaluationException"/> allows only
+    /// Faults in children: a child that throws is faulted, since the failure may have left a hide whose copy was never
+    /// merged, which cannot be repaired. A child faulted by a <see cref="RuleEvaluationException"/> allows only
     /// <see cref="Scope.Dispose"/>, keeps its cause, and leaves its parent and siblings unaffected.
     /// </summary>
     public sealed class FaultTests

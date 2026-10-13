@@ -183,12 +183,12 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Points every identifier on the path from <paramref name="id"/> to its root straight at the root: a read-only
-        /// walk to find the root, then a second walk that rewrites each parent (colored-contexts spec §5.1). O(path).
+        /// walk to find the root, then a second walk that rewrites each parent. O(path).
         /// </summary>
         /// <remarks>
-        /// A parent is only ever replaced by an ancestor, which is smaller, so <c>parents[i] &lt;= i</c> still holds and
-        /// every class keeps its root: no find, at any time, returns anything different. An identifier that was never
-        /// reserved is its own root and is left alone. Needs exclusive access, like every mutating member.
+        /// A parent is only ever replaced by an ancestor, which is smaller, so <c>parents[i] &lt;= i</c> still holds
+        /// and every class keeps its root: no find, at any time, returns anything different. An identifier that was
+        /// never reserved is its own root and is left alone. Needs exclusive access, like every mutating member.
         /// </remarks>
         /// <param name="id">The identifier whose path is compressed.</param>
         public void CompressPath(uint id)
@@ -212,13 +212,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Points every reserved identifier straight at its root, so that every later find is one hop (colored-contexts
-        /// spec §5.1, used when a context freezes). One ascending pass, <c>p[i] = p[p[i]]</c>. O(<see cref="IdCount"/>).
+        /// Points every reserved identifier straight at its root, so that every later find is one hop (used when a
+        /// context freezes). One ascending pass, <c>p[i] = p[p[i]]</c>. O(<see cref="IdCount"/>).
         /// </summary>
         /// <remarks>
-        /// Correct because <c>p[i] &lt;= i</c>: when <c>i</c> is processed, <c>p[i]</c> is either <c>i</c> itself (a root)
-        /// or a smaller identifier already processed, which therefore points at its root, the root of <c>i</c>. Roots are
-        /// unchanged. Needs exclusive access.
+        /// Correct because <c>p[i] &lt;= i</c>: when <c>i</c> is processed, <c>p[i]</c> is either <c>i</c> itself (a
+        /// root) or a smaller identifier already processed, which therefore points at its root, the root of <c>i</c>.
+        /// Roots are unchanged. Needs exclusive access.
         /// </remarks>
         public void CompressAll()
         {

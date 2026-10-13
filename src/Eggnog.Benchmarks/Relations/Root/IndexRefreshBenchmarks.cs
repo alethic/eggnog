@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Benchmarks
 
     /// <summary>
     /// <see cref="Index{TIndex}.Refresh"/> of a <see cref="ColumnIndex"/> and a <see cref="TupleIndex"/>, in full and
-    /// incrementally, over a table of 20,000 and 200,000 rows, serially and in parallel. Part of the root benchmark set
-    /// that colored contexts are gated on (colored-contexts spec §17, M9.0): it exercises the index builds, the bulk
-    /// build of a full refresh, the incremental merge of appended rows, and the parallel builds above egglog's
-    /// 20,000-row threshold.
+    /// incrementally, over a table of 20,000 and 200,000 rows, serially and in parallel. Part of the root benchmark
+    /// set, which measures the root on the engine paths colored contexts extend, so that a cost contexts add to the
+    /// root shows as a regression: it exercises the index builds, the bulk build of a full refresh, the incremental
+    /// merge of appended rows, and the parallel builds above egglog's 20,000-row threshold.
     /// </summary>
     /// <remarks>
     /// <para>

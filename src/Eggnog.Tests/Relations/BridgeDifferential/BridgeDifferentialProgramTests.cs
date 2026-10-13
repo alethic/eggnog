@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Hand-written programs run through the bridge differential harness (<see cref="BridgeDiffRunner"/>): egglog test
-    /// programs and the bridge's own tests, rewritten as <see cref="BridgeDiffProgram"/>s so that the semi-naive bridge,
-    /// the naive bridge and the oracle must agree on them, and their known answers checked on top. Also checks that the
-    /// harness is not vacuous: the comparison accepts a renaming and rejects real differences.
+    /// programs and the bridge's own tests, rewritten as <see cref="BridgeDiffProgram"/>s so that the semi-naive
+    /// bridge, the naive bridge and the oracle must agree on them, and their known answers checked on top. Also checks
+    /// that the harness is not vacuous: the comparison accepts a renaming and rejects real differences.
     /// </summary>
     public class BridgeDifferentialProgramTests
     {
@@ -20,8 +20,8 @@ namespace Eggnog.Relations.Tests
         const int I64 = BridgeDiffSort.I64;
 
         /// <summary>
-        /// egglog's tests/merge-during-rebuild.egg: a <c>min</c> merge triggered by a rebuild, when unions make two keys of
-        /// <c>distance</c> meet; the smaller distance must survive.
+        /// egglog's tests/merge-during-rebuild.egg: a <c>min</c> merge triggered by a rebuild, when unions make two
+        /// keys of <c>distance</c> meet; the smaller distance must survive.
         /// </summary>
         [Fact]
         public void MergeDuringRebuildKeepsTheSmallerDistance()
@@ -46,8 +46,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// egglog's tests/subsume-relation.egg: a subsumed relation row stays subsumed when a union makes it meet a row that
-        /// is not, and rules that match only rows that are not subsumed stop seeing it.
+        /// egglog's tests/subsume-relation.egg: a subsumed relation row stays subsumed when a union makes it meet a row
+        /// that is not, and rules that match only rows that are not subsumed stop seeing it.
         /// </summary>
         [Fact]
         public void SubsumptionSurvivesTheMergeOfARelationRow()
@@ -67,7 +67,8 @@ namespace Eggnog.Relations.Tests
                 Union(1, 2) with { Phase = 2 },
             ];
 
-            // r0: (subsume (R (A) (B))), a rule without atoms; r1: (R x y) => (Copy x y), over rows that are not subsumed.
+            // r0: (subsume (R (A) (B))), a rule without atoms; r1: (R x y) => (Copy x y), over rows that are not
+            // subsumed.
             var r0 = new BridgeDiffRule("r0", [A, A],
                 [],
                 [],
@@ -95,8 +96,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The bridge's <c>ac</c> test (egglog-bridge/src/tests.rs:30-104) with its subsumption variant: commutativity and
-        /// associativity saturate, and the left-associated sum of five numbers meets the right-associated one.
+        /// The bridge's <c>ac</c> test (egglog-bridge/src/tests.rs:30-104) with its subsumption variant: commutativity
+        /// and associativity saturate, and the left-associated sum of five numbers meets the right-associated one.
         /// </summary>
         [Theory]
         [InlineData(false)]
@@ -155,8 +156,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Transitive closure, Datalog-style, over a chain and a cycle: semi-naive evaluation must find every path naive
-        /// evaluation finds, in as many iterations.
+        /// Transitive closure, Datalog-style, over a chain and a cycle: semi-naive evaluation must find every path
+        /// naive evaluation finds, in as many iterations.
         /// </summary>
         [Fact]
         public void TransitiveClosureSaturates()
@@ -198,8 +199,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Shortest distances by a <c>min</c> lattice propagated along terms, with unions arriving between iterations, as
-        /// later top-level commands would; one rule runs only every other iteration.
+        /// Shortest distances by a <c>min</c> lattice propagated along terms, with unions arriving between iterations,
+        /// as later top-level commands would; one rule runs only every other iteration.
         /// </summary>
         [Fact]
         public void LatticePropagationAgreesUnderAPartialSchedule()
@@ -300,6 +301,99 @@ namespace Eggnog.Relations.Tests
         static BridgeDiffEntry Int(uint value) => BridgeDiffEntry.Const(value, I64);
 
         static BridgeDiffEntry Unit() => BridgeDiffEntry.Const(0, BridgeDiffSort.Unit);
+
+        /// <summary>
+        /// A min lattice, an id function and a relation without keys, written and read by rules.
+        /// </summary>
+        [Fact]
+        public void KeylessFunctionsAgree()
+        {
+            BridgeDiffFunction[] functions =
+            [
+                new("NumA", BridgeDiffFunctionKind.Constructor, [I64], A, false),
+                new("LeafA", BridgeDiffFunctionKind.Constructor, [], A, false),
+                new("g", BridgeDiffFunctionKind.Min, [], I64, false),
+                new("best", BridgeDiffFunctionKind.IdFunction, [], A, false),
+                new("flag", BridgeDiffFunctionKind.Relation, [], BridgeDiffSort.Unit, true),
+            ];
+            var seeds = new List<BridgeDiffSeed>();
+            for (var i = 0u; i < 4; i++)
+                seeds.Add(new BridgeDiffSeed(BridgeDiffSeedKind.Term, 0, [BridgeDiffEntry.Const(i + 1, I64)], 0));
+
+            seeds.Add(new BridgeDiffSeed(BridgeDiffSeedKind.Set, 2, [BridgeDiffEntry.Const(7, I64)], 0));
+            seeds.Add(new BridgeDiffSeed(BridgeDiffSeedKind.Set, 3, [BridgeDiffEntry.Variable(3, A)], 0));
+
+            var r0 = new BridgeDiffRule("r0", [I64, A],
+                [new BridgeDiffAtom(0, [V(0, I64), V(1)], false)],
+                [],
+                [new BridgeDiffAction(BridgeDiffActionKind.Set, 2, default, [V(0, I64)], -1)],
+                PlanStrategy.Gj, false);
+            var r1 = new BridgeDiffRule("r1", [I64, A, BridgeDiffSort.Unit],
+                [new BridgeDiffAtom(0, [V(0, I64), V(1)], false)],
+                [new BridgeDiffPrim(BridgeDiffPrimitive.Less, V(0, I64), BridgeDiffEntry.Const(3, I64), V(2, BridgeDiffSort.Unit))],
+                [new BridgeDiffAction(BridgeDiffActionKind.Set, 3, default, [V(1)], -1)],
+                PlanStrategy.Gj, false);
+            var r2 = new BridgeDiffRule("r2", [A, BridgeDiffSort.Unit],
+                [new BridgeDiffAtom(3, [V(0)], false)],
+                [],
+                [new BridgeDiffAction(BridgeDiffActionKind.Lookup, 4, default, [], 1)],
+                PlanStrategy.Gj, false);
+            var r3 = new BridgeDiffRule("r3", [I64, A, A],
+                [new BridgeDiffAtom(2, [V(0, I64)], false), new BridgeDiffAtom(0, [V(0, I64), V(1)], false)],
+                [],
+                [
+                    new BridgeDiffAction(BridgeDiffActionKind.Lookup, 1, default, [], 2),
+                    new BridgeDiffAction(BridgeDiffActionKind.Union, -1, default, [V(1), V(2)], -1),
+                ],
+                PlanStrategy.MinCover, false);
+            var r4 = new BridgeDiffRule("r4", [BridgeDiffSort.Unit],
+                [new BridgeDiffAtom(4, [V(0, BridgeDiffSort.Unit)], false)],
+                [],
+                [new BridgeDiffAction(BridgeDiffActionKind.Subsume, 4, default, [], -1)],
+                PlanStrategy.Gj, false);
+            BridgeDiffRule[] rules = [r0, r1, r2, r3, r4];
+            var all = Enumerable.Range(0, rules.Length).ToArray();
+            var program = new BridgeDiffProgram(0, 1, functions, [.. seeds], rules, Enumerable.Repeat(all, 10).ToArray(), 10, 10_000, 100_000, false);
+            var stats = new BridgeDiffStats();
+            BridgeDiffRunner.Run(program, stats);
+            Assert.Equal(1, stats.Saturated);
+        }
+
+        /// <summary>
+        /// A constructor with four keys (egglog functions often have more than three arguments), whose right-hand-side
+        /// lookups take the engine's N-column key path. The oracle and the comparison key rows by
+        /// <see cref="BridgeDiffKey"/>, of any length.
+        /// </summary>
+        [Fact]
+        public void FourKeyFunctionsAgree()
+        {
+            BridgeDiffFunction[] functions =
+            [
+                new("NumA", BridgeDiffFunctionKind.Constructor, [I64], A, true),
+                new("F", BridgeDiffFunctionKind.Constructor, [A, A, A, A], A, true),
+            ];
+            var seeds = new List<BridgeDiffSeed>();
+            for (var i = 0u; i < 4; i++)
+                seeds.Add(new BridgeDiffSeed(BridgeDiffSeedKind.Term, 0, [BridgeDiffEntry.Const(i, I64)], 0));
+
+            seeds.Add(new BridgeDiffSeed(BridgeDiffSeedKind.Term, 1, [V(0), V(1), V(2), V(3)], 0));
+
+            // (= r (F a b c d)) => (union r (F b a d c))
+            var swap = new BridgeDiffRule("swap", [A, A, A, A, A, A],
+                [new BridgeDiffAtom(1, [V(0), V(1), V(2), V(3), V(4)], false)],
+                [],
+                [
+                    new BridgeDiffAction(BridgeDiffActionKind.Lookup, 1, default, [V(1), V(0), V(3), V(2)], 5),
+                    new BridgeDiffAction(BridgeDiffActionKind.Union, -1, default, [V(4), V(5)], -1),
+                ],
+                PlanStrategy.Gj, false);
+            var program = new BridgeDiffProgram(0, 1, functions, [.. seeds], [swap], [[0], [0], [0]], 3, 10_000, 100_000, false);
+            var stats = new BridgeDiffStats();
+            BridgeDiffRunner.Run(program, stats);
+            Assert.Equal(1, stats.Saturated);
+        }
+
+        static BridgeDiffEntry V(int index, int sort = A) => BridgeDiffEntry.Variable(index, sort);
 
     }
 

@@ -9,16 +9,28 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the catch-up of ancestor rows (colored-contexts spec §7.2, C8 step 2): one per branch, (a) a row naming
-    /// an id not canonical in the child, (b) a row whose key the child holds, (c′) a row stamped below the child's
-    /// semi-naive floor, (c) a row visible as it is; plus the contradiction trigger, the generation check, the cursors,
-    /// and an ancestor change that only tombstones.
+    /// Tests for the catch-up of ancestor rows, one per branch: (a) a row naming an id not canonical in the child, (b)
+    /// a row whose key the child holds, (c′) a row stamped below the child's semi-naive floor, (c) a row visible as it
+    /// is; plus the contradiction trigger, the generation check, the cursors, an ancestor change that only tombstones,
+    /// a parent that wrote and froze, and the refusal to catch up with a parent a contradiction stopped.
     /// </summary>
     public class CatchUpTests
     {
 
+        readonly ITestOutputHelper output;
+
         /// <summary>
-        /// (a): an ancestor appends a row naming an id the child displaced; the child copies it canonically and hides it.
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="output">The test output.</param>
+        public CatchUpTests(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
+
+        /// <summary>
+        /// (a): an ancestor appends a row naming an id the child displaced; the child copies it canonically and hides
+        /// it.
         /// </summary>
         [Fact]
         public void AnAppendNamingAChildLoserIsCopiedCanonically()
@@ -103,8 +115,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// (c′): a raw ancestor append stamped below the child's semi-naive floor (raised by a rule run noted at a later
-        /// epoch) is re-stamped by a copy; one stamped at or above the floor is not (§7.2, the C7 safeguard).
+        /// (c′): a raw ancestor append stamped below the child's semi-naive floor (raised by a rule run noted at a
+        /// later epoch) is re-stamped by a copy; one stamped at or above the floor is not.
         /// </summary>
         [Fact]
         public void AnAppendBelowTheSemiNaiveFloorIsRestamped()
@@ -149,7 +161,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// §6.9 trigger 2: a case whose ancestor asserts the contradiction catches it up and stops; it then answers only
+        /// A case whose ancestor asserts the contradiction catches it up and stops; it then answers only
         /// <see cref="Context.IsContradictory"/>.
         /// </summary>
         [Fact]
@@ -177,9 +189,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// I16: an ancestor layer that changes generation under a live descendant (here by a compaction forced past the
-        /// gate) renumbers the rows the descendant's cursors and hidden sets name; the descendant's catch-up refuses, which
-        /// faults it.
+        /// An ancestor layer that changes generation under a live descendant (here by a compaction forced past the
+        /// gate) renumbers the rows the descendant's cursors and hidden sets name; the descendant's catch-up refuses,
+        /// which faults it.
         /// </summary>
         [Fact]
         public void AGenerationChangeUnderADescendantFaultsIt()
@@ -192,7 +204,7 @@ namespace Eggnog.Relations.Tests
             var child = root.CreateChild();
             Insert(child, f, ids[1], 1, 0);
 
-            // Bypass the gate (§6.8): what the gate prevents.
+            // Bypass the gate: what the gate prevents.
             Insert(root, f, ids[0], 2, 0);
             store.Schema[f]!.Root.Rehash();
             Assert.Throws<InvalidOperationException>(() => child.Rebuild());
@@ -201,7 +213,7 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Cursors (I17): after a rebuild every cursor is at its ancestor's versions and stamp, and frozen ancestors read in
+        /// Cursors: after a rebuild every cursor is at its ancestor's versions and stamp, and frozen ancestors read in
         /// full are settled and drop their cursors.
         /// </summary>
         [Fact]
@@ -222,8 +234,8 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(store.Schema[f]!.Root.Version, grandchild.Tables.CursorAt(0)!.RowsOrDefault(f));
             Assert.Equal(root.Version, grandchild.Tables.CursorAt(0)!.Stamp);
 
-            // Freezing changes nothing the grandchild reads, so it stays clean; its next rebuild that runs a pass settles
-            // the frozen ancestors.
+            // Freezing changes nothing the grandchild reads, so it stays clean; its next rebuild that runs a pass
+            // settles the frozen ancestors.
             root.Freeze();
             child.Freeze();
             Assert.True(grandchild.IsClean);
@@ -269,10 +281,9 @@ namespace Eggnog.Relations.Tests
             LookupPaths.Check(child);
         }
 
-
         /// <summary>
-        /// A table added to the root after a child exists (X16) is caught up like any other: the child's cursor has not
-        /// seen its layer, so every row the root writes into it counts as new; a grandchild under a writable parent too.
+        /// A table added to the root after a child exists is caught up like any other: the child's cursor has not seen
+        /// its layer, so every row the root writes into it counts as new; a grandchild under a writable parent too.
         /// </summary>
         [Fact]
         public void ATableAddedAfterTheChildIsCaughtUp()
@@ -302,32 +313,134 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A parent's rebuild that folds a rewritten row into an existing row tombstones without appending (its layer's
-        /// version does not move); a child holding nothing the union makes stale sees the tombstone as it is, which is what
-        /// a copy sees. (Restored from the M9.3 interim tests: it asserts no interim behaviour.)
+        /// The parent writes a row while its child lives and then freezes, which is allowed: the child catches the row
+        /// up once, through a direct rebuild or through its own freeze, and neither faults it.
         /// </summary>
         [Fact]
-        public void AnAncestorFoldThatOnlyTombstonesIsSeenAsItIs()
+        public void AChildCatchesUpWithAParentThatWroteAndFroze()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var f = store.AddTable(MaxFunction(1), name: "f");
             var root = store.Root;
             var a = root.NewId();
-            var b = root.NewId();
-            Insert(root, f, a, 5, 0);
-            Insert(root, f, b, 2, 0);
-            var child = root.CreateChild();
-            var version = store.Schema[f]!.Root.Version;
+            root.Freeze();
+            var parent = root.CreateChild();
+            var child = parent.CreateChild();
 
-            root.Union(a, b);
-            child.Rebuild();
-            Assert.Equal(version, store.Schema[f]!.Root.Version);
+            // The parent writes while its child lives, then freezes (allowed: the child catches up once).
+            Insert(parent, f, a, 1, 0);
+            parent.Freeze();
+
+            // The row is visible as it is (catch-up branch c): nothing is copied, so the rebuild changes nothing of the
+            // child's.
+            Assert.False(child.Rebuild());
+            Assert.False(child.IsFaulted);
             Assert.True(child.IsClean);
-            Assert.Equal(5u, Row(child, f, a)![1]);
-            Assert.Null(Row(child, f, b));
-            Assert.Equal(5u, Row(root, f, a)![1]);
-            LookupPaths.Check(child);
+            Assert.Equal(1u, Row(child, f, a)![1]);
+
+            child.Freeze();
+            Assert.False(child.IsFaulted);
+            Assert.True(child.IsFrozen);
+            Assert.Equal(1u, Row(child, f, a)![1]);
+            Assert.Equal(0, child.Tables!.Statistics.RowsCopied);
         }
+
+        /// <summary>
+        /// A child of a case that a contradiction stopped: the case answers only <c>IsContradicted</c> and stays as its
+        /// merge left it (writes pending). A child catches up only with a parent that is frozen or clean, so its
+        /// rebuild is refused cleanly with <see cref="InvalidOperationException"/>, before any pass: it neither trips
+        /// the debug assertion of <c>CatchUpUnionFind</c> (a process crash without a listener) nor runs passes it can
+        /// never become clean through.
+        /// </summary>
+        [Fact]
+        public void AChildOfAStoppedCaseIsNotCaughtUpWithItsUncleanParent()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var bottom = store.AddTable(Relation(0), name: "bottom");
+            store.DesignateContradiction(bottom);
+            var g = store.AddTable(Constructor(store), [], [store.UnionFindTable], "g");
+            var root = store.Root;
+            var a = root.NewId();
+            var x = root.NewId();
+            var y = root.NewId();
+            Insert(root, g, a, x, 0);
+            root.Freeze();
+
+            var @case = root.CreateChild(ContextOptions.Case);
+            var child = @case.CreateChild();
+
+            // The case stops with the union x = y staged and unmerged.
+            @case.Write(state =>
+            {
+                state.StageInsert(bottom, [state.Timestamp]);
+                state.StageInsert(g, [a, y, state.Timestamp]);
+                return 0;
+            });
+            Assert.True(@case.IsContradicted);
+            Assert.False(@case.IsClean);
+
+            using var scope = new DebugAssertScope();
+            Exception? thrown = null;
+            try
+            {
+                child.Rebuild();
+            }
+            catch (Exception e)
+            {
+                thrown = e;
+            }
+
+            output.WriteLine($"child.Rebuild() threw {thrown?.GetType().Name}: {thrown?.Message}");
+            Assert.False(thrown is DebugAssertFailedException, $"the child caught up with a stopped, unclean parent: {thrown?.Message}");
+            Assert.True(thrown is InvalidOperationException, "the child of a stopped case should be refused");
+        }
+
+        /// <summary>
+        /// The same with no assertion to trip, as in a release build: the child of the stopped case is refused cleanly
+        /// and not faulted (or is clean), rather than running passes on every <c>Rebuild</c> (each taking an epoch)
+        /// that never make it clean, while accepting writes that merge against the half-merged parent.
+        /// </summary>
+        [Fact]
+        public void AChildOfAStoppedCaseIsNeitherRefusedNorEverClean()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var bottom = store.AddTable(Relation(0), name: "bottom");
+            store.DesignateContradiction(bottom);
+            var g = store.AddTable(Constructor(store), [], [store.UnionFindTable], "g");
+            var root = store.Root;
+            var a = root.NewId();
+            var x = root.NewId();
+            var y = root.NewId();
+            Insert(root, g, a, x, 0);
+            root.Freeze();
+
+            var @case = root.CreateChild(ContextOptions.Case);
+            var child = @case.CreateChild();
+            @case.Write(state =>
+            {
+                state.StageInsert(bottom, [state.Timestamp]);
+                state.StageInsert(g, [a, y, state.Timestamp]);
+                return 0;
+            });
+
+            using var scope = new DebugAssertScope();
+            var clock = store.ReadClock();
+            Exception? first = null;
+            try
+            {
+                child.Rebuild();
+                child.Rebuild();
+            }
+            catch (Exception e)
+            {
+                first = e;
+            }
+
+            output.WriteLine($"threw: {first?.GetType().Name}: {first?.Message}; clean: {child.IsClean}; faulted: {child.IsFaulted}; clock {clock} -> {store.ReadClock()}");
+            var refusedCleanly = first is InvalidOperationException && first is not DebugAssertFailedException && child.IsFaulted == false;
+            Assert.True(refusedCleanly || child.IsClean, "the child of a stopped case is neither refused nor ever clean");
+        }
+
     }
 
 }

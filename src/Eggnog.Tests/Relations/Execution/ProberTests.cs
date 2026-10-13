@@ -9,7 +9,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// egglog's <c>Prober</c> (core-relations/src/free_join/execute.rs:211-345): clamping a whole-table index to the
-    /// atom's range, and the key count fix (map §8.1 row 18).
+    /// atom's range, and the key count of a clamped prober, which counts at most the range's rows (egglog's
+    /// <c>Prober::len</c> ignores the clamp and counts every key of the index).
     /// </summary>
     public class ProberTests
     {

@@ -7,9 +7,10 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A reference implementation of a <see cref="SortedWritesTable"/>'s contents: a dictionary from key to row with
-    /// egglog's serial merge semantics (map §2.3, "the conflict contract"). A batch applies every removal first, then
-    /// folds the inserts of each key left to right, starting from the stored row: <c>r := stored; for each incoming q,
-    /// if merge(r, q) then r := merge(r, q)</c>; with no stored row the first incoming row starts the fold.
+    /// egglog's serial merge semantics, the contract the table keeps for conflicting rows of one key. A batch applies
+    /// every removal first, then folds the inserts of each key left to right, starting from the stored row:
+    /// <c>r := stored; for each incoming q, if merge(r, q) then r := merge(r, q)</c>; with no stored row the first
+    /// incoming row starts the fold.
     /// </summary>
     sealed class SortedWritesModel
     {

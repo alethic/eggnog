@@ -17,7 +17,8 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Constraints never test staleness: a tombstoned row keeps its other cells, so whoever evaluates a constraint on a
-    /// physical row checks <see cref="Value.StaleRep"/> first. The tables do so on every path (map §8.1 row 1).
+    /// physical row checks <see cref="Value.StaleRep"/> first. The tables do so on every path, where egglog's
+    /// constrained scans skip the tombstone check (core-relations/src/table/mod.rs:429-439, 1018-1025).
     /// </para>
     /// </remarks>
     internal readonly record struct Constraint

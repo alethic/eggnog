@@ -29,39 +29,39 @@ namespace Eggnog.Relations
         long viewGeneration;
 
         /// <summary>
-        /// Gets a counter that moves whenever cached views are dropped because their structure changed (X21): by the merge
+        /// Gets a counter that moves whenever cached views are dropped because their structure changed: by the merge
         /// epilogue, a rebuild that caught up with an ancestor, a clear and a freeze. Layer creation never moves it.
         /// </summary>
         public long ViewGeneration => Interlocked.Read(ref viewGeneration);
 
         /// <summary>
-        /// Gets the context's view of <paramref name="table"/> (§6.3), building and caching it on first use: a table the
+        /// Gets the context's view of <paramref name="table"/>, building and caching it on first use: a table the
         /// context never touched shares its parent's view instance; a context-private table shows the own layer only;
-        /// otherwise every ancestor layer not below a cleared level, each with the rows the context does not see, and the
-        /// own layer.
+        /// otherwise every ancestor layer not below a cleared level, each with the rows the context does not see, and
+        /// the own layer.
         /// </summary>
         /// <remarks>
         /// <para>
         /// An ancestor layer's hidden rows are split as in <see cref="HiddenRows"/>: the hides of the frozen levels are
         /// the single set the deepest frozen ancestor folded at its freeze; the hides of the levels that are not frozen
         /// are one set, or their union (<see cref="LayerStatistics.FilterMerges"/>). A frozen context's views fold
-        /// everything into the frozen part. A frozen context never caches beyond its arrays: for a table added after its
-        /// freeze it returns its parent's view (X43).
+        /// everything into the frozen part. A frozen context never caches beyond its arrays: for a table added after
+        /// its freeze it returns its parent's view.
         /// </para>
         /// <para>
-        /// Requires every hidden set of the chain to be sealed, as it is outside a merge (I18). Cost of a build: O(depth)
+        /// Requires every hidden set of the chain to be sealed, as it is outside a merge. Cost of a build: O(depth)
         /// plus the unions; a cached view costs one load. Thread-safe.
         /// </para>
         /// </remarks>
         /// <param name="table">A registered function table.</param>
         /// <returns>The view.</returns>
-        /// <exception cref="NotSupportedException">The table is the union-find, which a child reads only through lookups
-        /// (X23).</exception>
+        /// <exception cref="NotSupportedException">The table is the union-find, which a child reads only through
+        /// lookups.</exception>
         /// <exception cref="KeyNotFoundException">The table is not registered with the store.</exception>
         public TableView GetView(TableId table)
         {
             if (table == schema.UnionFind)
-                throw new NotSupportedException($"The union-find (table {table}) has no table view in a child context; a child reads it only through lookups (X23).");
+                throw new NotSupportedException($"The union-find (table {table}) has no table view in a child context; a child reads it only through lookups.");
 
             var cache = Volatile.Read(ref views);
             var index = table.Index;
@@ -90,10 +90,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Drops cached views (§6.3): with <paramref name="all"/>, every one (a rebuild that caught up with an ancestor, a
-        /// clear, a freeze); otherwise those of the tables whose structure changed since the last invalidation (the merge
-        /// epilogue). Moves <see cref="ViewGeneration"/> when anything changed. Domain thread, outside a search. Nothing
-        /// once frozen.
+        /// Drops cached views: with <paramref name="all"/>, every one (a rebuild that caught up with an ancestor, a
+        /// clear, a freeze); otherwise those of the tables whose structure changed since the last invalidation (the
+        /// merge epilogue). Moves <see cref="ViewGeneration"/> when anything changed. Domain thread, outside a search.
+        /// Nothing once frozen.
         /// </summary>
         /// <param name="all">Whether to drop every view.</param>
         internal void InvalidateViews(bool all)
@@ -262,8 +262,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the depth of the deepest frozen ancestor (frozen contexts form a prefix of every chain, I23), or −1 when
-        /// the root is not frozen. O(depth).
+        /// Gets the depth of the deepest frozen ancestor (frozen contexts form a prefix of every chain), or −1 when the
+        /// root is not frozen. O(depth).
         /// </summary>
         int DeepestFrozenAncestor()
         {

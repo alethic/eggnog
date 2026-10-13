@@ -6,11 +6,12 @@ namespace Eggnog.Relations.Benchmarks
 {
 
     /// <summary>
-    /// Whole programs on <see cref="Database.RunRuleSet"/>: the AC-saturation and math e-graph programs of the
-    /// executor tests (<see cref="AcSaturationWorkload"/>, <see cref="MathWorkload"/>, both over a
-    /// <see cref="MathEgraph"/>), at about 20,000 and 200,000 rows, serially and in parallel. Part of the root benchmark
-    /// set that colored contexts are gated on (colored-contexts spec §17, M9.0): it exercises header evaluation, the
-    /// trie, the probers, the join kernels, the action interpreter and <see cref="Database.MergeAll"/>.
+    /// Whole programs on <see cref="Database.RunRuleSet"/>: the AC-saturation and math e-graph programs of the executor
+    /// tests (<see cref="AcSaturationWorkload"/>, <see cref="MathWorkload"/>, both over a <see cref="MathEgraph"/>), at
+    /// about 20,000 and 200,000 rows, serially and in parallel. Part of the root benchmark set, which measures the root
+    /// on the engine paths colored contexts extend, so that a cost contexts add to the root shows as a regression: it
+    /// exercises header evaluation, the trie, the probers, the join kernels, the action interpreter and
+    /// <see cref="Database.MergeAll"/>.
     /// </summary>
     /// <remarks>
     /// <para>

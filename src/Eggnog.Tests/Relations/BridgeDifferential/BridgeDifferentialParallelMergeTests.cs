@@ -4,11 +4,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A bulk program whose rule runs stage more than 20,000 rows into one table with conflicting keys, so the semi-naive
-    /// e-graph's parallel insert has to merge, with lattice merges and subsumption that change the stored rows, and later
-    /// with merges that change nothing. These are egglog's parallel-insert defects (map §8.1 rows 3 and 4: the merge
-    /// output discarded, changes reported that did not happen), which the random bulk programs never reach: their only
-    /// insert above the threshold is the conflict-free bulk load.
+    /// A bulk program whose rule runs stage more than 20,000 rows into one table with conflicting keys, so the
+    /// semi-naive e-graph's parallel insert has to merge, with lattice merges and subsumption that change the stored
+    /// rows, and later with merges that change nothing. These are the cases egglog's parallel insert gets wrong: it
+    /// discards the merge's output and reports changes that did not happen (core-relations/src/table/mod.rs:871,
+    /// 902-907). The random bulk programs never reach them: their only insert above the threshold is the conflict-free
+    /// bulk load.
     /// </summary>
     [Collection(ExecutorStressCollection.Name)]
     public class BridgeDifferentialParallelMergeTests

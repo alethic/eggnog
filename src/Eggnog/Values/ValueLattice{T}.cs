@@ -6,9 +6,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A merge for a function's values, with the case join a lift uses (D25). Contract: <see cref="Merge"/> is
-    /// associative, commutative and idempotent; <c>Merge(a, CaseJoin(a, b)) == a</c> (absorption: the join claims no
-    /// more than either case). Both must be pure and thread-safe, and must not call into any graph (D47).
+    /// A merge for a function's values, with the case join a lift uses. Contract: <see cref="Merge"/> is associative,
+    /// commutative and idempotent; <c>Merge(a, CaseJoin(a, b)) == a</c> (absorption: the join claims no more than
+    /// either case). Both must be pure and thread-safe, and must not call into any graph; such a call throws an
+    /// <see cref="InvalidOperationException"/>.
     /// </summary>
     /// <typeparam name="T">The value type.</typeparam>
     public sealed class ValueLattice<T> : ValueLattice
@@ -47,7 +48,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="samples">The values to check.</param>
         /// <exception cref="ArgumentNullException"><paramref name="samples"/> is <c>null</c>.</exception>
-        /// <exception cref="InvalidOperationException">A law fails; the message names the law and the values.</exception>
+        /// <exception cref="InvalidOperationException">A law fails; the message names the law and the
+        /// values.</exception>
         public void Verify(IEnumerable<T> samples)
         {
             ArgumentNullException.ThrowIfNull(samples);

@@ -10,7 +10,9 @@ namespace Eggnog.Tests.Scheduling
 {
 
     /// <summary>
-    /// Schedules and run limits (§6.5, D42) at the root.
+    /// Schedules and run limits at the root: <c>Repeat</c>, <c>Saturate</c>, <c>Sequence</c> and <c>Until</c>; the
+    /// iteration, time and row limits, which are checked before the first iteration and between iterations; and the
+    /// refusal, before any work, of what a run cannot execute.
     /// </summary>
     public sealed class ScheduleTests
     {
@@ -366,7 +368,7 @@ namespace Eggnog.Tests.Scheduling
         }
 
         /// <summary>
-        /// R3: the iteration limit counts the iterations of the run's cases, and the row limit their own rows (D42).
+        /// The iteration limit counts the iterations of the run's cases, and the row limit their own rows.
         /// </summary>
         [Fact]
         public void LimitsCountCaseIterationsAndCaseRows()
@@ -405,6 +407,207 @@ namespace Eggnog.Tests.Scheduling
             Assert.Equal(3, bounded.CasesOpened);
             Assert.Equal(0, bounded.Iterations);
             Assert.Empty(scope.Children);
+        }
+
+        /// <summary>
+        /// The row limit is checked before the first iteration too.
+        /// </summary>
+        [Fact]
+        public void TheRowLimitIsCheckedBeforeTheFirstIteration()
+        {
+            var t = new NodeTheory();
+            var facts = new Fact[100];
+            for (var i = 0; i < facts.Length; i++)
+                facts[i] = t.Num.Of((long)i);
+
+            t.Root.Assume(facts);
+            t.Rules.DefineRule("copy", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(t.Tag.Of(t.Lit.Of(x)));
+            });
+
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RowLimit = 10 });
+
+            Assert.Equal(RunStopReason.RowLimit, report.StopReason);
+            Assert.Equal(0, report.Iterations);
+        }
+
+        [Fact]
+        public void RowLimitStopsBeforeTheFirstIteration()
+        {
+            var t = new NodeTheory();
+            var facts = Enumerable.Range(0, 10).Select(i => t.Num.Of((long)i)).ToArray();
+            t.Root.Assume(facts);
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { RowLimit = 5 });
+            Assert.Equal(RunStopReason.RowLimit, report.StopReason);
+            Assert.Equal(0, report.Iterations);
+        }
+
+        [Fact]
+        public void TimeLimitZeroStopsBeforeTheFirstIteration()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { TimeLimit = TimeSpan.Zero });
+            Assert.Equal(RunStopReason.TimeLimit, report.StopReason);
+            Assert.Equal(0, report.Iterations);
+            Assert.False(report.Saturated);
+        }
+
+        [Fact]
+        public void UntilStopsWhenTheConditionHolds()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 100L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var report = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(5L))));
+            Assert.True(t.Root.Check(t.Num.Of(5L)));
+            Assert.False(t.Root.Check(t.Num.Of(6L)));
+            Assert.Equal(4, report.Iterations);
+
+            var none = t.Root.Run(Schedule.Until(t.Rules, t.Num.Of(5L)));
+            Assert.Equal(0, none.Iterations);
+            Assert.False(none.Changed);
+        }
+
+        [Fact]
+        public void LimitPrecedence()
+        {
+            var t = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            Assert.Equal(RunStopReason.IterationLimit, t.Root.Run(t.Rules, new RunOptions { IterationLimit = 0, TimeLimit = TimeSpan.Zero, RowLimit = 0 }).StopReason);
+            Assert.Equal(RunStopReason.TimeLimit, t.Root.Run(t.Rules, new RunOptions { TimeLimit = TimeSpan.Zero, RowLimit = 0 }).StopReason);
+            Assert.Equal(RunStopReason.RowLimit, t.Root.Run(t.Rules, new RunOptions { RowLimit = 0 }).StopReason);
+            using var cts = new System.Threading.CancellationTokenSource();
+            cts.Cancel();
+            Assert.ThrowsAny<OperationCanceledException>(() => t.Root.Run(t.Rules, new RunOptions { IterationLimit = 0 }, cts.Token));
+        }
+
+        [Fact]
+        public void AnotherGraphsHandleInAnUntilCondition()
+        {
+            var t = new NodeTheory();
+            var other = new NodeTheory();
+            other.Root.Assume(other.Num.Of(2L));
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 5L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(2L)));
+            Assert.Throws<ArgumentException>(() => t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, other.Num.Of(2L)))));
+        }
+
+        /// <summary>
+        /// <c>Schedule.Until</c> refuses filters at construction; a condition no host check of the scope can read (a
+        /// computation, or another graph's table) is refused by <c>Run</c> before any work, as another graph's ruleset
+        /// is: the earlier steps do not iterate, and the version does not move.
+        /// </summary>
+        /// <param name="foreignTable">Whether the condition reads another graph's table rather than a
+        /// computation.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AnUncheckableUntilConditionIsRefusedBeforeAnyWork(bool foreignTable)
+        {
+            var t = new NodeTheory();
+            var other = new NodeTheory();
+            t.Root.Assume(t.Num.Of(1L));
+            t.Rules.DefineRule("next", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Where(Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+            });
+            var version = t.Root.Version;
+            var condition = foreignTable ? other.Num.Of(2L) : t.Num.Of(Primitives.Add.Of(1L, 1L));
+
+            var error = Record.Exception(() => t.Root.Run(Schedule.Sequence(t.Rules, Schedule.Until(t.Rules, condition))));
+
+            Assert.IsType<ArgumentException>(error);
+            Assert.Equal(version, t.Root.Version);
+            Assert.False(t.Root.Check(t.Num.Of(2L)));
+        }
+
+        /// <summary>
+        /// A naive rule that re-inserts a row that already exists changes nothing, so <c>Saturate</c> ends.
+        /// </summary>
+        [Fact]
+        public void ANaiveRuleReinsertingAnExistingRowSaturates()
+        {
+            var t = new NodeTheory();
+            t.Rules.DefineRule("always", r =>
+            {
+                r.Naive();
+                r.Then(t.Num.Of(7L));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { IterationLimit = 50 });
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.True(report.Saturated);
+            Assert.True(report.Iterations <= 3, $"{report.Iterations} iterations");
+        }
+
+        /// <summary>
+        /// A naive rule writing a lattice value the stored one absorbs changes nothing, so <c>Saturate</c> ends.
+        /// </summary>
+        [Fact]
+        public void ANaiveLatticeWriteThatIsAbsorbedSaturates()
+        {
+            var t = new NodeTheory();
+            var lo = t.Graph.DefineFunction<long, long>("lo", ValueLattice.Max<long>());
+            t.Root.Assume(lo.Of(1L).Is(5L));
+            t.Rules.DefineRule("lower bound", r =>
+            {
+                r.Naive();
+                r.Then(lo.Of(1L).Is(3L));
+            });
+            var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { IterationLimit = 50 });
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.True(report.Iterations <= 3, $"{report.Iterations} iterations");
+            Assert.Equal(5L, t.Root.Get(lo.Of(1L)));
+        }
+
+        /// <summary>
+        /// <c>Schedule.Run</c> with no ruleset is allowed and does nothing; a <c>Saturate</c> of it ends without an
+        /// iteration.
+        /// </summary>
+        [Fact]
+        public void AScheduleWithAnEmptyRunEnds()
+        {
+            var t = new NodeTheory();
+            var report = t.Root.Run(Schedule.Saturate(Schedule.Run()));
+            Assert.Equal(0, report.Iterations);
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
         }
 
     }

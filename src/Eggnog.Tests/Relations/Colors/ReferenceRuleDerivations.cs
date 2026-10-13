@@ -4,10 +4,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// What the rules of one reference iteration derived (colored-contexts spec §17 M10.3): rows and unions, in the
-    /// order their matches ran, and the ids minted for missing constructor terms, one per term and iteration, as one
-    /// engine execution state mints one id per missing key (the engine's other states mint their own, which the
-    /// constructor's union merge reconciles; term names make the two agree).
+    /// What the rules of one reference iteration derived: rows and unions, in the order their matches ran, and the ids
+    /// minted for missing constructor terms, one per term and iteration, as one engine execution state mints one id per
+    /// missing key (the engine's other states mint their own, which the constructor's union merge reconciles; term
+    /// names make the two agree).
     /// </summary>
     sealed class ReferenceRuleDerivations
     {
@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the derived rows, by table.
         /// </summary>
-        public List<(SpikeTable Table, ulong[] Row)> Rows { get; } = new();
+        public List<(LogicalTable Table, ulong[] Row)> Rows { get; } = new();
 
         /// <summary>
         /// Gets the derived unions.
@@ -37,7 +37,7 @@ namespace Eggnog.Relations.Tests
         /// Gets the id minted in this iteration for the missing term <paramref name="table"/>(<paramref name="key"/>),
         /// minting it and deriving its row the first time.
         /// </summary>
-        public ulong Mint(SpikeTable table, ulong[] key)
+        public ulong Mint(LogicalTable table, ulong[] key)
         {
             var text = table.Name + ":" + string.Join(",", key);
             if (mints.TryGetValue(text, out var id))

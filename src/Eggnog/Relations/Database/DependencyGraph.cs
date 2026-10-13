@@ -31,12 +31,12 @@ namespace Eggnog.Relations
     /// <para>
     /// Threading. <see cref="AddTable"/> needs exclusive access among writers. <see cref="LevelOf"/> and
     /// <see cref="Contains"/> read a level snapshot, an <c>int[]</c> by table index (−1 for an unregistered id), and
-    /// are safe from any number of threads while a table is added (colored-contexts spec §4.3, X16): child contexts
-    /// share the root's graph and merge concurrently while the store adds a table to a frozen root. A level, once
-    /// published, never changes (a new table lands at or above existing strata), so the snapshot is extended in place
-    /// with a volatile write while it has room and is copied, filled and republished whole when it grows. The other
-    /// members (<see cref="StratumCount"/>, <see cref="Stratum"/>, <see cref="WriteDependencies"/>) read the
-    /// writer-side structures and need the same exclusive access as <see cref="AddTable"/>.
+    /// are safe from any number of threads while a table is added: child contexts share the root's graph and merge
+    /// concurrently while the store adds a table to a frozen root. A level, once published, never changes (a new table
+    /// lands at or above existing strata), so the snapshot is extended in place with a volatile write while it has room
+    /// and is copied, filled and republished whole when it grows. The other members (<see cref="StratumCount"/>,
+    /// <see cref="Stratum"/>, <see cref="WriteDependencies"/>) read the writer-side structures and need the same
+    /// exclusive access as <see cref="AddTable"/>.
     /// </para>
     /// <para>
     /// Every read is O(1) or a span over internal storage. <see cref="LevelOf"/> costs two volatile loads.

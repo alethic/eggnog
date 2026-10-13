@@ -9,8 +9,8 @@ namespace Eggnog.Relations
     /// Rust's <c>MutexReader</c>.
     /// </summary>
     /// <remarks>
-    /// Dispose exactly once, typically with a <c>using</c> statement; a copy of the handle shares the same lock and must
-    /// not be disposed separately. Holding it blocks writers, so keep it short.
+    /// Dispose exactly once, typically with a <c>using</c> statement; a copy of the handle shares the same lock and
+    /// must not be disposed separately. Holding it blocks writers, so keep it short.
     /// </remarks>
     /// <typeparam name="T">The type of the guarded data.</typeparam>
     internal readonly struct ReadOptimizedLockReader<T> : IDisposable

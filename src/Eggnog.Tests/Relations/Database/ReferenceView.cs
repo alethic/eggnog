@@ -7,8 +7,7 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// A naive e-graph: a dictionary union-find and a list of rows per table, closed by rewriting every row and
-    /// grouping by key until no group merges anything. Port of the spike's oracle
-    /// (src/Eggnog.Storage.Tests/Reference/ReferenceView.cs), over the engine's 32-bit cells.
+    /// grouping by key until no group merges anything, over the engine's 32-bit cells.
     /// </summary>
     /// <remarks>
     /// Nothing here is incremental, shared or clever, which is the point: it defines what the database should hold

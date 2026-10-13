@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="OverlayDisplacedTable"/>, a child context's union-find as a table (colored-contexts spec §5.5):
-    /// the merge through the parent's find with its order check, journal rows with a computed canonical column, view-level
-    /// point lookups, fast subsets and refinement, the base-class scan dispatch, statistics, freezing, and the refused
-    /// clear and clone.
+    /// Tests for <see cref="OverlayDisplacedTable"/>, a child context's union-find as a table: the merge through the
+    /// parent's find with its order check, journal rows with a computed canonical column, view-level point lookups,
+    /// fast subsets and refinement, the base-class scan dispatch, statistics, freezing, and the refused clear and
+    /// clone.
     /// </summary>
     public class OverlayDisplacedTableTests
     {

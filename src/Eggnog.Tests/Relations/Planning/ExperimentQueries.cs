@@ -5,9 +5,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The queries of the planner experiments (the scratchpad's plan_dump.rs, plan_dump2.rs and plan_dump3.rs, run against
-    /// egglog at HEAD): each table is built from <see cref="PlanTestDatabase.ExperimentRows"/>, a variable entry is its
-    /// index, a constant entry is the value 3, and the action reads the listed variables.
+    /// The queries of the planner experiments, whose plans under egglog are the golden stage lists of
+    /// <see cref="PlannerGoldenTests"/>: each table is built from <see cref="PlanTestDatabase.ExperimentRows"/>, a
+    /// variable entry is its index, a constant entry is the value 3, and the action reads the listed variables.
     /// </summary>
     static class ExperimentQueries
     {

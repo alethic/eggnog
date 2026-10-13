@@ -29,14 +29,12 @@ namespace Eggnog.Relations
     /// array pool.
     /// </para>
     /// <para>
-    /// Sealing (colored-contexts spec §8.1): once the table's context freezes, <see cref="Seal"/> makes every later
-    /// publication throw, so nothing can be staged into a frozen table. The check is one volatile read per published
-    /// buffer.
+    /// Sealing: once the table's context freezes, <see cref="Seal"/> makes every later publication throw, so nothing
+    /// can be staged into a frozen table. The check is one volatile read per published buffer.
     /// </para>
     /// <para>
-    /// Lazy queues (colored-contexts spec §14.2, M10.4): a child's tables create their queues on first publication, behind
-    /// the same flag read as the seal (<see cref="PendingState(ShardData, bool)"/>), so a root or bare table's publication
-    /// costs exactly what it did.
+    /// Lazy queues: a child's tables create their queues on first publication, behind the same flag read as the seal
+    /// (<see cref="PendingState(ShardData, bool)"/>), so lazy queues add nothing to a root or bare table's publication.
     /// </para>
     /// </remarks>
     internal sealed class PendingState
@@ -71,7 +69,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// <see cref="SealedFlag"/> and <see cref="LazyFlag"/>. Zero for an eager state that is not sealed, so a
-        /// publication pays one volatile read and one compare, as it did for the former sealed flag alone.
+        /// publication pays one volatile read and one compare for both flags together.
         /// </summary>
         volatile int flags;
 
@@ -92,10 +90,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>, created now or, with
-        /// <paramref name="lazyQueues"/>, on each queue's first publication (colored-contexts spec §14.2, §21.9): a child's
-        /// layer and union-find table pay nothing for queues they never stage into (each <see cref="ConcurrentQueue{T}"/>
-        /// allocates a 32-slot segment). Readers see a shared empty queue until then.
+        /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>, created now or,
+        /// with <paramref name="lazyQueues"/>, on each queue's first publication: a child's layer and union-find table
+        /// pay nothing for queues they never stage into (each <see cref="ConcurrentQueue{T}"/> allocates a 32-slot
+        /// segment). Readers see a shared empty queue until then.
         /// </summary>
         /// <param name="shardData">The table's shard layout.</param>
         /// <param name="lazyQueues">Whether to create the queues on first use.</param>
@@ -146,9 +144,8 @@ namespace Eggnog.Relations
         public bool IsSealed => (flags & SealedFlag) != 0;
 
         /// <summary>
-        /// Seals the state (colored-contexts spec §8.1): every later <see cref="EnqueueRows"/> and
-        /// <see cref="EnqueueRemovals"/> throws. Called when the table's context freezes, after its pending writes were
-        /// merged. Irreversible.
+        /// Seals the state: every later <see cref="EnqueueRows"/> and <see cref="EnqueueRemovals"/> throws. Called when
+        /// the table's context freezes, after its pending writes were merged. Irreversible.
         /// </summary>
         public void Seal() => Interlocked.Or(ref flags, SealedFlag);
 
@@ -175,7 +172,7 @@ namespace Eggnog.Relations
         /// disposed.</exception>
         public void EnqueueRows(int shard, RowBuffer buffer)
         {
-            // One volatile read and one compare, as before lazy queues: an eager state that is not sealed has no flag.
+            // One volatile read and one compare: an eager state that is not sealed has no flag set.
             if (flags != 0)
                 PrepareRows(shard, buffer);
 

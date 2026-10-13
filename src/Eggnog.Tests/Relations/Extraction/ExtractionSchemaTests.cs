@@ -117,8 +117,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void ViewsExtractUnderTheirTermConstructor()
         {
-            // Proof encoding: AddT is a hidden term constructor; AddView(a, b, class) -> View is its view, whose rows say
-            // that class = (AddT a b). Views extract under the term constructor's name and cost.
+            // Proof encoding: AddT is a hidden term constructor; AddView(a, b, class) -> View is its view, whose rows
+            // say that class = (AddT a b). Views extract under the term constructor's name and cost.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var view = new EqSort("View");

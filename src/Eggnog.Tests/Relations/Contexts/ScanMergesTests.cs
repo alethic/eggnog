@@ -7,15 +7,18 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="Context.ScanMerges{TVisitor}"/> (colored-contexts spec §5.7, L2, G1(a)): a merged class's
-    /// canonical is visited paired with itself when it is a parent id; local ids are never visited; classes the parent
-    /// dissolved are gone; reads, <see cref="Context.Find"/> included, are allowed inside the visitor, while writes to any
-    /// context of the domain, rebuilds with work to do and structural calls are refused before they change anything
-    /// (§8.3), and a frozen context cannot be disposed while it is scanned.
+    /// Tests for <see cref="Context.ScanMerges{TVisitor}"/>: a merged class's canonical is visited paired with itself
+    /// when it is a parent id; local ids are never visited; classes the parent dissolved are gone; reads,
+    /// <see cref="Context.Find"/> included, are allowed inside the visitor, while writes to any context of the domain,
+    /// rebuilds with work to do and structural calls are refused before they change anything, and a frozen context
+    /// cannot be disposed while it is scanned.
     /// </summary>
     public class ScanMergesTests
     {
 
+        /// <summary>
+        /// A store whose root holds <paramref name="count"/> ids.
+        /// </summary>
         static (Store Store, Context Root, uint[] Ids) Setup(int count)
         {
             var store = new Store();
@@ -24,6 +27,9 @@ namespace Eggnog.Relations.Tests
             return (store, root, ids);
         }
 
+        /// <summary>
+        /// Scans <paramref name="context"/>'s merges and returns the pairs in visiting order.
+        /// </summary>
         static (uint Member, uint Canonical)[] Scan(Context context)
         {
             var visitor = new MergeCollector();
@@ -31,10 +37,14 @@ namespace Eggnog.Relations.Tests
             return visitor.Pairs.ToArray();
         }
 
+        /// <summary>
+        /// The canonical of a class merged in the child, a parent id, is visited paired with itself, beside its
+        /// members.
+        /// </summary>
         [Fact]
         public void TheWinnerOfAMergedClassIsVisitedWithItself()
         {
-            // G1(a): the class {a, b} merged in the child reports a, its canonical, paired with itself.
+            // The class {1, 2, 3} merged in the child reports 1, its canonical, paired with itself.
             var (_, root, ids) = Setup(4);
             var child = root.CreateChild();
             child.Union(ids[2], ids[1]);
@@ -45,6 +55,9 @@ namespace Eggnog.Relations.Tests
                 Scan(child).OrderBy(p => p.Member).ToArray());
         }
 
+        /// <summary>
+        /// Classes are visited in slot order, and the members of a class in the order they joined it.
+        /// </summary>
         [Fact]
         public void TheVisitOrderIsSlotThenInsertionOrder()
         {
@@ -57,6 +70,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new[] { (ids[4], ids[3]), (ids[3], ids[3]), (ids[5], ids[3]), (ids[1], ids[0]), (ids[0], ids[0]) }, Scan(child));
         }
 
+        /// <summary>
+        /// A local id is never visited, whether it loses to a parent id or wins over one; a local winner is reported as
+        /// the canonical of the parent ids it beat.
+        /// </summary>
         [Fact]
         public void LocalIdsAreNeverVisited()
         {
@@ -68,7 +85,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsLocalId(high));
             child.Union(high, ids[0]);
 
-            // A local id below a parent id minted later (G2): the local id wins, and the parent id is visited with it.
+            // A local id below a parent id minted later: the local id wins, and the parent id is visited with it.
             var late = root.NewId();
             Assert.True(late > high);
             child.Union(late, high);
@@ -89,6 +106,10 @@ namespace Eggnog.Relations.Tests
             _ = store;
         }
 
+        /// <summary>
+        /// A class the child merged and the parent then merged itself is the parent's, not the child's own, and is not
+        /// visited.
+        /// </summary>
         [Fact]
         public void ClassesTheParentDissolvedAreAbsent()
         {
@@ -105,6 +126,9 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new[] { (ids[3], ids[0]), (ids[0], ids[0]) }.OrderBy(p => p.Item1), Scan(child).OrderBy(p => p.Member));
         }
 
+        /// <summary>
+        /// Finds and equality tests on the scanned context are allowed inside the visitor, which sees it clean.
+        /// </summary>
         [Fact]
         public void ReadsAreAllowedInsideTheVisitor()
         {
@@ -124,6 +148,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(2, checkedMembers);
         }
 
+        /// <summary>
+        /// Inside the visitor, structural calls and writes to the scanned context or to an ancestor sharing its domain
+        /// are refused before they change anything; the scan completes and the contexts stay clean and unfaulted.
+        /// </summary>
         [Fact]
         public void WritesAndStructuralCallsAreRefusedInsideTheVisitor()
         {
@@ -170,6 +198,10 @@ namespace Eggnog.Relations.Tests
             Assert.False(root.IsFaulted);
         }
 
+        /// <summary>
+        /// Inside the visitor, a rebuild with nothing to do returns false, while a sibling's rebuild with work is
+        /// refused without faulting it.
+        /// </summary>
         [Fact]
         public void ARebuildWithWorkIsRefusedInsideTheVisitorAndOneWithoutIsAllowed()
         {
@@ -196,6 +228,10 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(ids[3], sibling.Find(ids[4]));
         }
 
+        /// <summary>
+        /// Disposing a frozen context while another thread's scan of it runs is refused; after the scan it succeeds,
+        /// and a scan of the disposed context throws <see cref="ObjectDisposedException"/>.
+        /// </summary>
         [Fact]
         public void AFrozenContextCannotBeDisposedWhileAnotherThreadScansIt()
         {
@@ -233,6 +269,9 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ObjectDisposedException>(() => child.ScanMerges(ref after));
         }
 
+        /// <summary>
+        /// A scan of a context with an unrebuilt union, or behind its parent, throws; after a rebuild it runs.
+        /// </summary>
         [Fact]
         public void ScanMergesNeedsACleanContext()
         {
@@ -249,6 +288,9 @@ namespace Eggnog.Relations.Tests
             Assert.NotEmpty(visitor.Pairs);
         }
 
+        /// <summary>
+        /// A frozen context is scanned without entering its domain.
+        /// </summary>
         [Fact]
         public void AFrozenContextIsScannedWithoutItsDomain()
         {

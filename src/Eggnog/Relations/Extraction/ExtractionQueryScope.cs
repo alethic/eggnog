@@ -4,10 +4,10 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The hold an extraction query keeps on a context's thread domain (colored-contexts spec §8.3, §10.10): entered, and
-    /// marked as running a caller's code (the cost model's functions), for the query's duration, so a second thread fails
-    /// fast and a cost function cannot write to the context it is costing. The default scope holds nothing: a frozen
-    /// context, or an extractor made through the e-graph's root API, which keeps egglog's unguarded root.
+    /// The hold an extraction query keeps on a context's thread domain: entered, and marked as running a caller's code
+    /// (the cost model's functions), for the query's duration, so a second thread fails fast and a cost function cannot
+    /// write to the context it is costing. The default scope holds nothing: a frozen context, or an extractor made
+    /// through the e-graph's root API, which keeps egglog's unguarded root.
     /// </summary>
     /// <remarks>
     /// A value type so a query allocates nothing for it. Dispose it exactly once, on the thread that entered, also when

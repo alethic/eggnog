@@ -11,7 +11,9 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="Database.MergeAll"/> and <see cref="Database.MergeTable"/> (egglog's
-    /// core-relations/src/free_join/mod.rs:501-623), including the stratum-order fix of map §8.1 row 11.
+    /// core-relations/src/free_join/mod.rs:501-623): merges in stratum order, where egglog's <c>merge_simple</c> merges
+    /// in notification order; the epoch merge states carry; and what a merge that throws leaves behind, serially and in
+    /// parallel.
     /// </summary>
     public class DatabaseMergeTests
     {
@@ -19,7 +21,7 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void MergeStatesCarryTheTimestampOfTheRun()
         {
-            // Map section 4.2 C1: the rows merge functions write carry the epoch captured for the run being merged.
+            // The rows merge functions write carry the epoch captured for the run being merged.
             var db = new Database(ParallelHeuristics.Serial);
             var log = db.AddTable(Function(1, KeepCurrentMerge.Instance), name: "log");
             var f = db.AddTable(Function(1, new StampingMerge(log, 1)), [], [log], "f");
@@ -78,8 +80,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void MergeAllMergesInStratumOrderEvenForSmallRounds()
         {
-            // Map §8.1 row 11: F reads G in its merge. Notify F first, then G. egglog's merge_simple merges F before G,
-            // so F's merge reads G's old value 10; stratum order merges G first, so F reads 20.
+            // F reads G in its merge. Notify F first, then G. egglog's merge_simple merges F before G, so F's merge
+            // reads G's old value 10; stratum order merges G first, so F reads 20.
             var db = new Database(ParallelHeuristics.Serial);
             var g = db.AddTable(Function(1, ClosureMerge.TakeNew));
             var f = db.AddTable(Function(1, new LookupMerge(g, 1, 1, 1)), [g]);
@@ -243,6 +245,136 @@ namespace Eggnog.Relations.Tests
 
             Assert.False(db.MergeTable(num));
             Assert.Throws<KeyNotFoundException>(() => db.MergeTable(new TableId(9)));
+        }
+
+        [Fact]
+        public void MergeTableThatThrowsKeepsTheSizeEstimate()
+        {
+            // A merge that throws leaves the database consistent: MergeTable accounts for the rows the merge did add
+            // when it throws, as MergeAll does.
+            var db = new Database(ParallelHeuristics.Serial);
+            var f = db.AddTable(Function(1, KeepCurrentMerge.Instance));
+            Stage(db, f, R(1, 10, 5));
+            db.MergeAll();
+            Assert.Equal(1, db.TotalSizeEstimate);
+
+            // Timestamp 3 after timestamp 6 breaks the sort order of the timestamp column: the merge throws.
+            Stage(db, f, R(2, 20, 6), R(3, 30, 3));
+            Assert.ThrowsAny<Exception>(() => db.MergeTable(f));
+
+            Assert.Equal(db.GetTable(f).Count, db.TotalSizeEstimate);
+        }
+
+        [Fact]
+        public void MergeTableThatThrowsResetsTheCachedIndexes()
+        {
+            // MergeAll resets every cache in a finally, and MergeTable resets the table's caches the same way, so after
+            // a throw the column index does not keep answering for the table as it was before the rows the merge did
+            // add.
+            var db = new Database(ParallelHeuristics.Serial);
+            var f = db.AddTable(Function(1, KeepCurrentMerge.Instance));
+            Stage(db, f, R(1, 10, 5));
+            db.MergeAll();
+            using (var before = db.ProcessConstraints(f, [Constraint.EqConst(C(1), 20)]))
+                Assert.Equal(0, before.ApproximateSize);
+
+            Stage(db, f, R(2, 20, 6), R(3, 30, 3));
+            Assert.ThrowsAny<Exception>(() => db.MergeTable(f));
+
+            var live = Rows(db, f);
+            Assert.Contains(live, r => r.SequenceEqual(R(2, 20, 6)));
+            using var after = db.ProcessConstraints(f, [Constraint.EqConst(C(1), 20)]);
+            Assert.Equal(new[] { R(2, 20, 6) }, Rows(db.GetTable(f), after.Rows));
+        }
+
+        [Fact]
+        public void MergeAllThatThrowsResetsTheCachedIndexes()
+        {
+            // The same failure through MergeAll: the finally resets the caches, so the row the merge added is found.
+            var db = new Database(ParallelHeuristics.Serial);
+            var f = db.AddTable(Function(1, KeepCurrentMerge.Instance));
+            Stage(db, f, R(1, 10, 5));
+            db.MergeAll();
+            using (var before = db.ProcessConstraints(f, [Constraint.EqConst(C(1), 20)]))
+                Assert.Equal(0, before.ApproximateSize);
+
+            Stage(db, f, R(2, 20, 6), R(3, 30, 3));
+            Assert.ThrowsAny<Exception>(() => db.MergeAll());
+
+            Assert.Equal(db.GetTable(f).Count, db.TotalSizeEstimate);
+            if (Rows(db, f).Any(r => r.SequenceEqual(R(2, 20, 6))))
+            {
+                using var after = db.ProcessConstraints(f, [Constraint.EqConst(C(1), 20)]);
+                Assert.Equal(new[] { R(2, 20, 6) }, Rows(db.GetTable(f), after.Rows));
+            }
+        }
+
+        [Fact]
+        public void AnUndeclaredSameStratumReadThrowsKeyNotFoundWhenParallelToo()
+        {
+            // A merge that reads an undeclared table of its own stratum being merged throws KeyNotFoundException
+            // regardless of round size. Above the database-level threshold the stratum merges through Parallel.For,
+            // whose AggregateException is unwrapped so callers see the same exception as on the serial arm.
+            var parallelism = new ParallelHeuristics(4);
+            var db = new Database(parallelism);
+            var g = db.AddTable(Function(1, ClosureMerge.TakeNew, parallelism: parallelism));
+            var f = db.AddTable(Function(1, new LookupMerge(g, 1, 1, 1), parallelism: parallelism));
+            Stage(db, f, Enumerable.Range(0, 6000).Select(i => R((uint)i, 0, 0)).ToArray());
+            Stage(db, g, Enumerable.Range(0, 6000).Select(i => R((uint)i, 10, 0)).ToArray());
+            db.MergeAll();
+            Assert.True(db.Parallelism.ParallelizeDbLevelOp(db.TotalSizeEstimate));
+
+            Stage(db, g, R(1, 20, 1));
+            Stage(db, f, R(1, 5, 1));
+            Assert.Throws<KeyNotFoundException>(() => db.MergeAll());
+        }
+
+        [Fact]
+        public void ParallelStrataAgreeWithSerialWhenTheUnionFindMergesAlongsideItsWriters()
+        {
+            // The union-find shares stratum 0 with the constructor tables that write it. With unions of its own
+            // pending, it merges in the same parallel stratum while the constructors flush the unions their merges
+            // stage into it.
+            static (Database Db, TableId Uf, TableId[] Tables) Build(ParallelHeuristics parallelism)
+            {
+                var db = new Database(parallelism);
+                var uf = db.AddTable(new DisplacedTable());
+                var tables = new TableId[8];
+                for (var t = 0; t < tables.Length; t++)
+                    tables[t] = db.AddTable(Function(1, new UnionIdMerge(C(1), uf, C(2)), [C(0), C(1)], parallelism), [], [uf]);
+
+                for (var t = 0; t < tables.Length; t++)
+                    Stage(db, tables[t], Enumerable.Range(0, 2000).Select(i => R((uint)i, (uint)(100_000 + t * 10_000 + i), 1)).ToArray());
+
+                db.MergeAll();
+                return (db, uf, tables);
+            }
+
+            var (serial, serialUf, serialTables) = Build(ParallelHeuristics.Serial);
+            for (var round = 0; round < 10; round++)
+            {
+                var (parallel, parallelUf, parallelTables) = Build(new ParallelHeuristics(8));
+                Assert.True(parallel.Parallelism.ParallelizeDbLevelOp(parallel.TotalSizeEstimate));
+                if (round == 0)
+                {
+                    Stage(serial, serialUf, Enumerable.Range(0, 3000).Select(i => R((uint)(100_000 + i), (uint)(110_000 + i), 2)).ToArray());
+                    for (var t = 0; t < serialTables.Length; t++)
+                        Stage(serial, serialTables[t], Enumerable.Range(0, 2000).Where(i => i % 2 == t % 2).Select(i => R((uint)i, (uint)(50_000 + i), 2)).ToArray());
+
+                    Assert.True(serial.MergeAll());
+                }
+
+                Stage(parallel, parallelUf, Enumerable.Range(0, 3000).Select(i => R((uint)(100_000 + i), (uint)(110_000 + i), 2)).ToArray());
+                for (var t = 0; t < parallelTables.Length; t++)
+                    Stage(parallel, parallelTables[t], Enumerable.Range(0, 2000).Where(i => i % 2 == t % 2).Select(i => R((uint)i, (uint)(50_000 + i), 2)).ToArray());
+
+                Assert.True(parallel.MergeAll());
+                var serialFind = (DisplacedTable)serial.GetTable(serialUf);
+                var parallelFind = (DisplacedTable)parallel.GetTable(parallelUf);
+                Assert.Equal(serialFind.Count, parallelFind.Count);
+                for (var id = 50_000u; id < 190_000; id += 3)
+                    Assert.Equal(serialFind.FindNaive(id), parallelFind.FindNaive(id));
+            }
         }
 
     }

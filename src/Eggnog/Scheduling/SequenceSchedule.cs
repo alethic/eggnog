@@ -4,7 +4,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The steps in order; changed when any step changed (§6.5.2).
+    /// The steps in order; changed when any step changed.
     /// </summary>
     internal sealed class SequenceSchedule : Schedule
     {

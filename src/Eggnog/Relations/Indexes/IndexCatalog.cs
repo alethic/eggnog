@@ -17,9 +17,9 @@ namespace Eggnog.Relations
     /// Storage: a copy-on-write array of entries searched linearly, which beats a concurrent map while a table has few
     /// indexes (egglog's comment: fewer than about 64). A read is one acquire load and a scan, with no lock and no
     /// write to shared memory; adding an index takes a lock, re-checks, and publishes a longer copy (egglog uses a
-    /// <c>ReadOptimizedLock&lt;Vec&gt;</c> with the same double-checked insert; map §5.1 maps it to this). Entries are
-    /// never removed. Keys are ordered column lists: an index on (a, b) differs from one on (b, a), and a probe key
-    /// follows the order of its index's key.
+    /// <c>ReadOptimizedLock&lt;Vec&gt;</c> with the same double-checked insert). Entries are never removed. Keys are
+    /// ordered column lists: an index on (a, b) differs from one on (b, a), and a probe key follows the order of its
+    /// index's key.
     /// </para>
     /// <para>
     /// Lifecycle: <see cref="GetOrRefresh(Table, ReadOnlySpan{ColumnId})"/> creates the index on first use and runs its
@@ -41,7 +41,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Serializes inserts; created by the first insert, so a catalog that never gets an index (most of a child
-        /// context's) does not pay for it (colored-contexts spec §14.2).
+        /// context's) does not pay for it.
         /// </summary>
         object? gate;
         readonly ParallelHeuristics parallelism;
@@ -136,14 +136,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether refreshes run serially: the catalog belongs to a frozen context (colored-contexts spec X14).
+        /// Gets whether refreshes run serially: the catalog belongs to a frozen context.
         /// </summary>
         public bool IsSerialRefresh => serialRefresh;
 
         /// <summary>
-        /// Makes every later refresh run serially (colored-contexts spec §8.1, X14): the table's context is frozen, so
-        /// its indexes may be built lazily by concurrent descendants, each on its own thread, and a build never waits on
-        /// parallel work its waiter would have to run (map §5.5). Irreversible.
+        /// Makes every later refresh run serially: the table's context is frozen, so its indexes may be built lazily by
+        /// concurrent descendants, each on its own thread, and a build, which runs under the entry's once-lock, must
+        /// never wait on parallel work that a thread waiting on that lock would have to run. Irreversible.
         /// </summary>
         public void SetSerialRefresh() => serialRefresh = true;
 

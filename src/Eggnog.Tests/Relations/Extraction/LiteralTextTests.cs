@@ -4,9 +4,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for <see cref="LiteralText"/>: extracted literals print as egglog's <c>Literal</c> <c>Display</c> prints them
-    /// (egglog-ast/src/generic_ast_helpers.rs:740-758). The float expectations are Rust's <c>format!("{}", x)</c>, plus
-    /// <c>.0</c> when that parses as an <c>i64</c>.
+    /// Tests for <see cref="LiteralText"/>: extracted literals print as egglog's <c>Literal</c> <c>Display</c> prints
+    /// them (egglog-ast/src/generic_ast_helpers.rs:740-758). The float expectations are Rust's <c>format!("{}", x)</c>,
+    /// plus <c>.0</c> when that parses as an <c>i64</c>.
     /// </summary>
     public class LiteralTextTests
     {

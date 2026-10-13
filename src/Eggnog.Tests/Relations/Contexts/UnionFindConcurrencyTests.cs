@@ -9,9 +9,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Concurrency of the layered union-find under a frozen root (colored-contexts spec §17 M9.2, I11, I24): many children
-    /// of a frozen root, each on whichever thread runs it, union, rebuild, freeze and find concurrently, and the root's
-    /// union-find is bit-identical afterwards.
+    /// Concurrency of the layered union-find under a frozen root: many children of a frozen root, each on whichever
+    /// thread runs it, union, rebuild, freeze and find concurrently, and the root's union-find is bit-identical
+    /// afterwards.
     /// </summary>
     public class UnionFindConcurrencyTests
     {
@@ -27,6 +27,10 @@ namespace Eggnog.Relations.Tests
             return x;
         }
 
+        /// <summary>
+        /// Unions the classes of <paramref name="a"/> and <paramref name="b"/> in the small union-find, the smaller
+        /// root winning.
+        /// </summary>
         static void Union(Dictionary<uint, uint> parents, uint a, uint b)
         {
             var ra = Find(parents, a);
@@ -35,6 +39,11 @@ namespace Eggnog.Relations.Tests
                 parents[Math.Max(ra, rb)] = Math.Min(ra, rb);
         }
 
+        /// <summary>
+        /// A thousand children of a frozen root with 200,000 ids, on eight threads, union root and local ids, rebuild
+        /// and find, a quarter of them freezing under a grandchild; every find matches the expected classes, and the
+        /// root's union-find is unchanged.
+        /// </summary>
         [Fact]
         public void StressFrozenRoot()
         {

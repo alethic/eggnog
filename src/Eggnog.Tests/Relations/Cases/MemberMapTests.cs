@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 
 using Xunit;
 
@@ -7,8 +10,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Member maps (colored-contexts spec §11.1, L2, G1(a), X29, I32): the classes a child merged over its parent's ids,
-    /// with local ids left out, cached by the overlay's version, and checked by C4.
+    /// Member maps: the classes a child merged over its parent's ids, with local ids left out and members canonical in
+    /// the parent, cached by the overlay's version, and checked by the invariant checker's member-map check (whose
+    /// violations start with "member maps:").
     /// </summary>
     public class MemberMapTests
     {
@@ -59,8 +63,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A local id never appears in a member list; a class whose canonical is local lists its parent members only, and a
-        /// local class with no parent member stands for nothing.
+        /// A local id never appears in a member list; a class whose canonical is local lists its parent members only,
+        /// and a local class with no parent member stands for nothing.
         /// </summary>
         [Fact]
         public void LocalIdsAreLeftOut()
@@ -69,7 +73,8 @@ namespace Eggnog.Relations.Tests
             var parentIds = Ids(g, 2);
             using var child = g.Root.CreateChild();
 
-            // The child's block is reserved by its first mint; ids the root mints afterwards are larger than its locals.
+            // The child's block is reserved by its first mint; ids the root mints afterwards are larger than its
+            // locals.
             var local = child.FreshId();
             var other = child.FreshId();
             var late = g.Root.FreshId();
@@ -118,8 +123,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// After the parent merges ids of a child's class, the child re-keys (§5.6) and its map lists parent-canonical
-        /// members only (I32).
+        /// After the parent merges ids of a child's class, the child re-keys and its map lists parent-canonical members
+        /// only.
         /// </summary>
         [Fact]
         public void MembersFollowTheParentsUnions()
@@ -160,7 +165,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Random unions, local mints and parent unions keep I32, as C4 checks, and the map agrees with the context's find.
+        /// Random unions, local mints and parent unions keep the map exact, as the invariant checker's member-map check
+        /// requires, and the map agrees with the context's find.
         /// </summary>
         [Theory]
         [InlineData(1)]
@@ -204,6 +210,43 @@ namespace Eggnog.Relations.Tests
                         Assert.Equal(canonical, child.Find(new Value(m)).Rep);
                 }
             }
+        }
+
+        /// <summary>
+        /// A graph whose contradiction function is designated, with <paramref name="count"/> root ids.
+        /// </summary>
+        static (ContextGraph Graph, Value[] Ids) Setup(int count)
+        {
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            var ids = Enumerable.Range(0, count).Select(_ => g.Root.FreshId()).ToArray();
+            return (g, ids);
+        }
+
+        /// <summary>
+        /// The invariant checker's member-map check reports a cached member map whose version is current but whose
+        /// groups differ from the overlay's. The corrupt map is another case's map at the same overlay version.
+        /// </summary>
+        [Fact]
+        public void TheMemberMapCheckReportsACachedMapThatDiffersFromTheOverlay()
+        {
+            var (g, ids) = Setup(4);
+            using var set = new CaseSet(g.Root);
+            var one = set.AddCase();
+            one.StageUnion(ids[0], ids[1]);
+            var two = set.AddCase();
+            two.StageUnion(ids[2], ids[3]);
+            one.EnsureClean();
+            two.EnsureClean();
+            var mapOne = one.GetMemberMap();
+            var mapTwo = two.GetMemberMap();
+            Assert.Equal(mapOne.Version, mapTwo.Version);
+            one.CheckInvariants();
+
+            var field = typeof(EGraphContext).GetField("memberMap", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            field.SetValue(one, mapTwo);
+            var thrown = Assert.Throws<ContextInvariantException>(() => one.CheckInvariants());
+            Assert.Contains("member maps:", thrown.Message);
         }
 
     }

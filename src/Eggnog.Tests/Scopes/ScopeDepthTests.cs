@@ -8,8 +8,9 @@ namespace Eggnog.Tests.Scopes
 {
 
     /// <summary>
-    /// The depth limit of a scope tree (colors X36, §6.7): the scope layer refuses a child below depth 31 itself, with its
-    /// own message, before the engine is asked, and leaves the tree as it was.
+    /// The depth limit of a scope tree (a view has at most 32 layers, one per scope from the root down): the scope
+    /// layer refuses a child below depth 31 itself, with its own message, before the engine is asked, and leaves the
+    /// tree as it was.
     /// </summary>
     public sealed class ScopeDepthTests
     {
@@ -24,7 +25,7 @@ namespace Eggnog.Tests.Scopes
 
             var e = Assert.Throws<InvalidOperationException>(() => scope.CreateChild(t.Outer));
 
-            Assert.Equal($"Scope '{scope.Path}' is at depth 31, the deepest a scope tree goes (colors X36).", e.Message);
+            Assert.Equal($"Scope '{scope.Path}' is at depth 31, the deepest a scope tree goes.", e.Message);
             Assert.Empty(scope.Children);
             Assert.Equal(0, scope.Engine.Context.Context.ChildCount);
             Assert.False(scope.IsFaulted);

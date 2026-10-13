@@ -11,7 +11,7 @@ namespace Eggnog.Relations
     /// An e-graph: functions with functional dependencies, default values and merge functions, subsumption, a
     /// union-find with congruence closure by rebuilding, and the timestamps seminaive evaluation runs on, all lowered onto
     /// a <see cref="Relations.Store"/>. egglog-bridge's <c>EGraph</c> (egglog-bridge/src/lib.rs:113-964), the engine's
-    /// main entry point, extended with colored contexts (colored-contexts spec §10).
+    /// main entry point, extended with colored contexts.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -23,22 +23,21 @@ namespace Eggnog.Relations
     /// on the subsumption cell (<see cref="FunctionTableMerge"/>).
     /// </para>
     /// <para>
-    /// Definitions and contexts (§10.1). The e-graph holds the definitions: functions, rules (a <see cref="RuleTable"/>),
+    /// Definitions and contexts. The e-graph holds the definitions: functions, rules (a <see cref="RuleTable"/>),
     /// panic functions, the contradiction function, and context-local slots. Everything a context runs, writes and reads
     /// lives in an <see cref="EGraphContext"/>: <see cref="Root"/>, and the children created from it. The root-only
     /// egglog API of this type (<see cref="RunRules"/>, <see cref="FlushUpdates"/>, <see cref="AddValues"/>,
     /// <see cref="AddTerm"/>, <see cref="LookupId"/>, <see cref="TableSize"/>, <see cref="ForEach(FunctionId, FunctionRowCallback)"/>,
     /// <see cref="WithExecutionState{TResult}"/>, <see cref="FreshId"/>, <see cref="ClearTable"/>, <see cref="Rebuild"/>)
     /// runs on <see cref="Root"/> with egglog's semantics: rows are written as given and read as committed, and a panic a
-    /// flush records is reported by the next run. Two deviations from egglog bind it (colored-contexts spec §19 item 4):
-    /// a rule's semi-naive progress is not committed after a run that recorded a failure (X18), and every Id constant of a
-    /// rule runs in its canonical form (X19), so a rule whose constant lost a union keeps matching its class.
+    /// flush records is reported by the next run. It departs from egglog in two ways: a rule's semi-naive progress is
+    /// not committed after a run that recorded a failure, and every Id constant of a rule runs in its canonical form,
+    /// so a rule whose constant lost a union keeps matching its class.
     /// </para>
     /// <para>
     /// Timestamps. Every row written in a run, a flush or a rebuild pass is stamped with the clock's value when it
-    /// started, and the clock advances once after it (map §1.3, §4.2 C1; colored-contexts §4.1). Rows newer than a
-    /// rule's last run are what seminaive evaluation looks at. A program that creates no child and never freezes gets
-    /// egglog's timestamps exactly.
+    /// started, and the clock advances once after it. Rows newer than a rule's last run are what seminaive evaluation
+    /// looks at. A program that creates no child and never freezes gets egglog's timestamps exactly.
     /// </para>
     /// <para>
     /// Panics. A conflict in a function without a merge, a failed lookup or primitive, or an explicit panic calls a
@@ -47,12 +46,11 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Threading. Definitions (<see cref="AddTable"/>, <see cref="NewRule"/>, <see cref="NewPanic"/>,
-    /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>) may be made from any thread (rule-layer D6;
-    /// a table, once the root is frozen or while no other thread uses it, colored-contexts §4.3): they publish
-    /// copy-on-write. A context and every descendant created under it while it is not frozen form one thread domain
-    /// (§8.3); children of a frozen context may run concurrently (<see cref="ConcurrentChildren"/>, within
-    /// <see cref="ParallelismBudget"/>, §10.9). The parallelism of a single operation is inside the database's
-    /// operations.
+    /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>) may be made from any thread (a table,
+    /// once the root is frozen or while no other thread uses it): they publish copy-on-write. A context and every
+    /// descendant created under it while it is not frozen form one thread domain; children of a frozen context may run
+    /// concurrently (<see cref="ConcurrentChildren"/>, within <see cref="ParallelismBudget"/>). The parallelism of a
+    /// single operation is inside the database's operations.
     /// </para>
     /// </remarks>
     internal sealed partial class EGraph
@@ -104,17 +102,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Initializes an empty e-graph whose store and tables use <paramref name="parallelism"/> (rule-layer E9: the
-        /// root of a store-backed e-graph honours the host's degree of parallelism, and children of writable contexts
-        /// inherit it, colored-contexts §10.9).
+        /// Initializes an empty e-graph whose store and tables use <paramref name="parallelism"/> (the root of a
+        /// store-backed e-graph honours the host's degree of parallelism, and children of writable contexts inherit
+        /// it).
         /// </summary>
         /// <param name="parallelism">When operations go parallel.</param>
         internal EGraph(ParallelHeuristics parallelism)
         {
             ArgumentNullException.ThrowIfNull(parallelism);
 
-            // §10.1: the store lays out the union-find and the two counters (lib.rs:140-152): table 0, counter 0 for
-            // ids, counter 1 for timestamps, started at 1 so that a rule's initial last run, 0, sees every row.
+            // The store lays out the union-find and the two counters (lib.rs:140-152): table 0, counter 0 for ids,
+            // counter 1 for timestamps, started at 1 so that a rule's initial last run, 0, sees every row.
             store = new Store(parallelism);
             parallelismBudget = new ParallelismBudget(parallelism.DegreeOfParallelism);
             db = store.Root.Database;
@@ -179,7 +177,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the current timestamp: what rows written now are stamped with. egglog's <c>next_ts</c>.
         /// </summary>
-        /// <exception cref="OverflowException">The clock no longer fits in 32 bits.</exception>
+        /// <exception cref="OverflowException">The clock does not fit in 32 bits.</exception>
         internal uint NextTimestamp => store.ReadClock();
 
         /// <summary>
@@ -228,7 +226,7 @@ namespace Eggnog.Relations
         /// Mints a fresh e-class id at the root. egglog's <c>fresh_id</c>.
         /// </summary>
         /// <returns>The id.</returns>
-        /// <exception cref="OverflowException">The id counter no longer fits in 32 bits.</exception>
+        /// <exception cref="OverflowException">The id counter does not fit in 32 bits.</exception>
         public Value FreshId() => new(checked((uint)db.IncrementCounter(idCounter)));
 
         /// <summary>
@@ -262,15 +260,14 @@ namespace Eggnog.Relations
         /// merges first; a union-id or primitive merge writes the union-find (<c>fill_deps</c>, lib.rs:1033-1057).
         /// </para>
         /// <para>
-        /// The table is added to the store (<see cref="Relations.Store.AddTable"/>, colored-contexts §4.3): at any time,
-        /// children or not; while the root is not frozen, not while another thread uses it. A child sees the new
-        /// function as an empty table it may write once it has caught up. Only lattice merges may be written in a
-        /// child (decision 2).
+        /// The table is added to the store (<see cref="Relations.Store.AddTable"/>): at any time, children or not;
+        /// while the root is not frozen, not while another thread uses it. A child sees the new function as an empty
+        /// table it may write once it has caught up. Only lattice merges may be written in a child.
         /// </para>
         /// <para>
         /// The function is registered in the <see cref="ActionRegistry"/> under its name. The rule-based rebuild rules
-        /// egglog creates here are not created: rebuild is the native path only (decision 10). Thread-safe: definitions
-        /// serialize, and the function list is published copy-on-write.
+        /// egglog creates here are not created: rebuild is the native path only. Thread-safe: definitions serialize,
+        /// and the function list is published copy-on-write.
         /// </para>
         /// </remarks>
         /// <param name="config">The declaration.</param>

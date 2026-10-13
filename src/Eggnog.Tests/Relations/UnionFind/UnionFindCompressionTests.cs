@@ -7,10 +7,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the root's path compression (colored-contexts spec §5.1): <see cref="UnionFind.CompressPath"/> and
-    /// <see cref="UnionFind.CompressAll"/> keep every root and <c>parents[i] ≤ i</c>; <see cref="DisplacedUnionFind"/>'s
-    /// <c>CompressRows</c> and <c>CompressAll</c>; and <see cref="DisplacedTable"/>'s merge compressing the ids it
-    /// displaced, invisibly to every result.
+    /// Tests for the root's path compression: <see cref="UnionFind.CompressPath"/> and
+    /// <see cref="UnionFind.CompressAll"/> keep every root and <c>parents[i] ≤ i</c>;
+    /// <see cref="DisplacedUnionFind"/>'s <c>CompressRows</c> and <c>CompressAll</c>; and
+    /// <see cref="DisplacedTable"/>'s merge compressing the ids it displaced, invisibly to every result.
     /// </summary>
     public class UnionFindCompressionTests
     {

@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The <c>LookupPathsAgree</c> comparison (colored-contexts spec §12.7, I12, I18): for every table of a clean context
-    /// and every key that any layer of its view holds (plus extra probes), the write-phase lookup
-    /// (<see cref="ContextTables.TryFindVisible"/>), the read-phase lookup (<see cref="TableView.FindRow(ReadOnlySpan{uint}, out int)"/>)
+    /// The <c>LookupPathsAgree</c> comparison: for every table of a clean context and every key that any layer of its
+    /// view holds (plus extra probes), the write-phase lookup (<see cref="ContextTables.TryFindVisible"/>), the
+    /// read-phase lookup (<see cref="TableView.FindRow(ReadOnlySpan{uint}, out int)"/>)
     /// and a filtered scan of the view's layers agree on whether a row is visible and which; at most one visible row holds
     /// a key; the view's visible count is exact; and no hidden set is left unsealed. Run after every write.
     /// </summary>
@@ -67,12 +67,12 @@ namespace Eggnog.Relations.Tests
             var keyCount = spec.KeyCount;
             var view = clean ? context.GetView(table) : context.Tables?.GetView(table) ?? context.Store.Schema.RootView(table);
 
-            // The filtered scan: one visible row per key (I12).
+            // The filtered scan: at most one visible row per key.
             var visible = new Dictionary<string, (int Layer, int Row, uint[] Cells)>();
             foreach (var (layer, row, cells) in LayeredTestUtil.ScanVisible(view))
             {
                 var key = LayeredTestUtil.KeyOf(cells.AsSpan(0, keyCount));
-                Assert.False(visible.ContainsKey(key), $"two visible rows hold key [{key}] of table {table} (I12)");
+                Assert.False(visible.ContainsKey(key), $"two visible rows hold key [{key}] of table {table}");
                 visible[key] = (layer, row, cells);
             }
 

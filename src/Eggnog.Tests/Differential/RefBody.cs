@@ -20,8 +20,8 @@ namespace Eggnog.Tests.Differential
         int generated;
 
         /// <summary>
-        /// Compiles a rule's or query's body; a rewrite head item adds its pattern to the body, bound to a generated class
-        /// variable, which <see cref="RewriteVariables"/> gives by head item.
+        /// Compiles a rule's or query's body; a rewrite head item adds its pattern to the body, bound to a generated
+        /// class variable, which <see cref="RewriteVariables"/> gives by head item.
         /// </summary>
         /// <param name="rule">The rule or query.</param>
         public RefBody(DiffRule rule)

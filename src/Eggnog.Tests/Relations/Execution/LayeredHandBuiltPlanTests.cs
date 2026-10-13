@@ -10,12 +10,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The layered kernels the planner never emits a stage for (colored-contexts spec §9.5): a one-scan intersection
-    /// (<c>RunIntersectOne</c>) and a probe-free Free Join cover that a later stage scans again (the chunked, non-leaf
-    /// <c>RunFusedScan</c>). Generic Join compiles a single-occurrence variable to a fused scan and merges fused scans of
-    /// one atom, and the stage ordering never puts a probe-free cover before a stage reading its atom, so no planned rule
-    /// reaches them; a cached plan built by hand does. Both run in a child whose view of <c>f</c> has two layers and hides
-    /// the root's row of a key the child rewrote.
+    /// The layered kernels the planner never emits a stage for: a one-scan intersection (<c>RunIntersectOne</c>) and a
+    /// probe-free Free Join cover that a later stage scans again (the chunked, non-leaf <c>RunFusedScan</c>). Generic
+    /// Join compiles a single-occurrence variable to a fused scan and merges fused scans of one atom, and the stage
+    /// ordering never puts a probe-free cover before a stage reading its atom, so no planned rule reaches them; a
+    /// cached plan built by hand does. Both run in a child whose view of <c>f</c> has two layers and hides the root's
+    /// row of a key the child rewrote.
     /// </summary>
     public class LayeredHandBuiltPlanTests
     {

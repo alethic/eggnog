@@ -51,8 +51,8 @@ namespace Eggnog.Relations.Tests
         public List<(int A, int B)> Distinct { get; } = new();
 
         /// <summary>
-        /// Gets the actions: kind 0 unions <c>Args[0]</c> and <c>Args[1]</c>; kind 1 sets a row of <c>Function</c>; kind 2
-        /// sets <c>r(Args[0], f(Args[1]))</c>, minting <c>f(Args[1])</c> if it is missing (not supported by
+        /// Gets the actions: kind 0 unions <c>Args[0]</c> and <c>Args[1]</c>; kind 1 sets a row of <c>Function</c>;
+        /// kind 2 sets <c>r(Args[0], f(Args[1]))</c>, minting <c>f(Args[1])</c> if it is missing (not supported by
         /// <see cref="Evaluate"/>).
         /// </summary>
         public List<(int Kind, int Function, long[] Args)> Actions { get; } = new();
@@ -169,13 +169,14 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Evaluates the rule over the closed <paramref name="rows"/> (a snapshot of the reference), collecting the rows
-        /// and unions its matches write.
+        /// Evaluates the rule over the closed <paramref name="rows"/> (a snapshot of the reference), collecting the
+        /// rows and unions its matches write.
         /// </summary>
         /// <remarks>
-        /// The rule's constants in id columns run in their canonical form in the snapshot (<paramref name="find"/>), as a
-        /// store-backed e-graph runs every Id constant of a rule (colored-contexts spec X19, §19 item 4); value constants
-        /// run as written.
+        /// The rule's constants in id columns run in their canonical form in the snapshot (<paramref name="find"/>), as
+        /// a store-backed e-graph runs every Id constant of a rule in its canonical form in the running context (a
+        /// constant that lost a union keeps matching its class, where egglog's cached plan stops matching); value
+        /// constants run as written.
         /// </remarks>
         /// <param name="rows">The rows of each function.</param>
         /// <param name="writes">Receives the rows to add, by function.</param>
@@ -239,7 +240,8 @@ namespace Eggnog.Relations.Tests
         static long PickBound(Random random, List<int> idVars) => idVars[random.Next(idVars.Count)];
 
         /// <summary>
-        /// Enumerates the matches of atoms <paramref name="atom"/> onwards by nested loops, applying the actions to each.
+        /// Enumerates the matches of atoms <paramref name="atom"/> onwards by nested loops, applying the actions to
+        /// each.
         /// </summary>
         void Match(IReadOnlyList<uint[]>[] rows, int atom, uint[] binding, bool[] bound, List<(int Function, uint[] Row)> writes, List<(uint, uint)> unions)
         {

@@ -4,9 +4,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Orders the members of one seed group by their signatures for <see cref="ClassPartition.Meet"/>
-    /// (colored-contexts spec §11.1): lexicographically by the canonical ids each member has in the other live cases, then
-    /// by the member itself, so equal signatures are adjacent and the order is deterministic (decision 4).
+    /// Orders the members of one seed group by their signatures for <see cref="ClassPartition.Meet"/>:
+    /// lexicographically by the canonical ids each member has in the other live cases, then by the member itself, so
+    /// equal signatures are adjacent and the order is deterministic.
     /// </summary>
     /// <remarks>
     /// A struct comparer over a row-major signature matrix, so the sort is specialized and allocates nothing. Element

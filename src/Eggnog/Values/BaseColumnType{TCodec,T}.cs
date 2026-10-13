@@ -6,9 +6,10 @@ namespace Eggnog
 
     /// <summary>
     /// A value type over an engine codec: encoding is <c>BaseValues.Get</c>, decoding <c>Unwrap</c>, and
-    /// <see cref="TryEncodeExisting"/> <c>BaseValues.TryGetExisting</c> (E1); the extraction sort is a <c>BaseSort</c>
-    /// that formats and orders like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>, <see cref="ValueSet{T}"/>
-    /// (over <c>InternedCodec&lt;ValueSet&lt;T&gt;&gt;</c>) and registered types (<c>InternedCodec&lt;T&gt;</c>).
+    /// <see cref="TryEncodeExisting"/> <c>BaseValues.TryGetExisting</c>, which never interns; the extraction sort is a
+    /// <c>BaseSort</c> that formats and orders like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>,
+    /// <see cref="ValueSet{T}"/> (over <c>InternedCodec&lt;ValueSet&lt;T&gt;&gt;</c>) and registered types
+    /// (<c>InternedCodec&lt;T&gt;</c>).
     /// </summary>
     /// <typeparam name="TCodec">The engine codec.</typeparam>
     /// <typeparam name="T">The CLR type of the values.</typeparam>
@@ -74,9 +75,9 @@ namespace Eggnog
 
         /// <summary>
         /// Compares two values in content order: by the type's order, else by cell. Cells are read with
-        /// <see cref="TryEncodeExisting"/>, so comparing never interns (D15): a value never interned comes after every
-        /// interned one, and two such values compare by hash code (zero when they are equal), a deterministic preorder
-        /// within the process.
+        /// <see cref="TryEncodeExisting"/>, so comparing never interns and never grows the graph's permanent pools: a
+        /// value never interned comes after every interned one, and two such values compare by hash code (zero when
+        /// they are equal), a deterministic preorder within the process.
         /// </summary>
         /// <param name="x">One value.</param>
         /// <param name="y">The other value.</param>

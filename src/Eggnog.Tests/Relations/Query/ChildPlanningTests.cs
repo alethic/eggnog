@@ -10,10 +10,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Rules built and planned in a child context (colored-contexts spec §3.4, §9.7, X39; review finding R2-1): a child
-    /// whose database holds only its own layers answers schema questions from the store's schema and planning questions
-    /// from its view, so <c>NewRule</c>, <c>AddAtom</c>, <c>Build</c> and <c>PlanQuery</c> work for tables it never wrote,
-    /// with read-through statistics; the union-find is never an atom there (X23).
+    /// Rules built and planned in a child context: a child whose database holds only its own layers answers schema
+    /// questions from the store's schema and planning questions from its view, so <c>NewRule</c>, <c>AddAtom</c>,
+    /// <c>Build</c> and <c>PlanQuery</c> work for tables it never wrote, with read-through statistics; the union-find
+    /// is never an atom there: a child's union-find is read only through lookups, and a child does not rebuild with
+    /// rules.
     /// </summary>
     public class ChildPlanningTests
     {
@@ -71,7 +72,7 @@ namespace Eggnog.Relations.Tests
             Assert.Null(child.Tables!.TryGetLayer(f));
             Assert.Null(child.Tables!.TryGetLayer(g));
 
-            // Context = copy: the child's run sees what the root sees.
+            // A child that writes nothing sees what its parent sees: the child's run sees what the root sees.
             db.RunRuleSet(rs, ReportLevel.TimeOnly, store.ReadClock());
             var expected = Enumerable.Range(0, ids.Length).Where(i => i % 2 == 0).Select(i => $"{ids[i]},{ids[(i + 1) % ids.Length]},{i}");
             Assert.Equal(expected.OrderBy(s => s, StringComparer.Ordinal), ExecutionTestUtil.Distinct(log));
@@ -111,7 +112,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(ids.Length + fresh.Length, stats.GetApproximateSize(new AtomId(0), fAtom));
             Assert.Equal(ids.Length + fresh.Length, (int)stats.GetColumnUniqueness(f, C(0)).TableSize);
 
-            // §9.7: the distinct counts of the layers are summed too (every id is new in its layer).
+            // The distinct counts of the layers are summed too (every id is new in its layer).
             Assert.Equal(new ColumnUniqueness((ulong)(ids.Length + fresh.Length), (ulong)(ids.Length + fresh.Length)), stats.GetColumnUniqueness(f, C(0)));
             Assert.Equal(ids.Length + fresh.Length, db.EstimateSize(f));
 

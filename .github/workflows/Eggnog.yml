@@ -91,7 +91,6 @@ jobs:
       matrix:
         run:
         - Eggnog.Tests
-        - Eggnog.Storage.Tests
         sys:
         - win-x64
         - linux-x64

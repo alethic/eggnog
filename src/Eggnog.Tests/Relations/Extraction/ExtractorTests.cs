@@ -7,9 +7,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// egglog's extraction tests (tests/integration_test.rs:74-680, and src/lib.rs:2990-3087), ported from egglog programs
-    /// to the bridge API: each <c>datatype</c> becomes constructors, each <c>let</c> a term, each <c>union</c>/<c>subsume</c>
-    /// the same operation, and a rewrite run is replaced by the rows and unions it would add.
+    /// egglog's extraction tests (tests/integration_test.rs:74-680, and src/lib.rs:2990-3087), ported from egglog
+    /// programs to the bridge API: each <c>datatype</c> becomes constructors, each <c>let</c> a term, each
+    /// <c>union</c>/<c>subsume</c> the same operation, and a rewrite run is replaced by the rows and unions it would
+    /// add.
     /// </summary>
     public class ExtractorTests
     {
@@ -152,7 +153,7 @@ namespace Eggnog.Relations.Tests
             fx.Set(map2, [], fx.EGraph.GetContainerValue(new MapContainer(true, (fx.Boolean(false).Rep, bazId.Rep))));
             fx.Union(barId, bazId);
 
-            // bar and baz tie at cost 1; bar was declared first (D10).
+            // bar and baz tie at cost 1, and a tie goes to the function declared first: bar.
             Assert.Equal(("(map-insert (map-empty) 0 (bar))", 2L), fx.Extract(mapsrt1, fx.Get(map1)));
             Assert.Equal(("(map-insert (map-empty) false (bar))", 2L), fx.Extract(mapsrt2, fx.Get(map2)));
         }
@@ -329,7 +330,7 @@ namespace Eggnog.Relations.Tests
             var dag = new TermDag();
             Assert.Equal(2, Extractor.ComputeCostsFromRootSorts(fx.Schema, [math]).ExtractVariants(fx.Canon(y), 10, dag).Count);
 
-            // (constructor otherConst () Math) (union x (otherConst)): x's class now has one extractable node.
+            // (constructor otherConst () Math) (union x (otherConst)): then x's class has one extractable node.
             var otherConst = fx.Constructor("otherConst", math, null);
             fx.Union(x, fx.Make(otherConst));
             var variants = Extractor.ComputeCostsFromRootSorts(fx.Schema, [math]).ExtractVariants(fx.Canon(x), 10, dag);

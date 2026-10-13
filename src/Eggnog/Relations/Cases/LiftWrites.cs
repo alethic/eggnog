@@ -5,9 +5,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The writes one lift round stages into the parent (colored-contexts spec §11.2): unions, rows and terms, applied in
-    /// that order (<see cref="ApplyTo"/>). Reused across rounds; cells live in one growing array, so a warm round
-    /// allocates nothing but what the parent's staging does.
+    /// The writes one lift round stages into the parent: unions, rows and terms, applied in that order
+    /// (<see cref="ApplyTo"/>). Reused across rounds; cells live in one growing array, so a warm round allocates
+    /// nothing but what the parent's staging does.
     /// </summary>
     internal sealed class LiftWrites
     {
@@ -84,7 +84,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Stages everything into <paramref name="parent"/>'s host writes: unions, then rows (not subsumed), then terms,
-        /// for its next flush (§10.4).
+        /// for its next flush.
         /// </summary>
         /// <param name="parent">The cases' parent.</param>
         public void ApplyTo(EGraphContext parent)

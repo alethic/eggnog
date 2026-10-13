@@ -2,10 +2,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The logical clock and id counter one program's <see cref="ReferenceRuleContext"/>s share (colored-contexts spec
-    /// §17 M10.3): every assertion, rule run and child creation takes the next tick, in the order the harness performs
-    /// it on the engine, so tick order is the engine's epoch order wherever a watermark compares them; the reference's
-    /// minted ids (family B) come from the counter, far from the engine's.
+    /// The logical clock and id counter one program's <see cref="ReferenceRuleContext"/>s share: every assertion, rule
+    /// run and child creation takes the next tick, in the order the harness performs it on the engine, so tick order is
+    /// the engine's epoch order wherever a watermark compares them; the reference's minted ids (family B) come from the
+    /// counter, far from the engine's.
     /// </summary>
     sealed class ReferenceRuleClock
     {

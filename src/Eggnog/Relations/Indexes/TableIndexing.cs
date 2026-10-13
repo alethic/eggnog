@@ -34,25 +34,25 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Groups the rows of <paramref name="subset"/> a view sees (live and not in <paramref name="hidden"/>) by
-        /// <paramref name="column"/>: the visibility-aware <c>group_by_col</c> of a layered run (colored-contexts spec
-        /// §9.3); see <see cref="ColumnIndex.BuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/>.
+        /// <paramref name="column"/>: the visibility-aware <c>group_by_col</c> of a layered run; see
+        /// <see cref="ColumnIndex.BuildForSubset(Table, SubsetRef, ColumnId, HiddenRows)"/>.
         /// </summary>
         /// <param name="table">The table: one layer of a view.</param>
         /// <param name="subset">The rows to group.</param>
         /// <param name="column">The column.</param>
-        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed.</param>
         /// <returns>The index, which the caller owns.</returns>
         public static ColumnIndex GroupByColumn(this Table table, SubsetRef subset, ColumnId column, HiddenRows hidden) => ColumnIndex.BuildForSubset(table, subset, column, hidden);
 
         /// <summary>
         /// Groups the rows of <paramref name="subset"/> a view sees by the tuple of <paramref name="columns"/>: the
-        /// visibility-aware <c>group_by_key</c> of a layered run (colored-contexts spec §9.3, §9.5); see
+        /// visibility-aware <c>group_by_key</c> of a layered run; see
         /// <see cref="TupleIndex.BuildForSubset(Table, SubsetRef, ReadOnlySpan{ColumnId}, HiddenRows)"/>.
         /// </summary>
         /// <param name="table">The table: one layer of a view.</param>
         /// <param name="subset">The rows to group.</param>
         /// <param name="columns">The key columns, in key order; at least one.</param>
-        /// <param name="hidden">The rows of the layer the view hides; sealed (I18).</param>
+        /// <param name="hidden">The rows of the layer the view hides; sealed.</param>
         /// <returns>The index, which the caller owns.</returns>
         public static TupleIndex GroupByKey(this Table table, SubsetRef subset, ReadOnlySpan<ColumnId> columns, HiddenRows hidden) => TupleIndex.BuildForSubset(table, subset, columns, hidden);
 

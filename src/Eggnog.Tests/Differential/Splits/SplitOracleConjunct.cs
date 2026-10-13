@@ -4,7 +4,7 @@ namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// One conjunct of a split-oracle query (§8.2).
+    /// One conjunct of a split-oracle query.
     /// </summary>
     /// <param name="Kind">What it says.</param>
     /// <param name="Path">The path it constrains.</param>

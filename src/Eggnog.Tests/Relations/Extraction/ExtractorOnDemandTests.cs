@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for on-demand extraction (rule-layer decision D10: Knuth's algorithm over the classes reachable from the
-    /// root) and for the staleness checks every extractor makes.
+    /// Tests for on-demand extraction (Knuth's algorithm over the classes reachable from the root) and for the
+    /// staleness checks every extractor makes.
     /// </summary>
     public class ExtractorOnDemandTests
     {
@@ -157,8 +157,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void VariantsSkipNodesWithNoFiniteTerm()
         {
-            // Defect fixed (src/extract.rs:691): egglog unwraps every root node's cost and panics on (Wrap y), whose child
-            // has no term. The node is skipped instead.
+            // egglog unwraps every root node's cost (src/extract.rs:691) and panics on (Wrap y), whose child has no
+            // term; this extractor skips the node.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var wrap = fx.Constructor("Wrap", e, 1, e);
@@ -279,8 +279,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void DeepReplaysDoNotOverflowTheStack()
         {
-            // A chain of 100,000 zero-cost classes, costed by one query; a second query reaches a class over its top, which
-            // replays every finalization in the chain.
+            // A chain of 100,000 zero-cost classes, costed by one query; a second query reaches a class over its top,
+            // which replays every finalization in the chain.
             const int Depth = 100_000;
             var fx = new ExtractionFixture();
             var e = new EqSort("E");

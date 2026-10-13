@@ -5,7 +5,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One decoded row of a table, from <see cref="Scope.Rows(TableHandle)"/> (§6.11): for debugging and tests. Immutable.
+    /// One decoded row of a table, from <see cref="Scope.Rows(TableHandle)"/>: for debugging and tests. Immutable.
     /// </summary>
     public sealed class TableRow
     {
@@ -30,7 +30,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the decoded keys, one per key column; a sort cell is its <see cref="ClassId"/>, canonical in the scope read
-        /// and carrying it as its origin (D39).
+        /// and carrying it as its origin.
         /// </summary>
         public IReadOnlyList<object> Keys { get; }
 

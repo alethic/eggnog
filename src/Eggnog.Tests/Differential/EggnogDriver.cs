@@ -10,9 +10,9 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// Runs a <see cref="RandomProgram"/> on Eggnog at the root, through the internal untyped layer (D13), semi-naive or
-    /// with every rule's naive twin (the internal <c>RunOptions.SemiNaive</c>, D36), and renders what each command
-    /// observed as <see cref="ReferenceInterpreter.Execute(DiffCommand)"/> does.
+    /// Runs a <see cref="RandomProgram"/> on Eggnog at the root, through the internal untyped layer, semi-naive or with
+    /// every rule's naive twin (the internal <c>RunOptions.SemiNaive</c>), and renders what each command observed as
+    /// <see cref="ReferenceInterpreter.Execute(DiffCommand)"/> does.
     /// </summary>
     internal sealed class EggnogDriver
     {
@@ -271,8 +271,8 @@ namespace Eggnog.Tests.Differential
 
         /// <summary>
         /// A term, through the untyped layer: <c>Term.Constant</c>, <c>FunctionHandle.Apply</c>,
-        /// <c>Compute.Of(Primitive, …)</c>; a constructor application is a <see cref="ConstructorTerm{TSort}"/>, so it can be
-        /// made or rewritten.
+        /// <c>Compute.Of(Primitive, …)</c>; a constructor application is a <see cref="ConstructorTerm{TSort}"/>, so it
+        /// can be made or rewritten.
         /// </summary>
         Term Term(DiffTerm term, Dictionary<string, Term>? variables)
         {

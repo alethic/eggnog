@@ -65,8 +65,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <see cref="InternTable{TKey}.TryGetId"/> (request E1 of the rule-layer spec) finds exactly the interned keys,
-        /// with their ids, and never adds a key.
+        /// <see cref="InternTable{TKey}.TryGetId"/> finds exactly the interned keys, with their ids, and never adds a
+        /// key.
         /// </summary>
         [Fact]
         public void TryGetIdFindsInternedKeysAndAddsNone()
@@ -93,8 +93,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <see cref="InternTable{TKey}.TryGetId"/> probes past colliding keys, in one shard and in many, and across the
-        /// key store's growth.
+        /// <see cref="InternTable{TKey}.TryGetId"/> probes past colliding keys, in one shard and in many, and across
+        /// the key store's growth.
         /// </summary>
         [Fact]
         public void TryGetIdProbesPastCollisionsAndGrowth()
@@ -311,6 +311,23 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(writers * perWriter, table.Count);
             var all = Enumerable.Range(0, writers * perWriter).Select(id => table.Get((uint)id)).Order();
             Assert.Equal(Enumerable.Range(0, writers * perWriter).Select(i => (long)i), all);
+        }
+
+        /// <summary>
+        /// egglog interns every <c>i64</c>/<c>u64</c> base value that does not fit in 31 bits
+        /// (core-relations/src/base_values/unboxed.rs, <c>impl_medium_base_value</c>) and hashes it with
+        /// <c>FxHasher::write_u64</c>, a bijection on 64-bit values, so distinct keys always get distinct hashes.
+        /// <see cref="InternTable{TKey}.HashKey"/> hashes 64-bit keys by value the same way. Folding a key to 32 bits
+        /// first with <see cref="long.GetHashCode"/> (<c>lo ^ hi</c>) would give every value of the form <c>k * (2^32 +
+        /// 1)</c> the same 64-bit hash: same shard, same probe start, same tag, and each intern of such a key would
+        /// compare against every earlier one (quadratic interning).
+        /// </summary>
+        [Fact]
+        public void DistinctLongKeysGetDistinctHashes()
+        {
+            const long stride = 0x1_0000_0001L;
+            var hashes = Enumerable.Range(1, 4096).Select(k => InternTable<long>.HashKey(k * stride)).Distinct().Count();
+            Assert.Equal(4096, hashes);
         }
 
     }

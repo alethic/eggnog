@@ -8,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// <see cref="ActionReadAnalysis"/> (colored-contexts spec §10.2, X41): which instructions are query-determined, for
-    /// each instruction kind; constructors (core and bridge) against lattice functions and private tables; externals with
-    /// and without <see cref="ExternalFunction.ReadsTables"/>; and the analysis as rules see it
-    /// (<see cref="RuleInfo.AllowInheritance"/>).
+    /// <see cref="ActionReadAnalysis"/>, which decides whether a rule may inherit an ancestor's semi-naive watermark:
+    /// which instructions are query-determined, for each instruction kind; constructors (core and bridge) against
+    /// lattice functions and private tables; externals with and without <see cref="ExternalFunction.ReadsTables"/>; and
+    /// the analysis as rules see it (<see cref="RuleInfo.AllowInheritance"/>).
     /// </summary>
     public class ActionReadAnalysisTests
     {
@@ -45,8 +45,8 @@ namespace Eggnog.Relations.Tests
             var numMath = s.Graph.EGraph.GetFunctionInfo(s.Graph.Num).Math;
             WriteVal[] numDefaults = [WriteVal.FromCounter(s.Graph.EGraph.IdCounter), V(Y)];
 
-            // A bridge constructor (a function-table merge over a union) and a core one (UnionIdMerge), by key or by the
-            // union column.
+            // A bridge constructor (a function-table merge over a union) and a core one (UnionIdMerge), by key or by
+            // the union column.
             Assert.True(s.Schema[num]!.IsConstructor);
             Assert.True(s.Schema[s.CoreConstructor]!.IsConstructor);
             Assert.True(s.Determined(new LookupOrInsertDefaultInstr(num, [V(X)], numDefaults, new ColumnId(numMath.OutputColumn), Z)));
@@ -120,8 +120,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The analysis as rules see it, through the bridge's lowering: writes, unions, canonicalization and constructor
-        /// terms inherit; a naive rule, a function lookup, a subsumption, a table-reading primitive on either side do not.
+        /// The analysis as rules see it, through the bridge's lowering: writes, unions, canonicalization and
+        /// constructor terms inherit; a naive rule, a function lookup, a subsumption, a table-reading primitive on
+        /// either side do not.
         /// </summary>
         [Fact]
         public void BridgeRulesInheritExactlyWhenTheirActionsAreQueryDetermined()

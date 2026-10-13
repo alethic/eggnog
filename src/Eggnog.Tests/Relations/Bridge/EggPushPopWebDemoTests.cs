@@ -8,28 +8,28 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// egglog's push/pop programs under <c>ext/egglog/tests/web-demo</c>, translated by hand like
-    /// <see cref="EggPushPopTests"/> (colored-contexts spec §17 M10.3; the M10 gate of map §6), for the programs that use
-    /// only what the bridge has: i64 and string values, constructors, relations, unions, panics and pure primitives.
+    /// <see cref="EggPushPopTests"/>, for the programs that use only what the bridge has: i64 and string values,
+    /// constructors, relations, unions, panics and pure primitives.
     /// </summary>
     /// <remarks>
-    /// <see cref="EggPushPopTests"/> covers the push/pop programs at the top of <c>ext/egglog/tests</c>; the eleven programs
-    /// with a <c>(push)</c> under <c>tests/web-demo</c> were neither compared nor reported. Most need sorts the bridge does
-    /// not have; <c>bdd.egg</c>, <c>push-pop.egg</c>, <c>array.egg</c> and <c>cyk.egg</c> do not (strings are interned base
-    /// values, <see cref="StringCodec"/>). Their expected values are their own <c>check</c> and <c>(fail (check ...))</c>
-    /// commands, which egglog's test suite runs; <c>bdd.egg</c> is also compared with the same commands run at a fresh
-    /// root, without the push. Not translated: <c>herbie.egg</c> and <c>herbie-tutorial.egg</c> (<c>BigRat</c>, which the
-    /// bridge has no codec for); <c>lambda.egg</c>, <c>typeinfer.egg</c> and <c>fusion.egg</c> (<c>Set</c> containers of
-    /// e-classes, which children refuse, decision 9); <c>multiset.egg</c> (<c>MultiSet</c> and <c>UnstableFn</c>); and
-    /// <c>math.egg</c>, which needs only <c>f64</c> (<see cref="DoubleCodec"/>) and strings and so is in reach, but has 74
-    /// rules and 21 push blocks.
+    /// <see cref="EggPushPopTests"/> covers the push/pop programs at the top of <c>ext/egglog/tests</c>; this class
+    /// covers the eleven programs with a <c>(push)</c> under <c>tests/web-demo</c>. Most need sorts the bridge does not
+    /// have; <c>bdd.egg</c>, <c>push-pop.egg</c>, <c>array.egg</c> and <c>cyk.egg</c> do not (strings are interned base
+    /// values, <see cref="StringCodec"/>). Their expected values are their own <c>check</c> and
+    /// <c>(fail (check ...))</c> commands, which egglog's test suite runs; <c>bdd.egg</c> is also compared with the
+    /// same commands run at a fresh root, without the push. Not translated: <c>herbie.egg</c> and
+    /// <c>herbie-tutorial.egg</c> (<c>BigRat</c>, which the bridge has no codec for); <c>lambda.egg</c>,
+    /// <c>typeinfer.egg</c> and <c>fusion.egg</c> (<c>Set</c> containers of e-classes, which children refuse);
+    /// <c>multiset.egg</c> (<c>MultiSet</c> and <c>UnstableFn</c>); and <c>math.egg</c>, which needs only <c>f64</c>
+    /// (<see cref="DoubleCodec"/>) and strings and so is in reach, but has 74 rules and 21 push blocks.
     /// </remarks>
     public class EggPushPopWebDemoTests
     {
 
         /// <summary>
         /// <c>ext/egglog/tests/web-demo/bdd.egg</c>: binary decision diagrams over <c>ITE</c>, with rewrites for
-        /// <c>bddand</c>, <c>bddor</c>, <c>bddnot</c> and <c>bddxor</c>; one push that builds thirteen formulas, runs 30
-        /// iterations and checks their normal forms, then a pop that restores the root.
+        /// <c>bddand</c>, <c>bddor</c>, <c>bddnot</c> and <c>bddxor</c>; one push that builds thirteen formulas, runs
+        /// 30 iterations and checks their normal forms, then a pop that restores the root.
         /// </summary>
         [Fact]
         public void Bdd()
@@ -37,13 +37,14 @@ namespace Eggnog.Relations.Tests
             var inChild = RunBdd(push: true);
             var atRoot = RunBdd(push: false);
 
-            // Context = copy: the push's sizes and iteration count equal those of a fresh root running the same commands.
+            // A child behaves as a copy of its parent: the push's sizes and iteration count equal those of a fresh root
+            // running the same commands.
             Assert.Equal(atRoot, inChild);
         }
 
         /// <summary>
-        /// <c>ext/egglog/tests/web-demo/push-pop.egg</c>: a nullary function with a <c>max</c> merge, set to 1 at the root
-        /// and to 2 inside a push; the pop restores 1.
+        /// <c>ext/egglog/tests/web-demo/push-pop.egg</c>: a nullary function with a <c>max</c> merge, set to 1 at the
+        /// root and to 2 inside a push; the pop restores 1.
         /// </summary>
         [Fact]
         public void PushPop()
@@ -81,9 +82,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// <c>ext/egglog/tests/web-demo/array.egg</c>: arrays as <c>select</c>/<c>store</c> terms over arithmetic, with a
-        /// symmetric <c>neq</c> relation and a rule that panics if <c>neq</c> ever relates a term to itself; one push that
-        /// builds four terms, runs 5 iterations and checks them, then a pop that restores the root.
+        /// <c>ext/egglog/tests/web-demo/array.egg</c>: arrays as <c>select</c>/<c>store</c> terms over arithmetic, with
+        /// a symmetric <c>neq</c> relation and a rule that panics if <c>neq</c> ever relates a term to itself; one push
+        /// that builds four terms, runs 5 iterations and checks them, then a pop that restores the root.
         /// </summary>
         [Fact]
         public void Array()
@@ -288,8 +289,8 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// <c>ext/egglog/tests/web-demo/cyk.egg</c>: the CYK parsing algorithm as rules over a grammar (<c>Prod</c>,
         /// <c>End</c>) and a sentence (<c>getString</c>, a <c>:no-merge</c> function written inside the pushes); three
-        /// blocks, the last two nested under a push that holds their grammar, each running to saturation and checking which
-        /// spans parse as which non-terminals. (The <c>extract</c> commands only print and are not compared.)
+        /// blocks, the last two nested under a push that holds their grammar, each running to saturation and checking
+        /// which spans parse as which non-terminals. (The <c>extract</c> commands only print and are not compared.)
         /// </summary>
         [Fact]
         public void Cyk()

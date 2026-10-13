@@ -15,19 +15,18 @@ namespace Eggnog.Relations
         MemberMap? memberMap;
 
         /// <summary>
-        /// The split records opened in this context as a scope (colored-contexts spec §11.3, B6), in creation order;
-        /// <c>null</c> until the first. Guarded by itself once created.
+        /// The split records opened in this context as a scope, in creation order; <c>null</c> until the first. Guarded
+        /// by itself once created.
         /// </summary>
         List<SplitRecord>? splitRecords;
 
         /// <summary>
-        /// Visits every live row this child stored itself in <paramref name="function"/>'s table (colored-contexts spec
-        /// §6.10, L1): its own layer's rows, canonical in it (I13); nothing when it has no layer of the table. The lift's
-        /// step (a) (§11.2).
+        /// Visits every live row this child stored itself in <paramref name="function"/>'s table: its own layer's rows,
+        /// canonical in it; nothing when it has no layer of the table. The lift's first source of candidate keys.
         /// </summary>
         /// <remarks>
-        /// Requires the context to be clean (<see cref="IsClean"/>). The sink runs as a callback of the context's thread
-        /// domain (§8.3): it may read any context, and writes and structural calls are refused there. Each row is the
+        /// Requires the context to be clean (<see cref="IsClean"/>). The sink runs as a callback of the context's
+        /// thread domain: it may read any context, and writes and structural calls are refused there. Each row is the
         /// table's full row: the keys, the output, the timestamp and, for a function that can subsume, the subsumption
         /// flag. O(own rows).
         /// </remarks>
@@ -50,11 +49,11 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Visits every ancestor row of <paramref name="function"/>'s table this child sees that names
-        /// <paramref name="id"/> in an id column (colored-contexts spec §6.10, L1): the lift's winner probe, step (b) of
-        /// §11.2, through the ancestors' rebuild indexes, never a scan.
+        /// <paramref name="id"/> in an id column: the lift's winner probe, its second source of candidate keys, through
+        /// the ancestors' rebuild indexes, never a scan.
         /// </summary>
         /// <remarks>
-        /// Nothing for a table without id columns, for a context-private table and for an id local to the child (I10).
+        /// Nothing for a table without id columns, for a context-private table and for an id local to the child.
         /// <paramref name="id"/> must be canonical in the child. Requires the context to be clean; the sink runs as a
         /// callback, as in <see cref="ScanOwn{TSink}"/>. Rows come layer by layer from the root up. Cost: O(depth) index
         /// probes plus the uses of the id.
@@ -78,13 +77,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Visits the merges this child made over its parent's ids (colored-contexts spec §5.7, L2, G1(a); rule-layer D8):
-        /// for every class of its overlay, each member that is not local to the child, paired with the class's canonical
-        /// id; a class's canonical is visited paired with itself when it is a parent id. Slot order, then insertion order
-        /// (decision 4).
+        /// Visits the merges this child made over its parent's ids: for every class of its overlay, each member that is
+        /// not local to the child, paired with the class's canonical id; a class's canonical is visited paired with
+        /// itself when it is a parent id. Slot order, then insertion order.
         /// </summary>
         /// <remarks>
-        /// Requires the context to be clean. The visitor runs as a callback of the context's thread domain (§8.3).
+        /// Requires the context to be clean. The visitor runs as a callback of the context's thread domain.
         /// O(overlay members).
         /// </remarks>
         /// <typeparam name="TVisitor">The visitor type.</typeparam>
@@ -102,9 +100,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether <paramref name="id"/> was minted in this child: it lies in one of the child's id blocks
-        /// (colored-contexts spec §4.2, I2). Every term mint in a child is local; container ids are minted on the store's
-        /// shared counter and never are. Lock-free, O(log blocks).
+        /// Gets whether <paramref name="id"/> was minted in this child: it lies in one of the child's id blocks. Every
+        /// term mint in a child is local; container ids are minted on the store's shared counter and never are.
+        /// Lock-free, O(log blocks).
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns><c>true</c> if the id is local to this context.</returns>
@@ -113,9 +111,9 @@ namespace Eggnog.Relations
         public bool IsLocalId(Value id) => context.IsLocalId(id.Rep);
 
         /// <summary>
-        /// Gets the child's member map (colored-contexts spec §11.1, L2, I32): for every class it merged over its
-        /// parent's ids, the members that are not local, ascending. Cached while the overlay's version is unchanged
-        /// (X29), so repeated lifts over an unchanged case cost one comparison.
+        /// Gets the child's member map: for every class it merged over its parent's ids, the members that are not
+        /// local, ascending. Cached while the overlay's version is unchanged, so repeated lifts over an unchanged case
+        /// cost one comparison.
         /// </summary>
         /// <remarks>
         /// Requires the context to be clean. A rebuild is O(overlay members × log). Thread-safe: on a frozen context two
@@ -142,7 +140,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Builds the child's member map afresh, bypassing the cache (<see cref="MemberMap.Build(EGraphContext)"/>; the
-        /// C4 check compares it with the cached one). Same requirements as <see cref="GetMemberMap"/>.
+        /// member-map check of <see cref="CheckInvariants"/> compares it with the cached one). Same requirements as
+        /// <see cref="GetMemberMap"/>.
         /// </summary>
         /// <returns>A new map.</returns>
         internal MemberMap BuildMemberMap()
@@ -156,7 +155,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the member map cached by <see cref="GetMemberMap"/>, current or not, without building one; <c>null</c>
-        /// before the first call. For the C4 check.
+        /// before the first call. For the member-map check of <see cref="CheckInvariants"/>.
         /// </summary>
         internal MemberMap? CachedMemberMap => Volatile.Read(ref memberMap);
 
@@ -202,7 +201,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the output cell of a live row this context stored itself in <paramref name="table"/>, read past the
         /// stop flag: what a stopped case merged into the contradiction table, which the lift copies when every case is
-        /// vacuous (§11.2, L4). O(own rows of the table) until the first live row.
+        /// vacuous. O(own rows of the table) until the first live row.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="column">The column to read.</param>
@@ -228,9 +227,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// C4 of <see cref="CheckInvariants"/> (colored-contexts spec §12.7, I32): in a child, a member map built now holds
-        /// exactly the overlay's members that are not local, each canonical in the parent and mapped by this context's find
-        /// to its group's root, with roots and members ascending; the cached map, when its version is current, equals it.
+        /// The member-map part of <see cref="CheckInvariants"/>: in a child, a member map built now holds exactly the
+        /// overlay's members that are not local, each canonical in the parent and mapped by this context's find to its
+        /// group's root, with roots and members ascending; the cached map, when its version is current, equals it.
         /// Nothing at the root. O(overlay members × depth).
         /// </summary>
         /// <param name="violations">Receives each violation.</param>
@@ -255,41 +254,41 @@ namespace Eggnog.Relations
             }
 
             if (map.MemberCount != expected)
-                Context.Report(violations, $"C4: the member map holds {map.MemberCount} member(s), the overlay {expected} that are not local (I32)");
+                Context.Report(violations, $"member maps: the member map holds {map.MemberCount} member(s), the overlay {expected} that are not local");
 
             var roots = map.GroupRoots;
             for (var g = 0; g < roots.Length; g++)
             {
                 var root = roots[g];
                 if (g > 0 && roots[g - 1] >= root)
-                    Context.Report(violations, $"C4: group roots are not ascending at {root} (I32)");
+                    Context.Report(violations, $"member maps: group roots are not ascending at {root}");
 
                 if (finder.Find(root) != root)
-                    Context.Report(violations, $"C4: group root {root} is not canonical in the context (I32)");
+                    Context.Report(violations, $"member maps: group root {root} is not canonical in the context");
 
                 var members = map.GroupMembers(g);
                 if (members.IsEmpty)
-                    Context.Report(violations, $"C4: group {root} has no member (I32)");
+                    Context.Report(violations, $"member maps: group {root} has no member");
 
                 for (var i = 0; i < members.Length; i++)
                 {
                     var m = members[i];
                     if (i > 0 && members[i - 1] >= m)
-                        Context.Report(violations, $"C4: the members of group {root} are not ascending at {m} (I32)");
+                        Context.Report(violations, $"member maps: the members of group {root} are not ascending at {m}");
 
                     if (blocks.Contains(m))
-                        Context.Report(violations, $"C4: member {m} of group {root} is local to the context (I32)");
+                        Context.Report(violations, $"member maps: member {m} of group {root} is local to the context");
 
                     if (parentFinder.Find(m) != m)
-                        Context.Report(violations, $"C4: member {m} of group {root} is not canonical in the parent (I32)");
+                        Context.Report(violations, $"member maps: member {m} of group {root} is not canonical in the parent");
 
                     if (finder.Find(m) != root)
-                        Context.Report(violations, $"C4: member {m} of group {root} finds {finder.Find(m)} in the context (I32)");
+                        Context.Report(violations, $"member maps: member {m} of group {root} finds {finder.Find(m)} in the context");
                 }
             }
 
             if (Volatile.Read(ref memberMap) is { } cached && cached.Version == overlay.Version && SameMap(cached, map) == false)
-                Context.Report(violations, "C4: the cached member map is current by version but differs from the overlay (X29, I32)");
+                Context.Report(violations, "member maps: the cached member map is current by version but differs from the overlay");
         }
 
         /// <summary>
@@ -308,7 +307,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Records a split opened in this context as a scope (§11.3, B6). Thread-safe.
+        /// Records a split opened in this context as a scope. Thread-safe.
         /// </summary>
         /// <param name="record">The record.</param>
         internal void AddSplitRecord(SplitRecord record)
@@ -320,7 +319,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether a live split record of this context splits <paramref name="source"/> over
-        /// <paramref name="values"/> (B6): the same source object, whichever driver opened the record and whatever the
+        /// <paramref name="values"/>: the same source object, whichever driver opened the record and whatever the
         /// source's index in that driver's list, and the same cells. Thread-safe; O(records x cells).
         /// </summary>
         /// <param name="source">The source asking for the split.</param>
@@ -345,8 +344,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Appends this context's live split records to <paramref name="into"/>, in creation order; only those
-        /// <paramref name="driver"/> opened when it is not <c>null</c> (§11.3 step 6: a split step runs and lifts every
-        /// live record its own driver opened in the scope). Thread-safe; O(records).
+        /// <paramref name="driver"/> opened when it is not <c>null</c> (a split step runs and lifts every live record
+        /// its own driver opened in the scope). Thread-safe; O(records).
         /// </summary>
         /// <param name="into">The list to append to.</param>
         /// <param name="driver">The driver whose records to copy; <c>null</c> copies every live record.</param>

@@ -20,8 +20,8 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// Asserts that every table egglog lists has its row count in the root of <paramref name="theory"/>'s graph.
         /// </summary>
         /// <param name="theory">The theory.</param>
-        /// <param name="egglog">egglog's output: <c>(And 2) (Assume 6) …</c>; its <c>contradiction</c> is the prelude's,
-        /// which the port names <c>contradicts</c>.</param>
+        /// <param name="egglog">egglog's output: <c>(And 2) (Assume 6) …</c>; its <c>contradiction</c> is the
+        /// prelude's, which the port names <c>contradicts</c>.</param>
         public static void Matches(PrototypeTheory theory, string egglog)
         {
             var expected = Parse(egglog);

@@ -8,17 +8,17 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Mints a child context's ids from blocks reserved on the store's shared id counter, and answers exactly whether
-    /// an id was minted here: colored-contexts spec §4.2 (X5). Every id a child mints (terms through
-    /// <see cref="Database.IncrementCounterInView"/>, <see cref="Context.NewId"/>) comes from its blocks, so
-    /// <see cref="Contains"/> is <see cref="Context.IsLocalId"/>, with no per-id memory.
+    /// an id was minted here. Every id a child mints (terms through <see cref="Database.IncrementCounterInView"/>,
+    /// <see cref="Context.NewId"/>) comes from its blocks, so <see cref="Contains"/> is
+    /// <see cref="Context.IsLocalId"/>, with no per-id memory.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <see cref="Next"/> takes an id from the current block with one interlocked increment. When the block is spent,
-    /// one thread reserves the next block under a lock with <see cref="CounterSet.IncrementBy"/>: its size is twice
-    /// the ids reserved so far, clamped to [<see cref="FirstBlockSize"/>, <see cref="MaxBlockSize"/>], so a child that
+    /// one thread reserves the next block under a lock with <see cref="CounterSet.IncrementBy"/>: its size is twice the
+    /// ids reserved so far, clamped to [<see cref="FirstBlockSize"/>, <see cref="MaxBlockSize"/>], so a child that
     /// mints one id reserves 16 and a busy child's waste stays below half of what it minted (or 4096). The blocks of
-    /// different allocators and the root's own mints come from one counter, so they are disjoint (I1).
+    /// different allocators and the root's own mints come from one counter, so they are disjoint.
     /// </para>
     /// <para>
     /// The blocks are kept as one copy-on-write array of <c>[start, end)</c> pairs in ascending order (the counter only

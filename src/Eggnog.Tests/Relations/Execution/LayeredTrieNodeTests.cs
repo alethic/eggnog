@@ -10,10 +10,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// T4 (colored-contexts spec §9.5, §9.6, I28): trie nodes over rows of several layers. A node holds a
-    /// <see cref="LayeredSubset"/>; its per-column indexes are per (layer, column) and see only what each layer's view
-    /// sees; its child caches are keyed by a slot that names one row set (selector 0 for every layer, <c>l + 1</c> for
-    /// layer <c>l</c>); a single-layer node, every root node among them, keeps today's slots.
+    /// Trie nodes over rows of several layers. A node holds a <see cref="LayeredSubset"/>; its per-column indexes are
+    /// per (layer, column) and see only what each layer's view sees; its child caches are keyed by a slot that names
+    /// one row set (selector 0 for every layer, <c>l + 1</c> for layer <c>l</c>), so a cached child is a function of
+    /// the node's rows, the slot and the key; a single-layer node, every root node among them, uses the slots of an
+    /// unlayered node: the column alone.
     /// </summary>
     public class LayeredTrieNodeTests
     {
