@@ -41,11 +41,15 @@ namespace Eggnog.Relations.Benchmarks
         /// <param name="args">BenchmarkDotNet's command-line arguments, or <see cref="BridgeExampleRunner.Option"/> and a
         /// program name.</param>
         /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid. In the
-        /// example mode, <see cref="BridgeExampleRunner.Run"/>'s exit code.</returns>
+        /// example mode, <see cref="BridgeExampleRunner.Run"/>'s exit code; in the footprint mode
+        /// (<see cref="ContextFootprint.Option"/>), 0.</returns>
         static int Main(string[] args)
         {
             if (args.Length > 0 && args[0] == BridgeExampleRunner.Option)
                 return BridgeExampleRunner.Run(args.AsSpan(1));
+
+            if (args.Length > 0 && args[0] == ContextFootprint.Option)
+                return ContextFootprint.Run();
 
             if (args.Length == 0)
                 args = ["--filter", "*"];

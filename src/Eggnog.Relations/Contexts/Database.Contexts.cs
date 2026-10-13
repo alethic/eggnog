@@ -89,7 +89,7 @@ namespace Eggnog.Relations
             this.owner = owner;
             idBlocks = ids;
             clockRep = root.clockRep;
-            catalog = new TableCatalog { Resolver = ResolveForStaging };
+            catalog = new TableCatalog(lazyNotifications: true) { Resolver = ResolveForStaging };
             tables = new DenseIdMap<TableId, TableInfo>();
             tables.Insert(owner.Store.UnionFindTable, new TableInfo(Store.UnionFindName, unionFind, ParallelHeuristics.Serial));
             counters = root.counters;

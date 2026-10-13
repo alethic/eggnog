@@ -33,26 +33,86 @@ namespace Eggnog.Relations
     /// publication throw, so nothing can be staged into a frozen table. The check is one volatile read per published
     /// buffer.
     /// </para>
+    /// <para>
+    /// Lazy queues (colored-contexts spec §14.2, M10.4): a child's tables create their queues on first publication, behind
+    /// the same flag read as the seal (<see cref="PendingState(ShardData, bool)"/>), so a root or bare table's publication
+    /// costs exactly what it did.
+    /// </para>
     /// </remarks>
     internal sealed class PendingState
     {
+
+        /// <summary>
+        /// The bit of <see cref="flags"/> set once the state is sealed.
+        /// </summary>
+        const int SealedFlag = 1;
+
+        /// <summary>
+        /// The bit of <see cref="flags"/> set while some queue of a lazy state is still the shared empty queue.
+        /// </summary>
+        const int LazyFlag = 2;
+
+        /// <summary>
+        /// The queue a lazy state's row slot holds until its first publication: never enqueued into, so it stays empty
+        /// and every reader (<c>IsEmpty</c>, <c>TryDequeue</c>, enumeration) sees nothing.
+        /// </summary>
+        static readonly ConcurrentQueue<RowBuffer> NoRows = new();
+
+        /// <summary>
+        /// The removal-queue counterpart of <see cref="NoRows"/>.
+        /// </summary>
+        static readonly ConcurrentQueue<ArbitraryRowBuffer> NoRemovals = new();
 
         readonly ShardData shardData;
         readonly ConcurrentQueue<RowBuffer>[] rows;
         readonly ConcurrentQueue<ArbitraryRowBuffer>[] removals;
         long totalRows;
         long totalRemovals;
-        volatile bool isSealed;
 
         /// <summary>
-        /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>.
+        /// <see cref="SealedFlag"/> and <see cref="LazyFlag"/>. Zero for an eager state that is not sealed, so a
+        /// publication pays one volatile read and one compare, as it did for the former sealed flag alone.
+        /// </summary>
+        volatile int flags;
+
+        /// <summary>
+        /// The queues of a lazy state not created yet; zero for an eager one.
+        /// </summary>
+        int missingQueues;
+
+        /// <summary>
+        /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>, created now: the
+        /// state of every root and bare table.
         /// </summary>
         /// <param name="shardData">The table's shard layout.</param>
         public PendingState(ShardData shardData)
+            : this(shardData, lazyQueues: false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes an empty state with one queue pair per shard of <paramref name="shardData"/>, created now or, with
+        /// <paramref name="lazyQueues"/>, on each queue's first publication (colored-contexts spec §14.2, §21.9): a child's
+        /// layer and union-find table pay nothing for queues they never stage into (each <see cref="ConcurrentQueue{T}"/>
+        /// allocates a 32-slot segment). Readers see a shared empty queue until then.
+        /// </summary>
+        /// <param name="shardData">The table's shard layout.</param>
+        /// <param name="lazyQueues">Whether to create the queues on first use.</param>
+        public PendingState(ShardData shardData, bool lazyQueues)
         {
             this.shardData = shardData;
             rows = new ConcurrentQueue<RowBuffer>[shardData.Count];
             removals = new ConcurrentQueue<ArbitraryRowBuffer>[shardData.Count];
+            if (lazyQueues)
+            {
+                Array.Fill(rows, NoRows);
+                Array.Fill(removals, NoRemovals);
+                missingQueues = 2 * rows.Length;
+                flags = LazyFlag;
+                return;
+            }
+
             for (var i = 0; i < rows.Length; i++)
             {
                 rows[i] = new ConcurrentQueue<RowBuffer>();
@@ -83,14 +143,14 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the state is sealed: its table belongs to a frozen context and accepts no staged writes.
         /// </summary>
-        public bool IsSealed => isSealed;
+        public bool IsSealed => (flags & SealedFlag) != 0;
 
         /// <summary>
         /// Seals the state (colored-contexts spec §8.1): every later <see cref="EnqueueRows"/> and
         /// <see cref="EnqueueRemovals"/> throws. Called when the table's context freezes, after its pending writes were
         /// merged. Irreversible.
         /// </summary>
-        public void Seal() => isSealed = true;
+        public void Seal() => Interlocked.Or(ref flags, SealedFlag);
 
         /// <summary>
         /// Gets the queue of row buffers staged for shard <paramref name="shard"/>.
@@ -115,11 +175,9 @@ namespace Eggnog.Relations
         /// disposed.</exception>
         public void EnqueueRows(int shard, RowBuffer buffer)
         {
-            if (isSealed)
-            {
-                buffer.Dispose();
-                ThrowSealed();
-            }
+            // One volatile read and one compare, as before lazy queues: an eager state that is not sealed has no flag.
+            if (flags != 0)
+                PrepareRows(shard, buffer);
 
             var count = buffer.Count;
             rows[shard].Enqueue(buffer);
@@ -135,11 +193,8 @@ namespace Eggnog.Relations
         /// disposed.</exception>
         public void EnqueueRemovals(int shard, ArbitraryRowBuffer buffer)
         {
-            if (isSealed)
-            {
-                buffer.Dispose();
-                ThrowSealed();
-            }
+            if (flags != 0)
+                PrepareRemovals(shard, buffer);
 
             var count = buffer.Count;
             removals[shard].Enqueue(buffer);
@@ -300,6 +355,49 @@ namespace Eggnog.Relations
             copy.totalRows = TotalRows;
             copy.totalRemovals = TotalRemovals;
             return copy;
+        }
+
+        /// <summary>
+        /// The flagged path of <see cref="EnqueueRows"/>: throws when the state is sealed (disposing the buffer), and
+        /// creates a lazy state's row queue for <paramref name="shard"/> on its first publication. Thread-safe: racing
+        /// publishers agree on one queue.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void PrepareRows(int shard, RowBuffer buffer)
+        {
+            if ((flags & SealedFlag) != 0)
+            {
+                buffer.Dispose();
+                ThrowSealed();
+            }
+
+            if (ReferenceEquals(Volatile.Read(ref rows[shard]), NoRows) && ReferenceEquals(Interlocked.CompareExchange(ref rows[shard], new ConcurrentQueue<RowBuffer>(), NoRows), NoRows))
+                NoteQueueCreated();
+        }
+
+        /// <summary>
+        /// The flagged path of <see cref="EnqueueRemovals"/>, as <see cref="PrepareRows"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void PrepareRemovals(int shard, ArbitraryRowBuffer buffer)
+        {
+            if ((flags & SealedFlag) != 0)
+            {
+                buffer.Dispose();
+                ThrowSealed();
+            }
+
+            if (ReferenceEquals(Volatile.Read(ref removals[shard]), NoRemovals) && ReferenceEquals(Interlocked.CompareExchange(ref removals[shard], new ConcurrentQueue<ArbitraryRowBuffer>(), NoRemovals), NoRemovals))
+                NoteQueueCreated();
+        }
+
+        /// <summary>
+        /// Counts a lazy queue created; once every queue exists, publications take the unflagged path again.
+        /// </summary>
+        void NoteQueueCreated()
+        {
+            if (Interlocked.Decrement(ref missingQueues) == 0)
+                Interlocked.And(ref flags, ~LazyFlag);
         }
 
         [DoesNotReturn]

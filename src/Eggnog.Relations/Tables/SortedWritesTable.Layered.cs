@@ -76,15 +76,15 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Creates the own table of <paramref name="layer"/> (§6.2): an empty table of this table's shape and merge, with
-        /// one shard and never parallel, whose merge dispatches to <see cref="MergeLayered"/>, gated for compaction by the
-        /// owner's descendants unless the table is context-private.
+        /// one shard, never parallel and pending queues created on first use (§14.2), whose merge dispatches to
+        /// <see cref="MergeLayered"/>, gated for compaction by the owner's descendants unless the table is context-private.
         /// </summary>
         /// <param name="layer">The layer.</param>
         /// <returns>The own table.</returns>
         internal SortedWritesTable CreateLayer(TableLayer layer)
         {
             ArgumentNullException.ThrowIfNull(layer);
-            var table = new SortedWritesTable(keyCount, Arity, sortColumn >= 0 ? new ColumnId(sortColumn) : null, RebuildColumns, merge, ParallelHeuristics.Serial);
+            var table = new SortedWritesTable(keyCount, Arity, sortColumn >= 0 ? new ColumnId(sortColumn) : null, RebuildColumns, merge, ParallelHeuristics.Serial, lazyPending: true);
             table.layer = layer;
             table.compactionGate = layer.Schema.IsContextPrivate ? null : layer.Owner.Owner.Gate;
             return table;

@@ -112,6 +112,18 @@ namespace Eggnog.Relations
         /// </summary>
         internal bool HasHadChildren => hasHadChildren;
 
+#if DEBUG
+        /// <summary>
+        /// DEBUG only: whether a caller has written rows through a database's raw execution-state API
+        /// (<see cref="Database.WithExecutionState{TResult}"/>, <see cref="Database.CreateExecutionState"/>), whose rows
+        /// carry the stamps the caller gives them. Only then may a catch-up re-stamp an ancestor row (colored-contexts
+        /// spec §7.2 (c′), §19 item 9): every engine and bridge path stamps with the state's timestamp (I21), so a
+        /// re-stamped copy in a store without raw writes is a defect, which <c>ContextTables</c> asserts. Set once, never
+        /// cleared; not synchronized (a stale read can only skip the assertion).
+        /// </summary>
+        internal bool HasRawWrites { get; set; }
+#endif
+
         /// <summary>
         /// Gets the current epoch. Thread-safe, one volatile read.
         /// </summary>

@@ -70,7 +70,7 @@ namespace Eggnog.Relations
             var epoch = BeginEpoch();
             try
             {
-                var state = database.CreateExecutionState(epoch);
+                var state = database.CreateEngineState(epoch);
                 TResult result;
                 current.EnterCallback();
                 try

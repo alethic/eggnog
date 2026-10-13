@@ -170,7 +170,7 @@ namespace Eggnog.Relations
         /// <param name="epoch">The pass's epoch.</param>
         void StageCopy(ref ExecutionState? state, LayeredTableSchema s, SortedWritesTable layer, int layerDepth, int row, HideReason reason, bool canonicalize, uint epoch)
         {
-            state ??= owner.Database.CreateExecutionState(epoch);
+            state ??= owner.Database.CreateEngineState(epoch);
             var arity = s.Arity;
             var copy = copyScratch;
             if (copy is null || copy.Length < arity)

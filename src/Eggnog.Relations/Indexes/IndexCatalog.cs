@@ -39,7 +39,11 @@ namespace Eggnog.Relations
         where TIndex : class, IIndexBase<TIndex>
     {
 
-        readonly object gate = new();
+        /// <summary>
+        /// Serializes inserts; created by the first insert, so a catalog that never gets an index (most of a child
+        /// context's) does not pay for it (colored-contexts spec §14.2).
+        /// </summary>
+        object? gate;
         readonly ParallelHeuristics parallelism;
         IndexCatalogEntry<TIndex>[] entries;
 
@@ -181,7 +185,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         ResettableOnceLock<Index<TIndex>> Insert(ReadOnlySpan<ColumnId> key)
         {
-            lock (gate)
+            lock (LazyInitializer.EnsureInitialized(ref gate))
             {
                 var current = entries;
                 if (TryFind(current, key, out var found))

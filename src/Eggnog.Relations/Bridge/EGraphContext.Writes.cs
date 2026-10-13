@@ -303,7 +303,7 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException($"The container type {typeof(TContainer).Name} must be registered with the e-graph before a child interns one.");
 
             var database = context.Database;
-            var state = database.CreateExecutionState(owner.Store.ReadClock());
+            var state = database.CreateEngineState(owner.Store.ReadClock());
             var id = database.Containers.RegisterValue(container, state);
             state.Flush();
             database.RecordFailure(state);
@@ -347,7 +347,7 @@ namespace Eggnog.Relations
             {
                 if (hostWrites.IsEmpty == false)
                 {
-                    var state = database.CreateExecutionState(timestamp);
+                    var state = database.CreateEngineState(timestamp);
                     try
                     {
                         hostWrites.ReplayInto(state, timestamp, owner, context.UnionFind);

@@ -23,13 +23,15 @@ namespace Eggnog.Relations
         /// and a context that stops on contradictions and sees one is stopped, I25); <b>C6</b>, no own displacement held by
         /// an eq-sort container (the storage check <see cref="Context.CheckEqContainerElements"/>, G-b); <b>C7</b>, the
         /// tree (the storage context's host is this context, and each live storage child's host is a bridge child of this
-        /// one). C4 (member maps) arrives with the lift (M10.4).
+        /// one); <b>C4</b>, member maps (in a child, a member map built now has exactly the overlay's members that are not
+        /// local, each canonical in the parent and mapped to its group's root here, and the cached map, when current,
+        /// equals it, I32).
         /// </para>
         /// <para>
         /// A stopped context answers only <see cref="IsContradictory"/> and may have stopped its merge with writes pending:
         /// only C5 and C7 are checked on it. Any other context must be clean (<see cref="IsClean"/>), except that host writes
         /// held by a frozen context are reported as a C2 violation. Cost: the storage checker's, plus
-        /// O(rules × constants × depth).
+        /// O(rules × constants × depth), plus O(overlay members × depth) for C4.
         /// </para>
         /// </remarks>
         /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
@@ -59,6 +61,7 @@ namespace Eggnog.Relations
                 CheckFrozenState(violations);
                 CheckStop(violations);
                 CheckEqContainers(violations);
+                CheckMemberMaps(violations);
                 CheckTree(violations);
             }
 

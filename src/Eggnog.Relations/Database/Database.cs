@@ -486,7 +486,34 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The timestamp the state carries; <c>null</c> for the store clock's current value, or
         /// 0 without a store (colored-contexts spec §4.1).</param>
         /// <returns>The state.</returns>
-        public ExecutionState CreateExecutionState(uint? timestamp = null) => new(view, ResolveTimestamp(timestamp));
+        public ExecutionState CreateExecutionState(uint? timestamp = null)
+        {
+            NoteRawWrites();
+            return new(view, ResolveTimestamp(timestamp));
+        }
+
+        /// <summary>
+        /// Creates an execution state stamped with <paramref name="timestamp"/>, for the engine's own writes outside rules
+        /// (host writes, catch-up copies, interning), which stamp every row with the state's timestamp (I21). Unlike
+        /// <see cref="CreateExecutionState"/>, it does not mark the store as written raw (DEBUG,
+        /// <c>Store.HasRawWrites</c>).
+        /// </summary>
+        /// <param name="timestamp">The timestamp the state carries.</param>
+        /// <returns>The state.</returns>
+        internal ExecutionState CreateEngineState(uint timestamp) => new(view, timestamp);
+
+        /// <summary>
+        /// DEBUG only: notes in the store that rows were written through the raw execution-state API
+        /// (<c>Store.HasRawWrites</c>). Nothing in a release build or without a store.
+        /// </summary>
+        [Conditional("DEBUG")]
+        void NoteRawWrites()
+        {
+#if DEBUG
+            if (owner is { } context)
+                context.Store.HasRawWrites = true;
+#endif
+        }
 
         /// <summary>
         /// Runs <paramref name="action"/> with a fresh execution state over the database, then flushes the state.
@@ -502,6 +529,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(action);
 
+            NoteRawWrites();
             var state = new ExecutionState(view, ResolveTimestamp(timestamp));
             var result = action(state);
             state.Flush();

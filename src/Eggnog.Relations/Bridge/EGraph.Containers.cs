@@ -54,7 +54,7 @@ namespace Eggnog.Relations
             where TContainer : struct, IContainerValue<TContainer>
         {
             RegisterContainerType<TContainer>();
-            var state = db.CreateExecutionState(NextTimestamp);
+            var state = db.CreateEngineState(NextTimestamp);
             var id = db.Containers.RegisterValue(container, state);
             state.Flush();
             db.RecordFailure(state);

@@ -96,6 +96,17 @@ namespace Eggnog.Relations
         /// <param name="merge">Resolves conflicts between rows with the same key.</param>
         /// <param name="parallelism">When to go parallel; also fixes the shard count. <see cref="ParallelHeuristics.Default"/> if <c>null</c>.</param>
         public SortedWritesTable(int keyCount, int arity, ColumnId? sortBy, ReadOnlySpan<ColumnId> toRebuild, MergeFunction merge, ParallelHeuristics? parallelism = null)
+            : this(keyCount, arity, sortBy, toRebuild, merge, parallelism, lazyPending: false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes an empty table whose pending queues are created on first use when <paramref name="lazyPending"/>
+        /// is set: a child context's layer (<see cref="CreateLayer"/>, colored-contexts spec §14.2). Otherwise as the
+        /// public constructor.
+        /// </summary>
+        SortedWritesTable(int keyCount, int arity, ColumnId? sortBy, ReadOnlySpan<ColumnId> toRebuild, MergeFunction merge, ParallelHeuristics? parallelism, bool lazyPending)
             : base(TableKind.SortedWrites, arity)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(arity, 1);
@@ -125,7 +136,7 @@ namespace Eggnog.Relations
             scratch = new RowBuffer(arity);
             runValues = Array.Empty<uint>();
             runStarts = Array.Empty<int>();
-            pending = new PendingState(hash.ShardData);
+            pending = new PendingState(hash.ShardData, lazyPending);
             subsetTracker = new SubsetTracker();
         }
 

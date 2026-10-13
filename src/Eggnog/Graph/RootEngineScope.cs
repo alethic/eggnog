@@ -9,7 +9,7 @@ namespace Eggnog
     /// <summary>
     /// The root over the bridge's egglog-compatible root API on a bare <c>Database</c> (§6.4.5, §6.6.5). R1 only: R2
     /// replaces it with a context adapter for every scope and deletes it. It is the only file of the rule layer that
-    /// calls the bridge's root-only members (<c>Database.CreateExecutionState</c>, <c>GetCanonInUf</c>,
+    /// calls the bridge's root-only members (<c>Database.CreateEngineState</c>, <c>GetCanonInUf</c>,
     /// <c>LookupId</c>, <c>TableAction</c>, <c>UnionAction</c>, <c>FlushUpdates</c>, <c>TryTakePanic</c>).
     /// </summary>
     /// <remarks>
@@ -131,7 +131,7 @@ namespace Eggnog
                 for (var i = 0; i < row.Length; i++)
                     canonical[i] = columns[i].Kind == ColumnKind.Sort ? engine.GetCanonInUf(new Relations.Value(row[i])).Rep : row[i];
 
-                batch ??= engine.Database.CreateExecutionState(engine.NextTimestamp);
+                batch ??= engine.Database.CreateEngineState(engine.NextTimestamp);
                 ActionOf(function).Insert(batch, canonical);
             }
         }
@@ -141,7 +141,7 @@ namespace Eggnog
         {
             lock (graph.EngineLock)
             {
-                batch ??= engine.Database.CreateExecutionState(engine.NextTimestamp);
+                batch ??= engine.Database.CreateEngineState(engine.NextTimestamp);
                 union.Union(batch, a, b);
             }
         }

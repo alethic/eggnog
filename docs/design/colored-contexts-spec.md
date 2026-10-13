@@ -23,7 +23,7 @@
 
 **Revision.** This revision answers two design reviews. §20 maps every finding to the section that fixes it.
 
-**Implementation.** M9.0–M10.3 are implemented. §21 records, per milestone, where the code departs from this text and why, which departures were corrected in the text above, and what is still deferred.
+**Implementation.** M9.0–M10.4 are implemented. §21 records, per milestone, where the code departs from this text and why, which departures were corrected in the text above, and what is still deferred.
 
 ---
 
@@ -320,7 +320,7 @@ Call sites switched to the new members: `Query/RuleBuilder.cs:389` (`GetSpec` �
 | Staging (`ExecutionState.CreateBuffer`) | `TableCatalog.GetForStaging` → `ContextTables.ResolveForStaging` | Thread-safe; may create an empty layer (X37, I34). |
 | Tables (`ContextTables`) | `Context.UnionFind.Find`, `Context.IsOwnDisplacement`, `OverlayDisplacedTable` (rebuilder table), journal rows `[journalMark, Count)` | The union-find is current before any row work (§7.1). |
 | `Context.Rebuild` | `CatchUpUnionFind(e)` → `ContextTables.CatchUpRows(e)` → `ContextTables.RebuildPass(e)` | In this order, first pass only for the first two (§7.1). |
-| Bridge (`EGraphContext`) | `Context.BeginEpoch/EndEpoch/NoteRuleRun/PrepareForWrite/Rebuild/ClearTable/Freeze/CreateChild/Dispose`; `Database.CreateExecutionState` and `MergeAll` (host writes, §10.4); `Database.ExecuteRuleSet` and `MergeRuleSet` at T (§10.3; only the internal raw iteration calls `RunRuleSet`) | The bridge flushes its own `HostWrites` up the chain before calling storage (§10.4). `EGraphContext.CreateChild` and `Dispose` (rule-layer E7) wrap §8.2's calls: a parent that is not frozen is flushed and made clean first, and a failure recorded meanwhile is taken at once (§10.1). |
+| Bridge (`EGraphContext`) | `Context.BeginEpoch/EndEpoch/NoteRuleRun/PrepareForWrite/Rebuild/ClearTable/Freeze/CreateChild/Dispose`; `Database.CreateEngineState` and `MergeAll` (host writes, §10.4; the raw escape, `WithExecutionState`, uses `CreateExecutionState`); `Database.ExecuteRuleSet` and `MergeRuleSet` at T (§10.3; only the internal raw iteration calls `RunRuleSet`) | The bridge flushes its own `HostWrites` up the chain before calling storage (§10.4). `EGraphContext.CreateChild` and `Dispose` (rule-layer E7) wrap §8.2's calls: a parent that is not frozen is flushed and made clean first, and a failure recorded meanwhile is taken at once (§10.1). |
 | Extraction (`Extractor`, context form) | `ContextTables.GetView` → each present `LayerView`'s cached index and hidden-aware scan; `Context.UnionFind.Find`; `ExtractionWatch` over the table and union-find versions of the context and its non-frozen ancestors | Created on a clean context; each query enters the context's domain as a callback (§8.3, §10.10). |
 | Lift (`Cases/`) | `Context.ScanOwn`, `ScanMerges`, `IsLocalId`, `ScanAncestorsMentioning`, `UnionFindOverlay` (via `MemberMap`) | The context is clean. |
 
@@ -980,7 +980,7 @@ Properties:
 ThrowIfNotWritable(); using Domain.Enter(); ThrowIfNotWritable()   // the first check reports "frozen" rather than a domain conflict
 throw if inside a callback of the domain (§8.3); PrepareForWrite()
 e = BeginEpoch()
-try   { st = Database.CreateExecutionState(e); res = action(st); st.Flush(); Database.RecordFailure(st)
+try   { st = Database.CreateEngineState(e); res = action(st); st.Flush(); Database.RecordFailure(st)
         if IsRoot: Debug-only AssertPendingSortCells(e) on every registered table      // X38
         Database.MergeAll(e) }                                                        // epilogue seals and invalidates (X40)
 catch when !IsRoot { faulted = true; throw }
@@ -988,6 +988,8 @@ finally { EndEpoch() }
 ```
 
 It leaves rebuild work pending (spike semantics): a union makes the context not clean until `Rebuild`. In a child, incoming rows are canonical when stored, so a write with a stale id lands on the canonical key and merges with the visible row there. At the root, `Context.Write` is egglog's raw write: rows are stored as given, the sort cell is the caller's contract (asserted in DEBUG by `SortedWritesTable.AssertPendingSortCells`, which walks the pending row queues without dequeuing), and a stale row is rewritten by the next rebuild or settle.
+
+The engine's own writes (this batch, catch-up and rebuild copies, host-write flushes, container interning) create their states with the internal `Database.CreateEngineState(timestamp)`, which stamps every row with the state's timestamp. `CreateExecutionState` and `WithExecutionState` are the raw API (egglog's): rows carry whatever stamps the caller gives them, so in DEBUG builds they mark the store (`Store.HasRawWrites`), which exempts it from the re-stamp assertion (§7.2 (c′), §19 item 9).
 
 **`PrepareForWrite()`:**
 - if the parent is not frozen, call `Parent.Rebuild()`, then apply the stopped-parent rule (§6.9);
@@ -1121,7 +1123,7 @@ Details the loop above leaves out:
 ```text
 if settled == Depth: return false
 for a in [settled, Depth): generation check: every seen ancestor layer has Version.Major == cursor's, else Fault (I16)
-st = Database.CreateExecutionState(e); hides = []; floor = Owner.SemiNaiveFloor
+st = Database.CreateEngineState(e); hides = []; floor = Owner.SemiNaiveFloor
 for a in [settled, Depth), for each registered t not private with a layer at depth a:
     A = AncestorLayer(a, t); v = A.Version; from = cursors[a].RowsOrDefault(t).Minor; cursors[a].PendingRows[t] = v
     if from == v.Minor || a < ClearedFloor(t): continue
@@ -1132,6 +1134,7 @@ for a in [settled, Depth), for each registered t not private with a layer at dep
         if any rebuild column x has Owner.UnionFind.Find(x) != x:  StageCopy(t, a, r, Mentions, canonicalize: true)   // (a)
         elif TryGetLayer(t)?.Own.FindRow(cells[..k]) >= 0:         StageCopy(t, a, r, KeyHeld, false)              // (b)
         elif s.SortColumn >= 0 && cells[s.SortColumn] < floor:     StageCopy(t, a, r, Restamped, false); RestampedCopies++  // (c′)
+                                                                   Debug.Assert(Store.HasRawWrites)                       // §19 item 9
         // (c) otherwise visible as is, canonical here
     cursors[a].PendingStamp = Stamp(a)
 st.Flush(); ApplyHides(hides)                                     // hides after the copies are pending (X12)
@@ -1143,7 +1146,7 @@ Notes:
 - **Branch (a)** also catches a root row that was stale *at the root* when appended (a raw root write, X38): its id is non-canonical in this context too, since `find_C = overlay ∘ find_P`.
 - **`NeedsCatchUp`:** some a in `[settled, Depth)` has `Stamp(a) != cursors[a].Stamp`, where `Stamp(0)` is the root's `Database.ChangeStamp`.
 - **The semi-naive floor of (c′).** `Context.SemiNaiveFloor` is `max(CreatedAt, the largest epoch this context passed to NoteRuleRun)`. `NoteRuleRun(T)` (called by the bridge at the start of each run, §10.3) raises it; nothing else writes it, and only this context's catch-up reads it. Every watermark this context can use is at most its floor: its own watermarks are epochs it noted, and an inherited watermark is at most its `CreatedAt` (§10.2). A descendant checks ancestor appends against its own floor in its own catch-up, because it holds its own cursor into every unsettled ancestor, so no floor needs to travel up or down. Frozen contexts never catch up and never read it.
-- **(c′)** is the C7 safeguard. It never fires when writers stamp with the state's timestamp (I21): every engine and bridge path does, and children enforce it at the merge (X38). Tests assert `RestampedCopies == 0`.
+- **(c′)** is the C7 safeguard. It never fires when writers stamp with the state's timestamp (I21): every engine and bridge path does, and children enforce it at the merge (X38). Tests assert `RestampedCopies == 0`, and DEBUG builds assert at every re-stamped copy unless the store was written through the raw execution-state API (§6.6, §19 item 9).
 - Ancestor tombstones need no work: a replaced row reappears as an append. This relies on an invariant: an ancestor with live descendants tombstones a row without appending one only when its rebuild folds a rewritten row into an existing row after a union. It holds because every retraction entry point is guarded (§6.7) and compaction is gated (§6.8). `ContextTables.AncestorRowsChanged` documents it.
 - Context-private tables are left out of the row cursors and of the generation check (decision 1: descendants never read them).
 - `CatchUpRows` and the generation check skip an ancestor whose `ChangeStamp` did not move since its cursor's `Stamp`; this is equivalent to the loop above and cheaper.
@@ -1160,7 +1163,7 @@ own = adopted own layers with nonempty RebuildColumns, ascending
 if own nonempty:                                                                                  // step 3 (X9)
     Database.RunWithTakenOut(schema.UnionFind, own, new RebuildTableOperation(schema.UnionFind, Owner.UnionFindTable, e))
     // RunOnTablesCore notifies every layer whose ApplyRebuild staged a rewrite and records failures
-st = Database.CreateExecutionState(e); hides = []
+st = Database.CreateEngineState(e); hides = []
 if ownLosers nonempty:                                                                            // step 4
     for t in registered tables, not private, with s.RebuildColumns nonempty, ascending:
         for j in [ClearedFloor(t), Depth): A = AncestorLayer(j, t); if A is null: continue
@@ -1593,7 +1596,7 @@ Only the `EGraphContext` API flushes, ensures clean and throws `PanicException` 
 **`EGraphContext`** (`Bridge/EGraphContext.cs`, partials `.Run.cs`, `.Watermarks.cs`, `.Writes.cs`, `.Reads.cs`, `.Freeze.cs`, `.Locals.cs`, `.Invariants.cs`, `.Extraction.cs` (§10.10), and `.Lift.cs` in M10.4) holds:
 - `owner`, `parent` and `context` (the storage `Context`);
 - the rule progress map (§10.2), `HostWrites hostWrites` (`Bridge/HostWrites.cs`) and `object?[] locals`;
-- in M10.4, `List<SplitRecord>? splitRecords`, and `memberMap` / `memberMapVersion`.
+- from M10.4, `List<SplitRecord>? splitRecords` and `MemberMap? memberMap` (the map carries the overlay version it was built at), both `null` until first use.
 
 Its properties forward to storage: `Version`, `CreatedAt`, `IsFrozen`, `IsStopped` (= `context.IsContradicted`), `IsDisposed`, `IsFaulted`, `Parallelism` (the context database's heuristics, §10.9) and `OwnRowCount` (`context.Database.TotalSizeEstimate`, rule-layer D42). `Parent` is the parent's bridge context, `null` at the root. **`CreateChild(ContextOptions?)`** and **`Dispose()`** (rule-layer E7) have the storage semantics of §8.2: `CreateChild` of a context that is not frozen ensures it clean first (§10.3), and a failure recorded on this context by that flush, the rebuild or the root's settle, or before the call, is taken right after: the new child is disposed and `PanicException` is thrown. `Dispose` releases the host writes, the progress and the locals. `RunRules` reports at the e-graph's `ReportLevel` (E7).
 
@@ -1704,7 +1707,7 @@ else: context.Rebuild()
   if Parent is not null && !Parent.IsFrozen: Parent.EnsureClean()
   context.PrepareForWrite()                 // catch-up BEFORE anything is staged
   T = context.BeginEpoch(); ufBefore = DisplacedCount
-  st = database.CreateExecutionState(T); hostWrites.ReplayInto(st, T, context.UnionFind); hostWrites.Clear()   // ts cell = T, subsume cell = NOT_SUBSUMED
+  st = database.CreateEngineState(T); hostWrites.ReplayInto(st, T, context.UnionFind); hostWrites.Clear()   // ts cell = T, subsume cell = NOT_SUBSUMED
   st.Flush(); database.RecordFailure(st); changed = database.MergeAll(T); context.EndEpoch()   // egglog flush_updates
   if DisplacedCount != ufBefore: context.Rebuild()
   ThrowIfFailed(); return changed
@@ -1830,7 +1833,7 @@ FindChange (each query): the first level whose uf or one of whose marks moved �
 
 ## 11. Lift primitives and split hooks (L1, L2, L4, L5)
 
-All files are in `Cases/`, one type each.
+All files are in `Cases/`, one type each. The context reads they use are in `Bridge/EGraphContext.Lift.cs`: §6.10's reads by `FunctionId`, `ScanMerges`, `IsLocalId`, `GetMemberMap`, and the split-record storage.
 
 ### 11.1 Member maps (L2, G1(a), X29)
 
@@ -1838,15 +1841,19 @@ All files are in `Cases/`, one type each.
 internal sealed class MemberMap
 {
     public static MemberMap Build(EGraphContext k);      // from UnionFindOverlay slots: members not local, ascending, per canonical
-    public int GroupCount { get; }  public ReadOnlySpan<uint> GroupRoots { get; }
-    public ReadOnlySpan<uint> Members(uint caseCanonical);   // group; else [c] if c is not local; else empty
+    public int GroupCount { get; }  public ReadOnlySpan<uint> GroupRoots { get; }   // ascending
+    public ReadOnlySpan<uint> Members(in uint caseCanonical);   // group; else [c] if c is not local; else empty
+    public ReadOnlySpan<uint> GroupMembers(int group);  public int IndexOf(uint root);  public bool IsLocal(uint id);
+    public int MemberCount { get; }  public int Version { get; }
 }
 ```
 
+- `Members` takes its argument by `in`. The one-element answer `[c]` is then a span over the caller's variable, so nothing is allocated per lookup.
+- A group is a class with at least one member that is not local. A class whose members are all local stands for no parent id and is not a group.
 - `GetMemberMap()` is cached while `UnionFindOverlay.Version` is unchanged.
-- `ClassPartition.Meet(MemberMap seed, IReadOnlyList<EGraphContext> live, int seedIndex, List<uint[]> blocks)`:
-  - for each seed group, builds each member's signature `(K_j.Find(m))` over the cases j ≠ seed;
-  - sorts the members by signature;
+- `ClassPartition.Meet(MemberMap seed, IReadOnlyList<EGraphContext> live, int seedIndex, List<uint[]> blocks)` returns the number of blocks it appended. It:
+  - builds, for each seed group, each member's signature `(K_j.Find(m))` over the cases j ≠ seed;
+  - sorts the members by signature (`MemberSignatureComparer`, a struct comparer over pooled scratch, so the sort allocates nothing);
   - emits every run of length ≥ 2 as a block.
 
 ### 11.2 The lift
@@ -1857,60 +1864,109 @@ internal sealed class MemberMap
 |---|---|
 | `LiftTableKind` | `Relation`, `Constructor`, `Function` |
 | `LiftTable` | `(FunctionId, LiftTableKind, Func<uint,uint,uint>? caseJoin)` |
-| `LiftSpec` | A list of `LiftTable` |
+| `LiftSpec` | A list of `LiftTable`, each function at most once. `HasSameTables(other)` compares content |
+| `LiftedTable` | A `LiftTable` resolved against the definitions for one lift: the key layout, which key cells are ids, and whether the output is one |
 | `LiftOptions` | `RoundLimit = 16`, `CandidateLimit = 64` |
 | `LiftReport` | `Rounds`, `LiveCases`, `VacuousCases`, `ParentContradicted`, `Unions`, `Rows`, `Terms`, `Values`, `Skipped`, `HitRoundLimit`, `Changed` |
-| `LiftSignature` | Versions of P, of P's non-frozen ancestors, and of each case |
-| `LiftCandidates` | A deduplicating key arena |
+| `LiftSignature` | The versions of P, of P's non-frozen ancestors and of each case; the identities of P and the cases; and the spec lifted. `Matches(P, cases, spec)` allocates nothing |
+| `LiftCandidates` | A deduplicating key arena. A reset costs what the arena held, not its capacity |
 | `LiftKeySink` | `IRowSink`, with an optional winner filter |
 | `LiftWrites` | Pending unions, rows and terms |
 | `Lifter` | `Lifter.cs`, `Lifter.Equalities.cs`, `Lifter.Facts.cs` |
 
-**`Lifter.Lift(P, cases, spec, options, ref memo)`:**
+**Resolving the spec.** Each table is checked when the lift runs. A failed check throws `ArgumentException` before anything is written:
+- the function must be declared;
+- a `Constructor` must have an id output;
+- a `Relation` must not have an id output: its output is written as the cases hold it, and the seed's id could be local to the seed (I10);
+- a case join is allowed only for a `Function` with a base output.
+
+The contradiction function is skipped, because L4 writes it. In a child parent, a table the parent cannot write (a merge that is not a lattice merge, decision 2) is left out: no case can hold rows of it either.
+
+**`Lifter.Lift(P, cases, spec, options, ref memo, ct)`:**
 
 ```text
-throw if cases empty; P frozen, stopped or disposed; or a case's parent is not P
+throw if cases are empty, listed twice or not children of P; P is frozen, stopped, faulted or disposed; or the spec is invalid
+enter P's domain (the cases share it); throw if inside a callback of it
 loop:
+  ct.ThrowIfCancellationRequested()
   P.Rebuild(); each case not stopped: Rebuild()
-  sig = LiftSignature.Of(P, cases); if first round && sig == memo: return (Changed = false)
+  if first round && memo matches (P, cases, spec): return (Changed = false, ParentContradicted = no live case)
+  memo = null
   live = cases not IsContradictory; VacuousCases = |cases| - |live|                    // L4
-  if live empty: if P has a contradiction function and !P.IsContradictory: P.StageRow(c, []); P.FlushUpdates()
-                 ParentContradicted = true; break
+  if live empty: ContradictParent(P); ParentContradicted = true; break
   maps = live.GetMemberMap(); r = argmin GroupCount
   ClassPartition.Meet(maps[r], live, r, blocks); for each block: union block[0] with each other member   // equalities
-  for h in spec (skipping the contradiction function):
+  for h in the resolved spec:
      sources: live[r].ScanOwn(h) keys                                                         // (a)
             ∪ for each group root c of maps[r], not local: live[r].ScanAncestorsMentioning(h, c) keys mentioning c   // (b) L1
-     candidates: expand the Id key cells through maps[r].Members (skip a source if any list is empty or the product > CandidateLimit)
-     per kind: Relation/Constructor → present in every live case and absent in P → Row/Term
-               Function → every live case has a value: an Id output must have a common parent member
-                          (first y with K.Find(y) == v_K for every K); a value output folds with caseJoin, or requires all values equal
+     candidates: expand the Id key cells through maps[r].Members (skip a source if any list is empty; if the
+                 product > CandidateLimit, skip it and add the product to Skipped)
+     for each key that every live case holds and P does not:
+       Relation    → every live case holds the same output: a Row with it
+       Constructor → the first parent id that every live case's output stands for (y with K.Find(y) == v_K for every K):
+                     a Row with it; none: a Term (a fresh id, whose equalities the next round's meet lifts)
+       Function    → Id output: a common parent id as above: a Row with it; none: nothing
+                     base output: fold with caseJoin, or require all values equal: a Row (counted in Values)
+     a key that P holds already is skipped, except for a base-output Function whose joined value differs from P's,
+     and an id-output Function where some live case's output is not its class of P's stored output
   if writes empty: break
   apply: StageUnion, then StageRow (NOT_SUBSUMED), then StageTerm; v0 = P.Version; P.FlushUpdates(); rounds++
-  if P.Version == v0 or rounds == RoundLimit (HitRoundLimit): break
-P.Rebuild(); cases.Rebuild(); memo = LiftSignature.Of(P, cases)
+  if P.Version == v0: break
+  Changed = true; if rounds == RoundLimit: HitRoundLimit = true; break
+P.Rebuild(); cases.Rebuild()
+memo = settled ? LiftSignature.Of(P, cases, spec) : null   // settled: not HitRoundLimit, and the last round skipped nothing
 ```
 
-**`CaseSet`** (`Cases/CaseSet.cs`):
-- `AddCase()` calls `parent.CreateChild(ContextOptions.Case)`.
-- `RunEach(ICaseSchedule)` rebuilds each case. A contradictory case is disposed at once and counted as vacuous (L4); other cases run their schedule.
-- `Lift(...)` calls `Lifter.Lift`.
+Notes on the lift:
+- **A key P already holds, with an id output** (a constructor, or an id-output function whose every live case holds its own class of P's stored output), writes nothing. Under a `UnionId` or `AssertEq` merge that is always so: every case sees P's row, so the case's output is that id's class there, and any equality between it and another parent id is the meet's. Writing a second id next to P's would merge two ids in one flush before the meet's union applies, and an `AssertEq` merge refuses that. Any other merge on an id output (a declared lattice over ids, which decision 2 lets cases write) can move a case's output off the stored class; when every live case does, and they share a common parent id, that id is written over P's stored output, as a base-output function writes its joined value. It is never P's class of the stored output, since each case's find extends P's.
+- **ContradictParent** writes the e-graph's contradiction function, if one is designated and P does not see it yet. The output is the function's constant default; else, for an id output, a term (a fresh id of P, since a case's output can be local to it, I10); else the base value a vacuous case merged into its own layer. A `CaseSet` keeps that value from the first vacuous case it disposes that holds one (`Lifter.TryReadContradictionOutput`), so a lift after every case was disposed writes the same contradiction as a lift over the undisposed cases. `ParentContradicted` is reported also when no contradiction function is designated; nothing is written then.
+- **The memo** is keyed on everything a lift reads, the spec included, since a lift of other tables reads other rows. Specs compare by reference, then by content, so a host that builds an equal spec for each call still hits the memo. The limits are not part of the key. A lift whose answer could depend on them (cut short by `RoundLimit`, or whose last round skipped rows over `CandidateLimit`) has not settled and leaves no memo; a settled lift's answer is the same under any limits. A lift that throws part-way leaves no memo either.
+- The lift holds P's domain for its whole run and calls no caller code but the case joins.
+
+**`CaseSet`** (`Cases/CaseSet.cs`, rule-layer E8):
+- `CaseSet(P)` refuses a frozen or disposed parent.
+- `AddCase(ContextOptions? options = null)` calls `parent.CreateChild(options ?? ContextOptions.Case)`. The options must set `IsCase` and `StopOnContradiction` (`ArgumentException` otherwise).
+- `RunEach(ICaseSchedule schedule, int depth, bool allowSplits)` rebuilds each case. A contradictory case is disposed at once (its split records first) and counted in `VacuousCount` (L4); every other case runs the schedule. It returns whether a schedule reported a change.
+- `Lift(LiftSpec spec, LiftOptions options, CancellationToken ct = default)` calls `Lifter.Lift` with the set's memo and one `Lifter` kept for the set's life; the token is checked between rounds. When every case was disposed as vacuous, the parent is contradicted (L4), with the base output the set kept when it disposed them if the contradiction function needs one, and `ParentContradicted` is reported. With no case, and none found vacuous, it throws `InvalidOperationException`.
+- `DisposeVacuous()` disposes the contradictory cases and returns their number. It serves host-driven lifts, which never call `RunEach`.
+- The set owns its cases. A case disposed outside the set was not found vacuous, and without it the remaining cases do not cover the parent. `RunEach`, `Lift` and `DisposeVacuous` therefore refuse such a set (`InvalidOperationException`); only `Dispose` is allowed.
 - `Dispose()` disposes in reverse creation order, each case's split records first.
+- `IsDisposed`, and `Cases`: the cases in creation order, without those disposed as vacuous. A case disposed outside the set stays listed, disposed, until the set is disposed.
 
 ### 11.3 Split hooks (L5, B6)
 
-**Types:** `SplitKey`, `SplitRequest`, `ISplitSource`, `ISplitDemand`, `ICaseSchedule`, `SplitOptions` (`DepthLimit = 4`, `CaseLimit = 16`, `Lift`), `SplitRecord` and `SplitReport`.
+**Types** (rule-layer E8):
 
-**`SplitDriver.Step(scope, depth, report)`:**
-1. Find the split requests.
-2. Skip a request whose key is covered by a live record in the scope **or any ancestor** (B6).
-3. Skip a request over the limits.
+```csharp
+interface ISplitSource { void FindRequests(EGraphContext scope, List<SplitRequest> requests, SplitReport report);
+                         void Assume(EGraphContext @case, in SplitRequest request, int caseIndex); }
+readonly record struct SplitRequest(SplitKey Key, int CaseCount, object? Payload);
+readonly struct SplitKey : IEquatable<SplitKey> { SplitKey(int source, uint[] values); }
+interface ICaseSchedule { bool Run(EGraphContext @case, int depth, bool allowSplits); }
+interface ISplitDemand { bool Wants(EGraphContext scope, in SplitRequest request); }
+sealed class SplitOptions { int DepthLimit = 4; int CaseLimit = 16; LiftOptions Lift; ContextOptions CaseOptions = ContextOptions.Case; }
+sealed class SplitReport { int CasesOpened; int SplitsSkipped; int Lifts; long LiftRowsSkipped; }
+sealed class SplitRecord { SplitKey Key; SplitRequest Request; ISplitSource Source; CaseSet Cases; int Depth; SplitDriver Driver; bool IsLive; }
+```
+
+`SplitOptions.CaseOptions` must set `IsCase` and `StopOnContradiction`; through it, `InheritWatermarks` reaches the cases.
+
+**`SplitDriver.Step(scope, depth, report)`** refuses a frozen or faulted scope. It returns false at once for a stopped scope or at `depth ≥ DepthLimit`; otherwise it rebuilds the scope, and returns false if the scope is then stopped or contradictory. Then:
+1. Find the split requests of every source.
+2. Skip a request covered by a live record in the scope **or any ancestor** (B6): a record of the same source object (compared by reference, whichever driver opened the record) over the same key cells; or one whose key was taken earlier in the same step. A `SplitKey`'s source index numbers the sources of one driver only, so it is not compared across drivers.
+3. Skip a request over the limits: more than `CaseLimit` cases, or fewer than one.
 4. Skip a request that `ISplitDemand` rejects. Demand is checked before any case exists.
-5. Open the cases.
-6. **Phase A:** for every record, `RunEach` (nested splits disabled), then lift. This is lift before deepening (TheSy).
-7. **Phase B:** deepen into live cases while `depth + 1 < DepthLimit`, and lift again when deeper steps changed something.
+5. Open the cases. The record is registered on the scope first, so a failure while opening leaves it for `DisposeRecords`; then each case is created with `CaseOptions` and assumed by its source.
+6. **Phase A:** for every live record of the scope **that this driver opened**, in creation order (those its earlier steps opened as well as those just opened): `RunEach` with nested splits disabled, then lift, then `DisposeVacuous`. This is lift before deepening (TheSy). An earlier record's cases have caught up with the scope's new facts, so what they now derive is lifted, and a case those facts make vacuous is dropped (rule-layer §6.9.3, D43). The memo makes an unchanged record cost one signature check.
+7. **Phase B:** while `depth + 1 < DepthLimit`, for every such record, run the in-case schedule again in each live case with nested splits enabled (which recurses into `Step` at `depth + 1`), and lift again when that changed something.
 
-`DisposeRecords(scope)` disposes depth-first, in reverse.
+Several drivers may serve one scope (the rule layer builds one per split node, rule-layer §6.9.3). Each record names the driver that opened it, and only that driver runs its in-case schedule in the record's cases and lifts them with its spec; the drivers share coverage (step 2) only through shared source objects.
+
+A lift that contradicts the scope ends the step. `Step` returns whether it changed the scope: it opened cases, or a lift changed the scope. In-case work alone is no change, so a schedule that repeats the step until nothing changes ends.
+
+The driver never holds the scope's thread domain while it calls a source, the demand or the schedule, which may create children (nested splits, §8.3). Exceptions from a source or the schedule propagate, and the records opened so far stay.
+
+`DisposeRecords(scope)` disposes depth-first, in reverse creation order. Records are kept on the scope's `EGraphContext` (`AddSplitRecord`, `CoversSplit(source, values)`, `CopyLiveSplitRecords(into, driver)`, `TakeSplitRecords`, `SplitRecordCount`), whose list is created on first use.
 
 ---
 
@@ -2022,7 +2078,7 @@ In a child every stored row carries the merge's epoch by construction (X38), whi
 - At the root, every engine path and the bridge stamp with the state's timestamp; host writes are stamped at flush (X24); raw `Context.Write` is asserted in DEBUG.
 - Catch-up (c′) re-stamps, for each reading context, any ancestor append below that context's floor (§7.2).
 
-*Checker:* `RestampedCopies == 0` in tests.
+*Checker:* `RestampedCopies == 0` in tests; DEBUG builds assert at every re-stamped copy unless the store was written raw (§19 item 9).
 
 **I22. Retraction safety.** No context with a live descendant retracts a shared row, and a child retracts only under a frozen parent. This is the guard in §6.7, at every entry point. *Checker:* `RetractionTests`.
 
@@ -2228,7 +2284,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Contradiction check in the `MergeAll` loop | Per round | 1 null test |
 | `MergeAll`/`MergeTable` epilogue | Per call | 1 null test |
 | `ThrowIfFrozen` | Per entry point | 1 volatile read |
-| Sealed check in `PendingState` | Per buffer flush | 1 volatile read |
+| Flags check in `PendingState` | Per buffer flush | 1 volatile read: one `int` (`flags != 0`) covers the seal and, in children, lazy queues (M10.4); it was one `bool` |
 | New `TableKind` arms | Per scan or lookup call | 1 jump-table arm |
 | `hidden.IsNone` | Per hidden-aware scan or index-build call | 1 test; the plain overloads, which root paths call, pay nothing (§9.3) |
 | Serial-refresh flag in `IndexCatalog.GetOrRefresh` | Per call | 1 volatile read |
@@ -2261,6 +2317,9 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Contradiction early stop (§10.6) | Per head insert into the designated contradiction function | One external call (nothing when no function is designated) |
 | Extraction staleness (§10.10) | Per extraction query | O(slots) table versions and one union-find version read, where M8 read the slots' versions and the clock |
 | `ParallelismBudget` (§10.9) | Per `EGraph` | One small object |
+| Lift and split state (M10.4) | Per `EGraphContext`, the root's included | Two reference fields (the cached member map and the split records), 16 B; nothing else until a lift read or a split. The root takes no lift read (§6.10) |
+| Lazy child structures (M10.4) | — | None at the root: root and bare tables keep eager pending queues, root catalogs eager notification flags; `NotificationList.Notify` is unchanged, and `IndexCatalog`'s lazy insert lock is on its `NoInlining` insert path (24 B less until the first index) |
+| Re-stamp assertion (§19 item 9) | — | DEBUG builds only (`Store.HasRawWrites`, set by the raw execution-state API) |
 
 `Canonicalizer` is identical after JIT specialization. Nothing is added per scanned row, per staged insert, or per find; a staged removal at a Store's root pays the guard read above.
 
@@ -2270,8 +2329,8 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 
 | Operation | Cost |
 |---|---|
-| Creation | O(tables + depth) small objects; nothing is allocated for the union-find or a table before first use. Measured in M9.4 dry runs: about 7.4–9 KB for a bare child |
-| Layer creation | One empty single-shard table and `TableInfo` plus an O(tables) catalog copy, once per touched table. Estimated at 1–2 KB; measured in M9.4 dry runs of `ManyChildrenBenchmarks` (`ChildWithOneEmptyLayer` minus `ChildOnly`) at about 2.7–3.0 KB, mostly `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the catalog copy. Reducing it is M10.4 work (§21.10) |
+| Creation | O(tables + depth) small objects; nothing is allocated for the union-find or a table before first use. Measured in M9.4 dry runs at about 7.4–9 KB for a bare child (4,726 B in steady state); after M10.4's lazy pending queues and notification flags, 2,454 B in steady state, 2,693 B for a bridge child (`--context-footprint`) |
+| Layer creation | One empty single-shard table and `TableInfo` plus an O(tables) catalog copy, once per touched table. Estimated at 1–2 KB; measured in M9.4 dry runs of `ManyChildrenBenchmarks` (`ChildWithOneEmptyLayer` minus `ChildOnly`) at about 2.7–3.0 KB, mostly `PendingState`'s two `ConcurrentQueue`s per shard (a 32-slot segment each), `TableInfo`'s two `IndexCatalog`s, two `RowBuffer`s and the catalog copy. M10.4 creates a layer's queues on first publication: 1,062 B in steady state (2,766 B before) |
 | Rebuild-index refresh | At creation under a writable parent: root work, §8.2. Afterwards step 4 and the lift reads refresh a writable ancestor's index from that ancestor's appends since the child's creation: per-child work of the same order as the catch-up's reading of those appends |
 | `find` | Root `FindNaive` (one hop when frozen) + at most one dense load + one probe per non-empty level below the prefix |
 | Own union | 2 parent finds + 2 probes + O(1) or O(smaller class) |
@@ -2284,6 +2343,9 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | Executor | Ancestor dynamic-index work ≤ `|rows with ts ≥ W| + |probe results|`; dense ancestor pieces use shared indexes at zero build cost |
 | Memory | ~8 B per overlay member + 4 B per member-list entry + ~40 B per class + 8+8 B per journal row; 4 B per hidden row (or n/8 B as a bitset); tables and views at 8 B × tables |
 | Bridge state (M10.3) | One `EGraphContext` and one `HostWrites` object, empty arrays until the first staged write; the locals array and its gate on first use; rule progress at 20 B per slot (a 4 B key and a 16 B `RuleProgress`), 8 slots once a rule ran, and beyond that fewer than four times the rules the context ran (the map doubles when an insert would fill more than half of it), never the rules the e-graph defines |
+| A case (M10.4) | Steady state, under a writable scope over a frozen root of 20,000 rows (`--context-footprint`): the case itself 2,975 B; one union and its rebuild 9.8 KB; one asserted fact 3.3 KB; one rule run 12.5 KB; a lift over it 24.5 KB, the scope's flush of the lifted union and facts included. A case of a split that makes one union and asserts one fact costs 13.4–13.7 KB, 17.3–19.9 KB with the lift, the same at 20,000 and 200,000 root rows; one `Database.Clone()` per case costs 1.21 MB and 9.49 MB |
+| Lift (M10.4) | Per round: the cases' rebuilds; the seed's own rows and the uses of its group roots (L1), each expanded into at most `CandidateLimit` keys looked up once per live case and in the parent; one flush of the parent. The member map is cached per overlay version; the arenas are kept by the `CaseSet`'s `Lifter`, and a reset costs what they held. A memo hit costs O(depth + cases + tables) |
+| Split record (M10.4) | One `SplitRecord` and its `CaseSet` on the scope; the scope's record list on first use. A later step's revisit of an unchanged record costs its cases' schedule runs and one memo check |
 
 **Guidance to the rule layer:** saturate, or run every rule once after the last change, before `Freeze`. Otherwise every child re-matches the parent's last delta.
 
@@ -2309,7 +2371,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Tables/SortedWritesTable.Scan.cs` | Hidden-aware loops; `RefineVisible` |
 | `Tables/TableCatalog.cs` | Volatile map reads; `Resolver` (init); `GetForStaging`; copy-on-write `Publish` |
 | `Tables/ExecutionState.cs` | `CreateBuffer` uses `GetForStaging`; `StageRemove` calls `guard?.CheckRemove`; the clone copies view, layers, guard and views |
-| `Tables/PendingState.cs` | `Seal`, `IsSealed`; `Enqueue*` throw when sealed |
+| `Tables/PendingState.cs` | `Seal`, `IsSealed`; `Enqueue*` throw when sealed. M10.4: lazy queues for child tables (a shared, never-written empty queue until the first publication, then a queue created by compare-and-swap); a `flags` word replaces `isSealed` and covers the seal and the lazy queues; `PrepareRows`/`PrepareRemovals` (`NoInlining`) take the flagged path |
 | `Planning/QueryEntry.cs` | `IsIdConstant` flag, ignored by equality; `IdConst(Value)` factory |
 | `Planning/IQuerySchema.cs` | `IsCacheable` (default member, `true`) |
 | `Actions/ExecutionState.Database.cs` | `ReadCounter` pin; the view constructor sets `layers` and `guard`; `GetTable` throws when `layers` is set |
@@ -2328,9 +2390,9 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Database/TableInfo.cs` | `FreezeIndexes()` |
 | `Database/Database.Constraints.cs` | Delegates to `ConstraintProcessor`; refuses a child through `GetQueryTableInfo` (§3.4) |
 | `Database/ColumnCardEstimator.cs` | Static per-`TableInfo` overload; the instance form refuses a child (§3.4) |
-| `Indexes/Index.cs`, `Indexes/IndexCatalog.cs` | `Refresh(Table, bool allowParallel)`; `SetSerialRefresh` |
+| `Indexes/Index.cs`, `Indexes/IndexCatalog.cs` | `Refresh(Table, bool allowParallel)`; `SetSerialRefresh`. M10.4: `IndexCatalog`'s insert lock is created by the first insert |
 | `Indexes/ColumnIndex.cs`, `ColumnIndex.Build.cs`, `TupleIndex.cs`, `TableIndexing.cs`, `ColumnIndexGatherSink.cs` | Hidden-aware builds; `AddValue` |
-| `Concurrency/NotificationList.cs` | `IsEmpty` |
+| `Concurrency/NotificationList.cs` | `IsEmpty`. M10.4: a lazy constructor (an empty flag directory); the existing growth branch creates segment 0 on the first notify |
 | `Containers/ContainerValues.cs`, `ContainerEnvBase.cs`, `ContainerEnv.cs`, `ContainerValueIndex.cs`, `Database.Containers.cs` | `holdsIds`; `HasEqContainers`; `AnyEqContainerMentions`; `EqVersion` and `EqVersionCounter` (G-b, §7.4); the frozen-intern refusal; G-a; `MintId` via the shared counter; `ContainsElement`; child throws; dirty-log append; `RebuildContainers` resolves a `null` timestamp to the store clock (§4.1) |
 | `Planning/PlanTemplate.cs`, `PlanInstance.cs` | `InstantiateLayered`; `Instantiate` kept over `SingleLayerEvaluator`; `LayeredSubset[]` headers |
 | `Query/IdConstant.cs` | Remarks per X19 |
@@ -2359,7 +2421,15 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Database/Database.Merge.cs` | `MergeAll` and `MergeTable` refuse a faulted child, inside the existing layers test |
 | `Execution/Database.Execution.cs` | The failed-run decision: deferred layers' staged writes are discarded when a child's search throws |
 | `Extraction/Extractor.cs`, `.Discovery.cs`, `.Functions.cs`, `.Reconstruct.cs`, `.Variants.cs`, `ExtractionRowSink.cs` | Extraction over a context (§10.10) |
-| `src/Eggnog/Graph/RootEngineScope.cs` | Calls `RuleInfo.GetOrBuildCachedPlan`; the library's public API is unchanged |
+| `src/Eggnog/Graph/RootEngineScope.cs` | Calls `RuleInfo.GetOrBuildCachedPlan`; the library's public API is unchanged. M10.4: stages its root batches through `Database.CreateEngineState` (stamped with the store clock), so stores the library builds keep the re-stamp assertion (§19 item 9) |
+| `Tables/TableCatalog.cs` (M10.4) | A constructor with lazy notification flags, for child catalogs |
+| `Tables/SortedWritesTable.cs`, `SortedWritesTable.Layered.cs` (M10.4) | A private constructor with a lazy `PendingState`, which `CreateLayer` uses |
+| `Tables/OverlayDisplacedTable.cs` (M10.4) | A lazy `PendingState` |
+| `Contexts/Database.Contexts.cs` (M10.4) | A child's catalog has lazy notification flags |
+| `Bridge/EGraphContext.Invariants.cs` (M10.4) | C4 (`CheckMemberMaps`): a map built from the overlay holds exactly its members that are not local, each canonical in the parent and mapped to its group root, roots and members ascending; a cached map whose version is current equals it |
+| `Contexts/Store.cs`, `Database/Database.cs` (M10.4) | DEBUG-only `Store.HasRawWrites`, set by the raw `Database.WithExecutionState` and `CreateExecutionState`; `Database.CreateEngineState(timestamp)` for the engine's own writes, which never set it |
+| `Contexts/Context.Writes.cs`, `Layers/ContextTables.Rebuild.cs`, `Bridge/EGraph.Containers.cs`, `Bridge/EGraphContext.Writes.cs` (M10.4) | Engine writes create their states through `CreateEngineState`; the raw escapes keep `CreateExecutionState` |
+| `Layers/ContextTables.CatchUp.cs` (M10.4) | The re-stamp assertion (§19 item 9) |
 
 ---
 
@@ -2384,7 +2454,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 | `Containers/` | `ContainerDirtyLog` |
 | `Bridge/` | `EGraphContext` (+ 9 partials: `.Run`, `.Watermarks`, `.Writes`, `.Reads`, `.Freeze`, `.Locals`, `.Invariants`, `.Extraction`, and `.Lift` in M10.4), `RuleProgress`, `RuleTable`, `HostWrites`, `ContextLocalSlot`, `StopOnContradictionFunction`, `SaturateReport`, `ConcurrentChildren`, `ContextInvariantException` |
 | `Extraction/` | `ExtractionWatch`, `ExtractionTableMark`, `ExtractionQueryScope` (§10.10) |
-| `Cases/` | `MemberMap`, `ClassPartition`, `LiftSpec`, `LiftTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `LiftSignature`, `LiftCandidates`, `LiftKeySink`, `LiftWrites`, `Lifter` (+ `.Equalities`, `.Facts`), `CaseSet`, `SplitDriver`, `SplitRequest`, `SplitKey`, `SplitRecord`, `SplitOptions`, `SplitReport`, `ISplitSource`, `ISplitDemand`, `ICaseSchedule` |
+| `Cases/` | `MemberMap`, `MemberSignatureComparer`, `ClassPartition`, `LiftSpec`, `LiftTable`, `LiftedTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `LiftSignature`, `LiftCandidates`, `LiftKeySink`, `LiftWrites`, `Lifter` (+ `.Equalities`, `.Facts`), `CaseSet`, `SplitDriver`, `SplitRequest`, `SplitKey`, `SplitRecord`, `SplitOptions`, `SplitReport`, `ISplitSource`, `ISplitDemand`, `ICaseSchedule` |
 
 Tests and benchmarks are listed with their milestones in §17.
 
@@ -2426,6 +2496,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 | M10.1 | `ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks` |
 | M10.2 | `RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks` |
 | M10.3 | `RuleSetRunBenchmarks` (plus the M8 bridge workloads once they exist) |
+| M10.4 | `WritesBenchmarks`, `RuleSetRunBenchmarks` (both publish staged writes, whose `PendingState` check M10.4 changed, §14.1) |
 
 **Done when:** every class runs in-process (`Program.cs`) and the baseline reports are recorded.
 
@@ -2619,7 +2690,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - `SeededWatermarkDifferentialTests` (both families): `InheritWatermarks = false` gives equal views at every checkpoint, and seeded match totals are ≤ unseeded; includes R1-4's counterexample (`(set (g x) (f x))` with `f` raised in the child) as a regression, through a lookup and through a primitive that reads tables. Its programs delete and clear only tables no rule writes: a child that retracts a derived fact re-derives it unseeded and not seeded (egglog's push semantics, X41). Every seeded program carries a no-op primitive over every body variable, so match counts are counts of distinct full bindings in both runs (a semi-naive run otherwise sums over its variants).
 - `IdConstantContextTests`.
 - `ConcurrentChildRulesTests`: 16 children on 8 threads equal serial replays.
-- `EggPushPopTests` (and `EggPushPopWebDemoTests`): for programs whose rules all have `AllowInheritance` (egglog's push copies `last_run_at`, which then coincides with inheritance); other programs are reported, not compared. The M10 gate per map §6. There is no `.egg` reader (rule-layer D14): the programs are translated by hand through `EggPushPopProgram` (push is `CreateChild`, pop is `Dispose`), and only sizes, iteration counts and check results are compared, against values from the egglog 2.0.0 CLI. Compared: `calc.egg`, `tricky-type-checking.egg` blocks 1–6, a program written to make a push inherit progress, and the web demo's `bdd`, `push-pop`, `array` and `cyk`. Reported, not compared: programs that intern eq-sort containers in a child (decision 9) or need sorts the bridge lacks (§21.10).
+- `EggPushPopTests` (and `EggPushPopWebDemoTests`): for programs whose rules all have `AllowInheritance` (egglog's push copies `last_run_at`, which then coincides with inheritance); other programs are reported, not compared. The M10 gate per map §6. There is no `.egg` reader (rule-layer D14): the programs are translated by hand through `EggPushPopProgram` (push is `CreateChild`, pop is `Dispose`), and only sizes, iteration counts and check results are compared, against values from the egglog 2.0.0 CLI. Compared: `calc.egg`, `tricky-type-checking.egg` blocks 1–6, a program written to make a push inherit progress, and the web demo's `bdd`, `push-pop`, `array` and `cyk`. Reported, not compared: programs that intern eq-sort containers in a child (decision 9) or need sorts the bridge lacks (§21.11).
 
 **Done when:** the baseline holds; every differential is green at 400 seeds; I31 is exercised by the seeded-versus-unseeded property over both families (map §8.2 risk retired), in programs whose retractions touch only tables no rule writes (X41); `RestampedCopies == 0` throughout.
 
@@ -2632,14 +2703,19 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 - `LifterTests`: **`G1bFactThroughWinnerIsLifted`**, boolean split, three-case meet, no aliasing with one live case, vacuous cases dropped, all-vacuous contradicts, lattice case-join, bottom-up term lift, limits, memo, Id-output functions, not subsumed.
 - `LifterPropertyTests`: soundness ⊆ E, completeness ⊇ E; 400 seeds.
 - `SplitDriverTests`: lift-before-deepening order, demand filter, ancestor-covered keys, limits, disposal order, stopped cases disposed.
+- Added with the reviews and fixes: `LateIdLiftPropertyTests` (the lift property over ids the parent mints after its cases reserved their blocks, and under a writable parent; 200 seeds); `SplitStepRevisitTests` and `SplitDriverSharingTests` (a later step revisits its own driver's live records; several drivers on one scope); `LiftOracleTests` and `SplitDriverOracleTests` (behaviours the planted-bug review found unchecked); `LiftFixTests`; and the review and verification classes `LiftSoundnessReviewTests`, `LiftReviewTests`, `LiftCompletenessReviewTests`, `LiftRootCostReviewTests`, `NestedLiftPropertyReviewTests`, `LateParentLiftPropertyReviewTests`, `LiftFixVerificationTests`, `LiftFixRound2VerificationTests` and `SplitFixRound3VerificationTests`.
+- Outside `Cases/`: `Contexts/ChildFootprintTests` and `Tables/LazyPendingStateTests` (lighter children), and `Bridge/ConcurrentChildParallelRuleSetTests` and `ConcurrentParallelChildrenReviewTests` (parallel rule sets inside concurrent children).
 
 **Benchmarks** (`Contexts/`):
 - `CaseSplitMemoryBenchmarks` (L6, B5): bytes per structure, against `Database.Clone()`, the in-house egglog push baseline.
 - `CopyVolumeBenchmarks` (G3): histogram of rows copied per union.
 - `LateParentMintBenchmarks` (L7, G2): `ParentIdLosers`, copies per lift round, and the root's id-array growth from reserved blocks (§4.2).
 - `PerChildCostBenchmarks` (full workload: 100 merges plus one rule run).
+- The footprint mode, `--context-footprint` (`ContextFootprint`): steady-state bytes of a bare child's parts, of a split per case against clones, and of one case step by step (B5).
 
 **Done when:** the baseline holds, the property tests are green, and the L6 and L7 reports are produced and attached to the M10 PR.
+
+Built as §21.10 records; the L6 and L7 reports are `docs/design/colors-m10-reports.md`.
 
 ---
 
@@ -2715,7 +2791,7 @@ B6 is in the split driver; B7 in the overlay.
    - when every rule of a run was pruned (M10.3): the bridge still merges what is staged at the run's T, which egglog's `run_rule_set` skips while `run_rules` still records T as every rule's watermark. Added to map §8.1 as row 26.
 5. **Inheritance is narrower than egglog's push** (X41): rules whose actions read tables never inherit a watermark, whereas egglog's push copies `last_run_at` for every rule. egglog push/pop is therefore an oracle only for programs whose rules all inherit.
 6. **Host writes at the root** (X38): the egglog-compatible `EGraph` API writes as given; the `EGraphContext` API canonicalizes Id cells at every level, which is what the rule layer's invariant C assumes.
-7. **G2 ranking** (parent-visible ids first) is deferred until the L7 report exists.
+7. **G2 ranking** (parent-visible ids first) was deferred until the L7 report existed. The report (`docs/design/colors-m10-reports.md`, M10.4) measures the cost of smaller-id-wins after a late parent mint as linear in cases × terms per round and independent of the root; it gives no reason to hurry the change, and the decision stays open.
 8. Deferred:
    - **B1** pruning;
    - **B3** flattening of hidden sets;
@@ -2725,7 +2801,7 @@ B6 is in the split driver; B7 in the overlay.
    - eq containers in children (C13 after M10);
    - per-context replanning (§8.3 #13);
    - deduplicating driver keys across pieces (an optimization for I27's multiplicity; measure first).
-9. **The C7 safeguard (c′)** stays as defence in depth. Once I21 is proven over M10 workloads, turn a nonzero `RestampedCopies` into a `Debug.Assert`.
+9. **The C7 safeguard (c′)** stays as defence in depth. Once I21 is proven over M10 workloads, turn a nonzero `RestampedCopies` into a `Debug.Assert`. Done in M10.4 (§21.10): DEBUG builds assert at every re-stamped copy unless the store was written through the raw execution-state API, whose rows carry the stamps the caller gives them.
 
 ---
 
@@ -2768,19 +2844,19 @@ Two reviews were answered. Every finding was accepted. One fix uses the second o
 
 ---
 
-## 21. Implementation notes (M9.0–M10.3)
+## 21. Implementation notes (M9.0–M10.4)
 
-M9.0 through M10.3 are implemented. This section records, per milestone, where the code departs from the text above: what the text said, what was built, and why. Each departure is listed once, under the milestone that made it; when a later milestone changed the same thing again, the later entry says so.
+M9.0 through M10.4 are implemented. This section records, per milestone, where the code departs from the text above: what the text said, what was built, and why. Each departure is listed once, under the milestone that made it; when a later milestone changed the same thing again, the later entry says so.
 
 The last column says what happened to the text:
 - **Corrected (§…)**: the text above now says what was built; the sections named were changed in this revision.
 - **Note**: the text is unchanged. The entry records interim behaviour that a later milestone replaced, work done earlier than planned (*placement*), or detail below the level of this document.
 
-Reports that only confirmed the text are not listed; for example, `Context.NewId` does not enter the thread domain, as §5.7 says, and a root `Context.Write` asserts the sort cells of every registered table, as §6.6 says. §21.8 lists the edits that rule-layer spec v2 asked of this document, §21.9 records M10.3, and §21.10 lists what is still deferred.
+Reports that only confirmed the text are not listed; for example, `Context.NewId` does not enter the thread domain, as §5.7 says, and a root `Context.Write` asserts the sort cells of every registered table, as §6.6 says. §21.8 lists the edits that rule-layer spec v2 asked of this document, §21.9 records M10.3, §21.10 records M10.4, and §21.11 lists what is still deferred.
 
 ### 21.1 M9.0: Root benchmark baseline
 
-No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.10).
+No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.11).
 
 ### 21.2 M9.1: Store, contexts, clock and ids
 
@@ -2897,7 +2973,7 @@ No departure was reported. The baseline classes are in `src/Eggnog.Relations.Ben
 | §9.4 | With no present layer, `Evaluate` splits and returns `Empty`. | It classifies the constraints on the root's entry of the table, or on the database's own entry for synthetic layers. When layers classify a constraint differently, it counts as fast overall, and the layers where it was slow refine by it with `RefineOne`, as the text says. | Corrected (§9.4) |
 | §9.5 | `TrieNodePool` owns a `SubsetArrayPool`. | `TrieNodePool.Layers` is `null` for one-layer runs, so a root run allocates no array pool. | Corrected (§9.5) |
 | §9.5, §16 | `TrieNode`'s `Subset subset` becomes `LayeredSubset rows`. | A single-layer node, which includes every root node, keeps a plain `Subset` plus a layer byte inline. A multi-layer node's rows, and the spare indexes of a recycled node, live in a new type, `TrieNodeSideState`, created on first use and kept through the pool, so a warm serial run allocates none; a concurrent multi-layer child node allocates one. `IsMultiLayer` is one flag test. Cache arrays are sized from the rows' highest layer, and growth copies the old entries. Why: §1 item 11, because a parallel root run allocates a node per frame at positions 0 and 1, and the inline `LayeredSubset` grew the node from 64 B to 80 B (found in review). It is 64 B again. | Corrected (§9.5, §14.1, §16) |
-| §9.5, §14.1 | The prober's size is not stated. | A `Prober` is 72 B (48 B in M10.1), because a `ProberPiece` carries `Layer` and `View` and the prober carries `Rest` and `RestCount`. It is per-position scratch, allocated once per join task, not per frame or row; a parallel root run therefore pays it per morsel. The `LayerHits` per-position array is now allocated on first use, so a root run never allocates it. Measured against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%); parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%). Shrinking the prober would mean moving `View` and `Rest` out of the piece in every kernel; that is left to the idle-machine gate (§21.10). | Corrected (§9.5, §14.1) |
+| §9.5, §14.1 | The prober's size is not stated. | A `Prober` is 72 B (48 B in M10.1), because a `ProberPiece` carries `Layer` and `View` and the prober carries `Rest` and `RestCount`. It is per-position scratch, allocated once per join task, not per frame or row; a parallel root run therefore pays it per morsel. The `LayerHits` per-position array is now allocated on first use, so a root run never allocates it. Measured against the M10.1 build: parallel triangle probe 991 KB vs 970 KB (+2.2%); parallel 200k math probe 14.14 MB vs 14.135 MB (+0.05%). Shrinking the prober would mean moving `View` and `Rest` out of the piece in every kernel; that is left to the idle-machine gate (§21.11). | Corrected (§9.5, §14.1) |
 | §9.8 | `CachedPlan` keeps at most 16 variants. | When the cache is full, a new K's variant replaces the oldest (copy-on-write, under the lock). A first version stopped caching once full, which made a Store-backed root rebuild its variant on every run after 16 canonical changes (found in review). | Corrected (§9.8) |
 | §9.8 | `RuleBuilder` records an `ActionIdConstant` for every constant Id operand. | They are recorded once, in `RuleBuilder.Build`, by scanning the program through `ActionSubstituter.Operands`, so the operand order is defined in one place. A substituted `ActionInfo` keeps the written `IdConstants`. `QueryEntry` equality ignores the `IsIdConstant` flag, since a flagged and an unflagged constant of one value are the same operand; `WithConstant` keeps the flag. | Corrected (§9.8, §15) |
 | §9.1, §9.5 | `Build` collects the atom and lookup tables; `CloneForMorsel` copies `views`. | A child's snapshot leaves out `$uf` lookups, because a child reads `$uf` through its overlay table (X23). The tables a rule set reads are collected by `ContextView.Snapshot(rules, actions, skip)` through `RuleSet.LookupTable`, without a list; `RuleSet.ReadTables` was removed. `JoinRun.CloneForMorsel` copies the roots array, which M10.1 allocated anew; tasks only compare against it, for counter attribution. | Corrected (§9.1, §9.5) |
@@ -2917,7 +2993,7 @@ Rule-layer spec v2 §13 asks nine edits of this document. Three need no new code
 2. **§10.7.** The sentence saying that the rule layer registers its `ValueSet<T>` as a container is dropped: the rule layer registers no container, and `ValueSet<T>` is an interned base value.
 3. **`BaseValues`** in a child: §21.6.
 
-Items 4–9 change bridge and lift APIs. Items 4–7 are applied with M10.3 (§3.5, §10.1, §10.8, §10.10; §21.9); items 8–9 are listed in §21.10 with M10.4.
+Items 4–9 change bridge and lift APIs. Items 4–7 are applied with M10.3 (§3.5, §10.1, §10.8, §10.10; §21.9); items 8–9 are applied with M10.4 (§11.2, §11.3; §21.10).
 
 ### 21.9 M10.3: Per-context rules in the bridge, including concurrent children
 
@@ -2946,7 +3022,7 @@ M10.3 was built in four parts (the bridge on a store; the differential oracles; 
 | §9.8, §15 | The bridge lowers Id-typed constants through `QueryEntry.IdConst`. | Only constants that land in no table column (external arguments, `AssertEq`/`AssertAnyNe` operands, the default of a union-find lookup), and only when typed `ColumnTy.Id`. Table-column constants are canonicalized by the core through the table's id columns. Bridge constant types are diagnostic only (egglog's constants are untyped), and the semi-naive differential types value constants as Id, which a type-based flag canonicalized wrongly. | Corrected (§15) |
 | §10.7 | `GetContainerValue` registers as needed. | Registers the type on first use only at the root; a child needs it registered, since registration is a definition of the e-graph. | Corrected (§10.7) |
 | §10.8, E10 | `FlushUpdates()`; `Rebuild()`; throw on a failure; plan every live rule. | The flush runs only when host writes are staged (raw pending writes are merged by the storage freeze's rebuild, which the review probe `FreezeMergesARowStagedRawAtTheRoot` confirms); a recorded failure is thrown as `PanicException` and the context stays unfrozen; `Freeze(planRules)` plans exactly the given rules (E10). | Corrected (§10.8) |
-| §8.2, §21.10 | Taking a failure recorded during `CreateChild` is the bridge's job. | `EGraphContext.CreateChild` takes it right after: the new child is disposed and `PanicException` is thrown; the parent stays usable. | Corrected (§10.1) |
+| §8.2, §21.5 | Taking a failure recorded during `CreateChild` is the bridge's job. | `EGraphContext.CreateChild` takes it right after: the new child is disposed and `PanicException` is thrown; the parent stays usable. | Corrected (§10.1) |
 | §21.7 (M10.1 finding) | Decide whether an exception in a child's `ExecuteRuleSet` keeps faulting it. | It does (X12). The writes the failed search staged into deferred layers are discarded (`ContextTables.DiscardDeferredStaged`), and `Database.MergeAll` and `MergeTable` refuse a faulted child, inside the existing layers test (zero root cost). Documented in `Database.Execution.cs`. | Corrected (§15) |
 | §12.7 | C2 reports host writes held by a frozen context. | `CheckInvariants` refused any unclean context before checking, so that item could never be reported (found in review); host writes held by a frozen context are now exempt from the precondition and reported as C2. C4 (member maps) needs `MemberMap` and moves to M10.4. | Note |
 | §10.1 | — | Members the text did not list: `EGraphContext.Parallelism` (the context's heuristics, used by `ConcurrentChildren`), `Owner`, `Depth`, `Options`, `IsClean`, `SetProgress` and `CommittedLastRunAt`; `Context.Host` and `LastRebuildPasses`; `ExecutionState.TryLookupColumn` and `VisibleRowCount`, through which `TableAction` reads the running context's view (it read `state.GetTable`, which throws in a child). | Corrected (§10.1, §15) |
@@ -2967,7 +3043,7 @@ M10.3 was built in four parts (the bridge on a store; the differential oracles; 
 | §10.10, E5 | Staleness is keyed on the extraction schema's tables and the union-find of the context and its non-frozen ancestors, never on the clock. | Keyed on the tables of the extractor's slots (the schema functions it can use under its options), not on every function the schema declares: a write to a function the extractor never reads cannot change its answers. A compaction renumbers rows without changing them and still counts as a change; an empty layer that a no-op write created marks as an absent one. | Corrected (§10.10) |
 | §10.10, §10.5 | — | Only creation requires the context clean; each query checks the watch instead. A non-frozen ancestor's write to an unrelated table leaves the child behind its parent, yet the rows the extractor reads, and their canonical form, are as they were. | Corrected (§10.10) |
 | §10.10, §8.3, E5 | On a frozen context, any number of extractors run on any threads; a writable one is not discussed. | A context-form query enters the context's domain while it is not frozen and runs as a callback, so a second thread fails fast and a cost function may read the context but not write it. The root forms hold nothing, as egglog's root does not. A single extractor stays single-threaded, because queries extend its caches. | Corrected (§8.3, §10.10) |
-| §10.10, §16 | — | Members E5 did not list: `Extractor.Context`; the internal `EGraphContext.EnterExtraction`, `ExtractionWatch`, `ExtractionTableMark` and `ExtractionQueryScope`. `ComputeCostsFromRootSorts` and `FunctionToDag` stay root-only (§21.10). | Corrected (§10.10, §16) |
+| §10.10, §16 | — | Members E5 did not list: `Extractor.Context`; the internal `EGraphContext.EnterExtraction`, `ExtractionWatch`, `ExtractionTableMark` and `ExtractionQueryScope`. `ComputeCostsFromRootSorts` and `FunctionToDag` stay root-only (§21.11). | Corrected (§10.10, §16) |
 
 **Differential oracles (§17 M10.3)**
 
@@ -3005,24 +3081,71 @@ M10.3 was built in four parts (the bridge on a store; the differential oracles; 
 | `RawEscapeReverifyTests` (from the third verification) | Added as written; three cases failed until the raw escape's action ran as a callback, the bridge's writes refused inside callbacks, and the raw iteration flushed staged writes first. Each case accepts either a refusal or the ordered result; `RawEscapeCallbackTests` asserts the refusals | §8.3, §10.4 |
 | `BridgeRootCostReviewTests.RootAddValuesAllocatesNoMoreThanStagingTheRowsDirectly` | Measures the two paths in interleaved windows and keeps the least of up to ten windows each, stopping once the bound holds | It failed once in a full suite, where every window of one path was inflated by a pool trim; the bound is unchanged |
 
-### 21.10 Still deferred
+### 21.10 M10.4: Lift primitives and split hooks
 
-The spec-text updates that the M9.1–M10.3 stages left for this document, and rule-layer v2 §13 items 1–7, are applied in this revision. Everything below is still open.
+M10.4 was built in one part on the M10.3 core, merged with the M10.3 fixes, reviewed for soundness, root cost, oracle strength and completeness, and fixed in four rounds, the last three answering verification probes. The rows below record every departure the build, the merge and the fixes reported. Rule-layer v2 §13 items 8 and 9 (E8) are applied in §11.2 and §11.3; rule-layer §15.7 records the same from that side. The L6 and L7 reports are `docs/design/colors-m10-reports.md`.
+
+**Member maps and the lift (§11.1, §11.2)**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §11.1 | `ReadOnlySpan<uint> Members(uint caseCanonical)` | `Members(in uint caseCanonical)`: the one-element answer `[c]` is a span over the argument, so nothing is allocated per lookup. Also `GroupMembers`, `IndexOf`, `IsLocal`, `MemberCount` and `Version`. A class whose members are all local is no group: it stands for no parent id | Corrected (§11.1) |
+| §11.1 | `ClassPartition.Meet(...)` returns nothing | It returns the number of blocks appended, and sorts with the struct comparer `MemberSignatureComparer` | Corrected (§11.1, §16) |
+| §11.2 | A constructor present in every live case and absent in P is lifted as a term | When every live case's output stands for one parent id, the row is written with that id (counted in `Rows`), otherwise as a term. The result is the same as the next round's meet gives, one round and one fresh id earlier; it is sound because the row holds in every live case | Corrected (§11.2) |
+| §11.2 | Function with an id output: "an Id output must have a common parent member" | As written, for a key P does not hold. For a key P holds, nothing is written when every live case's output is its class of P's stored output, which a `UnionId` or `AssertEq` merge always gives: the first form wrote the common member next to P's stored output when the two differed in P, so an `AssertEq` merge, the rule layer's merge for a function to a sort without a lattice, panicked before the meet's union of the two ids applied (found in review). The first correction skipped every held key, which lost a value a lattice merge over ids had moved in every case (I33, found in verification); such a key is written again | Corrected (§11.2) |
+| §11.2 | Relation rows are written when present in every live case | The output is written as every live case holds it, and only when they agree; an id output is refused (`ArgumentException`), and so is a case join on any kind but `Function`, or on an id output, and a constructor without an id output. The first form wrote the seed's output unchecked: a base output that differed between cases was lifted from one case (I33), and an id output could be the seed's local id (I10) (found in review). The rule layer lifts its relations as `Function` with a unit output (rule-layer §6.9.1), unaffected | Corrected (§11.2) |
+| §11.2 | — | In a child parent, a table the parent cannot write (a merge that is not a lattice merge, decision 2) is left out of the lift: no case can hold rows of it either | Corrected (§11.2) |
+| §11.2 | `if first round && sig == memo: return`; `memo = LiftSignature.Of(P, cases)` at the end; `LiftSignature` holds versions | The memo is keyed on the spec as well (compared by reference, then by content), and set only when the lift settled: not cut short by `RoundLimit`, and its last round skipped no row over `CandidateLimit`. A lift that runs clears it first, so one that throws leaves none. The first form ignored the spec and the limits, so a lift of a wider spec, or with a larger `CandidateLimit` after a lift that skipped rows, returned at once and lifted nothing (I33 completeness through E8's per-call spec and options; found in review). A memo hit reports `ParentContradicted` when no live case is left; it reported false (found in review) | Corrected (§11.2) |
+| §11.2 | All-vacuous: `P.StageRow(c, [])` | The output is the function's constant default; else, for an id output, a term (a fresh id of P); else the base value a vacuous case merged into its own layer. The first form copied a vacuous case's cell for an id output too, which named an id local to that case in P while the cases lived (I10, found in review). A `CaseSet` keeps the base value when it disposes a vacuous case, so a lift after `DisposeVacuous` or `RunEach` disposed every case writes the contradiction too; the first form threw `InvalidOperationException` there for a base output with no constant default (found in verification). `ParentContradicted` is reported also when no contradiction function is designated (nothing is written then) | Corrected (§11.2) |
+| §11.2, §14.2 | `LiftCandidates`: a deduplicating key arena | A reset clears only the slots the arena used when they are few against its capacity. The first form cleared the whole slot table, which only grows, so after one large table every later table and round paid for the largest one ever seen (found in review) | Corrected (§11.2, §14.2) |
+| §11.2, §8.3 | — | The lift holds P's thread domain for its whole run (the cases share it), refuses to start inside a callback of it, and calls no caller code but the case joins | Corrected (§11.2) |
+| §11.2, E8 | `RunEach(ICaseSchedule)` | `RunEach(schedule, depth, allowSplits)`, returning whether a schedule reported a change. `CaseSet` also has `VacuousCount` and `IsDisposed`; `AddCase` requires options with `IsCase` and `StopOnContradiction`; the constructor refuses a frozen parent. A lift over a set whose cases were all disposed as vacuous contradicts the parent; with no case ever found vacuous it throws, as E8's host-driven `Lift` does | Corrected (§11.2) |
+| §11.2 | — | A case disposed outside the set makes `RunEach`, `Lift` and `DisposeVacuous` throw `InvalidOperationException`. The first form dropped it silently, so the lift ran over cases that no longer covered the parent and lifted what held in the rest, or contradicted the parent when the rest were vacuous (found in review). `Cases` still lists such a case, disposed; only `Dispose` is of use on the set then | Corrected (§11.2) |
+
+**Split hooks (§11.3, E8)**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §11.3 | Step 6: "for every record, `RunEach`, then lift" | For every live record of the scope, in creation order, those earlier steps opened included. The first form ran and lifted only the records the same step opened, and returned before phase A when every request was covered (B6), so facts the cases derived from the scope's later facts were never lifted, and a case those facts made vacuous was never dropped, against rule-layer §6.9.3 and D43 (found in review). `Step` returns whether it opened cases or a lift changed the scope; in-case work alone is no change, so a schedule that repeats the step until nothing changes ends | Corrected (§11.3) |
+| §11.3 | Step 6: "every live record of the scope"; step 2: "a key covered by a live record" | Step 6 runs and lifts only the live records the same driver opened; each `SplitRecord` names its `Driver`. B6 coverage compares the record's source object by reference and the key cells, not the `SplitKey` (whose source is an index into one driver's list). The first form ran one driver's in-case schedule in another driver's cases and lifted them with its own spec (and nested its own split nodes there), and let a record of one driver's source 0 cover an unrelated split of another driver's source 0, so that split was never taken; the rule layer builds one driver per split node over one scope (rule-layer §6.9.3), so both happened in programs with two `Split` nodes (found in verification). A split node that reuses the same source object is still covered, as B6 intends | Corrected (§11.3) |
+| §11.3 | Step's phases | `Step` brings the scope up to date first and returns false for a stopped or contradictory scope or at the depth limit; it refuses a frozen scope (a lift could not write into it). A request with fewer than one case is skipped like one over `CaseLimit`, and so is a request whose key an earlier request of the same step took. After every lift the cases found vacuous are disposed; a lift that contradicts the scope ends the step | Corrected (§11.3) |
+| §11.3 | Records | Kept on the scope's `EGraphContext`, created on first use. A record is registered before its cases are opened, so an exception while opening or running leaves it for `DisposeRecords` | Corrected (§11.3) |
+
+**Checks, children and benchmarks**
+
+| § | The text said | Built, and why | Text |
+|---|---|---|---|
+| §12.7 | C4: member maps | `CheckMemberMaps` in `EGraphContext.CheckInvariants`: a map built from the overlay holds exactly its members that are not local, each canonical in the parent and mapped to its group root, roots and members ascending; a cached map whose version is current equals it. It does not need a clean context, so it also runs where C2 reports a frozen context's host writes. A mutation that drops this check survives the tests: the map is built from the overlay the check compares it with, so only fault injection could fail it | Corrected (§15) |
+| §19 item 9 | Turn a nonzero `RestampedCopies` into a `Debug.Assert` once I21 holds over M10 workloads | Done: the lift and split workloads assert `RestampedCopies == 0` over hundreds of seeds (`LiftReviewTests`, `LiftCompletenessReviewTests`). DEBUG builds now assert at every re-stamped copy unless the store was written through the raw execution-state API (`Database.WithExecutionState`, `CreateExecutionState`, the bridge's raw escapes), whose rows carry the stamps the caller gives them, as `CatchUpTests` relies on. The engine's own writes use `CreateEngineState`, which marks nothing; so do the rule layer's root host batches (`RootEngineScope`, stamped with the store clock), so stores the library builds keep the assertion (found in verification). Release builds are unchanged | Corrected (§3.5, §6.6, §7.2, §7.3, §10.4, §12.3, §14.1, §15, §19) |
+| §14.2, §21.5 | Reduce a bare child and an empty layer: lazy `PendingState` segments and lazy `IndexCatalog`s | Lazy pending queues as specified, and lazy notification flags added (568 B per child catalog). The index catalogs stay eager, since a lazy catalog adds a null test to the root's index lookups; only their insert lock is lazy. Steady state: a bare child 4,726 → 2,454 B, an empty layer 2,766 → 1,062 B. The root pays what it did (§14.1); timing that is the M10.4 gate (`WritesBenchmarks`, `RuleSetRunBenchmarks`), still to be run on an idle machine (§21.11) | Corrected (§14.1, §14.2, §15, §17) |
+| §17 | `CaseSplitMemoryBenchmarks`: bytes per structure | The benchmark measures a split's bytes against clones; the footprint mode (`--context-footprint`) adds the bytes of each part of a child (pending state, catalogs, overlay, journal, id blocks) and of one case step by step (the case, a union and its rebuild, a fact, a rule run, a lift) | Corrected (§14.2) |
+| §17 | `PerChildCostBenchmarks` (full workload: 100 merges plus one rule run) | Built: 100 unions, a flush and one rule run whose watermark the child inherits from the root's run; the setup checks the 200 matches. Bytes are flat over 20k–2M root rows | Note |
+| Deferred from M10.3 | Exercise a child's internal parallel rule set under `ConcurrentChildren`, above `DbLevelThreshold` | Covered by tests rather than the benchmark: `ConcurrentChildParallelRuleSetTests` and `ConcurrentParallelChildrenReviewTests` run several children with more than 10,000 rows of their own under `ConcurrentChildren`, whose heuristics then choose parallel rule sets; each child equals a serial replay and passes `CheckInvariants` | Note |
+| §17 M10.4 | Tests and benchmarks as listed | Built as listed. The reviews and fixes added the late-id property, revisit, sharing, oracle and verification classes, and the footprint mode (`--context-footprint`); the gate map had no M10.4 row. §17 now lists them | Corrected (§17) |
+| §16 | Files in `Cases/` | Also `LiftedTable` and `MemberSignatureComparer`. Test helpers `RecordingSchedule`, `TestSplitSource`, `TestSplitDemand`, `SplitWorld`, `RowCountSink`, `LiftFacts`, `SeedFailure`; benchmark helpers `CaseGraph`, `LateParentMintResult`, `ContextFootprint` | Corrected (§16) |
+
+**Tests changed**
+
+| Test | Change | Why |
+|---|---|---|
+| `LiftCompletenessReviewTests` | The completeness review's `LiftReviewTests`, renamed | The root-cost review added a different class of that name; both are kept |
+
+No other existing test changed: every M10.4 test file is new, and the review tests pass as written.
+
+### 21.11 Still deferred
+
+The spec-text updates that the M9.1–M10.4 stages left for this document, and rule-layer v2 §13 items 1–9, are applied in this revision. Everything below is still open.
 
 | Item | Recorded in | Target |
 |---|---|---|
-| C4 (member maps) in `EGraphContext.CheckInvariants` | M10.2, M10.3 | M10.4 (needs `MemberMap`) |
-| §11 in full: lift primitives and split hooks (`MemberMap`, `ClassPartition`, `Lifter`, `CaseSet`, `SplitDriver` and the rest), and `EGraphContext.Lift.cs` (`ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` by `FunctionId`; M10.3 tests reach these through the storage `Context`) | M10.2, M10.3 | M10.4 |
-| Rule-layer v2 §13 items 8–9: `CaseSet.AddCase(ContextOptions?)`, `DisposeVacuous`, and `Lift` with a cancellation token checked between rounds; `ISplitSource.FindRequests` receiving the `SplitReport`, `SplitOptions.CaseOptions`, and `SplitDriver.Step` not holding the scope's domain while it calls sources and schedules | M10.1 | M10.4 |
-| `PerChildCostBenchmarks`' full workload (100 merges plus one rule run) | M9.4 | M10.4 |
-| The L6 and L7 reports; `CaseSplitMemoryBenchmarks`, `CopyVolumeBenchmarks` and `LateParentMintBenchmarks` | M9.4, M10.2 | M10.4 |
-| Reducing a bare child (about 7.4–9 KB) and an empty layer (about 2.7–3.0 KB) toward §14.2's estimate: lazy `PendingState` queue segments and lazy `IndexCatalog`s. These touch root hot paths, so the M9.0 gates apply | M9.4 | M10.4 |
-| The ≤2% root gates against the M9.0 baseline, which need an idle machine (only Release builds and dry runs were done): M9.1 (`ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks`); M9.2 (`DisplacedRebuildBenchmarks`, `UnionFind/*`); M9.3 (`WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks`); M9.4 (`DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks`); M10.1 (`ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks`); M10.2 (`RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks`); M10.3 (`RuleSetRunBenchmarks` and the M8 bridge workloads `BridgeMath` and `BridgeAc`, which now run on a store-backed root and pay §14.1's M10.3 rows; the cost of building an `EGraph`; `ContextExtractionBenchmarks` `RootContext` against `RootApi`). Allocation-only dry runs: `BridgeMath` 9.80 GB → 9.61 GB, `BridgeAc` 15.47 GB → 15.57 GB (+0.6%), `RootContext`/`RootApi` 612.5 KB / 608.6 KB | M9.1–M10.3 | No milestone: an idle-machine run |
-| M9.4's done-when: per-child time and bytes flat within 1.5× from 20k to 2M rows (L6, B4). Dry runs show per-child bytes flat at about 98–101 KB across 20k, 200k and 2M rows, for frozen and writable roots; time is not measured | M9.4 | No milestone: an idle-machine run |
+| Lazy `IndexCatalog` objects (M10.4 made only their insert lock lazy: a lazy catalog adds a null test to the root's index lookups) | M9.4, M10.4 | No milestone: only with an idle-machine gate showing the root unharmed |
+| The ≤2% root gates against the M9.0 baseline, which need an idle machine (only Release builds and dry runs were done): M9.1 (`ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks`); M9.2 (`DisplacedRebuildBenchmarks`, `UnionFind/*`); M9.3 (`WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks`); M9.4 (`DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks`); M10.1 (`ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks`); M10.2 (`RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks`); M10.3 (`RuleSetRunBenchmarks` and the M8 bridge workloads `BridgeMath` and `BridgeAc`, which now run on a store-backed root and pay §14.1's M10.3 rows; the cost of building an `EGraph`; `ContextExtractionBenchmarks` `RootContext` against `RootApi`); M10.4 (`WritesBenchmarks` and `RuleSetRunBenchmarks`, after the `PendingState` flags change). Allocation-only dry runs: `BridgeMath` 9.80 GB → 9.61 GB, `BridgeAc` 15.47 GB → 15.57 GB (+0.6%), `RootContext`/`RootApi` 612.5 KB / 608.6 KB | M9.1–M10.4 | No milestone: an idle-machine run |
+| M9.4's done-when: per-child time and bytes flat within 1.5× from 20k to 2M rows (L6, B4). Bytes are flat: about 96 KB for the storage workload and 145 KB for M10.4's full workload (100 unions, a flush and one rule run) across 20k, 200k and 2M rows, for frozen and writable roots (dry runs; 148–149 KB in steady state). Time is not measured | M9.4 | No milestone: an idle-machine run |
 | Whether the `Prober`'s growth (+24 B per prober) stays within the `RuleSetRunBenchmarks` Parallel gate. If it does not, shrink `ProberPiece` by moving `View` and `Rest` out of line | M10.2 | Idle-machine run; an M10.2 follow-up if the gate fails |
-| §19 item 9: turn a nonzero `RestampedCopies` into a `Debug.Assert` once I21 is proven over M10 workloads. Every M10.3 differential asserts `RestampedCopies == 0` throughout, and it held | §19 | M10.4, once its workloads (the lift) have run under the same assertion |
-| Exercising a child's internal parallel rule set under `ConcurrentChildren` with more than `DbLevelThreshold` rows of its own (`ChildParallelRuleSetReviewTests` covers forced parallel rule sets in one child, under writable and frozen roots) | M10.3 | M10.4 `PerChildCostBenchmarks`, or an idle-machine run |
 | Push/pop programs that intern eq-sort containers in a child (`container-rebuild.egg`, `container-fail.egg`, `vec.egg`) | M10.3 | After M10, with eq containers in children (decision 9, §19 item 8) |
 | Push/pop programs that need sorts the bridge lacks (`UnstableFn`, `Map`: `python_array_optimize.egg`, `stresstest_large_expr.egg`, the issue #113 blocks of `tricky-type-checking.egg`), and the web demo programs out of reach for the same reasons. The web demo's `math.egg` needs only `f64` and strings, which the bridge has, but is not translated (74 rules, 21 push blocks) | M10.3 | No milestone: there is no `.egg` reader (rule-layer D14); `math.egg` when a reader exists, or by hand if R2 needs more push/pop coverage |
 | `ComputeCostsFromRootSorts` and `FunctionToDag` over an `EGraphContext` (only the on-demand extractor takes a context, as E5 asks) | M10.3 | No milestone; R2 if it needs them |
-| Left open by design (§19 items 7 and 8): G2 ranking (after the L7 report), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |
+| B5 in full: bytes for each per-child structure separately (layer tables, hidden sets, overlay, cursors, watermarks, indexes; the footprint mode gives the parts of a bare child and the bytes each step of a case adds), and time and failures reported separately under a stated timeout policy | M10.4 | No milestone: the timed half needs an idle machine |
+| A test that fails when C4's canonical-in-parent check is removed (a surviving mutant of the oracle review): the member map is built from the overlay the check reads, so only fault injection can fail it | M10.4 | No milestone: needs a fault-injection hook |
+| Library use of the split hooks: `RuleSplitSource`, `SplitSchedule` with one cached `SplitDriver` per split node, and the host-driven `CaseSet` wrapper (rule-layer §6.9). The engine side is done, several drivers on one scope included (§11.3) | M10.4 | Rule-layer R3 |
+| Left open by design (§19 items 7 and 8): G2 ranking (the L7 report now exists, `docs/design/colors-m10-reports.md`: its cost is linear in cases × terms per round and independent of the root), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |

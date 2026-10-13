@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -215,6 +216,11 @@ namespace Eggnog.Relations
                 {
                     StageCopy(ref state, s, layer, a, r, HideReason.Restamped, false, epoch);
                     statistics.RestampedCopies++;
+#if DEBUG
+                    // §19 item 9: (c′) stays as defence in depth, but every engine and bridge path stamps with the
+                    // state's timestamp (I21), so only the raw-write contract can put a row below a reader's floor.
+                    Debug.Assert(owner.Store.HasRawWrites, $"I21: an ancestor row of table {table} was stamped {data[offset + sortColumn]}, below this context's semi-naive floor {floor}, without raw writes (a re-stamped catch-up copy).");
+#endif
                 }
             }
 

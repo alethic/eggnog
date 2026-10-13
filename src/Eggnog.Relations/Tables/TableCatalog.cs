@@ -40,9 +40,28 @@ namespace Eggnog.Relations
         DenseIdMap<TableId, Table> tables = new();
 
         /// <summary>
+        /// Initializes an empty catalog: a root's or a bare database's.
+        /// </summary>
+        public TableCatalog()
+            : this(lazyNotifications: false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes an empty catalog whose notification flags are allocated on the first staged write when
+        /// <paramref name="lazyNotifications"/> is set: a child context's (colored-contexts spec §14.2).
+        /// </summary>
+        /// <param name="lazyNotifications">Whether the notification list allocates its flags on first use.</param>
+        public TableCatalog(bool lazyNotifications)
+        {
+            Notifications = new NotificationList<TableId>(lazyNotifications);
+        }
+
+        /// <summary>
         /// Gets the tables notified of staged writes since the database last reset the list.
         /// </summary>
-        public NotificationList<TableId> Notifications { get; } = new();
+        public NotificationList<TableId> Notifications { get; }
 
         /// <summary>
         /// Gets the function that supplies a table the catalog does not hold when a write is staged into it, or

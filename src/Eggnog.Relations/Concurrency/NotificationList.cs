@@ -68,11 +68,32 @@ namespace Eggnog.Relations
         readonly List<TKey> notified = new();
 
         /// <summary>
-        /// The flag segment directory: nonzero flags are notified. Never empty. Replaced wholesale (under
-        /// <see cref="growLock"/>) when it grows; segments are shared between successive directories and never
-        /// reallocated.
+        /// The flag segment directory: nonzero flags are notified. Never empty, except in a lazy list before its first
+        /// notify. Replaced wholesale (under <see cref="growLock"/>) when it grows; segments are shared between successive
+        /// directories and never reallocated.
         /// </summary>
-        int[][] segments = [new int[1 << Log2Base]];
+        int[][] segments;
+
+        /// <summary>
+        /// Initializes an empty list with its first segment of 128 flags allocated: egglog's default capacity.
+        /// </summary>
+        public NotificationList()
+            : this(lazy: false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes an empty list whose first segment is allocated now or, with <paramref name="lazy"/>, by the first
+        /// notify (colored-contexts spec §14.2: a child context's catalog pays for flags only once it stages a write).
+        /// The notify path is the same either way: an empty directory takes the growth branch that a notify past the
+        /// last segment already takes.
+        /// </summary>
+        /// <param name="lazy">Whether to allocate the first segment on first use.</param>
+        public NotificationList(bool lazy)
+        {
+            segments = lazy ? Array.Empty<int[]>() : [new int[1 << Log2Base]];
+        }
 
         /// <summary>
         /// Notifies <paramref name="item"/>. Wait-free and read-only when it is already notified; the first notifier
@@ -224,11 +245,11 @@ namespace Eggnog.Relations
                 if (segment < directory.Length)
                     return directory;
 
-                // Segment 0 always exists, so every new segment k >= 1 holds SegmentStart(k) flags.
+                // Segment 0 holds 128 flags (a lazy list creates it here); every segment k >= 1 holds SegmentStart(k).
                 var grown = new int[segment + 1][];
                 Array.Copy(directory, grown, directory.Length);
                 for (var k = directory.Length; k <= segment; k++)
-                    grown[k] = new int[SegmentStart(k)];
+                    grown[k] = new int[k == 0 ? 1 << Log2Base : SegmentStart(k)];
 
                 // Release: the new segments are zeroed before any thread can reach them through the directory.
                 Volatile.Write(ref segments, grown);

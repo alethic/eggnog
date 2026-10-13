@@ -73,7 +73,7 @@ namespace Eggnog.Relations
             this.parentUnionFind = parentUnionFind;
             this.localIds = localIds;
             finder = parentFinder.Extend(overlay);
-            pending = new PendingState(new ShardData(1));
+            pending = new PendingState(new ShardData(1), lazyQueues: true);
         }
 
         /// <summary>
