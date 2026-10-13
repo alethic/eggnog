@@ -22,12 +22,20 @@ namespace Eggnog.Relations.Tests
         public long AncestorRowsExamined;
 
         /// <summary>
-        /// The rows hidden for naming a loser (<see cref="HideReason.Mentions"/>).
+        /// The ancestor rows copied into children, for any reason (<see cref="LayerStatistics.RowsCopied"/>); counted in
+        /// every build.
+        /// </summary>
+        public long RowsCopied;
+
+        /// <summary>
+        /// The rows hidden for naming a loser (<see cref="HideReason.Mentions"/>); DEBUG builds only, where the engine
+        /// records why each row was hidden (<see cref="TableLayer.ReasonFor"/>), and zero otherwise.
         /// </summary>
         public long Mentions;
 
         /// <summary>
-        /// The rows hidden for their key (<see cref="HideReason.KeyHeld"/>).
+        /// The rows hidden for their key (<see cref="HideReason.KeyHeld"/>); DEBUG builds only, like
+        /// <see cref="Mentions"/>.
         /// </summary>
         public long KeyHeld;
 
@@ -57,6 +65,7 @@ namespace Eggnog.Relations.Tests
             var statistics = tables.Statistics;
             CatchUpRowsExamined += statistics.CatchUpRowsExamined;
             AncestorRowsExamined += statistics.AncestorRowsExamined;
+            RowsCopied += statistics.RowsCopied;
             RestampedCopies += statistics.RestampedCopies;
             FrozenChildren += pair.IsFrozen ? 1 : 0;
             var rows = new List<int>();

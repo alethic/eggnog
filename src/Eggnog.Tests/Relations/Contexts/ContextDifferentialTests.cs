@@ -65,8 +65,12 @@ namespace Eggnog.Relations.Tests
                 Run(100_000 + seed, 600, withSpike: seed % 3 == 0, coverage);
 
             Assert.True(coverage.CatchUpRowsExamined > 0, "no child caught up with an ancestor's rows");
+            Assert.True(coverage.RowsCopied > 0, "no ancestor row was copied into a child");
+#if DEBUG
+            // Why a row was hidden is recorded in DEBUG builds of the engine only (TableLayer.ReasonFor).
             Assert.True(coverage.Mentions > 0, "no ancestor row was copied for naming a loser");
             Assert.True(coverage.KeyHeld > 0, "no ancestor row was copied for its key");
+#endif
             Assert.True(coverage.AncestorRowsExamined > 0, "step 4 examined no ancestor row");
             Assert.True(coverage.Retractions > 0, "no child retracted a row");
             Assert.True(coverage.FrozenChildren > 0, "no child was frozen");
