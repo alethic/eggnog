@@ -3,7 +3,7 @@
 **Code baseline:** worktree `project-overview-1f1e82` at `e65f4f4`. The bridge (M8) is being ported into
 `src/Eggnog.Relations/Bridge` and `Extraction`; §10 names its types as egglog-bridge's.
 
-**Paths.** Engine paths are relative to `src/Eggnog.Relations/`. Test paths are relative to `src/Eggnog.Relations.Tests/` and benchmark paths to `src/Eggnog.Relations.Benchmarks/`.
+**Paths.** Engine paths are relative to `src/Eggnog/Relations/`. Test paths are relative to `src/Eggnog.Tests/Relations/` and benchmark paths to `src/Eggnog.Benchmarks/Relations/`.
 
 **Binding inputs:**
 - `docs/design/egglog-engine-map.md`: §0, §1.2–1.3, §4 (C1–C14), §6 (M9, M10) and §8.2;
@@ -2435,7 +2435,7 @@ Harnesses run the checker after every `Rebuild`, `RunRules` and `FlushUpdates`, 
 
 ## 16. New files (one type each, namespace `Eggnog.Relations`)
 
-**Engine (`src/Eggnog.Relations/`):**
+**Engine (`src/Eggnog/Relations/`):**
 
 | Folder | Files |
 |---|---|
@@ -2463,7 +2463,7 @@ Tests and benchmarks are listed with their milestones in §17.
 ## 17. Milestones
 
 Every milestone has the same baseline definition of done:
-- `dotnet build src/Eggnog.Relations.Tests -f net10.0` has no errors and no warnings in new files;
+- `dotnet build src/Eggnog.Tests -f net10.0` has no errors and no warnings in new files;
 - every new test and every existing suite passes, with only the mechanical updates of §15;
 - the conventions hold (one type per file, XML docs);
 - the egglog defects of §8.1 touched by the milestone are fixed, with a citing comment;
@@ -2473,7 +2473,7 @@ Each milestone below adds its own gates. A milestone may ship interim behaviour 
 
 ### M9.0: Root benchmark baseline (before any engine change)
 
-**Content:** new classes in `src/Eggnog.Relations.Benchmarks/Root/`, one type per file, run on the unchanged engine; their exported reports are kept with the milestone PR as the baseline.
+**Content:** new classes in `src/Eggnog.Benchmarks/Relations/Root/`, one type per file, run on the unchanged engine; their exported reports are kept with the milestone PR as the baseline.
 
 | Class | Workload | Exercises |
 |---|---|---|
@@ -2856,7 +2856,7 @@ Reports that only confirmed the text are not listed; for example, `Context.NewId
 
 ### 21.1 M9.0: Root benchmark baseline
 
-No departure was reported. The baseline classes are in `src/Eggnog.Relations.Benchmarks/Root/`. The gates measured against them are pending (§21.11).
+No departure was reported. The baseline classes are in `src/Eggnog.Benchmarks/Relations/Root/`. The gates measured against them are pending (§21.11).
 
 ### 21.2 M9.1: Store, contexts, clock and ids
 

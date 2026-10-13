@@ -15,12 +15,17 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 
 ## Layout
 
-- Engine code: `src/Eggnog.Relations/<Folder>/<Type>.cs`. Tests: `src/Eggnog.Relations.Tests/<Folder>/<Type>Tests.cs`.
-- One namespace for the engine: `Eggnog.Relations`. Tests: `Eggnog.Relations.Tests`.
+- Engine code: `src/Eggnog/Relations/<Folder>/<Type>.cs`. Tests: `src/Eggnog.Tests/Relations/<Folder>/<Type>Tests.cs`.
+- One namespace for the engine: `Eggnog.Relations`. Tests: `Eggnog.Relations.Tests`, in the library's test project
+  (`Eggnog.Tests`); benchmarks: `Eggnog.Relations.Benchmarks`, in `src/Eggnog.Benchmarks/Relations/`. The test and
+  benchmark folders keep the engine's namespace rather than their project's, so engine types resolve as they do in the
+  engine and the library tests' `Relations.X` keeps naming the engine.
 - **One type per file.** No nested types (including nested enumerators, comparers and private helper structs), no
   multi-type files. Partial classes across files are fine for large types.
-- Default to `internal`. Make a type `public` only when a consumer of the engine needs it. `InternalsVisibleTo` covers
-  the test, benchmark and `Eggnog` projects, and `Eggnog.Tests`.
+- The engine is compiled into the `Eggnog` assembly (decision 13). Every engine type is `internal`; only the library's
+  own types in the namespace `Eggnog` are public. `InternalsVisibleTo` covers `Eggnog.Tests` and `Eggnog.Benchmarks`.
+  Library code names engine types through the child namespace (`Relations.EGraph`) and never writes
+  `using Eggnog.Relations;` (rule-layer D29).
 - XML doc comments on every public and internal type and member: say what it is for, its invariants and its cost.
 
 ## Representation
@@ -28,7 +33,7 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 - A table cell is a `uint` (`Value.Rep`). `Value.StaleRep` (`uint.MaxValue`) in a row's first cell marks the row
   deleted. Hot paths use raw `uint`; the `Value` struct is for API edges.
 - A row id (egglog's `RowId`/`Offset`) is an `int` index into a table's row buffer.
-- Identifiers are the record structs in `src/Eggnog.Relations/Ids` (`TableId`, `Variable`, `AtomId`, ...), all implementing
+- Identifiers are the record structs in `src/Eggnog/Relations/Ids` (`TableId`, `Variable`, `AtomId`, ...), all implementing
   `INumericId<T>`. Use `DenseIdMap<TKey,TValue>`, `IdVec<TKey,TValue>` and `FixedBitSet` from `Collections`.
 - Hashing: `FxHasher` (egglog's rustc-hash 2.x), and `ShardData` for shard selection (bits below the top seven).
 - Row-major buffers are `uint[]` with an arity: row `r` occupies `[r*arity, (r+1)*arity)`.
@@ -55,7 +60,7 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 
 - C# 13, nullable enabled, implicit usings disabled (write the `using`s), net8.0 and net10.0.
 - 4-space indent, braces on new lines, a blank line after an opening type brace and before the closing one (see
-  `src/Eggnog.Relations/Collections/DenseIdMap.cs`), `== false` rather than `!`, sealed classes, readonly structs.
+  `src/Eggnog/Relations/Collections/DenseIdMap.cs`), `== false` rather than `!`, sealed classes, readonly structs.
 - Exceptions: `ArgumentException`/`ArgumentOutOfRangeException` for bad input at API edges,
   `InvalidOperationException` for misuse; `Debug.Assert` for internal invariants the Rust `debug_assert`s.
 
@@ -63,11 +68,12 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 
 Work done in parallel happens in private sandboxes, so one module's half-finished state never breaks another's build:
 
-1. Copy the repository's build files and both engine projects into your sandbox (see the workflow prompt for the
-   exact command).
+1. Clone the repository into your sandbox, or copy its build files and `src/Eggnog`, `src/Eggnog.Tests` and
+   `src/Eggnog.Storage` there (the engine's context differentials use the spike as a second oracle; see the workflow
+   prompt for the exact command).
 2. Add only new files, in your module's folders. Never edit a file another module owns. If you need a change to a
    shared type, implement around it and report the change you need.
-3. Build with `dotnet build src/Eggnog.Relations.Tests -f net10.0` and run the tests by executing
-   `src/Eggnog.Relations.Tests/bin/Debug/net10.0/Eggnog.Relations.Tests.exe` (add `-class <FullName>` to filter).
+3. Build with `dotnet build src/Eggnog.Tests -f net10.0` and run the tests by executing
+   `src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.exe` (add `-class <FullName>` to filter).
    The build must have no errors and no warnings in your files, and every test must pass.
 4. Report the list of files you created, relative to the repository root.

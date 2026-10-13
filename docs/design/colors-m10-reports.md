@@ -13,10 +13,10 @@ reported; the machine was shared with other builds and test runs while these wer
 
 Two sources:
 
-- **Dry runs** (`--job dry`) of the benchmark classes in `src/Eggnog.Relations.Benchmarks/Contexts/`: one cold invocation
+- **Dry runs** (`--job dry`) of the benchmark classes in `src/Eggnog.Benchmarks/Relations/Contexts/`: one cold invocation
   per case. Their *Allocated* column includes one-time allocations of the first invocation (JIT, static initializers,
   pools filling), so small figures (a few KB) are noisy.
-- **The footprint mode** of the benchmark app, `Eggnog.Relations.Benchmarks.exe --context-footprint`
+- **The footprint mode** of the benchmark app, `Eggnog.Benchmarks.exe --context-footprint`
   (`Contexts/ContextFootprint.cs`): the same workloads, measured with `GC.GetAllocatedBytesForCurrentThread` after a
   warm-up and averaged over many repetitions. This is the steady state the memory diagnoser converges to, without the
   cold-start noise. The tables quote it unless they say otherwise.

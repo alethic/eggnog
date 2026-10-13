@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -12,9 +11,9 @@ namespace Eggnog.Tests.Surface
 
     /// <summary>
     /// The package shows one API (D29, D44): no public or protected member of <c>Eggnog</c> mentions an engine or spike
-    /// type, no public type of another packaged assembly shares a simple name with a public <c>Eggnog</c> type, and
-    /// <c>Eggnog</c> references no spike assembly. And the public surface is exactly the one the milestones so far list
-    /// (R1a and R1b, §3): <c>Surface/PublicSurface.txt</c>.
+    /// type, the engine is part of <c>Eggnog</c> and exports nothing, and <c>Eggnog</c> references no other Eggnog
+    /// assembly, the spike included. And the public surface is exactly the one the milestones so far list (§3):
+    /// <c>Surface/PublicSurface.txt</c>.
     /// </summary>
     public sealed class PublicSurfaceTests
     {
@@ -22,12 +21,16 @@ namespace Eggnog.Tests.Surface
         static readonly Assembly Library = typeof(EGraph).Assembly;
 
         /// <summary>
-        /// The spike's assembly name, assembled from its parts so that a text search of this project for the spike's name
-        /// finds nothing (R1a's done-when).
+        /// The spike's assembly name. This test project references the spike for the engine's context differentials
+        /// (<c>Relations/Contexts</c>); the library must not.
         /// </summary>
-        static readonly string Spike = string.Join(".", "Eggnog", "Storage");
+        const string Spike = "Eggnog.Storage";
 
-        static readonly string[] Hidden = { "Eggnog.Relations", Spike };
+        /// <summary>
+        /// The engine's namespace. The engine is compiled into the library's assembly (<c>src/Eggnog/Relations</c>), so
+        /// its types are told apart by namespace, not by assembly.
+        /// </summary>
+        const string EngineNamespace = "Eggnog.Relations";
 
         [Fact]
         public void NoPublicMemberMentionsAnEngineOrSpikeType()
@@ -81,34 +84,19 @@ namespace Eggnog.Tests.Surface
             Assert.Equal(expected, actual);
         }
 
+        /// <summary>
+        /// The package holds one assembly (engine decision 13): the engine is compiled into the library, exports nothing,
+        /// and the library references no other Eggnog assembly, so no other packaged assembly can show types of its own.
+        /// </summary>
         [Fact]
-        public void NoPackagedAssemblyExportsATypeNamedLikeALibraryType()
+        public void TheLibraryContainsTheEngineAndReferencesNoOtherEggnogAssembly()
         {
-            var names = new HashSet<string>(Library.GetExportedTypes().Select(SimpleName), StringComparer.Ordinal);
-            var clashes = new List<string>();
-            foreach (var reference in Library.GetReferencedAssemblies().Where(r => r.Name is { } n && n.StartsWith("Eggnog", StringComparison.Ordinal)))
-            {
-                foreach (var type in Assembly.Load(reference).GetExportedTypes())
-                {
-                    var browsable = type.GetCustomAttribute<EditorBrowsableAttribute>();
-                    if (browsable?.State == EditorBrowsableState.Never)
-                        continue;
+            Assert.Same(Library, typeof(Relations.Value).Assembly);
+            Assert.Empty(Library.GetExportedTypes().Where(IsEngine).Select(t => t.FullName));
 
-                    if (names.Contains(SimpleName(type)))
-                        clashes.Add($"{reference.Name}: {type.FullName}");
-                }
-            }
-
-            Assert.Empty(clashes);
-        }
-
-        [Fact]
-        public void TheLibraryReferencesTheEngineAndNotTheSpike()
-        {
-            var references = Library.GetReferencedAssemblies().Select(r => r.Name).ToArray();
-            Assert.Contains("Eggnog.Relations", references);
+            var references = Library.GetReferencedAssemblies().Select(r => r.Name ?? "").ToArray();
             Assert.DoesNotContain(Spike, references);
-            Assert.Empty(typeof(Relations.Value).Assembly.GetExportedTypes());
+            Assert.DoesNotContain(references, n => n.StartsWith("Eggnog", StringComparison.Ordinal));
         }
 
         /// <summary>
@@ -122,11 +110,17 @@ namespace Eggnog.Tests.Surface
             if (type.IsGenericParameter)
                 return false;
 
-            if (Hidden.Contains(type.Assembly.GetName().Name))
+            if (IsEngine(type) || type.Assembly.GetName().Name == Spike)
                 return true;
 
             return type.IsGenericType && type.GetGenericArguments().Any(Mentions);
         }
+
+        /// <summary>
+        /// Gets whether a type is declared in the engine's namespace or below it.
+        /// </summary>
+        static bool IsEngine(Type type) =>
+            type.Namespace is { } ns && (ns == EngineNamespace || ns.StartsWith(EngineNamespace + ".", StringComparison.Ordinal));
 
         /// <summary>
         /// Gets whether a member is visible outside the library: public or protected.
@@ -178,16 +172,6 @@ namespace Eggnog.Tests.Surface
                     yield return nested;
                     break;
             }
-        }
-
-        /// <summary>
-        /// Gets a type's simple name without its generic arity: <c>Relation`2</c> is <c>Relation</c>.
-        /// </summary>
-        static string SimpleName(Type type)
-        {
-            var name = type.Name;
-            var tick = name.IndexOf('`', StringComparison.Ordinal);
-            return tick < 0 ? name : name.Substring(0, tick);
         }
 
     }

@@ -53,11 +53,11 @@ namespace Eggnog.Tests.Support
         public Ruleset Rules { get; }
 
         /// <summary>
-        /// Starts the run on a pool thread and waits until it blocks.
+        /// Starts the run on a dedicated thread (<see cref="DedicatedThread"/>) and waits until it blocks.
         /// </summary>
         public void Start()
         {
-            run = Task.Run(() => Graph.Root.Run(Rules));
+            run = DedicatedThread.Run(() => Graph.Root.Run(Rules));
             if (started.Wait(TimeSpan.FromSeconds(30)) == false)
                 throw new TimeoutException("The run did not reach its blocking filter.");
         }

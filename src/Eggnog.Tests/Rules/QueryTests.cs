@@ -16,6 +16,7 @@ namespace Eggnog.Tests.Rules
     /// write nothing, so they move neither the version nor an extractor, and a failure in one leaves the scope usable;
     /// <c>Dispose</c> frees the engine rule once no call uses it.
     /// </summary>
+    [Collection(Relations.Tests.AllocationProbeCollection.Name)]
     public sealed class QueryTests
     {
 

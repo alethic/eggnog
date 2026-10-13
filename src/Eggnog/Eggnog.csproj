@@ -2,8 +2,8 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-        <Description>Equality saturation for .NET: typed definitions, rules, schedules, host writes and reads, and extraction, on the Eggnog.Relations engine.</Description>
-        <PackageTags>egraph;e-graph;equality-saturation;datalog;rewriting</PackageTags>
+        <Description>Equality saturation for .NET: typed definitions, rules, schedules, host writes and reads, and extraction, on a C# reimplementation of egglog's relational engine.</Description>
+        <PackageTags>egraph;e-graph;equality-saturation;datalog;rewriting;union-find;free-join</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageIcon>icon.png</PackageIcon>
     </PropertyGroup>
@@ -15,10 +15,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Eggnog.Tests" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\Eggnog.Relations\Eggnog.Relations.csproj" />
+        <InternalsVisibleTo Include="Eggnog.Benchmarks" />
     </ItemGroup>
 
 </Project>

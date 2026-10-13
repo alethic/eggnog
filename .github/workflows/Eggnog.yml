@@ -91,7 +91,6 @@ jobs:
       matrix:
         run:
         - Eggnog.Tests
-        - Eggnog.Relations.Tests
         - Eggnog.Storage.Tests
         sys:
         - win-x64
@@ -101,6 +100,13 @@ jobs:
         - osx-arm64
         tfm:
         - net10.0
+        include:
+        # Eggnog.Tests turns the engine's executor counters on for itself (Relations/Execution/ExecutorCountersSetup.cs).
+        # On linux-x64 it runs with them off, as production runs, and its counter tests skip there.
+        - run: Eggnog.Tests
+          sys: linux-x64
+          tfm: net10.0
+          counters: '0'
     name: Test (${{ matrix.run }}:${{ matrix.tfm }}:${{ matrix.sys }})
     needs:
     - build
@@ -126,6 +132,11 @@ jobs:
         $run = "${{ matrix.run }}"
         $tfm = "${{ matrix.tfm }}"
         $sys = "${{ matrix.sys }}"
+
+        # an entry that sets counters runs the suite with EGGNOG_COUNTERS set to it
+        if ("${{ matrix.counters }}" -ne "") {
+            $env:EGGNOG_COUNTERS = "${{ matrix.counters }}"
+        }
 
         # suite name can contain filter expression after ?
         $split = $run.IndexOf("?")

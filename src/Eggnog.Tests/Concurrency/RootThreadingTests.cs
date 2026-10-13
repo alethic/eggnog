@@ -14,6 +14,7 @@ namespace Eggnog.Tests.Concurrency
     /// Threads at the root (D6, D47, §6.12): one thread domain, definitions from other threads, and user delegates that
     /// call back into a graph.
     /// </summary>
+    [Collection(Relations.Tests.ThreadPoolProbeCollection.Name)]
     public sealed class RootThreadingTests
     {
 
@@ -58,9 +59,9 @@ namespace Eggnog.Tests.Concurrency
             });
             t.Root.Assume(t.Num.Of(0L));
 
-            var run = Task.Run(() => t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { IterationLimit = 1_000_000 }));
+            var run = DedicatedThread.Run(() => t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions { IterationLimit = 1_000_000 }));
             Assert.True(started.Wait(TimeSpan.FromSeconds(30)));
-            var late = await Task.Run(() => t.Rules.DefineRule("late", r =>
+            var late = await DedicatedThread.Run(() => t.Rules.DefineRule("late", r =>
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));

@@ -12,6 +12,7 @@ namespace Eggnog.Tests.Review
     /// Review probes of the R1b API (queries, schedules, run steps) against the rule-layer spec and the conventions. Each
     /// test asserts what the spec or the conventions require, and each fails on the reviewed sandbox.
     /// </summary>
+    [Collection(Relations.Tests.AllocationProbeCollection.Name)]
     public sealed class R1bApiReviewTests
     {
 

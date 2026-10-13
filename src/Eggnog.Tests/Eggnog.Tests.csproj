@@ -4,8 +4,10 @@
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
         <IsPackable>false</IsPackable>
         <!-- xUnit1051 asks every call with an optional CancellationToken (Scope.Run) to pass the test's token; the tests
-             that exercise cancellation pass their own, and the rest run to completion. -->
-        <NoWarn>$(NoWarn);CS1591;xUnit1051</NoWarn>
+             that exercise cancellation pass their own, and the rest run to completion. xUnit1031 flags blocking waits on
+             tasks; the concurrency, thread-domain and review tests of both the engine (Relations/) and the library block
+             on the tasks they race, on purpose, because the calls under test must stay on the test's thread. -->
+        <NoWarn>$(NoWarn);CS1591;xUnit1051;xUnit1031</NoWarn>
         <!-- xunit.v3 builds the assembly as its own runner, and writes the entry point itself. -->
         <OutputType>Exe</OutputType>
         <GenerateProgramFile>false</GenerateProgramFile>
@@ -19,6 +21,10 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Eggnog\Eggnog.csproj" />
+        <!-- The storage spike, a second oracle for the engine's context differentials (Relations/Contexts); used only
+             through `using Spike = Eggnog.Storage;` (colored-contexts spec X32). The library itself never references it
+             (Surface/PublicSurfaceTests). -->
+        <ProjectReference Include="..\Eggnog.Storage\Eggnog.Storage.csproj" />
     </ItemGroup>
 
     <ItemGroup>

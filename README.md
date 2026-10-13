@@ -36,20 +36,24 @@ still take, runs a schedule in each, and lifts into the scope what every case pr
 contradiction; the host can drive the same cases itself (`Scope.OpenCases`, `CaseSet.Lift`). Each milestone only added
 to the API that had shipped.
 
-**`Eggnog.Relations`** is its engine: a faithful C# reimplementation of egglog's `core-relations` (tables with
-functional dependencies and merges, Free Join planning and execution, union-find and rebuilding), its bridge and its
-extractor, plus colored contexts, which egglog does not have. Its types are internal: `Eggnog` is the one supported
-API, and it reaches the engine through `InternalsVisibleTo`. The engine's conventions and decisions are in
-`docs/engine`, and its design in `docs/design`.
+Its engine, in `src/Eggnog/Relations` (namespace `Eggnog.Relations`), is part of the same assembly and package: a
+faithful C# reimplementation of egglog's `core-relations` (tables with functional dependencies and merges, Free Join
+planning and execution, union-find and rebuilding), its bridge and its extractor, plus colored contexts, which egglog
+does not have. Its types are internal, so the public `Eggnog` types are the one supported API. The engine's
+conventions and decisions are in `docs/engine`, and its design in `docs/design`.
 
-`src/Eggnog.Storage` and `src/Eggnog.Storage.Tests` hold an earlier storage spike. Neither `Eggnog` nor the NuGet
-packages use it; it stays only as a second oracle for the engine's context tests.
+`src/Eggnog.Storage` and `src/Eggnog.Storage.Tests` hold an earlier storage spike. Neither `Eggnog` nor its NuGet
+package uses it; it stays only as a second oracle for the engine's context tests.
 
 ## Building and testing
 
 ```
 dotnet build src/Eggnog.Tests
 src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.exe
-dotnet build src/Eggnog.Relations.Tests
-src/Eggnog.Relations.Tests/bin/Debug/net10.0/Eggnog.Relations.Tests.exe
 ```
+
+`Eggnog.Tests` holds the library's tests (namespaces `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace
+`Eggnog.Relations.Tests`). Run the engine's with `-namespace Eggnog.Relations.Tests`, the library's with
+`-namespace "Eggnog.Tests.*"`, or one class with `-class <FullName>`. The suite turns the engine's executor counters on
+for itself; set `EGGNOG_COUNTERS=0` to run it as production runs. The benchmarks are in `src/Eggnog.Benchmarks` (see its
+README).

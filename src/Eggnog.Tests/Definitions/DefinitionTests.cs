@@ -222,7 +222,7 @@ namespace Eggnog.Tests.Definitions
             });
             graph.Root.Assume(tick.Of(0L));
 
-            var run = Task.Run(() => graph.Root.Run(Schedule.Saturate(rules), new RunOptions { IterationLimit = 1_000_000 }));
+            var run = DedicatedThread.Run(() => graph.Root.Run(Schedule.Saturate(rules), new RunOptions { IterationLimit = 1_000_000 }));
             Assert.True(started.Wait(TimeSpan.FromSeconds(30)));
             var late = rules.DefineRule("late", r =>
             {
