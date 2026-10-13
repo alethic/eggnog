@@ -1,13 +1,13 @@
 # egglog engine architecture map
 
-> **File:** `docs/design/egglog-engine-map.md`.
+> **File:** `docs/history/egglog-engine-map.md`.
 > Written 2026-10-10 for the Eggnog team.
 >
 > **Sources:** eight subsystem reports (tables, indexes and offsets, planner, executor, query and actions, memory and
 > values, union-find/ids/concurrency, bridge) and six gap investigations. Several gap investigations ran experiments on
 > instrumented copies of egglog and on its test corpus. Where a gap answer contradicts a report, the gap answer is used.
 >
-> **egglog version:** the submodule at `D:\eggnog\ext\egglog`, commit `5e655cae` (2026-06-22).
+> **egglog version:** the submodule at `ext/egglog`, commit `5e655cae` (2026-06-22).
 >
 > **Reference abbreviations** (line numbers are at that commit):
 > - `cr/` = `core-relations/src/`
@@ -17,7 +17,7 @@
 > - `nid/` = `numeric-id/src/`
 > - `conc/` = `concurrency/src/`
 >
-> **Spike:** `D:\eggnog\src\Eggnog.Storage` and its tests, `D:\eggnog\src\Eggnog.Storage.Tests`.
+> **Spike:** `src/Eggnog.Storage` and its tests, `src/Eggnog.Storage.Tests` (both since removed).
 
 ## Contents
 

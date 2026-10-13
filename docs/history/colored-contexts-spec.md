@@ -6,13 +6,13 @@
 **Paths.** Engine paths are relative to `src/Eggnog/Relations/`. Test paths are relative to `src/Eggnog.Tests/Relations/` and benchmark paths to `src/Eggnog.Benchmarks/Relations/`.
 
 **Binding inputs:**
-- `docs/design/egglog-engine-map.md`: §0, §1.2–1.3, §4 (C1–C14), §6 (M9, M10) and §8.2;
+- `docs/history/egglog-engine-map.md`: §0, §1.2–1.3, §4 (C1–C14), §6 (M9, M10) and §8.2;
 - `docs/engine/decisions.md`: decisions 1–12 and L1–L7;
-- `docs/design/colored-egraph-literature.md`, including its review corrections;
+- `docs/history/colored-egraph-literature.md`, including its review corrections;
 - `docs/engine/conventions.md`;
 - the spike: `src/Eggnog.Storage`, plus its `Reference/`, `Harness/` and `DifferentialTests.cs`.
 
-`docs/design/rule-layer-spec.md` is the consumer of this work. It is cited where its decisions (D3, D4, D6, D11, D16, D18, D20, D21) and its invariant C constrain the engine.
+`docs/history/rule-layer-spec.md` is the consumer of this work. It is cited where its decisions (D3, D4, D6, D11, D16, D18, D20, D21) and its invariant C constrain the engine.
 
 **Conventions** (`conventions.md`): one type per file, no nested types, `internal` by default, namespace `Eggnog.Relations`, XML docs, `== false`, sealed classes, and struct-constrained generics on hot paths.
 
@@ -2715,7 +2715,7 @@ The existing `Writes/WritesBenchmarks` and `UnionFind/*` are part of the set.
 
 **Done when:** the baseline holds, the property tests are green, and the L6 and L7 reports are produced and attached to the M10 PR.
 
-Built as §21.10 records; the L6 and L7 reports are `docs/design/colors-m10-reports.md`.
+Built as §21.10 records; the L6 and L7 reports are `docs/history/colors-m10-reports.md`.
 
 ---
 
@@ -2791,7 +2791,7 @@ B6 is in the split driver; B7 in the overlay.
    - when every rule of a run was pruned (M10.3): the bridge still merges what is staged at the run's T, which egglog's `run_rule_set` skips while `run_rules` still records T as every rule's watermark. Added to map §8.1 as row 26.
 5. **Inheritance is narrower than egglog's push** (X41): rules whose actions read tables never inherit a watermark, whereas egglog's push copies `last_run_at` for every rule. egglog push/pop is therefore an oracle only for programs whose rules all inherit.
 6. **Host writes at the root** (X38): the egglog-compatible `EGraph` API writes as given; the `EGraphContext` API canonicalizes Id cells at every level, which is what the rule layer's invariant C assumes.
-7. **G2 ranking** (parent-visible ids first) was deferred until the L7 report existed. The report (`docs/design/colors-m10-reports.md`, M10.4) measures the cost of smaller-id-wins after a late parent mint as linear in cases × terms per round and independent of the root; it gives no reason to hurry the change, and the decision stays open.
+7. **G2 ranking** (parent-visible ids first) was deferred until the L7 report existed. The report (`docs/history/colors-m10-reports.md`, M10.4) measures the cost of smaller-id-wins after a late parent mint as linear in cases × terms per round and independent of the root; it gives no reason to hurry the change, and the decision stays open.
 8. Deferred:
    - **B1** pruning;
    - **B3** flattening of hidden sets;
@@ -3083,7 +3083,7 @@ M10.3 was built in four parts (the bridge on a store; the differential oracles; 
 
 ### 21.10 M10.4: Lift primitives and split hooks
 
-M10.4 was built in one part on the M10.3 core, merged with the M10.3 fixes, reviewed for soundness, root cost, oracle strength and completeness, and fixed in four rounds, the last three answering verification probes. The rows below record every departure the build, the merge and the fixes reported. Rule-layer v2 §13 items 8 and 9 (E8) are applied in §11.2 and §11.3; rule-layer §15.7 records the same from that side. The L6 and L7 reports are `docs/design/colors-m10-reports.md`.
+M10.4 was built in one part on the M10.3 core, merged with the M10.3 fixes, reviewed for soundness, root cost, oracle strength and completeness, and fixed in four rounds, the last three answering verification probes. The rows below record every departure the build, the merge and the fixes reported. Rule-layer v2 §13 items 8 and 9 (E8) are applied in §11.2 and §11.3; rule-layer §15.7 records the same from that side. The L6 and L7 reports are `docs/history/colors-m10-reports.md`.
 
 **Member maps and the lift (§11.1, §11.2)**
 
@@ -3148,4 +3148,4 @@ The spec-text updates that the M9.1–M10.4 stages left for this document, and r
 | B5 in full: bytes for each per-child structure separately (layer tables, hidden sets, overlay, cursors, watermarks, indexes; the footprint mode gives the parts of a bare child and the bytes each step of a case adds), and time and failures reported separately under a stated timeout policy | M10.4 | No milestone: the timed half needs an idle machine |
 | A test that fails when C4's canonical-in-parent check is removed (a surviving mutant of the oracle review): the member map is built from the overlay the check reads, so only fault injection can fail it | M10.4 | No milestone: needs a fault-injection hook |
 | Library use of the split hooks: `RuleSplitSource`, `SplitSchedule` with one cached `SplitDriver` per split node, and the host-driven `CaseSet` wrapper (rule-layer §6.9). The engine side is done, several drivers on one scope included (§11.3) | M10.4 | Done in rule-layer R3 (rule-layer §15.9), with no engine change |
-| Left open by design (§19 items 7 and 8): G2 ranking (the L7 report now exists, `docs/design/colors-m10-reports.md`: its cost is linear in cases × terms per round and independent of the root), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |
+| Left open by design (§19 items 7 and 8): G2 ranking (the L7 report now exists, `docs/history/colors-m10-reports.md`: its cost is linear in cases × terms per round and independent of the root), B1 pruning, B3 flattening of hidden sets, G5, G8, G9, eq containers in children, per-context replanning (§8.3 #13), and deduplicating driver keys across pieces | §19 | Later; no milestone |

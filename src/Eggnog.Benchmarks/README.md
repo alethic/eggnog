@@ -1,11 +1,18 @@
 # Eggnog.Benchmarks
 
-BenchmarkDotNet benchmarks for Eggnog. Today they measure its engine (`Relations/`, namespace
-`Eggnog.Relations.Benchmarks`): ports of egglog's divan benchmarks for the relational engine, so the C# engine can be
-measured against the Rust it reimplements on the same workloads; ports of egglog-bridge's example programs `math` and
-`ac` (`Relations/Bridge/`), which the app can also run the way their Rust `main`s do (see
-[The egglog-bridge examples](#the-egglog-bridge-examples)); and the root benchmark set (`Relations/Root/`), which records
-the root engine's performance before colored contexts change it (see [The root benchmark set](#the-root-benchmark-set)).
+BenchmarkDotNet benchmarks for Eggnog's engine (`Relations/`, namespace `Eggnog.Relations.Benchmarks`). They measure:
+
+- the engine against the Rust it reimplements, on the same workloads: ports of egglog's divan benchmarks for tables
+  and the union-find (`Relations/Writes/`, `Relations/UnionFind/`), and ports of egglog-bridge's example programs
+  `math` and `ac` (`Relations/Bridge/`), which the app can also run the way their Rust `main`s do (see
+  [The egglog-bridge examples](#the-egglog-bridge-examples));
+- the root engine's hot paths (`Relations/Root/`): scans, index builds, the executor, actions and rebuilds, the
+  baseline that changes to those paths are compared against (see [The root benchmark set](#the-root-benchmark-set));
+- what a colored context costs (`Relations/Contexts/`): per child as the root grows, per case of a split, per union,
+  and per structure (see [The context benchmarks](#the-context-benchmarks)).
+
+Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
+fails the run instead of producing a number. The project references the library too, so benchmarks of the library's own paths can live beside these.
 
 ## Running
 
@@ -188,7 +195,9 @@ every logical processor.
   the more than 20,000 rows that iteration stages into `add` are merged by `parallel_insert`, which reports a change for
   every staged row before deciding whether its merge changes anything (`core-relations/src/table/mod.rs:871`), so egglog
   runs an iteration 10, which finds no new row and takes microseconds. The engine reports real changes only, fixing that
-  defect (`docs/design/egglog-engine-map.md` §8.1, row 4); with one rayon thread egglog would take its serial insert,
+  defect (row 4 of the defect list, "egglog defects: what the port does instead" in
+  [`docs/history/egglog-engine-map.md`](../../docs/history/egglog-engine-map.md)); with one rayon thread egglog would
+  take its serial insert,
   which reports real changes, and stop after 10 iterations too. The results agree otherwise: the sums are equal on both
   sides, and every table size `math` prints is the same.
 - The example mode's first repetition includes JIT compilation, which the Rust does not have.
@@ -200,21 +209,18 @@ every logical processor.
 
 ## The root benchmark set
 
-The classes in `Relations/Root/` record the root engine's performance before colored contexts change it: milestone M9.0 of
-`docs/design/colored-contexts-spec.md` (§17, X33). Together with `WritesBenchmarks` and the `Relations/UnionFind/` classes they
-are the root benchmark set: every later colors milestone must keep the classes that exercise its code within 2% of the
-baseline these classes record on the unchanged engine. Record the baseline, and every later comparison, on the same
-idle machine.
+The classes in `Relations/Root/`, together with `WritesBenchmarks` and the `Relations/UnionFind/` classes, are the root
+benchmark set: they measure the engine paths that every program takes at the root, and a change to those paths is
+compared against a baseline of the whole set, recorded on the same idle machine before the change. The tolerance used
+so far is 2%. Which classes exercise which paths:
 
-| Milestone | Classes it is gated on |
-| --- | --- |
-| M9.1 | `ActionLookupBenchmarks`, `DisplacedRebuildBenchmarks`, `WritesBenchmarks`, `RuleSetRunBenchmarks` |
-| M9.2 | `DisplacedRebuildBenchmarks`, `UnionFind/*` |
-| M9.3 | `WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks` |
-| M9.4 | `DisplacedRebuildBenchmarks`, `RuleSetRunBenchmarks` |
-| M10.1 | `ConstrainedScanBenchmarks`, `IndexRefreshBenchmarks` |
-| M10.2 | `RuleSetRunBenchmarks`, `ConstrainedScanBenchmarks` |
-| M10.3 | `RuleSetRunBenchmarks` (plus the bridge workloads once they exist) |
+| Path | Classes |
+|---|---|
+| Scans and their constraints | `ConstrainedScanBenchmarks`, `RuleSetRunBenchmarks` |
+| Index builds and refreshes | `IndexRefreshBenchmarks`, `ConstrainedScanBenchmarks` |
+| The executor and actions | `RuleSetRunBenchmarks`, `ActionLookupBenchmarks` |
+| Table writes and merges | `WritesBenchmarks`, `ActionLookupBenchmarks`, `RuleSetRunBenchmarks` |
+| The union-find and rebuilds | `DisplacedRebuildBenchmarks`, the `UnionFind/` classes |
 
 To record the whole set's baseline in one session, keeping the exported reports (the gates compare against all of
 these, `WritesBenchmarks` and the `Relations/UnionFind/` classes included):
@@ -223,8 +229,8 @@ these, `WritesBenchmarks` and the `Relations/UnionFind/` classes included):
 src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --filter *RuleSetRunBenchmarks* *ConstrainedScanBenchmarks* *IndexRefreshBenchmarks* *DisplacedRebuildBenchmarks* *ActionLookupBenchmarks* *WritesBenchmarks* *UnionFind* --artifacts <dir>
 ```
 
-Unlike the divan ports, these have no Rust counterpart: they measure the engine paths that colored contexts touch
-(scans, index builds, the executor, actions, the union-find and the rebuild), on programs taken from the executor tests
+Unlike the divan ports, these have no Rust counterpart: they measure scans, index builds, the executor, actions, the
+union-find and the rebuild, on programs taken from the executor tests
 or shaped as egglog's bridge lays out an e-graph. What they share:
 
 - `Rows` (20,000 and 200,000) sizes the workload, as each class describes.
@@ -343,21 +349,33 @@ canonical; one `combine` row per merged `best` key, whose second key is in the c
 `best(a)` holding the output of its merge's `combine` row (or still `a` where no merge changes it). So an engine that
 drops or misstores a merge function's output fails the run.
 
-## The per-child benchmarks
+## The context benchmarks
 
-The classes in `Relations/Contexts/` measure what a colored context costs (milestone M9.4 of
-`docs/design/colored-contexts-spec.md`, L6 and B4): unlike the root set, they have no baseline to stay within, but a
-shape to keep. The first three build a root (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
-a fixed set of ids touches a fixed number of root rows), frozen except in `PerChildCostBenchmarks`' writable-root cases,
-from the fixed seed `0x5EED`, and check their results in the setup or in every invocation. `ContextExtractionBenchmarks`
-builds its own term graph instead.
+The classes in `Relations/Contexts/` measure what a colored context costs. They have no Rust counterpart and no
+baseline to stay within, but a shape to keep: a child must cost in proportion to what it touches, never to the size
+of its ancestors. The root workload (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
+a fixed set of ids touches a fixed number of root rows; or `CaseGraph` for the bridge workloads) is built from the
+fixed seed `0x5EED`, frozen except where a class says otherwise; the classes check their results in the setup or in every invocation.
 
 | Class | What it measures | The shape to keep |
 | --- | --- | --- |
-| `PerChildCostBenchmarks` | One child of a root of 20,000, 200,000 or 2,000,000 rows, frozen or not (`FrozenRoot`): creation, 100 unions in one batch, a rebuild, disposal (the storage half; M10.4 adds a rule run). A root that is not frozen brings its rebuild indexes up to date when it creates a child; the setup's first child absorbs that root work. | Time and allocated bytes flat within 1.5× from 20k to 2M rows; the setup checks that the child examines and copies exactly the 300 root rows naming its losers. |
-| `ManyChildrenBenchmarks` | A thousand single-union children of a 200,000-row frozen root, in parallel and serially; one child with no layer and with one empty layer. | The spike took about 100 ms for the parallel case. `ChildWithOneEmptyLayer` minus `ChildOnly` in the allocated column is the bytes per empty layer (the spec estimates 1–2 KB). |
+| `PerChildCostBenchmarks` | One child of a root of 20,000, 200,000 or 2,000,000 rows, frozen or not (`FrozenRoot`): creation, 100 unions in one batch, a rebuild, disposal; and the full workload on the bridge, which also flushes and runs one rule whose watermark the child inherits from the root. A root that is not frozen brings its rebuild indexes up to date when it creates a child; the setup's first child absorbs that root work. | Time and allocated bytes flat within 1.5× from 20k to 2M rows; the setup checks that the child examines and copies exactly the 300 root rows naming its losers, and that the rule matches only the child's 200 rewritten rows. |
+| `ManyChildrenBenchmarks` | A thousand single-union children of a 200,000-row frozen root, in parallel and serially; one child with no layer and with one empty layer. | `ChildWithOneEmptyLayer` minus `ChildOnly` in the allocated column is the bytes per empty layer (about 1 KB). |
 | `ChildFindBenchmarks` | `find` at a frozen root, in a child at depth 1 and 3 over an explicit chain (raw and through `Context.Find`), and under a frozen, flattened chain. | One probe per non-empty level over the root's find; a flattened chain costs one map read whatever its depth. |
-| `ContextExtractionBenchmarks` | On-demand extraction of 4,000 classes from a fresh extractor (colored-contexts spec §10.10): through the root API (the baseline), through the context form at the root, and in a child of a 40,000-term frozen root that made 4,000 terms and 400 unions of its own, frozen or not. | `RootContext` within noise of `RootApi` (one branch per discovery round, none per node); `Child` pays one index probe per present layer per producing function on top. |
+| `ContextExtractionBenchmarks` | On-demand extraction of 4,000 classes from a fresh extractor: through the root API (the baseline), through the context form at the root, and in a child of a 40,000-term frozen root that made 4,000 terms and 400 unions of its own, frozen or not. | `RootContext` within noise of `RootApi` (one branch per discovery round, none per node); `Child` pays one index probe per present layer per producing function on top. |
+| `CaseSplitMemoryBenchmarks` | The bytes one split allocates per case (a case set under a fresh scope, each case one union and one fact, optionally lifted), against a full clone of the root per case with the same writes, over roots of 20,000 and 200,000 ids. | Bytes per case flat in the root's size for contexts; clones grow linearly. |
+| `CopyVolumeBenchmarks` | How many ancestor rows a child copies for one union, as a histogram (printed by the setup) over unions of random ids on a root where a few ids are named by thousands of rows. | Most unions copy two or three rows; only a union whose loser is a heavily used id copies many. |
+| `LateParentMintBenchmarks` | A writable parent that lifts terms after its cases built them, so each lifted term's parent id loses to the cases' local ids: the parent-id losers, the rows they copy per lift round, and the growth of the root's id array. | Counters linear in cases times terms per round, independent of the root's size. |
 
 Run them like any other class, for example `--filter *PerChildCostBenchmarks*`; the 2M-row root takes some seconds to
 build in the setup.
+
+The app's footprint mode prints the steady-state bytes of the context structures (a bare child, an empty layer, a
+bridge child, a child with one union) and the counters of the case-split workloads, measured in process after a
+warm-up and averaged over many repetitions, without the cold-start allocations a dry run includes:
+
+```
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --context-footprint
+```
+
+Allocation counts and counters do not depend on the machine's load, so these figures need no idle machine; times do.

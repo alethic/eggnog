@@ -1,6 +1,6 @@
 # Cosmos pushdown facts in egglog
 
-A prototype of the fact layer from `D:\calcite-cosmos` (`src/Apache.Calcite.Cosmos.Adapter/Metadata`)
+A prototype of the fact layer of the Apache Calcite Cosmos DB adapter (`src/Apache.Calcite.Cosmos.Adapter/Metadata`)
 written as an egglog program. It asks one question: does an equality-saturation engine with
 lattices express what that adapter's definite Horn theory cannot, while still doing what it does?
 
@@ -83,7 +83,7 @@ These are schema changes in sweep, not engine changes.
 
 ## Confirmed against the adapter
 
-The gaps are now tests, on the adapter's branch `fact-gap-tests`, in
+The gaps are tests on a test branch of the adapter, in
 `src/Apache.Calcite.Cosmos.Adapter.Tests/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`. Each gap
 has a control differing in one respect that passes, so the failure is the reasoning's and not the
 schema reader's. Run: 64 tests, 7 fail, all of them gaps; all controls and existing tests pass.

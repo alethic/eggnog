@@ -1,12 +1,12 @@
 # E-graphs with assumptions: the literature against Eggnog's colored contexts
 
-> **File:** `docs/design/colored-egraph-literature.md`.
+> **File:** `docs/history/colored-egraph-literature.md`.
 > Written 2026-10-10.
 >
 > **Inputs.** Three papers, each read in full, together with the authors' code where code exists.
 > This report works from those reading notes, not from the PDFs directly. On the Eggnog side it uses
-> `docs/design/egglog-engine-map.md` (§0, §4, §6, §8), `docs/engine/decisions.md`, the lift and split sections of
-> `docs/design/rule-layer-spec.md` (§0, §3.8, §3.9), and the spike (`src/Eggnog.Storage/README.md`,
+> `docs/history/egglog-engine-map.md` (§0, §4, §6, §8), `docs/engine/decisions.md`, the lift and split sections of
+> `docs/history/rule-layer-spec.md` (§0, §3.8, §3.9), and the spike (`src/Eggnog.Storage/README.md`,
 > `Context.Maintenance.cs`).
 >
 > **Names used below.** *arXiv* = Singher and Itzhaky, "Colored E-Graph" (2023). *Easter Egg* = the same authors' FMCAD
@@ -442,8 +442,8 @@ The points:
   https://github.com/eytans/easter-egg.
 - A. Drewery, T. P. Jensen, D. Pichardie. *Contextual Equality Saturation.* SAS 2025. HAL hal-05226543 (submission
   draft): https://inria.hal.science/hal-05226543/file/draft.pdf. No public code found.
-- Eggnog: `docs/design/egglog-engine-map.md` (§0, §4, §6, §8), `docs/engine/decisions.md`,
-  `docs/design/rule-layer-spec.md` (§0, §3.8, §3.9), `src/Eggnog.Storage/README.md`,
+- Eggnog: `docs/history/egglog-engine-map.md` (§0, §4, §6, §8), `docs/engine/decisions.md`,
+  `docs/history/rule-layer-spec.md` (§0, §3.8, §3.9), `src/Eggnog.Storage/README.md`,
   `src/Eggnog.Storage/Context.Maintenance.cs`.
 - Not read: Y. Hou, S. Laddad, J. M. Hellerstein. *Towards Relational Contextual Equality Saturation.* EGRAPHS 2024,
   arXiv:2507.11897.

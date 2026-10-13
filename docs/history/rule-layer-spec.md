@@ -34,10 +34,10 @@
 > now hold within one assembly; sections that record what a milestone changed keep the paths of their time.
 
 **Binding inputs.**
-- `docs/design/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
+- `docs/history/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
 - `docs/engine/conventions.md` and `docs/engine/decisions.md` (decisions 1–12, L1–L7).
-- `docs/design/egglog-engine-map.md` §3 (the bridge and what the frontend assumes).
-- `prototypes/cosmos-facts` (`prelude.egg`, `01`–`07`, `README.md`), and the adapter's gap tests in `D:\calcite-cosmos`
+- `docs/history/egglog-engine-map.md` §3 (the bridge and what the frontend assumes).
+- `prototypes/cosmos-facts` (`prelude.egg`, `01`–`07`, `README.md`), and the adapter's gap tests in the adapter repository
   (`src/Apache.Calcite.Cosmos.Adapter.Tests/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`, on the adapter's
   fact-gap-tests branch; see the prototype README, "Confirmed against the adapter").
 

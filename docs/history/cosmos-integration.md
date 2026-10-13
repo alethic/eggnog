@@ -4,13 +4,22 @@
 onto Eggnog. The two reasonings are compared in shadow mode first, and the switch-over is made per fact kind.
 Revision 2 answers a review of revision 1. Appendix B lists every problem raised and where this revision answers it.
 
+**Eggnog's side (2026-10-13).** Everything this plan waits for in Eggnog is released: scopes, frozen scopes, local
+rules, concurrent children, tags and mirrors (the plan's R2), and case splits and lift (its R3), on top of the
+definitions, rules, schedules, queries and extraction it calls R1b. Every phase's Eggnog entry is therefore met, and
+the R2a/R2b split of §8.3 request 1 is no longer needed. The plan still names Eggnog's features by the milestones
+that delivered them (R1b, R2, R3). Its citations of the two specifications (RLS, CCS) are of their text at `47eb33d`;
+both are now in `docs/history`, as the design record, and so is this plan. The library requests of §8.3 that are still
+open are listed in `docs/roadmap.md`.
+
 ## 0. Sources, refs and notation
 
 ### 0.1 What was read
 
 **Adapter**
-- Repository: `D:/calcite-cosmos` at `origin/main` = `7e6ae6a` (the merge of #206). It was read with `git show` and
-  `git grep`. The main checkout is on the feature branch `fix/with-statistics-keeps-keys` and was not used.
+- Repository: the adapter's (Apache.Calcite.Cosmos) at `origin/main` = `7e6ae6a` (the merge of #206). It was read with
+  `git show` and `git grep`. The main checkout is on the feature branch `fix/with-statistics-keeps-keys` and was not
+  used.
 - Abbreviations: `A/` = `src/Apache.Calcite.Cosmos.Adapter/` and `T/` = `src/Apache.Calcite.Cosmos.Adapter.Tests/`.
   Every `A/`, `T/`, `TODO.md` and `docs/` citation is at `origin/main` unless it names another ref.
 - On this ref the fact types are `JsonFact`, `JsonClaim`, `JsonFactRule`, `JsonFactSet`, `JsonFactTheory` and
@@ -19,20 +28,21 @@ Revision 2 answers a review of revision 1. Appendix B lists every problem raised
 
 **Gap tests**
 - File: `T/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`, plus a one-line `partial` edit.
-- Both are uncommitted in a working copy of the adapter, on branch
-  `fact-gap-tests` at `a83fd2a`, 46 commits behind `origin/main` [gaps §0]. Line numbers below are of that
+- Both are uncommitted in a local working copy of the adapter, on a test branch at `a83fd2a`, 46 commits behind
+  `origin/main` [gaps §0]. Line numbers below are of that
   working copy and are cited as `Gaps.cs:n`.
 
 **Disjunction attempt**
-- Uncommitted edits in a working copy of the adapter, also at `a83fd2a`.
+- Uncommitted edits in another local working copy of the adapter, also at `a83fd2a`.
 - Superseded on main by #196 (`27ba003`) [gaps §3].
 
 **Eggnog**
-- Commit: `47eb33d`.
-- Main holds R1a–R1b and colors M10.1–M10.2 (`3b9dda1`; `docs/status.md:5-14`).
+- Repository: Eggnog at `47eb33d`.
+- Main held R1a–R1b and colors M10.1–M10.2 when this plan was written (`3b9dda1`; the status file of that date, since
+  replaced by `docs/roadmap.md`).
 - Abbreviations, all at `47eb33d`:
-  - **RLS** = `docs/design/rule-layer-spec.md`
-  - **CCS** = `docs/design/colored-contexts-spec.md`
+  - **RLS** = `docs/history/rule-layer-spec.md`
+  - **CCS** = `docs/history/colored-contexts-spec.md`
   - **PS** = `src/Eggnog.Tests/Surface/PublicSurface.txt`
 
 **Study reports**
@@ -62,7 +72,7 @@ was settled against the sources (§0.2).
 | 10 | Stored-form identity | `IJsonStoredForm` promises value equality (`A/Facts/IJsonStoredForm.cs:27`). `CosmosRepresentation` is a record struct over its name, two bits and width (`A/Metadata/CosmosRepresentation.cs:47`). | — |
 | 11 | Decimal bounds need no library change | `ValueLattice<T>` has a public constructor with a case join (PS:382), and `ValueStore.Register<T : IEquatable<T>>` takes an order (PS:407) | PS |
 | 12 | `AdmitNull` and extensions | A head that entails `Present` is kept under an added `NotEqualTo(p, null)` guard (`A/Facts/JsonSchemaFacts.cs:627-628`); `CosmosGeography` entails `Present` (`A/Metadata/CosmosGeography.cs:55-60`). An extension head at the union's own path that does **not** entail `Present` is dropped (`_ => null`, l.633-644). | — |
-| 13 | R1b status in the spec | RLS says R1b is "complete, not yet merged" (RLS:21-23, 3625, 4651). `docs/status.md:11-14` and `3b9dda1` show it on main. | — |
+| 13 | R1b status in the spec | RLS says R1b is "complete, not yet merged" (RLS:21-23, 3625, 4651). The status file of that date and `3b9dda1` show it on main. | — |
 | 14 | When `WithFacts` runs | Inside `ReadContainers` (`A/CosmosSchemaFactory.cs:459-463`), before the schema object exists (l.235-236); once per database for an account schema (l.313), which is built afterwards (l.318). `WithFacts` returns `this` when nothing is added (`A/Metadata/CosmosContainerMetadata.cs:587-601`), so an undeclared container keeps the process-wide `static readonly ServiceFacts` theory (l.545-547). `Copy()` shares `_facts` (l.437-448). `CosmosSchema` has a public constructor over host-built metadata (`A/CosmosSchema.cs:39-48`). | — |
 | 15 | `Lazy` and exceptions | `_stated` is a `Lazy<JsonFactSet>` with `ExecutionAndPublication` (`A/Facts/JsonFactTheory.cs:83`). Such a `Lazy` caches a factory exception and blocks other callers until the factory returns. | — |
 | 16 | Limits | `TimeLimit` is checked before every iteration and overshoots by at most one (`src/Eggnog/Scheduling/RunOptions.cs:31-36`). Limits are per top-level `Run`, and `IterationLimit` counts iterations in every scope of the run, cases included (RLS:140, D42). | — |
@@ -1038,8 +1048,8 @@ The helper `Equals` in `JsonSchemaFactsTests` (l.131) builds a bare `EqualTo`. I
 | **4. Retire Horn as a decider** | — | every kind in `eggnog` for one release with no rollback | Eggnog becomes the default; Horn stays in reverse shadow for one more release, then reverse shadow is removed. **Horn's closure stays as the fallback engine.** It is removed (`JsonFactTheory.Close`, `Excludes` and their tests) only when B10, measured for a release with the fallback switched to the outright snapshot alone, holds. `Entails` stays while `Meet` uses it (`JsonSchemaFacts.cs:488-517`). `JsonSchemaFacts` and `JsonFactRule` stay as the compiler and its intermediate form. | Eggnog default merged; Horn's removal is a separate PR gated on B10 |
 | **5. Predicate extraction** (optional) | R2 with E5, licences and mirrors; R3 for splits; a "no result" primitive outcome (§8.3, request 10) | a decision to take architecture B (open question 9) | §2.11; a predicate-tier shadow (`AreEqual` in the query scope, plus the P ≡ P′ oracle); every `In(Schema)` read defined up front, with a generation swap on any theory change (risk 9, RLS:4492-4494) | the same criteria, per rewrite family |
 
-**Ordering in Eggnog** (`docs/status.md:19-25`): M10.3, then M10.4, then R2 (after M10.3) and R3 (after M10.4). Phases
-0a–0c, D and 1 can proceed now, alongside M10.3.
+**Ordering in Eggnog** (as planned when this was written): M10.3, then M10.4, then R2 (after M10.3) and R3 (after
+M10.4). All four are now released, so every phase's Eggnog entry is met; Phases 0a–0c, D and 1 never depended on them.
 
 ---
 
@@ -1260,7 +1270,7 @@ reads (D16).
 
 ## 9. Changes by repository
 
-### 9.1 `D:/calcite-cosmos` (pull requests to `main`)
+### 9.1 The adapter (pull requests to `main`)
 
 **Phase 0a**
 
@@ -1326,13 +1336,13 @@ reads (D16).
 | `…Saturation/HostCaseDriver.cs` | removed at R3 |
 | `…Facts/JsonFactTheory.cs`, `JsonFact.cs` (Phase 4, gated on B10) | `Close` and `Excludes` removed; `Entails` kept while `Meet` uses it |
 
-### 9.2 `D:/eggnog`
+### 9.2 Eggnog
 
 | File | Change | When |
 |---|---|---|
-| `docs/design/cosmos-integration-plan.md` (new) | this plan | now |
-| `docs/status.md` | item 3 started; a link to this plan | now |
-| `docs/design/rule-layer-spec.md` | the R1b status lines (l.21-23, 3625, 4651); a note in §10 that the numeric bound rules (l.3979-3990) model raw comparisons only; §9: the R2a/R2b split and the consumer-profile test (§8.3 request 1); freeze pre-planning control (request 7); `governs` as wanted, if Phase 3 confirms it | next docs pass |
+| `docs/plans/cosmos-integration.md` (new) | this plan | now |
+| `docs/roadmap.md` (was `docs/status.md`) | a link to this plan; its open library requests | done |
+| `docs/history/rule-layer-spec.md` | the R1b status lines (l.21-23, 3625, 4651); a note in §10 that the numeric bound rules (l.3979-3990) model raw comparisons only; §9: the R2a/R2b split and the consumer-profile test (§8.3 request 1); freeze pre-planning control (request 7); `governs` as wanted, if Phase 3 confirms it | next docs pass |
 | `prototypes/cosmos-facts/README.md` (l.86-90) | where the gap tests live, after the adapter commits them | after 0a |
 | `src/Eggnog.Benchmarks/` (new) | BDN in-process over the public API: `TheoryDefinitionBenchmarks`, `SchemaCompileBenchmarks`, `QueryScopeBenchmarks` (create, write, run, read and dispose under a frozen scope, at 10–50 touched tables and 10, 100 and 1,000 local rules, idle and active), and a benchmark over many sibling containers frozen in different orders | with R2a |
 | `src/Eggnog.Tests/Values/LatticeTests.cs` | a registered struct lattice with a case join (a `NumericBound`-style hull), checked with `Verify` | R2a or R3 |
@@ -1344,7 +1354,7 @@ reads (D16).
 
 ## Appendix A. Capability by milestone
 
-| Capability | R1b (today) | R2a / R2 | R3 |
+| Capability | R1b | R2a / R2 | R3 |
 |---|---|---|---|
 | Theory, translation, encodings, canonicalisation, snapshots | yes (graph per derivation) | the same code; host wiring changes | + `Cases` |
 | Container scopes with local rules, frozen and shared by digest | no | yes | yes |

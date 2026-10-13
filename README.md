@@ -2,58 +2,176 @@
 
 # Eggnog
 
-Equality saturation for .NET, with egglog's capabilities and a C# API.
+Equality saturation for .NET, with egglog's capabilities and a typed C# API.
 
-**`Eggnog`** is the library. A program defines column types, relations, functions with lattice merges, and constructors
-(e-class terms); writes rules with a typed builder; runs schedules (`Run`, `Repeat`, `Saturate`, `Sequence`); writes
-and reads facts from the host; and extracts the cheapest equivalent term:
+[![Build](https://github.com/alethic/eggnog/actions/workflows/Eggnog.yml/badge.svg)](https://github.com/alethic/eggnog/actions/workflows/Eggnog.yml)
+[![NuGet](https://img.shields.io/nuget/v/Eggnog.svg)](https://www.nuget.org/packages/Eggnog)
 
-```csharp
-var graph = new EGraph();                                    // serial by default: deterministic
-graph.DefineSort<Pred>("Pred");
-var present = graph.DefineRelation<string>("present");
-var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-var horn = graph.DefineRuleset("horn");
-horn.DefineRule("a singleton domain makes a path present", r =>
-{
-    var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
-    r.When(d.Is(dom.Of(p)));
-    r.Where(d, d => d.Count == 1);
-    r.Then(present.Of(p));
-});
+An e-graph stores many equivalent terms at once: each class holds terms proven equal, and a term's arguments are
+classes, so a few thousand nodes can represent exponentially many equivalent programs. Equality saturation applies
+rewrite rules to an e-graph until no rule adds anything new, and then extracts the cheapest term of the class you
+started from, so the order in which rules fire never loses a better answer. [egglog](https://github.com/egraphs-good/egglog)
+combines this with Datalog: rules match facts and terms together, and functions merge their values with lattices.
 
-graph.Root.Assume(dom.Of("kind").Is(ValueSet.Of("A")));
-graph.Root.Run(Schedule.Saturate(horn));
-bool known = graph.Root.Check(present.Of("kind"));          // true
+Use it where a program must find the best of many equivalent forms: rewriting and optimizing expressions or queries,
+simplifying symbolic math, or deriving facts by rules (Datalog) with equality built in.
+
+Eggnog brings that to .NET:
+
+- **egglog's model with a typed API.** Relations, functions with lattice merges, constructors (terms), rules with a
+  join body and a head, rulesets, schedules (`Run`, `Repeat`, `Saturate`, `Sequence`, `Until`), queries and extraction,
+  all as C# generics checked by the compiler. No text frontend to embed and no strings to parse.
+- **Scopes.** A child scope starts as a copy of its parent and costs in proportion to what it touches. Freeze a scope
+  that holds a schema or a theory, and any number of threads can query it and extend it in children of their own, one
+  per request. Rules can be local to a scope, and can read another scope's facts through tags.
+- **Case splits and lift.** Where a key can take only a few values, a split opens one case per value, runs rules in
+  each, and keeps in the scope what every case proves. Cases that reach a contradiction drop out. The host can drive
+  the same cases itself.
+- **Extraction** of the cheapest equivalent term under a cost model you can change per call.
+- **egglog's engine, in C#.** The engine is a faithful reimplementation of egglog's Rust engine (tables with
+  functional dependencies, Free Join planning and execution, semi-naive evaluation, union-find with rebuilding).
+  Benchmarks that port egglog's own and compare against it are in `src/Eggnog.Benchmarks`.
+- **Deterministic by default.** Runs are serial and repeatable unless you ask for parallelism.
+
+Eggnog targets .NET 8 and .NET 10.
+
+## Installation
+
+```
+dotnet add package Eggnog
 ```
 
-The design is `docs/design/rule-layer-spec.md`. Milestones R1a and R1b run everything at the root of a graph and add
-compiled queries, run limits and diagnostics. R2 adds scopes: a child scope starts as a copy of its parent and costs in
-proportion to what it touches; a frozen scope is a base that many children, on many threads, can query and extend;
-scopes carry tags that rules read through (`In(tag)`, `Fact.In`), and rules can be local to a scope. R3 adds case
-splits: wherever a split rule's body matches, a split step (`Schedule.Split`) opens one case scope per value a key can
-still take, runs a schedule in each, and lifts into the scope what every case proves, dropping the cases that reach a
-contradiction; the host can drive the same cases itself (`Scope.OpenCases`, `CaseSet.Lift`). Each milestone only added
-to the API that had shipped.
+## Quick start
 
-Its engine, in `src/Eggnog/Relations` (namespace `Eggnog.Relations`), is part of the same assembly and package: a
-faithful C# reimplementation of egglog's `core-relations` (tables with functional dependencies and merges, Free Join
-planning and execution, union-find and rebuilding), its bridge and its extractor, plus colored contexts, which egglog
-does not have. Its types are internal, so the public `Eggnog` types are the one supported API. The engine's
-conventions and decisions are in `docs/engine`, and its design in `docs/design`.
+Declare a sort, the type of a class of equivalent terms, in its own file (`Expr.cs`):
 
-`src/Eggnog.Storage` and `src/Eggnog.Storage.Tests` hold an earlier storage spike. Neither `Eggnog` nor its NuGet
-package uses it; it stays only as a second oracle for the engine's context tests.
+```csharp
+using Eggnog;
+
+public readonly record struct Expr(ClassId Id) : ISort<Expr>
+{
+    public static Expr FromId(ClassId id) => new(id);
+}
+```
+
+Then, in `Program.cs`, define constructors and rewrite rules, add a term, saturate, and extract:
+
+```csharp
+using Eggnog;
+
+var graph = new EGraph();
+graph.DefineSort<Expr>("Expr");
+var num = graph.DefineConstructor<long, Expr>("Num");
+var name = graph.DefineConstructor<string, Expr>("Var");
+var add = graph.DefineConstructor<Expr, Expr, Expr>("Add");
+var mul = graph.DefineConstructor<Expr, Expr, Expr>("Mul");
+
+var rules = graph.DefineRuleset("arith");
+rules.DefineRule("commute add", r =>
+{
+    var (a, b) = r.Vars<Expr, Expr>("a", "b");
+    r.Rewrite(add.Of(a, b), add.Of(b, a));
+});
+rules.DefineRule("times one", r =>
+{
+    var a = r.Var<Expr>("a");
+    r.Rewrite(mul.Of(a, num.Of(1L)), a);
+});
+rules.DefineRule("fold add", r =>
+{
+    var (x, y) = r.Vars<long, long>("x", "y");
+    r.Rewrite(add.Of(num.Of(x), num.Of(y)), num.Of(Primitives.Add.Of(x, y)));
+});
+
+var root = graph.Root;
+Expr e = root.Make(add.Of(mul.Of(name.Of("x"), num.Of(1L)), add.Of(num.Of(2L), num.Of(3L))));
+root.Run(Schedule.Saturate(rules));
+
+bool same = root.AreEqual(e, add.Of(num.Of(5L), name.Of("x")));   // true
+ExtractedTerm best = root.Extract(e);                              // (Add (Var "x") (Num 5))
+```
+
+`x * 1 + (2 + 3)` and `5 + x` are now in one class, and the cheapest term of that class is `x + 5`.
+
+## Scopes and case splits
+
+Here a frozen root holds what every question shares, each question gets a child scope of its own, and a split
+reasons by cases over the colors a signal can still show:
+
+```csharp
+var graph = new EGraph();
+var signal = graph.DefineRelation<string>("signal");
+var color = graph.DefineFunction<string, ValueSet<string>>("color", ValueLattice.Intersect<string>());
+var stop = graph.DefineRelation<string>("stop");
+
+var rules = graph.DefineRuleset("traffic");
+foreach (var c in new[] { "red", "amber" })
+{
+    rules.DefineRule($"{c} means stop", r =>
+    {
+        var s = r.Var<string>("s");
+        r.When(signal.Of(s), color.Of(s).Is(ValueSet.Of(c)));
+        r.Then(stop.Of(s));
+    });
+}
+
+// One case per color a signal can still show; each case assumes color(s) = {that color}.
+var byColor = graph.DefineDomainSplit("by color", color, [signal]);
+var schedule = Schedule.Saturate(rules, Schedule.Split(byColor, rules));
+
+graph.Root.Assume(signal.Of("north"));
+graph.Root.Freeze();                       // a shared base: read-only, children on any thread
+
+using var q1 = graph.Root.CreateChild();
+q1.Assume(color.Of("north").Is(ValueSet.Of("red", "amber")));
+q1.Run(schedule);
+bool mustStop = q1.Check(stop.Of("north"));            // true: both cases prove it
+
+using var q2 = graph.Root.CreateChild();
+q2.Assume(color.Of("north").Is(ValueSet.Of("red", "green")));
+q2.Run(schedule);
+bool mayGo = q2.Check(stop.Of("north")) == false;      // true: the green case does not prove it
+
+bool atRoot = graph.Root.Check(stop.Of("north"));      // false: what a query learns stays in it
+```
+
+`color` is a function whose values merge by intersection, so each fact about a color narrows it. Neither rule fires
+on `{red, amber}` directly; the split opens a red case and an amber case, each proves `stop`, and the lift writes
+`stop(north)` into `q1`. In `q2` the green case proves nothing, so nothing is lifted. Both queries leave the root
+unchanged, and could run on two threads at once.
+
+Every example in this README is compiled and run by the test suite
+([`ReadmeExampleTests`](src/Eggnog.Tests/Readme/ReadmeExampleTests.cs)).
+
+## Documentation
+
+- [Architecture](docs/architecture.md): the library's model, the engine, threading and lifetimes, and how Eggnog is
+  tested.
+- [Roadmap](docs/roadmap.md): what is open or planned.
+- The XML documentation of the public types, which your editor shows.
+- [Design history](docs/history/README.md): the specifications and reports the code was built from.
 
 ## Building and testing
 
 ```
 dotnet build src/Eggnog.Tests
-src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.exe
+dotnet src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.dll
 ```
 
-`Eggnog.Tests` holds the library's tests (namespaces `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace
-`Eggnog.Relations.Tests`). Run the engine's with `-namespace Eggnog.Relations.Tests`, the library's with
-`-namespace "Eggnog.Tests.*"`, or one class with `-class <FullName>`. The suite turns the engine's executor counters on
-for itself; set `EGGNOG_COUNTERS=0` to run it as production runs. The benchmarks are in `src/Eggnog.Benchmarks` (see its
-README).
+A full run takes 10-15 minutes per target framework. The test project holds the library's tests (namespaces
+`Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace `Eggnog.Relations.Tests`). Run one group by adding
+`-namespace Eggnog.Relations.Tests` or `-namespace "Eggnog.Tests.*"`, or one class with `-class <FullName>`. The
+benchmarks are in `src/Eggnog.Benchmarks` (see [its README](src/Eggnog.Benchmarks/README.md)). Clone with
+`--recurse-submodules` to get egglog's sources in `ext/egglog`, which the engine's comments cite and its benchmark
+comparisons build.
+
+## Credits
+
+Eggnog's engine is a reimplementation of [egglog](https://github.com/egraphs-good/egglog) by the egraphs-good
+community, and its design follows egglog's closely. egglog itself grew out of
+[egg](https://github.com/egraphs-good/egg), the same community's Rust library for e-graphs and equality saturation. The notices
+of the work Eggnog derives from are in [NOTICE](NOTICE).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
