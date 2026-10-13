@@ -35,6 +35,18 @@ namespace Eggnog
         /// </summary>
         static Term Check(Term argument, string parameter) => argument ?? throw new ArgumentNullException(parameter);
 
+        /// <summary>
+        /// A read-only scoped view of the table (D1, §6.8): an atom over it reads the nearest ancestor-or-self of the
+        /// running scope tagged <paramref name="scope"/>; a host read reads that scope directly. The view keeps this type,
+        /// so it composes with helpers that take the table; a write through it is a definition error in a rule and an
+        /// <see cref="ArgumentException"/> in a host write.
+        /// </summary>
+        /// <param name="scope">The tag of the scope to read.</param>
+        /// <returns>The view.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="scope"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort column.</exception>
+        public Relation<T1, T2, T3> In(ScopeTag scope) => ViewIn(new Relation<T1, T2, T3>(), scope);
+
     }
 
 }

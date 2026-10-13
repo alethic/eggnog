@@ -16,22 +16,24 @@ namespace Eggnog
         /// <param name="graph">The graph.</param>
         /// <param name="draft">What the builder collected.</param>
         /// <param name="ruleset">The ruleset that schedules the rule.</param>
-        /// <param name="owner">The scope the rule is local to; <c>null</c> for a global rule (always in R1).</param>
+        /// <param name="owner">The scope the rule is local to; <c>null</c> for a global rule.</param>
         /// <returns>The compiled rule, its default variant lowered with the written class constants (step 10).</returns>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule, or the engine rejected it; nothing is
-        /// registered then.</exception>
+        /// registered then (a mirror its first scoped read created stays, harmlessly).</exception>
         public static CompiledRule Compile(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner)
         {
-            var program = new ProgramBuilder(graph, draft, owner).Build();
+            var licence = draft.Erasing ?? ruleset.Licence;
+            var program = new ProgramBuilder(graph, draft, owner, licence: licence).Build();
             var serial = graph.NextSerial();
-            var rule = new Rule(draft.Name, ruleset, owner, draft.Naive, draft);
-            var description = ruleset.Name + "/" + draft.Name + "#" + serial;
+            var effective = draft.OwnFactsReason is null ? licence : null;
+            var rule = new Rule(draft.Name, ruleset, owner, draft.Naive, draft, effective, Array.AsReadOnly(program.ReadScopes));
+            var description = (owner is null ? "" : owner.Path + ":") + ruleset.Name + "/" + draft.Name + "#" + serial;
             var variants = new RuleVariants(program, rule, description, draft.Naive);
             var compiled = new CompiledRule(rule, program, variants, serial);
             rule.Compiled = compiled;
             try
             {
-                variants.Get(graph, draft.Naive == false, program.WrittenIdConstants);
+                variants.Get(graph, draft.Naive == false);
             }
             catch (Exception exception) when (exception is not RuleDefinitionException)
             {
@@ -72,7 +74,7 @@ namespace Eggnog
             query.Compiled = compiled;
             try
             {
-                variants.Get(graph, false, program.WrittenIdConstants);
+                variants.Get(graph, false);
             }
             catch (Exception exception) when (exception is not RuleDefinitionException)
             {

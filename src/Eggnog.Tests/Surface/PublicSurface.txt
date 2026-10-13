@@ -58,6 +58,7 @@ sealed class Eggnog.EGraph
     Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     IReadOnlyList<Ruleset> Rulesets { get }
+    IReadOnlyList<ScopeTag> ScopeTags { get }
     IReadOnlyList<TableHandle> Tables { get }
     Query DefineQuery(String name, Action<QueryBuilder> define)
     Relation Contradiction { get }
@@ -67,7 +68,10 @@ sealed class Eggnog.EGraph
     Relation<T1, T2> DefineRelation<T1, T2>(String name, TableOptions options = null)
     Relation<T1> DefineRelation<T1>(String name, TableOptions options = null)
     Ruleset DefineRuleset(String name)
+    Ruleset DefineRuleset(String name, RulesetOptions options)
     Scope Root { get }
+    ScopeTag DefineScopeTag(String name)
+    ScopeTag RootTag { get }
     ValueStore Values { get }
     ctor(EGraphOptions options = null)
 sealed class Eggnog.EGraphOptions
@@ -105,6 +109,7 @@ sealed class Eggnog.Extractor
 abstract class Eggnog.Fact
     override String ToString()
     static Fact Exists(Term application)
+    static Fact In(ScopeTag scope, params Fact[] facts)
     static Fact True(Term<Boolean> condition)
 sealed class Eggnog.FactConflictException : InvalidOperationException
     IReadOnlyList<Object> Key { get }
@@ -115,18 +120,23 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
 sealed class Eggnog.Function<TOut> : FunctionHandle
+    Function<TOut> In(ScopeTag scope)
     Term<TOut> Of()
     ValueLattice<TOut> Lattice { get }
 sealed class Eggnog.Function<T1, TOut> : FunctionHandle
+    Function<T1, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a)
     ValueLattice<TOut> Lattice { get }
 sealed class Eggnog.Function<T1, T2, TOut> : FunctionHandle
+    Function<T1, T2, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b)
     ValueLattice<TOut> Lattice { get }
 sealed class Eggnog.Function<T1, T2, T3, TOut> : FunctionHandle
+    Function<T1, T2, T3, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c)
     ValueLattice<TOut> Lattice { get }
 sealed class Eggnog.Function<T1, T2, T3, T4, TOut> : FunctionHandle
+    Function<T1, T2, T3, T4, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
     ValueLattice<TOut> Lattice { get }
 interface Eggnog.ISort<TSort>
@@ -199,20 +209,28 @@ ref struct Eggnog.QueryMatch
     T Get<T>(Var<T> variable)
 sealed class Eggnog.Relation : RelationHandle
     Fact Of()
+    Relation In(ScopeTag scope)
 abstract class Eggnog.RelationHandle : TableHandle
 sealed class Eggnog.Relation<T1> : RelationHandle
     Fact Of(Term<T1> a)
+    Relation<T1> In(ScopeTag scope)
 sealed class Eggnog.Relation<T1, T2> : RelationHandle
     Fact Of(Term<T1> a, Term<T2> b)
+    Relation<T1, T2> In(ScopeTag scope)
 sealed class Eggnog.Relation<T1, T2, T3> : RelationHandle
     Fact Of(Term<T1> a, Term<T2> b, Term<T3> c)
+    Relation<T1, T2, T3> In(ScopeTag scope)
 sealed class Eggnog.Relation<T1, T2, T3, T4> : RelationHandle
     Fact Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
+    Relation<T1, T2, T3, T4> In(ScopeTag scope)
 sealed class Eggnog.Rule
     Boolean IsNaive { get }
+    IReadOnlyList<ScopeTag> ReadScopes { get }
     Ruleset Ruleset { get }
     Scope Owner { get }
+    ScopeTag Licence { get }
     String Name { get }
+    String OwnFactsReason { get }
     override String ToString()
 sealed class Eggnog.RuleBuilder
     String Name { get }
@@ -221,7 +239,9 @@ sealed class Eggnog.RuleBuilder
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
     Var<T> Var<T>(String name)
     Var<TSort> Make<TSort : struct, ISort<TSort>>(String name, ConstructorTerm<TSort> term)
+    Void Erasing(ScopeTag licence)
     Void Naive()
+    Void ReadsOwnFacts(String reason)
     Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right)
     Void Then(params Fact[] facts)
     Void When(params Fact[] facts)
@@ -248,9 +268,13 @@ sealed class Eggnog.Ruleset
     EGraph Graph { get }
     IReadOnlyList<Rule> Rules { get }
     Rule DefineRule(String name, Action<RuleBuilder> define)
+    ScopeTag Licence { get }
     String Name { get }
     override String ToString()
     static Schedule op_Implicit(Ruleset ruleset)
+sealed class Eggnog.RulesetOptions
+    ScopeTag Licence { get; init }
+    ctor()
 sealed class Eggnog.RunOptions
     Action<RunStep> Observer { get; init }
     Boolean RecordSteps { get; init }
@@ -283,6 +307,7 @@ sealed class Eggnog.RunStep
     override String ToString()
 enum Eggnog.RunStepKind
     Iteration
+    MirrorSync
 enum Eggnog.RunStopReason
     Completed
     IterationLimit
@@ -304,6 +329,7 @@ sealed class Eggnog.Scope : IDisposable
     Boolean IsContradictory { get }
     Boolean IsDisposed { get }
     Boolean IsFaulted { get }
+    Boolean IsFrozen { get }
     Boolean IsRoot { get }
     Boolean TryGet<T>(Term<T> term, out T value)
     Boolean Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
@@ -311,11 +337,17 @@ sealed class Eggnog.Scope : IDisposable
     Exception Failure { get }
     ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root, CostModel costs = null)
     Extractor CreateExtractor(CostModel costs = null)
+    IReadOnlyList<Rule> LocalRules { get }
+    IReadOnlyList<Scope> Children { get }
     IReadOnlyList<TableRow> Rows(TableHandle table)
     Int64 Count(Query query)
     Int64 CountRows(TableHandle table)
     Int64 Version { get }
+    Rule DefineRule(Ruleset ruleset, String name, Action<RuleBuilder> define)
     RunReport Run(Schedule schedule, RunOptions options = null, CancellationToken cancellationToken = null)
+    Scope CreateChild(ScopeTag tag = null, ScopeOptions options = null)
+    Scope Parent { get }
+    ScopeTag Tag { get }
     String Path { get }
     T Get<T>(Term<T> term)
     TSort Find<TSort : struct, ISort<TSort>>(TSort value)
@@ -323,7 +355,16 @@ sealed class Eggnog.Scope : IDisposable
     Void Assume(params Fact[] facts)
     Void Dispose()
     Void ForEachMatch(Query query, QueryCallback callback)
+    Void Freeze()
     Void Write(Action<ScopeWriter> write)
+    override String ToString()
+sealed class Eggnog.ScopeOptions
+    Int32? DegreeOfParallelism { get; init }
+    ctor()
+    static ScopeOptions Default { get }
+sealed class Eggnog.ScopeTag
+    EGraph Graph { get }
+    String Name { get }
     override String ToString()
 sealed class Eggnog.ScopeWriter
     Scope Scope { get }
@@ -337,6 +378,7 @@ abstract class Eggnog.TableHandle
     EGraph Graph { get }
     IReadOnlyList<ColumnType> Keys { get }
     Int32 Index { get }
+    ScopeTag ReadScope { get }
     String Name { get }
     TableKind Kind { get }
     TableRole Role { get }

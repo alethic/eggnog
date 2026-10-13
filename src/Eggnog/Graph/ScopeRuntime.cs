@@ -6,8 +6,10 @@ namespace Eggnog
     /// the first evaluation failure (D31). Thread-safe, because rule tasks may run in parallel.
     /// </summary>
     /// <remarks>
-    /// R1: the root's runtime, held by the graph, serves every call (the root is the only scope). R2 gives every context
-    /// its own through a per-graph context-local slot, reached from the execution state the engine passes.
+    /// Every engine context has its own, the value of the graph's context-local slot (<see cref="EGraph.RuntimeSlot"/>,
+    /// colors §10.1), reached from the execution state the engine passes to an external function: the state's view's
+    /// database belongs to the context the call runs in. A query's transient child (D34) gets its own runtime, whose
+    /// <see cref="Owner"/> is the queried scope.
     /// </remarks>
     internal sealed class ScopeRuntime
     {
@@ -16,12 +18,21 @@ namespace Eggnog
         EvaluationFailure? failure;
 
         /// <summary>
-        /// Gets the runtime of the scope an engine call runs in. R1: always the root's.
+        /// Gets the runtime of the context an engine call runs in:
+        /// <c>(state.View?.Owner.Owner?.Host as EGraphContext)?.GetLocal(graph.RuntimeSlot)</c> (§4.1), or the root's for
+        /// a state with no context of this graph. Lock-free once the runtime exists: a few field reads and one volatile
+        /// read; safe from any rule task.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="state">The execution state the engine passed to the external function.</param>
         /// <returns>The runtime.</returns>
-        public static ScopeRuntime Of(EGraph graph, Relations.ExecutionState state) => graph.Root.Runtime;
+        public static ScopeRuntime Of(EGraph graph, Relations.ExecutionState state)
+        {
+            if (state.View?.Owner.Owner?.Host is Relations.EGraphContext context && ReferenceEquals(context.Owner, graph.Engine))
+                return context.GetLocal(graph.RuntimeSlot);
+
+            return graph.Root.Runtime;
+        }
 
         /// <summary>
         /// Gets or sets the scope this runtime belongs to.

@@ -24,8 +24,9 @@ namespace Eggnog
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or a live query has it.</exception>
         /// <exception cref="RuleDefinitionException">The query is not valid (the messages of §6.3); nothing is
         /// registered.</exception>
-        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost
-        /// function.</exception>
+        /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or the
+        /// query's first scoped read of a table creates its mirror, which is a table definition (D6, §6.8), while another
+        /// thread is using the writable root (nothing is registered; once the root is frozen any thread may).</exception>
         public Query DefineQuery(string name, Action<QueryBuilder> define)
         {
             EngineCallMarker.ThrowIfActive();
@@ -71,8 +72,9 @@ namespace Eggnog
         internal void DeferFree(RuleVariants variants) => deferredFrees.Enqueue(variants);
 
         /// <summary>
-        /// Frees the variants handed over by <see cref="DeferFree"/>. Called by the root adapter under the engine lock,
-        /// from a host call.
+        /// Frees the variants handed over by <see cref="DeferFree"/>: before every iteration and every query
+        /// (<see cref="ContextEngineScope.PrepareRules"/>, <see cref="ContextEngineScope.PrepareVariant"/>), from a host
+        /// call. No call uses a disposed query's variants, so freeing them while other threads run engine calls is safe.
         /// </summary>
         internal void FreeDeferred()
         {

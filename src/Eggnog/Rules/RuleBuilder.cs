@@ -92,12 +92,16 @@ namespace Eggnog
         /// filters.
         /// </summary>
         /// <param name="facts">The facts.</param>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
         public void When(params Fact[] facts)
         {
             ThrowIfClosed();
             ArgumentNullException.ThrowIfNull(facts);
             foreach (var fact in facts)
-                draft.Body.Add(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
+            {
+                graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
+                draft.Body.Add(fact);
+            }
         }
 
         /// <summary>
@@ -161,12 +165,16 @@ namespace Eggnog
         /// and unions of classes.
         /// </summary>
         /// <param name="facts">The facts.</param>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph (D38).</exception>
         public void Then(params Fact[] facts)
         {
             ThrowIfClosed();
             ArgumentNullException.ThrowIfNull(facts);
             foreach (var fact in facts)
-                draft.Head.Add(new HeadItem(HeadItemKind.Then, fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), null, null, null));
+            {
+                graph.CheckFactTags(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."), nameof(facts));
+                draft.Head.Add(new HeadItem(HeadItemKind.Then, fact, null, null, null));
+            }
         }
 
         /// <summary>
@@ -210,6 +218,34 @@ namespace Eggnog
         {
             ThrowIfClosed();
             draft.Naive = true;
+        }
+
+        /// <summary>
+        /// Makes this rule erasing under <paramref name="licence"/>, whatever its ruleset says (D12, §6.3 step 6): every
+        /// atom over a fact table must read the licence scope (<c>In(licence)</c>), unless the rule calls
+        /// <see cref="ReadsOwnFacts"/>.
+        /// </summary>
+        /// <param name="licence">The licence tag.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="licence"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The tag belongs to another graph.</exception>
+        public void Erasing(ScopeTag licence)
+        {
+            ThrowIfClosed();
+            graph.CheckTag(licence, nameof(licence));
+            draft.Erasing = licence;
+        }
+
+        /// <summary>
+        /// Exempts this rule from its licence (D12): it may read fact tables in the running scope.
+        /// <paramref name="reason"/> says why that is sound, and <see cref="Rule.ToString"/> renders it. The rule must have
+        /// a licence, its ruleset's or its own (a <see cref="RuleDefinitionException"/> otherwise), and the reason must not
+        /// be empty.
+        /// </summary>
+        /// <param name="reason">Why reading the running scope's facts is sound for this rule.</param>
+        public void ReadsOwnFacts(string reason)
+        {
+            ThrowIfClosed();
+            draft.OwnFactsReason = reason ?? string.Empty;
         }
 
         /// <summary>

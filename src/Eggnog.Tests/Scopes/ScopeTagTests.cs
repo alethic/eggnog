@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Support;
+
+using Xunit;
+
+namespace Eggnog.Tests.Scopes
+{
+
+    /// <summary>
+    /// Scope tags belong to their graph (D38): unique names, the reserved root tag, refusal of another graph's tag
+    /// everywhere one is taken, and no state shared between graphs.
+    /// </summary>
+    public sealed class ScopeTagTests
+    {
+
+        const string Ref = "123e4567-e89b-12d3-a456-426614174000";
+
+        [Fact]
+        public void TagNamesAreUniquePerGraphAndRootIsTheRoots()
+        {
+            var graph = new EGraph();
+            Assert.Equal("root", graph.RootTag.Name);
+            Assert.Same(graph, graph.RootTag.Graph);
+            Assert.Equal(new[] { graph.RootTag }, graph.ScopeTags);
+            Assert.Same(graph.RootTag, graph.Root.Tag);
+
+            var schema = graph.DefineScopeTag("schema");
+            Assert.Equal("schema", schema.ToString());
+            Assert.Equal(new[] { graph.RootTag, schema }, graph.ScopeTags);
+            Assert.Throws<ArgumentException>(() => graph.DefineScopeTag("schema"));
+            Assert.Throws<ArgumentException>(() => graph.DefineScopeTag("root"));
+            Assert.Throws<ArgumentException>(() => graph.DefineScopeTag(""));
+            Assert.Throws<ArgumentNullException>(() => graph.DefineScopeTag(null!));
+
+            // Another graph may define the same names: they are different tags.
+            var other = new EGraph();
+            var otherSchema = other.DefineScopeTag("schema");
+            Assert.NotSame(schema, otherSchema);
+            Assert.NotSame(graph.RootTag, other.RootTag);
+        }
+
+        [Fact]
+        public void AnotherGraphsTagIsRefusedEverywhere()
+        {
+            var t = new ScopeTheory();
+            var foreign = new EGraph().DefineScopeTag("foreign");
+
+            Assert.Throws<ArgumentException>(() => t.Root.CreateChild(foreign));
+            Assert.Throws<ArgumentException>(() => t.Root.CreateChild(t.Graph.RootTag));
+            Assert.Throws<ArgumentException>(() => t.Fact.In(foreign));
+            Assert.Throws<ArgumentException>(() => t.Best.In(foreign));
+            Assert.Throws<ArgumentException>(() => Fact.In(foreign, t.Fact.Of("a")));
+            Assert.Throws<ArgumentException>(() => t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = foreign }));
+            Assert.Throws<ArgumentException>(() => t.Rules.DefineRule("erasing", r =>
+            {
+                r.Erasing(foreign);
+                r.When(t.Fact.Of("a"));
+            }));
+
+            // Nothing was defined by the refusals.
+            Assert.DoesNotContain(t.Graph.Rulesets, r => r.Name == "licensed");
+            Assert.Empty(t.Rules.Rules);
+        }
+
+        [Fact]
+        public void TwoGraphsShareNoTagStateInEitherOrder()
+        {
+            // A's schema freezes before B defines its theory (whose first scoped reads create B's mirrors)...
+            var a = Compile();
+            var b = Compile();
+            Assert.True(Ask(a));
+            Assert.True(Ask(b));
+
+            // ...and B's theory is defined before A's schema freezes, and A's after B's schema froze.
+            var graphB = new EGraph();
+            var theoryB = new CosmosTheory(graphB);
+            var c = Compile();
+            var d = Compile(graphB, theoryB);
+            Assert.True(Ask(d));
+            Assert.True(Ask(c));
+
+            // Every scenario's container compiles and every scenario query passes, in both orders: A's schemas all freeze
+            // before B's theory is defined, and E's theory is defined before F's schemas freeze.
+            var reference = Reference();
+            var theoryA = new CosmosTheory(new EGraph());
+            var schemasA = ScopedScenarioCases.CompileAll(theoryA);
+            var theoryB2 = new CosmosTheory(new EGraph());
+            var schemasB = ScopedScenarioCases.CompileAll(theoryB2);
+            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryA, schemasA));
+            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryB2, schemasB));
+
+            var theoryE = new CosmosTheory(new EGraph());
+            var theoryF = new CosmosTheory(new EGraph());
+            var schemasF = ScopedScenarioCases.CompileAll(theoryF);
+            var schemasE = ScopedScenarioCases.CompileAll(theoryE);
+            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryE, schemasE));
+            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryF, schemasF));
+        }
+
+        [Fact]
+        public void TwoGraphsShareNoTagStateOnParallelThreads()
+        {
+            var results = new bool[8];
+            var threads = Support.DedicatedThreads.For(results.Length, results.Length, i => results[i] = CompileAndAsk());
+            Assert.Equal(results.Length, threads);
+            Assert.All(results, Assert.True);
+
+            // Every scenario's container and query, one graph per thread.
+            var reference = Reference();
+            var all = new List<string>[8];
+            threads = Support.DedicatedThreads.For(all.Length, all.Length, i =>
+            {
+                var c = new CosmosTheory(new EGraph());
+                all[i] = ScopedScenarioCases.AskAll(c, ScopedScenarioCases.CompileAll(c));
+            });
+            Assert.Equal(all.Length, threads);
+            Assert.All(all, lines => Assert.Equal(reference, lines));
+        }
+
+        [Fact]
+        public void AFrozenSchemaOfOneGraphDoesNotRefuseAnotherGraphsFirstScopedRead()
+        {
+            var a = new EGraph();
+            var aTheory = new CosmosTheory(a);
+            a.Root.Freeze();
+            a.Root.CreateChild(aTheory.Schema).Freeze();
+            Assert.Equal(1, a.Mirrors.FrozenCount(aTheory.Schema));
+
+            var b = new EGraph();
+            var bTheory = new CosmosTheory(b);
+            Assert.Equal(0, b.Mirrors.FrozenCount(bTheory.Schema));
+            Assert.Equal(2, b.Mirrors.CopyRules(bTheory.Schema).Length);
+            Assert.Equal(new[] { "dom@schema", "present@schema" }, b.Mirrors.AllCopyRules().Select(r => r.Rule.Name.Replace("copy ", "", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal));
+        }
+
+        /// <summary>
+        /// Scenario 03's container in a new graph.
+        /// </summary>
+        static (CosmosTheory C, Scope Schema) Compile()
+        {
+            var graph = new EGraph();
+            return Compile(graph, new CosmosTheory(graph));
+        }
+
+        /// <summary>
+        /// Scenario 03's container in a graph that has the theory: its root is frozen, then the schema.
+        /// </summary>
+        static (CosmosTheory C, Scope Schema) Compile(EGraph graph, CosmosTheory c)
+        {
+            graph.Root.Freeze();
+            var schema = graph.Root.CreateChild(c.Schema);
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
+            c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
+            schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
+            schema.Freeze();
+            return (c, schema);
+        }
+
+        /// <summary>
+        /// Asks scenario 03's query of a compiled container; returns whether it lowered.
+        /// </summary>
+        static bool Ask((CosmosTheory C, Scope Schema) container)
+        {
+            var (c, schema) = container;
+            using var query = schema.CreateChild(c.Query);
+            var q = query.Make(c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)));
+            query.Assume(c.WhereClause.Of(q));
+            query.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+            return query.Extract(q).Mentions(c.UuidEq) == false
+                && query.AreEqual(q, c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.StrEq.Of("ref", Ref)));
+        }
+
+        /// <summary>
+        /// Compiles and asks in a new graph.
+        /// </summary>
+        static bool CompileAndAsk() => Ask(Compile());
+
+        /// <summary>
+        /// Every scenario's answers in a graph of its own, which no other graph touches: no case fails, and one line per
+        /// sweep query.
+        /// </summary>
+        static List<string> Reference()
+        {
+            var c = new CosmosTheory(new EGraph());
+            var lines = ScopedScenarioCases.AskAll(c, ScopedScenarioCases.CompileAll(c));
+            Assert.DoesNotContain(lines, line => line.StartsWith("failed: ", StringComparison.Ordinal));
+            return lines;
+        }
+
+    }
+
+}

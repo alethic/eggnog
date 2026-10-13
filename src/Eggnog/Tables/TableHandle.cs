@@ -63,7 +63,7 @@ namespace Eggnog
         public bool Lift { get; internal set; }
 
         /// <summary>
-        /// Gets whether every key, and the output, is a value type: such a table may be read scoped (D1, R2).
+        /// Gets whether every key, and the output, is a value type: such a table may be read scoped (D1).
         /// </summary>
         public bool IsValueOnly
         {
@@ -78,10 +78,77 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the table's name.
+        /// Gets the tag of a read-only scoped view made by <c>In(tag)</c>: an atom over the view reads the nearest
+        /// ancestor-or-self of the running scope tagged so (D1, §6.8). <c>null</c> for the table itself. A scoped view is
+        /// rejected in any write: a <see cref="RuleDefinitionException"/> in a rule head, an
+        /// <see cref="ArgumentException"/> in a host write.
+        /// </summary>
+        public ScopeTag? ReadScope { get; private set; }
+
+        /// <summary>
+        /// Gets the table's name, or <c>dom@schema</c> for a scoped view.
         /// </summary>
         /// <returns>The name.</returns>
-        public override string ToString() => Name;
+        public override string ToString() => ReadScope is { } tag ? Name + "@" + tag.Name : Name;
+
+        /// <summary>
+        /// Gets the unscoped table: for a scoped view, the table it views; for a mirror handle, the table it mirrors;
+        /// <c>null</c> for a table itself.
+        /// </summary>
+        internal TableHandle? Source { get; set; }
+
+        /// <summary>
+        /// Gets the tag of a mirror handle (§6.8): the handle over the engine function <c>T@tag</c>, which only copy rules
+        /// write. <c>null</c> for every other handle.
+        /// </summary>
+        internal ScopeTag? MirrorTag { get; set; }
+
+        /// <summary>
+        /// Gets whether this is a mirror handle, which is never listed in <see cref="EGraph.Tables"/> and never reaches a
+        /// user.
+        /// </summary>
+        internal bool IsMirror => MirrorTag is not null;
+
+        /// <summary>
+        /// Gets the table this handle names: itself, or the table a scoped view views.
+        /// </summary>
+        internal TableHandle Table => ReadScope is null ? this : Source!;
+
+        /// <summary>
+        /// Makes <paramref name="view"/> a read-only scoped view of this table under <paramref name="tag"/> (§3.3
+        /// <c>In</c>): it shares the table's definition and engine function, with <see cref="ReadScope"/> set.
+        /// </summary>
+        /// <typeparam name="T">The handle type, the table's own.</typeparam>
+        /// <param name="view">A new, uninitialized handle of the table's type.</param>
+        /// <param name="tag">The tag.</param>
+        /// <returns>The view.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tag"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The tag belongs to another graph, or the table has a sort column.</exception>
+        internal T ViewIn<T>(T view, ScopeTag tag) where T : TableHandle
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+            var table = Table;
+            table.Graph.CheckTag(tag, nameof(tag));
+            if (table.IsValueOnly == false)
+                throw new ArgumentException($"'{table.Name}' has a sort column; scoped reads are limited to tables whose columns are all values (D1).", nameof(tag));
+
+            view.Graph = table.Graph;
+            view.Name = table.Name;
+            view.Index = table.Index;
+            view.Kind = table.Kind;
+            view.Role = table.Role;
+            view.KeyArray = table.KeyArray;
+            view.Output = table.Output;
+            view.Lift = table.Lift;
+            view.Function = table.Function;
+            view.Columns = table.Columns;
+            view.Source = table;
+            view.ReadScope = tag;
+            if (view is FunctionHandle function)
+                function.Lattice = ((FunctionHandle)table).Lattice;
+
+            return view;
+        }
 
         /// <summary>
         /// Gets the key columns' types, as an array.

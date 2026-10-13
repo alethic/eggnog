@@ -9,7 +9,8 @@ namespace Eggnog
     /// <remarks>
     /// A scope's origin lives as long as the scope and is marked <see cref="Disposed"/> when the scope is disposed, which
     /// kills every value it returned. A batch's origin is valid within its batch, and afterwards only once
-    /// <see cref="Committed"/>. In R1 every scope origin is the root's. The flags only ever go from false to true.
+    /// <see cref="Committed"/>. A scope's origin's parent is its parent scope's origin. The flags only ever go from false
+    /// to true.
     /// </remarks>
     internal sealed class ScopeOrigin
     {

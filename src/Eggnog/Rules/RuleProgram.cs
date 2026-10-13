@@ -24,9 +24,11 @@ namespace Eggnog
         /// <param name="namedRegisters">The registers of the declared body variables, then of the <c>Make</c> variables;
         /// -1 for a variable bound to a constant or unused.</param>
         /// <param name="writesAnalysis">Whether the head writes an analysis table.</param>
+        /// <param name="readScopes">The distinct tags the scoped atoms read, in first-use order.</param>
         public RuleProgram(string name, ProgramRegister[] registers, ProgramAtom[] atoms, ProgramStep[] steps, HeadOp[] head,
-            uint[] writtenIdConstants, ScopeOrigin[] idConstantOrigins, int[] namedRegisters, bool writesAnalysis)
+            uint[] writtenIdConstants, ScopeOrigin[] idConstantOrigins, int[] namedRegisters, bool writesAnalysis, ScopeTag[] readScopes)
         {
+            ReadScopes = readScopes;
             Name = name;
             Registers = registers;
             Atoms = atoms;
@@ -78,6 +80,12 @@ namespace Eggnog
         /// to a constant or unused.
         /// </summary>
         public int[] NamedRegisters { get; }
+
+        /// <summary>
+        /// Gets the distinct tags the scoped atoms read, in first-use order: the tags whose mirrors are synced before the
+        /// program runs (D48) and that must resolve from the running scope.
+        /// </summary>
+        public ScopeTag[] ReadScopes { get; }
 
         /// <summary>
         /// Gets whether the head writes an analysis table (invariant A).

@@ -63,16 +63,22 @@ namespace Eggnog
         public RunStatistics Statistics { get; } = new();
 
         /// <summary>
-        /// Gets the rules of an iteration: the rulesets' global rules (snapshots, in definition order), deduplicated by
-        /// reference. Recomputed for every iteration, so rules defined meanwhile join the next one (D6). R2 appends the
-        /// local rules of the scope and its ancestors.
+        /// Gets the rules of an iteration in <paramref name="scope"/> (§6.5.2): the rulesets' global rules (snapshots, in
+        /// definition order), then the local rules belonging to those rulesets of each scope from the root down to
+        /// <paramref name="scope"/>, deduplicated by reference. Mirror copy rules are never among them; they run only in
+        /// syncs (D48). Recomputed for every iteration, so rules defined meanwhile join the next one (D6). A single ruleset
+        /// on a path without local rules returns its snapshot, allocation-free.
         /// </summary>
-        /// <param name="rulesets">The rulesets.</param>
+        /// <param name="rulesets">The rulesets of the step.</param>
         /// <param name="scope">The scope the iteration runs in.</param>
         /// <returns>The rules.</returns>
-        public IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope)
+        public static IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope)
         {
-            if (rulesets.Count == 1)
+            var anyLocal = false;
+            for (var up = scope; up is not null && anyLocal == false; up = up.Parent)
+                anyLocal = up.LocalCompiled.Length > 0;
+
+            if (rulesets.Count == 1 && anyLocal == false)
                 return rulesets[0].Compiled;
 
             var seen = new HashSet<CompiledRule>(ReferenceEqualityComparer.Instance);
@@ -81,6 +87,26 @@ namespace Eggnog
                 foreach (var rule in ruleset.Compiled)
                     if (seen.Add(rule))
                         rules.Add(rule);
+
+            if (anyLocal)
+            {
+                var path = new List<Scope>();
+                for (var up = scope; up is not null; up = up.Parent)
+                    path.Add(up);
+
+                for (var k = path.Count - 1; k >= 0; k--)
+                {
+                    foreach (var rule in path[k].LocalCompiled)
+                    {
+                        var member = false;
+                        foreach (var ruleset in rulesets)
+                            member |= ReferenceEquals(rule.Rule.Ruleset, ruleset);
+
+                        if (member && seen.Add(rule))
+                            rules.Add(rule);
+                    }
+                }
+            }
 
             return rules;
         }
@@ -124,12 +150,14 @@ namespace Eggnog
         public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase)
         {
             BeforeStep(scope);
+            rules = Resolvable(scope, rules);
             if (rules.Count == 0)
                 return false;
 
-            var started = Stopwatch.GetTimestamp();
             var engine = scope.Engine;
             engine.EnsureClean();
+            SyncMirrors(scope, rules);
+            var started = Stopwatch.GetTimestamp();
             var lowered = engine.PrepareRules(rules, Options.SemiNaive);
             var ids = new Relations.EGraphRuleId[lowered.Length];
             for (var i = 0; i < ids.Length; i++)
@@ -143,11 +171,7 @@ namespace Eggnog
             }
             catch (Relations.PanicException panic)
             {
-                var failure = scope.Runtime.TakeFailure();
-                var exception = new RuleEvaluationException(failure?.RuleName, failure?.Bindings, failure?.What ?? panic.PanicMessage,
-                    failure?.Exception ?? panic);
-                scope.Fault(exception);
-                throw exception;
+                throw scope.FaultWith(panic);
             }
 
             var elapsed = Stopwatch.GetElapsedTime(started);
@@ -182,6 +206,60 @@ namespace Eggnog
 
             RecordStep(RunStepKind.Iteration, scope, changed, elapsed, matched);
             return changed;
+        }
+
+        /// <summary>
+        /// Leaves out of an iteration the rules that read a tag <paramref name="scope"/> cannot resolve. <c>Run</c> refuses
+        /// such a rule before any work when the schedule reaches it at the start (§6.5.3); one defined on another thread
+        /// during the run (D6) cannot be refused then, and failing the run half-way would leave its earlier iterations'
+        /// writes behind and lose its report, so it takes part only in iterations of scopes that resolve its tags. Returns
+        /// <paramref name="rules"/> itself, allocation-free, when every rule's tags resolve.
+        /// </summary>
+        /// <param name="scope">The scope the iteration runs in.</param>
+        /// <param name="rules">The iteration's rules.</param>
+        /// <returns>The rules whose tags resolve from <paramref name="scope"/>.</returns>
+        static IReadOnlyList<CompiledRule> Resolvable(Scope scope, IReadOnlyList<CompiledRule> rules)
+        {
+            List<CompiledRule>? kept = null;
+            for (var i = 0; i < rules.Count; i++)
+            {
+                var rule = rules[i];
+                var resolves = true;
+                foreach (var tag in rule.Program.ReadScopes)
+                    resolves &= ScopeResolver.TryResolve(scope, tag) is not null;
+
+                if (resolves == false && kept is null)
+                {
+                    kept = new List<CompiledRule>(rules.Count);
+                    for (var j = 0; j < i; j++)
+                        kept.Add(rules[j]);
+                }
+                else if (resolves && kept is not null)
+                {
+                    kept.Add(rule);
+                }
+            }
+
+            return kept ?? rules;
+        }
+
+        /// <summary>
+        /// Brings current, just before an iteration, the mirrors its rules read (D48, §6.8): for each tag a rule reads,
+        /// the tagged scope's copy rules run once if it is writable and changed since its last sync. Allocates only when a
+        /// rule reads a scope.
+        /// </summary>
+        /// <param name="scope">The scope the iteration runs in.</param>
+        /// <param name="rules">The iteration's rules.</param>
+        void SyncMirrors(Scope scope, IReadOnlyList<CompiledRule> rules)
+        {
+            List<ScopeTag>? tags = null;
+            foreach (var rule in rules)
+                foreach (var tag in rule.Program.ReadScopes)
+                    if ((tags ??= new List<ScopeTag>()).Contains(tag) == false)
+                        tags.Add(tag);
+
+            if (tags is not null)
+                MirrorSync.Ensure(scope, tags, "A rule of the run", this);
         }
 
         /// <summary>

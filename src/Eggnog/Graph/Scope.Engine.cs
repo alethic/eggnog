@@ -19,8 +19,9 @@ namespace Eggnog
         /// condition cannot be checked here: it names a table or column type of another graph, or a class this scope cannot
         /// use (D39). Both are refused before any work, so nothing is written.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The iteration, time or row limit is negative.</exception>
-        /// <exception cref="InvalidOperationException">The scope is faulted, or the call comes from another thread while
-        /// the scope is in use, from a primitive, lattice, filter or cost function, or from a run observer.</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen or faulted; a rule the schedule reaches reads a
+        /// tag no ancestor-or-self of the scope carries (before any work); or the call comes from another thread while the
+        /// scope is in use, from a primitive, lattice, filter or cost function, or from a run observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
         /// <exception cref="RuleEvaluationException">An evaluation failure; the scope is then faulted.</exception>
         public RunReport Run(Schedule schedule, RunOptions? options = null, CancellationToken cancellationToken = default)
@@ -52,6 +53,11 @@ namespace Eggnog
                     if (TermReader.Validate(this, fact) is { } error)
                         throw new ArgumentException($"An until condition cannot be checked in scope '{Path}': {error}: {fact}.", nameof(schedule));
 
+                // Every tag a reachable rule reads must resolve from here (§6.5.3, §6.7).
+                foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(rulesets), this))
+                    foreach (var tag in rule.Program.ReadScopes)
+                        ScopeResolver.Resolve(this, tag, $"Rule '{rule.Rule.Name}'");
+
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
                 RunStopReason reason;
                 try
@@ -68,7 +74,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(true);
             }
         }
 
@@ -82,7 +88,7 @@ namespace Eggnog
         public Extractor CreateExtractor(CostModel? costs = null)
         {
             costs ??= CostModel.Default;
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 var schema = Graph.Extraction.SchemaFor(costs);
@@ -91,7 +97,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 

@@ -1,18 +1,22 @@
-using System;
 using System.Collections.Generic;
-using System.Globalization;
 
 namespace Eggnog
 {
 
     /// <summary>
-    /// The engine variants of one compiled rule (D36): the semi-naive variant (or the naive one for a naive program) and,
-    /// on demand, the naive twin of a semi-naive program, which differential tests use. In R1 a variant is lowered again,
-    /// with the description suffix <c>/k{generation}</c>, when the canonical forms of its class constants change (§6.4.5).
+    /// The engine variants of one compiled rule, query or mirror copy rule (D36): the semi-naive variant (or the naive one
+    /// for a naive program) and, on demand, the naive twin of a semi-naive program, which differential tests use.
     /// </summary>
     /// <remarks>
-    /// Thread-safe: a lock-free check of the cached variant, then a double check under a per-rule lock taken after the
-    /// graph's engine lock (lock order: definition lock, engine lock, rule lock).
+    /// <para>
+    /// Each variant is lowered once, with the class constants as written: the engine runs every Id constant in its
+    /// canonical form in the running context and gates watermarks on them (X19, I30), so a variant never changes once
+    /// lowered (§6.4.4). R1's re-lowering under <c>/k{generation}</c> (§6.4.5) is gone with the bare root.
+    /// </para>
+    /// <para>
+    /// Thread-safe: a lock-free read of the cached variant, then a double check under a per-rule lock. Lowering registers
+    /// engine definitions, which the bridge publishes copy-on-write (X16), so no engine lock is needed.
+    /// </para>
     /// </remarks>
     internal sealed class RuleVariants
     {
@@ -24,8 +28,6 @@ namespace Eggnog
         readonly bool naive;
         volatile LoweredRule? semiNaiveVariant;
         volatile LoweredRule? naiveVariant;
-        int semiNaiveGeneration;
-        int naiveGeneration;
 
         /// <summary>
         /// Initializes a new instance; nothing is lowered yet.
@@ -63,96 +65,69 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the default variant (semi-naive, or naive for a naive program); <c>null</c> before it exists.
+        /// Gets the default variant (semi-naive, or naive for a naive program), for E10's plan list; <c>null</c> before it
+        /// exists or once the variants are freed.
         /// </summary>
         public LoweredRule? Default => naive ? naiveVariant : semiNaiveVariant;
 
         /// <summary>
-        /// Gets the variant for the mode, lowering it with <paramref name="constants"/> when it does not exist or was
-        /// lowered with other constants; a stale variant is freed first (R1 only, D3).
+        /// Gets the variant for the mode, lowering it with the written class constants the first time. O(1) once
+        /// lowered: one volatile read.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="semiNaive">Whether the semi-naive variant is wanted; a naive program has none.</param>
-        /// <param name="constants">The values to lower the class constants with.</param>
         /// <returns>The variant.</returns>
-        public LoweredRule Get(EGraph graph, bool semiNaive, ReadOnlySpan<uint> constants)
+        public LoweredRule Get(EGraph graph, bool semiNaive)
         {
             if (naive)
                 semiNaive = false;
 
             var current = semiNaive ? semiNaiveVariant : naiveVariant;
-            if (current is not null && constants.SequenceEqual(current.Constants))
+            if (current is not null)
                 return current;
 
-            lock (graph.EngineLock)
+            lock (sync)
             {
-                lock (sync)
-                {
-                    current = semiNaive ? semiNaiveVariant : naiveVariant;
-                    if (current is not null && constants.SequenceEqual(current.Constants))
-                        return current;
+                current = semiNaive ? semiNaiveVariant : naiveVariant;
+                if (current is not null)
+                    return current;
 
-                    int generation;
-                    if (semiNaive)
-                    {
-                        if (current is not null)
-                            semiNaiveGeneration++;
+                var name = description;
+                if (semiNaive == false && naive == false)
+                    name += "/naive";
 
-                        generation = semiNaiveGeneration;
-                    }
-                    else
-                    {
-                        if (current is not null)
-                            naiveGeneration++;
+                var lowered = RuleLowering.Lower(graph, program, rule, semiNaive, program.WrittenIdConstants, name);
+                if (semiNaive)
+                    semiNaiveVariant = lowered;
+                else
+                    naiveVariant = lowered;
 
-                        generation = naiveGeneration;
-                    }
-
-                    if (current is not null)
-                        FreeVariant(graph, current);
-
-                    var name = description;
-                    if (semiNaive == false && naive == false)
-                        name += "/naive";
-
-                    if (generation > 0)
-                        name += "/k" + generation.ToString(CultureInfo.InvariantCulture);
-
-                    var lowered = RuleLowering.Lower(graph, program, rule, semiNaive, constants, name);
-                    if (semiNaive)
-                        semiNaiveVariant = lowered;
-                    else
-                        naiveVariant = lowered;
-
-                    return lowered;
-                }
+                return lowered;
             }
         }
 
         /// <summary>
-        /// Frees every variant: <c>FreeRule</c>, then <c>FreeExternalFunction</c> of its owned call sites.
+        /// Frees every variant: <c>FreeRule</c>, then <c>FreeExternalFunction</c> of its owned call sites. The caller
+        /// guarantees that no engine call is using them (§6.4.6).
         /// </summary>
         /// <param name="graph">The graph.</param>
         public void Free(EGraph graph)
         {
-            lock (graph.EngineLock)
+            lock (sync)
             {
-                lock (sync)
-                {
-                    if (semiNaiveVariant is { } semi)
-                        FreeVariant(graph, semi);
+                if (semiNaiveVariant is { } semi)
+                    FreeVariant(graph, semi);
 
-                    if (naiveVariant is { } twin)
-                        FreeVariant(graph, twin);
+                if (naiveVariant is { } twin)
+                    FreeVariant(graph, twin);
 
-                    semiNaiveVariant = null;
-                    naiveVariant = null;
-                }
+                semiNaiveVariant = null;
+                naiveVariant = null;
             }
         }
 
         /// <summary>
-        /// Frees one variant. Called under the engine lock.
+        /// Frees one variant.
         /// </summary>
         static void FreeVariant(EGraph graph, LoweredRule variant)
         {

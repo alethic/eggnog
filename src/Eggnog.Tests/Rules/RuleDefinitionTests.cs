@@ -78,19 +78,41 @@ namespace Eggnog.Tests.Rules
             t.Rules.DefineRule("equal constants are dropped", r => r.When(((Term<long>)1L).Is(1L)));
         }
 
+        /// <summary>
+        /// §6.3 <c>c1.Is(c2)</c> of class constants (N63, N86): never refused. Classes that differ at the root are compared
+        /// where the rule runs, so the rule does not match at the root and matches in a child that unions them; classes
+        /// already one class at the root are merged, and the rule keeps the first.
+        /// </summary>
         [Fact]
-        public void ClassConstantsAreComparedByClassWhenTheRuleIsDefined()
+        public void ClassConstantsAreComparedByClassWhereTheRuleRuns()
         {
             var t = new NodeTheory();
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
             var lit = t.Root.Make(t.Lit.Of(1L));
-            AssertRefused(t, "distinct classes", r => r.When(((Term<Node>)a).Is(lit)), $"never matches: #{a.Id.Cell} = #{lit.Id.Cell} is false");
-            AssertRefused(t, "distinct through a variable", r =>
+            t.Root.Assume(t.Tag.Of(a));
+            t.Rules.DefineRule("distinct classes", r =>
+            {
+                r.When(((Term<Node>)a).Is(lit));
+                r.Then(t.Num.Of(2L));
+            });
+            t.Rules.DefineRule("distinct through a variable", r =>
             {
                 var x = r.Var<Node>("x");
                 r.When(t.Tag.Of(x), x.Is(a), x.Is(lit));
-            }, $"never matches: #{a.Id.Cell} = #{lit.Id.Cell} is false");
+                r.Then(t.Num.Of(3L));
+            });
+
+            t.Root.Run(Schedule.Saturate(t.Rules));
+            Assert.False(t.Root.Check(t.Num.Of(2L)));
+            Assert.False(t.Root.Check(t.Num.Of(3L)));
+
+            var child = t.Root.CreateChild();
+            child.Union(a, lit);
+            child.Run(Schedule.Saturate(t.Rules));
+            Assert.True(child.Check(t.Num.Of(2L)));
+            Assert.True(child.Check(t.Num.Of(3L)));
+            Assert.False(t.Root.Check(t.Num.Of(3L)));
 
             t.Root.Union(a, b);
             t.Rules.DefineRule("one class", r =>
@@ -99,6 +121,8 @@ namespace Eggnog.Tests.Rules
                 r.When(t.Tag.Of(x), x.Is(a), x.Is(b));
                 r.Then(t.Num.Of(1L));
             });
+            t.Root.Run(Schedule.Saturate(t.Rules));
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
         }
 
         [Fact]
@@ -256,6 +280,178 @@ namespace Eggnog.Tests.Rules
             Assert.Null(first.Owner);
             Assert.False(first.IsNaive);
             Assert.Equal("first", first.Name);
+        }
+
+        [Fact]
+        public void NestedFactInIsRefused()
+        {
+            var t = new ScopeTheory();
+            AssertScopedRefused(t, "nested", r => r.When(Fact.In(t.Outer, Fact.In(t.Inner, t.Fact.Of("a")))), "Fact.In cannot be nested");
+        }
+
+        [Fact]
+        public void AHandleScopedToAnotherTagInsideFactInIsRefused()
+        {
+            var t = new ScopeTheory();
+            AssertScopedRefused(t, "mismatched", r => r.When(Fact.In(t.Inner, t.Fact.In(t.Outer).Of("a"))), "'fact@outer' is inside Fact.In('inner')");
+        }
+
+        [Fact]
+        public void AScopedReadOfATableWithASortColumnIsRefused()
+        {
+            var t = new ScopeTheory();
+            t.Graph.DefineSort<Node>("Node");
+            var and = t.Graph.DefineConstructor<Node, Node, Node>("And");
+            var tag = t.Graph.DefineRelation<Node>("tagged");
+            AssertScopedRefused(t, "sort column", r =>
+            {
+                var (a, b) = r.Vars<Node, Node>("a", "b");
+                r.When(Fact.In(t.Outer, Fact.Exists(and.Of(a, b))));
+            }, "scoped reads are limited to tables whose columns are all values; 'And' has a sort column");
+            AssertScopedRefused(t, "sort relation", r => r.When(Fact.In(t.Outer, tag.Of(r.Var<Node>("x")))),
+                "scoped reads are limited to tables whose columns are all values; 'tagged' has a sort column");
+            Assert.Throws<ArgumentException>(() => ((RelationHandle)tag).InScope(t.Outer));
+        }
+
+        [Fact]
+        public void AScopedWriteIsRefused()
+        {
+            var t = new ScopeTheory();
+            AssertScopedRefused(t, "scoped insert", r => r.Then(t.Fact.In(t.Outer).Of("a")), "'fact@outer' is read-only");
+            AssertScopedRefused(t, "scoped write", r => r.Then(t.Best.In(t.Outer).Of("k").Is(1L)), "'best@outer' is read-only");
+            AssertScopedRefused(t, "scoped head", r => r.Then(Fact.In(t.Outer, t.Fact.Of("a"))), "head facts are writes; Fact.In('outer') is read-only");
+        }
+
+        [Fact]
+        public void AnErasingViolationIsRefused()
+        {
+            var t = new ScopeTheory();
+            var licensed = t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = t.Outer });
+            var e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("own facts", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Then(t.Seen.Of(x));
+            }));
+            Assert.Equal("rule reads fact table 'fact' outside scope 'outer'; read it through In(outer), or call ReadsOwnFacts with the reason that is sound", e.Message);
+            e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("other scope", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.In(t.Inner).Of(x));
+                r.Then(t.Seen.Of(x));
+            }));
+            Assert.Equal("rule reads fact table 'fact' outside scope 'outer'; read it through In(outer), or call ReadsOwnFacts with the reason that is sound", e.Message);
+            Assert.Empty(licensed.Rules);
+        }
+
+        [Fact]
+        public void ReadsOwnFactsNeedsALicenceAndAReason()
+        {
+            var t = new ScopeTheory();
+            AssertScopedRefused(t, "no licence", r =>
+            {
+                r.ReadsOwnFacts("because");
+                r.When(t.Fact.Of("a"));
+            }, "rule calls ReadsOwnFacts but has no licence");
+            var licensed = t.Graph.DefineRuleset("licensed", new RulesetOptions { Licence = t.Outer });
+            var e = Assert.Throws<RuleDefinitionException>(() => licensed.DefineRule("no reason", r =>
+            {
+                r.ReadsOwnFacts(" ");
+                r.When(t.Fact.Of("a"));
+            }));
+            Assert.Equal("ReadsOwnFacts needs a reason", e.Message);
+        }
+
+        [Fact]
+        public void AFirstScopedReadAfterATaggedScopeFrozeIsRefused()
+        {
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("early", r => r.When(t.Fact.In(t.Outer).Of(r.Var<string>("x"))));
+            t.Root.Freeze();
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Freeze();
+
+            // fact@outer exists already, so a second reader of it is fine; best@outer would be new.
+            t.Rules.DefineRule("second reader", r => r.When(t.Fact.In(t.Outer).Of(r.Var<string>("x"))));
+            AssertScopedRefused(t, "late", r =>
+            {
+                var (k, v) = r.Vars<string, long>("k", "v");
+                r.When(v.Is(t.Best.In(t.Outer).Of(k)));
+            }, "'best' is first read in scope 'outer' after a scope tagged 'outer' was frozen; define rules that read it before freezing such scopes");
+
+            // Once the frozen scope is released, the read is allowed again; another tag was never affected.
+            outer.Dispose();
+            t.Rules.DefineRule("after release", r =>
+            {
+                var (k, v) = r.Vars<string, long>("k", "v");
+                r.When(v.Is(t.Best.In(t.Outer).Of(k)));
+            });
+            t.Rules.DefineRule("inner", r =>
+            {
+                var (k, v) = r.Vars<string, long>("k", "v");
+                r.When(v.Is(t.Best.In(t.Inner).Of(k)));
+            });
+        }
+
+        [Fact]
+        public void ClassConstantsFromOtherScopesAreChecked()
+        {
+            var t = new NodeTheory();
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild();
+            var sibling = t.Root.CreateChild();
+            var a = schema.Make(t.A.Of());
+            var b = sibling.Make(t.B.Of());
+
+            // A global rule holds only classes from the root.
+            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("global", r => r.When(t.Tag.Of(a))));
+            Assert.Equal($"class {a.Id} came from scope '{schema.Path}'; a global rule may hold only classes from the root; define the rule on that scope", e.Message);
+
+            // A local rule holds classes from its owner or its ancestors, not from a sibling.
+            var local = schema.DefineRule(t.Rules, "local", r => r.When(t.Tag.Of(a)));
+            Assert.Same(schema, local.Owner);
+            e = Assert.Throws<RuleDefinitionException>(() => schema.DefineRule(t.Rules, "sibling", r => r.When(t.Tag.Of(b))));
+            Assert.Equal($"class {b.Id} came from scope '{sibling.Path}', which is not '{schema.Path}' or an ancestor of it", e.Message);
+
+            // A disposed origin.
+            sibling.Dispose();
+            var child = schema.CreateChild();
+            e = Assert.Throws<RuleDefinitionException>(() => child.DefineRule(t.Rules, "disposed", r => r.When(t.Tag.Of(b))));
+            Assert.Equal($"class {b.Id} came from scope '{sibling.Path}', which is disposed", e.Message);
+        }
+
+        [Fact]
+        public void ALocalRulesEquatedConstantsCompareInItsOwner()
+        {
+            var t = new NodeTheory();
+            var hit = t.Graph.DefineRelation<long>("hit");
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild();
+            var a = schema.Make(t.A.Of());
+            var b = schema.Make(t.B.Of());
+            schema.Union(a, b);
+
+            // a and b are one class in the owner, though not in the root (N8).
+            schema.DefineRule(t.Rules, "equated", r =>
+            {
+                r.When(t.Num.Of(1L), ((Term<Node>)a).Is(b));
+                r.Then(hit.Of(1L));
+            });
+            schema.Assume(t.Num.Of(1L));
+            schema.Run(Schedule.Saturate(t.Rules));
+            Assert.True(schema.Check(hit.Of(1L)));
+        }
+
+        /// <summary>
+        /// Asserts that a definition in the theory's ruleset fails with <paramref name="message"/> and adds no rule.
+        /// </summary>
+        static void AssertScopedRefused(ScopeTheory t, string name, Action<RuleBuilder> define, string message)
+        {
+            var before = t.Rules.Rules.Count;
+            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule(name, define));
+            Assert.Equal(name, e.RuleName);
+            Assert.Equal(message, e.Message);
+            Assert.Equal(before, t.Rules.Rules.Count);
         }
 
         /// <summary>

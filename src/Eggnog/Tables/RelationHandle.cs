@@ -27,6 +27,15 @@ namespace Eggnog
             return new RelationFact(this, (Term[])arguments.Clone());
         }
 
+        /// <summary>
+        /// The untyped scoped view (D13): what the typed <c>In(tag)</c> returns, as an untyped relation.
+        /// </summary>
+        /// <param name="tag">The tag of the scope to read.</param>
+        /// <returns>The view.</returns>
+        /// <exception cref="System.ArgumentException">The tag belongs to another graph, or the table has a sort
+        /// column.</exception>
+        internal RelationHandle InScope(ScopeTag tag) => ViewIn<RelationHandle>(new UntypedRelation(), tag);
+
     }
 
 }

@@ -20,8 +20,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static long Count(Scope scope, TableHandle table)
         {
-            Check(scope, table);
-            return scope.Engine.TableSize(table.Function);
+            return Source(scope, table).Engine.TableSize(table.Function);
         }
 
         /// <summary>
@@ -35,7 +34,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static IReadOnlyList<TableRow> Read(Scope scope, TableHandle table)
         {
-            Check(scope, table);
+            var source = Source(scope, table);
             var columns = table.Columns;
             var width = columns.Length;
             using var cells = new TupleBuffer(width);
@@ -43,7 +42,7 @@ namespace Eggnog
 
             // Copied out during the visit, which must not call the engine; canonicalized afterwards, in place, which can
             // only make rows equal in a scope that is not clean.
-            scope.Engine.ForEach(table.Function, visited =>
+            source.Engine.ForEach(table.Function, visited =>
             {
                 var values = visited.Values;
                 for (var i = 0; i < width; i++)
@@ -84,13 +83,21 @@ namespace Eggnog
             type.Kind == ColumnKind.Sort ? new ClassId(cell, scope.Origin) : type.DecodeObject(cell, scope);
 
         /// <summary>
-        /// Checks that a table belongs to the scope's graph.
+        /// Gets the scope whose view of a table is read (§6.11): the scope itself, or for a scoped view the nearest
+        /// ancestor-or-self tagged so, read directly. A table of another graph and a mirror handle are refused.
         /// </summary>
-        static void Check(Scope scope, TableHandle table)
+        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
+        /// <exception cref="InvalidOperationException">A scoped view's tag does not resolve.</exception>
+        static Scope Source(Scope scope, TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
             if (ReferenceEquals(table.Graph, scope.Graph) == false)
                 throw new ArgumentException($"Table '{table.Name}' belongs to another graph.", nameof(table));
+
+            if (table.IsMirror)
+                throw new ArgumentException($"'{table.Name}' is a mirror table, which only the library reads.", nameof(table));
+
+            return table.ReadScope is { } tag ? ScopeResolver.Resolve(scope, tag, $"Reading '{table}'") : scope;
         }
 
     }

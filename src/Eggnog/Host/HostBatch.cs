@@ -184,6 +184,8 @@ namespace Eggnog
                     throw new ArgumentException("host writes are ground facts; 'Exists' is a check, not a write", nameof(fact));
                 case FilterFact:
                     throw new ArgumentException("host writes are ground facts; 'True' is a filter", nameof(fact));
+                case ScopedFact scoped:
+                    throw new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact));
                 default:
                     throw new ArgumentException($"a {fact.GetType().Name} is not a host write", nameof(fact));
             }
@@ -389,12 +391,16 @@ namespace Eggnog
         ColumnType TypeOf(Type clrType) => graph.Values.TypeOf(clrType);
 
         /// <summary>
-        /// Checks that a table belongs to the scope's graph.
+        /// Checks that a table belongs to the scope's graph and is not a read-only scoped view (§6.6.2).
         /// </summary>
         void CheckTable(TableHandle table)
         {
             if (ReferenceEquals(table.Graph, graph) == false)
                 throw new ArgumentException($"Table '{table.Name}' belongs to another graph.");
+
+            // Invariant R: a host write goes to the scope written, never through a scoped view.
+            if (table.ReadScope is { } tag)
+                throw new ArgumentException($"'{table.Name}@{tag.Name}' is read-only; write '{table.Name}' in the scope itself.");
         }
 
         /// <summary>

@@ -1,21 +1,21 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace Eggnog
 {
 
     /// <summary>
     /// A compiled query (§6.6.4): its program, whose head is one collector of the declared variables, its one engine
-    /// variant (naive; lowered again in R1 when its class constants lose a union, §6.4.5), the column types of its
+    /// variant (naive, lowered once: the engine runs its class constants in their canonical forms, X19), the column types of its
     /// matches, and the count of calls using it, which defers the release of a disposed query (D49).
     /// </summary>
     /// <remarks>
     /// Thread-safe: <see cref="Acquire"/>, <see cref="Release"/> and <see cref="Dispose"/> take a private lock, and the
     /// variants are freed outside it, once, by whichever call leaves the query disposed and unused. Freeing never waits:
-    /// when the graph's engine lock is busy (an engine call runs on another thread), or the call comes from a user
-    /// delegate the engine invoked (<see cref="EngineCallMarker"/>, whose thread may be inside an engine call), the
-    /// variants are handed to the graph, which frees them before its next engine call.
+    /// while an engine call that may run user delegates is in progress on any thread (<see cref="EGraph.ActiveEngineCalls"/>),
+    /// or when the call comes from a user delegate the engine invoked (<see cref="EngineCallMarker"/>, whose thread may be
+    /// inside an engine call), the variants are handed to the graph, which frees them before its next iteration or
+    /// query.
     /// </remarks>
     internal sealed class CompiledQuery
     {
@@ -184,25 +184,19 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Frees the variants now, or hands them to the graph when the engine lock is busy or the call comes from a user
-        /// delegate the engine invoked.
+        /// Frees the variants now, or hands them to the graph (D49, §6.4.6) when the call comes from a user delegate the
+        /// engine invoked, or while an engine call that may run user delegates is in progress on any thread: the graph frees
+        /// them before it next prepares an iteration or a query. Never waits.
         /// </summary>
         void Free()
         {
-            if (EngineCallMarker.IsActive || Monitor.TryEnter(graph.EngineLock) == false)
+            if (EngineCallMarker.IsActive || graph.ActiveEngineCalls > 0)
             {
                 graph.DeferFree(Variants);
                 return;
             }
 
-            try
-            {
-                Variants.Free(graph);
-            }
-            finally
-            {
-                Monitor.Exit(graph.EngineLock);
-            }
+            Variants.Free(graph);
         }
 
         /// <inheritdoc />

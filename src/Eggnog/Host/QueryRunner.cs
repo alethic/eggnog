@@ -4,14 +4,19 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Runs a query in a scope (§6.6.4, D34, D49): checks its class constants against the scope, runs its naive engine
-    /// rule (R1: without a merge and without a clock tick, §6.6.5), and returns the distinct full bindings, canonical, and
-    /// in content order when asked.
+    /// Runs a query in a scope (§6.6.4, D34, D49): checks its class constants against the scope, brings the mirrors it
+    /// reads current (D48), runs its naive engine rule, and returns the distinct full bindings, canonical, and in content
+    /// order when asked.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A query writes nothing, so a failure in it throws <see cref="RuleEvaluationException"/> without faulting the scope.
-    /// From R2 a frozen scope's queries run in a transient child; R1 runs every query at the root.
+    /// In a writable scope the query is an iteration of that scope that writes nothing: the clock advances, but the
+    /// scope's version does not move and no extractor goes stale (E5). A query reading a tag whose scope is writable and
+    /// changed since its last sync first syncs that scope's mirrors (D48); the mirror tables are internal, so that moves
+    /// neither its <see cref="Scope.Version"/> nor any extractor. In a frozen scope it runs in a transient child
+    /// created for the call and disposed after it, so a frozen scope stays read-only and can be queried from many
+    /// threads; the transient child defers the scope's release like any child (D40). A query writes nothing, so a failure
+    /// in it throws <see cref="RuleEvaluationException"/> without faulting the scope.
     /// </para>
     /// <para>
     /// Allocation: the matches go into one pooled <see cref="TupleBuffer"/>, canonicalized in place and sorted through a
@@ -28,15 +33,13 @@ namespace Eggnog
         /// <param name="scope">The scope queried.</param>
         /// <param name="query">The query.</param>
         /// <param name="stopAtFirst">Whether the engine stops after the first match (<c>Any</c>).</param>
-        /// <param name="sort">Whether to order the matches by content (<c>ForEachMatch</c>).</param>
-        /// <returns>The distinct full bindings: one tuple per match, a cell per declared variable, sort cells canonical in
-        /// the scope, in content order when <paramref name="sort"/>. The caller disposes it, which returns its arrays to
-        /// the pool.</returns>
+        /// <param name="sort">Whether the matches are sorted in content order (<c>ForEachMatch</c>).</param>
+        /// <returns>The matches, which the caller disposes.</returns>
         /// <exception cref="ObjectDisposedException">The query or the scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class constant of the query cannot be used in the scope (D39).</exception>
-        /// <exception cref="InvalidOperationException">The scope is faulted or in use on another thread.</exception>
-        /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope is not
-        /// faulted.</exception>
+        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from the scope, or the scope
+        /// is not usable.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed.</exception>
         public static TupleBuffer Run(Scope scope, CompiledQuery query, bool stopAtFirst, bool sort)
         {
             query.Acquire();
@@ -50,18 +53,22 @@ namespace Eggnog
                         throw new ArgumentException($"Query '{query.Query.Name}': {error}", nameof(query));
                 }
 
-                scope.Guard.Enter(scope);
+                // Every tag resolves before any work (§6.13): a tag read later must not fail after an earlier one synced.
+                foreach (var tag in program.ReadScopes)
+                    ScopeResolver.Resolve(scope, tag, $"Query '{query.Query.Name}'");
+
+                var held = scope.EnterRead();
                 try
                 {
-                    scope.ThrowIfNotUsable();
-                    var engine = scope.Engine;
-                    engine.EnsureClean();
-                    var matches = Collect(scope, query, stopAtFirst);
+                    if (program.ReadScopes.Length > 0)
+                        MirrorSync.Ensure(scope, program.ReadScopes, $"Query '{query.Query.Name}'", null);
+
+                    var matches = scope.IsFrozen ? CollectInTransient(scope, query, stopAtFirst) : Collect(scope.Engine, query, stopAtFirst);
                     try
                     {
                         // Canonical in the scope, then deduplicated: at a clean scope the collected cells are canonical
                         // already, so this changes nothing there.
-                        if (engine.CanonicalizeColumns(matches.Cells, matches.Width, query.SortColumns))
+                        if (scope.Engine.CanonicalizeColumns(matches.Cells, matches.Width, query.SortColumns))
                             matches.Deduplicate();
 
                         if (sort)
@@ -77,7 +84,7 @@ namespace Eggnog
                 }
                 finally
                 {
-                    scope.Guard.Exit();
+                    scope.Exit(held);
                 }
             }
             finally
@@ -87,19 +94,36 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Runs the query's engine rule with the scope's runtime collecting into a fresh buffer.
+        /// Runs the query in a transient child of a frozen scope (D34), disposed after the call.
         /// </summary>
-        static TupleBuffer Collect(Scope scope, CompiledQuery query, bool stopAtFirst)
+        static TupleBuffer CollectInTransient(Scope scope, CompiledQuery query, bool stopAtFirst)
         {
-            var runtime = scope.Runtime;
+            var transient = scope.CreateTransient();
+            try
+            {
+                return Collect(transient, query, stopAtFirst);
+            }
+            finally
+            {
+                scope.ReleaseTransient(transient);
+            }
+        }
+
+        /// <summary>
+        /// Runs the query's naive engine rule in <paramref name="target"/>, its collector filling a new buffer through the
+        /// target's runtime.
+        /// </summary>
+        static TupleBuffer Collect(ContextEngineScope target, CompiledQuery query, bool stopAtFirst)
+        {
+            var runtime = target.Runtime;
             var matches = new TupleBuffer(query.Width);
             runtime.TakeFailure();
             runtime.QueryMatches = matches;
             runtime.StopAtFirstQueryMatch = stopAtFirst;
             try
             {
-                var variant = scope.Engine.PrepareVariant(query.Variants, query.Program.WrittenIdConstants, false);
-                scope.Engine.RunQuery(variant);
+                var variant = target.PrepareVariant(query.Variants, query.Program.WrittenIdConstants, false);
+                target.RunQuery(variant);
                 return matches;
             }
             catch (Relations.PanicException panic)

@@ -15,6 +15,8 @@ namespace Eggnog
         /// <returns>The class, usable in this scope (D39).</returns>
         /// <exception cref="ArgumentException">A subterm reads a function (<c>Get</c> it first), computes, is a variable, or
         /// holds a class value this scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
+        /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         public TSort Make<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
         {
@@ -29,7 +31,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(true);
             }
         }
 
@@ -42,7 +44,10 @@ namespace Eggnog
         /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
         /// make would merge two of its keys that hold different values (D32).</exception>
         /// <exception cref="ArgumentException">A fact is a value equality that is not a function write, a filter, an
-        /// existence, or reads or computes in a term.</exception>
+        /// existence, or reads or computes in a term; or it writes through a scoped view (<c>T.In(tag)</c>) or a
+        /// <see cref="Fact.In"/>, which are read-only (R2).</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
+        /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (nothing is written,
         /// the scope is not faulted) or while merging (the scope is faulted).</exception>
         public void Assume(params Fact[] facts)
@@ -59,7 +64,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(true);
             }
         }
 
@@ -73,6 +78,8 @@ namespace Eggnog
         /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
         /// hold different values, directly or through the congruences it causes (D32); nothing is written.</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
+        /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
             EnterWrite();
@@ -88,7 +95,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(true);
             }
         }
 
@@ -102,9 +109,15 @@ namespace Eggnog
         /// <paramref name="write"/> caught still rejects the batch: <see cref="Write"/> then returns without writing
         /// anything, and <see cref="Version"/> does not move. A <see cref="ScopeWriter"/> call from another thread is
         /// refused (D47) and rejects the batch too. A conflict a merge of the batch would cause is found as the call that
-        /// causes it is made (D32).
+        /// causes it is made (D32). While the batch is open, the scopes it reads through (its writable ancestors) refuse
+        /// writes and runs, which would change what the batch's calls were checked against (N88). Other calls of the thread
+        /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
+        /// batch is brought up to date with them before each of its calls and before it commits, without moving
+        /// <see cref="Version"/> (N87).
         /// </remarks>
         /// <param name="write">Makes the batch's calls through its <see cref="ScopeWriter"/>.</param>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
+        /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         public void Write(Action<ScopeWriter> write)
         {
@@ -115,12 +128,14 @@ namespace Eggnog
                 var batch = new HostBatch(this);
                 var writer = new ScopeWriter(this, batch);
                 openBatch = batch;
+                CountOpenBatch(1);
                 try
                 {
                     write(writer);
                 }
                 finally
                 {
+                    CountOpenBatch(-1);
                     openBatch = null;
                     writer.Close();
                 }
@@ -129,11 +144,27 @@ namespace Eggnog
                 if (batch.IsRejected)
                     return;
 
+                // The callback may have made calls in this scope's domain that left it behind its ancestors without
+                // changing what the batch read (a mirror sync before an ancestor's query, N88). The catch-up is made here,
+                // left out of Version as at the entry (N87), so that the commit's flush makes only the batch's changes.
+                if (batch.IsEmpty == false)
+                {
+                    Runtime.TakeFailure();
+                    try
+                    {
+                        CatchUp();
+                    }
+                    catch (Relations.PanicException panic)
+                    {
+                        throw FaultWith(panic);
+                    }
+                }
+
                 Commit(batch);
             }
             finally
             {
-                Guard.Exit();
+                Exit(true);
             }
         }
 
@@ -153,11 +184,7 @@ namespace Eggnog
                 }
                 catch (Relations.PanicException panic)
                 {
-                    var failure = Runtime.TakeFailure();
-                    var exception = new RuleEvaluationException(failure?.RuleName, failure?.Bindings, failure?.What ?? panic.PanicMessage,
-                        failure?.Exception ?? panic);
-                    Fault(exception);
-                    throw exception;
+                    throw FaultWith(panic);
                 }
             }
 

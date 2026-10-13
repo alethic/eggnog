@@ -126,6 +126,74 @@ namespace Eggnog.Tests.Graph
             Assert.NotEqual(a.Id, foreign.Id);
         }
 
+
+        [Fact]
+        public void ASiblingQuerysClassIsRefused()
+        {
+            var t = new NodeTheory();
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild();
+            schema.Freeze();
+            using var one = schema.CreateChild();
+            using var two = schema.CreateChild();
+            var a = one.Make(t.A.Of());
+
+            var e = Assert.Throws<ArgumentException>(() => two.Find(a));
+            Assert.Contains($"class {a.Id} came from scope '{one.Path}', which is not '{two.Path}' or an ancestor of it", e.Message);
+            Assert.Throws<ArgumentException>(() => two.Assume(t.Tag.Of(a)));
+            Assert.Throws<ArgumentException>(() => schema.Find(a));
+
+            // A descendant may use it.
+            var child = one.CreateChild();
+            Assert.True(child.AreEqual(a, a));
+            Assert.Equal(child.Find(a), child.Find(child.Make(t.A.Of())));
+        }
+
+        [Fact]
+        public void AQuerysClassIsRefusedAfterTheQueryIsDisposed()
+        {
+            var t = new NodeTheory();
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild();
+            var query = schema.CreateChild();
+            var a = query.Make(t.A.Of());
+            var b = schema.Make(t.B.Of());
+            Assert.True(query.AreEqual(a, a));
+
+            query.Dispose();
+
+            Assert.Contains("which is disposed", Assert.Throws<ArgumentException>(() => schema.CreateChild().Find(a)).Message);
+
+            // The schema's own class lives on.
+            Assert.Equal(b, schema.Find(b));
+        }
+
+        [Fact]
+        public void AGlobalRuleHoldingANonRootClassIsRefusedAndALocalRuleMayHoldItsOwners()
+        {
+            var t = new NodeTheory();
+            var hit = t.Graph.DefineRelation<long>("hit");
+            var root = t.Root.Make(t.A.Of());
+            t.Root.Freeze();
+            var schema = t.Root.CreateChild();
+            var b = schema.Make(t.B.Of());
+
+            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("global", r => r.When(t.Tag.Of(b))));
+            t.Rules.DefineRule("global root", r =>
+            {
+                r.When(t.Tag.Of(root));
+                r.Then(hit.Of(1L));
+            });
+            schema.DefineRule(t.Rules, "local", r =>
+            {
+                r.When(t.Tag.Of(b));
+                r.Then(hit.Of(2L));
+            });
+            schema.Assume(t.Tag.Of(root), t.Tag.Of(b));
+            schema.Run(Schedule.Saturate(t.Rules));
+
+            Assert.True(schema.Check(hit.Of(1L), hit.Of(2L)));
+        }
     }
 
 }

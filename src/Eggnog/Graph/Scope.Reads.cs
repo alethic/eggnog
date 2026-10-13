@@ -15,29 +15,33 @@ namespace Eggnog
         {
             get
             {
-                EnterRead();
+                var held = EnterRead();
                 try
                 {
                     return Engine.IsContradictory;
                 }
                 finally
                 {
-                    Guard.Exit();
+                    Exit(held);
                 }
             }
         }
 
         /// <summary>
         /// Gets whether every ground fact holds (§6.6.3). Never creates terms and never interns: a constant that was never
-        /// interned makes its fact false.
+        /// interned makes its fact false. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
+        /// ancestor-or-self tagged <c>tag</c> directly (R2; host reads never use mirrors).
         /// </summary>
         /// <param name="facts">The facts: relation rows, equalities of classes or values, existences.</param>
         /// <returns>Whether every fact holds.</returns>
-        /// <exception cref="ArgumentException">A fact is a filter, or a term in it is not ground.</exception>
+        /// <exception cref="ArgumentException">A fact is a filter, a term in it is not ground, a <see cref="Fact.In"/> is
+        /// nested, or a handle scoped to one tag is inside a <see cref="Fact.In"/> of another.</exception>
+        /// <exception cref="InvalidOperationException">A tag read does not resolve from this scope: no ancestor-or-self
+        /// carries it.</exception>
         public bool Check(params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(facts);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 foreach (var fact in facts)
@@ -48,7 +52,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
@@ -58,7 +62,10 @@ namespace Eggnog
         /// <typeparam name="T">The term's type.</typeparam>
         /// <param name="term">The term.</param>
         /// <returns>The value; a class is canonical here and usable in this scope.</returns>
-        /// <exception cref="InvalidOperationException">The term has no value here.</exception>
+        /// <remarks>A scoped view in the term reads the nearest ancestor-or-self carrying its tag directly (R2).</remarks>
+        /// <exception cref="InvalidOperationException">The term has no value here, or a tag it reads does not resolve from
+        /// this scope.</exception>
+        /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot use (D39).</exception>
         public T Get<T>(Term<T> term)
         {
             if (TryGet(term, out var value))
@@ -74,10 +81,13 @@ namespace Eggnog
         /// <param name="term">The term.</param>
         /// <param name="value">The value, when the result is <c>true</c>.</param>
         /// <returns>Whether the term has a value here.</returns>
+        /// <remarks>A scoped view in the term reads the nearest ancestor-or-self carrying its tag directly (R2).</remarks>
+        /// <exception cref="InvalidOperationException">A tag the term reads does not resolve from this scope.</exception>
+        /// <exception cref="ArgumentException">The term is not ground, or holds a class this scope cannot use (D39).</exception>
         public bool TryGet<T>(Term<T> term, [MaybeNullWhen(false)] out T value)
         {
             ArgumentNullException.ThrowIfNull(term);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 if (TermReader.TryRead(this, term, out var cell))
@@ -91,7 +101,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
@@ -104,7 +114,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The class value is not usable in this scope (D39).</exception>
         public TSort Find<TSort>(TSort value) where TSort : struct, ISort<TSort>
         {
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 var cell = ClassChecks.Require(this, value.Id, nameof(value));
@@ -112,7 +122,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
@@ -126,7 +136,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">A class value is not usable in this scope (D39).</exception>
         public bool AreEqual<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
@@ -135,7 +145,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
@@ -150,7 +160,7 @@ namespace Eggnog
         public bool AreEqual<TSort>(TSort a, Term<TSort> b) where TSort : struct, ISort<TSort>
         {
             ArgumentNullException.ThrowIfNull(b);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 var x = ClassChecks.Require(this, a.Id, nameof(a));
@@ -158,59 +168,66 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
         /// <summary>
-        /// Gets the number of rows of a table in this scope's view: egglog's <c>print-size</c> (§6.11).
+        /// Gets the number of rows of a table in this scope's view: egglog's <c>print-size</c> (§6.11). A scoped view
+        /// (<c>T.In(tag)</c>) counts the rows of the nearest ancestor-or-self tagged <c>tag</c> (R2).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The row count.</returns>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
+        /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope.</exception>
         public long CountRows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 return RowReader.Count(this, table);
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
         /// <summary>
         /// Gets the rows of a table in this scope's view, decoded and in content order: for debugging and tests (§6.11). A
-        /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope.
+        /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope. A scoped view (<c>T.In(tag)</c>)
+        /// lists the rows of the nearest ancestor-or-self tagged <c>tag</c> (R2).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The rows.</returns>
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
+        /// <exception cref="InvalidOperationException">The view's tag does not resolve from this scope.</exception>
         public IReadOnlyList<TableRow> Rows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 return RowReader.Read(this, table);
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
         /// <summary>
         /// Gets whether a query has a match here (§6.6.4). The engine stops at the first match. A query writes nothing: it
-        /// moves neither <see cref="Version"/> nor any extractor (D49).
+        /// moves neither <see cref="Version"/> nor any extractor (D49); the mirrors of the tags it reads are brought
+        /// current first (D48), which neither does either.
         /// </summary>
         /// <param name="query">The query.</param>
         /// <returns>Whether it has a match.</returns>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
         /// (D39).</exception>
+        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
+        /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
         /// (D49).</exception>
@@ -227,6 +244,8 @@ namespace Eggnog
         /// <returns>The number of matches.</returns>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
         /// (D39).</exception>
+        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
+        /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
         /// (D49).</exception>
@@ -247,6 +266,8 @@ namespace Eggnog
         /// <param name="callback">Receives each match; returns <c>false</c> to stop.</param>
         /// <exception cref="ArgumentException">The query belongs to another graph, or holds a class this scope cannot use
         /// (D39).</exception>
+        /// <exception cref="InvalidOperationException">A tag the query reads does not resolve from this scope (refused
+        /// before any work); the scope is faulted or in use on another thread.</exception>
         /// <exception cref="ObjectDisposedException">The query is disposed.</exception>
         /// <exception cref="RuleEvaluationException">A primitive or filter of the query failed; the scope stays usable
         /// (D49).</exception>
@@ -255,7 +276,7 @@ namespace Eggnog
             ArgumentNullException.ThrowIfNull(query);
             ArgumentNullException.ThrowIfNull(callback);
             CheckQuery(query);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 var compiled = query.Compiled;
@@ -274,7 +295,7 @@ namespace Eggnog
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 
@@ -285,14 +306,14 @@ namespace Eggnog
         {
             ArgumentNullException.ThrowIfNull(query);
             CheckQuery(query);
-            EnterRead();
+            var held = EnterRead();
             try
             {
                 return QueryRunner.Run(this, query.Compiled, stopAtFirst, false);
             }
             finally
             {
-                Guard.Exit();
+                Exit(held);
             }
         }
 

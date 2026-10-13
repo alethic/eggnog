@@ -12,8 +12,8 @@ namespace Eggnog
     /// functions to constructors; and the conversion of cost models, cached per model instance.
     /// </summary>
     /// <remarks>
-    /// Relations, functions and (from R2) mirror tables are never declared. Thread-safe: schemas are made and extended
-    /// under the graph's engine lock, then the catalog's lock.
+    /// Relations, functions and mirror tables are never declared. Thread-safe: schemas are made and extended under the
+    /// catalog's lock; the bridge's extraction schema publishes its declarations for extractors on other threads.
     /// </remarks>
     internal sealed class ExtractionCatalog
     {
@@ -26,6 +26,13 @@ namespace Eggnog
         readonly ConditionalWeakTable<CostModel, Relations.CostModel> engineCosts = new();
 
         /// <summary>
+        /// The scope whose extractor runs on this thread: a per-row cost function decodes its node's classes with that
+        /// scope's origin (§3.8 <c>NodeView</c>). Set around each extraction, which runs on its caller's thread.
+        /// </summary>
+        [ThreadStatic]
+        static Scope? currentScope;
+
+        /// <summary>
         /// Initializes an empty catalog.
         /// </summary>
         /// <param name="graph">The graph.</param>
@@ -35,7 +42,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Declares a constructor in every cached schema. Called under the definition and engine locks.
+        /// Declares a constructor in every cached schema. Called under the definition lock.
         /// </summary>
         /// <param name="constructor">The constructor.</param>
         public void Declare(ConstructorHandle constructor)
@@ -66,32 +73,38 @@ namespace Eggnog
             }
 
             var key = string.Join(",", marked.Select(h => h.Function.Rep).OrderBy(r => r));
-            lock (graph.EngineLock)
+            lock (sync)
             {
-                lock (sync)
-                {
-                    if (schemas.TryGetValue(key, out var cached))
-                        return cached.Schema;
+                if (schemas.TryGetValue(key, out var cached))
+                    return cached.Schema;
 
-                    var schema = new Relations.ExtractionSchema(graph.Engine);
-                    foreach (var constructor in constructors)
-                        DeclareIn(schema, constructor, marked);
+                var schema = new Relations.ExtractionSchema(graph.Engine);
+                foreach (var constructor in constructors)
+                    DeclareIn(schema, constructor, marked);
 
-                    schemas.Add(key, (schema, marked));
-                    return schema;
-                }
+                schemas.Add(key, (schema, marked));
+                return schema;
             }
         }
 
         /// <summary>
         /// Gets the engine cost model of a cost model (cached per instance): head costs, per-row costs (whose rows a
-        /// <see cref="NodeView"/> decodes, R1: with the root's origin) and value costs, every user delegate invoked under
-        /// <see cref="EngineCallMarker"/>.
+        /// <see cref="NodeView"/> decodes with the origin of the scope extracting) and value costs, every user delegate
+        /// invoked under <see cref="EngineCallMarker"/>.
         /// </summary>
         /// <param name="costs">The cost model.</param>
         /// <returns>The engine cost model.</returns>
         /// <exception cref="ArgumentException">The model names a constructor or column type of another graph.</exception>
         public Relations.CostModel EngineCosts(CostModel costs) => engineCosts.GetValue(costs, Convert);
+
+        /// <summary>
+        /// Gets or sets the scope whose extractor runs on the calling thread; <c>null</c> outside an extraction.
+        /// </summary>
+        internal static Scope? CurrentScope
+        {
+            get => currentScope;
+            set => currentScope = value;
+        }
 
         /// <summary>
         /// Gets the constructor of an engine function.
@@ -133,7 +146,7 @@ namespace Eggnog
                     EngineCallMarker.Enter();
                     try
                     {
-                        return function(new NodeView(constructor, row, root));
+                        return function(new NodeView(constructor, row, CurrentScope ?? root));
                     }
                     finally
                     {

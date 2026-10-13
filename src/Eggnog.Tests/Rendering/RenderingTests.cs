@@ -149,6 +149,28 @@ namespace Eggnog.Tests.Rendering
             Assert.Equal("(contradiction)", RowOf(t, t.Graph.Contradiction));
         }
 
+        [Fact]
+        public void ScopedReadsAndLicencesRender()
+        {
+            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            var tautology = c.Rewrite.Rules[4];
+            Assert.Equal("declared tautology", tautology.Name);
+            Assert.Equal(
+                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (set-subset d s)) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
+                tautology.ToString());
+
+            var lower = c.Rewrite.Rules[0];
+            Assert.Equal(
+                "(rule ((= e (UuidEq p v)) (form p \"uuid-lower\")) ((union e (StrEq p v))) :ruleset rewrite :reads-own-facts \"the guard that proved the form is a conjunct that stays in the predicate\")",
+                lower.ToString());
+
+            // Fact.In renders its facts read in the tagged scope; a scoped view renders with its tag.
+            Assert.Equal("(present@schema \"kind\") (= (dom@schema \"kind\") (set-of \"a\"))",
+                Fact.In(c.Schema, c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a"))).ToString());
+            Assert.Equal("dom@schema", c.Dom.In(c.Schema).ToString());
+            Assert.Equal("dom", c.Dom.ToString());
+        }
+
         /// <summary>
         /// Writes the nullary relation and renders its row.
         /// </summary>

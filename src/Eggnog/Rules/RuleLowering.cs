@@ -11,7 +11,8 @@ namespace Eggnog
     /// Atoms are lowered in program order (the engine's variant order), each relation atom ending with the unit constant;
     /// then the body steps as <c>QueryPrim</c>s in placement order, which the bridge runs after the join on every match;
     /// then the head operations in builder-call order (a query's or split matcher's head is one collector). Every call
-    /// site is registered as an external function owned by the variant. Called under the graph's engine lock.
+    /// site is registered as an external function owned by the variant. Called under the variants' lock; the bridge's
+    /// definitions are thread-safe (X16).
     /// </remarks>
     internal static class RuleLowering
     {
@@ -90,6 +91,10 @@ namespace Eggnog
                             builder.QueryPrim(function, arguments, unitType);
                             break;
                         }
+                        case ProgramStepKind.Equal:
+                            arguments[^1] = builder.NewVar(unitType);
+                            builder.QueryPrim(graph.Equal, arguments, unitType);
+                            break;
                         default:
                             arguments[^1] = builder.NewVar(unitType);
                             builder.QueryPrim(graph.NotEqual, arguments, unitType);

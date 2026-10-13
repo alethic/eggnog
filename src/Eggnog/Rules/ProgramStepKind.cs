@@ -22,6 +22,12 @@ namespace Eggnog
         /// </summary>
         NotEqual,
 
+        /// <summary>
+        /// Keeps the match where two class constants are one class in the running context: a comparison a definition left
+        /// to run time (§6.3 step 3).
+        /// </summary>
+        Equal,
+
     }
 
 }

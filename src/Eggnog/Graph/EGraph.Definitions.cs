@@ -283,7 +283,12 @@ namespace Eggnog
         /// <param name="name">The name, unique among the graph's rulesets.</param>
         /// <returns>The ruleset.</returns>
         /// <exception cref="ArgumentException">The name is empty or taken.</exception>
-        public Ruleset DefineRuleset(string name)
+        public Ruleset DefineRuleset(string name) => DefineRulesetCore(name, null);
+
+        /// <summary>
+        /// Defines a named ruleset with an optional licence (D12).
+        /// </summary>
+        Ruleset DefineRulesetCore(string name, ScopeTag? licence)
         {
             EngineCallMarker.ThrowIfActive();
             NameRules.ValidateName(name, nameof(name));
@@ -292,7 +297,7 @@ namespace Eggnog
                 if (rulesetsByName.ContainsKey(name))
                     throw new ArgumentException($"A ruleset named '{name}' is already defined.", nameof(name));
 
-                var ruleset = new Ruleset(this, name);
+                var ruleset = new Ruleset(this, name, licence);
                 rulesetsByName.Add(name, ruleset);
                 var next = new Ruleset[rulesets.Length + 1];
                 rulesets.CopyTo(next, 0);
@@ -338,8 +343,9 @@ namespace Eggnog
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
-        /// Defines a table (§6.2): validates under the definition lock, enters the root's guard while the root is writable
-        /// (D6), adds the engine function under the engine lock, and publishes the handle.
+        /// Defines a table (§6.2): validates, then under the definition lock adds the engine function
+        /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable, D6) and publishes the
+        /// handle.
         /// </summary>
         T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost)
             where T : TableHandle
@@ -382,110 +388,129 @@ namespace Eggnog
                 if (tablesByName.ContainsKey(name))
                     throw new ArgumentException($"A table named '{name}' is already defined.", nameof(name));
 
+                var columns = new ColumnType[keys.Length + 1];
+                keys.CopyTo(columns, 0);
+                columns[^1] = output ?? Unit;
+                var function = AddEngineTable(name, kind, columns, lattice, output);
+                var handle = create();
+                handle.Graph = this;
+                handle.Name = name;
+                handle.Index = tables.Length;
+                handle.Kind = kind;
+                handle.Role = role;
+                handle.KeyArray = keys;
+                handle.Output = output;
+                handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
+                handle.Function = function;
+                handle.Columns = columns;
+                if (handle is FunctionHandle functionHandle)
+                    functionHandle.Lattice = lattice;
+
+                if (handle is ConstructorHandle constructor)
+                {
+                    constructor.Cost = cost;
+                    constructor.Extractable = options.Extractable;
+                    Extraction.Declare(constructor);
+                }
+
+                tablesByName.Add(name, handle);
+                var nextTables = new TableHandle[tables.Length + 1];
+                tables.CopyTo(nextTables, 0);
+                nextTables[^1] = handle;
+                PublishFunction(handle);
+                tables = nextTables;
+                Volatile.Write(ref tablesView, Array.AsReadOnly(nextTables));
+                return handle;
+            }
+        }
+
+        /// <summary>
+        /// Adds the engine function of a table with the layout of §6.2: a relation's unit default and assert-equal merge, a
+        /// function's lattice merge (its own <c>LatticeMerge</c> external) or assert-equal, a constructor's fresh-id
+        /// default and union merge. A table definition (D6): while the root is writable, the call enters the root's guard,
+        /// so it throws when another thread is using the root; once the root is frozen, any thread may define one. Called
+        /// under the definition lock. Nothing is registered when the engine refuses the table.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Another thread is using the writable root.</exception>
+        Relations.FunctionId AddEngineTable(string name, TableKind kind, ColumnType[] columns, ValueLattice? lattice, ColumnType? output)
+        {
+            var guarded = Root.IsFrozen == false;
+            if (guarded)
                 Root.Guard.Enter(Root);
+
+            try
+            {
+                var schema = new Relations.ColumnTy[columns.Length];
+                for (var i = 0; i < columns.Length; i++)
+                    schema[i] = columns[i].EngineType;
+
+                Relations.ExternalFunctionId? merge = null;
+                Relations.DefaultVal defaultValue;
+                Relations.MergeFn mergeFn;
+                switch (kind)
+                {
+                    case TableKind.Relation:
+                        defaultValue = Relations.DefaultVal.Const(new Relations.Value(Unit.Unit));
+                        mergeFn = Relations.MergeFn.AssertEq;
+                        break;
+                    case TableKind.Function:
+                        defaultValue = Relations.DefaultVal.Fail;
+                        if (lattice is not null)
+                        {
+                            merge = Engine.RegisterExternalFunction(lattice.CreateMerge(this, name, output!));
+                            mergeFn = Relations.MergeFn.Primitive(merge.Value, Relations.MergeFn.Old, Relations.MergeFn.New).AsLattice();
+                        }
+                        else
+                        {
+                            mergeFn = Relations.MergeFn.AssertEq;
+                        }
+
+                        break;
+                    default:
+                        defaultValue = Relations.DefaultVal.FreshId;
+                        mergeFn = Relations.MergeFn.UnionId;
+                        break;
+                }
+
                 try
                 {
-                    var columns = new ColumnType[keys.Length + 1];
-                    keys.CopyTo(columns, 0);
-                    columns[^1] = output ?? Unit;
-
-                    T handle;
-                    lock (EngineLock)
+                    return Engine.AddTable(new Relations.FunctionConfig
                     {
-                        var schema = new Relations.ColumnTy[columns.Length];
-                        for (var i = 0; i < columns.Length; i++)
-                            schema[i] = columns[i].EngineType;
-
-                        Relations.ExternalFunctionId? merge = null;
-                        Relations.DefaultVal defaultValue;
-                        Relations.MergeFn mergeFn;
-                        switch (kind)
-                        {
-                            case TableKind.Relation:
-                                defaultValue = Relations.DefaultVal.Const(new Relations.Value(Unit.Unit));
-                                mergeFn = Relations.MergeFn.AssertEq;
-                                break;
-                            case TableKind.Function:
-                                defaultValue = Relations.DefaultVal.Fail;
-                                if (lattice is not null)
-                                {
-                                    merge = Engine.RegisterExternalFunction(lattice.CreateMerge(this, name, output!));
-                                    mergeFn = Relations.MergeFn.Primitive(merge.Value, Relations.MergeFn.Old, Relations.MergeFn.New).AsLattice();
-                                }
-                                else
-                                {
-                                    mergeFn = Relations.MergeFn.AssertEq;
-                                }
-
-                                break;
-                            default:
-                                defaultValue = Relations.DefaultVal.FreshId;
-                                mergeFn = Relations.MergeFn.UnionId;
-                                break;
-                        }
-
-                        Relations.FunctionId function;
-                        try
-                        {
-                            function = Engine.AddTable(new Relations.FunctionConfig
-                            {
-                                Schema = schema,
-                                Default = defaultValue,
-                                Merge = mergeFn,
-                                Name = name,
-                            });
-                        }
-                        catch
-                        {
-                            if (merge is { } registered)
-                                Engine.FreeExternalFunction(registered);
-
-                            throw;
-                        }
-
-                        handle = create();
-                        handle.Graph = this;
-                        handle.Name = name;
-                        handle.Index = tables.Length;
-                        handle.Kind = kind;
-                        handle.Role = role;
-                        handle.KeyArray = keys;
-                        handle.Output = output;
-                        handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
-                        handle.Function = function;
-                        handle.Columns = columns;
-                        if (handle is FunctionHandle functionHandle)
-                            functionHandle.Lattice = lattice;
-
-                        if (handle is ConstructorHandle constructor)
-                        {
-                            constructor.Cost = cost;
-                            constructor.Extractable = options.Extractable;
-                            Extraction.Declare(constructor);
-                        }
-                    }
-
-                    tablesByName.Add(name, handle);
-                    var nextTables = new TableHandle[tables.Length + 1];
-                    tables.CopyTo(nextTables, 0);
-                    nextTables[^1] = handle;
-                    var byFunction = tablesByFunction;
-                    if (handle.Function.Rep >= byFunction.Length)
-                        Array.Resize(ref byFunction, Math.Max(handle.Function.Rep + 1, byFunction.Length * 2));
-                    else
-                        byFunction = (TableHandle?[])byFunction.Clone();
-
-                    byFunction[handle.Function.Rep] = handle;
-                    Volatile.Write(ref tablesByFunction, byFunction);
-                    tables = nextTables;
-                    Volatile.Write(ref tablesView, Array.AsReadOnly(nextTables));
-                    return handle;
+                        Schema = schema,
+                        Default = defaultValue,
+                        Merge = mergeFn,
+                        Name = name,
+                    });
                 }
-                finally
+                catch
                 {
-                    Root.Guard.Exit();
+                    if (merge is { } registered)
+                        Engine.FreeExternalFunction(registered);
+
+                    throw;
                 }
             }
+            finally
+            {
+                if (guarded)
+                    Root.Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Publishes a handle by its engine function (<see cref="TableOf"/>), copy-on-write. Called under the definition
+        /// lock.
+        /// </summary>
+        void PublishFunction(TableHandle handle)
+        {
+            var byFunction = tablesByFunction;
+            if (handle.Function.Rep >= byFunction.Length)
+                Array.Resize(ref byFunction, Math.Max(handle.Function.Rep + 1, byFunction.Length * 2));
+            else
+                byFunction = (TableHandle?[])byFunction.Clone();
+
+            byFunction[handle.Function.Rep] = handle;
+            Volatile.Write(ref tablesByFunction, byFunction);
         }
 
         /// <summary>

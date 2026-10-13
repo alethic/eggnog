@@ -27,9 +27,11 @@ graph.Root.Run(Schedule.Saturate(horn));
 bool known = graph.Root.Check(present.Of("kind"));          // true
 ```
 
-The design is `docs/design/rule-layer-spec.md`. Milestone R1a runs everything at the root of a graph; scopes (child
-contexts, frozen schemas, per-query layers), queries and case splits follow in later milestones without changing the
-API that has shipped.
+The design is `docs/design/rule-layer-spec.md`. Milestones R1a and R1b run everything at the root of a graph and add
+compiled queries, run limits and diagnostics. R2 adds scopes: a child scope starts as a copy of its parent and costs in
+proportion to what it touches; a frozen scope is a base that many children, on many threads, can query and extend;
+scopes carry tags that rules read through (`In(tag)`, `Fact.In`), and rules can be local to a scope. Case splits
+follow in R3 without changing the API that has shipped.
 
 **`Eggnog.Relations`** is its engine: a faithful C# reimplementation of egglog's `core-relations` (tables with
 functional dependencies and merges, Free Join planning and execution, union-find and rebuilding), its bridge and its

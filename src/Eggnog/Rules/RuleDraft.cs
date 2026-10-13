@@ -52,6 +52,18 @@ namespace Eggnog
         /// </summary>
         public bool Naive { get; set; }
 
+        /// <summary>
+        /// Gets or sets the licence the rule's own <see cref="RuleBuilder.Erasing"/> call gave it (D12); <c>null</c> when
+        /// it takes its ruleset's.
+        /// </summary>
+        public ScopeTag? Erasing { get; set; }
+
+        /// <summary>
+        /// Gets or sets the reason given to <see cref="RuleBuilder.ReadsOwnFacts"/>, which exempts the rule from its
+        /// licence (D12); <c>null</c> when the rule did not call it.
+        /// </summary>
+        public string? OwnFactsReason { get; set; }
+
     }
 
 }

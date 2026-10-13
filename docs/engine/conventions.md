@@ -20,7 +20,7 @@ does not have. It must be as fast as the Rust and faithful to its semantics. The
 - **One type per file.** No nested types (including nested enumerators, comparers and private helper structs), no
   multi-type files. Partial classes across files are fine for large types.
 - Default to `internal`. Make a type `public` only when a consumer of the engine needs it. `InternalsVisibleTo` covers
-  the test, benchmark and `Eggnog` projects.
+  the test, benchmark and `Eggnog` projects, and `Eggnog.Tests`.
 - XML doc comments on every public and internal type and member: say what it is for, its invariants and its cost.
 
 ## Representation

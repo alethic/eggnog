@@ -6,12 +6,12 @@ namespace Eggnog
 
     /// <summary>
     /// The engine side of one <see cref="Scope"/> (D28): the only way the rest of the rule layer reaches the engine for a
-    /// scope's contents. R1 implements it for the root over the bridge's egglog-compatible root API
-    /// (<see cref="RootEngineScope"/>); R2 implements it over a context for every scope and deletes the root adapter.
+    /// scope's contents. R2 implements it over an engine context for every scope, the root included
+    /// (<see cref="ContextEngineScope"/>, §6.6.6); R1's root adapter over the egglog-compatible root API is gone.
     /// </summary>
     /// <remarks>
-    /// Every member runs while the scope's <see cref="ScopeGuard"/> is held by the calling thread (or, from R2, on a
-    /// frozen scope). Cells are the engine's: sort cells are class ids, value cells base values.
+    /// Every member runs while the scope's <see cref="ScopeGuard"/> is held by the calling thread, or on a frozen scope,
+    /// whose reads are thread-safe. Cells are the engine's: sort cells are class ids, value cells base values.
     /// </remarks>
     internal abstract class EngineScope
     {
@@ -27,14 +27,29 @@ namespace Eggnog
         public abstract bool IsContradictory { get; }
 
         /// <summary>
-        /// Gets the number of rows in the scope's own layers, the engine's row-count estimate (the R1 root's
-        /// <c>Database.TotalSizeEstimate</c>): what <see cref="RunOptions.RowLimit"/> bounds (D42). O(1).
+        /// Gets the number of rows in the scope's own layers, the engine's row-count estimate (the context database's
+        /// <c>TotalSizeEstimate</c>): what <see cref="RunOptions.RowLimit"/> bounds (D42). O(1).
         /// </summary>
         public abstract long OwnRowCount { get; }
 
         /// <summary>
-        /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current (always at
-        /// the R1 root, which is rebuilt after every flush and run).
+        /// Gets whether the engine context is frozen (colors §8.1): it never changes again, and its reads are thread-safe.
+        /// </summary>
+        public abstract bool IsFrozen { get; }
+
+        /// <summary>
+        /// Gets whether the engine context is disposed.
+        /// </summary>
+        public abstract bool IsDisposed { get; }
+
+        /// <summary>
+        /// Gets whether the engine faulted the context (X12): an exception escaped one of its writes, runs or rebuilds,
+        /// and only disposal is allowed.
+        /// </summary>
+        public abstract bool IsFaulted { get; }
+
+        /// <summary>
+        /// Catches up with non-frozen ancestors and rebuilds when needed; a no-op when the scope is current or frozen.
         /// </summary>
         public abstract void EnsureClean();
 
@@ -48,8 +63,9 @@ namespace Eggnog
         public abstract LoweredRule[] PrepareRules(IReadOnlyList<CompiledRule> rules, bool semiNaive);
 
         /// <summary>
-        /// Gets one variant of a program for this scope: R1 lowers it with the canonical forms of
-        /// <paramref name="writtenIdConstants"/> (§6.4.5); R2 with the written values.
+        /// Gets one variant of a program for this scope, lowered with the written values of its class constants: the
+        /// engine runs each in its canonical form in the running context and gates watermarks on them (X19, I30), so a
+        /// variant never changes once lowered (§6.4.4).
         /// </summary>
         /// <param name="variants">The program's variants.</param>
         /// <param name="writtenIdConstants">The class constants as written.</param>
@@ -140,8 +156,9 @@ namespace Eggnog
 
         /// <summary>
         /// Runs a query's naive engine rule against the scope's current contents (D34, D49): its collector hands each
-        /// match to the scope's runtime. R1 runs it without merging and without advancing the clock, so nothing a query
-        /// does moves <see cref="Version"/> or invalidates an extractor.
+        /// match to the scope's runtime. It runs as an iteration of the context that writes nothing: the clock advances,
+        /// but <see cref="Version"/> does not move, and extraction staleness ignores the clock (E5), so no extractor is
+        /// invalidated.
         /// </summary>
         /// <param name="query">The query's variant, prepared for this scope.</param>
         /// <exception cref="Relations.PanicException">A call site recorded a failure; the rule layer turns it into a
@@ -177,6 +194,31 @@ namespace Eggnog
         /// <returns>Whether a finite term exists.</returns>
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         public abstract bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out long cost);
+
+        /// <summary>
+        /// Creates a child context (E7, colors §8.2): thread-safe on a frozen scope; on a writable one, the scope is
+        /// brought up to date first and the child shares its thread domain.
+        /// </summary>
+        /// <param name="options">The child's options.</param>
+        /// <returns>The child's engine side.</returns>
+        /// <exception cref="InvalidOperationException">The context is at the deepest level (colors X36), faulted or
+        /// stopped.</exception>
+        /// <exception cref="Relations.PanicException">A failure was recorded on this context.</exception>
+        public abstract ContextEngineScope CreateChild(Relations.ContextOptions options);
+
+        /// <summary>
+        /// Freezes the context, pre-planning exactly <paramref name="planRules"/> (E10, colors §10.8): it flushes,
+        /// rebuilds, plans those rules that have no plan yet on this context's statistics, and freezes storage.
+        /// </summary>
+        /// <param name="planRules">The rules to plan.</param>
+        /// <exception cref="Relations.PanicException">A failure was recorded.</exception>
+        public abstract void Freeze(IReadOnlyCollection<Relations.EGraphRuleId> planRules);
+
+        /// <summary>
+        /// Disposes the context (E7): it must have no live children and no call in progress in its thread domain on
+        /// another thread. A second call does nothing.
+        /// </summary>
+        public abstract void Dispose();
 
     }
 

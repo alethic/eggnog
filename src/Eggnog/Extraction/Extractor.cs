@@ -7,14 +7,22 @@ namespace Eggnog
 
     /// <summary>
     /// Finds the cheapest terms of classes in one scope as it is now; reusable for many roots (§6.10). Reads, queries and
-    /// writes that change nothing never invalidate it; a write that changes the scope, or a run in it, may, and it then
-    /// throws <see cref="InvalidOperationException"/>. Ties are broken by content (D10), so a serial graph extracts
-    /// deterministically. Not thread-safe on a writable scope.
+    /// writes that change nothing never invalidate it; a write that changes the scope, or a run in it or in a writable
+    /// ancestor, may, and it then throws <see cref="InvalidOperationException"/>; staleness ignores the clock (E5). Ties
+    /// are broken by content (D10), so a serial graph extracts deterministically.
     /// </summary>
+    /// <remarks>
+    /// On a writable scope, a call takes the scope's thread domain (D47): from another thread while the scope is in use it
+    /// throws <see cref="InvalidOperationException"/>. On a frozen scope any number of extractors run on any threads at
+    /// once, and one extractor is thread-safe too: its calls are serialized on a private lock, because its caches are
+    /// shared (E5). Use one extractor per thread for parallel extraction. A cost function must not wait for another
+    /// thread's call of the same extractor.
+    /// </remarks>
     public sealed class Extractor
     {
 
         readonly Relations.Extractor engine;
+        readonly object sync = new();
 
         /// <summary>
         /// Initializes a new instance.
@@ -67,24 +75,28 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The class value is not usable in the scope (D39).</exception>
         public bool TryExtract<TSort>(TSort root, [NotNullWhen(true)] out ExtractedTerm? term) where TSort : struct, ISort<TSort>
         {
-            EngineCallMarker.ThrowIfActive();
-            Scope.Guard.Enter(Scope);
+            var held = Scope.EnterExtraction();
+            var previous = ExtractionCatalog.CurrentScope;
+            ExtractionCatalog.CurrentScope = Scope;
             try
             {
-                Scope.ThrowIfNotUsable();
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
-                if (Scope.Engine.TryExtract(engine, SortOf<TSort>(), cell, out var raw) == false || raw is null)
+                lock (sync)
                 {
-                    term = null;
-                    return false;
-                }
+                    if (Scope.Engine.TryExtract(engine, SortOf<TSort>(), cell, out var raw) == false || raw is null)
+                    {
+                        term = null;
+                        return false;
+                    }
 
-                term = Wrap(raw, new Dictionary<Relations.ExtractedTerm, ExtractedTerm>(ReferenceEqualityComparer.Instance));
-                return true;
+                    term = Wrap(raw, new Dictionary<Relations.ExtractedTerm, ExtractedTerm>(ReferenceEqualityComparer.Instance));
+                    return true;
+                }
             }
             finally
             {
-                Scope.Guard.Exit();
+                ExtractionCatalog.CurrentScope = previous;
+                Scope.Exit(held);
             }
         }
 
@@ -99,17 +111,19 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The class value is not usable in the scope (D39).</exception>
         public bool TryGetCost<TSort>(TSort root, out long cost) where TSort : struct, ISort<TSort>
         {
-            EngineCallMarker.ThrowIfActive();
-            Scope.Guard.Enter(Scope);
+            var held = Scope.EnterExtraction();
+            var previous = ExtractionCatalog.CurrentScope;
+            ExtractionCatalog.CurrentScope = Scope;
             try
             {
-                Scope.ThrowIfNotUsable();
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
-                return Scope.Engine.TryGetCost(engine, SortOf<TSort>(), cell, out cost);
+                lock (sync)
+                    return Scope.Engine.TryGetCost(engine, SortOf<TSort>(), cell, out cost);
             }
             finally
             {
-                Scope.Guard.Exit();
+                ExtractionCatalog.CurrentScope = previous;
+                Scope.Exit(held);
             }
         }
 

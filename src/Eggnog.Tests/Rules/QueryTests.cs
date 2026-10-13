@@ -405,10 +405,10 @@ namespace Eggnog.Tests.Rules
 
             t.Root.Union(a, b);
 
+            // The engine runs the constant in its canonical form (X19), so the variant lowered at definition serves on.
             Assert.Equal(2, t.Root.Count(fromB));
-            var relowered = fromB.Compiled.Variants.Default!;
-            Assert.Equal(original.Description + "/k1", relowered.Description);
-            Assert.False(t.Graph.VariantsByDescription.ContainsKey(original.Description));
+            Assert.Same(original, fromB.Compiled.Variants.Default);
+            Assert.True(t.Graph.VariantsByDescription.ContainsKey(original.Description));
         }
 
         [Fact]
@@ -686,6 +686,72 @@ namespace Eggnog.Tests.Rules
             Assert.DoesNotContain(t.Graph.Queries, q => q.Name == "from a filter");
         }
 
+
+        [Fact]
+        public void QueriesOnAFrozenScopeRunFromEightThreads()
+        {
+            var t = new NodeTheory();
+            var edge = t.Graph.DefineRelation<long, long>("edge");
+            var from = t.Graph.DefineQuery("from", q =>
+            {
+                var (x, y) = q.Vars<long, long>("x", "y");
+                q.When(edge.Of(x, y));
+                q.Where(x, x => x % 2 == 0);
+            });
+            var any = t.Graph.DefineQuery("any", q => q.When(edge.Of(q.Var<long>("x"), 7L)));
+            for (var i = 0L; i < 200; i++)
+                t.Root.Assume(edge.Of(i, i % 13));
+
+            t.Root.Freeze();
+            var version = t.Root.Version;
+            var counts = new long[8 * 25];
+            var anys = new bool[counts.Length];
+            var sums = new long[counts.Length];
+            var threads = Support.DedicatedThreads.For(8, counts.Length, i =>
+            {
+                counts[i] = t.Root.Count(from);
+                anys[i] = t.Root.Any(any);
+                var sum = 0L;
+                t.Root.ForEachMatch(from, m =>
+                {
+                    sum += m.Get((Var<long>)from.Variables[0]);
+                    return true;
+                });
+                sums[i] = sum;
+            });
+
+            Assert.Equal(8, threads);
+            Assert.All(counts, c => Assert.Equal(100, c));
+            Assert.All(anys, Assert.True);
+            Assert.All(sums, s => Assert.Equal(Enumerable.Range(0, 100).Sum(i => 2L * i), s));
+            Assert.Equal(version, t.Root.Version);
+            Assert.Equal(0, t.Root.Engine.Context.Context.ChildCount);
+        }
+
+        [Fact]
+        public void AQueryWithScopedAtomsSeesAHostWriteIntoAWritableTaggedScope()
+        {
+            var t = new ScopeTheory();
+            var tagged = t.Graph.DefineQuery("tagged", q =>
+            {
+                var x = q.Var<string>("x");
+                q.When(t.Fact.In(t.Outer).Of(x), t.Fact.Of(x));
+            });
+            var outer = t.Root.CreateChild(t.Outer);
+            var inner = outer.CreateChild(t.Inner);
+            Assert.Equal(0, outer.Count(tagged));
+
+            // A host write into the writable tagged scope; the query from that scope and from a descendant.
+            outer.Assume(t.Fact.Of("a"));
+            Assert.Equal(1, outer.Count(tagged));
+            Assert.Equal(1, inner.Count(tagged));
+            inner.Assume(t.Fact.Of("d"));
+            outer.Assume(t.Fact.Of("b"), t.Fact.Of("c"));
+            Assert.Equal(3, inner.Count(tagged));
+            Assert.Equal(3, outer.Count(tagged));
+            Assert.Equal(4, inner.CountRows(t.Fact));
+            Assert.Equal("(query ((fact@outer x) (fact x)) (x))", tagged.ToString());
+        }
     }
 
 }

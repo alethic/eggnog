@@ -18,11 +18,12 @@
 > library (definitions, rules, runs, host writes and reads, and extraction, at the root on today's engine), drops the
 > spike from the project and from the package, and merges to main before any other rule-layer work.
 >
-> **Implemented (2026-10-12).** R1a is on main (`edd1fa9`, merged with colors M9.3–M9.4). R1b is complete and not yet
-> merged. Where the implementation found the better design, the text below now says what was built. §15 records every
-> deviation from the earlier text (what it said, what was built, and why) and every item still deferred, with its
-> milestone. Colors M10.3 and M10.4 delivered the engine requests R2 and R3 depend on (E4, E5, E7–E10; §15.6,
-> §15.7).
+> **Implemented (2026-10-13).** R1a is on main (`edd1fa9`, merged with colors M9.3–M9.4), and so are R1b (`80675d8`,
+> merged with colors M10.1–M10.2 at `3b9dda1`) and R2, merged with colors M10.4. R2 runs every scope, the root
+> included, on colors M10.3's `EGraphContext`, with no engine change. Colors M10.3 and M10.4 delivered the engine
+> requests R2 and R3 depend on (E4, E5, E7–E10; §15.6, §15.7); R3 is next. Where the implementation found the better
+> design, the text below now says what was built. §15 records every deviation from the earlier text (what it said,
+> what was built, and why) and every item still deferred, with its milestone.
 
 **Binding inputs.**
 - `docs/design/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
@@ -71,7 +72,7 @@
 12. [Appendix: porting an egglog program by hand](#12-appendix-porting-an-egglog-program-by-hand)
 13. [Edits this spec asks of the colored-contexts spec](#13-edits-this-spec-asks-of-the-colored-contexts-spec)
 14. [Review responses](#14-review-responses)
-15. [Implementation notes (R1a-R1b)](#15-implementation-notes-r1a-r1b)
+15. [Implementation notes (R1a-R1b, the engine requests of colors M10.3, and R2)](#15-implementation-notes-r1a-r1b-the-engine-requests-of-colors-m103-and-r2)
 
 ---
 
@@ -102,7 +103,7 @@
 | D13 | Arity limit and lambdas | **Kept**, narrowed | Typed handles go up to four key columns. The untyped layer (`Apply`, `Term.Constant`, `Fact.Equal`, `Fact.NotEqual`, `Compute.Of(Primitive, …)`, `Var(ColumnType, …)` and the untyped `Define*` overloads) is **internal** until a consumer needs more than four columns; the differential generator reaches it through `InternalsVisibleTo`. Named primitives render by name; lambdas render as `<lambda>`. |
 | D14 | `.egg` frontend | **Changed** | Never. Consumers use the C# API only, and no milestone adds a parser. v1's frontend mapping (§3.14) is dropped; §12 keeps a correspondence table for porting egglog programs by hand, which the Cosmos tests use. |
 | D15 | Interner growth | **Kept** | Pools are permanent per `EGraph` (the engine's `BaseValues` is append-only). Constants used only for reading never intern: host reads use `BaseValues.TryGetExisting` (E1). `ValueStore.InternedCount` reports growth (E1) so a host can recycle a graph. Constants of rules and queries intern at definition. |
-| D16 | Storage surface | **Changed** | No storage surface is public. What v1 added to the spike exists in the engine and stays internal: `Version` is `Database.ChangeStamp` (X30). It moves on every effective change to the scope's own layer, including (R2) the catch-up copies that hide an ancestor's rows when one of the scope's own classes merges; queries, reads and writes that change nothing never move it. `ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` come with M9.2–M9.4 and M10.4. `LatestStamp` and `ApproximateCount` are not needed, because the engine plans. |
+| D16 | Storage surface | **Changed** | No storage surface is public. What v1 added to the spike exists in the engine and stays internal: `Version` is `Database.ChangeStamp` (X30). It moves on every effective change a call of the scope makes to its own layer, including (R2) the catch-up copies that hide an ancestor's rows when one of the scope's own classes merges in that call; queries, reads and writes that change nothing never move it. The upkeep a call makes first is left out (R2): the sync of the internal mirror tables (N62), and the catch-up that brings the scope's layer, and each writable ancestor's, in line with what an ancestor wrote since, which a descendant makes lazily at its next call (N87); a write into an ancestor therefore never moves a descendant's `Version`. `ScanOwn`, `ScanMerges`, `IsLocalId` and `ScanAncestorsMentioning` come with M9.2–M9.4 and M10.4. `LatestStamp` and `ApproximateCount` are not needed, because the engine plans. |
 | D17 | Parallel cases | **Kept** (**Engine**-enforced) | Sequential. A writable parent shares its thread domain with every case under it (colors §8.3). Children of a frozen scope may run concurrently. |
 | D18 | Rollback | **Changed** | No rollback, and no re-run guarantee. In Store-backed contexts the engine commits watermarks only after a run without a recorded failure (X18), and a child that throws is faulted (X12). The rule layer **faults the scope** after any `RuleEvaluationException` from a run or a write, the root included. `Scope.Failure` keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as `InnerException`; a faulted root makes the graph unusable. A failed query is the exception: it wrote nothing, so it throws without faulting (D49). Limits and cancellation stop between iterations and are not failures. |
 | D19 | Cost type | **Engine** | `long`, saturating addition, negative costs rejected (`Extraction/CostMath.cs`). |
@@ -121,7 +122,7 @@
 | D27 | How is a relation represented? | As a bridge function whose output column is the engine's unit base value: `Default = DefaultVal.Const(unit)`, `Merge = MergeFn.AssertEq`, no subsumption. egglog's frontend instead desugars a relation into a constructor with a fresh sort (map §3.1). Ours mints no id per row, adds no rebuild column, and its merge is a lattice merge, so children may write it (decision 2). The contradiction relation is the nullary case, schema `[Unit]`, which is what `Store.DesignateContradiction` expects. |
 | D28 | How does R2 add contexts without changing the public API? | Through an internal **engine-scope** abstraction (`EngineScope`, §4.1). R1 implements it for the root over the bridge's egglog-compatible root API (`RootEngineScope`). R2 implements it over `EGraphContext` for every scope, the root included (`ContextEngineScope`), and deletes `RootEngineScope`. Public types only gain members (and overloads) in later milestones; no member changes signature or meaning once it has shipped. |
 | D29 | Engine types in the public API | None in public signatures: they use only `Eggnog` types and BCL types. The package must not show two APIs either, so the engine's own public types become internal (D44, E11). Rule-layer files never write `using Eggnog.Relations;`; they name engine types through the child namespace (`Relations.EGraph`, `Relations.FunctionId`). Engine internals are reached through `InternalsVisibleTo("Eggnog")`, which `Eggnog.Relations.csproj` already declares. |
-| D30 | When are host writes visible? | Every host write call (`Make`, `Assume`, `Union`) is one atomic batch, and `Scope.Write(Action<ScopeWriter>)` makes several calls one batch: validate, stage, flush and rebuild before it returns. A batch whose facts all hold already stages nothing and flushes nothing, so `Version`, the clock and live extractors are untouched. A batch with a rejected call writes nothing, even when `write` caught the rejection (`Write` then returns normally), and while a `Write` batch is open the scope's own members throw `InvalidOperationException`: the batch's calls go through its `ScopeWriter`. A read first brings its scope current (`EngineScope.EnsureClean`, a no-op when clean). So v1's cleanliness contract (`Rebuild()`, `IsClean`, reads that throw while dirty) is gone from the public API. |
+| D30 | When are host writes visible? | Every host write call (`Make`, `Assume`, `Union`) is one atomic batch, and `Scope.Write(Action<ScopeWriter>)` makes several calls one batch: validate, stage, flush and rebuild before it returns. A batch whose facts all hold already stages nothing and flushes nothing, so `Version`, the clock and live extractors are untouched. A batch with a rejected call writes nothing, even when `write` caught the rejection (`Write` then returns normally), and while a `Write` batch is open the scope's own members throw `InvalidOperationException`: the batch's calls go through its `ScopeWriter`; its writable ancestors refuse writes and runs until it ends (N88). A read first brings its scope current (`EngineScope.EnsureClean`, a no-op when clean). So v1's cleanliness contract (`Rebuild()`, `IsClean`, reads that throw while dirty) is gone from the public API. |
 | D31 | Primitive failures | A primitive or lattice delegate that throws is caught inside its external function. The failure (rule, primitive, decoded arguments, exception) is recorded in the scope's runtime, and `ExecutionState.ReportFailure` is called, so the engine stops the run early and treats it as a panic (in Store-backed contexts no watermark commits, X18). The rule layer then throws `RuleEvaluationException` and faults the scope (D18). One outcome is not a failure: the built-in `+` and `-` (`Primitives.Add`, `Subtract`) are **partial**, as egglog's checked arithmetic is. An overflow in a body let means "no result" and drops the match without recording anything; in a head it fails the rule as any exception does. User primitives have no "no result" outcome (§15). |
 | D32 | Host writes to a function without a lattice | Checked before anything is staged: a value that conflicts with the stored one, two different values for one key in one batch, or a merge of the batch that would give such a function two values for one key, throw `FactConflictException` (an `InvalidOperationException` carrying the table, the key, the stored value and the new one) and write nothing. A merge is a union, a sort equality, or a constructor write that gives an existing key another class; phase 1 of the batch simulates the congruence closure the rebuild will compute (§6.6.1). Lattice merges that a host union causes still run at the rebuild, so a lattice delegate that throws there faults the scope (D18). A conflicting rule write is an engine panic (D31). |
 | D33 | Deletion and subsumption | Not exposed. The engine has them under decision 1 and refinement R1 (colors X28). Watermark inheritance (I31), lift soundness (I33) and mirror exactness (M) all rest on monotone contents. |
@@ -231,7 +232,7 @@ Eggnog.Relations core             Database, tables, Free Join planner and execut
 | Primitives, lattice merges, collectors | Internal `Relations.ExternalFunction` subclasses registered with `EGraph.RegisterExternalFunction` |
 | Semi-naive evaluation, watermarks, inheritance, Id constants | Bridge `RunRules` and `EGraphContext` (colors §10.2, §10.3, X19). R1: the root adapter also re-lowers rules whose Id constants changed (D3). |
 | One iteration | `RunRules(ids)` → `IterationReport` (`Changed`, `RebuildChanged`, `Stopped`, `RuleSetReport`, `RebuildTime`) |
-| Change detection | `IterationReport` flags (decision 11); `Version` = `Database.ChangeStamp` (X30) |
+| Change detection | `IterationReport` flags (decision 11); `Version` = `Database.ChangeStamp` (X30), less, from R2, the stamp moves of the upkeep a call makes first: mirror syncs (N62) and the catch-up with an ancestor's writes (N87) |
 | Host writes | R1: `ExecutionState` + `TableAction`/`UnionAction`, then `FlushUpdates`. R2: `EGraphContext.FreshId`/`StageRow`/`StageUnion`/`FlushUpdates` (colors §10.4). |
 | Host reads | R1: `LookupId`, `GetCanonInUf`, `TableSize`, `ForEach`. R2: `EGraphContext.TryLookup`, `Find`, `TableSize`, `ForEach` (colors §10.5). |
 | Queries | R1: `Database.ExecuteRuleSet` without a merge (D49). R2: `EGraphContext.RunRules`, in a transient child for a frozen scope (D34). |
@@ -258,8 +259,9 @@ Eggnog.Relations core             Database, tables, Free Join planner and execut
 - **Local rules** (R2) belong to the scope they are defined on. They are active in it and its descendants, can be added
   only before it is frozen, and are freed when it is released.
 - **Class values** (D39) are usable in the scope that returned them and its descendants, until that scope is disposed.
-- **Visibility.** Host writes are atomic batches (D30). Reads never fail for want of a rebuild. Engine operations (`Run`,
-  splits, lifts) leave the scope current.
+- **Visibility.** Host writes are atomic batches (D30); while a `Write` batch is open, the writable scopes above it
+  refuse writes and runs (R2, N88). Reads never fail for want of a rebuild. Engine operations (`Run`, splits, lifts)
+  leave the scope current.
 
 ### 2.5 Departures from egglog, stated once
 
@@ -388,9 +390,10 @@ public sealed partial class Scope : IDisposable
     public Exception? Failure { get; }
     /// True once Dispose has been called, even while the release waits for live children (D40). Never true for the root.
     public bool IsDisposed { get; }
-    /// The engine's change stamp (X30): moves on every effective change to this scope's own layer, including (R2) the
-    /// catch-up copies that hide an ancestor's rows when one of this scope's classes merges. Queries, reads and writes
-    /// that change nothing never move it.
+    /// The engine's change stamp (X30): moves on every effective change a call of this scope makes to its own layer,
+    /// including (R2) the catch-up copies that hide an ancestor's rows when one of this scope's classes merges in that
+    /// call. Queries, reads and writes that change nothing never move it; neither does the upkeep a call makes first:
+    /// a mirror sync (N62), or the catch-up with what a writable ancestor wrote since (N87).
     public long Version { get; }
     /// "root", "root/schema#2/query#7": for messages.
     public string Path { get; }
@@ -412,11 +415,12 @@ public sealed partial class Scope
     public IReadOnlyList<Scope> Children { get; }
     /// Rules defined on this scope, in definition order (snapshot).
     public IReadOnlyList<Rule> LocalRules { get; }
-    /// A child scope. Thread-safe on a frozen scope. ArgumentException for another graph's tag;
-    /// InvalidOperationException at depth 31 (colors X36).
+    /// A child scope. Thread-safe on a frozen scope. ArgumentException for another graph's tag or for RootTag (N72);
+    /// InvalidOperationException at depth 31 (colors X36), and from a run observer (a structural call, N81).
     public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null);
     /// Brings this scope's mirrors current, then freezes it (colors §10.8). The parent must be frozen. Local rules
-    /// are fixed from here on. A second call does nothing.
+    /// are fixed from here on. A second call does nothing. InvalidOperationException from a run observer or from
+    /// inside another call of the scope's thread domain (N79).
     public void Freeze();
     /// A rule active in this scope and its descendants, scheduled with ruleset, whose licence it takes (D12). Enters
     /// this scope's thread domain: InvalidOperationException from another thread while that domain is in use, or if
@@ -443,7 +447,10 @@ public sealed partial class Scope
     /// flushed and rebuilt once, after write returns. If write throws or a call is rejected, nothing is written and the
     /// class values the batch's Make calls returned are invalid (D39). An exception write lets escape propagates; a
     /// rejection write caught still rejects the batch, and Write then returns normally without writing (Version does
-    /// not move). While write runs, this scope's own members throw InvalidOperationException: use the ScopeWriter.
+    /// not move). While write runs, this scope's own members throw InvalidOperationException: use the ScopeWriter; and
+    /// its writable ancestors refuse writes and runs, which would change what the batch's calls were checked against
+    /// (N88). Other calls of the domain are allowed; the batch catches up with them before each of its calls and before
+    /// it commits, without moving Version (N87).
     public void Write(Action<ScopeWriter> write);
 }
 
@@ -1459,7 +1466,9 @@ internal abstract class EngineScope
     public abstract void RunQuery(LoweredRule query);                                              // R1b
     public abstract bool IsFrozen { get; }                                                         // R2
     public abstract bool IsDisposed { get; }                                                       // R2
-    public abstract EngineScope CreateChild(Relations.ContextOptions options);                     // R2
+    /// The engine context's fault flag (E7, X12), which Scope.IsFaulted reads with its own.
+    public abstract bool IsFaulted { get; }                                                        // R2
+    public abstract ContextEngineScope CreateChild(Relations.ContextOptions options);              // R2
     /// Freezes, pre-planning exactly planRules (E10).
     public abstract void Freeze(IReadOnlyCollection<Relations.EGraphRuleId> planRules);            // R2
     public abstract void Dispose();                                                                // R2
@@ -1480,6 +1489,11 @@ internal sealed class ContextEngineScope : EngineScope
 {
     public ContextEngineScope(EGraph graph, Relations.EGraphContext context);
     public Relations.EGraphContext Context { get; }
+    /// The context's value of the graph's runtime slot (Context.GetLocal(graph.RuntimeSlot)).
+    public ScopeRuntime Runtime { get; }
+    /// The sum of the change stamps of the context and its ancestors (colors §9.1): the key of mirror syncs (§6.8, N61).
+    /// O(depth).
+    public long ViewStamp { get; }
 }
 
 // Graph/EngineIteration.cs  [R1a]
@@ -1488,13 +1502,22 @@ internal readonly record struct EngineIteration(bool Changed, bool RebuildChange
 
 // Graph/ScopeGuard.cs  [R1a]
 /// The rule layer's guard of one thread domain (D47): a Relations.ThreadAffinityGuard, the releases deferred until the
-/// domain's current call ends (D40), and whether a run observer is running.
+/// domain's current call ends (D40), and whether a run observer is running. A release holds the guard under a release
+/// lock; it runs no user code (R2, N68).
 internal sealed class ScopeGuard
 {
-    /// Re-entrant on the owning thread; InvalidOperationException naming the scope on another thread.
+    /// Re-entrant on the owning thread. When the guard is held, waits for a release in progress on another thread (the
+    /// release lock) and tries once more; InvalidOperationException naming the scope when a call holds it (N68).
     public void Enter(Scope scope);
-    /// At depth 0, runs the deferred releases.
+    /// Enters unless another thread holds the guard; never waits.
+    public bool TryEnter();                                                                            // R2
+    /// As TryEnter, under the release lock, for a release (D40); left with ExitAfterRelease.
+    public bool TryEnterForRelease();                                                                  // R2
+    public void ExitAfterRelease();                                                                    // R2
+    /// At depth 0, leaves the domain, then runs the releases deferred meanwhile (N71).
     public void Exit();
+    /// The calling thread's nesting depth; 0 when it does not hold the guard.
+    public int Depth { get; }                                                                          // R2
     public bool IsHeldByAnotherThread { get; }
     public bool InObserver { get; set; }
     public void DeferRelease(Scope scope);
@@ -1542,7 +1565,8 @@ internal static class ClassChecks
 /// context, made by the graph's ContextLocalSlot<ScopeRuntime> (colors §10.1); Owner maps the context to its Scope.
 internal sealed class ScopeRuntime
 {
-    /// R1: graph.Root's runtime. R2: (state.View?.Owner.Owner?.Host as EGraphContext)?.GetLocal(graph.RuntimeSlot).
+    /// R1: graph.Root's runtime. R2: (state.View?.Owner.Owner?.Host as EGraphContext)?.GetLocal(graph.RuntimeSlot) when
+    /// that context belongs to this graph's engine, otherwise graph.Root's runtime (N75). Lock-free once the runtime exists.
     public static ScopeRuntime Of(EGraph graph, Relations.ExecutionState state);
     public Scope? Owner { get; set; }
     public bool TryRecord(EvaluationFailure failure);     // the first one wins
@@ -1745,12 +1769,12 @@ internal sealed class RuleProgram
     public string Name { get; }
     public ProgramRegister[] Registers { get; }               // body registers first, then head registers
     public ProgramAtom[] Atoms { get; }                       // in flattening order: the engine's variant order
-    public ProgramStep[] Steps { get; }                       // lets, filters and not-equals, in a valid order
+    public ProgramStep[] Steps { get; }                       // lets, filters, not-equals and (R2) equals, in a valid order
     public HeadOp[] Head { get; }
     public uint[] WrittenIdConstants { get; }                 // class constants, by IdConstant operand index
     public ScopeOrigin[] IdConstantOrigins { get; }           // their origins (D39), same indexing
     public int[] NamedRegisters { get; }                      // declared body variables, then Make variables
-    public IReadOnlyList<ScopeTag> ReadScopes { get; }        // R2
+    public ScopeTag[] ReadScopes { get; }                     // R2
     public bool WritesAnalysis { get; }
 }
 
@@ -1770,7 +1794,8 @@ internal sealed record ProgramAtom(TableHandle Table, ScopeTag? Scope, Operand[]
 // Rules/ProgramStep.cs  [R1a]
 internal sealed record ProgramStep(ProgramStepKind Kind, Primitive? Primitive, Operand[] Arguments, Operand Target);
 // Rules/ProgramStepKind.cs  [R1a]
-internal enum ProgramStepKind { Let, Filter, NotEqual }
+/// Equal (R2): two class constants whose comparison the definition left to run time (§6.3 step 3, N63, N86).
+internal enum ProgramStepKind { Let, Filter, NotEqual, Equal }
 // Rules/HeadOp.cs  [R1a]
 internal sealed record HeadOp(HeadOpKind Kind, TableHandle? Table, Operand[] Inputs, int Target, Primitive? Primitive);
 // Rules/HeadOpKind.cs  [R1a]
@@ -1791,9 +1816,10 @@ internal sealed class CompiledRule
 /// a per-rule lock.
 internal sealed class RuleVariants
 {
-    /// The variant for the mode, lowered with constants when it does not exist or was lowered with other constants
-    /// (the stale variant is freed first: R1 only, D3).
-    public LoweredRule Get(EGraph graph, bool semiNaive, ReadOnlySpan<uint> constants);
+    /// R1: the variant for the mode, lowered with constants when it does not exist or was lowered with other constants
+    /// (the stale variant is freed first, D3). R2: lowered once with the written constants, which the engine
+    /// canonicalizes per context (X19), so the constants parameter is gone; O(1) once lowered.
+    public LoweredRule Get(EGraph graph, bool semiNaive);
     public IEnumerable<LoweredRule> All { get; }
     /// The default variant (semi-naive, or naive for a naive program), for E10's plan list; null before it exists.
     public LoweredRule? Default { get; }
@@ -1841,6 +1867,11 @@ internal sealed class FilterCall : Relations.ExternalFunction
 /// [a, b] → unit when a != b as raw cells (canonical classes or canonical values), nothing otherwise. One per graph.
 internal sealed class NotEqualFunction : Relations.ExternalFunction { public NotEqualFunction(uint unit); }
 
+// Rules/EqualFunction.cs  [R2]
+/// [a, b] → unit when the cells are equal, nothing otherwise: the Equal step. Its operands are class constants the
+/// engine substitutes with their canonical forms in the running context (X19). One per graph (EGraph.Equal).
+internal sealed class EqualFunction : Relations.ExternalFunction { public EqualFunction(uint unit); }
+
 // Rules/MatchCollector.cs  [R1b]
 /// The head action of a query or a split matcher: adds its arguments to ScopeRuntime.Of(graph, state).QueryMatches and
 /// produces unit. For a query asked with Any, triggers early stop after the first match. Stages nothing.
@@ -1865,8 +1896,9 @@ internal sealed class CompiledQuery
     public bool IsDisposed { get; }
     public void Acquire();                                    // ObjectDisposedException once disposed
     public void Release();
-    /// Marks the query disposed; frees the variants now if unused, without waiting: when the engine lock is busy or the
-    /// call comes from a user delegate, EGraph.DeferFree hands them to the graph. false when already disposed.
+    /// Marks the query disposed; frees the variants now if unused, without waiting: when the call comes from a user
+    /// delegate, or (R1) the engine lock is busy, or (R2) EGraph.ActiveEngineCalls is positive (N69), EGraph.DeferFree
+    /// hands them to the graph. false when already disposed.
     public bool Dispose();
 }
 ```
@@ -2012,9 +2044,13 @@ internal sealed class MirrorRegistry
 {
     /// RuleDefinitionException wording of §6.3, step 2, when FrozenCount(tag) > 0 and the mirror is new.
     public MirrorTable GetOrCreate(TableHandle table, ScopeTag tag, string reader);
+    /// One definition's mirrors, all or nothing, once its other checks passed (§6.3 step 2, N64).
+    public MirrorTable[] GetOrCreateAll(IReadOnlyList<(TableHandle Table, ScopeTag Tag)> reads, string reader);
     public MirrorTable Get(TableHandle table, ScopeTag tag);
-    /// The copy rules of tag's mirrors (copy-on-write snapshot).
-    public IReadOnlyList<CompiledRule> CopyRules(ScopeTag tag);
+    /// The copy rules of tag's mirrors, in creation order (copy-on-write snapshot, read lock-free).
+    public CompiledRule[] CopyRules(ScopeTag tag);
+    /// Every copy rule of every tag (snapshot): part of a freeze's plan list (E10).
+    public CompiledRule[] AllCopyRules();
     public int FrozenCount(ScopeTag tag);
     public void AddFrozen(ScopeTag tag);
     public void RemoveFrozen(ScopeTag tag);
@@ -2037,8 +2073,9 @@ internal sealed class MirrorTable
 /// The pre-use sync of D48 (§6.8).
 internal static class MirrorSync
 {
-    /// For each tag, brings resolve(scope, tag)'s mirrors current if that scope is writable and changed since its last
-    /// sync; records a MirrorSync step when executor is given.
+    /// Resolves every tag, then, for each, brings resolve(scope, tag)'s mirrors current if that scope is writable and its
+    /// view changed since its last sync (N61), leaving the sync out of its Version (N62); records a MirrorSync step when
+    /// executor is given.
     public static void Ensure(Scope scope, IReadOnlyList<ScopeTag> tags, string reader, ScheduleExecutor? executor);
 }
 ```
@@ -2108,8 +2145,8 @@ internal static class SExpression
 
 | Type | Internal members |
 |---|---|
-| `EGraph` | `Relations.EGraph Engine`; `object DefinitionLock`; `object EngineLock` (R1, deleted in R2); `Relations.BaseValues BaseValues`; `UnitColumnType Unit`; `ExtractionCatalog Extraction`; `Relations.ExternalFunctionId NotEqual`; `ConcurrentDictionary<string, LoweredRule> VariantsByDescription`; `int NextSerial()`; `EGraphOptions Options`; `ScopeOrigin RootOrigin`; `TableHandle TableOf(Relations.FunctionId)`; `IReadOnlyCollection<Query> Queries` (live, R1b); `void ForgetQuery(Query)` (frees a disposed query's name, R1b); `void DeferFree(RuleVariants)` and `void FreeDeferred()` (variants a disposal could not free at once, freed by the R1 root adapter under the engine lock before it next prepares an iteration or a query, R1b); `MirrorRegistry Mirrors` (R2); `Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot` (R2); `bool InheritWatermarks` (tests, R2) |
-| `Scope` | `EngineScope Engine`; `ScopeRuntime Runtime`; `ScopeGuard Guard`; `ScopeOrigin Origin`; `void Fault(Exception cause)`; `void ThrowIfNotUsable()` (faulted → InvalidOperationException with `Failure` inner; disposed → ObjectDisposedException); `void ThrowIfNotWritable()` (also frozen, and inside a run observer); the open `Write` batch, which makes the scope's own members throw InvalidOperationException (D30); `void ThrowIfStopped()` (R3); `List<CompiledRule> LocalCompiled` (R2); `Dictionary<ScopeTag, long> MirrorSyncedVersions` (R2); live and transient child counts (R2, §6.7); `TryRelease()` (a no-op in R1, where only the root exists; R2, §6.7) |
+| `EGraph` | `Relations.EGraph Engine`; `object DefinitionLock`; `object EngineLock` (R1, deleted in R2); `Relations.BaseValues BaseValues`; `UnitColumnType Unit`; `ExtractionCatalog Extraction`; `Relations.ExternalFunctionId NotEqual`; `ConcurrentDictionary<string, LoweredRule> VariantsByDescription`; `int NextSerial()`; `EGraphOptions Options`; `ScopeOrigin RootOrigin`; `TableHandle TableOf(Relations.FunctionId)`; `IReadOnlyCollection<Query> Queries` (live, R1b); `void ForgetQuery(Query)` (frees a disposed query's name, R1b); `void DeferFree(RuleVariants)` and `void FreeDeferred()` (variants a disposal could not free at once: R1b's root adapter freed them under the engine lock before it next prepared an iteration or a query; from R2 `ContextEngineScope.PrepareRules` and `PrepareVariant` free them, §6.4.6); `MirrorRegistry Mirrors` (R2); `Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot` (R2); `bool InheritWatermarks` (tests, R2); `Relations.ExternalFunctionId Equal` (the `Equal` step's `EqualFunction`, R2, N63); `int ActiveEngineCalls`, `EnterEngineCall()`, `ExitEngineCall()` (engine calls that may run user delegates, which defer a disposed query's free, R2, N69); `void CheckTag(ScopeTag, string)` and `void CheckFactTags(Fact, string)` (another graph's tag, `Fact.In` included, R2, N65); `TableHandle DefineMirrorTable(TableHandle, ScopeTag, int)` (R2, §6.8); `int NextScopeSerial()` (scope paths, R2) |
+| `Scope` | `ContextEngineScope Engine` (an `EngineScope` in R1); `ScopeRuntime Runtime`; `ScopeGuard Guard` and `ScopeGuard EnterGuard()` (reads the guard again once entered, R2, N60); `ScopeOrigin Origin`; `void Fault(Exception cause)`; `void ThrowIfNotUsable()` (faulted → InvalidOperationException with `Failure` inner; disposed → ObjectDisposedException); `void ThrowIfNotWritable()` (also frozen, and inside a run observer); `Enter()`, `EnterRead()`, `EnterExtraction()` and `Exit(bool held)` (a call's entry and exit: the guard on a writable scope, the call count, and from R2 the catch-up of `CatchUp`); the open `Write` batch, which makes the scope's own members throw InvalidOperationException (D30), and the count of open batches below it, which makes its writes and runs throw (R2, N88); `void ThrowIfStopped()` (R3); `CompiledRule[] LocalCompiled` (R2); `void BeginCall()` and `void EndCall()` (calls in progress, which defer the release, R2, N71); `void CatchUp()` (brings the scope and each writable ancestor up to date, left out of `Version`, R2, N87); `void ExcludeMirrorSync(long)` (R2, N62); `bool IsMirrorCurrent(ScopeTag, int)` and `void MarkMirrorSynced(ScopeTag, int)` (the sync key: the view stamp and the tag's copy-rule count, R2, N61); `ContextEngineScope CreateTransient()` and `void ReleaseTransient(ContextEngineScope)` (a query's child of a frozen scope, R2, D34); live and transient child counts (R2, §6.7); `TryRelease()` (a no-op in R1, where only the root exists; R2, §6.7); `RuleEvaluationException FaultWith(Relations.PanicException)` (R2) |
 | `ScopeTag` | `int Serial` (per graph) |
 | `ClassId` | `internal ClassId(uint cell, ScopeOrigin origin)`; `uint Cell`; `ScopeOrigin? Origin` |
 | `TableHandle` | `Relations.FunctionId Function`; `bool IsRelation`; `ColumnType[] Columns` (keys then output; a relation ends with the unit type); the public properties' internal setters, which the graph sets once at definition |
@@ -2145,6 +2182,12 @@ All are internal to `Eggnog.Relations` (after E11, without exception) and reache
 | `EGraph` on a `Store`; `EGraph.Root` (`EGraphContext`); `EGraphContext.RunRules`, `EnsureClean`, `FlushUpdates`, `FreshId`, `StageRow`, `StageUnion`, `Find`, `TryLookup`, `TableSize`, `ForEach`, `IsContradictory`, `Version`, `IsFrozen`, `IsDisposed`, `IsStopped`, `Freeze`; `IterationReport.Stopped`; `ContextOptions` (`Default`, `Case`, `IsCase`, `StopOnContradiction`, `InheritWatermarks`, `Parallelism`); `ContextLocalSlot<T>`, `GetLocal`; copy-on-write `RuleTable` and definitions (X16) | colors §3.3, §10.1–§10.8 | R2 (`ContextEngineScope`) | Colors M10.3 (landed; N43–N50) |
 | `CaseSet`, `Lifter`, `LiftSpec`, `LiftTable`, `LiftTableKind`, `LiftOptions`, `LiftReport`, `SplitDriver`, `ISplitSource`, `ICaseSchedule`, `SplitRequest`, `SplitKey`, `SplitOptions`, `SplitReport`, `SplitRecord` | colors §11 | R3 | Colors M10.4 (landed; N51–N58) |
 
+From R2 the rows used only by R1's root adapter have no caller: one iteration through `EGraph.RunRules`, queries
+through `GetRuleInfo` and `Database.ExecuteRuleSet`, and host batches and reads through `Database.CreateEngineState`,
+`TableAction`, `UnionAction`, `EGraph.FlushUpdates`, `TryTakePanic`, `GetCanonInUf` and `LookupId`. Every scope, the
+root included, goes through the `EGraphContext` row; the graph also calls `EGraph.DesignateContradiction` (E4) and
+`EGraph.NewLocalSlot` (N48) at construction.
+
 ### 5.2 Engine members requested
 
 Each request names the milestone that should provide it. Where the colors spec already implies a member without naming
@@ -2164,7 +2207,7 @@ edits to the colors spec.
 | **E9** | `ParallelHeuristics` reachable from the bridge `EGraph` constructor on a `Store` (`Store(ParallelHeuristics?)` exists). As built: `EGraph(ParallelHeuristics)` builds the `Store` with them, and `EGraph.ParallelismBudget` holds the root's degree of parallelism for `ConcurrentChildren` (N46). | The root of a Store-backed graph honours `EGraphOptions.DegreeOfParallelism` (D46); children of writable scopes inherit it. | Colors M10.3 (landed; N46) |
 | **E10** | `EGraphContext.Freeze(IReadOnlyCollection<EGraphRuleId>? planRules = null)`: `null` keeps step 4 of colors §10.8 as written (plan every live rule without a cached plan); a collection plans exactly those rules that have no cached plan. As built: the freeze flushes only when host writes are staged, and throws a recorded failure as `PanicException`, leaving the context unfrozen (N47). | Plans are made once per rule (decision 7). Step 4 as written plans every live rule, including other containers' local rules, queries and split matchers, on this context's statistics. The rule layer passes the empty set for the root and, for any other scope, the default variants its descendants can run (§6.7). | Colors M10.3 (landed; N47) |
 | **E11** | Every public type of `Eggnog.Relations` becomes `internal` (D44). `InternalsVisibleTo` already covers `Eggnog`, `Eggnog.Relations.Tests` and `Eggnog.Relations.Benchmarks`; a public test fixture or benchmark member whose signature mentions an engine type becomes internal or private. | One API in the package: about 95 public engine types include `EGraph`, `Term`, `Sort`, `CostModel`, `Extractor`, `ExtractedTerm` and `NodeCostFunction`, and a file with `using Eggnog; using Eggnog.Relations;` fails with CS0104. | **With R1a** (landed, `0fe0477`; the engine files of colors M9.3–M9.4 merged with it in `edd1fa9` declare no public type either) |
-| **E12** | A serial join kept after an early stop. `JoinRun.ReleaseInterrupted()` (`Execution/JoinRun.Reuse.cs`) returns to their pools the sparse and per-stage tuple indexes that the interrupted stages never moved back, and clears every prober. `Database.RunRulesSerial` (`Execution/Database.Execution.cs`) calls it after an early stop (an action's `TriggerEarlyStop`, or a reported failure), then parks and keeps the join as after a full run. A run that throws still drops its join. Test: `AnEarlyStoppedRunKeepsItsJoin` (24.6 bytes per row with the old parking rule restored). | `Any` must stop the engine early (§6.6.4) and must not allocate per row (conventions: no allocation per match). Before E12 an early stop dropped the serial join, so the next run rebuilt it and its leaf-scan buffers. | **With R1b** (on its branch, not yet merged) |
+| **E12** | A serial join kept after an early stop. `JoinRun.ReleaseInterrupted()` (`Execution/JoinRun.Reuse.cs`) returns to their pools the sparse and per-stage tuple indexes that the interrupted stages never moved back, and clears every prober. `Database.RunRulesSerial` (`Execution/Database.Execution.cs`) calls it after an early stop (an action's `TriggerEarlyStop`, or a reported failure), then parks and keeps the join as after a full run. A run that throws still drops its join. Test: `AnEarlyStoppedRunKeepsItsJoin` (24.6 bytes per row with the old parking rule restored). | `Any` must stop the engine early (§6.6.4) and must not allocate per row (conventions: no allocation per match). Before E12 an early stop dropped the serial join, so the next run rebuilt it and its leaf-scan buffers. | **With R1b** (landed, `80675d8`; merged at `3b9dda1`, where the kept join releases what each of M10.2's prober pieces owns) |
 
 Nothing else in the engine changes for this layer. In particular the rule layer needs no planner, matcher or index API:
 every body is planned and executed by the engine.
@@ -2314,7 +2357,8 @@ name).
 
 `Ruleset.DefineRule`, `Scope.DefineRule` (R2), `EGraph.DefineQuery` (R1b) and `EGraph.DefineSplit` (R3) run `define`
 on a fresh builder, then compile at once under the definition lock. A tag of another graph passed to `In`, `Fact.In`
-or `Erasing` throws `ArgumentException` at that call, inside `define`. Every compilation error is a
+or `Erasing` throws `ArgumentException` at that call, inside `define`; for `Fact.In`, whose facts may hold no table to
+compare the tag with, the call is the builder's `When` or `Then` that receives it (N65). Every compilation error is a
 `RuleDefinitionException` naming the rule; the messages below are exact, and `Rules/RuleDefinitionTests` (§8.3) tests
 each one.
 
@@ -2332,7 +2376,10 @@ each one.
      definition (D6). If a live frozen scope tagged `tag` exists in this graph at that moment: *"'dom' is first read in
      scope 'schema' after a scope tagged 'schema' was frozen; define rules that read it before freezing such scopes"*.
    - A scoped atom becomes an atom over the mirror's internal handle, with the tag kept for rendering and
-     `ReadScopes`.
+     `ReadScopes`. The mirrors are created last, once every other check of steps 1–9 has passed, and all at once
+     (`MirrorRegistry.GetOrCreateAll`: the frozen counts of every new mirror are checked first, then the mirrors are
+     made while the definition holds the writable root's guard), so a refused definition registers no mirror and does
+     not count as a first read (N64).
 3. **Normalization.** `flatten(t)` turns a term into an operand:
    - a variable becomes its register, after unification (a union-find over registers; equating registers of different
      types: *"variables 'a' (i64) and 'b' (String) are equated"*);
@@ -2365,7 +2412,7 @@ each one.
    | `x.Is(p(args))` either side | `Let(p, args, x)` |
    | `p(args).Is(c)` either side | `Let(p, args, c)`: a check against the constant |
    | `p(args).Is(h(…))`, `p(args).Is(q(…))` | flatten the other side to `o`; `Let(p, args, o)` |
-   | `c1.Is(c2)` | evaluated now: value constants by cell (invariant V); class constants by their canonical classes in the root, where a global rule's constants come from (D39), read under the engine lock. False: *"never matches: c1 = c2 is false"*; true: dropped, the rule keeping the first. Two classes unioned only later stay refused (§11, risk 14) |
+   | `c1.Is(c2)` | value constants: evaluated now, by cell (invariant V); false: *"never matches: c1 = c2 is false"*; true: dropped. Class constants are never refused: a global rule runs in every scope a run reaches and a local rule in its owner's descendants (§6.5.2), and a child may union two classes that differ where the rule's constants come from (context = copy). When the two are already one class there (D39: in the owner for a local rule, whose guard the definition holds; in the root for a global rule) and that can be read now (the root frozen, lock-free, or its guard free for this thread), the union holds in every scope the rule runs in: dropped, the rule keeping the first. Otherwise (different classes, a writable root another thread is using (D6, D47), and always for a query, whose classes may come from any scope and are checked against the scope it runs in) the rule keeps the first constant and an `Equal` step keeps only the matches where the two are one class in the running context, which the engine canonicalizes (X19). The outcome of a definition therefore never depends on another thread (N63, N86) |
    | `Fact.Exists(h(args))` | atom with a fresh output register that nothing else reads |
    | `a.IsNot(b)` | `NotEqual(flatten(a), flatten(b))` |
    | `Fact.True(p(args))`, `Where(p(args))` | `Filter(p, flatten(args))` |
@@ -2374,7 +2421,8 @@ each one.
    | `Fact.In(tag, facts)` (R2) | each inner fact with read scope `tag` |
    | `Rewrite(left, right)` | the body fact `t.Is(left)` for a fresh class variable `$rw{n}` (and the head item of step 8) |
 
-   Substituting two different constants into one register (through unification) is *"never matches: …"*.
+   Substituting two different value constants into one register (through unification) is *"never matches: …"*; two
+   class constants are handled as in the `c1.Is(c2)` row.
 4. **Range restriction and step order.**
    - Every register in an atom is bound.
    - Steps are placed in rounds. Each round scans the steps in declaration order and places every step whose inputs
@@ -2518,12 +2566,14 @@ PrepareRules(rules, semiNaive):                     // R1: under the engine lock
     return lowered
 
 PrepareVariant(variants, written, mode):
-    K = R1 ? map Find over written : written
-    return variants.Get(graph, mode, K)
+    graph.FreeDeferred()                            // variants of queries disposed during an engine call (§6.4.6)
+    R1: return variants.Get(graph, mode, K = map Find over written)
+    R2: return variants.Get(graph, mode)            // lowered once, with the written constants
 ```
 
-`RuleVariants.Get` returns the cached variant for the mode when its `Constants` sequence-equal `K`; otherwise it
-lowers one (freeing a stale one first), under the rule's lock.
+In R1, `RuleVariants.Get` returns the cached variant for the mode when its `Constants` sequence-equal `K`; otherwise it
+lowers one (freeing a stale one first), under the rule's lock. From R2 it lowers each mode's variant once, under the
+rule's lock, and then returns it with one volatile read: the engine canonicalizes the constants in each context (X19).
 
 #### 6.4.5 Id constants in R1 (D3)
 
@@ -2543,9 +2593,10 @@ R2's `PrepareRules` passes the written constants, and the variant never changes.
 
 - Global rules, split matchers and mirror copy rules live as long as the graph.
 - A query lives until it is disposed and no call uses it (D49). The call that leaves it disposed and unused frees it
-  at once if it can take the R1 engine lock and is not inside a user delegate; otherwise `EGraph.DeferFree` hands the
-  variants to the graph, and the root adapter frees them (`FreeDeferred`) before it next prepares an iteration or a
-  query (§6.6.5). A disposal never waits.
+  at once if it is not inside a user delegate and (R1) can take the engine lock, or (R2) no engine call that may run
+  user delegates is in progress on any thread (`EGraph.ActiveEngineCalls`, N69). Otherwise `EGraph.DeferFree` hands the
+  variants to the graph, which frees them (`FreeDeferred`) before it next prepares an iteration or a query: in R1 the
+  root adapter (§6.6.5), from R2 `ContextEngineScope.PrepareRules` and `PrepareVariant`. A disposal never waits.
 - A stale R1 variant is freed when it is re-lowered.
 - A local rule's variants are freed when its scope is released (D40, §6.7). No descendant can be running it then,
   because a scope is released only once it has no live children.
@@ -2616,13 +2667,17 @@ Run(schedule, options, ct):
     a negative IterationLimit, TimeLimit or RowLimit: ArgumentOutOfRangeException
     check EngineCallMarker; enter Guard (InvalidOperationException for a second thread)
     try:
-        ThrowIfNotUsable(); ThrowIfNotWritable()        // faulted, disposed, open Write batch, frozen (R2), observer
+        ThrowIfNotUsable(); ThrowIfNotWritable()        // faulted, disposed, open Write batch, frozen (R2), observer,
+                                                        // and (N88) an open Write batch in a descendant
+        R2: CatchUp()                                   // each writable ancestor, then this scope; no Version move (N87)
         R3: if Engine.IsStopped: return a report with no iteration and StopReason = Contradiction   // D45
         schedule.Collect(rulesets, conditions)          // R3: and splits
         a ruleset of another graph: ArgumentException   // before any work
         each Until fact: TermReader.Validate(this, fact), ArgumentException on an error   // before any work
         R2: for each tag t read by a reachable rule or split rule (Rule.ReadScopes, SplitRule.ReadScopes):
                 ScopeResolver.Resolve(this, t, reader)  // throws before any work
+            a rule defined on another thread during the run (D6) that reads a tag an iteration's scope cannot resolve
+            is left out of that iteration (N67)
         executor = new ScheduleExecutor(this, options, ct)   // starts executor.Clock
         try:
             schedule.Execute(executor, this, depth: 0, inCase: false, splitsEnabled: true)
@@ -2664,9 +2719,11 @@ scope holds fewer facts, each of them valid.
 batch(S, body):
     check EngineCallMarker; enter S.Guard
     try:
-        S.ThrowIfNotUsable(); S.ThrowIfNotWritable()      // also refused while S has an open Write batch
+        S.ThrowIfNotUsable(); S.ThrowIfNotWritable()      // also refused while S has an open Write batch, and (N88)
+                                                          // while a descendant of S has one (S.batchesBelow > 0)
         R3: if S.Engine.IsStopped: Assume → return; Union → return false; Make, Write → throw ScopeContradictedException
-        S.Engine.EnsureClean()
+        S.CatchUp()    // R1: S.Engine.EnsureClean(). R2: each writable ancestor outermost first, then S, every catch-up
+                       // left out of its own Version (N87)
         b = new HostBatch(S)
         body(b)        // phase 1, per call as it is made: validate the facts, check class values (D39), encode constants
                        // (interning), resolve existing terms with TryLookup, mint fresh ids for new terms, record the
@@ -2674,7 +2731,11 @@ batch(S, body):
                        // discards the batch: nothing is staged, and b.Origin never commits. In Write, each ScopeWriter
                        // call enters S.Guard and checks EngineCallMarker; a call that throws marks b rejected
                        // (b.Reject()) before the exception leaves it, and S's own members throw while body runs.
+                       // Write counts its batch in each writable ancestor of S (N88), and each ScopeWriter call first
+                       // brings S up to date (S.CatchUp(), N87): the ancestors' reads and queries may have synced their
+                       // mirrors, which writes nothing the batch read.
         if b.IsRejected: return                  // Write only: body caught a rejection; nothing written, no commit
+        Write only, if b.IsEmpty == false: S.CatchUp()   // N88: the commit's flush then makes only the batch's changes
         if b.IsEmpty == false:
             try: b.Commit()                      // phase 2: stage new terms' rows in post-order, then rows, then
                                                  // unions; flush; rebuild
@@ -2747,8 +2808,10 @@ A write into `Contradiction` is a relation row like any other.
 #### 6.6.3 Host reads
 
 Reads check `EngineCallMarker`, enter the guard (none on a frozen scope), check `ThrowIfNotUsable` (which also refuses
-a read while the scope's `Write` batch is open, D30) and (R3) `ThrowIfStopped` (D45), call `EnsureClean`, and never
-create terms or intern.
+a read while the scope's `Write` batch is open, D30) and (R3) `ThrowIfStopped` (D45), bring a writable scope up to date
+(`EnsureClean`; from R2 `Scope.CatchUp`, which brings each writable ancestor up to date first and leaves every
+catch-up out of `Version`, N87), and never create terms or intern. A call in progress is counted on the scope
+(`BeginCall`/`EndCall`), so a release waits for it (D40, N71).
 
 `TryRead(S, t, out cell)`:
 - a value constant: `TryEncodeExisting`; a miss means absent;
@@ -2785,9 +2848,10 @@ stopAtFirst, sort)`:
 query.Compiled.Acquire()                                    // ObjectDisposedException if disposed
 try:
     check every class constant against S (ClassChecks, D39): ArgumentException naming the query
+    R2: ScopeResolver.Resolve(S, t, query.Name) for every t in query.ReadScopes     // before any work (N66)
     enter S.Guard unless S is frozen; ThrowIfNotUsable (an open Write batch included); R3: ThrowIfStopped
-    S.Engine.EnsureClean()
-    R2: MirrorSync.Ensure(S, query.ReadScopes, query.Name, executor: null)          // D48
+    unless S is frozen: S.CatchUp()          // R1: S.Engine.EnsureClean(); R2: no Version move (N87)
+    R2: MirrorSync.Ensure(S, query.ReadScopes, query.Name, executor: null)          // D48; moves no Version (N62)
     target = S.Engine                                       // R1 always; R2 when S is writable
     R2, S frozen: target = S.Engine.CreateChild(ContextOptions.Default): a transient child with its own guard, counted
                   in S's transient children and not listed in Children; released in finally (D40)
@@ -2803,7 +2867,10 @@ finally: query.Compiled.Release(); exit the guard if entered
 
 - R1 runs the query without merging and without advancing the clock (§6.6.5), so neither `Version` nor any extractor
   is affected. From R2, in a writable scope the query is an iteration of that scope that writes nothing: it advances the
-  clock, `Version` does not move, and E5's staleness ignores the clock.
+  clock, `Version` does not move, and E5's staleness ignores the clock. The mirror sync before it may write mirror rows
+  into a writable tagged scope; mirror tables are internal and not extraction tables, so the sync moves neither that
+  scope's `Version` (`Scope.Version` leaves the stamp moves of mirror syncs out) nor any extractor (N62). Nor does the
+  catch-up the query's entry makes in the scope and its writable ancestors when an ancestor wrote since (N87).
 - Allocation: matches go into one pooled `TupleBuffer`, canonicalized in place and ordered through a pooled order, so a
   call allocates nothing per match beyond what the engine run allocates (conventions).
 - `Count` is the number of distinct tuples, which are distinct full bindings because the collector projects every
@@ -2815,11 +2882,14 @@ finally: query.Compiled.Release(); exit the guard if entered
   decodes a class with `S`'s origin and maps it through `S`'s `Find` when it is read (one engine call per class read),
   so a class is canonical even after a union an earlier callback made; two delivered matches may then name one class.
   The query counts as in use until `ForEachMatch` returns.
-- In R1 a query whose class constants lost a union is re-lowered like a rule (§6.4.5), through `PrepareVariant`.
+- In R1 a query whose class constants lost a union is re-lowered like a rule (§6.4.5), through `PrepareVariant`. From
+  R2 the variant lowered at definition serves on: the engine canonicalizes the constants per context (X19).
 - `Query.Dispose` marks the query disposed, releases its name, and frees its variants (`RuleVariants.Free`) when
   `Users` reaches zero, without waiting (§6.4.6).
 
 #### 6.6.5 The R1 root adapter (`RootEngineScope`)
+
+R2 deleted this adapter, with the engine lock; the table records R1.
 
 Every member that touches the bridge runs under the graph's engine lock (§6.12), and only while the root's guard is
 held.
@@ -2857,14 +2927,17 @@ The batch is the same mechanism as `EGraph.AddValues`/`AddTerm`: rows stamped wi
 
 | `EngineScope` member | `EGraphContext` member (colors §10) |
 |---|---|
-| `Version` | `Version` (X30) |
-| `IsContradictory`, `IsStopped` | `IsContradictory`, `IsStopped` (§10.1, §10.5) |
+| `Version` | `Version` (X30); `Scope.Version` subtracts the stamp moves of the scope's mirror syncs (N62) and of the catch-up each call makes first (`Scope.CatchUp`, N87) |
+| `ViewStamp` (internal) | the sum of the change stamps of the context and its ancestors, which keys mirror syncs (§6.8, N61) |
+| `IsContradictory`, `IsStopped` (R3) | `IsContradictory`, `IsStopped` (§10.1, §10.5) |
+| `IsFaulted` | `IsFaulted` (E7, X12) |
+| `Runtime` (internal) | `GetLocal(graph.RuntimeSlot)` (N48) |
 | `OwnRowCount` | `OwnRowCount` (E7) |
 | `EnsureClean()` | `EnsureClean()` (§10.3) |
-| `PrepareRules` | §6.4.4 with the written constants (X19 canonicalizes them in the engine) |
+| `PrepareRules`, `PrepareVariant` | §6.4.4 with the written constants (X19 canonicalizes them in the engine), after `EGraph.FreeDeferred` |
 | `RunRules(ids)` | `RunRules(ids)` → `EngineIteration(Changed, RebuildChanged, Stopped, RuleSetReport, RebuildTime)` |
 | `FreshId`, `StageRow`, `StageUnion` | `FreshId`, `StageRow`, `StageUnion` (§10.4; Id cells canonicalized by `ReplayInto`) |
-| `Flush()` | `v0 = Version`; `FlushUpdates()`; panics as `PanicException` (§10.4 `ThrowIfFailed`); return `Version != v0` |
+| `Flush()` | `v0 = Version`; `FlushUpdates()`; panics as `PanicException` (§10.4 `ThrowIfFailed`); return `Version != v0`. Flush, `RunRules`, `RunQuery` and `Freeze` count in `EGraph.ActiveEngineCalls`, which defers the free of a disposed query's variants (N69) |
 | `Find`, `TryLookup`, `TableSize`, `ForEach` | `Find`, `TryLookup`, `TableSize`, `ForEach` (§10.5) |
 | `RunQuery(variant)` | `RunRules([variant.Id])` |
 | `CreateExtractor` | `Extractor.CreateOnDemand(schema, context, costs)` (E5) |
@@ -2912,8 +2985,10 @@ checks it after `ThrowIfNotUsable`, except the members that still answer:
 ### 6.7 Scopes, tags and local rules (R2)
 
 - **Creation.** `CreateChild(tag, options)`:
-  1. `ArgumentException` for another graph's tag; `ThrowIfNotUsable`; `ThrowIfStopped` (R3).
-  2. A writable scope enters its guard; a frozen one takes none.
+  1. `ArgumentException` for another graph's tag, or for `graph.RootTag` (the root's alone, N72); `ThrowIfNotUsable`;
+     `ThrowIfStopped` (R3).
+  2. A writable scope enters its guard, and refuses a call from a run observer (a structural call, §6.11); a frozen one
+     takes none.
   3. Under the scope's children lock: `ObjectDisposedException` if it is disposed; then the engine child is created
      with `new ContextOptions { Parallelism = options?.DegreeOfParallelism is { } n ? new ParallelHeuristics(n) : null,
      InheritWatermarks = graph.InheritWatermarks }` (E7), and the new `Scope` is added to the live children.
@@ -2927,17 +3002,25 @@ checks it after `ThrowIfNotUsable`, except the members that still answer:
   `InvalidOperationException("Scope 'root/schema#2' is frozen; its local rules are fixed")`; otherwise compile with
   `Owner = this` and append to the scope's local rules (copy-on-write, under the definition lock). The engine rule is
   global; only `RulesFor` makes it local.
-- **Freeze.** `Freeze()`: return if frozen; enter the guard; `ThrowIfNotUsable`; `ThrowIfStopped` (R3); a writable
-  parent throws `InvalidOperationException("A scope can be frozen only once its parent is")` (the engine would throw
-  too). Then:
+- **Freeze.** `Freeze()`: return if frozen; refuse a call from inside another call of the scope's thread domain (from
+  a run observer: `"Not allowed inside a run observer"`; otherwise naming the scope), since step 4 reassigns guards
+  that outer call holds; enter the guard; `ThrowIfNotUsable`; `ThrowIfStopped` (R3); a writable parent throws
+  `InvalidOperationException("A scope can be frozen only once its parent is")` (the engine would throw too). Then,
+  under the definition lock (so that no first scoped read of the tag can create a mirror between steps 1 and 3):
   1. if the scope's tag has copy rules, `MirrorSync.Ensure(this, [Tag], …)` (§6.8);
   2. `Engine.Freeze(planRules)` (E10): the empty set for the root; otherwise the default variants of every global rule,
-     every local rule of this scope and its ancestors, every query, every split matcher and every mirror copy rule
-     (the rules a descendant can run; other containers' local rules are excluded). The engine flushes, rebuilds, plans
-     those rules that have no plan yet on this context's statistics, and freezes storage (colors §10.8);
+     every local rule of this scope and its ancestors, every live query, every split matcher and every mirror copy
+     rule (the rules a descendant can run; other containers' local rules are excluded). The listed queries are held
+     (`CompiledQuery.Acquire`) until the engine has frozen, so a query disposed on another thread meanwhile cannot free
+     a listed variant (N70). The engine flushes, rebuilds, plans those rules that have no plan yet on this context's
+     statistics, and freezes storage (colors §10.8);
   3. `graph.Mirrors.AddFrozen(Tag)` when the scope has a tag;
-  4. each live child subtree gets a new `ScopeGuard`, as colors §8.1 step 7 does for the engine's domains (this thread
-     holds the shared guard, so no descendant is in use).
+  4. each child subtree that shares this scope's guard gets a new `ScopeGuard`, as colors §8.1 step 7 does for the
+     engine's domains. This thread holds that guard, so none of those subtrees is in use. From step 2 on, the scope
+     reads as frozen, so another thread may already have created a child of it, with a guard of its own, and be using
+     it: such a child keeps its guard. A call enters a guard by reading it, entering it, and reading it again
+     (`Scope.EnterGuard`): if a freeze reassigned it in between, the call moves to the new one, so no call holds a guard
+     its scope no longer has (N60).
 - **Dispose and release** (D40). `Dispose()` never throws:
   1. on the root, or when already disposed: return;
   2. under the parent's children lock: set `IsDisposed`, set `Origin.Disposed` (the scope's class values die);
@@ -2952,8 +3035,16 @@ checks it after `ThrowIfNotUsable`, except the members that still answer:
     children; `graph.Mirrors.RemoveFrozen(Tag)` if it was frozen with a tag; then, if the parent is disposed,
     `parent.TryRelease()`.
 
-  An open `CaseSet` and a split's cases are children, so they defer the release too. A `Dispose` called from a run
-  observer is deferred until the run ends, through the guard.
+  An open `CaseSet` and a split's cases are children, so they defer the release too. A call in progress on the scope
+  (`Scope.BeginCall`/`EndCall`, counted for reads, queries and extractions, which take no guard on a frozen scope)
+  defers it as well, and inside an engine call of the scope's domain the release is handed to the guard's last exit
+  (N71). A `Dispose` called from a run observer releases a scope that has no call in progress at once (a child of the
+  running scope, say); one of the running scope is deferred by its call.
+
+  A release holds the guard for its engine work under the guard's release lock (`ScopeGuard.TryEnterForRelease`). That
+  work runs no user code, so a call that finds the guard held waits on the release lock and tries once more: it fails
+  only when a call holds the guard. A `Dispose` on one thread therefore never makes another thread's call of the domain
+  fail (N68).
 - **Faults.** `IsFaulted` is the rule layer's flag or the engine context's (X12); `Failure` is the rule layer's
   exception, or an `InvalidOperationException` describing the engine's fault. A faulted scope allows only `Dispose`.
 - **Depth.** `CreateChild` at depth 31 throws (colors X36).
@@ -2977,15 +3068,24 @@ Creating a mirror is a table definition (D6), and it is refused while a live fro
 
 ```
 MirrorSync.Ensure(C, tags, reader, executor):
+    for t in tags: ScopeResolver.Resolve(C, t, reader)           // every tag, before any sync (§6.13)
     for t in tags:
         S = ScopeResolver.Resolve(C, t, reader)
         if S.IsFrozen: continue                                  // current since its freeze
-        if S.MirrorSyncedVersions[t] == S.Version: continue      // nothing changed since the last sync
-        lowered = S.Engine.PrepareRules(graph.Mirrors.CopyRules(t), semiNaive: true)
+        rules = graph.Mirrors.CopyRules(t)
+        if S.MirrorSyncs[t] == (S.Engine.ViewStamp, rules.Length): continue   // nothing changed since the last sync
+        S.Engine.EnsureClean()
+        lowered = S.Engine.PrepareRules(rules, semiNaive: true)
+        v0 = S.Engine.Version
         S.Engine.RunRules(lowered ids)                           // one iteration of t's copy rules, in S
-        S.MirrorSyncedVersions[t] = S.Version
+        S.ExcludeMirrorSync(S.Engine.Version - v0)               // Scope.Version leaves mirror syncs out
+        S.MirrorSyncs[t] = (S.Engine.ViewStamp, rules.Length)
         executor?.RecordStep(MirrorSync, S, changed, …)
 ```
+
+The key is the view stamp, the sum of the change stamps of `S` and its ancestors, not `S.Version`: a host write into
+a writable ancestor of `S` changes `S`'s view of `T` without moving `S`'s own version. It also holds the number of the
+tag's copy rules, so a mirror created after the tag's last sync forces a new one (N61).
 
 It is called before every iteration in a scope (with the tags its rules read), before every query (§6.6.4), before
 every split step's matcher (§6.9.2), and at `Freeze` (with the scope's own tag). `S` is `C` or a writable ancestor of
@@ -3125,8 +3225,11 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
   Defaults: the declared constructor cost, and 1 per value (egglog's `TreeAdditiveCostModel` with `base_value_cost =
   1`), so `StrEq "a" "b"` costs 3. Negative costs throw `InvalidOperationException` (`CostMath`).
 - **Creating.** `Scope.CreateExtractor(costs)`: `ThrowIfNotUsable`, `ThrowIfStopped` (R3), the guard on a writable
-  scope, `EnsureClean`, then `Engine.CreateExtractor(SchemaFor(costs), EngineCosts(costs))`. R1 uses
-  `CreateOnDemand(schema, costs)` over the root; R2 uses the context form (E5).
+  scope, `EnsureClean` (from R2 `Scope.CatchUp` on a writable scope, N87), then
+  `Engine.CreateExtractor(SchemaFor(costs), EngineCosts(costs))`. R1 uses `CreateOnDemand(schema, costs)` over the root;
+  R2 uses the context form (E5). Each extraction through the extractor takes the guard on a writable scope and none on a
+  frozen one, is counted so that a release waits for it (N71), and holds the extractor's own lock (N73); it does not
+  catch up, since a scope that changed makes the extractor stale.
 - **Extracting.** `Extract<TSort>(root)`: `ClassChecks.Require(scope, root.Id, …)`, then the engine's
   `ExtractTerm(catalog.SortOf(TSort), new Value(Find(root)))`, through `EngineScope.TryExtract` (and `TryGetCost`),
   which canonicalize the class and extract in one engine call. The result is wrapped into `ExtractedTerm`:
@@ -3158,9 +3261,10 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
   `RecordSteps` the step is appended to `RunReport.Steps`; with an `Observer` it is passed to it at once, on the run's
   thread, between engine calls. While the observer runs, the guard's `InObserver` flag is set. Reads of the run's scopes
   are allowed, since the guard is re-entrant (`Check`, `Get`, `Find`, queries, `CountRows`, `Rows` and extraction).
-  Writes, `Run` and every other call that changes a scope throw `InvalidOperationException("Not allowed inside a run
-  observer")`, except `Dispose`, which is deferred. An exception thrown by the observer propagates out of `Run` after
-  the `finally` and does not fault the scope.
+  Writes, `Run` and every other call that changes a scope (`CreateChild`, `Freeze` and `DefineRule` included) throw
+  `InvalidOperationException("Not allowed inside a run observer")`, except `Dispose`, whose release waits for any call
+  in progress on the scope (§6.7). An exception thrown by the observer propagates out of `Run` after the `finally` and
+  does not fault the scope.
 - **Rows.** `CountRows(table)` is `Engine.TableSize(table.Function)`. `Rows(table)` visits `Engine.ForEach`, decodes
   each row (sort cells as classes with the scope's origin), and sorts by content. Both take the guard on a writable
   scope, check `ThrowIfStopped` (R3), and reject mirror handles (never reachable) and handles of another graph
@@ -3176,12 +3280,19 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
 
 - **Guards** (D47).
   - Each thread domain has one rule-layer `ScopeGuard`. A writable scope's children share its guard; each child of a
-    frozen scope gets a new one; freezing a scope gives each live child subtree a new one. This mirrors colors §8.3.
-  - Every `Scope` member except the identity members, the reads of a frozen scope, and `Dispose` enters the guard for
-    the whole call: a host batch, a run, a query on a writable scope, a definition of a local rule. So does every
+    frozen scope gets a new one; freezing a scope gives each child subtree that shares its guard a new one (§6.7). This
+    mirrors colors §8.3.
+  - Every `Scope` member except the identity members (with R2's tree members `Parent`, `Tag`, `IsFrozen`, `Children`
+    and `LocalRules`, which answer snapshots), the reads of a frozen scope, and `Dispose` enters the guard for the
+    whole call: a host batch, a run, a query on a writable scope, a definition of a local rule. So does every
     `ScopeWriter` call, for its own duration; a refused one rejects its batch (D30). A second thread gets
     `InvalidOperationException("Scope 'root/schema#2' is in use on another thread; only children of a frozen scope may
     run concurrently")`. The root has the same guard in every milestone.
+  - Within one domain, a `Write` batch's callback may call other scopes of the domain between the batch's calls. The
+    writable ancestors of the batch's scope refuse writes and runs until the batch ends, since they would change what
+    the batch's calls were checked against; their reads, queries, `CreateChild` and `DefineRule`, and writes and runs
+    in descendants and siblings, are allowed, and the batch catches up with them before each call and before it commits
+    (N88).
   - The rule layer never holds an engine thread domain across calls; each engine call enters the domain itself. So a
     split may create cases (colors §8.3 forbids `CreateChild` while the caller holds the domain), and E8 asks
     `SplitDriver.Step` not to hold it while calling sources and schedules.
@@ -3204,10 +3315,13 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
 - **Engine-invoked delegates.** Primitives, lattice merges, filters and cost functions run inside engine calls, possibly
   on pool threads. A call from one into any graph or scope throws `InvalidOperationException` (`EngineCallMarker`,
   §6.1).
-- **Frozen scopes.** Reads take no guard. Queries run in transient children (D34), and extractors may run on any
-  threads (E5), so a frozen schema can be read, queried and extracted from many threads.
+- **Frozen scopes.** Reads take no guard. Queries run in transient children (D34), with `ContextOptions.Default` (the
+  frozen scope's own `DegreeOfParallelism` does not apply to them), and extractors may run on any threads (E5), so a
+  frozen schema can be read, queried and extracted from many threads. One `Extractor` instance is thread-safe too: its
+  calls are serialized on a private lock, because the engine extractor's caches are shared; use one per thread for
+  parallel extraction (N73).
 - **Disposal.** `Dispose` may be called from any thread; the release waits for live children and for a call in
-  progress on another thread (D40).
+  progress on another thread (D40), and never makes another thread's call fail (§6.7, N68).
 - **Values.** `BaseValues` interning is thread-safe. `ValueSet<T>` is immutable.
 - **External functions** (call sites, lattice merges, collectors) may run on several rule tasks at once. Their state
   is immutable except the scope runtime's buffers, which lock.
@@ -3223,8 +3337,10 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
 | A host write giving a function without a lattice a second value, directly or through a merge of its batch (D32) | `FactConflictException`; nothing written |
 | A rejected `ScopeWriter` call that `write` caught | `Write` returns normally; nothing written (D30) |
 | A scope member called while that scope's `Write` batch is open | `InvalidOperationException` |
+| A write or run into a writable ancestor of a scope whose `Write` batch is open (N88) | `InvalidOperationException`; nothing written, and the batch is not rejected |
+| A `ScopeWriter` call after its batch ended (N82) | `ObjectDisposedException` |
 | Unknown CLR type; `Register` of `ClassId`, a sort or a set; `RegisterSet` of an element type without an order | `ArgumentException` (naming the `Register*` method to call, where there is one) |
-| A ruleset of another graph, or an `Until` fact the scope cannot read, at `Run` | `ArgumentException`, before any work |
+| A ruleset of another graph, or an `Until` fact the scope cannot read (an unresolved tag in it included), at `Run` | `ArgumentException`, before any work |
 | `Schedule.Until` with no fact, or with a filter, a variable or a computation | `ArgumentException` |
 | A negative `IterationLimit`, `TimeLimit` or `RowLimit` | `ArgumentOutOfRangeException` from `Run`, before any work |
 | A query name a live query has | `ArgumentException` |
@@ -3237,10 +3353,11 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
 | Two threads on one thread domain | `InvalidOperationException` (rule-layer guard, D47) |
 | A table definition from another thread while the root is writable and in use | `InvalidOperationException` |
 | A call into a graph from a primitive, lattice, filter or cost function | `InvalidOperationException` |
-| A write, run or structural call from a run observer | `InvalidOperationException` |
+| A write, run or structural call (`CreateChild`, `Freeze`, `DefineRule`; R3 `OpenCases`) from a run observer | `InvalidOperationException("Not allowed inside a run observer")` |
 | `Run`, a host write or `DefineRule` on a frozen scope (R2) | `InvalidOperationException` |
-| Freezing under a writable parent; `OpenCases` on a frozen scope (R2, R3) | `InvalidOperationException` |
-| An unresolved tag at `Run` or at a query (R2) | `InvalidOperationException`, before any work |
+| Freezing under a writable parent, or from inside another call of the scope's thread domain (N79); `OpenCases` on a frozen scope (R2, R3) | `InvalidOperationException` |
+| `CreateChild(graph.RootTag)` (R2, N72) | `ArgumentException` |
+| An unresolved tag at `Run` or at a query (R2) | `InvalidOperationException`, before any work; a rule defined during the run whose tag the iteration's scope cannot resolve takes no part in it (N67) |
 | A first scoped read after a scope of this graph with its tag was frozen (R2) | `RuleDefinitionException` |
 | A read or write needing a model on a contradicted case (R3, D45) | `ScopeContradictedException` |
 | A lift with no cases (R3) | `InvalidOperationException` |
@@ -3289,8 +3406,9 @@ Extra guards only remove splits, so they never break coverage (D43). Lift soundn
      absorption.
 
   The sync of D48 makes the mirror current whenever a rule, query or split matcher in `C` reads it: a writable `S`
-  shares `C`'s thread domain, is synced when its `Version` moved since its last sync, and cannot change during `C`'s
-  engine work; a frozen `S` was synced at its freeze and never changes. ∎
+  shares `C`'s thread domain, is synced when its view stamp (the change stamps of `S` and its ancestors) or its tag's
+  number of copy rules changed since its last sync (N61), and cannot change during `C`'s engine work; a frozen `S` was
+  synced at its freeze and never changes. ∎
 - **Q (actions are query-determined).** Rule-layer actions never read a table that can change:
   - `GetOrAdd` lowers to the bridge's `Lookup` on a constructor (`LookupOrInsertDefault` with `UnionIdMerge`);
   - lets, filters, head computations and collectors are external functions with `ReadsTables == false`;
@@ -3502,7 +3620,7 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
 | `Values/LatticeTests` | `Verify` accepts the built-ins and rejects a mismatched case join (∩ with ∩); a lattice delegate that throws during a rule's merge gives `RuleEvaluationException` with `RuleName == null` | R1a |
 | `Definitions/DefinitionTests` | Duplicate names, `@`, `$`, `contradiction`; unknown types; a sort output to `DefineFunction`; `Role = Term` on a relation; the engine layout per kind (§6.2), read through `Relations.EGraph.GetFunctionInfo`; a table defined from another thread while the root runs throws; a rule defined from another thread during a run joins the next iteration | R1a |
 | `Graph/ClassIdTests` | `default(ClassId)` is refused by `Find`, `AreEqual`, `Union`, `Make`, `Assume`, `Extract` and a rule constant; another graph's class is refused; a `Write` that throws leaves the values its `Make` returned unusable, and one that commits leaves them usable. R2: a sibling query's class is refused; a query's class is refused after the query is disposed; a global rule holding a non-root class is a `RuleDefinitionException`; a local rule may hold its owner's class. R3: a case's class is refused after the run that made the case | R1a, R2, R3 |
-| `Rules/RuleDefinitionTests` | One test per message of §6.3: another builder's variable; duplicate name; unknown type; variables of different types equated; never-matching constants, class constants compared by their class when the rule is defined (§6.3 step 3); unbound variable; primitive over a sort; analysis writer reading a fact table; head function read; head value equality; head filter; `Make` variable in the body; head variable before its `Make`; class constants (default, another graph). R2 adds: nested `Fact.In`; a handle scoped to another tag inside `Fact.In`; a scoped read of a table with a sort column; a scoped write; an erasing violation; `ReadsOwnFacts` without a licence or a reason; a first scoped read after a tagged scope froze; class constants from other scopes | R1a, R2 |
+| `Rules/RuleDefinitionTests` | One test per message of §6.3: another builder's variable; duplicate name; unknown type; variables of different types equated; never-matching value constants; class constants never refused: different classes compared where the rule runs (they match in a child that unions them), one class merged (§6.3 step 3, N86); unbound variable; primitive over a sort; analysis writer reading a fact table; head function read; head value equality; head filter; `Make` variable in the body; head variable before its `Make`; class constants (default, another graph). R2 adds: nested `Fact.In`; a handle scoped to another tag inside `Fact.In`; a scoped read of a table with a sort column; a scoped write; an erasing violation; `ReadsOwnFacts` without a licence or a reason; a first scoped read after a tagged scope froze; class constants from other scopes | R1a, R2 |
 | `Rules/LoweringTests` | The engine rule of a lowered program (through `Relations.BridgeQuery`): atom order; relation atoms end with the unit constant; steps as `QueryPrim` in placement order; head operations in call order; descriptions (§6.4.3); the naive twin lowered only when `SemiNaive = false` is first used | R1a |
 | `Rules/ActionTests` | Get-or-add duplicates merged by the rebuild; `C.Of(k).Is(x)` unions; lattice writes merge; `Rewrite` with a variable right side unions; `Make` variables in heads; a rule's write conflicting on a function without a lattice gives `RuleEvaluationException`, after which the scope `IsFaulted`, `Failure` is that exception, and `Run` throws `InvalidOperationException` with it as `InnerException`; a primitive throwing in a filter, a let and a head gives `RuleEvaluationException` with the rule name and bindings, sets rendered as `{a, b}`; an overflow of the built-in `+` or `-` drops the match in a body and fails the rule in a head (D31) | R1a |
 | `Rules/IdConstantTests` | Behaviour only: a rule with a class constant matches the class after the constant loses a union; an action writing such a constant writes the canonical cell. Runs unchanged in R2 | R1a, R2 |
@@ -3528,13 +3646,31 @@ every checkpoint, and the seeded match totals must be at most the unseeded ones.
 | `Concurrency/ConcurrencyTests` | 32 queries under one frozen container on parallel threads give the extractions of serial runs; queries and extractors on a frozen schema from 8 threads | R2 |
 | `Concurrency/ParallelEquivalenceTests` | The scoped Cosmos programs with `DegreeOfParallelism = 4` on the graph and on query scopes: every scope's facts equal the serial run's modulo renaming (`TermNamer`); extraction is compared at 1 only | R2 |
 | `Extraction/ContextExtractionTests` | Extraction in a child sees inherited and own rows and the child's equalities; a parent change makes a child's extractor stale; a query in the child does not | R2 |
+| `Scopes/MirrorSyncTests` | A host write into an ancestor of the tagged scope is synced before the next run and before the next query (the view-stamp key); a mirror created after the tag's last sync, by a rule or by a query, is synced before its first read (the copy-rule-count key, N61) | R2 |
+| `Scopes/FreezePlanTests` | A `Freeze` plans every rule a descendant can run, and no other container's local rules; the root's `Freeze` plans nothing | R2 |
+| `Scopes/LocalRuleScheduleTests` | A local rule runs only when its own ruleset is scheduled, in its owner and in a descendant | R2 |
+| `Scopes/RunTagResolutionTests` | A run whose later step, or a local rule it reaches, reads a tag that does not resolve throws before its first step: the earlier steps write nothing, `Version` is unchanged and the scope is not faulted (§6.5.3, §6.7) | R2 |
+| `Scopes/DeferredReleaseTests` | A frozen scope disposed during an extraction is released after the extraction (D40) | R2 |
+| `Scopes/DisposeInsideARunTests` | A sibling disposed from a primitive of a run in its domain is released when the run ends | R2 |
+| `Scopes/DisposedChildListingTests` | A disposed child waiting for its release is not listed in `Children` | R2 |
+| `Scopes/ScopeDepthTests` | The scope layer refuses a child below depth 31 with its own message | R2 |
+| `Scopes/CatchUpVersionTests` | The catch-up a call makes first moves no `Version` (N87): a read in the innermost of two writable children after a root write moves neither child's; a write that changes nothing, a run with nothing to do, and a child's `Freeze` after its parent wrote and froze keep it; a scope's own union over an ancestor's rows still moves it | R2 |
+| `Scopes/OpenBatchDomainTests` | While a `Write` batch is open (N88), its writable ancestors, the root included, refuse writes, runs and nested batches, so an ancestor write that would conflict with the batch's plan is refused and the batch commits; the ancestors accept writes again once the batch ends, even after its callback threw; writes into a descendant, into a sibling and a nested batch in a descendant are allowed; an ancestor's query between the batch's calls (a mirror sync) leaves the writer usable and moves `Version` exactly as the same query before the batch | R2 |
+| `Extraction/ExtractedClassOriginTests` | An extracted term's classes carry the extracting scope's origin (D39) | R2 |
+| `Concurrency/FrozenScopeOverlapTests` | While an extraction is held inside its cost function, or a query inside its filter, on another thread, the same frozen scope serves reads, queries and extractions on this thread (no guard on a frozen scope, D47) | R2 |
 | `Cases/LiftTests` | Case joins come from `ValueLattice.CaseJoin`; relation rows lift through the function kind with a unit output; `Lift = false` tables are not lifted; mirror tables and `Contradiction` are never lifted as rows; vacuous cases are disposed after `CaseSet.Lift` and leave `Cases`; zero cases throw; cancellation between rounds | R3 |
 | `Cases/SplitTests` | Persistent cases absorb later parent facts within one `Run`; records are disposed when the `Run` ends and a second `Run` splits again; `CaseLimit` and `SplitDepthLimit` skip; an empty element set skips and is counted; a guarded split opens no case when the guard fails; a split step on a contradictory scope does nothing; `DefineDomainSplit` equals the hand-written rule; nested splits (phase A, then phase B); cases are disposed when a run stops early or throws; `Children` is empty after every `Run`; `OpenCases` on a frozen scope throws; `InheritWatermarks = false` reaches cases | R3 |
 | `Cases/ContradictedCaseTests` | After a case derives `Contradiction`: `IsContradictory` is true; `Check`, `Get`, `Find`, `Count`, `Extract`, `Make`, `Write`, `CreateChild` and `OpenCases` throw `ScopeContradictedException`; `Assume` does nothing; `Union` returns false; `Run` returns `Contradiction` with no iteration; `Dispose` works | R3 |
 
 Beside these classes, `src/Eggnog.Tests/Review/` keeps the tests the R1a and R1b reviews added (API, semantics, batch
 atomicity, partial primitives, extraction and the literal suite's `print-size` figures; for example
-`R1bApiCoverageTests.TheRowLimitIsCheckedBeforeTheFirstIteration`), and `src/Eggnog.Tests/Support/` the small theories
+`R1bApiCoverageTests.TheRowLimitIsCheckedBeforeTheFirstIteration`) and the R2 reviews' probes (`R2ApiReviewTests`,
+`R2CompletenessReviewTests`, `R2ConcurrencyReviewTests`, `R2SoundnessProbeTests`, and `R2FixVerificationTests`, which
+pins N86: class constants equated in a body match in a child that unions them, whether or not the root is busy, and
+`R2FixVerification2Tests`, which pins N86 under semi-naive runs and N87: a descendant's lazy catch-up moves no `Version`,
+and `R2FixVerification3Tests`, which pins N88: an ancestor's write inside a descendant's batch is refused and moves no
+`Version`), and
+`src/Eggnog.Tests/Support/` the small theories
 they share (`NodeTheory`, `BlockingRun`, …). Both follow the same conventions and run in every milestone's baseline.
 
 ### 8.4 Running
@@ -3626,9 +3762,10 @@ main. **Status:** done; merged to main at `edd1fa9` (with colors M9.3–M9.4). �
 - `Differential/RuleLayerDifferentialTests` at 300 seeds.
 
 **Done when** the baseline holds, the literal suite is green in full, and the differential is green at 300 seeds with a
-5000-seed run recorded with the change. **Status:** complete, not yet merged. The engine suite (8516 tests, E12's
-included) and the 5000-seed run (39.0 s on net10.0, 39.4 s on net8.0) are green; §15 lists what remains before the
-merge.
+5000-seed run recorded with the change. **Status:** done; added at `80675d8` and merged to main at `3b9dda1` (with
+colors M10.1–M10.2). The engine suite (8516 tests, E12's included) and the 5000-seed run (39.0 s on net10.0, 39.4 s on
+net8.0, recorded in the `RuleLayerDifferentialTests` class remarks) were green. §15 lists what it changed in this spec,
+and §15.5 the items still open.
 
 ### R2: scopes, frozen bases, per-query layers, local rules, concurrency
 
@@ -3657,7 +3794,18 @@ merge.
 
 **Done when** the baseline holds; all of the above is green with the default `DegreeOfParallelism` of 1;
 `ConcurrencyTests` is green on 8 threads and `ParallelEquivalenceTests` at 4; and the R1 suites pass unchanged in
-source.
+source, with three exceptions: `Rules/RootRelowerTests` is deleted;
+`QueryTests.AClassConstantThatLostAUnionIsMatchedCanonically`, whose `/k1` assertion tested R1's re-lowering, now
+asserts the same matches through the variant lowered at definition (N74); and
+`RuleDefinitionTests.ClassConstantsAreComparedByClassWhenTheRuleIsDefined`, which asserted the refusal of class
+constants of different classes, is now `ClassConstantsAreComparedByClassWhereTheRuleRuns` (N86).
+
+**Status:** done; merged to main with colors M10.4. §15.8 records how it was built (N60–N89). No engine file changed.
+At the merge `Eggnog.Tests` (498 tests), `Eggnog.Relations.Tests` (11,811 tests, 10 of them opt-in and skipped)
+and `Eggnog.Storage.Tests` (816) pass on net10.0 and net8.0, so the baseline holds. `ConcurrencyTests` runs on 8
+dedicated threads and `ParallelEquivalenceTests` at degree 4; the scope differential and the inheritance equivalence
+run 300 seeds. The benchmark project's Release build is clean. Not timed: R2's per-iteration cost at the root, left to
+an idle-machine run (§15.5).
 
 ### R3: case splits and lift
 
@@ -4496,8 +4644,8 @@ These are accepted. None is an open question: each has a decision above.
 9. **Scoped reads must be defined before tagged scopes of the same graph freeze** (§6.8). A late first read is rejected
    with a message that says so. Theories that define all their global rules up front, as `CosmosTheory` does, never
    meet it.
-10. **R1 re-lowering** (§6.4.5) re-plans a rule whenever one of its class constants loses a union. This is rare (class
-    constants come from host `Make`s), and it ends with R2.
+10. **R1 re-lowering** (§6.4.5) re-planned a rule whenever one of its class constants lost a union. It ended with R2,
+    which lowers each variant once and leaves the constants to the engine's per-context canonicalization (X19).
 11. **Split demand trades completeness for cost** (D43). A query that constrains a path a discriminator's branches
     govern, without mentioning the discriminator, gets no case split on it, so facts only that split would prove are
     missed (soundly). The schema's own split has already lifted everything the schema alone implies. A theory that
@@ -4508,13 +4656,18 @@ These are accepted. None is an open question: each has a decision above.
     again from the scope where it is used.
 13. **Deferred release keeps memory alive** (D40). A retired frozen schema lives until its last query ends, and a child
     that is never disposed keeps its ancestors' engine state alive.
-14. **Class constants equated in a body are compared at definition** (§6.3 step 3). A rule whose body equates two class
-    constants of different classes is refused as never matching, although a later union would make them one class;
-    two constants already of one class are merged, and the rule keeps the first. A runtime check would need a new step
-    kind, which no milestone plans. The remedy is to define such a rule once the union holds.
+14. **Class constants equated in a body are compared where the rule runs** (§6.3 step 3, N86). A rule whose body
+    equates two class constants of different classes is accepted, and an `Equal` step compares them in each context
+    the rule runs in, so it matches in a child that unions them. The step costs one comparison per match; two
+    constants already of one class where the rule's constants come from are merged at definition, and the rule keeps
+    the first, with no step.
 15. **The host merge check reads tables** (D32, §6.6.1). In a graph with a function without a lattice keyed by a sort, a
     host batch that merges reads every row of the tables a merge can reach, once per batch. Batch such merges together
     (`Scope.Write`), or give the function a lattice. Cosmos defines no such function.
+16. **An open `Write` batch holds its ancestors' writes** (N88). While a batch is open on a scope, a write or run into
+    one of its writable ancestors from the batch's callback throws `InvalidOperationException`, because it could make
+    the batch's checked plan wrong. Write the ancestor before or after the batch; reads and queries of the ancestors,
+    and writes into descendants and siblings, are allowed meanwhile.
 
 ---
 
@@ -4643,13 +4796,13 @@ taken and why.
 
 ---
 
-## 15. Implementation notes (R1a-R1b, and the engine requests of colors M10.3-M10.4)
+## 15. Implementation notes (R1a-R1b, the engine requests of colors M10.3-M10.4, and R2)
 
-This section records how R1a and R1b were built against this spec, how colors M10.3 delivered this spec's engine
+This section records how R1a, R1b and R2 were built against this spec, how colors M10.3 delivered this spec's engine
 requests E4, E5, E7, E9 and E10 and §13 items 4–7, and how colors M10.4 delivered E8 and §13 items 8–9. Each note
 says what the spec said, what was built, and why. Where the built design is the better one, the sections in the last
 column now state it, and the note is the record of the change; where the spec was silent, those sections now fill the
-gap. Notes are numbered **N1–N59**; what is still deferred, with its milestone, is in §15.5.
+gap. Notes are numbered **N1–N89**; what is still deferred, with its milestone, is in §15.5.
 
 ### 15.1 Where the work stands
 
@@ -4658,11 +4811,15 @@ gap. Notes are numbered **N1–N59**; what is still deferred, with its milestone
   `Eggnog.Relations` and not the spike; `dist-nuget` packs `Eggnog` and `Eggnog.Relations` only; the CI matrix lists
   `Eggnog.Tests`; the README describes the library. A search of `src/Eggnog.Relations` on main finds no public type, so
   E11 also holds for the engine files M9.3–M9.4 added.
-- **R1b** is complete on its own branch and not yet merged (§15.5). It includes one engine change, E12 (N5). The engine
-  suite is green (8516 tests), and so is the 5000-seed differential run (39.0 s on net10.0, 39.4 s on net8.0, recorded
-  in the `RuleLayerDifferentialTests` class remarks).
-- **Engine requests.** Colors M10.3 delivered E4, E5, E7, E9 and E10 and §13 items 4–7 (§15.6); colors M10.4 delivered
-  E8 and §13 items 8–9 (§15.7). Every engine request R2 and R3 depend on is in.
+- **R1b** is on main. `80675d8` added it with one engine change, E12 (N5); `3b9dda1` merged it with colors M10.1–M10.2,
+  where the join kept after an early stop now releases what each of M10.2's prober pieces owns. The engine suite was
+  green (8516 tests), and so was the 5000-seed differential run (39.0 s on net10.0, 39.4 s on net8.0, recorded in the
+  `RuleLayerDifferentialTests` class remarks).
+- **Colors M10.3 and M10.4** are on main. M10.3 delivered E4, E5, E7, E9 and E10 and §13 items 4–7 (§15.6); M10.4
+  delivered E8 and §13 items 8–9 (§15.7). Every engine request R2 and R3 depend on is in.
+- **R2** is on main, merged with colors M10.4 (§9 R2, §15.8). It changes no engine file. At the merge, `Eggnog.Tests`
+  (498 tests), `Eggnog.Relations.Tests` (11,811 tests, 10 of them opt-in and skipped) and `Eggnog.Storage.Tests`
+  (816) are green on net10.0 and net8.0.
 
 ### 15.2 Engine changes
 
@@ -4680,14 +4837,14 @@ gap. Notes are numbered **N1–N59**; what is still deferred, with its milestone
 |---|---|---|---|---|
 | N6 | D32: host conflicts are checked against the stored value and within a batch, so "merge conflicts can therefore only come from rules" | Merges are checked too. A union, a sort equality, or a constructor write that gives an existing key another class makes phase 1 simulate the rebuild's congruence closure (`Host/HostBatch.Merges.cs`, a partial of `HostBatch`): an overlay union-find and a signature table over the rows a merge can reach. A function without a lattice that would get two values for one key throws `FactConflictException` before anything is staged. The check runs only in a batch that merges, and only when the graph has a function without a lattice keyed by a sort; it then reads every row of the affected tables once. Lattice merges a union causes still run at the rebuild, so a lattice that throws there faults the scope | The spec's sentence was false: a host union can make two stored rows of such a function congruent, and the rebuild's panic would fault the scope instead of refusing the write | D32, §3.1 `Assume` and `Union`, §3.5 `FactConflictException`, §4.5, §6.1, §6.6.1, §6.6.2, §6.13, §8.3 `HostWriteTests`, §11 risk 15 |
 | N7 | §4.1: `EngineScope.ForEach` is R1b (for `Rows`) | Added in R1a, with its `RootEngineScope` implementation | N6's merge check reads stored rows | §4.1 |
-| N8 | §6.3: `c1.Is(c2)` is "evaluated now" | Value constants compare by cell. Class constants compare by their canonical classes in the root (`Find` under the engine lock) when the rule is defined: one class, dropped (the rule keeps the first constant); different classes, *"never matches"* | The root is where a global rule's class constants come from (D39); comparing written cells would refuse constants already unioned. Left open: a rule refused this way would match after a later union; a runtime check would need a new step kind | §6.3 step 3, §11 risk 14 |
+| N8 | §6.3: `c1.Is(c2)` is "evaluated now" | Value constants compare by cell. Class constants compare by their canonical classes in the root (`Find` under the engine lock) when the rule is defined: one class, dropped (the rule keeps the first constant); different classes, *"never matches"* | The root is where a global rule's class constants come from (D39); comparing written cells would refuse constants already unioned. Superseded: from R2 different classes are compared at run time by an `Equal` step and never refused (N63, N86) | §6.3 step 3, §11 risk 14 |
 | N9 | §3.4, §6.1: an exception from a primitive fails the rule (R1a's first pass: overflow in `+` and `-` always fails it) | `Primitives.Add` and `Subtract` are partial, as egglog's `+` and `-` are (`checked_add`): an `OverflowException` in a body let drops the match without recording a failure; in a head it fails the rule (`RuleEvaluationException` with the rule name and bindings; the scope is faulted). Adds the internal `Primitive.IsPartial` and an `inBody` parameter to the `PrimitiveCall` constructor | egglog's semantics: a body match whose primitive has no result is no match. User primitives still have no "no result" outcome except throwing (§15.5) | D31, §3.4, §4.3, §4.4, §6.1, §6.4.2, §6.13 |
 | N10 | §3.5: `Bindings` such as `d={a, b} v="b"`; `Message` unstated | A set argument renders as `ValueSet<T>.ToString` does (`{a, b}`), any other value as its s-expression literal (`"b"`, `42`); elsewhere sets render as `(set-of …)`. For a primitive, `Message` is `rule 'r': primitive 'p' threw {type}: {message}` | Matches the documented example; the message names the rule, the primitive and the cause | §3.5, §6.1 |
 | N11 | §3.2: `Register<T>` refuses a taken type or name; `RegisterSet<T>` needs a registered element type that is not a sort | `Register<T>` also refuses `ClassId`, sort types and `ValueSet<>` types. `RegisterSet<T>` refuses an element type that is not `string` and implements neither `IComparable<T>` nor `IComparable`. `RegisterSet` and `RegisterEnum` are idempotent. `ValueTests.RegisteredTypesRoundTrip` now asserts the refusal for a non-comparable `Point` and uses `Set<Guid>` | Consistent with D20 (classes are never values; no sets of classes) and with the element order `ValueSet<T>` keeps | §3.2, §6.1 |
 | N12 | §6.1: a registered type without an order compares by "the cell" | Interned values compare by cell; a value never interned sorts after every interned one; two never-interned values compare by hash code (zero when equal), a preorder stable within the process | `Compare` must not intern (D15), and a value never interned has no cell | §3.2, §6.1 |
 | N13 | §3.1, §6.6.1: a rejected call writes nothing; silent on whether `Write` throws when the callback catches the rejection | `Write` returns normally and writes nothing: `Version` unchanged, the batch's `Make` classes invalid. An exception the callback lets escape propagates | Both reviews' tests require a normal return; atomicity holds either way | D30, §3.1, §4.5, §6.6.1, §6.13 |
 | N14 | D47, §6.12: `Scope` members enter the guard | Every `ScopeWriter` call also enters the scope's guard and checks `EngineCallMarker`. Any call that throws, a refusal on another thread included, rejects the whole batch; later calls are still checked, but nothing commits | A writer used from another thread would otherwise interleave with the batch's thread | D47, §3.1, §6.1, §6.6.1, §6.12 |
-| N15 | §6.6.1: silent on calls to the scope during its own `Write` | While a `Write` batch is open, the scope's own members, reads and queries included, throw `InvalidOperationException`; the batch's calls go through its `ScopeWriter` | A read would see contents the batch is about to change, and a nested batch would interleave with it | D30, §3.1, §4.10, §6.6.1, §6.13 |
+| N15 | §6.6.1: silent on calls to the scope during its own `Write` | While a `Write` batch is open, the scope's own members, reads and queries included, throw `InvalidOperationException`; the batch's calls go through its `ScopeWriter`. N88 extends the refusal to writes and runs of the scope's writable ancestors | A read would see contents the batch is about to change, and a nested batch would interleave with it | D30, §3.1, §4.10, §6.6.1, §6.13 |
 | N16 | §4.5, §6.6.1: an empty batch returns without committing | An all-holding batch still commits its origin, with no flush and no clock tick | The classes its `Make` calls returned (existing ones) stay valid (D39) | §4.5, §6.6.1 |
 | N17 | §6.6.2: `C.Of(k).Is(x)` is a row `C(k ++ [Find(x)])` | A new key becomes a pending term whose class is `x` (no fresh id, no union); a key the batch already plans as a term is unioned with `x`; an existing key with another class is a row that the union-id merge unions (a merge, checked by N6) | One row and no union in the common case | §6.6.2 |
 | N18 | §6.3 step 4: each round places "every step whose inputs are bound" | A step is placed when its inputs were bound when the round began; registers a round binds count from the next round | The placement does not depend on the declaration order within a round | §6.3 step 4 |
@@ -4725,22 +4882,27 @@ gap. Notes are numbered **N1–N59**; what is still deferred, with its milestone
 
 | Item | Milestone | Notes |
 |---|---|---|
-| Merge R1b to main, E12 included, with the 5000-seed figures of §15.1 in the commit message | R1b | R1b exists only on its branch |
-| Run `Eggnog.Storage.Tests` with R1b on net8.0, and again on net10.0 | R1b, before the merge | `Eggnog.Storage` references no project R1b changed. Earlier in R1b it passed on net10.0 (816/816); net8.0 has not been run, and §9's baseline requires it |
-| List `Eggnog.Tests` among the `InternalsVisibleTo` projects in `docs/engine/conventions.md` | With the R1b merge | Open since R1a; `Eggnog.Relations.csproj` and `Eggnog.csproj` already declare it |
-| Confirm the `Eggnog.Tests` CI matrix entry on a CI run | The first CI run after the R1b merge | The entry is in `.github/workflows/Eggnog.yml` on main since `edd1fa9`. It cannot run locally; the equivalent local builds and test runs pass on both TFMs |
+| Merge R1b to main, E12 included, with the 5000-seed figures of §15.1 in the commit message | Done: `80675d8`, merged at `3b9dda1` | The commit message says the 5000-seed run was made; its figures are in §15.1 and the `RuleLayerDifferentialTests` class remarks |
+| Merge R2 to main | Done: merged with colors M10.4 | Its notes were renumbered N60–N89 at the merge, after colors M10.4's N51–N59 (§15.8) |
+| Full net8.0 runs of `Eggnog.Relations.Tests` and `Eggnog.Storage.Tests`, which §9's baseline requires | Done at the R2 merge | Both pass on net10.0 and net8.0 with R2 and colors M10.4 (11,811 tests, 10 opt-in and skipped; 816 tests) |
+| List `Eggnog.Tests` among the `InternalsVisibleTo` projects in `docs/engine/conventions.md` | Done at the R2 merge | Open since R1a; `Eggnog.Relations.csproj` and `Eggnog.csproj` already declared it |
+| Confirm the `Eggnog.Tests` CI matrix entry on a CI run | The next CI run of main | The entry is in `.github/workflows/Eggnog.yml` on main since `edd1fa9`. It cannot run locally; the equivalent local builds and test runs pass on both TFMs |
 | A "no result" outcome for user primitives (a partial-primitive API) | Unscheduled; additive (D28) when a consumer needs one | Only the built-in `+` and `-` are partial (N9); a user primitive that throws fails the rule |
-| A runtime check for class constants equated in a body | Unscheduled | §11 risk 14 (N8) |
-| The R1 adapter's new members on contexts: `CanonicalizeColumns`, `TryExtract`, `TryGetCost`, `ForEach` for the merge check, and the deferred free of disposed queries (`FreeDeferred`, which `RootEngineScope` calls today) | R2 | `RootEngineScope` is deleted in R2 (§6.6.6 lists the context members). N8's comparison must use the owner's scope for a local rule's constants, and N6's merge check must read the scope's view, inherited rows included |
-| `RunStepKind.MirrorSync`, `SplitStep` and `Lift`; `RunStep.CasesOpened` | R2, R3 | As tagged in §3.9 (N39) |
-| A benchmark dry run after R1a's last engine fix | The next benchmark pass | Skipped because that fix only removed an uncalled member (N3); the full dry run before it (131 cases) and a filtered run passed |
+| A runtime check for class constants equated in a body | Done in R2 (N63, N86): every comparison that is not already true where the rule's constants come from is an `Equal` step; class constants are never refused | §11 risk 14 (N8) |
+| The R1 adapter's new members on contexts: `CanonicalizeColumns`, `TryExtract`, `TryGetCost`, `ForEach` for the merge check, and the deferred free of disposed queries | Done in R2 | `ContextEngineScope` (§6.6.6); N8 compares a local rule's constants in its owner; N6's merge check reads the scope's view, inherited rows included |
+| `RunStepKind.MirrorSync` | Done in R2 | — |
+| Engine request E8 and §13 items 8–9 (`CaseSet`, `SplitDriver` and the split hooks) | Done in colors M10.4 (§15.7) | R3 calls them (§9 R3) |
+| `RunStepKind.SplitStep` and `Lift`; `RunStep.CasesOpened`; `EngineScope.IsStopped`, `ScopeContradictedException` and the D45 answers; the split and lift steps of `DiagnosticsTests`; `ScopeTagTests`' refusals of another graph's tag by `DefineSplit` and `CaseSet.Add`; `DisposeTests`' "an open `CaseSet` defers its parent's release"; `ClassIdTests`' "a case's class is refused after the run that made the case"; the scoped Cosmos R3 tests (02 `TwoKindsNamedTogetherLowerTheReference`, `TheSameSplitDrivenByTheHost`, `AQueryThatDoesNotMentionTheDiscriminatorDoesNotSplit`; 04 `AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains`; 07 `ParkAndMapWrittenInLowerTheParkId`, `ParkAndMapSpeltPerKindLowerTheParkId`, `TheOfflineRefreshLowersEverything`; `SweepLinks.Compile` asserting 3 schema cases) and `CosmosTheory.Cases.cs` | R3 | As tagged in §3.9, §6.6.8 and §8 |
+| A rule-layer benchmark of R2's paths: queries on a frozen scope, transient children, mirror syncs, the `Equal` step's cost per match (N86), the catch-up each call makes first (N87), and the catch-up of each `ScopeWriter` call (N88) | No milestone | The benchmark project references only the engine, which R2 did not change; its Release build is clean |
+| Timed gates: R2's per-iteration cost at the root (the call and engine-call counters, the deferred-free check, the local-rule path walk, the late-rule tag check of N67) and per write or run (N88's read of the open-batch count) | No milestone: an idle-machine run | R2 built the benchmarks in Release only and timed nothing. The colors gates are listed in colors §21.11 |
+| A benchmark dry run after R1a's last engine fix | Done with colors M10.3 | That fix only removed an uncalled member (N3). Colors M10.3 dry-ran the benchmark project after it (colors §21.9) |
 
 ### 15.6 Engine requests delivered by colors M10.3
 
 Colors M10.3 put the bridge `EGraph` on a `Store` and added `EGraphContext`, per-context rules, concurrent children and
 extraction over a context. The colors spec records the whole milestone in its §21.9; these notes cover what this layer
-asked for. The R1 library (`RootEngineScope`) runs unchanged on the store-backed root, and every `Eggnog.Tests` test
-passes; one test changed with E5 (N44).
+asked for. The R1 library (`RootEngineScope`) ran unchanged on the store-backed root, and every `Eggnog.Tests` test
+passed; one test changed with E5 (N44). R2 then deleted `RootEngineScope` (§15.8).
 
 | # | The spec said | What was built | Why | Spec now |
 |---|---|---|---|---|
@@ -4756,8 +4918,8 @@ passes; one test changed with E5 (N44).
 ### 15.7 Engine request delivered by colors M10.4, and the R1 change it made
 
 Colors M10.4 added the lift primitives and split hooks (colors §11). The colors spec records the whole milestone in its
-§21.10; these notes cover E8 and §13 items 8–9, and one change M10.4 made to R1's `RootEngineScope` (N59). Every
-member E8 lists exists with the shape it gives; the notes record what the engine adds or decides where E8 is silent. No
+§21.10; these notes cover E8 and §13 items 8–9, and one change M10.4 made to R1's `RootEngineScope` (N59), which R2 then deleted
+(§15.8). Every member E8 lists exists with the shape it gives; the notes record what the engine adds or decides where E8 is silent. No
 library code calls the hooks yet (R3).
 
 | # | The spec said | What was built | Why | Spec now |
@@ -4771,3 +4933,49 @@ library code calls the hooks yet (R3).
 | N57 | E8: `Step` | `Step` refuses a frozen or faulted scope (`InvalidOperationException`; §6.9.4 refuses a frozen scope before it), returns false for a stopped or contradictory scope (§6.9.3 checks `IsContradictory` first) or at `DepthLimit`, and skips a request with fewer than one case and a request whose key an earlier request of the same step took (counted in `SplitsSkipped`) | §6.9.2 already skips empty sets in the source; the engine checks again | colors §11.3 |
 | N58 | §6.9.3: one cached `SplitDriver` per split node; colors §11.3 step 6, "every live record of the scope", and B6 over `SplitKey` | Each record names the driver that opened it; a step runs and lifts only its own driver's records, and B6 compares the source object by reference and the key cells. Two split nodes over one scope keep their in-case schedules, lift specs and reports apart, and a node's split is not skipped because another node's source at the same index split the same values | The revisited records did not say which driver opened them, and `SplitKey.Source` is an index into one driver's list (found in verification) | colors §11.3 |
 | N59 | §5.1, §6.6.5: R1's host batches create their state with `Database.CreateExecutionState(engine.NextTimestamp)` | `RootEngineScope` creates it with the internal `Database.CreateEngineState(engine.NextTimestamp)`: the same state, stamped with the store clock, without the DEBUG mark of a raw write. The library's public API and every `Eggnog.Tests` test are unchanged | Colors M10.4 turned a re-stamped catch-up copy into a DEBUG assertion (colors §19 item 9), from which stores written through the raw execution-state API are exempt, since their rows carry whatever stamps the caller gives them. The library stamps every row with the clock, so its stores keep the assertion (found in verification) | §5.1, §6.6.5, §9 R1a; colors §19 item 9 |
+
+### 15.8 R2: scopes, tags, local rules, concurrency
+
+R2 was built on colors M10.3, and merged with colors M10.4, with no engine change: it changes no file under
+`src/Eggnog.Relations`. Its notes were N51–N80 on its branch, written while colors M10.4 numbered its own N51–N59;
+they are N60–N89 here. Every
+`EngineScope` member maps onto one `EGraphContext` member for every scope, the root included (`ContextEngineScope`);
+`RootEngineScope`, the engine lock, the re-lowering of §6.4.5 and `Rules/RootRelowerTests` are deleted, and each rule
+variant is lowered once with its constants as written (X19 and I30 apply them per context). The public types only
+gained members (`Surface/PublicSurface.txt` has additions only), and no file of `src/Eggnog` imports
+`Eggnog.Relations`. Five reviews (soundness, API, an oracle review that planted 53 mutants, concurrency, completeness)
+added tests; the fixes they called for are N60 and N62–N73. Three verification rounds followed: the first's fix is
+N86, the second's N87, the third's N88. N89 records the internal members §4 now lists.
+
+| # | The spec said | What was built | Why | Spec now |
+|---|---|---|---|---|
+| N60 | §6.7 Freeze: freeze the engine, then give each live child subtree a new guard; "no descendant is in use" | The scope reads as frozen from the engine freeze on, so another thread may create a child (with a guard of its own) and use it before the reassignment. Freeze reassigns only the children that share its guard, and every entry reads the guard, enters it and reads it again (`Scope.EnterGuard`), moving to the new guard if a freeze reassigned it meanwhile; `TryRelease` does the same | Reassigning a guard a call holds let a third thread into the domain and made the call's exit throw (`R2SoundnessProbeTests.P11`, `R2ConcurrencyReviewTests`) | §6.7, §6.12 |
+| N61 | §6.8: a sync is skipped when `S.MirrorSyncedVersions[t] == S.Version` | The key is `(S.Engine.ViewStamp, the tag's copy-rule count)`. The view stamp sums the change stamps of `S` and its ancestors | A host write into a writable ancestor changes `S`'s view without moving `S.Version` (found by `ScopeDifferentialTests`, seed 219); a mirror created after the tag's last sync must be synced before its first read (`MirrorSyncTests`) | §4.10, §6.6.6, §6.8, §7.1 M |
+| N62 | D16, D49, §6.6.4: a query moves no `Version`; D48: a query syncs the mirrors it reads | `Scope.Version` is the engine's stamp less the stamp moves of the scope's mirror syncs (`Scope.ExcludeMirrorSync`); a sync never moves it, before a query, an iteration or a freeze | Mirror tables are internal, and not extraction tables, so a sync changes nothing a caller sees; both rules hold. `ScopedReadTests.AFrozenTaggedScopeIsNeverSynced` and `R2CompletenessReviewTests.P11` asserted that a sync moves `Version` and were corrected | §3.1 `Version`, §6.6.4, §6.6.6, §6.8 |
+| N63 | §6.3: `c1.Is(c2)` of class constants compared in the root under the engine lock (N8) | Compared at definition where it can be read now: a local rule in its owner, a global rule in the root when frozen or when this thread can take its guard. Otherwise the rule keeps the first constant and gains an `Equal` step (`ProgramStepKind.Equal`, the graph's `EqualFunction`), whose Id-constant operands the engine canonicalizes in the running context (X19). A query always compares at run time. N86 then removed the refusal of different classes: the comparison at definition only drops a constant already of one class | R2 removed the engine lock: reading the writable root from a definition on another thread raised the engine's domain error and could abort the run (D6, D47); a query whose classes come from a child was refused although they were one class where it ran (`R2CompletenessReviewTests.P02`–`P04`). `R2SoundnessProbeTests.P10` expected "never matches" for a global rule defined during a run; it now asserts the rule is accepted and never matches | §4.4, §6.3 step 3, §15.5 |
+| N64 | §6.3 step 2: the first scoped read creates the mirror during normalization | Atoms keep their source table until every other check passed; then `MirrorRegistry.GetOrCreateAll` checks the frozen counts of every new mirror and creates them while holding the writable root's guard | A refused definition left a mirror, its copy rule and a first read behind (`R2SoundnessProbeTests.P06`, `P07`) | §6.3 step 2 |
+| N65 | §6.3: a tag of another graph passed to `Fact.In` is an `ArgumentException` at that call | `Fact.In` compares the tag with the tables inside it; the builders' `When` and `Then` check every `Fact.In` tag (`EGraph.CheckFactTags`) | `Fact.In(tag, x.Is("a"))` holds no table, so compilation gave a `RuleDefinitionException` | §6.3 |
+| N66 | §6.13: an unresolved tag at a query, before any work | `QueryRunner` resolves every tag before it enters the scope, and `MirrorSync.Ensure` resolves every tag before its first sync | The first tag's sync ran before the second tag failed | §6.6.4, §6.8 |
+| N67 | §6.5.3 resolves tags at `Run` only; D6 lets a rule join the next iteration | A rule defined during the run whose read tags the iteration's scope cannot resolve is left out of that iteration (`ScheduleExecutor.Resolvable`, allocation-free when every rule resolves) | Failing mid-run would leave earlier iterations' writes and lose the report (`R2ConcurrencyReviewTests`) | §6.5.3, §6.13 |
+| N68 | D40: a release runs on whichever thread removes the last obstacle, taking the guard | The release takes the guard under the guard's release lock (`TryEnterForRelease`); `ScopeGuard.Enter`, finding the guard held, waits on the release lock and tries once more, failing only when a call holds it | A `Dispose` on one thread made the domain owner's concurrent call (a `Freeze`, say) fail with "in use on another thread" (`ChildrenDisposedWhileTheirParentFreezesAreAllReleased`, flaky before) | §4.1, §6.7, §6.12 |
+| N69 | D49, §6.4.6: free a disposed query's variants unless an engine call holds the R1 engine lock | `EGraph.ActiveEngineCalls`, an interlocked count `ContextEngineScope` keeps around calls that may run user delegates (flush, run, query, freeze); while it is positive, or from a user delegate, the variants go to the graph, which frees them in the next `PrepareRules` or `PrepareVariant` | No engine lock in R2; keeps `DisposalWhileAnotherThreadRunsDoesNotWaitForTheRun` | §4.4, §4.10, §6.4.4, §6.4.6, §6.6.6 |
+| N70 | E10: `Freeze` plans every query's default variant | The listed queries are held until the engine froze; one disposed before the list is left out | A query disposed and freed on another thread made the engine refuse the list (`ArgumentException`) | §6.7 |
+| N71 | D40: release waits for children and a busy domain | Also for a per-scope count of calls in progress (`BeginCall`/`EndCall`), and, inside an engine call of the scope's domain, for the guard's last exit. `ScopeGuard.Exit` leaves the domain before it takes the deferred list | Frozen-scope reads take no guard, so the count is what keeps a reader's scope alive (`DeferredReleaseTests`); a primitive that disposes a scope of its own domain would make the engine refuse a re-entrant disposal (`DisposeInsideARunTests`) | §6.7 |
+| N72 | §6.7: silent on `CreateChild(graph.RootTag)` | `ArgumentException`: the root tag is the root's | `In(RootTag)` would otherwise resolve to a scope other than the root | §3.1, §6.7, §6.13 |
+| N73 | §2.4, §6.12: extractors over a frozen scope are thread-safe | One `Extractor` instance serializes its calls on a private lock | Its engine caches are shared; eight threads on one extractor corrupted them (`R2ApiReviewTests`) | §6.12 |
+| N74 | §9 R2: the R1 suites pass unchanged in source | `QueryTests.AClassConstantThatLostAUnionIsMatchedCanonically` asserted R1's re-lowered `/k1` variant; it asserts the same matches through the variant lowered at definition | The behaviour is unchanged; the mechanism it named is gone | §9 R2 |
+| N75 | §4.1: `ScopeRuntime.Of` finds the context's runtime through `GetLocal` | It follows `state.View.Owner.Owner.Host`, and falls back to the root's runtime when the view has no context of this graph | A child's failure is reported in the child (`R2CompletenessReviewTests.P12`) | §4.1 |
+| N76 | §6.8: copy rules in the internal ruleset `$mirror` | Each copy rule's `CompiledRule` carries an internal `Rule` of an unregistered `$mirror` ruleset; its `LoweredRule.Rule` is null, so copy rules never appear in `RunReport.Rules`. Mirror handles have negative unique `Index` values and are published in `TableOf`, not `Tables`; a scoped view handle shares its source's `Index`, `Function` and `Name` and renders as `dom@schema` | `CompiledRule.Rule` is not nullable; the memo keys of `ProgramBuilder` key on `(Index, read scope)` | §6.4.3, §6.8 |
+| N77 | §6.11: `CountRows` and `Rows` | They accept a scoped view handle and read the resolved scope; a mirror handle is refused | The spec was silent on views | §3.1, §6.11 |
+| N78 | §6.3 step 7 and head facts: no message for an analysis writer's scoped atom or a head `Fact.In` | *"rule writes analysis table 'X' and may not read scoped atoms; it reads 'T@tag'"*; *"head facts are writes; Fact.In('t') is read-only"*; a host write through `Fact.In` or a view is an `ArgumentException` naming it read-only | Messages the spec did not give | §6.3 |
+| N79 | §6.7: `Freeze` steps | `Freeze` holds the definition lock from the mirror sync through `AddFrozen`, and refuses a call from inside another call of its domain (an observer gets the observer message) | A first scoped read on another thread could otherwise create a mirror that stays empty in the frozen scope (invariant M); step 4 reassigns guards an outer call holds | §3.1, §6.7, §6.13 |
+| N80 | §8.2: the scope differential and the inheritance equivalence | The generator keeps lattice semantics deterministic: a function's value is read only into a fresh variable that heads write into a function merged the same way, with no joins, filters or relation rows on it. The driver uses every body variable (a filter that keeps every value, a disequality of each class variable with a class no row holds), so match counts are distinct full bindings as colors' `ColorSchema.Keep` makes them, and `InheritanceOffEquivalenceTests` asserts each seed's seeded total at most its unseeded one, and the sum below | Matching transient lattice values is order-dependent in egglog too; without the keep steps, four seeds counted more seeded matches than unseeded (`R2CompletenessReviewTests.P09`) | §8.2 |
+| N81 | §6.11: an observer may make no structural call | `CreateChild` refuses a call from a run observer; `Freeze` gives the observer message | `CreateChild` entered through the read path, which did not check the observer flag | §3.1, §6.7, §6.11, §6.13 |
+| N82 | §6.6.1: a `ScopeWriter` call after its batch ended throws `ObjectDisposedException` | The writer checks that the batch has not ended again once it holds the guard | A call from another thread that waited out the batch could plan into the committed batch | §6.6.1, §6.13 |
+| N83 | §3.4: `Fact.In(tag)` with no facts | Allowed: true in a host check, no atom in a rule body, an empty rendering | Unspecified; recorded as built | — |
+| N84 | §8.3: the R2 concurrency gates | `ConcurrencyTests`, `QueryTests`' eight-thread frozen query, `ScopeTagTests`, `ContextExtractionTests` and `ScopeTreeTests` run on dedicated threads that meet at a barrier (`Support/DedicatedThreads`) and assert that every thread ran; `TwoGraphsShareNoTagState` (both orders and on eight threads) and `ParallelEquivalenceTests` run every R2 scenario query (`Cosmos/Scoped/ScopedScenarioCases`) | `Parallel.For` may run every iteration on the calling thread when the pool is busy (N24); the spec asks for every scenario | §8.3 |
+| N85 | §8.3: the R2 rows | The reviews added `MirrorSyncTests`, `FreezePlanTests`, `LocalRuleScheduleTests`, `RunTagResolutionTests`, `DeferredReleaseTests`, `DisposeInsideARunTests`, `DisposedChildListingTests`, `ScopeDepthTests`, `ExtractedClassOriginTests`, `FrozenScopeOverlapTests`, and the probes under `Review/R2*` | Each pins a behaviour that a planted mutant or a review found unpinned; §8.3 has a row for each class | §8.3 |
+| N86 | §6.3 step 3: `c1.Is(c2)` of class constants of different classes refused as *"never matches"* when compared at definition (N8, N63) | Class constants are never refused. The definition-time comparison (in the owner for a local rule; in the root for a global rule, when frozen or when this thread can take its guard) is used only to drop a constant already of one class. Different classes, or a scope that cannot be read now, keep both constants and add the `Equal` step | A global rule runs in every scope a run reaches and a local rule in its owner's descendants (§6.5.2); a child may union classes that differ at the root or in the owner (context = copy), so the refusal was unsound there, and whether a definition was refused depended on whether another thread held the root's guard (D6). A union at the root or in the owner holds in every descendant, so dropping a constant already of one class stays sound. `R2FixVerificationTests.V01`–`V05` pin this; `RuleDefinitionTests.ClassConstantsAreComparedByClassWhenTheRuleIsDefined` asserted the refusal and is now `ClassConstantsAreComparedByClassWhereTheRuleRuns` | §6.3 step 3, §11 risk 14, §15.5 |
+| N87 | D16, D49: `Version` moves on every effective change to the scope's own layer, catch-up copies included, and never on a query, a read or a write that changes nothing | `Scope.Version` also leaves out the catch-up each call makes first (`Scope.CatchUp`, used by every read, query, write, run, `CreateChild`, `CreateExtractor` and a child's `Freeze`): each writable scope from the first frozen ancestor or the root down to the called scope is brought up to date outermost first, and the stamp moves of its rebuild are subtracted from its own `Version`. The copies a scope's own union makes over rows already there (in that call's flush or run) still move it. The root is not measured and its catch-up is as before | A descendant catches up with a writable ancestor lazily, so when its own union came first and the ancestor's write later, the copies were made at its next call, even a read or a query, and moved its `Version` there; both halves of D16 could not hold in that order. Leaving that catch-up out keeps every read and query from moving `Version` and makes `Version` count only what the scope's own calls change: an ancestor's write never moves it, as it never did when no copies were needed. An eager catch-up at the ancestor's write was rejected: the ancestor would pay for every descendant (a child costs in proportion to what it touches). Cost: two reads of the change stamp per writable scope on the path, none at the root. `R2FixVerification2Tests.Q05`/`Q06` and `CatchUpVersionTests` pin this | D16, §2.3, §3.1 `Version`, §6.5.3, §6.6.1, §6.6.3, §6.6.4, §6.6.6, §6.10 |
+| N88 | N15, §6.6.1, §6.13: silent on calls into other scopes of the thread domain while a `Write` batch is open; N87: the catch-up each call makes first is left out of `Version` | While a batch is open on `S`, every writable ancestor of `S` (they share its guard) refuses writes and runs with *"Scope 'X' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch."*: `Write` counts its batch in each writable ancestor (`Scope.CountOpenBatch`) and `EnterWrite` reads that count. A refused call writes nothing and does not reject the batch. Every other call of the domain is allowed (reads, queries, `CreateChild`, extractors and `DefineRule` on the ancestors; writes, runs and nested batches in descendants and siblings), and each `ScopeWriter` call, and `Write` before it commits, brings `S` up to date first (`Scope.CatchUp`), left out of `Version` as at a call's entry | The batch's calls are checked against `S` as it stands when each is made, ancestors' rows included: which facts hold already, and the conflicts of D32, merges included. An ancestor write between them could make the plan wrong (a function without a lattice given another value would fault `S` at the commit instead of throwing `FactConflictException`), and its catch-up at the commit moved `S.Version` (`R2FixVerification3Tests.V03`), or a later `ScopeWriter` call failed with the engine's "call EnsureClean() first" (`V02`). Catching up per call cannot repair the plan; refusing only the writes that change what the batch read keeps everything else usable. An ancestor's query may still sync its mirrors, which writes only internal tables the batch cannot plan into: the per-call catch-up covers it. Cost: one read of a field per write or run, one increment per writable ancestor per `Write`, and two stamp reads per writable scope on the path per `ScopeWriter` call; none at the root beyond the field read. `R2FixVerification3Tests.V02`/`V03` asserted the ancestor write was allowed and now assert its refusal; `OpenBatchDomainTests` pins the rest | D30, §2.4, §3.1 `Write`, §6.5.3, §6.6.1, §6.12, §6.13, §11 risk 16 |
+| N89 | §4.1, §4.4, §4.7, §4.10: the internal members | `EngineScope` adds `IsFaulted` (the context's fault flag, E7), and its `CreateChild` returns a `ContextEngineScope`, which adds `Runtime` and `ViewStamp`. `ScopeGuard` adds `TryEnter`, `TryEnterForRelease`, `ExitAfterRelease` and `Depth`. `RuleVariants.Get` takes no constants. `ProgramStepKind.Equal` and `EqualFunction` are new. `MirrorRegistry.CopyRules` returns an array, and `AllCopyRules` lists every copy rule for a freeze. `EGraph` and `Scope` gain the internal members §4.10 lists (among them `Equal`, `ActiveEngineCalls`, `CheckFactTags`, `CatchUp`, `EnterGuard`, `BeginCall`/`EndCall`, the count of open batches below a scope and the mirror-sync key), and from R2 the bridge root API rows of §5.1 have no caller | Implementation structure that N60–N88 call for; no behaviour beyond theirs | §4.1, §4.4, §4.7, §4.10, §5.1 |

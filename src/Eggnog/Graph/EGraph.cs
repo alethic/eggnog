@@ -7,27 +7,34 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A theory and its database: column types, tables, rulesets, and the root of a tree of scopes. Holds only managed
-    /// memory; not disposable.
+    /// A theory and its database: column types, tables, rulesets, scope tags, queries, and the root of a tree of scopes.
+    /// Holds only managed memory; not disposable.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Threads (§6.12): rule and ruleset definitions may be made from any thread at any time and take part from the next
-    /// iteration of every run (D6). A table definition throws <see cref="InvalidOperationException"/> while another thread
-    /// is using the root (from R2: until the root is frozen); sorts and value types may be registered from any thread.
-    /// User delegates the engine invokes (primitives, lattices, filters, cost functions) must not call into a graph.
+    /// Threads (§6.12): rule, ruleset, query and tag definitions may be made from any thread at any time and take part
+    /// from the next iteration of every run (D6). A table definition may be made from any thread once the root is frozen;
+    /// while it is not, it throws <see cref="InvalidOperationException"/> if another thread is using the root at that
+    /// moment. A rule definition whose first scoped read of a table creates a mirror table counts as a table definition.
+    /// Sorts and value types may be registered from any thread. User delegates the engine invokes (primitives, lattices,
+    /// filters, cost functions) must not call into a graph.
     /// </para>
     /// <para>
-    /// R1 runs everything at the <see cref="Root"/>, on the engine's egglog-compatible root.
+    /// The graph runs on one engine e-graph over a store (colors §10.1): every scope is one engine context, the
+    /// <see cref="Root"/> included. A graph defined with nothing written at its root serves an empty frozen root, a frozen
+    /// schema per container (children of the root), and a layer per query beneath it (§2.1).
     /// </para>
     /// </remarks>
     public sealed partial class EGraph
     {
 
         int serial;
+        int scopeSerial;
+        int engineCalls;
 
         /// <summary>
-        /// Initializes an empty graph: its value types, its root, and its <see cref="Contradiction"/> relation.
+        /// Initializes an empty graph: its value types, its root (tagged <see cref="RootTag"/>), and its
+        /// <see cref="Contradiction"/> relation, designated as the engine's contradiction function (E4).
         /// </summary>
         /// <param name="options">The graph's options; <c>null</c> for <see cref="EGraphOptions.Default"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is less than
@@ -49,10 +56,18 @@ namespace Eggnog
             Values = new ValueStore(BaseValues);
             Unit = new UnitColumnType(BaseValues) { Store = Values };
             NotEqual = Engine.RegisterExternalFunction(new NotEqualFunction(Unit.Unit));
+            Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));
             Extraction = new ExtractionCatalog(this);
+            RuntimeSlot = Engine.NewLocalSlot(static _ => new ScopeRuntime());
+            Mirrors = new MirrorRegistry(this);
+            RootTag = new ScopeTag(this, RootTagName, 0);
+            scopeTags = new[] { RootTag };
+            scopeTagsView = Array.AsReadOnly(scopeTags);
+            scopeTagsByName.Add(RootTagName, RootTag);
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
             Contradiction = DefineRelation("contradiction");
+            Engine.DesignateContradiction(Contradiction.Function);
         }
 
         /// <summary>
@@ -61,7 +76,8 @@ namespace Eggnog
         public ValueStore Values { get; }
 
         /// <summary>
-        /// Gets the root scope, where R1 runs everything.
+        /// Gets the root scope: what holds unconditionally. Freeze it empty so that containers can be sibling children
+        /// (§2.1).
         /// </summary>
         public Scope Root { get; }
 
@@ -87,16 +103,53 @@ namespace Eggnog
         internal Relations.EGraph Engine { get; }
 
         /// <summary>
-        /// Gets the lock of definitions: table, sort, ruleset and rule definitions take it (lock order: definition lock,
-        /// then engine lock).
+        /// Gets the lock of definitions: table, sort, ruleset, tag, query and rule definitions take it, and so does a
+        /// freeze while it syncs a tag's mirrors and counts the frozen scope (§6.8). Nothing blocks while holding it except
+        /// engine definitions and a freeze's engine work; guards never block.
         /// </summary>
         internal object DefinitionLock { get; } = new();
 
         /// <summary>
-        /// Gets the lock of the bridge (R1, deleted in R2): every root engine call holds it for one call, and so do bridge
-        /// mutations of definitions, which then wait for the current engine call.
+        /// Gets the per-context slot of <see cref="ScopeRuntime"/>s (§4.1, colors §10.1): every engine context of the graph
+        /// holds its own, built on first use.
         /// </summary>
-        internal object EngineLock { get; } = new();
+        internal Relations.ContextLocalSlot<ScopeRuntime> RuntimeSlot { get; }
+
+        /// <summary>
+        /// Gets the mirror tables and copy rules of scoped reads, and the counts of live frozen scopes per tag (§6.8,
+        /// D38).
+        /// </summary>
+        internal MirrorRegistry Mirrors { get; }
+
+        /// <summary>
+        /// Gets or sets whether children and transient children are created with watermark inheritance
+        /// (<c>ContextOptions.InheritWatermarks</c>, colors §10.2): <c>true</c> by default; differential tests compare
+        /// runs with it off (§8.2). Read when a child is created.
+        /// </summary>
+        internal bool InheritWatermarks { get; set; } = true;
+
+        /// <summary>
+        /// Gets the number of engine calls that may run user delegates (runs, queries, flushes, freezes) in progress on
+        /// any thread: while it is not zero, a disposed query hands its variants to the graph instead of freeing them
+        /// (§6.4.6). One volatile read.
+        /// </summary>
+        internal int ActiveEngineCalls => Volatile.Read(ref engineCalls);
+
+        /// <summary>
+        /// Counts an engine call that may run user delegates as started. One interlocked increment.
+        /// </summary>
+        internal void EnterEngineCall() => Interlocked.Increment(ref engineCalls);
+
+        /// <summary>
+        /// Counts an engine call as ended. One interlocked decrement.
+        /// </summary>
+        internal void ExitEngineCall() => Interlocked.Decrement(ref engineCalls);
+
+        /// <summary>
+        /// Gets the next graph-unique serial number of a scope, for paths: <c>root/schema#2/query#7</c>.
+        /// </summary>
+        /// <returns>The serial number.</returns>
+        internal int NextScopeSerial() => Interlocked.Increment(ref scopeSerial);
 
         /// <summary>
         /// Gets the engine's base value registry.
@@ -117,6 +170,11 @@ namespace Eggnog
         /// Gets the graph's not-equal filter.
         /// </summary>
         internal Relations.ExternalFunctionId NotEqual { get; }
+
+        /// <summary>
+        /// Gets the graph's equal filter, for class-constant comparisons left to run time (§6.3 step 3).
+        /// </summary>
+        internal Relations.ExternalFunctionId Equal { get; }
 
         /// <summary>
         /// Gets every live engine variant, by description (§6.4.3).

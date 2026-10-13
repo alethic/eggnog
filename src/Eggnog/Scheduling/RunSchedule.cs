@@ -35,7 +35,7 @@ namespace Eggnog
                 return false;
             }
 
-            return executor.RunIteration(scope, executor.RulesFor(Rulesets, scope), inCase);
+            return executor.RunIteration(scope, ScheduleExecutor.RulesFor(Rulesets, scope), inCase);
         }
 
         /// <inheritdoc />

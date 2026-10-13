@@ -14,7 +14,8 @@ namespace Eggnog
     /// <see cref="Scope.Write"/> it is re-entrant, and from any other thread it throws
     /// <see cref="InvalidOperationException"/> instead of interleaving with the batch. A call that throws, for any reason,
     /// rejects the whole batch: <see cref="Scope.Write"/> then writes nothing, even when the callback caught the
-    /// exception, and the classes the batch's <see cref="Make{TSort}"/> calls returned stay invalid (D39).
+    /// exception, and the classes the batch's <see cref="Make{TSort}"/> calls returned stay invalid (D39). While the batch
+    /// is open, the scope's writable ancestors refuse writes and runs (N88).
     /// </remarks>
     public sealed class ScopeWriter
     {
@@ -138,8 +139,11 @@ namespace Eggnog
         internal void Close() => closed = true;
 
         /// <summary>
-        /// Enters the scope's thread domain for one call (D47). A refusal while the batch is open rejects the batch; a
-        /// call after the batch ended changes nothing.
+        /// Enters the scope's thread domain for one call (D47) and brings the scope up to date with its ancestors (N88). A
+        /// refusal while the batch is open rejects the batch; a call after the batch ended changes nothing. The batch's end
+        /// is checked again once the domain is entered: the batch's thread closes the writer before it leaves the domain, so
+        /// a call from another thread that waited out the batch sees it ended instead of planning into a committed batch.
+        /// Cost: beyond the guard, two reads of the change stamp per writable scope from here up to the first frozen one.
         /// </summary>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
@@ -155,10 +159,30 @@ namespace Eggnog
             try
             {
                 EngineCallMarker.ThrowIfActive();
-                Scope.Guard.Enter(Scope);
+                Scope.EnterGuard();
             }
             catch
             {
+                batch.Reject();
+                throw;
+            }
+
+            if (closed)
+            {
+                Scope.Guard.Exit();
+                throw new ObjectDisposedException(nameof(ScopeWriter), "The Write batch has ended.");
+            }
+
+            // A call the callback made in the domain between two of the batch's calls (an ancestor's query syncing its
+            // mirrors, say) may have left the scope behind its ancestors; writes and runs that would change what the batch
+            // read are refused (N88). The catch-up is left out of Version (N87).
+            try
+            {
+                Scope.CatchUp();
+            }
+            catch
+            {
+                Scope.Guard.Exit();
                 batch.Reject();
                 throw;
             }

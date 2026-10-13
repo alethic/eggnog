@@ -12,6 +12,13 @@ namespace Eggnog
         /// </summary>
         Iteration,
 
+        /// <summary>
+        /// A mirror sync (D48, §6.8): one iteration of a tag's copy rules in the tagged scope, just before a rule, query
+        /// or freeze read its mirrors. Not counted in <see cref="RunReport.Iterations"/>; its <see cref="RunStep.Rules"/>
+        /// is empty.
+        /// </summary>
+        MirrorSync,
+
     }
 
 }

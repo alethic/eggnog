@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Eggnog
 {
 
@@ -15,13 +17,17 @@ namespace Eggnog
         /// <param name="owner">The scope it is local to; <c>null</c> for a global rule.</param>
         /// <param name="isNaive">Whether every run matches in full.</param>
         /// <param name="draft">What its builder collected, for rendering.</param>
-        internal Rule(string name, Ruleset ruleset, Scope? owner, bool isNaive, RuleDraft draft)
+        /// <param name="licence">The effective licence: its own, else its ruleset's; <c>null</c> when exempt.</param>
+        /// <param name="readScopes">The distinct tags its scoped atoms read, in first-use order.</param>
+        internal Rule(string name, Ruleset ruleset, Scope? owner, bool isNaive, RuleDraft draft, ScopeTag? licence, IReadOnlyList<ScopeTag> readScopes)
         {
             Name = name;
             Ruleset = ruleset;
             Owner = owner;
             IsNaive = isNaive;
             Draft = draft;
+            Licence = licence;
+            ReadScopes = readScopes;
         }
 
         /// <summary>
@@ -35,7 +41,8 @@ namespace Eggnog
         public Ruleset Ruleset { get; }
 
         /// <summary>
-        /// Gets the scope the rule is local to; <c>null</c> for a global rule (always in R1).
+        /// Gets the scope the rule is local to (§6.7): it is active in that scope and its descendants. <c>null</c> for a
+        /// global rule.
         /// </summary>
         public Scope? Owner { get; }
 
@@ -43,6 +50,22 @@ namespace Eggnog
         /// Gets whether every run matches in full (a naive engine rule, which never inherits watermarks).
         /// </summary>
         public bool IsNaive { get; }
+
+        /// <summary>
+        /// Gets the rule's effective licence (D12): its own <see cref="RuleBuilder.Erasing"/> tag, else its ruleset's;
+        /// <c>null</c> when it has none, or when <see cref="RuleBuilder.ReadsOwnFacts"/> exempts it.
+        /// </summary>
+        public ScopeTag? Licence { get; }
+
+        /// <summary>
+        /// Gets the reason given to <see cref="RuleBuilder.ReadsOwnFacts"/>; <c>null</c> when the rule does not use it.
+        /// </summary>
+        public string? OwnFactsReason => Draft.OwnFactsReason;
+
+        /// <summary>
+        /// Gets the distinct tags the rule's scoped atoms read, in first-use order.
+        /// </summary>
+        public IReadOnlyList<ScopeTag> ReadScopes { get; }
 
         /// <summary>
         /// Renders the rule as written, as an s-expression:
