@@ -7,7 +7,7 @@ evaluated separately, because they have little in common beyond their size. Neit
 
 | # | Item | Verdict |
 |---|---|---|
-| S1 | A flag on the engine's lift report saying that the lift memo answered | Do now, as an internal engine flag with tests. The public members wait for a consumer or the pre-release API review |
+| S1 | A flag on the engine's lift report saying that the lift memo answered | Do now, as an internal engine flag with tests. The public members wait for a user's request or the pre-release API review |
 | S2 | An engine hook reporting each lift of a split step as it happens | Drop |
 | S3 | A cancellation token for split-step lifts, checked between rounds | Optional, low priority |
 | S4 | Report a failure recorded by the run's own catch-up together with the run's own failure, in `RunRulesCore` | Drop. Document the behaviour instead |
@@ -28,7 +28,7 @@ The case for each part:
   `Lifter.Run` and ran the full net10.0 suite: no test failed (section 3). An internal `LiftReport.Memoized`, set in
   the memo branch and asserted by the memo tests, closes that gap. It needs no owner decision, because the engine's
   `LiftReport` is internal. The public side (`Memoized` on the library's `LiftReport`, a memo count on `RunReport`) is
-  additive and can land at any time. No consumer has asked for it, and `RunReport.Lifts` already documents that it
+  additive and can land at any time. No user has asked for it, and `RunReport.Lifts` already documents that it
   includes memo answers. So it waits, unless the owner wants `Lifts` to change meaning before a stable release
   (question 1).
 - **S8** needs no production hook. A reflection-based corruption test of the kind that
@@ -39,7 +39,7 @@ The case for each part:
   own iteration is just as uncancellable as a lift, so the bound becomes the larger of one iteration and one lift
   round, not "one round instead of sixteen", and later rounds of a lift usually stage less than the first. Nothing
   depends on it.
-- **The dropped items** serve no consumer. S2 has no consumer, and its reconstruction is exact in count and order.
+- **The dropped items** serve no known use. Nothing needs S2, and its reconstruction is exact in count and order.
   S4 cannot occur through the library. S5 saves bytes only on layers that are touched but never probed. S7 serves
   egglog's `print-function`, which Eggnog has no frontend for.
 - **S6** is the one item that might matter for performance, but the prior is low (section 6). A padding experiment on
@@ -96,8 +96,7 @@ each was deferred because it was not needed for soundness or for the feature bei
   that it includes "those answered at once because nothing they read had changed since the last full lift". The
   public counter is therefore correct as documented.
 - The public `LiftReport` (`src/Eggnog/Cases/LiftReport.cs`) mirrors the engine's report and has no memo flag either.
-- The Cosmos plan reads `RunReport` only for triage ([cosmos-integration](../history/cosmos-integration.md), §4 and
-  the triage table). No consumer has asked to tell memo answers apart.
+- No user has asked to tell memo answers apart.
 - Tests. `LiftMemoTests` (`src/Eggnog.Tests/Relations/Cases/LiftMemoTests.cs`) recognize a memo hit only by
   `Changed == false` and `Rounds == 0`. Its other tests check the opposite direction: that the memo does not skip a
   wider spec or a wider limit.
@@ -292,10 +291,10 @@ The engine is internal, so every item's value reaches users only through the lib
 |---|---|---|---|
 | S1 (internal) | Maintainers | Makes the lift memo testable, which closes a gap the dry run shows (no test fails without the memo). The planned library-path "lift memo check" benchmark can also verify that it measures memo hits | A broken memo would go unnoticed until a split workload slows down |
 | S1 (public) | Library users tuning splits, should any ask | A user could tell lifts that ran rounds from memo answers; today `Lifts = 50` could be 50 full lifts or 49 memo answers | `RunReport.Lifts` stays as documented (all lifts). Additive later at no extra cost |
-| S2 | Users reading `RunReport.Steps` | Exact `Elapsed` per lift step, and exact `Changed` in multi-lift windows. No consumer has asked for it; the Cosmos plan reads `RunReport.Rules`, `StopReason` and `Steps` only for triage ([cosmos-integration](../history/cosmos-integration.md), §4 and the triage table) | Lift steps stay windowed approximations, documented as such |
-| S3 | Hosts that cancel runs: the Cosmos adapter cancels on `ForceHorn`, a runtime override and schema disposal (cosmos-integration, "Cancellation") | Cancellation latency during a split step falls from at most one lift to at most the larger of one iteration and one lift round. Each round first catches the parent and every case up, and later rounds usually stage less than the first, so the gain is well under the 16x the round limit suggests. Unmeasured; at the Cosmos plan's scale (B3: p99 of 5 ms per derivation with splits) probably tens of microseconds | D42's bound stays at "one iteration or one lift", which is documented and sound. The library's host `CaseSet.Lift` already honours its token |
+| S2 | Users reading `RunReport.Steps` | Exact `Elapsed` per lift step, and exact `Changed` in multi-lift windows. No user has asked for it | Lift steps stay windowed approximations, documented as such |
+| S3 | Hosts that cancel runs, for example on a deadline or when the scope a run serves is being disposed | Cancellation latency during a split step falls from at most one lift to at most the larger of one iteration and one lift round. Each round first catches the parent and every case up, and later rounds usually stage less than the first, so the gain is well under the 16x the round limit suggests. Unmeasured: no lift has been timed (section 3) | D42's bound stays at "one iteration or one lift", which is documented and sound. The library's host `CaseSet.Lift` already honours its token |
 | S4 | Direct engine callers only, of which there are none outside tests | A second failure message in a case that the library cannot produce | Nothing observable through the library |
-| S5 | Memory per case | 96 B per touched layer that is never probed. A probed layer needs its catalogs anyway | Nothing a budget notices. The Cosmos budgets are in time and transient megabytes (B3: at most 4 MB transient for the host-driven case track) |
+| S5 | Memory per case | 96 B per touched layer that is never probed. A probed layer needs its catalogs anyway | Nothing measurable: under 1% of a case with one union and one fact (13.4 KB) per never-probed layer |
 | S6 | Root performance, possibly | Unknown, and the prior is low (section 6). If the prober's size explains part of the `BasicMath` regression, up to that part of 10-15% on that benchmark; if not, nothing | The `BasicMath` regression stays as it is, owned by performance-parity |
 | S7 | Nobody today | It would serve a "print a table as terms" API on scopes, which is not planned | Nothing |
 | S8 | Maintainers | Closes a recorded surviving mutant for a line that is mostly redundant with the overlay check. With a membership check added (section 7), the line would guard a fault no other check reports | The checker keeps a line that no test can fail |
@@ -319,13 +318,13 @@ The engine is internal, so every item's value reaches users only through the lib
 | Item | Deciding question | Cheapest decisive experiment | Go/no-go threshold | Idle machine? | Preliminary verdict |
 |---|---|---|---|---|---|
 | S1 (internal) | Does any test observe the memo? | Done for this plan: disable the memo and run the suite (section 3) | Go if no test fails without the memo (the dry run says none fails) | No | **Do now** |
-| S1 (public) | Does a consumer, or the owner, want memo answers told apart in the public report? | None: a question for the owner and consumers | Go if a consumer asks, or if the owner wants `Lifts` to count computed lifts only before a stable release | No | **Later**, at the pre-release API review or on request |
-| S2 | Does any consumer need exact per-lift figures beyond what the windowed reconstruction gives? | None that decides it today. If it comes up, count multi-lift windows on the library-path benchmark's split workloads once they exist ([idle-machine-measurement](./idle-machine-measurement.md)) | Go only if a consumer asks | No | **Drop**. If wanted later, the driver can append each lift's `LiftReport` to the `SplitReport`, which gives exact per-lift `Changed` and memo flags with no callback |
-| S3 | Can a single lift take long enough to matter for cancellation? | The library-path benchmark's "host lift" and "split step that finds nothing new" timings ([idle-machine-measurement](./idle-machine-measurement.md)); record the p99 of one lift on `CaseWorkloadRestampTests`-sized and Cosmos-sized workloads | Worth doing on value alone if one lift exceeds 1 ms at p99 on Cosmos-sized workloads, or 10% of a typical `TimeLimit` | Yes, for the timing | **Optional, low priority**. Cheap, and it makes the split path honour the token as the host lift does, but nothing depends on it |
+| S1 (public) | Does a user, or the owner, want memo answers told apart in the public report? | None: a question for the owner and users | Go if a user asks, or if the owner wants `Lifts` to count computed lifts only before a stable release | No | **Later**, at the pre-release API review or on request |
+| S2 | Does any user need exact per-lift figures beyond what the windowed reconstruction gives? | None that decides it today. If it comes up, count multi-lift windows on the library-path benchmark's split workloads once they exist ([idle-machine-measurement](./idle-machine-measurement.md)) | Go only if a user asks | No | **Drop**. If wanted later, the driver can append each lift's `LiftReport` to the `SplitReport`, which gives exact per-lift `Changed` and memo flags with no callback |
+| S3 | Can a single lift take long enough to matter for cancellation? | The library-path benchmark's "host lift" and "split step that finds nothing new" timings ([idle-machine-measurement](./idle-machine-measurement.md)); record the p99 of one lift on `CaseWorkloadRestampTests`-sized workloads and on the split runs of the test fixture `PredicateTheory` (`src/Eggnog.Tests/Predicates`) | Worth doing on value alone if one lift's p99 exceeds 10% of a typical `TimeLimit` | Yes, for the timing | **Optional, low priority**. Cheap, and it makes the split path honour the token as the host lift does, but nothing depends on it |
 | S4 | Can the library reach a run whose own catch-up records a failure? | Static reading, done for this plan (section 3). A confirming check: assert in DEBUG at `RunRulesCore`'s entry, in a private clone, that a child's `Database.Failure` is null after `EnsureClean` when called from the library, and run the library suites | Go only if the assertion fires in a library test | No | **Drop**. Document in `RunRulesCore`'s remarks that a catch-up failure is reported as the run's failure |
 | S5 | Do index catalogs matter to per-case bytes? | Run the footprint mode (`--context-footprint`, allocation only) and count the touched layers that are never probed in a typical case | Go only if catalogs on never-probed layers exceed 5% of a lifted case's bytes, and the root gate stays within 2% | Footprint: no. Root gate: yes | **Drop**. The catalogs are about 9% of an empty layer but are needed on every probed layer; the saving is 96 B per touched, never-probed layer, against 13-20 KB per case |
 | S6 | Does the prober's size explain any of the `BasicMath` regression? | Step 1: on `3a6e0b7`, pad `Prober` from 48 B to 72 B with unused fields (checked with `Unsafe.SizeOf`), and A/B `BasicMath` padded against unpadded. Step 2, only if step 1 reproduces a slowdown: a shrink prototype on `eda0c61` that moves `View` to a per-position side array and `Rest` out of the prober, checked at 48 B with `Unsafe.SizeOf` in the prototype before any timing, then A/B on `RuleSetRunBenchmarks` (all four configurations, `BasicMath` first) | Each step, ABBA order with the in-process toolchain and server GC, preceded by an A/A run to measure the spread. Step 1 goes on only if padding slows `BasicMath` by more than the A/A spread. Step 2 goes if the shrink alone recovers at least 3% and at least twice the A/A spread on `BasicMath` in the parallel configurations; else drop | Yes | **Do after an experiment**, owned by performance-parity, inside the `BasicMath` investigation. Prior: low |
-| S7 | Does any planned library API need extraction-wide costs or a function DAG in a child scope? | None needed: check [rule-layer-split-features](./rule-layer-split-features.md) and the Cosmos requests | Go only when such an API is scheduled | No | **Drop** |
+| S7 | Does any planned library API need extraction-wide costs or a function DAG in a child scope? | None needed: check [rule-layer-split-features](./rule-layer-split-features.md) and the roadmap | Go only when such an API is scheduled | No | **Drop** |
 | S8 | Can the mutant be killed without a production hook? | Done for this plan: the prototype test kills it (section 3) | Go | No | **Do now**, as a test |
 
 Why the S6 prior is low. A join task holds a few hundred bytes to a few kilobytes of probers, which stay in the L1
@@ -336,7 +335,7 @@ experiment tests the size hypothesis directly and cheaply, and it does not touch
 with that branch.
 
 Sunk design effort is not a reason to build any of these. S2, S4, S5 and S7 are recorded in the history as "no
-milestone", and none has a consumer.
+milestone", and nothing needs any of them.
 
 ## 7. Plan if it goes ahead
 
@@ -385,7 +384,7 @@ One branch, two small phases and an optional third, merged together. Each phase 
 - **Deferred public side.** `Memoized` on the library's `LiftReport` (`src/Eggnog/Cases/LiftReport.cs`) and
   `RunReport.LiftsMemoized` go to the pre-release API review in
   [conformance-docs-release](./conformance-docs-release.md). They are needed there only if the owner wants `Lifts` to
-  change meaning; otherwise they wait for a consumer. With the internal counter in place, either change is a few
+  change meaning; otherwise they wait for a user's request. With the internal counter in place, either change is a few
   lines.
 
 ### Phase 3 (optional): S3, the token for split-step lifts
@@ -453,7 +452,7 @@ that it measures memo hits once that benchmark exists ([idle-machine-measurement
 
 1. **The meaning of `RunReport.Lifts` (S1, public side).** It counts every lift, memo answers included, as documented.
    Do you want it to count only computed lifts, as rule-layer spec §3.6 first said, before a stable release? If not,
-   the plan leaves the public report alone until a consumer asks, and then adds `LiftsMemoized` beside `Lifts`.
+   the plan leaves the public report alone until a user asks, and then adds `LiftsMemoized` beside `Lifts`.
 2. **The overshoot bound (S3).** If S3 lands, is "cancellation overshoots by at most one iteration or one lift round;
    limits by one iteration or one lift" the guarantee you want? Checking `TimeLimit` between lift rounds as well would
    need a stop callback into the engine, which this plan does not propose.
@@ -479,10 +478,10 @@ Changed:
   the evidence (prober scratch per task, pieces passed by reference on the root path, `TakeProbers`, `RefineScan`
   taking `in ProberPiece`), and the conflict with the kernel splits on `wip/perf-basicmath` is noted.
 - **S1 split.** The internal flag and its tests are done now with no owner dependency; the public members wait for the
-  API review or a consumer. The counting-case-join alternative is mentioned.
+  API review or a user's request. The counting-case-join alternative is mentioned.
 - **S2 reconstruction.** Multi-lift windows occur only in phase A, when a whole record is found vacuous; `Elapsed` is
   approximate in general because the window includes the next record's catch-up and vacuity disposal.
-- **S2 experiment.** Removed; the drop rests on the absence of a consumer.
+- **S2 experiment.** Removed; the drop rests on the absence of any use for it.
 - **S3 docs.** The overshoot statement is split into cancellation (one iteration or one lift round) and limits (one
   iteration or one lift), and the `RunOptions` class and member documentation are added to the places to update.
 - **S3 cost.** The call-site count is corrected to about 41 under `Relations/Cases`. The token goes in the per-run

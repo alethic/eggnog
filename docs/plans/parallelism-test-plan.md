@@ -132,9 +132,10 @@ Every merge kind it generates is a lattice (`BridgeDiffFunctionKind`).
      parallelizes and gives one shard. The rule-set executor does have a one-thread parallel mode (`Parallel1`).
    - (b) No randomized whole-program differential reaches the table, index and rebuild paths on small programs. At
      library level, the parallel-equivalence tests repeat egglog's weakness. `ParallelEquivalenceTests`
-     (`src/Eggnog.Tests/Concurrency/ParallelEquivalenceTests.cs`) runs the Cosmos programs at degree 4, but its
-     `ForceParallel` sets only `ParallelRuleSetsOverride`. Those programs are below the thresholds of 10,000 and
-     20,000 rows, so their table, index and rebuild paths run serially in both runs.
+     (`src/Eggnog.Tests/Concurrency/ParallelEquivalenceTests.cs`) runs the programs of the test fixture
+     `PredicateTheory` (`src/Eggnog.Tests/Predicates`) at degree 4, but its `ForceParallel` sets only
+     `ParallelRuleSetsOverride`. Those programs are below the thresholds of 10,000 and 20,000 rows, so their table,
+     index and rebuild paths run serially in both runs.
 
    Section 3.4 measures what (b) costs in practice.
 3. **Stress of concurrent children against serial runs: fixed seeds only.** The tests that exist:
@@ -147,7 +148,7 @@ Every merge kind it generates is a lattice (`BridgeDiffFunctionKind`).
      context, on three seeds.
    - `ConcurrentChildParallelRuleSetTests` and `ConcurrentSiblingTests`.
    - At library level, `ConcurrencyTests` (`src/Eggnog.Tests/Concurrency/ConcurrencyTests.cs`) runs 32 queries under
-     one frozen container, compares them with serial runs, and also runs split queries on parallel threads.
+     one frozen schema scope, compares them with serial runs, and also runs split queries on parallel threads.
      `ScopeThreadingTests` covers freezes, disposal and definitions under load.
 
    None of these is time-boxed or draws fresh programs. The soaks do both (`EGGNOG_BRIDGE_DIFF_SOAK`,
@@ -180,9 +181,10 @@ and every degree-1 path are unchanged. The run used a Release build on net10.0, 
     row, and reports nothing. The stored values can also differ.
   - No failure involved a lattice merge. None involved `keep-current` or `sum` either: these are not lattices, but
     they are associative.
-- **Library tests**: 550 tests in the rule-layer, scope, split, case, Cosmos, rules, scheduling and concurrency
-  namespaces. In this run graphs also defaulted to degree 4, and children of frozen scopes inherited it. One test
-  failed, by design: `ScopeTreeTests.ScopeOptionsReachTheContext` asserts the serial default.
+- **Library tests**: 550 tests in the rule-layer, scope, split, case, predicate-fixture, rules, scheduling and
+  concurrency namespaces, as the suite stood when measured; the scenario tests then among them are no longer in it. In
+  this run graphs also defaulted to degree 4, and children of frozen scopes inherited it. One test failed, by design:
+  `ScopeTreeTests.ScopeOptionsReachTheContext` asserts the serial default.
 
 **The KeepIncoming divergence is a known limit, not a new finding.** `MergeFunction`
 (`src/Eggnog/Relations/Tables/MergeFunction.cs`) says the parallel path "agrees with the serial order only for
@@ -245,13 +247,12 @@ Result:
 
 - **The contract.** Decision 4's wording does not mention non-associative merges at the root, while `MergeFunction`
   and `DiffGenerator` document the limit. One added sentence makes the decisions file match the code.
-- **The Cosmos adapter.** It runs serial graphs (`DegreeOfParallelism` 1, D46;
-  [`../history/cosmos-integration.md`](../history/cosmos-integration.md), section 1.1 "Decisions"), so parallelism
-  inside an operation does not reach it. It does depend on concurrent children of frozen scopes (section 3.5 "Thread
-  safety"). Its production phase requires "32 concurrent plans equal serial plans" (section 5.2, phase 2 row). The
-  adapter's own test for that criterion (section 7, item 8) "mirrors `ConcurrencyTests`", which the library already
-  has. A fresh-seed soak of the library and engine concurrency tests is useful before that phase, but it is not
-  required.
+- **Hosts that serve many short-lived children of frozen scopes.** A long-lived service that keeps its graphs serial
+  (`DegreeOfParallelism` 1) and gets its concurrency from children of frozen scopes running at once is not reached by
+  parallelism inside an operation, but it depends on concurrent children giving the results of serial runs. The
+  library's `ConcurrencyTests` already checks that for 32 concurrent queries on fixed programs. A fresh-seed soak of the
+  library and engine concurrency tests widens that check to programs and child counts nobody chose; it is useful, but
+  nothing waits on it.
 - **Library users who set `DegreeOfParallelism` above 1.** The option is public ([`../architecture.md`](../architecture.md),
   section 2.11). The dry run and the mutation comparison are evidence that lattice behaviour is correct and well
   tested today.
@@ -380,9 +381,6 @@ None.
   a parallel kernel (table insert, rebuild chunks, index build, morsel execution), it reruns the comparison of section
   3.4 against the new code. It builds the eager switch if the new kernel lacks targeted tests above its threshold, or
   if a seeded mutation is caught only in eager mode. Compiled plans would add a "compiled" axis to the executor modes.
-- **The Cosmos production phase.** The soak of step 2 is useful before it, but not required: the adapter runs serial
-  graphs and has its own 32-plan test (section 4). See [Deferred rule-layer and split features](./rule-layer-split-features.md)
-  for the Cosmos requests.
 - **With [Deferred colored-context features](./colored-context-deferred-features.md).** Two of those features add
   concurrency that the step 2 soak should cover when they land: running a split's cases in parallel, and shared ids
   across sibling cases.
@@ -425,9 +423,9 @@ Changed:
 - **The evidence of races here was overstated (accepted).** R1-2 and R2-2 are one race, and both it and the
   `Store.AddTable` race were found in design review of the spec. The plan now says so, names the targeted tests that
   pin them, and states the value as preventive, sized by the mutation comparison.
-- **Phase 3's decision rule was inverted, and its Cosmos value overstated (accepted).** The default is now a soak
-  variable on the existing tests. A general harness requires a mutation that the targeted tests miss. "Before the
-  Cosmos production phase" became "useful before it; not required".
+- **Phase 3's decision rule was inverted, and its value overstated (accepted).** The default is now a soak variable
+  on the existing tests. A general harness requires a mutation that the targeted tests miss. The soak is described as
+  useful, with nothing waiting on it.
 - **The CI matrix was misread (accepted).** The `counters: '0'` include merges into the linux-x64 job, so there are
   five jobs in total. A future eager combination uses a new matrix dimension, so that it does not replace the default
   linux-arm64 job.

@@ -6,8 +6,8 @@ are:
 - the root benchmark set against the baseline from before colored contexts;
 - egglog-bridge's `math` and `ac`, against the build from before the store-backed root and against the Rust;
 - the per-child and case-split figures, and catch-up under a busy parent;
-- the benchmarks the library itself has never had: its own paths, the latency of transient children, and the Cosmos
-  integration plan's benchmark set.
+- the benchmarks the library itself has never had: its own paths, the latency of transient children, and the cost of
+  idle local rules.
 
 It is also the single definition of the measurement campaign that [performance parity](./performance-parity.md) shares:
 one baseline, one comparison method, one profiler and one set of thresholds.
@@ -19,7 +19,7 @@ one baseline, one comparison method, one profiler and one set of thresholds.
 **Now, with no idle machine:**
 
 - Write the comparison method against `3a6e0b7`, the baseline on `main`.
-- Write `QueryScopeBenchmarks` (with the recorded plans of the sibling-container question) and
+- Write `QueryScopeBenchmarks` (with the recorded plans of the sibling-schema-scope question) and
   `LibraryRunOverheadBenchmarks`.
 - Write the 100-sibling release test and the counters for catch-up under a busy parent.
 - Open one small engine item: allocate in header instantiation only once a run is known not to be empty. Allocation
@@ -43,16 +43,16 @@ The campaign has a rule for inconclusive cases, and a stated action for each out
 - the literature review's B5 failure count under a timeout policy.
 
 The new evidence is a count-only dry run made for this plan. It used a synthetic workload: two-atom local rules over
-ten 1,000-row tables, under a frozen container. A transient query child allocates about 1.5 KB per idle local rule per
-iteration. That exceeds the Cosmos plan's B4 budget of 128 KB per derivation from about 80 rules. The slope depends on
-rule shape, because semi-naive evaluation makes one variant per body atom. About two thirds of those bytes come from
-`PlanTemplate.InstantiateLayered` (`src/Eggnog/Relations/Planning/PlanTemplate.cs`). It allocates its arrays and lists
-before it learns that a header is empty. No timing can change that finding, so the fix should not wait for the
-campaign (section 3.6, Q12).
+ten 1,000-row tables, under a frozen schema scope. A transient query child allocates about 1.5 KB per idle local rule
+per iteration: 165 KB per query at 100 rules and 1.5 MB at 1,000. The slope depends on rule shape, because semi-naive
+evaluation makes one variant per body atom. About two thirds of those bytes come from `PlanTemplate.InstantiateLayered`
+(`src/Eggnog/Relations/Planning/PlanTemplate.cs`). It allocates its arrays and lists before it learns that a header is
+empty, and an idle variant then discards them. The same waste occurs for idle global rules at the root. No timing can
+change that finding, so the fix should not wait for the campaign (section 3.6, Q12).
 
-The value is real for the Cosmos adapter's request 2 and for any later root-path change. For the historical root gates
-it is mostly record-keeping, unless the owner will act on a confirmed regression other than `BasicMath`. The owner has
-deferred `BasicMath` itself (section 9, question 1).
+The value is real for hosts that run each query in a transient child under a scope with many local rules, and for any
+later root-path change. For the historical root gates it is mostly record-keeping, unless the owner will act on a
+confirmed regression other than `BasicMath`. The owner has deferred `BasicMath` itself (section 9, question 1).
 
 ## 2. What it is and why it was planned
 
@@ -87,7 +87,7 @@ deferred `BasicMath` itself (section 9, question 1).
   both ([roadmap](../roadmap.md), "Benchmarks and timed gates").
 - **Per-child cost and case splits against clones.** These come from the literature review
   ([colored-egraph-literature.md](../history/colored-egraph-literature.md)). This plan writes its labels as
-  "literature B4" and "literature B5" to keep them apart from the Cosmos plan's budgets of the same names:
+  "literature B4" and "literature B5", as that review names them:
   - literature B4: per-child time and bytes must stay flat as the root grows, because Easter Egg's per-colour work
     "never clearly beat clones";
   - literature B5: compare bytes per structure against a clone baseline on a case-split workload, and report time and
@@ -110,17 +110,17 @@ deferred `BasicMath` itself (section 9, question 1).
 
   It also asks for timed gates: a split step that finds nothing new, a host lift, and the per-iteration and per-write
   overhead at the root. Nothing was timed because the machine was shared.
-- **Transient children and idle local rules; the Cosmos set.** These come from the
-  [Cosmos integration plan](../history/cosmos-integration.md):
-  - section 8.3, request 2: latency of create, write, run, read and dispose, in tens to hundreds of microseconds, and
-    the per-iteration overhead of an idle local rule at 100 and 1,000 rules. If that overhead is significant, the
-    follow-up is demand-indexed local rules;
-  - section 6.2, budgets Cosmos B3 (one derivation) and Cosmos B4 (memory). Cosmos B5 (cold start without
-    ReadyToRun) and B7 (gate and memo hit) are measured in the adapter's own benchmark project and CI job, not here;
-  - section 8.1, risks R6 (per-child latency unmeasured) and R14 (global rules planned on the first frozen container's
-    statistics);
-  - section 9.2: `TheoryDefinitionBenchmarks`, `SchemaCompileBenchmarks`, `QueryScopeBenchmarks` and a sibling-container
-    benchmark, plus a test of 100 sibling frozen scopes with local rules (memory and release).
+- **Transient children, idle local rules and sibling scopes.** The roadmap's "Latency of transient children" item
+  ([roadmap](../roadmap.md), "Benchmarks and timed gates") asks for the latency of a query child under a frozen scope,
+  and for the per-iteration cost of idle local rules at 100 and 1,000 rules. On a scope with local rules, every query
+  child runs every local rule of its scope on every iteration (`ScheduleExecutor.RunIteration`, section 3.6), so that
+  cost grows with the number of rules whatever the query touches. If it proves significant, the follow-up is
+  demand-indexed local rules, which [performance parity](./performance-parity.md) owns. Two further questions arise
+  from the same pattern of many frozen scopes with local rules under one root:
+  - plans are made once per rule, on the statistics of the first context that runs or pre-plans it
+    ([rule-layer-spec.md](../history/rule-layer-spec.md), section 11, residual risk 4; engine map section 8.2,
+    "Frozen plan statistics"), so a later sibling scope may run plans made on another scope's statistics;
+  - deferred release (D40) and `RuleVariants.Free` are tested for one released scope, not for many siblings.
 
 ## 3. Current state
 
@@ -171,7 +171,7 @@ None has been timed on an idle machine.
   of 1.25 and 1.12 (20,000 rows, serial and parallel) and 1.12 and 1.09 (200,000 rows). Its allocation is unchanged,
   which shows that allocation does not predict time here. Unreviewed fix experiments are on the branch
   `wip/perf-basicmath` (eight commits). The owner deferred that work.
-- **A sequential short run cannot test a 2% gate.** An earlier sweep ran each class first on the baseline build and
+- **A sequential short run cannot test a 2% gate.** An earlier pass ran each class first on the baseline build and
   then on the candidate, with three iterations per case on the shared machine. Its time deltas ranged from -36% to
   +124%. The largest were on cases of a few microseconds (union-find at 1,000 ids).
 - **Allocation-only dry runs moved little** (colored-contexts spec section 21.11): `math` 9.80 GB to 9.61 GB, `ac`
@@ -204,7 +204,7 @@ The C# side is ready (`BridgeMathBenchmarks`, `BridgeAcBenchmarks`, `BridgeExamp
   - the engine's `Eggnog.Relations.EGraph` on its store-backed root: 6,193 B;
   - the library's `Eggnog.EGraph`: 56,000 B.
 
-  The Cosmos plan's per-generation budget is 1 MB (Cosmos B4). No figure exists from before the store-backed root to
+  Both are less than one child of section 3.4 (95.9 KB or more). No figure exists from before the store-backed root to
   compare with. Each bridge invocation builds a fresh graph, but construction is a negligible part of a 6.6 s run.
 
 ### 3.4 Per-child cost and case splits
@@ -280,9 +280,9 @@ Nothing is written. The paths to measure are in these files:
 The workload is synthetic:
 
 - ten relations `p0`..`p9` over `long`, each with 1,000 rows at the root, and the root frozen;
-- a container scope that defines N local rules of the two-atom form `p_i(x), p_j(x) => q_i(x)`, runs them to
+- a schema scope that defines N local rules of the two-atom form `p_i(x), p_j(x) => q_i(x)`, runs them to
   saturation and freezes;
-- per query: a child of the container, one `Assume`, `Run(Saturate)`, one `Check`, and `Dispose`.
+- per query: a child of the schema scope, one `Assume`, `Run(Saturate)`, one `Check`, and `Dispose`.
 
 In the idle case the child asserts into a table no rule reads. In the active case it asserts into `p0`.
 
@@ -295,7 +295,7 @@ In the idle case the child asserts into a table no rule reads. In the active cas
 
 On this workload each idle local rule costs about 1.5 KB allocated per iteration. Each rule has two body atoms, so
 semi-naive evaluation gives it two variants. The figure per rule therefore scales with the number of body atoms, and
-the 1,000-row tables and ten touched tables are this probe's choice, not the adapter's.
+the 1,000-row tables and ten touched tables are this probe's choice, not a property of the engine.
 
 **Where the bytes go.** Allocation-tick sampling by type at 1,000 idle rules attributes about two thirds of them to
 the engine's header instantiation:
@@ -319,13 +319,12 @@ It allocates 1,170,334 B at 1,000 rules: about 1.17 KB per idle rule per iterati
 arrays. The root goes through the same method, because `PlanTemplate.Instantiate` wraps a single-table evaluator and
 calls `InstantiateLayered`.
 
-**What this decides.** Cosmos B4 ("per R2 derivation ≤ 128 KB allocated") is exceeded on this synthetic two-atom
-workload from about 80 local rules, whatever the time turns out to be. Allocation does not predict time (`BasicMath`,
-section 3.2), so Cosmos B3's latency budget (p50 ≤ 250 µs at ≤ 100 rules) still needs an idle machine. The adapter's
-own B3 workloads (`ThreeKinds`, `SweepLinks` and synthetic unions, Cosmos plan section 6.2) are where both budgets are
-finally judged.
+**What this decides.** A query child's allocation grows linearly with the idle local rules of its scope, at about
+1.5 KB per rule per iteration on this two-atom workload, and two thirds of it is allocated and then discarded. That is
+settled whatever the time turns out to be. Allocation does not predict time (`BasicMath`, section 3.2), so the time per
+idle rule, and whether demand-indexed local rules are needed, still need an idle machine (Q8).
 
-### 3.7 The Cosmos benchmark set and the sibling-scope test
+### 3.7 The sibling-scope test
 
 None exists. Related pieces:
 
@@ -336,16 +335,16 @@ None exists. Related pieces:
   time. The engine's `EGraph.RuleCount` (`src/Eggnog/Relations/Bridge/EGraph.Rules.cs`) counts registered rules, and
   each rule's cached plan lives in its `RuleInfo`.
 - The [interning and value lifetime](./interning-and-value-lifetime.md) plan proposes `ScopeChurnTests` on the same
-  scoped test theory, for the Cosmos plan's churn and retained-memory tests.
-- The Cosmos test theory (`src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.cs` and `src/Eggnog.Tests/Cosmos/Pred.cs`)
-  does not depend on xunit and could be linked into the benchmark app. `SweepLinks.cs` uses `Assert`, and the Cosmos
-  scenarios are xunit tests, so they can be counted in tests but not timed as they stand.
-- The adapter's schema compiler lives in the adapter's repository, not in Eggnog.
+  scoped test theory, `PredicateTheory` (`src/Eggnog.Tests/Predicates/`), for churn and retained-memory tests.
+- The predicate fixture (`src/Eggnog.Tests/Predicates/Scoped/PredicateTheory.cs` and
+  `src/Eggnog.Tests/Predicates/Pred.cs`) does not depend on xunit and could be linked into the benchmark app.
+  `DiscriminatedSchema.cs` and `ScopedQueryCases.cs` use `Assert`, so their queries can be counted in tests but not
+  timed as they stand. Compiled plans' Q1, Q3 and Q5 time query children of this fixture.
 
 ### 3.8 Platforms
 
 The library targets net8.0 and net10.0. The benchmark app targets net10.0 only, and so do the baseline apps at
-`3a6e0b7`, `673495d` and `2fd4a18`. Many of the Cosmos adapter's projects target net8.0.
+`3a6e0b7`, `673495d` and `2fd4a18`. So the JIT behaviour that net8.0 users get is not measured.
 
 ## 4. Value
 
@@ -364,16 +363,16 @@ The library targets net8.0 and net10.0. The benchmark app targets net10.0 only, 
   sets a new baseline. A confirmed failure other than `BasicMath` becomes a roadmap item. If the owner will not
   schedule such items, as with `BasicMath`, the timed root comparison is record-keeping. Its main use is then the new
   baseline that the changes above need.
-- **The Cosmos adapter.** The plan's Phase 2 entry needs request 2 and Cosmos B3 at 1,000 rules "set from the §8.3
-  request 2 measurement before Phase 2's entry" (section 6.2). The dry run in section 3.6 already shows the Cosmos B4
-  overrun and its cause, before any timing:
+- **Hosts that run queries in transient children.** A service that freezes schema scopes with local rules and runs
+  each request in a query child pays, per query, for every local rule of its scope. The dry run in section 3.6 already
+  shows that cost in bytes and its cause, before any timing:
   - the header-instantiation fix removes most of the engine's two thirds;
   - trimming the library's per-run bookkeeping would address the other third;
   - demand-indexed local rules would remove nearly all of the per-rule cost, at larger cost and risk.
 
   Whether demand-indexed rules are needed after the fix depends on the time per idle rule, which only an idle machine
-  gives. If this is never measured, the adapter enters Phase 2 with an unknown per-rule latency and a known memory
-  overrun. Its fallback for R14 ("one graph per container") would multiply the theory's cost.
+  gives. Q10 also says whether sibling scopes run plans made on another scope's statistics, which decides per-context
+  replanning in [colored-context deferred features](./colored-context-deferred-features.md).
 - **Library users.** The release states no performance figures (`README.md` and `src/Eggnog/README.md` make no timing
   claim), so nothing published is wrong today. Users would gain two numbers that decide how a service uses scopes: the
   latency of a transient child and the cost of a rule.
@@ -383,14 +382,15 @@ The library targets net8.0 and net10.0. The benchmark app targets net10.0 only, 
   half is confirmation, not discovery. It costs only machine time.
 - **If it is never done:**
   - root-path changes stay ungated, and any `BasicMath` work cannot show it has finished;
-  - the Cosmos plan's budgets stay unset;
+  - the latency of a transient child and the time cost of an idle local rule stay unknown, and demand-indexed local
+    rules stay undecided;
   - claims of parity with the Rust stay frozen at a figure from before the store-backed root.
 
 ## 5. Cost and risk
 
 - **Effort: medium for the scope recommended here.** The full scope of the earlier draft would be medium-large.
   - **Code.** Two library benchmark classes, one engine class for busy-parent catch-up, one release test, a comparison
-    script, and adding net8.0 to the benchmark app.
+    script, and adding net8.0 to the benchmark app if net8.0 stays a target.
   - **Review.** Each piece goes through the project's review practice:
     - review from several angles: workload realism, result checks, allocation accounting and API use;
     - a mutation review of the checks;
@@ -467,28 +467,27 @@ The library targets net8.0 and net10.0. The benchmark app targets net10.0 only, 
   ([performance parity](./performance-parity.md), section 6).
 - **Launch matrix.**
   - Root and bridge classes: net10.0 under server GC, as the baselines were built.
-  - Library classes: `dotnet run -c Release -f net10.0` and `-f net8.0`, each with and without `DOTNET_gcServer=0`.
-    That is four processes per class.
+  - Library classes: `dotnet run -c Release -f net10.0` and, while net8.0 stays a target, `-f net8.0`, each with and
+    without `DOTNET_gcServer=0`. That is four processes per class, or two without net8.0.
 
 | # | Question | Cheapest decisive measurement | Metric and threshold | Idle machine? | Preliminary verdict |
 |---|---|---|---|---|---|
 | Q1 | Did the changes since `3a6e0b7` cost the root more than 2% anywhere other than `BasicMath`? | The shared method, two builds, each root class (129 cases). Bisect over the engine-changing stage commits (section 3.2) only for confirmed failures, and only if the owner will act. | The shared gate and outcomes. | Yes | Do it. It records the baseline at `main` that later changes need. `BasicMath` is expected to fail; the others are unknown. |
 | Q2 | Did the store-backed root cost whole programs more than 2%, and where do they stand against the Rust? | (a) `BridgeMath` and `BridgeAc` at `673495d`, `2fd4a18` and `main`, with the shared three-build method, `--warmupCount 2 --iterationCount 15`. (b) `--bridge-example math` and `ac`, alternated with the Rust `math.exe` and `ac.exe` rebuilt at the pinned submodule (toolchain 1.91.0), five pairs each, median of the warm repetitions. | (a) `main` ÷ `2fd4a18` under the shared gate: this is colored-contexts spec section 21.11's gate. `main` ÷ `673495d` answers performance parity's whole-program question, using that plan's thresholds (≤ 1.02 local to the microbenchmark; > 1.03 supports the branch work). (b) C# ÷ Rust is reported beside 6.6 s/7.4 s and 15.5-16 s. Above 1.10 on either, profile that program (performance parity's threshold). It is a figure, not the gate. | Yes | Unknown. Allocation moved -1.9% (`math`) and +0.6% (`ac`), but allocation does not predict time (section 3.2). Cheap to run. |
-| Q3 | Is `RootContext` within noise of `RootApi`, and does building an `EGraph` matter? | `ContextExtractionBenchmarks` timed at `main` (the class first exists at `8444a46`, so the ratio is within one build). Construction: none beyond section 3.3's allocation counts. | `RootContext` ÷ `RootApi` ≤ 1.02 at `main`. The spec's construction gate is closed by allocation (6.2 KB engine, 56 KB library, against Cosmos B4's 1 MB per generation), subject to the owner (section 9). | Yes for time | Low stakes. Run it on night 2. |
+| Q3 | Is `RootContext` within noise of `RootApi`, and does building an `EGraph` matter? | `ContextExtractionBenchmarks` timed at `main` (the class first exists at `8444a46`, so the ratio is within one build). Construction: none beyond section 3.3's allocation counts. | `RootContext` ÷ `RootApi` ≤ 1.02 at `main`. The spec's construction gate is closed by allocation (6.2 KB engine, 56 KB library, less than one child of section 3.4), subject to the owner (section 9). | Yes for time | Low stakes. Run it on night 2. |
 | Q4 | Is per-child time flat within 1.5x from 20,000 to 2,000,000 rows (literature B4)? | `PerChildCostBenchmarks` timed, both methods, frozen and not. | Time(2M) ÷ Time(20k) ≤ 1.5 for each method. | Yes | Expected to pass, because the counters are identical across sizes. A failure would come from cache misses in the rebuild-index probes, and would itself be a finding. |
 | Q5 | How do case splits compare with clones in time (literature B5)? | `CaseSplitMemoryBenchmarks` timed (no new code). | Contexts' time per case flat in root size. The time ratio of clone to context is reported. Failures are not possible in this workload. | Yes | Run it. Defer "failures under a timeout policy" until a deep-split workload exists (section 9). |
 | Q6 | What are the bytes of each per-child structure? | A heap snapshot by type, taken with `dotnet-gcdump`, of a process holding 1,000 live children of the bridge workload. Map types to structures. | Bytes per structure per child; the total agrees with the footprint mode within 5%. | No | Later. The total is flat and small, and section 3.6 shows that per-rule cost, not child structure, dominates a query child. |
-| Q7 | What does catch-up under a busy, writable parent cost? | **Now:** a new engine class, `BusyParentCatchUpBenchmarks`. A writable root has k children (1, 8, 64), each with one union. The parent then appends A rows (100, 10,000) to a table whose rows name the children's losers in a set fraction, and every child rebuilds. Count `CatchUpRowsExamined` and `RowsCopied`. Also count, in a test, `CatchUpRowsExamined` against the executor's scanned and index rows per split step in the Cosmos scoped scenarios 02, 04 and 07 under a writable query scope. **Later:** time the engine class in ns per examined row. | Counters: examined = k × A exactly, asserted in the setup. Decision by counts: if catch-up's examined rows exceed 25% of all rows a split step examines (catch-up plus rule scans plus index rows) at 8 cases, open an engine item (catch-up through the rebuild index, or by losers). Otherwise close engine-map section 8.2's risk with the figures, converted to time on night 2. | Counters no; time yes | Write the counters now. Expected small for Cosmos-shaped splits, since a lift writes one row per lifted fact. |
-| Q8 | What does a transient query child cost, and what does an idle local rule cost per iteration? | `QueryScopeBenchmarks` over the public API, as in section 3.6's workload, with two-atom and four-atom rule bodies. Vary touched tables (10, 30, 50), local rules (0, 10, 100, 1,000), and idle or active. Report time per query, allocation, and the slope per rule. Use the launch matrix. | Cosmos B3: p50 ≤ 250 µs and p99 ≤ 2 ms at ≤ 100 rules. Idle-rule overhead: build demand-indexed local rules if it exceeds 50 µs per iteration at 100 rules (20% of B3's p50; performance parity's threshold), measured after Q12, or if B3 fails at 100 rules. Cosmos B4 on allocation is answered now: exceeded on the synthetic two-atom workload from about 80 rules, with a slope that depends on rule shape. | Yes for time | Do now (the code). The time decides demand-indexed local rules, beyond what Q12 removes. |
-| Q9 | What does the library add per run at the root? | `LibraryRunOverheadBenchmarks`: a library `Run` at the root against the engine's `RunRules` on the same lowered rules, at 10 and 100 rules. | Library time ≤ 1.05 × engine time at 10 rules. Above that, trim the per-run bookkeeping of section 3.6 (the description-keyed lookups and the per-run statistics objects). | Yes for time; bytes no | Do now. The other path classes (`ScopeCatchUp`, `MirrorSync`, `EqualStep`, `SplitStep`) wait until a change touches those paths. No consumer waits on their figures, and their thresholds would have no follow-up today. |
-| Q10 | Do rules planned on the first frozen container serve later containers badly (risk R14)? | In `QueryScopeBenchmarks`: sibling containers with different statistics, frozen in both orders, with `EGraphOptions.RecordPlans`. Compare the recorded plans now, and time queries under each later. | If the plans differ by freeze order and a later container's query is ≥ 2x slower than under its own first freeze, raise request 7 (freeze planning control) in [rule-layer split features](./rule-layer-split-features.md). | Plans no; time yes | Do it in the same class as Q8. |
-| Q11 | Do 100 sibling frozen scopes with local rules release their memory? | A test beside `ScopeChurnTests` of the interning plan, on the scoped Cosmos test theory. Record a reference state, then create 100 siblings with 100 local rules each, freeze, query each, and dispose all. Then run a second pass over the same keys and compare the two. | `WeakReference`s to the scopes and their compiled variants collected. `VariantsByDescription.Count` and the engine's `RuleCount` return exactly to their values before the siblings. The retained heap after the second pass differs from after the first by no more than the newly interned values (`InternedCount` delta), as Cosmos B4's "second pass" defines. | No | Do now; small. |
-| Q12 | Can idle variants stop allocating in header instantiation? | In `PlanTemplate.InstantiateLayered` and `ContextView.EvaluateLayers`, either evaluate the extra (timestamp) constraints before allocating the per-run arrays and lists, or take those buffers from a per-thread pool and copy into exact-size arrays only when every header is non-empty. Count with the section 3.6 probe at the root and in a query child. | Bytes: the engine's share of idle-rule allocation falls by at least 90%, so idle-query bytes at 100 rules fall by at least half. Tests: every suite passes on both frameworks. Time: the root set, `main` with the change against `main`, under the shared gate on night 2. Keep the change only if no case is a confirmed failure. | Bytes no; time yes | Do now. The cause is known, the change is local, and it serves Cosmos B4 whatever Q8's timing shows. |
+| Q7 | What does catch-up under a busy, writable parent cost? | **Now:** a new engine class, `BusyParentCatchUpBenchmarks`. A writable root has k children (1, 8, 64), each with one union. The parent then appends A rows (100, 10,000) to a table whose rows name the children's losers in a set fraction, and every child rebuilds. Count `CatchUpRowsExamined` and `RowsCopied`. Also count, in a test, `CatchUpRowsExamined` against the executor's scanned and index rows per split step in domain splits on `PredicateTheory` (`src/Eggnog.Tests/Predicates/`) under a writable query scope, at 3 and 8 cases. **Later:** time the engine class in ns per examined row. | Counters: examined = k × A exactly, asserted in the setup. Decision by counts: if catch-up's examined rows exceed 25% of all rows a split step examines (catch-up plus rule scans plus index rows) at 8 cases, open an engine item (catch-up through the rebuild index, or by losers). Otherwise close engine-map section 8.2's risk with the figures, converted to time on night 2. | Counters no; time yes | Write the counters now. Expected small for splits whose lifts write few rows, since a lift writes one row per lifted fact. |
+| Q8 | What does a transient query child cost, and what does an idle local rule cost per iteration? | `QueryScopeBenchmarks` over the public API, as in section 3.6's workload, with two-atom and four-atom rule bodies. Vary touched tables (10, 30, 50), local rules (0, 10, 100, 1,000), and idle or active. Report time per query (p50 and p99), allocation, and the slope per rule. Use the launch matrix. | Latency of a query child: reported, not gated. Idle-rule overhead, measured after Q12: time per query at 100 idle rules minus time at 0 rules, which includes every iteration. Build demand-indexed local rules if that overhead exceeds 25% of the query's own time at 0 rules, at p50 or at p99; otherwise record and drop. This is [performance parity](./performance-parity.md)'s row 3, and both plans use it. Allocation is answered now: about 1.5 KB per idle rule per iteration on the synthetic two-atom workload, with a slope that depends on rule shape. | Yes for time | Do now (the code). The time decides demand-indexed local rules, beyond what Q12 removes. |
+| Q9 | What does the library add per run at the root? | `LibraryRunOverheadBenchmarks`: a library `Run` at the root against the engine's `RunRules` on the same lowered rules, at 10 and 100 rules. | Library time ≤ 1.05 × engine time at 10 rules. Above that, trim the per-run bookkeeping of section 3.6 (the description-keyed lookups and the per-run statistics objects). | Yes for time; bytes no | Do now. The other path classes (`ScopeCatchUp`, `MirrorSync`, `EqualStep`, `SplitStep`) wait until a change touches those paths. Nothing waits on their figures, and their thresholds would have no follow-up today. |
+| Q10 | Do rules planned on the first frozen schema scope serve later sibling scopes badly (rule-layer spec residual risk 4)? | In `QueryScopeBenchmarks`: the fixed corpus of sibling schema scopes that `ScopedQueryCases.CompileAll` builds on the test fixture ([colored-context deferred features](./colored-context-deferred-features.md), B), fixed before any measurement and frozen in both orders, with `EGraphOptions.RecordPlans`. The plans can be compared in a test now; timing them in the benchmark app needs the fixture there (question 11). Compare the recorded plans now, and time queries under each later. | If the plans differ by freeze order and a later scope's query is ≥ 2x slower than under its own first freeze, the figures go to per-context replanning in [colored-context deferred features](./colored-context-deferred-features.md) and to freeze planning control in [rule-layer split features](./rule-layer-split-features.md). | Plans no; time yes | Do it in the same class as Q8. |
+| Q11 | Do 100 sibling frozen scopes with local rules release their memory? | A test beside `ScopeChurnTests` of the interning plan, on `PredicateTheory`. Record a reference state, then create 100 siblings with 100 local rules each, freeze, query each, and dispose all. Then run a second pass over the same keys and compare the two. | `WeakReference`s to the scopes and their compiled variants collected. `VariantsByDescription.Count` and the engine's `RuleCount` return exactly to their values before the siblings. The retained heap after the second pass differs from after the first by no more than the newly interned values (`InternedCount` delta). | No | Do now; small. |
+| Q12 | Can idle variants stop allocating in header instantiation? | In `PlanTemplate.InstantiateLayered` and `ContextView.EvaluateLayers`, either evaluate the extra (timestamp) constraints before allocating the per-run arrays and lists, or take those buffers from a per-thread pool and copy into exact-size arrays only when every header is non-empty. Count with the section 3.6 probe at the root and in a query child. | Bytes: the engine's share of idle-rule allocation falls by at least 90%, so idle-query bytes at 100 rules fall by at least half. Tests: every suite passes on both frameworks. Time: the root set, `main` with the change against `main`, under the shared gate on night 2. Keep the change only if no case is a confirmed failure. | Bytes no; time yes | Do now. The cause is known, the change is local, and it removes allocation that every idle variant discards, at the root and in children, whatever Q8's timing shows. |
 
-Of the Cosmos plan's set, `SchemaCompileBenchmarks` measures the adapter's compiler, which lives in the adapter's
-repository. It belongs in the adapter's own benchmark project (Cosmos plan section 6.2, "Measured by"), together with
-Cosmos B5 and B7. `TheoryDefinitionBenchmarks` is deferred until the adapter asks for it, because the adapter's Cosmos B5
-job measures schema creation end to end.
+`TheoryDefinitionBenchmarks`, the time to define a theory on a new graph, is deferred until a host's graph rebuild
+needs a figure for it: for example, a host that retires its graph on the usage gauge of the
+[interning plan](./interning-and-value-lifetime.md) more often than the horizons there suggest.
 
 **A cheaper signal before the idle window.** Instruction counts are much less sensitive to a busy machine than wall-clock
 time. The benchmark app does not reference `BenchmarkDotNet.Diagnostics.Windows`, which BenchmarkDotNet's hardware
@@ -500,7 +499,7 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
 
 - **Now:** Q12, Q7's counters, Q8's and Q9's benchmark code, Q10's plan comparison and Q11.
 - **At the first idle window:** Q1, Q2, Q3-Q5, and the timed halves of Q7, Q8, Q10 and Q12.
-- **Deferred:** Q6, literature B5's failure half, and the other library path classes.
+- **Deferred:** Q6, literature B5's failure half, `TheoryDefinitionBenchmarks`, and the other library path classes.
 - **Dropped:** the per-stage gates. A cumulative comparison plus conditional bisection gives the same answer for every
   stage that matters, at a fraction of the builds.
 
@@ -529,17 +528,17 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
 - **Work:**
   - Library classes under `src/Eggnog.Benchmarks/Library/`, in their own namespace, over the public API:
     `QueryScopeBenchmarks` (Q8, Q10) and `LibraryRunOverheadBenchmarks` (Q9).
-  - The engine class `Relations/Contexts/BusyParentCatchUpBenchmarks`, and the counting test over the Cosmos
-    scenarios (Q7).
+  - The engine class `Relations/Contexts/BusyParentCatchUpBenchmarks`, and the counting test over domain splits on
+    `PredicateTheory` (Q7).
   - The release test of Q11, coordinated with the interning plan's `ScopeChurnTests`. Whichever lands first holds both.
   - Q12's change in the engine, with the probe's figures before and after.
   - Each benchmark checks its result in its setup or in every invocation: match counts, the facts that must hold, and
     the counters that must equal a formula.
-  - Add net8.0 to the benchmark app's target frameworks, at least for the library classes, because the adapter runs on
-    net8.0.
+  - If the package keeps targeting net8.0 (synthesis question 3), add net8.0 to the benchmark app's target
+    frameworks, at least for the library classes, because the library targets net8.0.
 - **Review:** the project's practice applies:
-  - implement, then review from several angles: workload realism against the Cosmos theory, result checks, allocation
-    accounting, and API use;
+  - implement, then review from several angles: workload realism (rule shapes, touched tables and the number of local
+    rules), result checks, allocation accounting, and API use;
   - a mutation review of the checks (section 5);
   - fix, then verify on net8.0 and net10.0: dry runs of every class, and the full test suites on both frameworks
     (they must pass for Q12).
@@ -547,7 +546,7 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
   - Every new class passes `--job dry` on both frameworks.
   - These figures are recorded: Q7's counters, Q10's recorded plans, the allocation slopes of Q8 and Q9 (for two-atom
     and four-atom rules), and Q12's bytes before and after.
-  - Q8's Cosmos B4 figures, with and without Q12, go to the owner and the adapter at this point.
+  - Q8's allocation figures, with and without Q12, go to the owner at this point.
 
 ### Phase 2: the campaign (idle machine)
 
@@ -591,9 +590,10 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
 - **Work:**
   - A report in the style of [colors-m10-reports.md](../history/colors-m10-reports.md): method, machine, runtime, every
     table, and an outcome per question.
-  - Updates to the [roadmap](../roadmap.md):    - close the gates that passed;
+  - Updates to the [roadmap](../roadmap.md):
+    - close the gates that passed;
     - record the decisions that follow: demand-indexed local rules (Q8), catch-up indexing or closing engine-map
-      section 8.2's risk (Q7), and freeze planning control (Q10).
+      section 8.2's risk (Q7), and the evidence for per-context replanning and freeze planning control (Q10).
   - Name the new baseline commit in `src/Eggnog.Benchmarks/README.md` ("The root benchmark set") for future gates.
 - **Exit:** the owner has decided each follow-up.
 
@@ -603,7 +603,8 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
 - **It defines the campaign that other plans use:**
   - [Performance parity](./performance-parity.md) runs its section 6 rows in Phase 2, with the shared method,
     profiler and thresholds:
-    - the idle-rule threshold of 50 µs per iteration at 100 rules;
+    - the idle-rule measurement and rule, shared with Q8: overhead per query at 100 idle rules against 25% of the
+      query's own time at 0 rules, at p50 and at p99;
     - C# ÷ Rust of at most 1.10;
     - the `673495d` whole-program comparison;
     - the three-build `BasicMath` run.
@@ -614,10 +615,11 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
     parity in this campaign. S5 (lazy `IndexCatalog`) is dropped by that plan, so nothing here waits on it. S3 goes
     ahead without the split-step timings deferred here. S1's memo count would let a future `SplitStepBenchmarks`
     verify that it measures memo hits.
-  - [Rule-layer split features](./rule-layer-split-features.md): the Q8 and Q10 results decide demand-indexed local
-    rules and freeze planning control (Cosmos requests 2 and 7).
+  - [Rule-layer split features](./rule-layer-split-features.md): Q10's results are evidence for freeze planning
+    control. Demand-indexed local rules, decided by Q8, belong to performance parity.
   - [Colored-context deferred features](./colored-context-deferred-features.md): Q7 for any work on busy writable
-    parents (G8 thaw, parallel cases), and Q4/Q5 as the baseline for pruning or flattening hidden sets.
+    parents (G8 thaw, parallel cases), Q10 for per-context replanning, and Q4/Q5 as the baseline for pruning or
+    flattening hidden sets.
   - [Interning and value lifetime](./interning-and-value-lifetime.md): Q11 sits beside that plan's `ScopeChurnTests`,
     and both are counts. Its first-block experiment needs this campaign's method for its latency half.
   - [Parallelism test plan](./parallelism-test-plan.md): the parallel cases of the root set are timed here. Its stress
@@ -646,17 +648,19 @@ The result is an early signal for Q1 and Q12, never a replacement for the timed 
    up to four rounds, then report and leave ungated?
 5. **The new baseline.** After the campaign, do future root gates compare against `main` as measured, with
    `BasicMath`'s regression recorded as open, rather than against `3a6e0b7`?
-6. **Q12.** May the header-instantiation change go ahead now, landing after its root gate on night 2? Is Cosmos B4
-   (≤ 128 KB per derivation) still the budget the adapter holds Eggnog to?
+6. **Q12.** May the header-instantiation change go ahead now, landing after its root gate on night 2?
 7. **Construction.** Can the spec's "cost of building an `EGraph`" gate be closed by allocation (6.2 KB engine, 56 KB
    library) without a timed backport to `2fd4a18`?
-8. **net8.0.** May the benchmark app target net8.0 as well as net10.0, so the adapter's runtime is measured?
-9. **Literature B5's failure half.** Is it deferred until a deep-split workload exists, such as a TheSy-style suite or
-   the adapter's corpus? The current case-split workload cannot time out.
+8. **net8.0.** If the package keeps targeting net8.0 (synthesis question 3), may the benchmark app target net8.0 as
+   well as net10.0, so the library's net8.0 target is measured?
+9. **Literature B5's failure half.** Is it deferred until a deep-split workload exists, such as a TheSy-style suite?
+   The current case-split workload cannot time out.
 10. **Where results live.** A report under `docs/` like the colored-context reports, tables in
     `src/Eggnog.Benchmarks/README.md`, or both? Are BenchmarkDotNet's exported reports kept in the repository?
-11. **The Cosmos benchmarks.** Is linking `CosmosTheory.cs` and `Pred.cs` from the test project into the benchmark app
-    acceptable, or should they move to a shared source folder?
+11. **The predicate fixture in benchmarks.** Is linking `PredicateTheory.cs` and `Pred.cs` from
+    `src/Eggnog.Tests/Predicates` into the benchmark app acceptable, or should they move to a shared source folder?
+    Compiled plans' Q1, Q3 and Q5 time query children of that fixture. Q10's timing half also needs the corpus that
+    `ScopedQueryCases.CompileAll` builds, whose `Assert` checks would have to move out before it can be linked.
 
 ## 10. Review
 
@@ -671,15 +675,15 @@ A skeptical review raised fifteen problems. Each was checked against the reposit
   parity's `673495d` comparison. C# ÷ Rust is a reported figure, with performance parity's 1.10 action threshold.
 - **Inconclusive outcome.** Section 6 now defines pass, confirmed failure and inconclusive (up to four rounds, then
   report and leave ungated), with an action for each. Bisection now waits on the owner's commitment (question 1).
-- **Cosmos B4.** It is now phrased as exceeded on a synthetic two-atom workload, with a slope that depends on rule
-  shape. The header-instantiation fix is a new item, Q12. Allocation counts verify it, and the root gate times it. Q8
-  keeps the timing for B3 and for demand-indexed rules beyond the fix.
+- **Idle-rule allocation.** It is now phrased as a slope on a synthetic two-atom workload that depends on rule shape.
+  The header-instantiation fix is a new item, Q12. Allocation counts verify it, and the root gate times it. Q8 keeps
+  the timing for demand-indexed rules beyond the fix.
 - **One campaign definition.** The plan now has one baseline, ETW instead of EventPipe, and performance parity's
-  thresholds (50 µs per iteration at 100 rules, C# ÷ Rust ≤ 1.10). Performance parity's rows are folded into Phase 2.
+  thresholds (the shared idle-rule measurement, C# ÷ Rust ≤ 1.10). Performance parity's rows are folded into Phase 2.
   Compiled plans is no longer counted as value.
 - **Scope cut to medium.** The other path classes, `TheoryDefinitionBenchmarks` and `EGraphConstructionBenchmarks`
-  are deferred or dropped. Q7's 25% threshold is now decided by counts, which a test can take from the xunit
-  scenarios, and is converted to time later.
+  are deferred or dropped. Q7's 25% threshold is now decided by counts, which a test can take, and is converted to
+  time later.
 - **Allocation as a predictor.** The plan no longer uses it. Q2's verdict is "unknown", and `BasicMath` is cited as
   the counter-example.
 - **Benchmark count.** It is now 44 (`git grep -c "\[Benchmark"`). The root set's 129 cases are added.
@@ -687,8 +691,7 @@ A skeptical review raised fifteen problems. Each was checked against the reposit
   section 21.11 and the roadmap.
 - **Bytes per child.** The range is now 95.9-96.3 KB.
 - **Milestone labels.** They appear only in a table attributed to spec section 21.11, beside commits and their content.
-- **B labels.** The plan writes "literature B4/B5" and "Cosmos B4/B5" throughout. Cosmos B5 and B7 are placed in the
-  adapter's project.
+- **B labels.** The plan writes "literature B4/B5" throughout.
 - **Launch matrix.** It is stated in section 6.
 - **Q11 conditions.** It now asserts exact counts against the state before the siblings (`VariantsByDescription.Count`,
   `RuleCount`), and measures the heap on a second pass.

@@ -21,8 +21,8 @@ gate costs time. Mark B "Later". Drop or shelve the rest.
 | C. Parent-visible ids winning over smaller ids (G2 ranking) | Drop; close the decision as "smaller id wins" | medium |
 | D. Pruning child rows an ancestor made redundant (B1) | Drop | medium |
 | E. Flattening of hidden sets (B3) | Drop, with a revisit trigger | medium |
-| F. A memory budget per run that disposes settled split records (G5) | Later: not planned until a consumer needs it | medium |
-| G. Running a split's cases in parallel, with a thaw (G8) | Later: not planned until a consumer needs it | large |
+| F. A memory budget per run that disposes settled split records (G5) | Later: not planned until a user needs it | medium |
+| G. Running a split's cases in parallel, with a thaw (G8) | Later: not planned until a user needs it | large |
 | H. Shared ids for a term sibling cases derive (G9) | Drop | large |
 | I. Deduplicating driver keys across layer pieces | Drop unless a count shows duplicates matter | small to medium |
 
@@ -37,11 +37,13 @@ cannot attribute. The time value has not been measured either, and it can be neg
 a full rebuild of the table's indexes. So the owner's question decides first, and an idle-machine timing that is
 two-sided decides second.
 
-Item B rested on a wrong premise. In the Cosmos flow, global rules are planned during the first container's compile run,
-on statistics taken before anything is derived, and not at its freeze. Per-scope plans for every rule would cost about
-2.8 KB retained per plan, measured on the Cosmos theory. That extrapolates to about 2.8 MB per container scope at 1,000
-rules, above the Cosmos budget of 2 MB. Nothing has measured what a mis-planned rule costs. B therefore waits for a
-count on real containers. For items C to I, the record already gives the answer, or no consumer needs them.
+Item B rested on a wrong premise. When sibling scopes under a frozen root are each saturated by a run and then frozen,
+global rules are planned during the first such scope's run, on statistics taken before anything is derived, and not at
+its freeze. Per-scope plans for every rule would cost about 2.8 KB retained per plan, measured on the test fixture
+`PredicateTheory` (`src/Eggnog.Tests/Predicates`). That extrapolates to about 2.8 MB per frozen scope at 1,000 rules,
+memory that grows with the number of frozen scopes times the number of rules, which rules out a plan per scope for every
+rule as the first remedy. Nothing has measured what a mis-planned rule costs. B therefore waits for a count on a fixed
+corpus of sibling schema scopes. For items C to I, the record already gives the answer, or no workload needs them.
 
 ## 2. What it is and why it was planned
 
@@ -49,7 +51,7 @@ All nine items come from the design of colored contexts. The engine map's cross-
 [`../history/egglog-engine-map.md`](../history/egglog-engine-map.md) §4.2. The specification and its deferred list are in
 [`../history/colored-contexts-spec.md`](../history/colored-contexts-spec.md) §19 and §21.11. The review of the
 literature is in [`../history/colored-egraph-literature.md`](../history/colored-egraph-literature.md) §3.1 and §4. Each
-item was left open on purpose: either the cost it answers had not been measured, or no consumer needed it.
+item was left open on purpose: either the cost it answers had not been measured, or no user needed it.
 
 - **A. Compaction under live descendants.** Engine map §4.2 C12 keeps egglog's compaction trigger (more than
   `max(16, n/2)` tombstones). It adds a gate: a layer whose "descendants have cursors behind it, or hidden sets keyed by
@@ -61,10 +63,11 @@ item was left open on purpose: either the cost it answers had not been measured,
 - **B. Per-context replanning.** Engine map §8.2 ("Frozen plan statistics": "A child whose statistics differ sharply
   from the root's keeps the root's plan") and §8.3 question 13. Spec §9.7: "A plan is made once per rule, on the
   statistics of the context it first runs in, or of the frozen context that pre-plans it… Replanning stays open."
-  Rule-layer spec §11 risk 4 accepts the risk ([`../history/rule-layer-spec.md`](../history/rule-layer-spec.md)). The
-  Cosmos plan turns it into risk R14 and library request 7
-  ([`../history/cosmos-integration.md`](../history/cosmos-integration.md) §8.1 and §8.3), with "one graph per
-  container" as its fallback (§3.3).
+  Rule-layer spec §11 risk 4 accepts the risk ([`../history/rule-layer-spec.md`](../history/rule-layer-spec.md)). It
+  matters most to a long-lived host that keeps several sibling scopes of different shapes frozen under one root and
+  answers short-lived children of each; such a host's fallback is one graph per scope. An option on non-root freezes
+  that plans only local rules, or nothing, was proposed as a mitigation
+  ([`./rule-layer-split-features.md`](./rule-layer-split-features.md), item 4), and is now merged into this item.
 - **C. G2 ranking.** The literature review's G2 ("Union-by-min under a parent that is not frozen"). When a writable
   parent mints a term's id after its cases minted theirs (the term lift), the parent's id is larger and loses in every
   case. Each case then hides and copies the parent rows that mention it. The proposed alternative ranks winners
@@ -202,18 +205,17 @@ other scope, it passes every global, local, query, mirror and split rule that it
 (`CollectPlanRules`, `src/Eggnog/Graph/Scope.Tree.cs`).
 
 A rule's plan is therefore fixed by the first run of that rule anywhere, or by the first non-root freeze if no run came
-first. In the Cosmos flow, a run comes first. Every scoped scenario compiles a container by running rules in the
-writable container scope and then freezing it. `SweepLinks.Compile` (`src/Eggnog.Tests/Cosmos/Scoped/SweepLinks.cs`)
-calls `schema.Run(c.Facts)` and then `schema.Freeze()`. Here `CosmosTheory.Facts` is `Saturate(Saturate(Horn,
-Lattice), Split(SchemaSplit, …))` (`CosmosTheory.Cases.cs`). The Scenario01 to Scenario07 tests do the same with
-`Saturate(Horn, Lattice)` or `Facts`. So every Horn and Lattice rule, and the schema split's matcher, is planned at the
-first iteration of the first container's compile run. At that point the scope holds its assumed declarations, and
-every derived table is still empty. Only rules that compile does not run (the `Rewrite` rules, the query split's
-matcher, queries) are planned at that container's freeze, on its saturated statistics. Two things follow:
+first. A run comes first whenever a host saturates a writable non-root scope before freezing it, which is how the test
+fixture's schema scopes are built: under a frozen root, the scope assumes its declarations, runs
+`PredicateTheory.Facts`, which is `Saturate(Saturate(Horn, Lattice), Split(SchemaSplit, …))`, and is then frozen. So
+every Horn and Lattice rule, and the schema split's matcher, is planned at the first iteration of the first such scope's
+run. At that point the scope holds its assumed declarations, and every derived table is still empty. Only rules that the
+run does not use (the `Rewrite` rules, the query split's matcher, queries) are planned at that scope's freeze, on its
+saturated statistics. Two things follow:
 
-- the Cosmos mitigation "a representative container freezes first" (cosmos-integration §3.3) chooses whose
-  declarations the plans see, not whose derived facts they see;
-- request 7's freeze option cannot touch the plans of the rules run during compile.
+- choosing which sibling scope is built first chooses whose declarations the plans see, not whose derived facts they
+  see;
+- a freeze option cannot touch the plans of the rules that a run before the freeze used.
 
 The planner reads statistics through `IPlanStatistics` (`GetApproximateSize`, `GetColumnUniqueness`;
 `src/Eggnog/Relations/Planning/QueryPlanner.FreeJoin.cs`, `QueryPlanner.Decomposition.cs`). The executor can still
@@ -223,8 +225,9 @@ watermark (`AllowInheritance`) is computed from the plan's actions, which do not
 that scans enumerate and that indexes absorb, own and ancestor. It keeps one instance per `Database` and counts per stage
 call or index build. It has no breakdown per rule, so a query child's database gives one total per derivation.
 
-*Measurement made for this plan (allocations, a dry run, no timing).* Under one frozen `CosmosTheory` root, two sibling
-container scopes received the same declarations (`SweepLinks.Declare`) without any run. The first was frozen, which
+*Measurement made for this plan (allocations, a dry run, no timing).* Under one frozen `PredicateTheory` root, two
+sibling schema scopes received the same declarations (the fixture's schema with a three-way discriminator) without any
+run. The first was frozen, which
 planned the theory's 51 global rules and split matchers plus its own branch rules. Then the second was frozen, which
 planned only its own branch rules. The probe recorded allocated bytes on the thread and the managed heap after forced
 collections:
@@ -234,12 +237,11 @@ collections:
 | Allocated | 708 KB | 74 KB | 634 KB (about 12 KB per plan) |
 | Retained | 170 KB | 25 KB | 145 KB (about 2.8 KB per plan) |
 
-On the real path, `SweepLinks.Compile` allocated 1.67 MB for the first container and 1.04 MB for an identical second
-one, a difference that matches the 634 KB above. Linear extrapolation is the only basis for larger theories. On that
-basis, a plan per frozen scope for every rule at 1,000 rules would retain about 2.8 MB per container scope. That is above
-the Cosmos budget B4 of "≤ 2 MB at 1,000 rules" for the whole container scope (cosmos-integration §6.2). Each freeze
-would also allocate about 12 MB. Nothing has measured how much a plan made on one container's statistics costs on
-another.
+On the full path (declare, run, freeze), the fixture's schema compile allocated 1.67 MB for the first scope and 1.04 MB
+for an identical second one, a difference that matches the 634 KB above. Linear extrapolation is the only basis for
+larger theories. On that basis, a plan per frozen scope for every rule at 1,000 rules would retain about 2.8 MB per
+frozen scope, and each freeze would allocate about 12 MB. Nothing has measured how much a plan made on one scope's
+statistics costs on another.
 
 **C. G2.** `UnionFindOverlay.Union` (`src/Eggnog/Relations/UnionFind/UnionFindOverlay.cs`) sets
 `winner = Math.Min(ca, cb)`. `Rekey` assumes that the parent's canonical is the smaller id. `UnionIdMerge`
@@ -251,8 +253,9 @@ another.
 `cases × (lifted terms − 1)`. The copies are one row per lifted term per case per round (2,048 rows per round for 8
 cases of 256 terms). Neither depends on the root's size. The report's read-out says that ranking parent-visible ids first
 "would remove the parent-id losers and these copies, at the price of rewriting the cases' own rows that name the local
-id (the same order of rows, but inside the case's own layer rather than copied from the parent)". The Cosmos theory
-lifts value-keyed facts only (rule-layer spec §11 risk 5), so it never lifts terms and never meets G2.
+id (the same order of rows, but inside the case's own layer rather than copied from the parent)". The test fixture
+`PredicateTheory` lifts value-keyed facts only (rule-layer spec §11 risk 5), so it never lifts terms and never meets
+G2.
 
 **D. B1.** Not implemented. Catch-up branch (b) (`ContextTables.CatchUpRows`, spec §7.2;
 `src/Eggnog/Relations/Layers/ContextTables.CatchUp.cs`) merges an ancestor row whose key the child holds into the
@@ -304,10 +307,10 @@ unaffected.
 - *Split runs:* a split run at that scale pays the same, because its cases live from the first split step to the run's
   end (rule-layer D7). The caught-up variant suggests that step 0 would recover most of it, but no split run has been
   measured. No split benchmark exists in `src/Eggnog.Benchmarks`.
-- *Cosmos:* none. The container's schema split runs in the writable container scope during compile, so that scope's
-  tables are gated for the compile run. Those tables are small, `Run` disposes the cases before `SweepLinks.Compile`
-  freezes the scope (it asserts `Assert.Empty(schema.Children)`), and the freeze then compacts. Query splits run in
-  transient query scopes under frozen containers (cosmos-integration §3.3).
+- *A scope split, then frozen:* not affected. A split run in a writable scope gates that scope's tables for the run,
+  but `Run` disposes the cases before it returns (the fixture's schema compile asserts that the scope has no children
+  after its run), so a freeze after the run compacts. Splits in short-lived children of a frozen scope gate only those
+  children's own tables.
 - *If never done:* the library documents the limitation. Do not hold children of a large writable scope across heavy
   work in it. Expect a split run at a large writable scope to keep its tombstones until it ends. Freeze a scope before
   creating children. The cost is memory and scan time, never correctness.
@@ -319,23 +322,22 @@ count that a test or a host can read. Step 0 does not help that case when the to
 as in `FreezeTests`.
 
 **B. Per-context replanning.**
-- *Who benefits:* the Cosmos adapter, whose global rules are planned on the first container's declarations before
-  anything is derived, and any user with several scopes of very different shapes under one graph.
-- *How much:* unknown. The executor's run-time reordering mitigates a bad order only in part (engine map §8.2).
-  Cosmos container tables are small. Its budget for a derivation is p50 ≤ 250 µs at ≤ 100 rules
-  (cosmos-integration §6.2, B3), so a plan that is twice as bad may still fit.
-- *A benefit the first version of this plan missed:* plans made at freeze would replan the first container's rules
-  too. Today those plans see only declarations. A cheaper variant, "provisional plans", captures most of that benefit
+- *Who benefits:* any user with several scopes of very different shapes under one graph, and in particular a
+  long-lived host that saturates each sibling scope by a run before freezing it, whose global rules are then planned
+  on the first scope's declarations before anything is derived.
+- *How much:* unknown. The executor's run-time reordering mitigates a bad order only in part (engine map §8.2). When a
+  scope's tables are small, a plan that is twice as bad may still cost little in absolute terms.
+- *A benefit the first version of this plan missed:* plans made at freeze would replan the first scope's rules too.
+  Today those plans see only declarations. A cheaper variant, "provisional plans", captures most of that benefit
   without plans per scope (§5).
-- *If never done:* the Cosmos plan's mitigations stand. A representative container compiles first, its B3 budget is
-  measured on a later container, and the fallback is one graph per container. The fallback costs theory definition per
-  container, about 1.3 to 3.0 ms and 815 KB per graph for the prototype theory (§3.3).
+- *If never done:* a host can choose which sibling scope is built first, and its fallback is one graph per scope,
+  which costs a theory definition per graph (not measured here).
 
-**C. G2.** No consumer lifts terms in volume (Cosmos lifts value-keyed facts only). The measured cost is linear in
-cases × terms per round and independent of the root. The alternative moves rewriting of the same order into each case's
-own layer (L7 read-out). The expected saving is therefore the difference between copying a parent row and rewriting an
-own row, not the removal of the work. *If never done:* no change. Smaller-id-wins stays egglog's rule at every level,
-and the overlay, `Rekey`, `UnionIdMerge` and the invariant checker keep one ordering.
+**C. G2.** No workload lifts terms in volume (the test fixture lifts value-keyed facts only). The measured cost is
+linear in cases × terms per round and independent of the root. The alternative moves rewriting of the same order into
+each case's own layer (L7 read-out). The expected saving is therefore the difference between copying a parent row and
+rewriting an own row, not the removal of the work. *If never done:* no change. Smaller-id-wins stays egglog's rule at
+every level, and the overlay, `Rekey`, `UnionIdMerge` and the invariant checker keep one ordering.
 
 **D. B1.** It saves one own row and one hidden entry per lifted fact per live case. Cases die at the end of the run
 (D7), and a whole case costs 13 to 53 KB, so the saving is a fraction of a few tens of KB per case for the length of one
@@ -348,17 +350,16 @@ probe. The measured copy volume per union is 2.9 rows on average (maximum 32), s
 arrays and far from any layer's half. A child heavy enough to need B3 already costs about as much as a clone
 (correction 13). *If never done:* such a child is slower than a clone would be. No workload has shown one.
 
-**F. G5.** It lets a split run continue under a memory bound instead of stopping at `RowLimit`. Cosmos opens few cases:
-`SweepLinks.Compile` asserts 3 schema cases. Its scope tree stays at depth 4 or less (cosmos-integration §3.3, "Depth
-stays at 4 or less"), and it uses the default `SplitDepthLimit` of 4 nested splits (`RunOptions`). *If never done:*
+**F. G5.** It lets a split run continue under a memory bound instead of stopping at `RowLimit`. Measured workloads open
+few cases: the fixture's schema compile opens 3, and no split in the fixture's programs nests. *If never done:*
 `RowLimit` and `CaseLimit` stop runaway runs soundly, and the report says why.
 
-**G. G8.** Wall-clock time for split-heavy runs on several cores. Cosmos runs each graph with a degree of parallelism of
-1 and gets its concurrency across statements (cosmos-integration §3.3), so it gains nothing. *If never done:* split runs
-use one core per top-level run. Children of frozen scopes still run concurrently.
+**G. G8.** Wall-clock time for split-heavy runs on several cores, for a host that is latency-bound on one split run. A
+host that runs serial graphs and gets its concurrency from many children of frozen scopes at once gains nothing. *If
+never done:* split runs use one core per top-level run. Children of frozen scopes still run concurrently.
 
 **H. G9.** Fewer ids and fewer lift unions for terms that several cases derive. This matters only for the term lift,
-which no consumer uses in volume. *If never done:* nothing visible.
+which no workload in the repository uses in volume. *If never done:* nothing visible.
 
 **I. Driver keys.** Less duplicate probe work in children whose keys have rows in more than one layer. Root runs are
 unaffected. Children are small in every measured workload: the per-child benchmark matches 200 rows
@@ -414,19 +415,19 @@ with a tombstone; the invariant checker after every rebuild; and a mutation-test
   The first non-root freeze replans each provisional rule once, on the frozen scope's statistics, and publishes the new
   plan with the volatile write `RuleInfo` already uses. Plans are immutable, and progress and watermarks are kept per
   rule and context, not per plan, so a rule running concurrently on the old plan is unaffected. No memory per scope. It
-  moves Cosmos's compile-run plans from declaration-only statistics to the first container's saturated statistics. It
-  does not help later containers that differ from the first.
+  moves the plans of rules first run in a non-root scope from declaration-only statistics to that scope's saturated
+  statistics. It does not help later sibling scopes that differ from the first.
 - *B-s, selective per-scope plans (medium).* Each non-root freeze replans every rule it pre-plans and keeps a plan table
   entry (rule id to `CachedPlanInfo`) only where the plan differs from the shared one. A child resolves a rule's plan by
   walking up to the nearest frozen ancestor that has an entry, falling back to `RuleInfo`'s plan. Planning allocates
-  about 12 KB per rule per freeze (§3), about 12 MB per container at 1,000 rules, against B5's "≤ 1 s for 10
-  containers". The retained cost is about 2.8 KB per differing plan. Keeping every plan would break B4 at 1,000 rules
-  by extrapolation.
+  about 12 KB per rule per freeze (§3), about 12 MB per frozen scope at 1,000 rules. The retained cost is about 2.8 KB
+  per differing plan. Keeping every plan would retain about 2.8 MB per frozen scope at 1,000 rules, by extrapolation.
 - *Correctness risk:* low for both. Results do not depend on plans, and the differential tests check results.
 - *Interaction:* compiled plans ([`./compiled-plans.md`](./compiled-plans.md)) compile once per plan, so per-scope plans
   multiply compilation. B-p does not.
-- *The freeze option of Cosmos request 7*, owned by [`./rule-layer-split-features.md`](./rule-layer-split-features.md),
-  cannot reach the plans of rules that compile runs. That plan reaches the same conclusion about the option.
+- *The freeze-planning option* of [`./rule-layer-split-features.md`](./rule-layer-split-features.md), item 4, cannot
+  reach the plans of rules that a run before the freeze used. That plan reaches the same conclusion about the option,
+  and merges it into this item.
 
 **C. G2 (medium).** It touches the overlay's `Union` and `Rekey`, `UnionIdMerge` (which becomes aware of its context),
 the invariant checker, the lift's member maps, and the root/child asymmetry with egglog. Correctness risk: medium,
@@ -463,12 +464,12 @@ child code. The root must keep its single-piece path untouched.
 | A-d | Is a scope frozen with live children a pattern users fall into? | None needed: `FreezeTests` shows the permanent cost, and nothing reports it | Go with A0. Also go alone if question 1 is "no", since the documented limitation then needs this text. | No | Do (small) |
 | A1 | Does a cursor remap recover more than A0? | Already answered: the probe leaves ≤ 5% of tombstones below a cursor that moves every iteration, and split cases hide rows, which A1 excludes | No-go | No | Drop |
 | A2 | In a split run that fires where it naturally fires, how many tombstones lie below the cases' cursors? | After A0, if the owner names a split workload at scale: run it and report the share of the run during which the gate was closed, peak row-buffer bytes, and tombstones below the highest live cursor | Go only if tombstones below the cursors are ≥ 25% of the tombstones at the run's peak and the row buffers they hold are ≥ 100 MB | Counts: no | Later |
-| B | Does a plan made on one container's statistics cost much on another, on real containers? | First the kill test, already partly made: plan bytes per rule (2.8 KB retained, 12 KB allocated) against B4 and B5, which rules out plans per scope for every rule. Then compile the real containers of Scenario01 to Scenario07 under one frozen root through their real compile path (run, then freeze), in two orders. Compare total derivation work per query (own and ancestor rows scanned plus rows indexed, from each query child's `ExecutorCounters`), or isolate rulesets for per-rule figures. Repeat with B-p prototyped. | Go for B-p if the declaration-only plans cost ≥ 1.5× the work of plans made on the frozen container for some real container. Go for B-s only if a later container still costs ≥ 1.5× after B-p, or misses Cosmos B3. | Counts: no. Cosmos B3 per container: yes | Later |
-| C | Is copying parent rows into cases more expensive than rewriting the cases' own rows? | Already answered by the L7 report: same order of rows either way, linear in cases × terms, independent of the root | No-go unless a consumer lifts terms in volume | No | Drop; record the decision |
-| D | Does keeping duplicate own rows in cases cost memory that matters? | Count own rows equal to the visible ancestor row (the B2 invariant's "no own row is equal, after merging, to the visible ancestor row") at each lift, in `CaseSplitMemoryBenchmarks` and in the case-split tests of `Scenario02QueryDisjunctionTests`, `Scenario04UndiscriminatedAnyOfTests` and `Scenario07SweepLinksTests` | Go only if such rows are ≥ 25% of case bytes and some consumer's cases live long | No | Drop |
+| B | Does a plan made on one scope's statistics cost much on a sibling's? | First the kill test, already partly made: plan bytes per rule (2.8 KB retained, 12 KB allocated), which rules out plans per scope for every rule. Then build the fixed corpus that `ScopedQueryCases.CompileAll` builds on the test fixture (`src/Eggnog.Tests/Predicates/Scoped/`): every query case's schema plus `DiscriminatedSchema`, as sibling schema scopes under one frozen root, each through its compile path (declare, run, then freeze), in that order and in reverse. The corpus is fixed before any measurement, and no scope is added or chosen to make plans differ. Compare total derivation work per query (own and ancestor rows scanned plus rows indexed, from each query child's `ExecutorCounters`), or isolate rulesets for per-rule figures. Repeat with B-p prototyped. | Go for B-p if the declaration-only plans cost ≥ 1.5× the work of plans made on the frozen scope for some scope of that corpus. Go for B-s only if a later scope still costs ≥ 1.5× after B-p. | Counts: no. The timing half of Q10: yes | Later |
+| C | Is copying parent rows into cases more expensive than rewriting the cases' own rows? | Already answered by the L7 report: same order of rows either way, linear in cases × terms, independent of the root | No-go unless a workload lifts terms in volume | No | Drop; record the decision |
+| D | Does keeping duplicate own rows in cases cost memory that matters? | Count own rows equal to the visible ancestor row (the B2 invariant's "no own row is equal, after merging, to the visible ancestor row") at each lift, in `CaseSplitMemoryBenchmarks` and in the case-split tests over the test fixture (`src/Eggnog.Tests/Predicates`) | Go only if such rows are ≥ 25% of case bytes and some workload's cases live long | No | Drop |
 | E | Does any child hide a large share of a large ancestor layer? | A test-only histogram of hidden-set size ÷ layer rows at dispose, over the context and scoped suites and `CopyVolumeBenchmarks` | Go only if some workload has a child hiding > 25% of an ancestor layer of ≥ 10,000 rows | No | Drop; revisit only if that histogram ever shows it |
-| F | Do split runs fail on memory before `RowLimit` or `CaseLimit` stops them? | None until a consumer reports one | Go only on a consumer's workload | No | Later |
-| G | Is in-case work the bulk of a split run, on a workload a consumer has? | Count rows written and matches in cases against the parent per split run on that workload; then time it | Go only if in-case work is ≥ 70% of the run and the consumer is latency-bound on one run | Yes, for time | Later |
+| F | Do split runs fail on memory before `RowLimit` or `CaseLimit` stops them? | None until a user reports one | Go only on a workload that shows it | No | Later |
+| G | Is in-case work the bulk of a split run, on a workload that runs large splits? | Count rows written and matches in cases against the parent per split run on that workload; then time it | Go only if in-case work is ≥ 70% of the run on that workload | Yes, for time | Later |
 | H | Does the term lift matter to anyone? | None now | No-go | No | Drop |
 | I | How often is a key driven from more than one piece? | A counter in the driver kernels for (position, key) frames whose key has rows in more than one piece, over the scoped suites, `PerChildCostBenchmarks` and `CaseSplitMemoryBenchmarks` | Go only if duplicates are ≥ 20% of child frames on a workload whose children are not small | No | Drop |
 
@@ -478,7 +479,7 @@ correctly.
 
 ## 7. Plan if it goes ahead
 
-Only A0, A-d and B have plans. The others need none unless a consumer reopens them.
+Only A0, A-d and B have plans. The others need none unless a user's workload reopens them.
 
 **Phase 0: owner's answers and the cheap counts.**
 - Entry: this plan accepted.
@@ -504,8 +505,7 @@ Only A0, A-d and B have plans. The others need none unless a consumer reopens th
   - `CompactionGateTests` turned into suffix-compaction tests, with descendants at several depths and cursors at
     several positions.
   - A forced mode that compacts at every merge with a tombstone, running the context suites, the differential tests
-    and the case-split tests of `Scenario02QueryDisjunctionTests`, `Scenario04UndiscriminatedAnyOfTests` and
-    `Scenario07SweepLinksTests`.
+    and the case-split tests over the test fixture (`src/Eggnog.Tests/Predicates`).
   - The held-child probe as an allocation test. After every iteration, each table's tombstones at or above the highest
     cursor are at most `max(16, physical/2)`, the same bound as the run without a child. No ratio is asserted.
 - Practice: implement; review from several angles, including a mutation-testing review of the new tests; fix; verify on
@@ -515,20 +515,21 @@ Only A0, A-d and B have plans. The others need none unless a consumer reopens th
   3% of the run without a child.
 
 **Phase B-p: provisional plans.**
-- Entry: the real-container count of §6 is a go for B-p.
+- Entry: the sibling-scope count of §6 is a go for B-p.
 - Work: a provisional flag on plans made in a writable non-root scope's run, and a replan at the first non-root
   freeze.
 - Tests: the plan-golden tests. Differential runs with and without replanning must give equal results. The
-  real-container counts as regression tests.
-- Documentation: [`../architecture.md`](../architecture.md) §3.5 ("A rule is planned once…"), rule-layer residual risk
-  4 restated, and R14's status in the Cosmos plan's tracking.
+  sibling-scope counts as regression tests.
+- Documentation: [`../architecture.md`](../architecture.md) §3.5 ("A rule is planned once…"), and rule-layer residual
+  risk 4 restated.
 
-**Phase B-s: selective per-scope plans.** Only if B-p leaves a later container ≥ 1.5× worse or over Cosmos B3, and
-plan bytes at 1,000 rules fit B4. Work and tests as B-p, plus a freeze-time allocation figure at 100 and 1,000 rules.
+**Phase B-s: selective per-scope plans.** Only if B-p leaves a later sibling scope ≥ 1.5× worse, and the owner accepts
+the retained plan bytes per frozen scope that Phase 0 measures at 1,000 rules. Work and tests as B-p, plus a freeze-time
+allocation figure at 100 and 1,000 rules.
 
 **Closing the dropped items (documentation only).** Remove G2, B1, B3, G9 and the driver-key item from the roadmap's
 "Left open by design", with one line each saying why they are not planned. Keep G5 and G8 as "not planned until a
-consumer needs them", and A2 as "later, if a split workload shows tombstones below the cursors". Record G2's decision in
+user needs them", and A2 as "later, if a split workload shows tombstones below the cursors". Record G2's decision in
 [decisions](../engine/decisions.md): smaller id wins at every level. Correct the roadmap's two misdescriptions:
 "split-driver keys" (driver keys across layer pieces) and "pruning and flattening of hidden sets" (B1 prunes a child's
 rows). These edits belong to [`./conformance-docs-release.md`](./conformance-docs-release.md).
@@ -543,12 +544,12 @@ rows). These edits belong to [`./conformance-docs-release.md`](./conformance-doc
 - **Performance parity** ([`./performance-parity.md`](./performance-parity.md)): A0 touches the root's merge path. Land
   it after the `BasicMath` regression is understood, so the two are not confounded.
 - **Idle-machine measurement** ([`./idle-machine-measurement.md`](./idle-machine-measurement.md)): the timing that
-  decides A0, the root gates after A0, and Cosmos B3 per container for B.
+  decides A0, the root gates after A0, and Q10, whose plan comparison and timing inform B.
 - **Parallelism test plan** ([`./parallelism-test-plan.md`](./parallelism-test-plan.md)): a prerequisite of G8 if it is
   ever reopened.
-- **Rule-layer and split features** ([`./rule-layer-split-features.md`](./rule-layer-split-features.md)): owns Cosmos
-  request 7's freeze option, plus D7, D17 and the split options that G5 and G8 would change. Its item 4 cites B here as
-  "Do after an experiment". With B now "Later", that reference should follow.
+- **Rule-layer and split features** ([`./rule-layer-split-features.md`](./rule-layer-split-features.md)): its item 4,
+  the freeze-planning option, is merged into B here. It also owns D7, D17 and the split options that G5 and G8 would
+  change.
 - **Conformance, documentation and release** ([`./conformance-docs-release.md`](./conformance-docs-release.md)): the
   roadmap and decision edits of §7.
 - **Smaller engine items** ([`./smaller-engine-items.md`](./smaller-engine-items.md)): no dependency.
@@ -559,10 +560,10 @@ rows). These edits belong to [`./conformance-docs-release.md`](./conformance-doc
    writable scope or at the root? If not, A0 is dropped, and A-d documents the limitation.
 2. May G2 be closed with "smaller id wins at every level" recorded as a decision, given the L7 read-out?
 3. Do you accept dropping A1, B1, B3, G9 and the driver-key item, and marking A2, G5 and G8 "not planned until a
-   consumer needs them"?
-4. For R14: global rules that a container's compile runs are planned on its declarations alone, before anything is
-   derived. Is that acceptable until the real-container count exists? Should provisional plans (B-p) be the first
-   remedy if the count shows a loss, with per-scope plans only after it?
+   user needs them"?
+4. For residual risk 4: global rules that a non-root scope's run uses before its freeze are planned on that scope's
+   declarations alone, before anything is derived. Is that acceptable until the sibling-scope count exists? Should
+   provisional plans (B-p) be the first remedy if the count shows a loss, with per-scope plans only after it?
 5. If A0 goes ahead: may a forced-compaction test mode (compact at every merge with a tombstone) become a permanent test
    configuration on net8.0 and net10.0, even though it lengthens the context suites?
 6. May the roadmap's "split-driver keys" be corrected to "driver keys across layer pieces", and "pruning and flattening
@@ -588,15 +589,16 @@ Changed:
   A2 only.
 - **Time cost restated** (major). Index refresh is incremental, delta atoms are narrowed by timestamp, and compaction
   forces full index rebuilds (§3, §4, §5).
-- **B's premise corrected** (major). Plans are fixed by the first run of each rule. In Cosmos that is the first
-  container's compile run, on declarations alone (`SweepLinks.Compile`, `CosmosTheory.Facts`). The benefit of
-  replanning the first container's rules is now credited, and provisional plans (B-p) are added as the cheap variant.
+- **B's premise corrected** (major). Plans are fixed by the first run of each rule. When a non-root scope is saturated
+  before its freeze, that is the first such scope's run, on declarations alone (the fixture's schema compile with
+  `PredicateTheory.Facts`). The benefit of replanning the first scope's rules is now credited, and provisional plans
+  (B-p) are added as the cheap variant.
 - **B's experiment** (major). Plan bytes were measured first: about 2.8 KB retained and 12 KB allocated per plan, which
-  rules out a plan per scope for every rule at 1,000 rules against B4. The comparison now uses the real scenario
-  containers through their real compile path, total derivation work per query (`ExecutorCounters` is per `Database`),
-  and a threshold of 1.5×.
-- **Cosmos reason for A restated** (minor): the schema split gates the container scope during compile, on small
-  tables, and the freeze compacts after `Run` disposes the cases.
+  rules out a plan per scope for every rule at 1,000 rules. The comparison now uses sibling schema scopes built through
+  the full path (declare, run, freeze), total derivation work per query (`ExecutorCounters` is per `Database`), and a
+  threshold of 1.5×.
+- **A for a scope split, then frozen** (minor): the split gates the scope during its run, and the freeze compacts after
+  `Run` disposes the cases.
 - **Figures corrected** (minor): "nearly doubles (1.93×)". Bytes now come from measured row-buffer capacities, not a
   four-cell estimate. The measured heap contradicts a memory gain, and that is now stated.
 - **Probe described exactly** (minor), and proposed as a `--stale-probe` benchmark mode.
@@ -604,8 +606,7 @@ Changed:
 - **I's citation** (minor, accepted in part): I27 now governs. Decision 6 stays as the item the spec's §18.2 maps to
   layered multiplicity.
 - **The roadmap's B1 wording** (minor): added to the corrections and to question 6.
-- **Depth in F** (minor): scope-tree depth (cosmos-integration §3.3) and split depth (`RunOptions.SplitDepthLimit`)
-  are now separate.
+- **Depth in F** (minor): F now states only what the fixture's splits show, that none of them nests.
 - **Publication** (minor): the milestone-labelled test name is replaced by the test classes, and decisions is a
   relative link. Every `./<key>.md` link was checked against the plan keys. All exist among the plans except
   `conformance-docs-release.md`, which is the key every sibling plan uses for that workstream, and which must exist

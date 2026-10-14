@@ -3,8 +3,9 @@
 This plan covers the roadmap's "Performance parity" and "The root `BasicMath` regression" items
 ([`../roadmap.md`](../roadmap.md), "Engine work"). It also covers four performance follow-ups that are not on the
 roadmap yet: staging-buffer growth, write allocation, the parallel writes gap and a separate shard-count option. And it
-covers the engine side of the Cosmos plan's idle-local-rule request: the cost of idle local rules and the conditional
-follow-up "demand-indexed local rules" ([`../roadmap.md`](../roadmap.md), "Library work").
+covers the engine side of the roadmap's "Latency of transient children" item ([`../roadmap.md`](../roadmap.md),
+"Benchmarks and timed gates"), the cost of idle local rules, and its conditional follow-up, demand-indexed local rules
+([`../roadmap.md`](../roadmap.md), "Engine work", "Idle local rules").
 
 ## 1. Summary and recommendation
 
@@ -14,12 +15,13 @@ The plan splits into three parts.
 
 **Do now (small): idle local rules allocate too much.** A count-only probe in
 [`./idle-machine-measurement.md`](./idle-machine-measurement.md) (section 3.6) shows that a transient query child under a
-frozen container allocates about 1.5 KB per idle local rule per iteration: 165 KB per query at 100 idle rules. The
-Cosmos plan's budget B4 is at most 128 KB per derivation, so it fails from about 80 rules, whatever the timing shows.
-About two thirds of that allocation happens in the engine before it finds that a rule has nothing new.
-`PlanTemplate.InstantiateLayered` allocates its header arrays and lists before it evaluates the first header (§3). The
-other third is the library's per-rule bookkeeping. An allocation-free path for empty headers, plus trimmed
-bookkeeping, is small and serves the first consumer directly. In the same pass, at almost no cost:
+frozen schema scope allocates about 1.5 KB per idle local rule per iteration: 165 KB per query at 100 idle rules, and
+1.5 MB at 1,000. About two thirds of that allocation happens in the engine before it finds that a rule has nothing new.
+`PlanTemplate.InstantiateLayered` allocates its header arrays and lists before it evaluates the first header (§3), and
+an idle variant then discards them. The other third is the library's per-rule bookkeeping. The same waste occurs at the
+root, at about 1.17 KB per idle global rule per iteration. An allocation-free path for empty headers, plus trimmed
+bookkeeping, is small, has strong oracles, and serves every graph whose runs list rules that find nothing new. In the
+same pass, at almost no cost:
 
 - count execution-state clones and buffer creations per run;
 - size a clone's buffer map up front, which removes the `Array.Resize` frames that the disputed profile figure points
@@ -46,8 +48,9 @@ The root `BasicMath` microbenchmark is 6-29% slower than its baseline, depending
 branch for it has never been measured above the noise. Each of these is a small question that a noise-controlled
 idle-machine session can settle. Each fix should be built only if its threshold says so.
 
-**Conditional: demand-indexed local rules.** Build these only if, after the allocation fix, idle rules still cost a
-meaningful share of a derivation's time: the threshold is in §6.
+**Conditional: demand-indexed local rules.** Build these only if, after the allocation fix, the idle-rule overhead
+per query at 100 idle local rules exceeds 25% of the query's own time at 0 rules, at p50 or at p99: the measurement
+and the rule are in §6, row 3.
 
 Drop the herbie and eggcc ports. They need a `.egg` reader, which is not planned.
 
@@ -62,7 +65,7 @@ Verdict by item:
 | Staging-buffer growth (`Array.Resize` under `ExecutionState.CreateBuffer`) | **Do after an experiment**: the counters and the map sizing first. Run an ETW profile only if those leave the question open | Small to medium |
 | Write allocation (about 630-650 MB per 4M-row invocation) | **Do after an experiment**. The bytes are already broken down (§3). Prototype two fixes, count bytes now, and time them with a direct A/B under both collectors | Small |
 | Parallel writes gap, and the shard count | **Do after an experiment**: one writes row that compares medians on both sides and includes a 16-shard parameter at 1, 2 and 4 threads. The existing 4-thread figures already exceed 10% | Small (measurement) |
-| Demand-indexed local rules | **Later**, conditional on the per-derivation threshold in §6, measured after the allocation fix | Medium |
+| Demand-indexed local rules | **Later**, conditional on the per-query rule in §6, measured after the allocation fix | Medium |
 
 ## 2. What it is and why it was planned
 
@@ -95,12 +98,12 @@ divan ports in `src/Eggnog.Benchmarks/Relations/Writes/`, and the sampling profi
 the Rust"). They fall under the engine map's "pooling" and "parallel tuning".
 
 **Idle local rules and demand-indexed local rules.** On a scope with local rules, every query child runs every local
-rule of its container on every iteration. "Nothing measures that cost at 100 or 1,000 local rules"
-([`../history/cosmos-integration.md`](../history/cosmos-integration.md), §6.1). The Cosmos plan asks for latency
-figures for transient children, and for the per-iteration cost of idle local rules at 100 and 1,000 rules. If that cost
-is significant, it asks for a follow-up: "skip, in an iteration, every local rule none of whose body tables has rows
-newer than the parent's watermark" (§8.3, request 2). Its budgets B3 (one derivation on a memo miss: p50 at most
-250 µs and p99 at most 2 ms at up to 100 rules) and B4 (at most 128 KB allocated per derivation) are in §6.2.
+rule of its scope on every iteration (`ScheduleExecutor.RunIteration` and `EGraphContext.RunRulesCore`, §3), whether or
+not the query touches the rule's tables. Nothing measures that cost at 100 or 1,000 local rules. The roadmap asks for
+latency figures for transient children, and for the per-iteration cost of idle local rules at 100 and 1,000 rules
+([`../roadmap.md`](../roadmap.md), "Latency of transient children"). If that cost is significant, its follow-up is
+demand-indexed local rules: skip, in an iteration, every local rule none of whose body tables has rows newer than the
+parent's watermark.
 
 ## 3. Current state
 
@@ -239,7 +242,7 @@ run.
   pressure.
 - **Idle local rules.** These figures are from the sibling plan
   ([`./idle-machine-measurement.md`](./idle-machine-measurement.md), section 3.6). The probe is count-only, on
-  `eda0c61`, net10.0 Release, server GC. The workload is a frozen container with N local rules
+  `eda0c61`, net10.0 Release, server GC. The workload is a frozen schema scope with N local rules
   `p_i(x), p_j(x) => q_i(x)` over 10 relations of 1,000 rows. Per query: a child, one `Assume`, `Run(Saturate)`, one
   `Check`, `Dispose`.
 
@@ -324,20 +327,21 @@ the engine to `src/Eggnog/Relations` (`f2bfea2`). There was one conflict, at `e8
 
 ## 4. Value
 
-- **The Cosmos adapter (first).** Its budgets concern latency and memory per derivation on small children (B3, B4
-  above).
-  - B4 already fails on allocation from about 80 idle local rules. The allocation-free empty-header path addresses
-    that directly. By the sibling probe's attribution, removing the engine's two thirds would bring 100 idle rules from
-    165 KB to roughly 65 KB per query. Trimming the library's third would bring it to roughly 20-30 KB. These figures
-    are estimates from the type shares, to be confirmed by the same count.
+- **Hosts that run queries in transient children.** A service that freezes schema scopes with local rules
+  and runs each request in a query child pays, per query, for every local rule of its scope, in latency and in memory.
+  - Allocation grows by about 1.5 KB per idle local rule per iteration, and two thirds of it is discarded. The
+    allocation-free empty-header path addresses that directly. By the sibling probe's attribution, removing the
+    engine's two thirds would bring 100 idle rules from 165 KB to roughly 65 KB per query. Trimming the library's
+    third would bring it to roughly 20-30 KB. These figures are estimates from the type shares, to be confirmed by the
+    same count.
   - The same change removes allocation and its time from every idle variant, at the root too (about 1.17 KB per idle
     rule per iteration there).
   - The active case (315 KB at 100 rules over 2 iterations) includes real matching work. The fix helps only its idle
     variants.
   - Demand-indexed local rules would remove the remaining per-rule time, that is, the binary searches and the run's
-    per-rule bookkeeping. Their value depends on what that time is per derivation (§6). For scale, if an idle rule cost
-    0.5-2 µs per iteration (an estimate, not measured), 100 idle rules at 1-2 iterations per derivation would cost
-    50-400 µs: 20-160% of B3's p50.
+    per-rule bookkeeping. Their value depends on what that time is per query, against the rest of the query (§6). For
+    scale, if an idle rule cost 0.5-2 µs per iteration (an estimate, not measured), 100 idle rules at 1-2 iterations
+    per query would cost 50-400 µs per query.
 - **Library users with large saturation workloads.** The last measurement put them at egglog-level throughput on two
   programs, before the store-backed root and the rule layer. Parity on `main`, and at one thread (the library's
   default, and egglog's), has not been measured. The `BasicMath` loss is 6-29% depending on the configuration, and it
@@ -352,7 +356,7 @@ the engine to `src/Eggnog/Relations` (`f2bfea2`). There was one conflict, at `e8
 
 **If none of it is done:**
 
-- B4 stays failed for containers with more than about 80 local rules.
+- Query children keep allocating, and discarding, about 1.5 KB per idle local rule per iteration.
 - Parity with the Rust stays unconfirmed on `main` and unmeasured at one thread.
 - The root `BasicMath` microbenchmark stays 6-29% behind its baseline.
 - The roadmap keeps an open-ended campaign that no one can finish, because two of its workloads cannot be run.
@@ -432,7 +436,8 @@ Nothing breaks.
     Oracles: `SeededWatermarkDifferentialTests` and `ContextRuleDifferentialTests` (child runs against replayed roots),
     `SemiNaiveDifferentialTests`, and the library's local-rule and scope tests. Add a test-only switch that runs every
     program both with and without the skip.
-  - Root risk: none if it applies only in children, which is where the Cosmos request asks for it.
+  - Root risk: none if it applies only in children, where the skip compares against a parent's watermark. Local rules at
+    a writable root keep today's path.
 - **Herbie and eggcc ports.** Large without a reader: thousands of lines, `BigRat`, nested schedules and containers,
   translated by hand. Excluded.
 - **Machine time.** This dominates the cost of the measurement. Estimates come from invocation lengths: `math` about
@@ -468,9 +473,9 @@ Nothing breaks.
 
 | # | Question | Cheapest decisive experiment | Metric and go/no-go | Idle machine? |
 |---|---|---|---|---|
-| 1 | Does the allocation fix bring idle rules under B4? | The sibling plan's count-only probe, before and after the fix, with 0, 10, 100 and 1,000 idle and active local rules, at a child and at the root | Bytes per query at 100 idle local rules at most 64 KB (half of B4), and per idle rule per iteration at most 200 B. Record the active case. If it still exceeds 128 KB, the excess is matching work, and demand indexing would not remove it | No |
+| 1 | Does the allocation fix remove the idle-rule waste? | The sibling plan's count-only probe, before and after the fix, with 0, 10, 100 and 1,000 idle and active local rules, at a child and at the root | The sibling plan's Q12 measure: the engine's share of idle-rule allocation falls by at least 90%, so bytes per query at 100 idle local rules fall by at least half. Record the active case. What remains of it after the fix is matching work, which demand indexing would not remove | No |
 | 2 | Where do the execution states and the `Array.Resize` frames come from? | `EGGNOG_COUNTERS` per `BasicMath` run (both sizes, both modes): clones by site, buffer creations, and buffer-map growths. Then the same with the clone's map sized up front | Reconcile the clone count with the 13% `ExecutionState` byte share. If the growth counter goes to zero and nothing else remains under `CreateBuffer` in a re-taken EventPipe profile, close the staging item without ETW. Otherwise go to row 6 | No |
-| 3 | Are idle local rules still costly in time, per derivation? | The sibling plan's Q8 benchmark after the fix of row 1: a query child under a frozen scope with 0, 100 and 1,000 idle local rules, time per query (p50 and p99), and iterations per query | Overhead per derivation = time per query at 100 idle rules minus at 0 rules, which already includes every iteration. Build demand-indexed local rules if that overhead is above 25% of B3's p50 (about 60 µs), or if B3's p50 or p99 fails at 100 rules. Otherwise record and drop. The sibling plan's Q8 currently uses 1 µs per rule per iteration, which at 100 rules and 2 iterations is 200 µs (80% of the p50). Both plans should adopt this per-derivation threshold (owner question 6) | Yes |
+| 3 | Are idle local rules still costly in time, per query? | The sibling plan's Q8 benchmark after the fix of row 1: a query child under a frozen scope with 0, 100 and 1,000 idle local rules, time per query (p50 and p99), and iterations per query | Overhead per query = time per query at 100 idle rules minus at 0 rules, which already includes every iteration. Build demand-indexed local rules if that overhead exceeds 25% of the query's own time at 0 rules, at p50 or at p99. Otherwise record and drop. The sibling plan's Q8 uses the same measurement and rule | Yes |
 | 4 | Does the branch recover `BasicMath`'s loss? | Port the branch to a scratch branch from `main`, as the dry run did. First, with no idle machine, compare JIT shape (`DOTNET_JitStdOutFile`, `DOTNET_JitDisasmSummary=1`, `DOTNET_JitDisasm=RunIntersectTwo RunFusedScan Replay`) on `3a6e0b7`, `main` and the port, on both target frameworks. Then time `main` against the port, alternating, four rounds: `RuleSetRunBenchmarks` and `ConstrainedScanBenchmarks` (the classes over the code the branch changes), plus `BridgeMathBenchmarks` and `BridgeAcBenchmarks` with `--iterationCount 10`. `main`'s loss per configuration comes from the sibling plan's cumulative comparison against `3a6e0b7` in the same session | Go if, in each `BasicMath` configuration where `main`'s loss exceeds twice the A/A spread, the port recovers at least half of that configuration's loss. No other case may be more than 2% worse, and `math` and `ac` must not be worse. Drop the branch if `main`'s loss is under 3% or under twice the A/A spread in every configuration. A whole-program gain of 2% or more on `math` or `ac` is a go on its own | JIT shape: no. Timing: yes |
 | 5 | Does `main` still match the Rust, and does it match at one thread? | (a) `--bridge-example math` and `ac` against `ext/egglog/target/release/examples/math.exe` and `ac.exe`, alternating, three rounds: once at every processor, and once with the examples' new degree-of-parallelism option at 1 against `RAYON_NUM_THREADS=1`. (b) The library-API port of `math-microbenchmark.egg` (`DegreeOfParallelism = 1`) against `egglog -j 1 tests/math-microbenchmark.egg`, built with `cargo +1.91.0 build --release`, alternating, three rounds | Warm C# time / Rust time, medians, for each program and degree. At most 1.10: parity holds. 1.10 to 2.0: within E2's bar; record it, and profile that program only if the owner keeps throughput parity as a goal (question 1). Above 2.0: a regression to investigate before the next release | Yes |
 | 6 | If row 2 leaves it open: is `CreateBuffer`'s share real? | An unbiased CPU profile of `BasicMath` (200,000 rows, both modes): ETW kernel sampling through PerfView or Windows Performance Recorder, with the JIT's symbols, over 50 runs. Do not use EventPipe's sampler | `CreateBuffer`'s inclusive share. Below 5%: close. At 5% or more: prototype per-thread reuse of the batch state (the clone's buffers, `MutationBuffer`s and `PredictedValues`), and keep it if `BasicMath` serial improves by at least 3% and by more than twice the A/A spread | Yes |
@@ -480,8 +485,9 @@ Nothing breaks.
 
 **Preliminary verdict from the evidence now.**
 
-- The idle-rule allocation is worth fixing now. It is the only item here with a budget already known to fail, and the
-  fix is small and has strong oracles.
+- The idle-rule allocation is worth fixing now. It is the only item here whose waste is known without timing: every
+  idle variant allocates and discards its header buffers, at the root and in children. The fix is small and has strong
+  oracles.
 - The clone counters and map sizing cost minutes and may close the staging question without a profiler.
 - The parity campaign as scoped is not worth running. Two of its workloads are out of reach, and its question needs
   only one re-measurement on existing workloads, at both degrees of parallelism. That re-measurement is worth doing:
@@ -502,7 +508,7 @@ Nothing breaks.
 
 Entry: the owner agrees to this plan.
 
-Order by consumer value:
+In this order, the items that need no timing first:
 
 1. **Idle-rule allocation (row 1).** Implement the engine and library changes of §5. Add the allocation test. Run the
    full suite on net8.0 and net10.0 and the mutation review. Record the sibling probe's figures before and after.
@@ -531,7 +537,7 @@ Exit:
 ### Phase 1: one idle-machine night (about 12 hours)
 
 Shared with [`./idle-machine-measurement.md`](./idle-machine-measurement.md), which owns the cumulative root baseline.
-Run in this order, so the rows that matter most to the first consumer are taken first:
+Run in this order, so the rows that decide open items are taken first:
 
 1. the A/A control;
 2. row 3 (idle rules and transient children; that plan's Q8);
@@ -570,15 +576,16 @@ The items:
   bytes per staged row.
 - **Batch-state reuse** (only if row 6 confirms it). Per-thread reuse of the clone's buffers and the predicted cache,
   with a debug lease check. Extend `ExecutorAllocationTests` and `ParallelRootMathAllocationTests`.
-- **Demand-indexed local rules** (only if row 3 crosses its threshold). The newest-stamp summary per (context, table),
-  the skip in `RunRulesCore`, a test-only switch, and the differential runs with and without the skip.
+- **Demand-indexed local rules** (only if row 3 crosses its threshold). The newest-stamp summary per (context,
+  table), the skip in `RunRulesCore`, a test-only switch, and the differential runs with and without the skip.
 
 ### Documentation
 
 - [`../roadmap.md`](../roadmap.md):
   - replace "Performance parity" with the outcome of Phase 1;
   - restate the `BasicMath` item with per-configuration figures, then close it or keep it with its idle-machine
-    figures;  - record the idle-rule allocation figures under the Cosmos request.
+    figures;
+  - record the idle-rule allocation figures under the transient-children item.
 - [`../../src/Eggnog.Benchmarks/README.md`](../../src/Eggnog.Benchmarks/README.md): the new figures against the Rust at
   both degrees of parallelism, the examples' degree-of-parallelism option, the allocation-probe mode, the shard
   parameter, the library-API math benchmark, and the regression record of row 9.
@@ -592,9 +599,9 @@ The items:
 
 - [`./idle-machine-measurement.md`](./idle-machine-measurement.md): Phase 1 runs in the same night as that workstream's
   cumulative root comparison and transient-child latency, and uses its root baseline. That plan owns the idle-rule
-  measurement (its Q8). This plan owns the engine-side fix and the demand-indexed decision. The two plans must use one
-  threshold (row 3). That plan's question 6 asks whether header skipping should start before the idle-machine run; this
-  plan answers yes.
+  measurement (its Q8). This plan owns the engine-side fix and the demand-indexed decision. The two plans use one
+  measurement and one rule (row 3). That plan's question 6 asks whether header skipping should start before the
+  idle-machine run; this plan answers yes.
 - [`./compiled-plans.md`](./compiled-plans.md) recommends Drop and names hand-written C# fast paths, "as
   `wip/perf-basicmath` does", as the first remedy if interpretive overhead ever shows up. If compiled plans are dropped,
   this branch is the remaining route to kernel speed, and its review cost should be weighed on that basis. The
@@ -605,8 +612,8 @@ The items:
   shard counts, parallel merges) waits for its serial-against-parallel oracles with value-changing lattice merges.
 - [`./smaller-engine-items.md`](./smaller-engine-items.md): the `ProberPiece` shrink and lazy `IndexCatalog` objects
   are gated on the same root classes. Measure them in the same night, so one baseline serves all.
-- [`./rule-layer-split-features.md`](./rule-layer-split-features.md): demand-indexed local rules are one of the Cosmos
-  plan's requests listed there. This plan owns the engine side.
+- [`./rule-layer-split-features.md`](./rule-layer-split-features.md): demand-indexed local rules need no public API,
+  so that plan carries no item for them. This plan owns them, engine side and decision.
 - [`./conformance-docs-release.md`](./conformance-docs-release.md): the herbie and eggcc workloads come back only if a
   `.egg` reader is ever built there. The unreachable commit citations in the roadmap are a documentation fix.
 - [`./interning-and-value-lifetime.md`](./interning-and-value-lifetime.md) and
@@ -616,9 +623,9 @@ The items:
 
 ## 9. Questions for the owner
 
-1. Is throughput parity with egglog still a goal in itself, or is the target now the Cosmos adapter's latency and
-   memory budgets? The answer decides whether anything beyond Phase 1 is built for the saturation workloads, and
-   whether row 5's middle band (1.10 to 2.0) leads to profiling.
+1. Is throughput parity with egglog on saturation workloads still a goal in itself, beside the latency and memory of
+   small query children? The answer decides whether anything beyond Phase 1 is built for the saturation workloads,
+   and whether row 5's middle band (1.10 to 2.0) leads to profiling.
 2. May the herbie repro and the eggcc samples be dropped from the plan, coming back only if a `.egg` reader is built for
    other reasons?
 3. About `wip/perf-basicmath`:
@@ -628,10 +635,12 @@ The items:
      the port?
 4. Are departures from egglog that only remove allocation acceptable? There are three: an allocation-free empty-header
    path, a bounded hash reserve at merge, and staging arrays returned to the pool. egglog does none of them.
-5. Should the benchmark app target net8.0 as well as net10.0, so the JIT behaviour that net8.0 users get is measured?
-6. Is B4 (at most 128 KB per derivation) still the budget? And may both this plan and
-   [`./idle-machine-measurement.md`](./idle-machine-measurement.md) use row 3's per-derivation threshold (above 25% of
-   B3's p50, or B3 failing at 100 rules) in place of a per-iteration slope?
+5. If the package keeps targeting net8.0 (synthesis question 3), should the benchmark app target net8.0 as well as
+   net10.0, so the JIT behaviour that net8.0 users get is measured?
+6. Settled: row 3's rule for demand-indexed local rules, used by this plan and by
+   [`./idle-machine-measurement.md`](./idle-machine-measurement.md) alike, is to build them if, after the allocation
+   fix, the overhead per query at 100 idle local rules exceeds 25% of the query's own time at 0 rules, at p50 or at
+   p99.
 7. When will an idle machine be available for a night?
 
 ## Review
@@ -643,12 +652,11 @@ the sibling plans.
 
 - **Idle-rule allocation (accepted).** `PlanTemplate.InstantiateLayered` allocates two arrays and two lists before its
   first evaluation. `RuleSetBuilder.AddRuleFromCachedPlan` builds `CombineExtras`' array before that. `RunRulesCore`
-  allocates three arrays per run. The sibling plan's count shows B4 failing from about 80 idle rules. The fix is now a
-  Do-now item, and the demand-indexed skip stays conditional. Sections 1, 3, 4, 5, 6 and 7 were changed, and the
-  headline recommendation moved from "Do after an experiment" to "Do now, in part".
-- **Per-derivation threshold (accepted).** Row 3 now measures overhead per query, which includes every iteration,
-  against 25% of B3's p50 or a B3 failure. The sibling's 1 µs per rule per iteration is shown to be laxer. Aligning the
-  two plans is put to the owner.
+  allocates three arrays per run. The sibling plan's count shows about 1.5 KB per idle rule per iteration, two thirds of
+  it discarded. The fix is now a Do-now item, and the demand-indexed skip stays conditional. Sections 1, 3, 4, 5, 6 and
+  7 were changed, and the headline recommendation moved from "Do after an experiment" to "Do now, in part".
+- **Per-query measurement (accepted).** Row 3 now measures overhead per query, which includes every iteration, in place
+  of a per-iteration slope. The two plans use the same measurement and the same relative rule.
 - **Parity stated as current fact (accepted, with a correction).** The parity figure is now described as unconfirmed on
   `main`. One-thread rows for the bridge examples and the library port against `egglog -j 1` were added to §6 and to
   Phase 1. The previous version named `b041e70` as the store-backed root. It is the status document that records the
@@ -659,7 +667,7 @@ the sibling plans.
   with the port, on the bridge programs too. `673495d` against `main` is kept as a record only (row 9).
 - **Machine time (accepted).** The plan now gives estimates per row: about 12 h, one night. The branch A/B is limited
   to `RuleSetRunBenchmarks` and `ConstrainedScanBenchmarks`. The cumulative baseline is shared with the sibling plan,
-  and Phase 1 is ordered by consumer value.
+  and Phase 1 is ordered by priority.
 - **Write gaps at 4 threads, and the shard verdict (accepted).** All four thread counts are now reported with ratios.
   The 8-thread `RemoveWithCollisions` gap is now given as 17%. The shard test is part of the writes row.
 - **`BasicMath` per configuration (accepted).** The plan now gives 21-29%, 11-13%, 10-15% and 6-11%, with absolute

@@ -29,9 +29,10 @@ ReadyToRun, take part in tiering and dynamic PGO, and work under NativeAOT. Each
   emitter is hard to review, debug and mutation-test.
 - Composed generic structs leave every instantiation in memory for good and run slowly until tiering promotes them.
 
-None of the three works without dynamic code. The first consumer's workload also argues against compiling at run time.
-On the in-repository Cosmos test suites, used as a proxy for the adapter, a dispatch serves 1.2-4.0 lanes. A test's
-whole engine run is a few hundred instructions. JIT time per compiled shape would land on the Cosmos latency budgets.
+None of the three works without dynamic code. Small runs also argue against compiling at run time. On a sample of
+small queries over the predicate test theories, a dispatch serves 1.2-4.0 lanes, and a test's whole engine run is a few
+hundred instructions. The JIT time of one compiled shape is expected (not yet measured; section 6, Q5) to exceed the
+interpreted run it would serve.
 
 The plan is therefore:
 
@@ -86,7 +87,7 @@ The engine map planned compiled plans as the second half of a two-step executor:
 **Why it was never started, from the record.**
 
 - The build order put compiled plans after the parallelism milestone, and both came after the bridge.
-- The work then went to colored contexts and to the rule layer for the Cosmos consumer (the design history index,
+- The work then went to colored contexts and to the rule layer (the design history index,
   [`../history/README.md`](../history/README.md)).
 - The parallelism test plan is still open too (see [`./parallelism-test-plan.md`](./parallelism-test-plan.md)).
 - Meanwhile the interpreter beat or matched the Rust on the two workloads that were timed: egglog-bridge's `math` and
@@ -231,18 +232,21 @@ The owner's proposal names `SubsetRef` among the engine's ref structs. It is in 
 - **Dispatch counts, measured for this plan.** These are counts, not timings, so the busy machine does not affect
   them. A private clone of `eda0c61` was given temporary counters in `RunInstrs`, `RunPlan`, `FrameUpdates.FinishFrame`,
   `ActionBuffer.Push`, `ExternalCallProducer` and `FunctionTableMerge.Merge`. It was then run on egglog-bridge's
-  examples (`--bridge-example`, both repetitions) and on the Cosmos test suites (net10.0).
+  examples (`--bridge-example`, both repetitions) and on two suites of scenario tests over the predicate test theories
+  (net10.0).
 
   | Workload | Instruction dispatches | Live lanes per dispatch | Matches | Stage-kernel calls | Matches per stage call | External calls | Merge calls (merge function run) |
   |---|---|---|---|---|---|---|---|
   | bridge `math` | 811,095 | 126.6 | 30.7 M | 4.09 M | 7.5 | 0 | 28.7 M (16.6 M) |
   | bridge `ac` | 4,107,878 | 127.9 | 177.0 M | 207 K | 855 | 0 | 209.9 M (46.6 M) |
-  | `Eggnog.Tests.Cosmos.Scoped` (24 tests) | 2,259 | 1.2 | 1,184 | 2,446 | 0.5 | 478 | 646 (382) |
-  | `Eggnog.Tests.Cosmos.Literal` (27 tests) | 2,852 | 4.0 | 4,021 | 5,069 | 0.8 | 2,726 | 1,514 (1,023) |
+  | scenario tests on `PredicateTheory`, scopes as contexts (24 tests) | 2,259 | 1.2 | 1,184 | 2,446 | 0.5 | 478 | 646 (382) |
+  | scenario tests on `ContextArgumentTheory`, contexts as data arguments (27 tests) | 2,852 | 4.0 | 4,021 | 5,069 | 0.8 | 2,726 | 1,514 (1,023) |
 
   The merge function runs only when the two outputs differ. On the bridge examples that is the constructors'
-  `UnionId`, one `switch` case. The Cosmos suites are in-repository tests (`src/Eggnog.Tests/Cosmos/`). They are a
-  proxy for the adapter's derivations, not its workload.
+  `UnionId`, one `switch` case. Both theories are test fixtures in `src/Eggnog.Tests/Predicates/`: predicates over
+  document paths (presence, forms, domains, types and numeric bounds) and their simplification. The scenario tests that
+  produced these counts are not kept in the suite; the theories are. Each test is one small query or a few, so the
+  counts are a sample of small runs, not a workload.
 - **Experiments for the root `BasicMath` regression.** Branch `wip/perf-basicmath` (commits `5efe32d` to `c47077e`)
   attacks the regression by writing root fast paths of the join kernels in C#. Examples are a fused intersect over a
   plain, single-layer view and a split two-scan intersect. This is hand specialization, not compilation. It is
@@ -250,8 +254,7 @@ The owner's proposal names `SubsetRef` among the engine's ref structs. It is in 
   (`src/Eggnog.Relations/...`), so reusing it means porting it to `src/Eggnog/Relations/`.
 
 **Packaging.** `src/Eggnog/Eggnog.csproj` targets net8.0 and net10.0. It declares neither `IsAotCompatible` nor
-`IsTrimmable` (see [`./conformance-docs-release.md`](./conformance-docs-release.md)). The Cosmos adapter targets net8.0
-and itself uses `System.Linq.Expressions`, so its host has dynamic code.
+`IsTrimmable` (see [`./conformance-docs-release.md`](./conformance-docs-release.md)).
 
 ## 4. Value
 
@@ -293,30 +296,24 @@ executor.
 
 Only a ceiling prototype can decide the kernel question (section 6, Q3). Method-level profiles cannot.
 
-**The Cosmos adapter and library users with small runs.** Compilation at run time would make these slower. On the
-scoped suite (a proxy, section 3) a dispatch serves 1.2 lanes and a stage-kernel call yields 0.5 matches. A test's whole
-engine run is on the order of 100 instructions. Time per derivation is dominated by fixed costs, which compilation does
-not touch:
+**Library users with small runs.** Compilation at run time would make these slower. A host that runs each request in
+a query child under a frozen scope runs small programs. On the `PredicateTheory` sample (section 3) a dispatch serves
+1.2 lanes and a stage-kernel call yields 0.5 matches. A test's whole engine run is on the order of 100 instructions.
+Time per query is dominated by fixed costs, which compilation does not touch:
 
 - catch-up and planning;
 - a fresh `ExecutionState` and staging buffers per batch;
 - the library's primitive path (`PrimitiveCall`, about one external call per two to three matches here).
 
 Under any dynamic technique, each compiled program or kernel is a method the JIT compiles on first use. The
-interpreter's code is shared by every rule and is compiled once per process, or ahead of time by ReadyToRun. The
-budgets in [`../history/cosmos-integration.md`](../history/cosmos-integration.md), section 6.2, are these:
+interpreter's code is shared by every rule and is compiled once per process, or ahead of time by ReadyToRun.
 
-- B3, one derivation on a memo miss: "R2 at ≤ 100 rules: p50 ≤ 250 µs, p99 ≤ 2 ms". The 1,000-rule budget is not set
-  yet.
-- B5(b): the first derivation after ready must be within B3's p99.
-- B5(a): "≤ 1 s for 10 containers, measured without ReadyToRun". The same plan measured the first call in a process at
-  190-530 ms of cold JIT.
-
-An optimizing JIT of one kernel-sized method is expected to take on the order of B3's p50 or more. This is not
-measured here; Q5 measures it. So a derivation that compiled even one shape on its path would spend most of its p50
-budget on that one method. Compiling lazily, only after a plan has run many times, would avoid that cost on
-Cosmos-sized runs, and would also deliver nothing there. Closed-world fast paths have no such cost: ReadyToRun can
-precompile them.
+An optimizing JIT of one kernel-sized method is expected to take on the order of hundreds of microseconds. This is not
+measured here; Q5 measures it. A run of about 100 instructions, serving one or two lanes each, is expected to take
+less. So a query that compiled even one shape on its path would spend more on that one method than on the work it
+speeds up, and it would pay that again for each new shape and after each graph rebuild. Compiling lazily, only after a
+plan has run many times, would avoid that cost on small runs, and would also deliver nothing there. Closed-world fast
+paths have no such cost: ReadyToRun can precompile them.
 
 **Maintainers.**
 
@@ -348,7 +345,7 @@ Rust or level with it on the two workloads timed.
 | **Tiering and PGO** | Compiled into a dynamic method: compiled once, optimized, never tiered, no dynamic PGO (engine map section 5.2). | Same as expression trees. | Normal tiering and dynamic PGO, unless `AggressiveOptimization` is used. |
 | **Where dynamic code is unavailable** | Under NativeAOT, `LambdaExpression.Compile` returns delegates run by the expression interpreter, far slower than the engine's own interpreter. The engine must check `RuntimeFeature.IsDynamicCodeCompiled` and keep its own interpreter. | `DynamicMethod` is not supported. The fallback is the interpreter. | `MakeGenericType` and `MakeGenericMethod` require dynamic code (`RequiresDynamicCode`). Under NativeAOT only instantiations generated ahead of time exist. The fallback is the interpreter. |
 | **ReadyToRun and cold start** | Nothing precompiled; one JIT per delegate. | Nothing precompiled; one JIT per method. | Instantiations composed at run time are not precompiled; one JIT per shape, at tier 0 first. |
-| **Memory over a long-lived service** | Collectible: delegates are freed with their plans. | Collectible. | Not collectible: every instantiation lives as long as the process. Shapes must come from a bounded vocabulary. Otherwise a service that swaps rule generations (the Cosmos plan's generation swap) grows without bound. |
+| **Memory over a long-lived service** | Collectible: delegates are freed with their plans. | Collectible. | Not collectible: every instantiation lives as long as the process. Shapes must come from a bounded vocabulary. Otherwise a service that retires graphs and defines its rules again (as the [interning plan](./interning-and-value-lifetime.md)'s usage gauge invites) grows without bound. |
 | **Access to internal engine members** | `Compile` uses a skip-visibility dynamic method on CoreCLR, so internals are reachable. `MethodInfo`s found by reflection need trimming annotations. | An owner type or module plus `skipVisibility` gives access. Same trimming caveat. | Same assembly; no issue. `MakeGenericType` itself is unsafe under trimming. |
 | **Correctness risk** | Low: trees are type-checked when built. | High. The JIT rejects unbalanced stacks with `InvalidProgramException`, but it does not verify type safety. Wrong IL around byrefs or `Unsafe` can corrupt memory silently. | Low: C# is type-checked, and composition errors fail at `MakeGenericType` (constraint violations). |
 | **Debugging and review** | No source or line numbers in stack traces; trees can be printed. | No source, no PDB, no stepping. Reviewers must simulate the evaluation stack. Mutation testing of an emitter yields many mutants that fail only by crashing the JIT. Tests could save the same IL through `PersistedAssemblyBuilder` and run ILVerify, but only on net10.0 (the type exists from .NET 9). | Ordinary C#: debuggable, reviewable and mutation-testable. Type-level composition is awkward to read, and nesting depth can exceed the JIT's inlining budget. |
@@ -435,7 +432,8 @@ built.
   - `RuleSetRunBenchmarks.AcSaturation` and `BasicMath` at 200,000 rows;
   - `ActionLookupBenchmarks`;
   - a primitive-heavy synthetic program built on the library (integer arithmetic primitives in rule heads and lets);
-  - a loop over the `Eggnog.Tests.Cosmos.Scoped` derivations (a proxy for the adapter).
+  - a loop of query children on `PredicateTheory` (`src/Eggnog.Tests/Predicates/`) under a frozen schema scope, as a
+    sample of small runs.
 
   Use a normal build. A build with hot helpers marked `NoInlining` changes the shape of the loops being measured, so if
   one is used at all, report it beside the normal build, never instead of it.
@@ -450,8 +448,8 @@ built.
 
 - **Experiment.** Count, not time. Run the counter patch described in section 3 on every Q1 workload. Add keys per
   stage call and rows scanned per stage call.
-- **Answer already measured.** The bridge examples serve 127-128 lanes per right-hand-side dispatch. The Cosmos
-  proxies serve 1.2-4.0 lanes and 0.5-0.8 matches per stage call.
+- **Answer already measured.** The bridge examples serve 127-128 lanes per right-hand-side dispatch. The
+  predicate-theory scenario tests serve 1.2-4.0 lanes and 0.5-0.8 matches per stage call.
 - **Conclusion, limited to right-hand-side dispatch.** On large workloads, compiling the right-hand side removes
   little. On small workloads a run is too short to repay compiling anything at run time. These counts say nothing
   about the time spent inside the join kernels.
@@ -460,8 +458,8 @@ built.
 **Q3. What is the ceiling? This is the only decider for kernels.**
 
 - **Target.** One workload, chosen in advance from Q1: the one where the join kernels and `Replay` hold the largest
-  share. If the owner's priority is the Cosmos adapter, the target is the Cosmos derivation loop instead, measured as
-  B3's p50 and p99.
+  share. If the owner's priority is the latency of small query children, the target is the `PredicateTheory` query
+  loop of Q1 instead, measured as time per query at p50 and p99.
 - **Experiment.** In a private branch, hand-write in C# the code a compiler would emit for the target's three hottest
   plans:
   - their right-hand-side programs, fused;
@@ -504,16 +502,16 @@ built.
   interpreter's existing switches. Only an open-ended shape distribution would justify composing code at run time.
 - **Idle machine.** Not needed for the count.
 
-**Q5. If dynamic code is ever chosen, does it fit the Cosmos budgets?**
+**Q5. If dynamic code is ever chosen, does its JIT cost fit small runs and cold start?**
 
-- **Experiment.** Cover each container of the Cosmos scoped suite and a synthetic container with 1,000 local rules.
-  With compilation forced, count the methods and IL bytes compiled, using
+- **Experiment.** Cover query children of `PredicateTheory`'s schema scopes and a synthetic schema scope with 1,000
+  local rules. With compilation forced, count the methods and IL bytes compiled, using
   `System.Runtime.JitInfo.GetCompiledMethodCount` and `GetCompiledILBytes` before and after. Then measure
-  `JitInfo.GetCompilationTime` on the idle machine. This also checks the expectation in section 4 that one optimized
-  kernel JIT costs on the order of B3's p50.
-- **Go.** B5(a), at most 1 s for 10 containers without ReadyToRun, still holds with compilation on. The first
-  derivation after ready stays within B3's p99. In practice that means a lazy threshold under which no Cosmos-sized
-  derivation compiles anything.
+  `JitInfo.GetCompilationTime` on the idle machine, beside the interpreted time per query. This also checks the
+  expectation in section 4 that one optimized kernel JIT costs on the order of hundreds of microseconds.
+- **Go.** With compilation on, the first query after a scope's freeze, and every later one, is no slower than with
+  compilation off, on both the `PredicateTheory` queries and the 1,000-rule scope, without ReadyToRun. In practice that
+  means a lazy threshold under which no query-child-sized run compiles anything.
 - **Idle machine.** Required for the time; the counts can be taken now.
 
 **Q6. Should the duplicate overloads go now?** This needs no experiment. Not compiling, IL emission and composed
@@ -606,7 +604,7 @@ says go, within [`./performance-parity.md`](./performance-parity.md).
 
 **Phase 2: composed generic structs.** Only if Phase 1 cannot cover the distribution.
 
-- **Entry:** Q4 shows the shapes are open-ended, and Q5's counts and times fit the budgets.
+- **Entry:** Q4 shows the shapes are open-ended, and Q5's go condition holds.
 - **Work:**
   - a bounded vocabulary of struct types, one per file;
   - composition behind `RuntimeFeature.IsDynamicCodeSupported`, falling back to the interpreter;
@@ -619,7 +617,8 @@ says go, within [`./performance-parity.md`](./performance-parity.md).
   - every differential family in the always mode against the interpreter, on net8.0 and net10.0;
   - a mutation-testing review of the vocabulary and the composer, where every surviving mutant needs a test;
   - a test that the interpreter path is taken when dynamic code is reported unavailable.
-- **Benchmarks:** the root set, bridge `math`/`ac`, and the Cosmos B3/B5 measurements.
+- **Benchmarks:** the root set, bridge `math`/`ac`, the query-child latency of
+  [`./idle-machine-measurement.md`](./idle-machine-measurement.md) (its Q8), and Q5's JIT counts and times.
 
 **Phase 3: hand-emitted IL.** Only for a piece the vocabulary cannot express at the required speed.
 
@@ -653,9 +652,10 @@ says go, within [`./performance-parity.md`](./performance-parity.md).
 - [`./colored-context-deferred-features.md`](./colored-context-deferred-features.md): per-context replanning would
   multiply the shapes a dynamic compiler caches. That is another argument against compiling at run time while
   replanning is open.
-- [`./rule-layer-split-features.md`](./rule-layer-split-features.md): the Cosmos requests that bear on run time
-  (demand-indexed local rules, a "no result" primitive outcome) address fixed per-run costs and the primitive path,
-  which compilation would not reach.
+- [`./rule-layer-split-features.md`](./rule-layer-split-features.md) and
+  [`./performance-parity.md`](./performance-parity.md): the items that bear on run time (demand-indexed local rules in
+  performance parity, a "no result" primitive outcome in rule-layer split features) address fixed per-run costs and the
+  primitive path, which compilation would not reach.
 - [`./interning-and-value-lifetime.md`](./interning-and-value-lifetime.md): no dependency.
 
 ## 9. Questions for the owner
@@ -676,8 +676,8 @@ says go, within [`./performance-parity.md`](./performance-parity.md).
    that it duplicates kernel code for the shapes it covers?
 5. Should decision 8 be restated as "the interpreter is the only executor; specialization is closed-world", or left
    as history with a note that compilation was not built?
-6. For Q3, which target matters more: root throughput (bridge examples and root benchmarks) or the Cosmos derivation
-   latency (B3)?
+6. For Q3, which target matters more: root throughput (bridge examples and root benchmarks) or the latency of small
+   query children?
 
 ## 10. Review
 
@@ -707,16 +707,16 @@ probe build of `eda0c61`.
    only Q3 can decide the kernel question.
 4. **Thresholds (section 6).** Q1 no longer has go/no-go thresholds; it picks the target and the plans. Q3 is the
    only decider. It has one cut-off with no gap (a scaled gain of 10% or more on a target chosen in advance, root set
-   within 2%) and reports the coverage of the prototyped plans. The root requirement no longer applies to a Cosmos
-   target, except as a guard against regression.
+   within 2%) and reports the coverage of the prototyped plans. The root requirement no longer applies to a
+   small-query target, except as a guard against regression.
 5. **Fusion and `Replay` (sections 4, 6 Q3, Q4).** Whole-plan fusion of fixed-order plans would remove `Replay` and
    frame writes for those plans. Q3 now includes a fused plan of one or two stages, and Q4 counts fixed-order plans.
 6. **`CreateBuffer` rationale (section 6 Q1).** The reason given for building the graph outside the sampled region was
    wrong: `CreateBuffer` runs for every batch's cloned state. It is removed. Q1 now waits once for performance-parity's
    unbiased profile.
-7. **Cosmos evidence (sections 3, 4, 6 Q2).** The suites are called a proxy. B3's p50 of 250 µs and p99 of 2 ms are
-   quoted, with the expectation (not measured; Q5 measures it) that one optimized kernel JIT costs on that order. Q2's
-   arbitrary thresholds are removed, and its conclusion is limited to right-hand-side dispatch.
+7. **Small-run evidence (sections 3, 4, 6 Q2).** The scenario suites are called a sample of small runs, not a
+   workload. The expectation that one optimized kernel JIT costs hundreds of microseconds is stated as unmeasured; Q5
+   measures it. Q2's arbitrary thresholds are removed, and its conclusion is limited to right-hand-side dispatch.
 8. **E2 (sections 2, 4).** Restated. The interpreter beats or matches the Rust on the two bridge examples that were
    timed. E2's own three workloads against `egglog -j1` have not been measured.
 9. **Small errors.**

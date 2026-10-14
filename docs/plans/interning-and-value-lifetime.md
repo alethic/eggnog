@@ -12,12 +12,13 @@ owner's question on interning in colored contexts in sections 3 and 4.
 Three small parts should be done now:
 
 - Phase A documents how a child interns values and what a disposed scope leaves behind.
-- Phase B adds the churn and retained-memory tests that the Cosmos plan asks for.
+- Phase B adds churn and retained-memory tests, which pin that a disposed query scope keeps nothing beyond the values it
+  newly interned.
 - Phase C adds a public usage gauge. The gauge reports interned values, ids reserved and epochs used, each against its
   limit. Phase C also gives every minting path one documented exhaustion bound and one exception type.
 
-Phase C should land before the Cosmos adapter runs in production on scoped graphs, and above all before its split
-phase.
+None of the three waits on anything else. Phase C matters most to hosts that run case splits on a long-lived graph,
+because the clock runs out first there (section 3.4).
 
 Four parts wait for data (**Later**), each on a named trigger:
 
@@ -29,32 +30,34 @@ Four parts wait for data (**Later**), each on a named trigger:
 Two parts should be dropped: 64-bit cells, and recycling ids or the clock globally in place.
 
 The reason is a set of measurements made for this plan, described in section 3.4. Two dry runs of query-scope churn on
-the Cosmos test theory found that interning is not what limits the life of a long-lived graph:
+the predicate test theory found that interning is not what limits the life of a long-lived graph:
 
-- Literals that the adapter canonicalizes intern nothing per query.
+- Queries that reuse their literals intern nothing per query.
 - A disposed query scope retains no memory beyond the values it newly interned: 0.6 B per query over 5,000 queries.
 
 The limits that bind are the store's id counter and its clock. Every query scope that mints an id reserves 16 ids. A
 plain query, including its snapshot read, uses 15 epochs. A query with a domain split uses about 20 + 10 x *cases*
-epochs on this theory. That is 50 epochs at 3 cases and 660 epochs at 64 cases, the default `CaseLimit` and the Cosmos
-plan's `split` profile. At an illustrative 100 derivations per second:
+epochs on this theory. That is 50 epochs at 3 cases and 660 epochs at 64 cases, the default `CaseLimit`. At an
+illustrative 100 queries per second:
 
 - plain queries exhaust the ids in about 15.5 days, and the clock in about 33 days;
 - split queries exhaust the clock first: in about 10 days at 3 cases and in about 18 hours at 64 cases.
 
 When either limit is reached, a raw `OverflowException` is thrown. It is not documented, it does not fault the scope,
-and once the clock has run out `CreateChild` throws too. The Cosmos plan names three triggers for a generation swap
-(section 3.7): `InternedCount`, a theory change, and a faulted scope that cannot be recompiled. None of them can see
-exhaustion coming. `InternedCount` does not move. The faulted-scope trigger can fire only after a burst of failures,
-which fall back to Horn and count against budget B10. Even then it fires only if the adapter treats a failed
-recompile on an unfaulted scope as that trigger. With a gauge, the host can swap before the limit, and exhaustion
-becomes documented behaviour. Of everything in this workstream, the gauge gives the most value for its cost.
+and once the clock has run out `CreateChild` throws too. The only usage figure the library exposes today is
+`ValueStore.InternedCount`, which D15 provides so that a host can retire a graph before it grows too large. It cannot
+see exhaustion coming: on a workload that reuses its literals it does not move at all. With a gauge, the host can
+retire the graph before the limit, and exhaustion becomes documented behaviour. Of everything in this workstream, the
+gauge gives the most value for its cost.
 
-A swap that the gauge triggers costs milliseconds of theory definition plus at most about 1 s of container compilation
-(budget B5). That cost is the main reason the other parts can wait. A smaller first block extends a plain-query graph's
-life by about 2.1x and a split graph's by nothing, since the clock binds first. Recycling ids and epochs within the
-transient children of a frozen scope would remove both limits for the Cosmos topology. It is medium-to-large work, and
-its clock half carries a high risk. Neither change is worth its cost while a swap is this cheap.
+Retiring a graph is paid once per graph life: the host builds a new `EGraph` (about 56 KB allocated, see
+[idle-machine measurement](./idle-machine-measurement.md), section 3.3), defines its theory again and rebuilds its
+frozen scopes. That cost depends on the host's theory and is not measured here. At the horizons above it is spread over
+millions of queries, and that is the main reason the other parts can wait. A smaller first block extends a plain-query
+graph's life by about 2.1x and a split graph's by nothing, since the clock binds first. Recycling ids and epochs within
+the transient children of a frozen scope would remove both limits for a host whose root and schema scopes are frozen.
+It is medium-to-large work, and its clock half carries a high risk. Neither change is worth its cost while a host can
+retire a graph on the gauge.
 
 ## 2. What it is and why it was planned
 
@@ -72,16 +75,10 @@ its clock half carries a high risk. Neither change is worth its cost while a swa
   - Constants of rules and queries intern when they are defined.
   - Invariant V (section 6.1) requires equal values of a column type to have equal cells in every scope, because value
     joins and not-equal tests compare raw cells.
-- **The Cosmos plan** ([../history/cosmos-integration.md](../history/cosmos-integration.md)) asks for the following:
-  - It records interning growth as risk R5 (section 8.1). It answers that risk with literal canonicalization (section
-    2.1) and with a generation swap (section 3.7). The swap's triggers are `InternedCount` passing a threshold
-    (proposed 10^6), a theory change, and a faulted scope that cannot be recompiled.
-  - Section 8.3 lists "values that die with a scope" as library request 3.
-  - Budget B4 (section 6.2) asks for "≤ 128 KB allocated" per derivation and for "0 retained after `Dispose` beyond
-    values newly interned".
-  - Budget B8 bounds interning on fresh-literal replay.
-  - Section 9.2 plans a test in `src/Eggnog.Tests/Scopes/` of 100,000 query scopes. Retained memory must stay flat
-    beyond new interning, and `InternedCount` must stay flat under reused constants.
+- **Values that die with a scope.** The roadmap ([../roadmap.md](../roadmap.md), "Library work") lists values that die
+  with a scope, or interning scoped to a context, as open. Its workarounds are canonicalizing literals (mapping a
+  request's literals onto a bounded set of values) and retiring graphs. No test churns query scopes to check what a
+  disposed scope leaves behind (section 3.5).
 - **Eq-sort containers in children** (C13 in the engine map, section 4.2) were deferred. The interim rule refuses
   them ([../engine/decisions.md](../engine/decisions.md), decision 9;
   [../history/colored-contexts-spec.md](../history/colored-contexts-spec.md), sections 7.4 and 10.7, section 19 item
@@ -165,7 +162,7 @@ before that bound: 2 x 10^9 values would need well over 100 GB.
 | Base-value pools | interns into them (section 3.1) | no | `BaseValues` remarks |
 | The store's id counter | each child that mints reserves blocks: first 16 ids, then twice the total so far, up to 4,096 (`src/Eggnog/Relations/Contexts/IdBlockAllocator.cs`). A child that mints nothing reserves nothing. Base-value containers interned from a child take ids straight from the shared counter (`ContainerEnv.MintId`, `src/Eggnog/Relations/Containers/ContainerEnv.cs`) | no. The minting paths do not agree on the limit or on the exception (see the minting-sites table below) | dry runs, section 3.4 |
 | The store's clock | each run, rebuild pass and write batch of the child advances it (`Store.AdvanceClock`, `src/Eggnog/Relations/Contexts/Store.cs`) | no; `Store.CheckEpoch` throws `OverflowException` at `Value.StaleRep` (2^32 - 1) | dry runs, section 3.4 |
-| The root's union-find arrays | unaffected while the root does not union. A root that later unions an id above the children's reserved blocks grows its dense arrays to that id, at 8 bytes per id below it | no | colored-contexts spec section 4.2 ("Memory at the root"); colors-m10-reports L7: n single-mint cases reserve 16n ids, so 10^5 cases reserve 1.6 M ids and a later root union costs about 13 MB. Under the Cosmos topology the root is frozen and never unions, so this does not arise there |
+| The root's union-find arrays | unaffected while the root does not union. A root that later unions an id above the children's reserved blocks grows its dense arrays to that id, at 8 bytes per id below it | no | colored-contexts spec section 4.2 ("Memory at the root"); colors-m10-reports L7: n single-mint cases reserve 16n ids, so 10^5 cases reserve 1.6 M ids and a later root union costs about 13 MB. A frozen root never unions, so this does not arise under one |
 | Base-value containers (engine level only) | interned from a child into the root's shared environment | no | `ContainerEnv.GetOrInsert`. The library registers no containers (D20), so only engine-level programs reach this path |
 | Local rules and their call-site external functions | registered when the rule is defined | yes. `RuleVariants.Free` (`src/Eggnog/Rules/RuleVariants.cs`) frees each variant, removes its `VariantsByDescription` entry and frees its external functions. Freed rule ids and external-function ids are reused, most recently freed first (`src/Eggnog/Relations/Bridge/RuleTable.cs`, `src/Eggnog/Relations/Database/ExternalFunctionRegistry.cs`) | the first dry run's local-rule pass: `VariantsByDescription` back to its baseline after 5,000 local rules |
 | Constants of local rules and per-request queries | interned at definition | no, as base values | D15 |
@@ -183,8 +180,8 @@ exception types at the bound:
 | `Relations.EGraph.FreshId` (`src/Eggnog/Relations/Bridge/EGraph.cs`) | `EGraphContext.AddTermAtRoot` | `checked((uint)…)`, which admits `StaleRep` itself | `OverflowException` only above `StaleRep` |
 | `ContainerEnv.MintId` (`src/Eggnog/Relations/Containers/ContainerEnv.cs`) | container ids, on the shared counter | below `Value.StaleRep` | `InvalidOperationException` |
 
-Under the Cosmos topology the root is frozen, so only the child path, the first row, is reached there. The other rows
-matter to hosts that keep a writable root.
+Under a frozen root, only the child path, the first row, is reached. The other rows matter to hosts that keep a
+writable root.
 
 ### 3.3 Eq-sort containers in children
 
@@ -212,7 +209,8 @@ programs.
 
 **Method.** These figures are counts and heap deltas, not timings. Both dry runs used a private clone of the current
 `main` (`eda0c61`), a Release build, net10.0 and workstation GC, on a machine shared with other work. Console probes
-used the scoped Cosmos test theory (`src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.cs`).
+used the scoped predicate test theory, `PredicateTheory` (`src/Eggnog.Tests/Predicates/`): a theory of predicates over
+document paths (presence, forms, domains, types and numeric bounds) in which scopes are the contexts.
 
 *First dry run.* The setup was a frozen root and one frozen schema scope. The schema declares `kind` with domain
 `{a, b, c}` and `n` within `[0, 100]`. For each query the probe:
@@ -243,9 +241,9 @@ Each row ran 200 warm-up queries, then 5,000 measured ones. Before and after eac
 
 - The split query was repeated with the discriminator's domain widened from 3 values to 6, 12, 24, 48 and 64. Branches
   were still declared on `a`, `b` and `c`.
-- The same-literal plain query was extended with the snapshot read that ends every Cosmos derivation (Cosmos plan,
-  section 2.9): `Check(present(kind))`, `TryGet` of `dom(kind)` and `types(kind)`, and one `ForEachMatch` over a
-  reusable query of `ne` rows.
+- The same-literal plain query was extended with a snapshot read of the kind a host makes after each query:
+  `Check(present(kind))`, `TryGet` of `dom(kind)` and `types(kind)`, and one `ForEachMatch` over a reusable query of
+  `ne` rows.
 
 | Query shape | Cases opened (`RunReport.CasesOpened`) | Epochs per query | Ids reserved per query | Ids minted per query | Interned per query |
 |---|---:|---:|---:|---:|---:|
@@ -259,28 +257,24 @@ Each row ran 200 warm-up queries, then 5,000 measured ones. Before and after eac
 
 On this theory a split query uses exactly 20 + 10 x *cases* epochs. The cases mint nothing and reserve no block, so ids
 per query do not move with the number of cases. `RunOptions.CaseLimit` defaults to 64 and `SplitDepthLimit` to 4
-(`src/Eggnog/Scheduling/RunOptions.cs`), and the Cosmos plan's `split` profile uses `CaseLimit` 64 (section 3.8).
+(`src/Eggnog/Scheduling/RunOptions.cs`).
 
 What these figures show:
 
-- **The retained-memory half of B4 holds, and the allocation half does not.**
+- **A disposed query scope retains nothing beyond what it newly interned. Its allocation per query is large.**
   - With reused literals, a disposed query retains nothing: 0.6 B per query over 5,000 queries is noise.
   - With fresh literals, the retained memory equals the newly interned values, at 68-76 B each (short strings and
     singleton sets).
   - Local rules free their variants: `VariantsByDescription` returned to its baseline.
-  - B4's allocation target, at most 128 KB per derivation, is not met on the test theory: 230-431 KB per plain query
-    and 1.15 MB per 3-case split query, which is 1.8x to 9x the target.
-  - The test theory is not the production theory, so this does not settle B4. The
-    [idle-machine-measurement plan](./idle-machine-measurement.md) owns the B3 and B4 figures for transient children.
-    It already traces most of a transient child's per-rule allocation to `PlanTemplate.InstantiateLayered`, so this
-    plan hands the allocation gap to it.
-- **B8 needs canonicalization.** On the test theory a fresh string literal interns 2 values: the string, and the
-  singleton set that `inset` computes. Without the adapter's canonicalization, B8's bound of at most 1,000 values per
-  1,000 statements fails by a factor of 2 to 3. The test theory's `long` bounds intern nothing for small numbers,
-  because they box inline. That says nothing about Cosmos's B8. The production encoding (Cosmos plan, section 2.1)
-  stores scalars as tagged strings in a `ValueSet<string>` (`i:<integer>`, `f:<decimal>`), and bounds as a registered
-  `NumericBound(decimal, bool)`. Under that encoding, each fresh number or bound interns at least one value before
-  canonicalization.
+  - Allocation per query is 230-431 KB for a plain query and 1.15 MB for a 3-case split query on this theory. The
+    [idle-machine-measurement plan](./idle-machine-measurement.md) owns the allocation and latency figures of
+    transient children. It already traces most of a transient child's per-rule allocation to
+    `PlanTemplate.InstantiateLayered`, so this plan hands the allocation figures to it.
+- **Fresh literals intern per query unless the host canonicalizes them.** On the test theory a fresh string literal
+  interns 2 values: the string, and the singleton set that `inset` computes. A host that maps its literals onto a
+  bounded set of values interns nothing per query. The test theory's `long` bounds intern nothing for small numbers,
+  because they box inline. That holds only for `long` values in `[0, 2^31)`. An encoding that stores numbers as
+  strings, doubles, sets or registered values interns each fresh number or bound (section 3.1).
 - **Ids and epochs are what a query consumes.**
   - A query that mints 1 to 3 ids reserves a whole 16-id block.
   - A third run of the plain shapes, with `IdBlockAllocator.FirstBlockSize` set to 4, reserved 4 ids per query. All
@@ -297,8 +291,9 @@ What these figures show:
     mentions `OverflowException`.
 
 **Horizons.** The limits are `UnionFind.MaxId` = 2,147,483,590 ids and `Value.StaleRep` - 1 = 4,294,967,294 epochs.
-The derivation rates are illustrative, because the Cosmos plan states no rate. A graph's life is the shorter of its id
-horizon and its clock horizon.
+The query rates are illustrative; no rate is assumed. The `InternedCount` rows are written for a host that retires its
+graph at T interned values; no threshold is assumed either. A graph's life is the shorter of its id horizon and its
+clock horizon.
 
 | Limit | Per query | Queries until exhaustion | At 10 per second | At 100 per second | At 1,000 per second |
 |---|---:|---:|---:|---:|---:|
@@ -308,16 +303,16 @@ horizon and its clock horizon.
 | clock, 3-case split | 50 | 86 M | 99 days | 9.9 days | 24 hours |
 | clock, 12-case split | 140 | 31 M | 36 days | 3.6 days | 8.5 hours |
 | clock, 64-case split | 660 | 6.5 M | 7.5 days | 18 hours | 1.8 hours |
-| `InternedCount` at 10^6, fresh literals not canonicalized | 2 | 0.5 M | 14 hours | 83 minutes | 8 minutes |
-| `InternedCount` at 10^6, canonicalized literals | 0 | unbounded | | | |
+| `InternedCount` at T, fresh literals not canonicalized | 2 | T / 2 | T / 20 seconds | T / 200 seconds | T / 2,000 seconds |
+| `InternedCount` at T, canonicalized literals | 0 | unbounded | | | |
 
 So:
 
 - For plain queries the ids bind, at about half the clock horizon.
 - For any split workload the clock binds. Even a 3-case split exhausts the clock before the ids, and the gap widens
   with the number of cases.
-- The test theory is not the production theory. Its epochs per case should be re-measured on the production theory
-  once the adapter has one. The gauge in phase C is meant to report exactly this.
+- Epochs per case depend on the theory's schedule and rules. These figures hold for the test theory. The gauge in
+  phase C reports them for any theory.
 - This plan did not examine whether the 10 epochs per case could be reduced in the engine.
 
 ### 3.5 Tests and benchmarks that exist
@@ -333,63 +328,59 @@ So:
 
 ## 4. Value
 
-**For the Cosmos adapter.** With canonicalized literals, the `InternedCount` trigger never fires on drift (section
-3.4). The id counter or the clock then ends the generation:
+**For long-lived services built on frozen scopes.** A host that freezes its root and schema scopes and runs each
+request in a transient child is the case D15 and `InternedCount` were written for. If it reuses or canonicalizes its
+literals, `InternedCount` never moves (section 3.4). The id counter or the clock then ends the graph's life:
 
-- in 15.5 days for plain queries at 100 derivations per second;
+- in 15.5 days for plain queries at 100 queries per second;
 - in 10 days to 18 hours for split queries, depending on the number of cases.
 
-The adapter cannot see either limit coming. When one runs out, every Eggnog call on that generation fails with an
-`OverflowException`:
+The host cannot see either limit coming. When one runs out, every minting call on that graph fails with an
+undocumented `OverflowException`. The scope is not faulted, so a host that watches for faulted scopes sees nothing,
+and once the clock is out `CreateChild` fails too. The graph serves no further query until the host retires it.
 
-- Each call falls back to Horn (Cosmos plan, section 3.8). The fallbacks count against B10.
-- The breaker then schedules a recompile on the same graph, which fails again.
-- The generation is retired only if the adapter treats that failed recompile, on a scope that is not faulted, as
-  section 3.7's "faulted scope that cannot be recompiled".
+A public usage gauge lets the host retire the graph before the limit, as D15 lets it do for `InternedCount`. That
+replaces undocumented failure with documented behaviour and a usable signal. It is the largest value in this
+workstream, and it costs little. The split horizons make it more urgent: at 64 cases and 100 queries per second, the
+clock runs out in under a day.
 
-A public usage gauge lets the adapter swap before the limit, as it already does for `InternedCount`. That avoids a
-window of fallbacks and replaces undocumented failure with documented behaviour. It is the largest value in this
-workstream, and it costs little. The split horizons make it more urgent: at 64 cases and 100 derivations per second,
-the clock runs out in under a day.
+Documenting the child interning paths tells hosts exactly which of their operations intern (section 3.1): `inset`
+singletons, case joins and local-rule constants. The churn test turns "a disposed scope retains nothing beyond new
+interning" and "reused literals intern nothing" into regression tests.
 
-Documenting the child interning paths tells the adapter exactly which of its operations intern (section 3.1): `inset`
-singletons, case joins and local-rule constants. The churn test turns the retained half of B4, and B8, into regression
-tests.
+**For hosts that cannot canonicalize.** A host whose rules read the contents of strings through primitives cannot map
+its literals onto a bounded set:
 
-**For other library users.** Any long-lived service built on frozen scopes and transient children meets the same
-limits. A user whose rules read the contents of strings through primitives cannot canonicalize literals as Cosmos
-does:
+- Such a host interns about 2-3 values (150-230 B) per fresh-literal query.
+- At 100 such queries per second with no retirement, that is about 1.3-2 GB a day.
+- Retiring at T interned values, the graph is retired every T / 300 to T / 200 seconds, so the interval is set by the
+  host's own threshold.
 
-- Such a user interns about 2-3 values (150-230 B) per fresh-literal query.
-- At 100 such queries per second with no swap, that is about 1.3-2 GB a day.
-- With a swap at 10^6 values, the graph is retired every 1 to 1.4 hours.
-
-A scoped pool would remove that retained memory between swaps. It would not remove retirement, because the ids and the
-clock still run out (section 3.4).
+A scoped pool would remove that retained memory between retirements. It would not remove retirement, because the ids
+and the clock still run out (section 3.4).
 
 **For maintainers.** [../architecture.md](../architecture.md) section 2.2 states that the pools are permanent per
 graph. The "Ownership" paragraph of section 3.8 says that a child shares base values "by reference". No document says
 explicitly that values a child interns outlive it, or which child operations intern. Writing that down, and pinning it
 in tests, stops it from being rediscovered. The minting-sites table in section 3.2 also shows three bounds and two
-exception types for one limit. That inconsistency is a maintenance hazard independent of Cosmos.
+exception types for one limit. That inconsistency is a maintenance hazard in its own right.
 
 **For performance.** Nothing in this workstream speeds up the root.
 
 - A smaller first id block extends a graph's life by at most min(4, clock horizon / id horizon). That is about 2.1x
   for plain queries with a snapshot read, and 1x for splits whose cases do not mint.
-- Recycling ids and epochs inside transient domains would remove both horizons for the Cosmos topology (section 5,
-  row H2).
-- Once a gauge-driven swap exists, a longer graph life is worth little. A swap costs 1.3-3.0 ms and 815 KB for the
-  prototype theory (Cosmos plan, section 6.1), plus at most 1 s of container compilation for 10 containers (budget
-  B5). It runs on the background worker, and no statement sees a generation whose containers are not ready (section
-  3.7).
+- Recycling ids and epochs inside transient domains would remove both horizons for a host whose root and schema
+  scopes are frozen (section 5, row H2).
+- Once retirement on the gauge exists, a longer graph life is worth little. Retirement costs one graph construction
+  (about 56 KB allocated), the host's theory definitions and its frozen scopes, once per graph life. That cost is the
+  host's and is not measured here; at the horizons of section 3.4 it is spread over millions of queries.
 
 **If it is never done.**
 
-- The documentation gap remains, and B4's retained half and B8 have no regression test.
-- A long-lived Cosmos generation eventually fails all its queries with an undocumented exception and falls back to
-  Horn, until the breaker's handling or an operator retires it.
-- Without scoped interning, nothing changes for users who canonicalize. Users who cannot canonicalize keep retiring
+- The documentation gap remains, and retained memory and per-query interning have no regression test.
+- A long-lived graph eventually fails every minting call with an undocumented exception, until the host notices and
+  retires it.
+- Without scoped interning, nothing changes for hosts that canonicalize. Hosts that cannot canonicalize keep retiring
   graphs, which is the workaround the roadmap documents.
 - Without eq containers in children, five or six egglog push/pop programs stay untranslated, and no library feature is
   affected.
@@ -406,7 +397,7 @@ exception types for one limit. That inconsistency is a maintenance hazard indepe
 | F. Eq containers in children (C13) | large | the overlay environment (`to_id`, `to_container`, `val_index` deltas); an exact parent `val_index`; child container rebuild through the child's union-find; a dirty-id refresh; removing the eq guard and the frozen-database rule; a reference model with container programs in the context differentials | high: container rebuild is egglog's own defect area (issue 831) | the root's container rebuild must keep its cost; gated on the bridge workloads | medium-high |
 | G. 64-bit cells | very large | every table, index, subset, SIMD probe, and the egglog layout the port follows | high | doubles memory per cell | — (dropped) |
 | H1. Recycling ids or the clock globally, in place | medium | proving that no structure still holds a disposed child's ids. Under a writable parent, a recycled low block makes parent ids lose to smaller ids in children, with copies as in L7. The global clock cannot be reset while any frozen scope's rows carry stamps | medium-high | none | medium (dropped) |
-| H2. Ids and epochs local to the transient children of a frozen scope | medium to large | two parts, below | ids: medium. Clock: high, because semi-naive evaluation depends on stamps and a mistake silently loses matches. Guards: the context, split and Cosmos differentials with the feature on and off, and the `ContextTables` invariant checkers | none at the root; a domain test on each clock read in a child | medium: every new clock read must go through the context |
+| H2. Ids and epochs local to the transient children of a frozen scope | medium to large | two parts, below | ids: medium. Clock: high, because semi-naive evaluation depends on stamps and a mistake silently loses matches. Guards: the context and split differentials and the `PredicateTheory` tests with the feature on and off, and the `ContextTables` invariant checkers | none at the root; a domain test on each clock read in a child | medium: every new clock read must go through the context |
 
 **Row H2 in detail.** A *transient domain* is a child of a frozen scope, together with its cases and arms. `Freeze`
 requires the parent to be frozen (`Scope.Freeze`, `src/Eggnog/Graph/Scope.Tree.cs`), so every ancestor of such a
@@ -435,21 +426,21 @@ domain is frozen.
     of `src/Eggnog/Relations`. They include `Context.Epochs.cs`, `EGraphContext.Writes.cs`, `Database.Contexts.cs`
     (`CurrentClock`), `ExecutionState.Database.cs`, `EGraph.Run.cs` and the invariant checkers.
   - Rules that read the clock as a value (egglog's `next_ts`) would see domain values.
-- **What it removes and what it leaves.** It removes both horizons of section 3.4 for the Cosmos topology. It leaves
-  interning growth and theory changes, so the generation swap stays. Its ids half alone gains no more than part D,
-  because the clock binds next. Only the two halves together remove the limits.
+- **What it removes and what it leaves.** It removes both horizons of section 3.4 for a host whose root and schema
+  scopes are frozen. It leaves interning growth and theory changes, so retirement stays. Its ids half alone gains no
+  more than part D, because the clock binds next. Only the two halves together remove the limits.
 
 ## 6. Worth-it evaluation
 
 | Question | Cheapest decisive experiment | Metric and threshold | Idle machine? | Verdict now |
 |---|---|---|---|---|
-| Does a disposed query scope retain anything beyond new interning (B4's retained half)? | Done for this plan (section 3.4). The test in phase B repeats it | Retained heap slope per same-literal query below 16 B; rule, variant and external-function counts back to baseline. Measured: 0.6 B, and the counts returned to baseline | no | holds; write the test |
-| Does a derivation allocate at most 128 KB (B4's allocation half)? | Allocation counts on the production theory | B4 as written | no for counts | fails on the test theory (230 KB-1.15 MB); handed to [./idle-machine-measurement.md](./idle-machine-measurement.md), which owns B4 |
-| What binds a long-lived graph: interning, ids or the clock? | Done (section 3.4): ids, epochs and interned values per query shape and per number of cases | Whichever horizon is shortest at the consumer's rate | no | ids for plain queries, the clock for any split; build the gauge |
-| Is a first block of 4 worth taking? | Done in part: 4 ids per query with allocation unchanged, and the net10.0 suite failed only the 2 tests that pin the size (below). Still to do: the net8.0 run, counting block reservations per child over the context and split differentials and `CaseSplitMemoryBenchmarks`, and the per-child latency benchmarks (`ManyChildrenBenchmarks`, `PerChildCostBenchmarks`) | Take it only if the gauge, in production, shows the id counter ending generations before the clock, on split-free workloads or on theories whose cases mint, at a swap rate the owner considers a measurable cost. Then the gates: allocation per child within +1%, time per child within 2% | the latency part only, and only once triggered | **Later, on data**. It extends graph life by at most min(4, clock horizon / id horizon): about 2.1x for plain queries, 1x for splits whose cases do not mint |
-| Are ids and epochs local to transient domains worth building (H2)? | The gauge in production: how often ids or the clock force a swap, and whether swaps cause fallbacks | Build only if forced swaps happen more often than an owner-set bound (for example, hourly), or if swaps cost fallbacks that threaten B10 | no | **Later, on data**. A gauge-driven swap costs milliseconds plus at most about 1 s in the background, and at 64-case splits and 100 derivations per second it would happen about once in 18 hours |
-| Is scoped interning worth building? | First, the consumer's own number. For Cosmos, B8 on production fresh-literal replay after canonicalization, and the implied swap interval. For another consumer, its fresh values per request and its request rate | Build only if a consumer that cannot canonicalize would swap more often than an owner-set bound (for example, once an hour), or would retain more than its memory budget between swaps | no | **Later**; no consumer meets the trigger today |
-| Are eq containers in children worth building? | An owner decision: will the library offer containers of classes (sets or vectors of terms)? | Build only if the library will expose such containers, or a consumer needs them through the engine | no | **Later** (park); the only gain today is six conformance programs |
+| Does a disposed query scope retain anything beyond new interning? | Done for this plan (section 3.4). The test in phase B repeats it | Retained heap slope per same-literal query below 16 B; rule, variant and external-function counts back to baseline. Measured: 0.6 B, and the counts returned to baseline | no | holds; write the test |
+| How much does a query child allocate, and where? | Allocation counts per query shape, attributed by type | Recorded, with no gate here | no for counts | 230 KB-1.15 MB per query on the test theory; handed to [./idle-machine-measurement.md](./idle-machine-measurement.md), which owns the allocation of transient children |
+| What binds a long-lived graph: interning, ids or the clock? | Done (section 3.4): ids, epochs and interned values per query shape and per number of cases | Whichever horizon is shortest at the host's rate | no | ids for plain queries, the clock for any split; build the gauge |
+| Is a first block of 4 worth taking? | Done in part: 4 ids per query with allocation unchanged, and the net10.0 suite failed only the 2 tests that pin the size (below). Still to do: the net8.0 run, counting block reservations per child over the context and split differentials and `CaseSplitMemoryBenchmarks`, and the per-child latency benchmarks (`ManyChildrenBenchmarks`, `PerChildCostBenchmarks`) | Take it only if the gauge, in a host's long-lived use, shows the id counter ending graphs before the clock, on split-free workloads or on theories whose cases mint, at a retirement rate the owner considers a measurable cost. Then the gates: allocation per child within +1%, time per child within 2% | the latency part only, and only once triggered | **Later, on data**. It extends graph life by at most min(4, clock horizon / id horizon): about 2.1x for plain queries, 1x for splits whose cases do not mint |
+| Are ids and epochs local to transient domains worth building (H2)? | The gauge in a host's long-lived use: how often ids or the clock force a retirement | Build only if forced retirements happen more often than an owner-set bound (for example, hourly) | no | **Later, on data**. Retirement is paid once per graph life, and at 64-case splits and 100 queries per second it would happen about once in 18 hours |
+| Is scoped interning worth building? | A host's own numbers: its fresh values per request and its request rate, and the retirement interval they imply | Build only if a host that cannot canonicalize would retire more often than an owner-set bound (for example, once an hour), or would retain more than its memory budget between retirements | no | **Later**; nothing measured so far meets the trigger |
+| Are eq containers in children worth building? | An owner decision: will the library offer containers of classes (sets or vectors of terms)? | Build only if the library will expose such containers, or a host needs them through the engine | no | **Later** (park); the only gain today is six conformance programs |
 | 64-bit cells? | none needed | a 2x memory cost per cell everywhere, against a limit that a gauge plus retirement already handles | no | **Drop** |
 | Recycling ids or the clock globally, in place (H1)? | none needed | Under a writable parent, recycled blocks break smaller-id-wins, and the global clock cannot be reset while frozen rows carry stamps. Where recycling is safe, H2 covers it | no | **Drop** |
 
@@ -462,7 +453,7 @@ size into their arithmetic:
 - `ABlockPastTheUnionFindMaximumOverflows` places the counter 20 ids below the limit and expects the second block to
   overflow. With 4-id blocks the second block still fits.
 
-No context, colored, split or Cosmos differential failed, and no allocation probe failed. If the trigger is ever met,
+No context, colored, split or predicate-theory test failed, and no allocation probe failed. If the trigger is ever met,
 the change costs two test edits plus the gates above.
 
 ## 7. Plan if it goes ahead
@@ -493,10 +484,10 @@ review of the new tests; fix; verify on net8.0 and net10.0.
 
 **Phase B: churn and retained-memory tests (small).** Entry: none; may run in parallel with A.
 
-- The churn shape is the Cosmos derivation: `CreateChild`, `Make`, `Assume`, `Run`, then the snapshot read (`Check`,
-  `TryGet`, one `ForEachMatch` over a reusable query), then `Dispose`. A split variant runs the theory's `Saturation`
-  schedule.
-- `src/Eggnog.Tests/Scopes/ScopeChurnTests.cs` (deterministic), on the scoped Cosmos test theory:
+- The churn shape is a request on a frozen schema scope: `CreateChild`, `Make`, `Assume`, `Run`, then the snapshot
+  read (`Check`, `TryGet`, one `ForEachMatch` over a reusable query), then `Dispose`. A split variant runs the theory's
+  `Saturation` schedule.
+- `src/Eggnog.Tests/Scopes/ScopeChurnTests.cs` (deterministic), on `PredicateTheory` (`src/Eggnog.Tests/Predicates/`):
   - `InternedCount` is unchanged across a second pass of same-literal queries;
   - it rises by exactly the known count for each fresh-literal shape (2 for `StrEq`);
   - the snapshot read interns nothing and reserves no ids;
@@ -514,7 +505,8 @@ review of the new tests; fix; verify on net8.0 and net10.0.
 
   The slope excludes one-off growth from caches and tiering. The `WeakReference` and count assertions remain the
   deterministic guard.
-- An opt-in 100,000-query soak behind an environment variable, as the Cosmos plan's section 9.2 asks.
+- An opt-in 100,000-query soak behind an environment variable, long enough to show a small per-query retention that
+  10,000 queries would hide in the heap's noise.
 - Mutation review: the tests must fail in each of these cases:
   - `RuleVariants.FreeVariant` stops removing `VariantsByDescription` entries;
   - `FreeExternalFunction` is skipped;
@@ -541,8 +533,8 @@ review of the new tests; fix; verify on net8.0 and net10.0.
   - the gauge moves as phase B's counts say;
   - an internal hook, as in the dry run, advances each counter to just below its limit, and the documented exception
     and state follow on every minting path, including a root rule mint and a container mint.
-- Exit: merged on both frameworks. The Cosmos adapter is told that its swap trigger should include the gauge's
-  fraction. That is an adapter-side change, and section 3.4 shows it matters most for its split phase.
+- Exit: merged on both frameworks. The gauge's documentation says that a long-lived host should retire its graph on
+  the gauge's largest fraction as well as on `InternedCount`, and that split workloads reach the clock's limit first.
 
 **Phase D (Later, on data): first id block.** Trigger: section 6's row on the first block.
 
@@ -556,7 +548,7 @@ review of the new tests; fix; verify on net8.0 and net10.0.
 two steps, recycled id blocks first and the domain clock second. The design and its decision record go in
 [../engine/decisions.md](../engine/decisions.md). Oracles:
 
-- the context, split and Cosmos differentials, run with the feature on and off;
+- the context and split differentials and the `PredicateTheory` tests, run with the feature on and off;
 - the `ContextTables` invariant checkers, extended to assert that epochs are monotone within each domain;
 - a test that a `ClassId` kept from a disposed query is refused in a later one that reuses its block.
 
@@ -590,11 +582,9 @@ two steps, recycled id blocks first and the domain clock second. The design and 
 
 ## 8. Dependencies and ordering
 
-- **Phases A, B and C** depend on nothing and can start now. C should come before the Cosmos adapter's production
-  phases on scoped graphs (its Phase 2, "Production on R2", in the Cosmos plan's section 5.2), and above all before its
-  Phase 3, "Splits". At 64 cases the clock runs out in under a day at 100 derivations per second.
-- **B4's allocation half** goes to [./idle-machine-measurement.md](./idle-machine-measurement.md), which owns the
-  transient-child figures and Cosmos B3 and B4.
+- **Phases A, B and C** depend on nothing and can start now. No other workstream waits on them.
+- **Allocation per query child** goes to [./idle-machine-measurement.md](./idle-machine-measurement.md), which owns the
+  transient-child figures.
 - **Phase D**, if triggered, needs an idle machine for its latency gate. It also touches the same id machinery as two
   items in [./colored-context-deferred-features.md](./colored-context-deferred-features.md): the ranking that lets
   parent-visible ids win (G2), and shared sibling ids (G9). Whichever lands second re-reads the L7 figures. H2's
@@ -603,9 +593,8 @@ two steps, recycled id blocks first and the domain clock second. The design and 
   This plan recommends parking the feature until the library offers containers of classes.
 - **Scoped interning** (phase E) changes `Encode`, `Decode` and `Primitive.InvokeCore`, which compiled plans
   ([./compiled-plans.md](./compiled-plans.md)) would call or inline. If both are ever built, design them together.
-- [./rule-layer-split-features.md](./rule-layer-split-features.md) carries the other Cosmos requests. This plan
-  answers request 3 (values that die with a scope) and part of the measurement scaffolding of request 2: the churn
-  harness can be reused for its latency figures.
+- [./idle-machine-measurement.md](./idle-machine-measurement.md): phase B's churn harness can be reused for its
+  transient-child latency figures (its Q8), and its 100-sibling release test (Q11) sits beside `ScopeChurnTests`.
 - [./parallelism-test-plan.md](./parallelism-test-plan.md): its stress tests of concurrent children can run phase B's
   churn on several threads under one frozen schema. That also exercises concurrent interning into the shared pool.
 - [./conformance-docs-release.md](./conformance-docs-release.md): phase A's documentation, and the push/pop
@@ -619,16 +608,15 @@ two steps, recycled id blocks first and the domain clock second. The design and 
    `GraphUsage` record struct? At exhaustion, should the library keep a documented `OverflowException` that leaves the
    scope unfaulted, or throw a documented library exception? Either way, should one bound (`UnionFind.MaxId`) and one
    exception type hold across all four minting paths?
-2. **The first id block.** Do you agree to leave it at 16 until the gauge shows the id counter ending generations
-   before the clock, at a swap rate you consider costly?
+2. **The first id block.** Do you agree to leave it at 16 until the gauge shows the id counter ending graphs before the
+   clock, at a retirement rate you consider costly?
 3. **Containers of classes.** Will the library ever offer containers of classes (sets or vectors of terms)? If not,
    should eq containers in children, and the push/pop programs that wait on them, be dropped rather than left open?
-4. **The trigger for scoped interning.** What swap interval, or what retained memory between swaps, would justify
-   scoped interning for a consumer that cannot canonicalize? Is there such a consumer besides Cosmos, which
-   canonicalizes?
-5. **Generation swaps.** Should the library provide a helper for generation swaps, which would rebuild a graph from a
-   definition delegate when the gauge passes a threshold? Or should it only document the pattern, as the Cosmos
-   adapter implements its own?
+4. **The trigger for scoped interning.** What retirement interval, or what retained memory between retirements, would
+   justify scoped interning for a host that cannot canonicalize its literals?
+5. **Retiring graphs.** Should the library provide a helper that rebuilds a graph from a definition delegate when the
+   gauge passes a threshold? Or should it only document the pattern: retire on the gauge, rebuild from the host's own
+   definitions?
 6. **The 100,000-query churn.** Should it run in the default suite, or as an opt-in soak, with a shorter churn by
    default?
 7. **The `u32` decision.** The engine map's section 8.2 asked for this decision to be made "early". Do you agree to
@@ -636,8 +624,8 @@ two steps, recycled id blocks first and the domain clock second. The design and 
    - 64-bit cells: dropped.
    - Global recycling of ids or the clock in place: dropped.
    - Ids and epochs local to the transient children of a frozen scope: possible, and deferred. The reason is that a
-     gauge-driven generation swap costs milliseconds plus at most about 1 s. The trigger is forced swaps more often
-     than a bound you set.
+     host can retire a graph on the gauge, once per graph life. The trigger is forced retirements more often than a
+     bound you set.
 
 ## Review
 
@@ -654,18 +642,19 @@ where it rested on a count, a second dry run.
    with it. Its gain is now stated as min(4, clock horizon / id horizon). That is 2.1x for plain queries, not the
    review's 2.3x, because the snapshot read adds an epoch, so the plain clock horizon is 33 days, not 35. It is 1x for
    splits whose cases do not mint. The plan also notes the case where ids do bind: theories whose cases mint.
-3. **B4.** The plan now says only the retained-memory half holds. The allocation half fails on the test theory by 1.8x
-   to 9x. The gap goes to the idle-machine-measurement plan rather than rule-layer-split-features, as the review
-   suggested, because that plan owns Cosmos B3 and B4 and already has an allocation finding on transient children.
+3. **Allocation per query.** The plan now says that only retained memory stays flat. Allocation per query
+   (230 KB-1.15 MB on the test theory) is recorded and handed to the idle-machine-measurement plan rather than
+   rule-layer-split-features, as the review suggested, because that plan owns the transient-child figures and already
+   has an allocation finding on transient children.
 4. **Recycling.** Row H became H1 (global recycling in place: Drop) and H2 (ids and epochs local to transient domains
-   under a frozen scope). H2 is evaluated on its merits in section 5 and rated **Later, on data**: a gauge-driven swap
-   is cheap. The evaluation adds one consequence the review did not raise: `ClassId` equality across recycled blocks.
-   Owner question 7 now asks to record that reasoning.
-5. **Swap triggers.** The plan now quotes all three triggers of the Cosmos plan's section 3.7, and explains why none
-   sees exhaustion coming. The gauge's value is restated as avoiding a window of Horn fallbacks (B10) and documenting
-   the behaviour.
-6. **B8.** The claim about small numbers is now limited to the test theory's `long` encoding. Under the production
-   encoding, each fresh number or bound interns at least one value before canonicalization.
+   under a frozen scope). H2 is evaluated on its merits in section 5 and rated **Later, on data**. The evaluation adds
+   one consequence the review did not raise: `ClassId` equality across recycled blocks. Owner question 7 now asks to
+   record that reasoning.
+5. **Retirement signals.** The plan now explains why `InternedCount`, the only usage figure exposed today, cannot see
+   exhaustion coming, and why an unfaulted scope gives a host no other signal. The gauge's value is restated as
+   retiring before the limit and documenting the behaviour.
+6. **Number encodings.** The claim about small numbers is now limited to the test theory's `long` encoding. An
+   encoding that stores numbers or bounds as interned values interns each fresh one.
 7. **Minting bounds.** Section 3.2 now lists the four minting sites with their bounds (`MaxId`, below `StaleRep`, up to
    and including `StaleRep`) and exceptions (`OverflowException`, `InvalidOperationException`, and a later
    `ArgumentOutOfRangeException` from `UnionFind.Grow`). Each was verified in the code. Phase C covers all of them.
@@ -678,6 +667,6 @@ where it rested on a count, a second dry run.
 
 **Rejected:** none of the nine problems was rejected outright. Two of the review's proposals were adjusted:
 
-- The proposed handoff target for B4's allocation half was changed, for the reason given in item 3.
-- The proposed summary sentence on the swap triggers ("The only trigger that can see exhaustion coming is none") was
+- The proposed handoff target for the allocation figures was changed, for the reason given in item 3.
+- The proposed summary sentence on retirement signals ("The only trigger that can see exhaustion coming is none") was
   reworded with the same content.

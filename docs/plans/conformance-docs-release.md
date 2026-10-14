@@ -5,8 +5,8 @@ This plan covers these follow-ups:
 - the ordering that the built-in `Max` and `Min` lattices use for strings;
 - running the test suite on net8.0 in CI;
 - whether the package declares AOT and trimming compatibility;
-- two pieces of documentation the Cosmos plan asked for;
-- a stale statement in `prototypes/cosmos-facts/README.md`;
+- a worked modelling note on hidden discriminators and on numeric bounds that stay sound, with the test fixture
+  `PredicateTheory`'s own limits stated in its class remarks;
 - the egglog push/pop programs that are still untranslated, and the one kind of coverage the most tractable of them
   (`math.egg`) would add: subsumption and deletion by rules inside a child.
 
@@ -17,16 +17,16 @@ behaves without dynamic code, which bear on the compiled-plans question.
 
 ## 1. Summary and recommendation
 
-**Recommendation: Do now, for six small items. Confidence: medium-high.**
+**Recommendation: Do now, for five small items. Confidence: medium-high.**
 
 | Item | Verdict | Confidence |
 |---|---|---|
 | A. Ordinal `Max`/`Min` for strings | **Do now** (a defect, not a documentation item) | high |
-| H. Run `Eggnog.Tests` on net8.0 in CI, on linux-x64 (and optionally win-x64) | **Do now** | high |
+| H. Run `Eggnog.Tests` on net8.0 in CI, on linux-x64 (and optionally win-x64) | **Do now**, while the package targets net8.0 (section 9, question 2) | high |
 | B-min. Clear the three trim warnings, declare `IsAotCompatible`, make IL2xxx and IL3xxx errors, and add a publish-only NativeAOT check in CI | **Do now** | medium-high |
 | B-full. A NativeAOT smoke application with golden output | **Only if the owner names NativeAOT a supported target** (section 9, question 1). No demand for it is recorded | medium |
-| C. Documentation: hidden discriminators; the limits of the Cosmos test theory | **Do now** (small) | medium-high |
-| D. Correct `prototypes/cosmos-facts/README.md` | **Do now**, unless the adapter commits its gap tests first (section 9, question 2), in which case one edit points at them | high |
+| C. Documentation: a modelling note on hidden discriminators and sound numeric bounds; the test fixture `PredicateTheory`'s limits in its class remarks | **Do now** (small) | medium-high |
+| D. Correct a stale statement in a prototype's README | **Closed**: the prototype and its README are no longer in the repository | high |
 | F. Directed tests of subsumption and deletion by rules in a child, and settling the unused `RetractionGuard.CheckSubsume` | **Do now** (small, low priority) | medium-high |
 | E. Push/pop programs with eq-sort containers in a child | **Later**: blocked on eq containers in children, which [`./interning-and-value-lifetime.md`](./interning-and-value-lifetime.md) parks | high |
 | G. `math.egg`, and the programs that need `UnstableFn`, `Map`, `MultiSet` or `BigRat` | **Drop**, and take them off the roadmap. `math.egg` stays an owner option | medium-high |
@@ -38,13 +38,11 @@ The reasons:
   `"ä"` under sv-SE. The merge is also not commutative on canonically equivalent strings: the precomposed and
   decomposed forms of "é" compare equal under the culture and differ ordinally, so `Verify` throws "violates
   commutativity". Everything else in the library orders strings ordinally.
-- The package ships a net8.0 build that CI never runs, and its first consumer, the Cosmos adapter library, targets
-  net8.0 only. One more job closes that.
+- The package ships a net8.0 build that CI never runs. One more job closes that, for as long as the package targets
+  net8.0.
 - The library is one small step from declaring AOT and trimming compatibility: the analyzers report three trim warnings
   on net10.0 (two on net8.0) and no AOT warning. A declaration plus a publish-only check keeps that true at little
   cost. A golden-output smoke application costs more and has no recorded user, so it waits for the owner.
-- The prototype README states that the gap tests are "on a test branch" of the adapter. They were written against the
-  adapter but never committed there.
 - The documentation item consolidates reasoning that exists today only in the history documents, which by their own
   index do not describe the current code.
 - Subsumption and deletion in a child run through the engine's generic merge and layer paths, so a few directed tests
@@ -78,28 +76,27 @@ in the remarks of `src/Eggnog.Tests/Relations/Bridge/EggPushPopWebDemoTests.cs`.
 `herbie-tutorial.egg` (`BigRat`), `lambda.egg`, `typeinfer.egg`, `fusion.egg` (`Set` containers of e-classes) and
 `multiset.egg` (`MultiSet`, `UnstableFn`).
 
-**Documentation.** The Cosmos plan ([`../history/cosmos-integration.md`](../history/cosmos-integration.md), section 8.3,
-"Library requests") made two requests:
+**Documentation.** A worked modelling note is missing, and the roadmap lists it under "Library work". It has two
+parts:
 
-- Request 6 asks for a worked note on how a compiler synthesizes a hidden discriminator. The rule-layer spec encodes
-  `$anyOf/0` by hand and does not say how a compiler would produce it.
-- Request 9 is documentation, in four bullets:
-  - the test theory `CosmosTheory`'s numeric bound rules model a raw comparison and must never model a numeric `CAST`,
-    which also matches stored strings (Cosmos plan section 0.2, point 2);
-  - its "a domain settles the type" rule is string-only;
-  - the built-in `Max` and `Min` compare with `CompareTo`, while sets compare ordinally;
-  - the R1b status lines of the rule-layer spec.
+- A worked note on how a schema compiler synthesizes a hidden discriminator for a disjunction that has none (JSON
+  Schema's `anyOf` or `oneOf` without a property that tells the branches apart). The rule-layer spec encodes `$anyOf/0`
+  by hand and does not say how a compiler would produce it.
+- Numeric bounds that stay sound, which the test fixture `PredicateTheory` shows by its limits: a bound rule may prove
+  a type only for a comparison that holds only between numbers, never for one that first converts a stored value to a
+  number, which also matches stored strings; and a bound that steps by one is sound only over integers.
 
-  The roadmap lists the first two under "Library work". This plan treats the third as a defect (item A). The fourth is
-  moot: the history documents are archived, and their index says their status lines are those of the time they were
-  written ([`../history/README.md`](../history/README.md)).
+The fixture's own limits, including that its "a domain settles the type" rule is string-only, belong in its class
+remarks. They are test code, not a roadmap item.
+
+A related point, that the built-in `Max` and `Min` compare with `CompareTo` while sets compare ordinally, is a defect,
+which this plan treats as item A. A point about the rule-layer spec's status lines is moot: the history documents are
+archived, and their index says their status lines are those of the time they were written
+([`../history/README.md`](../history/README.md)).
 
 **net8.0 in CI and AOT.** No document plans either. The owner raised AOT with the compiled-plans question
 (`RuntimeFeature.IsDynamicCodeSupported`, NativeAOT). What CI tests, and whether a package declares `IsAotCompatible`,
 are release properties, so they belong here.
-
-**The prototype README.** The Cosmos plan, section 8.2 question 7 and section 9.2, asks that
-`prototypes/cosmos-facts/README.md` (lines 86-90) be corrected "after 0a", once the adapter commits the gap tests.
 
 ## 3. Current state
 
@@ -168,30 +165,34 @@ or delete. No test runs a subsuming rule in a child and then checks what later r
 
 ### 3.2 Documentation
 
-The hidden-discriminator encoding is written down only in the history documents:
+The hidden-discriminator encoding is written down only in the history documents and in the test fixture's code:
 
-- the Cosmos plan, section 2.6, the "Undiscriminated `anyOf`/`oneOf`" row: a key `#anyOf:<schema location>` with
-  presence, a domain of branch indices, `discriminator(#…)`, branch rules guarded on the key, and `governs(#…, p)`;
-- section 2.8 of the same plan: `mentioned(#h)` when the query mentions a path the key governs;
-- the rule-layer spec, section 11, residual risk 11: split demand trades completeness for cost, and its remedy;
-- the rule-layer spec, D43.
+- the rule-layer spec, section 11, residual risk 11: split demand trades completeness for cost, and its remedy, a
+  `governs(k, p)` fact per branch path, with the query split guarded on "mentions k, or mentions a path k governs";
+- the rule-layer spec, D43;
+- the test fixture `PredicateTheory` (`src/Eggnog.Tests/Predicates`), whose query cases encode `$anyOf/0` by hand: a
+  synthesized key with presence, a domain of branch indices, marked as a discriminator, and branch rules guarded on the
+  key's presence and on its domain narrowed to one index. That case (`ScopedQueryCases`) runs without a split, so it
+  shows only that the branches never meet without one. The split over the key is run by
+  `SplitExtractionTests.ASplitOnAHiddenDiscriminatorJoinsTheBranchDomains` (`src/Eggnog.Tests/Cases`), which compiles
+  the schema with `PredicateTheory.Facts` and checks what the split lifts: the union of the branch domains, and neither
+  branch's own field. A query that mentions a path the key governs, but not the key, opens no case on it.
 
-The worked example is `src/Eggnog.Tests/Cosmos/Scoped/Scenario04UndiscriminatedAnyOfTests.cs` (and `.Cases.cs`),
-which encodes `$anyOf/0` by hand. [`../architecture.md`](../architecture.md), section 2.9, describes split rules and
-the coverage obligation, but not this pattern or the `governs` remedy. No test uses `governs`. The history index
+[`../architecture.md`](../architecture.md), section 2.9, describes split rules and the coverage obligation, but not this
+pattern or the `governs` remedy. No test uses `governs`. The history index
 ([`../history/README.md`](../history/README.md)) says those documents "do not describe the current code".
 
-The limits of the test theory, from `src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.cs`:
+The limits of the test fixture, from `PredicateTheory` (`src/Eggnog.Tests/Predicates`):
 
 - "a numeric lower bound" and "a numeric upper bound" (`DefineHorn`) derive `types(p) = {number}` from
-  `NumGt(p, n)` and `NumLt(p, n)`. This is right for a raw comparison and wrong for a numeric `CAST`, which also matches
-  a stored `"30"`.
+  `NumGt(p, n)` and `NumLt(p, n)`. This is right for a comparison that holds only between numbers, and wrong for a
+  comparison that first converts the stored value to a number, which also matches a stored `"30"`.
 - The same rules step by one (`lo = n + 1`, `hi = n - 1`) over `long`. That is sound only when the path holds
-  integers: a stored 2.5 satisfies `> 2` but not `>= 3`. The Cosmos plan's own lattice uses open and closed bounds
-  (section 2.3, row L7). Request 9 does not mention this limit.
+  integers: a stored 2.5 satisfies `> 2` but not `>= 3`. A bound with an open flag over `decimal` avoids this; item 7
+  of [`./rule-layer-split-features.md`](./rule-layer-split-features.md) tests a lattice of that shape.
 - "a domain settles the type" (`DefineLattice`) sets `types(p) = {string}` from any `dom(p)`. Domains are
-  `ValueSet<string>`, so an `enum` with a number or a `null` member (the Cosmos plan's `enum ["600", 1]`) cannot be
-  stated. Integer domains (`IDom`) settle no type.
+  `ValueSet<string>`, so an `enum` with a number or a `null` member (such as `enum ["600", 1]`) cannot be stated.
+  Integer domains (`IDom`) settle no type.
 
 Nothing in the class remarks states these limits.
 
@@ -247,9 +248,8 @@ has no `#if NET…` conditionals, and uses no `Reflection.Emit`, `DynamicMethod`
 platforms (win-x64, linux-x64, linux-arm64, osx-x64, osx-arm64), on **net10.0 only**: the `tfm` axis of the matrix
 lists only net10.0, and the job installs only the .NET 10 runtime (`actions/setup-dotnet`, `10.0.x`).
 `src/dist-tests/dist-tests.csproj` packages `Eggnog.Tests` for both net8.0 and net10.0, so the net8.0 test assembly is
-built and shipped to the job but never run. The Cosmos adapter's library project targets net8.0 only (its test project
-targets net8.0 and net10.0), so in production the adapter runs the build CI never tests. With no conditional source,
-the risk is in runtime and base-library behaviour, which only a run catches.
+built and shipped to the job but never run. A user on net8.0 therefore runs a build that CI never tests. With no
+conditional source, the risk is in runtime and base-library behaviour, which only a run catches.
 
 **Dry runs for AOT and trimming**, in a private clone at `eda0c61`, with packages already in the local cache:
 
@@ -271,7 +271,7 @@ the risk is in runtime and base-library behaviour, which only a run catches.
    the split example's three answers, and a `ValueSet` of a sort value. `Register<Expr>` still refused the sort with
    its message.
 
-Nothing checks AOT or trimming in CI. No issue, roadmap item or consumer asks for AOT or trimming support.
+Nothing checks AOT or trimming in CI. No issue, roadmap item or user asks for AOT or trimming support.
 
 ### 3.5 Facts that bear on the compiled-plans question
 
@@ -288,26 +288,6 @@ first dynamic code in the package:
 [`./compiled-plans.md`](./compiled-plans.md) recommends dropping compiled plans. If the owner accepts that, item B has
 no interaction with it.
 
-### 3.6 The prototype README
-
-`prototypes/cosmos-facts/README.md`, lines 86-90 (last changed in `2853490`), says that "the gaps are tests on a test
-branch of the adapter, in `…/CosmosDeclaredFactPlanningTests.Gaps.cs`". The Cosmos plan, section 5.1, cites those tests
-as `Gaps.cs` at the adapter's commit `a83fd2a` and records that they are uncommitted. In the adapter's repository (main
-at `c1f7dda`, 2026-10-13), no commit on any branch contains the file: the tests were written against the adapter but
-never committed there. The adapter has started its Phase 0a: its main has "Read an integer as a number wherever a
-claim's type is compared" (`628d1d7`), the plan's `Integer ⊂ Number` change. Porting and committing the gap tests is
-the first step of that phase (the Cosmos plan's phase table, row 0a). This repository reproduces and closes each gap with
-a scoped scenario test:
-
-| Gap | Test here |
-|---|---|
-| 1 | `Scenario02QueryDisjunctionTests.TwoKindsNamedTogetherLowerTheReference` |
-| 1 (sweep) | `Scenario07SweepLinksTests.ParkAndMapWrittenInLowerTheParkId` and `ParkAndMapSpeltPerKindLowerTheParkId` |
-| 2 | `Scenario03CombiningClaimsTests.ADomainLessARefusedValueProvesTheGuard` |
-| 3 | `Scenario04UndiscriminatedAnyOfTests.AnUndiscriminatedUnionDeclaresTheUnionOfItsDomains` |
-| 4 | `Scenario05IntervalsTests.AComparisonBeyondADeclaredBoundIsFalse` |
-| 5 | `Scenario08IntegerDomainTests.AnIntegerOutsideADeclaredDomainIsFalse` |
-
 ## 4. Value
 
 **A. Ordinal `Max`/`Min`.**
@@ -315,25 +295,24 @@ a scoped scenario test:
 - Benefits library users. A function declared with `ValueLattice.Max<string>()` or `Min<string>()` today gives
   different results on machines with different cultures, on ordinary text (section 3.3), and can merge differently
   between serial and parallel runs when canonically equivalent or ignorable-character strings meet.
-- The adapter's bounds are numeric, so it is not affected today. The Cosmos plan raised the item because its theory
-  mixes sets and ordered values.
 - If the fix is never made, the library ships a built-in lattice that fails its own `Verify` and contradicts the
   README's "Deterministic by default".
-- The behaviour change has no portable dependant: nothing in the repository or the adapter uses `Max<string>` or
-  `Min<string>`, the package is a 0.0.1 pre-release, and today's result depends on the machine's culture.
+- The behaviour change has no portable dependant: nothing in the repository uses `Max<string>` or `Min<string>`, the
+  package is a 0.0.1 pre-release, and today's result depends on the machine's culture.
 
 **H. net8.0 in CI.**
 
-- Benefits the first consumer directly: the adapter library targets net8.0 only (section 3.4).
+- Benefits every user on net8.0: the package ships a net8.0 build that CI never runs (section 3.4).
 - The test assembly for net8.0 is already built and shipped to the job; only the run is missing.
 - One platform (linux-x64) catches most runtime and base-library differences; win-x64 adds the NLS-or-ICU and file
-  system differences of the adapter's likely developer machines.
-- If it is never done, a net8.0-only regression reaches the adapter first.
+  system differences of Windows machines.
+- If it is never done, a net8.0-only regression reaches net8.0 users first.
+- The value lasts only as long as the package targets net8.0. .NET 8's support ends in November 2026; if the package
+  drops the target, H is moot (section 9, question 2).
 
 **B. AOT and trimming.**
 
-- No demand is recorded: no issue, roadmap item or consumer asks for it. The Cosmos adapter does not benefit: it targets
-  net8.0 and uses `System.Linq.Expressions` itself ([`./compiled-plans.md`](./compiled-plans.md), section 3).
+- No demand is recorded: no issue, roadmap item or user asks for it.
 - Prospective beneficiaries are users who publish trimmed or NativeAOT applications: command-line tools, serverless
   functions, mobile.
 - B-min turns the dry runs' "presumably works" into a property the build enforces: the analyzers flag the first
@@ -346,19 +325,18 @@ a scoped scenario test:
 
 **C. Documentation.**
 
-- The beneficiary is whoever writes the adapter's schema compiler in its Phase 3 (the Cosmos plan's phase table,
-  section 5.2).
-- The hidden-discriminator pattern and the `governs` remedy for split demand are general modelling techniques for any
-  user with undiscriminated disjunctions. They are recorded today only in documents that say they do not describe the
-  code.
-- The test theory's limits matter to anyone who ports `CosmosTheory` as a starting point. Each limit is a soundness
-  trap: a `CAST` modelled as a raw comparison proves a type that a stored string violates. Integer stepping proves a
-  bound that a fraction violates.
-- If it is never done, the adapter can still read the Cosmos plan, but a port of the test theory can carry the traps
-  silently.
+- The beneficiary is anyone who compiles a schema with undiscriminated disjunctions into split rules. The
+  hidden-discriminator pattern and the `governs` remedy for split demand are general modelling techniques for any user
+  with such disjunctions. They are recorded today only in documents that say they do not describe the code.
+- The numeric-bound part matters to anyone who models comparisons with bound lattices. Each point is a soundness trap,
+  and the fixture shows both: a converting comparison modelled as a comparison between numbers proves a type that a
+  stored string violates, and integer stepping proves a bound that a fraction violates. The fixture's class remarks
+  record its own limits for anyone who reads or reuses it.
+- If it is never done, a theory modelled the same way can carry the traps silently, and the pattern stays in documents
+  that do not describe the code.
 
-**D. The prototype README.** It removes a false statement from a file in the repository at almost no cost. If the
-adapter commits its gap tests first, the same edit can point at them.
+**D. The prototype README.** Closed: the prototype it described is no longer in the repository, so there is nothing
+to correct.
 
 **E. Eq-container push/pop programs.** Five programs, plus the eq-container half of `vec.egg`, would check eq
 containers in children against egglog. The feature does not exist, so there is nothing to check yet. Their value
@@ -398,7 +376,6 @@ If they are never done, nothing is lost but a line in the roadmap.
 | B-min | small | the three code sites, and a publish step in CI (the native link needs clang, which GitHub's Ubuntu images have) | low: the code changes touch an error path and a rendering fallback. Oracle: zero analyzer and ILC warnings, and the published app exits with 0 | none: no runtime code changes on hot paths | every new reflection or dynamic-code use must be annotated or guarded, or the build fails; one publish step per push |
 | B-full | medium | a smoke app over every public area and its golden file | the golden file is brittle: `RunReport.ToString()` prints the elapsed milliseconds (`src/Eggnog/Scheduling/RunReport.cs`), concurrent children finish in any order, and any change to rendering or report wording churns the file. Printing only deterministic fields and sorting children's results contains this | none | the golden file changes with every rendering change |
 | C | small | writing | none (documentation and test-class remarks) | none | must be kept in step with split and scope APIs |
-| D | tiny | a paragraph and a table | none | none | one more edit if the adapter commits its gap tests later |
 | F | small | two or three directed tests, and either wiring or deleting `CheckSubsume` | tests only, unless `CheckSubsume` is wired, which refuses a subsume the code allows today (the extraction test would need to change) | none if deleted; one guard call per subsume batch if wired | none |
 | E | medium, after the feature | translating 5 programs (the container types exist in the tests) | tests only | none | five more hand translations |
 | G | medium (`math.egg`, about 600-1,000 lines of C# judging by `bdd.egg`'s 19 rules) to large (function values, or a `.egg` reader) | translation, or features | — | — | — |
@@ -408,12 +385,11 @@ If they are never done, nothing is lost but a line in the roadmap.
 | Question | Cheapest decisive experiment | Metric and threshold | Idle machine? | Verdict now |
 |---|---|---|---|---|
 | A: is the current behaviour wrong? | Done: the probes in section 3.3 | results differ across cultures, or `Verify` fails on a two-string sample → go | no | **Go** |
-| H: is net8.0 worth a CI job? | none needed: the consumer's target and the untested shipped build are facts | — | no | **Go** (linux-x64; win-x64 optional) |
+| H: is net8.0 worth a CI job? | none needed: the untested shipped build is a fact (question 2 decides whether the target stays) | — | no | **Go** (linux-x64; win-x64 optional) |
 | B1: does the package work trimmed? | Done: the trimmed, self-contained publish in section 3.4 | output identical to the JIT run → go | no | **Go** |
 | B2: does the whole library pass ILC with no IL3xxx? | Publish a tiny app with `PublishAot=true` and `TrimmerRootAssembly=Eggnog` on a Linux CI runner, or locally from a developer shell | zero IL2xxx and IL3xxx warnings once the three sites are cleared, and the app exits with 0 → declare `IsAotCompatible`. An IL3xxx → declare `IsTrimmable` only, and record why | no | **Go** (B-min) |
 | B3: is a runtime golden comparison needed? | Owner decision (section 9, question 1) | AOT named a supported target → B-full. Otherwise B-min suffices | no | ask |
-| C: is the note worth writing now, before the adapter reaches Phase 3? | none needed: the material exists and the cost is small | — | no | **Go** (small) |
-| D: correct now or wait for the adapter? | Owner question 2: can the adapter commit its gap tests now? | yes → one edit pointing at them. No → correct now and amend later | no | **Go** |
+| C: is the note worth writing now, with no user waiting for it? | none needed: the material exists, the cost is small, and its only record is in documents that do not describe the code | — | no | **Go** (small) |
 | F: is `CheckSubsume` needed? | The directed test F1 below: subsume at a writable root with a live child, then catch the child up | the child sees the row subsumed and its rules stop matching it with no inconsistency → delete `CheckSubsume` and correct the record. An inconsistency → wire `CheckSubsume` at both subsume paths, as the spec says | no | **Go** (small) |
 | E: build eq containers in children? | owned by [`./interning-and-value-lifetime.md`](./interning-and-value-lifetime.md) (its Phase F trigger) | — | — | **Later** |
 | G: any program worth translating by hand? | none needed | — | — | **Drop** (`math.egg` an owner option) |
@@ -490,7 +466,7 @@ review of the new tests; fix; verify on net8.0 and net10.0.
   job rather than a checked-in golden file, so rendering changes do not churn a file.
 - Whether xunit.v3 can run `Eggnog.Tests` itself under NativeAOT was not established here, and is not needed.
 
-**Phase 4: documentation (C, D).** Entry: none.
+**Phase 4: documentation (C).** Entry: none.
 
 - [`../architecture.md`](../architecture.md), section 2.9: a short subsection, "Splitting a disjunction that has no
   discriminator". It should cover:
@@ -502,13 +478,14 @@ review of the new tests; fix; verify on net8.0 and net10.0.
   - the `governs(k, p)` remedy: the query split is guarded on "mentions k, or mentions a path k governs", and the host
     may supply that demand;
   - the cost: one schema case per branch, multiplied by nesting, against `CaseLimit` and `SplitDepthLimit`;
-  - a reference to `Scenario04UndiscriminatedAnyOfTests` as the worked example.
+  - a reference, as the worked example, to `SplitExtractionTests.ASplitOnAHiddenDiscriminatorJoinsTheBranchDomains`,
+    which compiles a hidden-discriminator schema with `PredicateTheory.Facts` and checks what the split lifts.
+- In the same note, a paragraph on numeric bounds: a comparison that first converts a stored value proves no type, and
+  a bound that steps by one is sound only over integers (a bound with an open flag over `decimal` avoids it), with
+  `PredicateTheory`'s bound rules as the example of the integer case.
 - If the owner wants the remedy shown working, add one scoped test with a `governs` relation. Today no test uses it.
-- `CosmosTheory`'s class remarks (`src/Eggnog.Tests/Cosmos/Scoped/CosmosTheory.cs`): its three limits, as in section
-  3.2: raw comparisons only, integer stepping, and string-only domains.
-- `prototypes/cosmos-facts/README.md`, lines 86-90: if the adapter has committed its gap tests (question 2), point at
-  their committed path. Otherwise say that the gaps were confirmed with tests written against the adapter but not
-  committed there, which the Cosmos plan's Phase 0a ports, and add the table of section 3.6.
+- `PredicateTheory`'s class remarks (`src/Eggnog.Tests/Predicates`): its three limits, as in section 3.2: comparisons
+  between numbers only, integer stepping, and string-only domains.
 - Roadmap: remove the documentation bullet and rewrite "Push/pop conformance" (Phase 6). The roadmap lists only what is
   open, so items done here are recorded in the release notes, not in the roadmap.
 - Exit: links checked; the review checks every statement against the code.
@@ -559,9 +536,10 @@ the colored-contexts spec says, and change `ContextExtractionTests.ARelevantWrit
   dropped, as that plan recommends, B adds no burden. If they are revived, every dynamic technique needs a guarded
   interpreter fallback, and B-min's analyzers, as errors, enforce the guard. That plan's conventions and roadmap edits
   can share Phase 4's documentation pass.
-- [`./rule-layer-split-features.md`](./rule-layer-split-features.md): the Cosmos plan's other requests (non-root freeze
-  planning, per-case budgets, "no result" primitives). The hidden-discriminator note should describe the split API as
-  that workstream leaves it, so write it after any change there to split demand, or amend it then.
+- [`./rule-layer-split-features.md`](./rule-layer-split-features.md): the split and rule API that workstream may change
+  (per-case bounds, "no result" primitives), and the struct-lattice test that models an open bound. The
+  hidden-discriminator note should describe the split API as that workstream leaves it, so write it after any change
+  there to split demand, or amend it then.
 - [`./colored-context-deferred-features.md`](./colored-context-deferred-features.md): retraction under a writable
   parent (R1) is why a `math.egg` translation would need a frozen root, and why Phase 5's third test expects a refusal.
   If that workstream relaxes R1, the third test changes with it.
@@ -580,8 +558,8 @@ others on net8.0. Phase 3b only after the owner's answer. Item E with the intern
 
 1. Is NativeAOT a supported target for the package? If yes, Phase 3b adds the runtime smoke comparison. If no, Phase 3's
    declaration and publish-only check stand alone.
-2. Can the adapter commit its gap tests now (the first step of its Phase 0a), so that the prototype README is corrected
-   once, pointing at them? If not, the README is corrected now to point at this repository's tests.
+2. Should the package keep targeting net8.0? .NET 8's support ends in November 2026. If the target stays, Phase 2 runs
+   it in CI; if it goes, Phase 2 is dropped and the conventions' "net8.0 and net10.0" changes with it.
 3. Should net8.0 run on all five CI platforms, at five more jobs per push, rather than on linux-x64 (and win-x64)?
 4. Where should the hidden-discriminator note live: a subsection of `architecture.md` section 2.9 (proposed), or a
    separate modelling guide under `docs/`?
@@ -602,8 +580,8 @@ Changed:
   has no caller, contrary to the colored-contexts spec, and an existing extraction test subsumes where it would refuse.
   Phase 5 settles it. Also added: neither subsumption nor deletion is reachable from the public API.
 - **`math.egg`** is dropped with the other programs (item G) and kept as owner question 5.
-- **net8.0 in CI** is a Do-now item of its own (H, Phase 2), on linux-x64 and optionally win-x64, citing the adapter's
-  net8.0-only library target. The plan also notes that the test job must install the 8.0 runtime.
+- **net8.0 in CI** is a Do-now item of its own (H, Phase 2), on linux-x64 and optionally win-x64, citing the net8.0
+  build the package ships and CI never runs. The plan also notes that the test job must install the 8.0 runtime.
 - **AOT** is split into B-min (Do now: clear warnings, declare, errors, publish-only ILC check with
   `TrimmerRootAssembly`) and B-full (only if the owner names AOT a target). Section 4 states that no demand is recorded.
   Section 5 records why a golden file is brittle (`RunReport.ToString()` timings, concurrent children, rendering
@@ -614,14 +592,12 @@ Changed:
 - **`RegisterMethod` callers:** four error-message call sites, all named in sections 3.4 and Phase 3.
 - **`LifterTests.LiftedRowsAreNotSubsumed`** added to the tests that subsume in a child; the statement about later
   matches kept.
-- **Request 9** described as documentation in four bullets; the fourth (R1b status lines) is moot because the history
-  documents are archived.
+- **The documentation item** described in full; its point about the rule-layer spec's status lines is moot because the
+  history documents are archived.
 - **Evidence for A** now leads with cross-culture differences and canonically equivalent strings, with the soft hyphen
   second, and Phase 1's samples include them. New dry runs confirmed each probe.
 - **`StringCodec`'s remark** is no longer cited as support; section 3.3 explains why it is wrong for supplementary
   characters, and Phase 1 corrects it.
-- **The gap tests** are described as written against the adapter but not committed there, with owner question 2 on
-  committing them first.
 - **Conventions:** section 17 is cited as "Milestones"; R2 is glossed; the roadmap edit no longer lists a done item
   (release notes record it).
 - **Former question 3** (culture-aware lattices) is now a statement: switch to ordinal order with a release note, and
