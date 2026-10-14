@@ -37,9 +37,10 @@
 - `docs/history/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
 - `docs/engine/conventions.md` and `docs/engine/decisions.md` (decisions 1–12, L1–L7).
 - `docs/history/egglog-engine-map.md` §3 (the bridge and what the frontend assumes).
-- `prototypes/cosmos-facts` (`prelude.egg`, `01`–`07`, `README.md`), and the adapter's gap tests in the adapter repository
+- the egglog prototype of the Cosmos fact theory (`prelude.egg`, `01`–`07`, `README.md`; no longer in the repository),
+  and the adapter's gap tests in the adapter repository
   (`src/Apache.Calcite.Cosmos.Adapter.Tests/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`, on the adapter's
-  fact-gap-tests branch; see the prototype README, "Confirmed against the adapter").
+  fact-gap-tests branch).
 
 **Code baseline.** Commit `673495d`:
 - The bridge (`src/Eggnog.Relations/Bridge`) and extraction (`src/Eggnog.Relations/Extraction`) are ported (M4).
@@ -4129,7 +4130,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// The theory of prototypes/cosmos-facts/prelude.egg, defined once per graph and shared by every container compiled
+    /// The theory of the prototype's prelude.egg, defined once per graph and shared by every container compiled
     /// into it. The prototype's context argument and its inheritance rules are gone: scopes are the contexts. One theory
     /// per graph: it defines the graph's scope tags.
     /// </summary>
@@ -4640,7 +4641,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/02-query-disjunction.egg: kind IN ('order', 'invoice') lowers the UUID comparison on ref
+    /// The prototype's 02-query-disjunction.egg: kind IN ('order', 'invoice') lowers the UUID comparison on ref
     /// only through a case split, and the schema alone still proves nothing about ref, because a note carries none.
     /// </summary>
     public sealed partial class Scenario02QueryDisjunctionTests

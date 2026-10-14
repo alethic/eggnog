@@ -511,7 +511,7 @@ namespace Eggnog
         /// Freezes the engine context, planning a chosen set of rules: none for the root, whose statistics are empty by
         /// design; otherwise the default variants of every rule a descendant can run: every global rule, the local
         /// rules of this scope and its ancestors, every live query, every mirror copy rule, and every split matcher.
-        /// Other containers' local rules are left to be planned on their own statistics. The listed queries are held
+        /// Sibling scopes' local rules are left to be planned on their own statistics. The listed queries are held
         /// (<see cref="CompiledQuery.Acquire"/>) until the engine has frozen, so a query disposed on another thread
         /// meanwhile cannot free a listed variant; one disposed before the list is built is left out. Global rules,
         /// ancestors' local rules, copy rules and split matchers are never freed while this scope lives.

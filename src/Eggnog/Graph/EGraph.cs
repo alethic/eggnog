@@ -22,7 +22,7 @@ namespace Eggnog
     /// <para>
     /// Every scope is a context of one e-graph, the <see cref="Root"/> included, and a child costs in proportion to
     /// what it touches. A graph defined with nothing written at its root serves an empty frozen root, a frozen
-    /// schema scope per container (children of the root), and a transient child per query beneath it.
+    /// scope per schema (children of the root), and a transient child per query beneath it.
     /// </para>
     /// </remarks>
     public sealed partial class EGraph
@@ -76,7 +76,7 @@ namespace Eggnog
         public ValueStore Values { get; }
 
         /// <summary>
-        /// Gets the root scope: what holds unconditionally. Freeze it empty so that containers can be sibling children.
+        /// Gets the root scope: what holds unconditionally. Freeze it empty so that schema scopes can be sibling children.
         /// </summary>
         public Scope Root { get; }
 

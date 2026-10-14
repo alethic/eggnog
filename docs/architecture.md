@@ -69,7 +69,6 @@ because several engine and library types share simple names.
 | `src/Eggnog.Benchmarks` | BenchmarkDotNet benchmarks, run in process; the engine's are under `Relations/` |
 | `src/dist-nuget`, `src/dist-tests` | Packaging projects driven by `Eggnog.dist.msbuildproj` in CI |
 | `ext/egglog` | egglog's sources, as a git submodule: the reference for the port |
-| `prototypes/cosmos-facts` | egglog programs that prototype the fact reasoning of a Cosmos DB query planner; the tests port them |
 | `docs` | This document, the roadmap, the engine's conventions and decisions, and the design history |
 
 ---
