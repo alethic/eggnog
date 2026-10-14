@@ -166,6 +166,34 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
+        /// A relation over two columns has a scoped view as a relation over one does: a host read through it reads the
+        /// tagged scope, so a tuple the descendant asserted itself is not there, and a write through it is refused.
+        /// </summary>
+        [Fact]
+        public void TwoColumnRelationsHaveScopedViews()
+        {
+            var t = new ScopeTheory();
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Assume(t.Edge.Of(1L, 2L));
+            var inner = outer.CreateChild(t.Inner);
+            inner.Assume(t.Edge.Of(2L, 3L));
+
+            var view = t.Edge.In(t.Outer);
+            Assert.Same(t.Outer, view.ReadScope);
+            Assert.Null(t.Edge.ReadScope);
+            Assert.Equal("edge@outer", view.ToString());
+            Assert.True(inner.Check(view.Of(1L, 2L)));
+            Assert.False(inner.Check(view.Of(2L, 3L)));
+            Assert.True(inner.Check(t.Edge.Of(2L, 3L)));
+            Assert.Equal(1, inner.CountRows(view));
+            Assert.Equal(2, inner.CountRows(t.Edge));
+            Assert.Equal(new[] { (1L, 2L) }, inner.Rows(view).Select(r => ((long)r.Keys[0], (long)r.Keys[1])));
+            Assert.Contains("read-only", Assert.Throws<ArgumentException>(() => outer.Assume(view.Of(1L, 2L))).Message);
+            Assert.False(outer.Check(t.Edge.Of(2L, 3L)));
+            Assert.Throws<ArgumentNullException>(() => t.Edge.In(null!));
+        }
+
+        /// <summary>
         /// The rows of a table in a scope, rendered.
         /// </summary>
         static string[] Rendered(Scope scope, TableHandle table) => scope.Rows(table).Select(r => r.ToString()).ToArray();

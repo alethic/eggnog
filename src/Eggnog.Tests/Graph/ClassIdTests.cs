@@ -202,12 +202,12 @@ namespace Eggnog.Tests.Graph
         [Fact]
         public void ACasesClassIsRefusedAfterTheRunThatMadeTheCase()
         {
-            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            var c = new Predicates.Scoped.PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
             var q = scope.Make(c.StrEq.Of("kind", "a"));
-            Cosmos.Pred? fromCase = null;
+            Predicates.Pred? fromCase = null;
             string? casePath = null;
 
             scope.Run(Schedule.Split(c.SchemaSplit, c.Horn), new RunOptions

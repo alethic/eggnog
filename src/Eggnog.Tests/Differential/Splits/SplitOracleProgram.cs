@@ -9,13 +9,13 @@ namespace Eggnog.Tests.Differential.Splits
     /// <summary>
     /// A random discriminated schema and a query over it (run by <c>SplitOracleTests</c>): one or two discriminators
     /// with two to four values each, branches that declare presence, stored forms and domains of the paths each
-    /// discriminator governs, and a query of <c>IN</c> lists and disequalities on the discriminators and comparisons on
-    /// governed paths.
+    /// discriminator governs, and a query of in-set conjuncts and disequalities on the discriminators and comparisons
+    /// on governed paths.
     /// </summary>
     /// <remarks>
     /// Each discriminator governs its own paths, so a fact never needs the values of two discriminators at once: a
-    /// split on each discriminator alone (the scoped encoding's) and the prototype's nested splits prove the same
-    /// facts.
+    /// split on each discriminator alone (the scoped encoding's) and the literal encoding's nested splits prove the
+    /// same facts.
     /// </remarks>
     /// <param name="Seed">The seed that made it.</param>
     /// <param name="Discriminators">Each discriminator's path and domain.</param>
@@ -105,7 +105,7 @@ namespace Eggnog.Tests.Differential.Splits
             foreach (var branch in Branches)
                 text.Append("  ").Append(branch).Append('\n');
 
-            return text.Append("  WHERE ").Append(string.Join(" AND ", Conjuncts.Select(c => c.ToString()))).ToString();
+            return text.Append("  predicate ").Append(string.Join(" and ", Conjuncts.Select(c => c.ToString()))).ToString();
         }
 
     }

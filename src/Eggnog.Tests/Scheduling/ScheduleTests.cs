@@ -373,9 +373,9 @@ namespace Eggnog.Tests.Scheduling
         [Fact]
         public void LimitsCountCaseIterationsAndCaseRows()
         {
-            static (Cosmos.Scoped.CosmosTheory C, Scope Scope) Split()
+            static (Predicates.Scoped.PredicateTheory C, Scope Scope) Split()
             {
-                var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+                var c = new Predicates.Scoped.PredicateTheory(new EGraph());
                 c.Graph.Root.Freeze();
                 var scope = c.Graph.Root.CreateChild(c.Schema);
                 scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b", "c")), c.Discriminator.Of("kind"));

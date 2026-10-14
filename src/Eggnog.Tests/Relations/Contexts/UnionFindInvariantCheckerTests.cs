@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 
 using Xunit;
 
@@ -222,6 +223,121 @@ namespace Eggnog.Relations.Tests
             // compared, so a miscount is still reported.
             root.Freeze();
             root.Gate.Enter();
+            AssertViolation(root, "gate:");
+            root.Gate.Exit();
+            root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A frozen context's gate is compared only when no creation or disposal below it is under way: a miscount read
+        /// while a change is under way is not reported, since the change may account for it, and the same miscount is
+        /// reported once the change has ended.
+        /// </summary>
+        [Fact]
+        public void AGateIsNotComparedWhileAChangeIsUnderWay()
+        {
+            var (_, root, _, _) = Setup();
+            root.Freeze();
+            root.Gate.BeginChange();
+            root.Gate.Enter();
+            root.CheckInvariants();
+
+            root.Gate.EndChange();
+            AssertViolation(root, "gate:");
+            root.Gate.Exit();
+            root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// Changes on another thread while a frozen context is checked are never reported, although each moves the gate's
+        /// count away from the tree and back while it is under way: the check reads the count and the tree only between
+        /// changes, whether it starts before, during or after one of them.
+        /// </summary>
+        [Fact]
+        public void ChangesOnAnotherThreadDuringTheCheckAreNotReported()
+        {
+            var (_, root, _, _) = Setup();
+            root.Freeze();
+            var stop = 0;
+            var changer = new Thread(() =>
+            {
+                while (Volatile.Read(ref stop) == 0)
+                {
+                    root.Gate.BeginChange();
+                    root.Gate.Enter();
+                    root.Gate.Exit();
+                    root.Gate.EndChange();
+                }
+            });
+            changer.Start();
+            try
+            {
+                for (var i = 0; i < 2000; i++)
+                    root.CheckInvariants();
+            }
+            finally
+            {
+                Volatile.Write(ref stop, 1);
+                changer.Join();
+            }
+
+            root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A change that begins while the checker walks the tree, after it found no change under way, is seen when it
+        /// reads the gate again: the walk and the count it read are discarded, not compared. The checker is held at the
+        /// walk by the lock on the root's child list, and the change begins and moves the count while it waits. Before
+        /// the walk the checker takes no lock and does not wait, and a first check on this thread has already compiled
+        /// its path, so a waiting checker is waiting for the child list, past its first read of the gate.
+        /// </summary>
+        [Fact]
+        public void AChangeThatBeginsDuringTheWalkIsNotReported()
+        {
+            var (_, root, _, _) = Setup();
+            root.Freeze();
+            root.CheckInvariants();
+            var children = Field<object>(root, "children");
+            Exception? error = null;
+            using var started = new ManualResetEventSlim();
+            var checker = new Thread(() =>
+            {
+                started.Set();
+                try
+                {
+                    root.CheckInvariants();
+                }
+                catch (Exception e)
+                {
+                    error = e;
+                }
+            });
+
+            Monitor.Enter(children);
+            try
+            {
+                checker.Start();
+                started.Wait();
+                var spin = new SpinWait();
+                var deadline = Environment.TickCount64 + 10_000;
+                while ((checker.ThreadState & ThreadState.WaitSleepJoin) == 0)
+                {
+                    Assert.True(Environment.TickCount64 < deadline, "the checker never waited for the child list");
+                    spin.SpinOnce();
+                }
+
+                root.Gate.BeginChange();
+                root.Gate.Enter();
+            }
+            finally
+            {
+                Monitor.Exit(children);
+            }
+
+            checker.Join();
+            Assert.Null(error);
+
+            root.Gate.EndChange();
             AssertViolation(root, "gate:");
             root.Gate.Exit();
             root.CheckInvariants();

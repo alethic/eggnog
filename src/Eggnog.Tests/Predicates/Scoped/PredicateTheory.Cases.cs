@@ -1,7 +1,7 @@
-namespace Eggnog.Tests.Cosmos.Scoped
+namespace Eggnog.Tests.Predicates.Scoped
 {
 
-    public sealed partial class CosmosTheory
+    public sealed partial class PredicateTheory
     {
 
         /// <summary>Gets the tag of a discriminator split's cases.</summary>
@@ -25,7 +25,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
         public Schedule Facts { get; private set; } = null!;
 
         /// <summary>
-        /// Gets the schedule a query runs: the prototype's (saturate horn lattice split rewrite), with the facts
+        /// Gets the schedule a query runs: horn, lattice, split and rewrite steps saturated together, with the facts
         /// settled before each split step, so that the split sees the narrowest domain and opens no case that goes
         /// vacuous only once the domain narrows.
         /// </summary>

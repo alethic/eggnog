@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -88,28 +88,28 @@ namespace Eggnog.Tests.Scopes
 
             // ...and B's theory is defined before A's schema freezes, and A's after B's schema froze.
             var graphB = new EGraph();
-            var theoryB = new CosmosTheory(graphB);
+            var theoryB = new PredicateTheory(graphB);
             var c = Compile();
             var d = Compile(graphB, theoryB);
             Assert.True(Ask(d));
             Assert.True(Ask(c));
 
-            // Every scenario's container compiles and every scenario query passes, in both orders: A's schemas all
+            // Every query case's schema compiles and every query passes, in both orders: A's schemas all
             // freeze before B's theory is defined, and E's theory is defined before F's schemas freeze.
             var reference = Reference();
-            var theoryA = new CosmosTheory(new EGraph());
-            var schemasA = ScopedScenarioCases.CompileAll(theoryA);
-            var theoryB2 = new CosmosTheory(new EGraph());
-            var schemasB = ScopedScenarioCases.CompileAll(theoryB2);
-            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryA, schemasA));
-            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryB2, schemasB));
+            var theoryA = new PredicateTheory(new EGraph());
+            var schemasA = ScopedQueryCases.CompileAll(theoryA);
+            var theoryB2 = new PredicateTheory(new EGraph());
+            var schemasB = ScopedQueryCases.CompileAll(theoryB2);
+            Assert.Equal(reference, ScopedQueryCases.AskAll(theoryA, schemasA));
+            Assert.Equal(reference, ScopedQueryCases.AskAll(theoryB2, schemasB));
 
-            var theoryE = new CosmosTheory(new EGraph());
-            var theoryF = new CosmosTheory(new EGraph());
-            var schemasF = ScopedScenarioCases.CompileAll(theoryF);
-            var schemasE = ScopedScenarioCases.CompileAll(theoryE);
-            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryE, schemasE));
-            Assert.Equal(reference, ScopedScenarioCases.AskAll(theoryF, schemasF));
+            var theoryE = new PredicateTheory(new EGraph());
+            var theoryF = new PredicateTheory(new EGraph());
+            var schemasF = ScopedQueryCases.CompileAll(theoryF);
+            var schemasE = ScopedQueryCases.CompileAll(theoryE);
+            Assert.Equal(reference, ScopedQueryCases.AskAll(theoryE, schemasE));
+            Assert.Equal(reference, ScopedQueryCases.AskAll(theoryF, schemasF));
         }
 
         [Fact]
@@ -120,13 +120,13 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal(results.Length, threads);
             Assert.All(results, Assert.True);
 
-            // Every scenario's container and query, one graph per thread.
+            // Every query case's schema and query, one graph per thread.
             var reference = Reference();
             var all = new List<string>[8];
             threads = Support.DedicatedThreads.For(all.Length, all.Length, i =>
             {
-                var c = new CosmosTheory(new EGraph());
-                all[i] = ScopedScenarioCases.AskAll(c, ScopedScenarioCases.CompileAll(c));
+                var c = new PredicateTheory(new EGraph());
+                all[i] = ScopedQueryCases.AskAll(c, ScopedQueryCases.CompileAll(c));
             });
             Assert.Equal(all.Length, threads);
             Assert.All(all, lines => Assert.Equal(reference, lines));
@@ -136,31 +136,32 @@ namespace Eggnog.Tests.Scopes
         public void AFrozenSchemaOfOneGraphDoesNotRefuseAnotherGraphsFirstScopedRead()
         {
             var a = new EGraph();
-            var aTheory = new CosmosTheory(a);
+            var aTheory = new PredicateTheory(a);
             a.Root.Freeze();
             a.Root.CreateChild(aTheory.Schema).Freeze();
             Assert.Equal(1, a.Mirrors.FrozenCount(aTheory.Schema));
 
             var b = new EGraph();
-            var bTheory = new CosmosTheory(b);
+            var bTheory = new PredicateTheory(b);
             Assert.Equal(0, b.Mirrors.FrozenCount(bTheory.Schema));
             Assert.Equal(2, b.Mirrors.CopyRules(bTheory.Schema).Length);
             Assert.Equal(new[] { "dom@schema", "present@schema" }, b.Mirrors.AllCopyRules().Select(r => r.Rule.Name.Replace("copy ", "", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal));
         }
 
         /// <summary>
-        /// Scenario 03's container in a new graph.
+        /// A schema whose order branch declares a stored form for <c>ref</c>, in a new graph.
         /// </summary>
-        static (CosmosTheory C, Scope Schema) Compile()
+        static (PredicateTheory C, Scope Schema) Compile()
         {
             var graph = new EGraph();
-            return Compile(graph, new CosmosTheory(graph));
+            return Compile(graph, new PredicateTheory(graph));
         }
 
         /// <summary>
-        /// Scenario 03's container in a graph that has the theory: its root is frozen, then the schema.
+        /// A schema whose order branch declares a stored form for <c>ref</c>, in a graph that has the theory: its root
+        /// is frozen, then the schema.
         /// </summary>
-        static (CosmosTheory C, Scope Schema) Compile(EGraph graph, CosmosTheory c)
+        static (PredicateTheory C, Scope Schema) Compile(EGraph graph, PredicateTheory c)
         {
             graph.Root.Freeze();
             var schema = graph.Root.CreateChild(c.Schema);
@@ -172,11 +173,12 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
-        /// Asks scenario 03's query of a compiled container; returns whether it lowered.
+        /// Asks a query that refuses the invoice kind, which leaves only orders, of a compiled schema; returns whether
+        /// its UUID comparison lowered.
         /// </summary>
-        static bool Ask((CosmosTheory C, Scope Schema) container)
+        static bool Ask((PredicateTheory C, Scope Schema) compiled)
         {
-            var (c, schema) = container;
+            var (c, schema) = compiled;
             using var query = schema.CreateChild(c.Query);
             var q = query.Make(c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)));
             query.Assume(c.WhereClause.Of(q));
@@ -191,13 +193,13 @@ namespace Eggnog.Tests.Scopes
         static bool CompileAndAsk() => Ask(Compile());
 
         /// <summary>
-        /// Every scenario's answers in a graph of its own, which no other graph touches: no case fails, and one line
-        /// per sweep query.
+        /// Every query case's answers in a graph of its own, which no other graph touches: no case fails, and one line
+        /// per discriminated-schema query.
         /// </summary>
         static List<string> Reference()
         {
-            var c = new CosmosTheory(new EGraph());
-            var lines = ScopedScenarioCases.AskAll(c, ScopedScenarioCases.CompileAll(c));
+            var c = new PredicateTheory(new EGraph());
+            var lines = ScopedQueryCases.AskAll(c, ScopedQueryCases.CompileAll(c));
             Assert.DoesNotContain(lines, line => line.StartsWith("failed: ", StringComparison.Ordinal));
             return lines;
         }

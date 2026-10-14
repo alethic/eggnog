@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -14,9 +14,9 @@ namespace Eggnog.Tests.Cases
 
     /// <summary>
     /// Split steps: the cases a split rule opens, how long they live, what they lift, the limits and what the run
-    /// reports of them, nesting, and the checks of split rules at definition and before a run. Most tests use the
-    /// scoped Cosmos theory: <c>dom</c> is a discriminator's domain, and branch rules local to the split scope are what
-    /// each case proves; others use <see cref="ChooseSplitTheory"/> or a theory of their own.
+    /// reports of them, nesting, and the checks of split rules at definition and before a run. Most tests use
+    /// <see cref="PredicateTheory"/>: <c>dom</c> is a discriminator's domain, and branch rules local to the split scope
+    /// are what each case proves; others use <see cref="ChooseSplitTheory"/> or a theory of their own.
     /// </summary>
     public sealed class SplitTests
     {
@@ -25,9 +25,9 @@ namespace Eggnog.Tests.Cases
         /// A graph with the theory, an empty frozen root, and a writable scope tagged schema beneath it that declares
         /// <paramref name="path"/> a present discriminator with <paramref name="values"/>.
         /// </summary>
-        static (CosmosTheory C, Scope Scope) Discriminated(string path, params string[] values)
+        static (PredicateTheory C, Scope Scope) Discriminated(string path, params string[] values)
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of(path), c.Dom.Of(path).Is(ValueSet.Of(values)), c.Discriminator.Of(path));
@@ -37,7 +37,7 @@ namespace Eggnog.Tests.Cases
         /// <summary>
         /// Horn and lattice rules to saturation.
         /// </summary>
-        static Schedule Settle(CosmosTheory c) => Schedule.Saturate(c.Horn, c.Lattice);
+        static Schedule Settle(PredicateTheory c) => Schedule.Saturate(c.Horn, c.Lattice);
 
         [Fact]
         public void ASplitLiftsWhatEveryCaseProvesAndDisposesItsCases()
@@ -216,7 +216,7 @@ namespace Eggnog.Tests.Cases
         {
             for (var depthLimit = 1; depthLimit <= 2; depthLimit++)
             {
-                var c = new CosmosTheory(new EGraph());
+                var c = new PredicateTheory(new EGraph());
                 var outer = c.Graph.DefineRelation<string>("outer discriminator");
                 var inner = c.Graph.DefineRelation<string>("inner discriminator");
                 var outerSplit = c.Graph.DefineDomainSplit("outer", c.Dom, [outer], c.Case);
@@ -363,7 +363,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void SplitRulesAreListedAndCheckedAtDefinition()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             Assert.Equal(new[] { c.SchemaSplit, c.QuerySplit }, c.Graph.SplitRules);
             Assert.Same(c.Case, c.SchemaSplit.CaseTag);
             Assert.Empty(c.SchemaSplit.ReadScopes);
@@ -407,7 +407,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ADomainSplitNeedsAWritableDomainWithALatticeAndReadsItsGuardsAnywhere()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var plain = c.Graph.DefineFunction<string, ValueSet<string>>("plain domain");
 
             var noLattice = Assert.Throws<ArgumentException>(() => c.Graph.DefineDomainSplit("no lattice", plain, [c.Present]));
@@ -588,7 +588,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ASplitTheDepthLimitStopsIsNotLookedFor()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var outer = c.Graph.DefineRelation<string>("outer discriminator");
             var inner = c.Graph.DefineRelation<string>("inner discriminator");
             var outerSplit = c.Graph.DefineDomainSplit("outer", c.Dom, [outer], c.Case);
@@ -644,7 +644,7 @@ namespace Eggnog.Tests.Cases
         public void ARunRefusesASplitRuleOfAnotherGraphBeforeAnyWork()
         {
             var (c, scope) = Discriminated("kind", "a", "b");
-            var other = new CosmosTheory(new EGraph());
+            var other = new PredicateTheory(new EGraph());
             var version = scope.Version;
 
             var refused = Assert.Throws<ArgumentException>(() => scope.Run(Schedule.Sequence(Settle(c), Schedule.Split(other.SchemaSplit, c.Horn))));
@@ -749,7 +749,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void SplitDefinitionErrorsNameTheSplitRule()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var child = c.Graph.Root.CreateChild();
             var childClass = child.Make(c.PTrue.Of());
             Var<ValueSet<string>>? stray = null;
@@ -911,7 +911,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void EachSplitNodeRunsItsInCaseScheduleOnlyInItsOwnCases()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var first = c.Graph.DefineRelation<string>("first discriminator");
             var second = c.Graph.DefineRelation<string>("second discriminator");
             var tagA = c.Graph.DefineScopeTag("first cases");
@@ -1007,7 +1007,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ALiftThatChangesNothingIsAnUnchangedStep()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
@@ -1086,7 +1086,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void AVacuousCaseOfASplitIsDisposedOnceTheLiftDropsIt()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
@@ -1127,7 +1127,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ANestedSplitsCasesAreReleasedWhenTheRunEnds()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var outer = c.Graph.DefineRelation<string>("outer discriminator");
             var inner = c.Graph.DefineRelation<string>("inner discriminator");
             var outerSplit = c.Graph.DefineDomainSplit("outer", c.Dom, [outer], c.Case);
@@ -1403,7 +1403,7 @@ namespace Eggnog.Tests.Cases
         public void ARunsSplitLeavesAnOpenHostSetAlone()
         {
             var graph = new EGraph();
-            var c = new CosmosTheory(graph);
+            var c = new PredicateTheory(graph);
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
@@ -1474,7 +1474,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ASplitThatLiftsNothingDoesNotChangeTheScope()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var scope = c.Graph.Root.CreateChild(c.Schema);
             scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b")), c.Discriminator.Of("kind"));
@@ -1496,7 +1496,7 @@ namespace Eggnog.Tests.Cases
         [Fact]
         public void ASplitCutOffByTheDepthLimitIsNotLookedFor()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var outerKey = c.Graph.DefineRelation<string>("outer key");
             var innerKey = c.Graph.DefineRelation<string>("inner key");
             var outer = c.Graph.DefineDomainSplit("outer", c.Dom, [outerKey], c.Case);

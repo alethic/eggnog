@@ -3,43 +3,45 @@ using System.Linq;
 
 using Xunit;
 
-namespace Eggnog.Tests.Cosmos.Scoped
+namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// Every query of the scoped Cosmos scenarios 01 to 06 and 08 that runs without a split, as a
-    /// <see cref="ScopedScenarioCase"/>, with the steps that compile a case's container and ask its query; scenario
-    /// 07's queries are <see cref="SweepLinks"/>'s. Used by the tests that must run every scenario in another setting:
-    /// two graphs in either order and on parallel threads (ScopeTagTests), and a degree of parallelism above 1
+    /// Queries of <see cref="PredicateTheory"/> that run without a split, each a <see cref="ScopedQueryCase"/> over a
+    /// schema of its own, with the steps that compile a case's schema and ask its query; the queries over a schema with
+    /// a discriminator split are <see cref="DiscriminatedSchema"/>'s. Between them they exercise stored forms and
+    /// lowering, discriminated and undiscriminated unions, refused values, numeric bounds, integer domains, type claims
+    /// and the deletion of conjuncts the schema implies. Used by the tests that must run every query in another
+    /// setting: two graphs in either order and on parallel threads (ScopeTagTests), and a degree of parallelism above 1
     /// (ParallelEquivalenceTests).
     /// </summary>
-    public static class ScopedScenarioCases
+    public static class ScopedQueryCases
     {
 
         /// <summary>
-        /// The UUID the scenarios compare.
+        /// The UUID the cases compare.
         /// </summary>
         const string Ref = "123e4567-e89b-12d3-a456-426614174000";
 
         /// <summary>
-        /// The timestamp scenario 06 compares.
+        /// The timestamp the weakened ordering comparison compares.
         /// </summary>
         const string At = "2024-01-01T00:00:00Z";
 
         /// <summary>
-        /// Gets the cases, in scenario order.
+        /// Gets the cases.
         /// </summary>
-        public static IReadOnlyList<ScopedScenarioCase> All { get; } =
+        public static IReadOnlyList<ScopedQueryCase> All { get; } =
         [
-            new("01 ADeclaredStoredFormPutsTheComparisonInTheStatement",
+            new("a declared stored form lowers the UUID comparison",
                 (c, s) => c.DeclareBranch(s, "kind", "B", c.Form.Of("ref", "uuid-lower")),
                 c => c.And.Of(c.StrEq.Of("kind", "B"), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (StrEq \"kind\" \"B\") (StrEq \"ref\" \"{Ref}\"))"),
-            new("01 WithoutTheDiscriminatorNothingIsProvenAndNothingLowers",
+            new("without the discriminator nothing is proven and nothing lowers",
                 (c, s) => c.DeclareBranch(s, "kind", "B", c.Form.Of("ref", "uuid-lower")),
                 c => c.UuidEq.Of("ref", Ref),
                 (c, s, q, p) => q.Check(c.Form.Of("ref", "uuid-lower")) == false && q.Extract(p).Cost == 1002),
-            new("02 HornAndLatticesAloneDoNotLower",
+            new("without a split, horn and lattice rules alone do not lower a disjunction",
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice", "note")), c.Discriminator.Of("kind"));
@@ -48,7 +50,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
                 },
                 c => c.And.Of(c.Or.Of(c.StrEq.Of("kind", "order"), c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Get(c.Dom.Of("kind")).Equals(ValueSet.Of("invoice", "order")) && q.Check(c.Form.Of("ref", "uuid-lower")) == false),
-            new("03 ADomainLessARefusedValueProvesTheGuard",
+            new("a domain less a refused value proves the guard",
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
@@ -56,7 +58,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
                 },
                 c => c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (Not (StrEq \"kind\" \"invoice\")) (StrEq \"ref\" \"{Ref}\"))"),
-            new("04 WithoutTheSplitTheBranchesNeverMeet",
+            new("without a split, the branches of an undiscriminated union never meet",
                 (c, s) =>
                 {
                     s.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(ValueSet.Of("0", "1")), c.Discriminator.Of("$anyOf/0"));
@@ -65,101 +67,101 @@ namespace Eggnog.Tests.Cosmos.Scoped
                 },
                 c => c.StrEq.Of("status", "purged"),
                 (c, s, q, p) => q.IsContradictory == false && q.Extract(p).ToString() == "(StrEq \"status\" \"purged\")"),
-            new("05 AComparisonBeyondADeclaredBoundIsFalse",
+            new("a comparison beyond a declared bound is false",
                 (c, s) => s.Assume(c.Types.Of("n").Is(ValueSet.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 500L),
                 (c, s, q, p) => q.IsContradictory && s.IsContradictory == false && q.Extract(p).ToString() == "(PFalse)"),
-            new("05 ABoundInsideTheRangeIsLeftAlone",
+            new("a bound inside the declared range is left alone",
                 (c, s) => s.Assume(c.Types.Of("n").Is(ValueSet.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 50L),
                 (c, s, q, p) => q.Get(c.Lo.Of("n")) == 51L && q.Extract(p).ToString() == "(NumGt \"n\" 50)"),
-            new("06 ADeclaredTypeMakesAnOrderingComparisonExact",
+            new("a declared type makes a weakened ordering comparison exact",
                 (c, s) => s.Assume(c.Types.Of("at").Is(ValueSet.Of("string"))),
                 Weakened,
                 (c, s, q, p) => q.Extract(p).ToString() == $"(StrGe \"at\" \"{At}\")"),
-            new("06 WithoutADeclaredTypeTheComparisonIsStillWeakened",
+            new("without a declared type the comparison stays weakened",
                 (c, s) => { },
                 Weakened,
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (IsDefined \"at\") (Or (Not (IsString \"at\")) (StrGe \"at\" \"{At}\")))"),
-            new("06 ADeclaredTautologyIsNotAsked",
+            new("a declared tautology is deleted",
                 (c, s) => s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("A"))),
                 c => c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")),
                 (c, s, q, p) => q.Extract(p).ToString() == "(StrEq \"id\" \"x\")"),
-            new("06 WithoutAPresenceClaimTheComparisonStays",
+            new("without a presence claim the comparison stays",
                 (c, s) => s.Assume(c.Dom.Of("kind").Is(ValueSet.Of("A"))),
                 c => c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")),
                 (c, s, q, p) => q.Extract(p).ToString() == "(And (StrEq \"kind\" \"A\") (StrEq \"id\" \"x\"))"),
-            new("08 AnIntegerOutsideADeclaredDomainIsFalse",
+            new("an integer outside a declared domain is false",
                 (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(ValueSet.Of(100L, 200L, 300L))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
                 (c, s, q, p) => q.IsContradictory && q.Extract(p).ToString() == "(PFalse)"),
-            new("08 AnIntegerInsideTheDomainIsLeftAlone",
+            new("an integer inside the declared domain is left alone",
                 (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(ValueSet.Of(100L, 500L))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
                 (c, s, q, p) => q.IsContradictory == false && q.Get(c.IDom.Of("n")).Equals(ValueSet.Of(500L))),
         ];
 
         /// <summary>
-        /// Compiles a case's container under the graph's frozen root: declares it in a new schema scope, saturates horn
+        /// Compiles a case's schema under the graph's frozen root: declares it in a new schema scope, saturates horn
         /// and lattice rules, and freezes it.
         /// </summary>
         /// <param name="c">The theory, whose graph's root is frozen.</param>
-        /// <param name="scenario">The case.</param>
+        /// <param name="queryCase">The case.</param>
         /// <param name="options">The schema's options; <c>null</c> for the default.</param>
         /// <returns>The frozen schema.</returns>
-        public static Scope Compile(CosmosTheory c, ScopedScenarioCase scenario, ScopeOptions? options = null)
+        public static Scope Compile(PredicateTheory c, ScopedQueryCase queryCase, ScopeOptions? options = null)
         {
             var schema = c.Graph.Root.CreateChild(c.Schema, options);
-            scenario.Declare(c, schema);
-            Assert.True(schema.Run(Schedule.Saturate(c.Horn, c.Lattice)).Saturated, scenario.Name);
+            queryCase.Declare(c, schema);
+            Assert.True(schema.Run(Schedule.Saturate(c.Horn, c.Lattice)).Saturated, queryCase.Name);
             schema.Freeze();
             return schema;
         }
 
         /// <summary>
-        /// Asks a case's query of its compiled container (<see cref="SweepLinks.Ask"/>) and returns whether its result
-        /// holds.
+        /// Asks a case's query of its compiled schema (<see cref="DiscriminatedSchema.Ask"/>) and returns whether its
+        /// result holds.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schema">The case's frozen schema.</param>
-        /// <param name="scenario">The case.</param>
+        /// <param name="queryCase">The case.</param>
         /// <returns>Whether the result holds.</returns>
-        public static bool Holds(CosmosTheory c, Scope schema, ScopedScenarioCase scenario)
+        public static bool Holds(PredicateTheory c, Scope schema, ScopedQueryCase queryCase)
         {
-            var (query, q) = SweepLinks.Ask(c, schema, scenario.Query(c));
+            var (query, q) = DiscriminatedSchema.Ask(c, schema, queryCase.Query(c));
             using (query)
-                return scenario.Holds(c, schema, query, q);
+                return queryCase.Holds(c, schema, query, q);
         }
 
         /// <summary>
-        /// Compiles every case's container and sweep's in one graph, under its frozen root (frozen here if it is not
-        /// yet).
+        /// Compiles every case's schema and <see cref="DiscriminatedSchema"/>'s in one graph, under its frozen root
+        /// (frozen here if it is not yet).
         /// </summary>
         /// <param name="c">The theory.</param>
-        /// <returns>The frozen schemas, one per case, then sweep's.</returns>
-        public static Scope[] CompileAll(CosmosTheory c)
+        /// <returns>The frozen schemas, one per case, then the discriminated schema.</returns>
+        public static Scope[] CompileAll(PredicateTheory c)
         {
             c.Graph.Root.Freeze();
-            return All.Select(scenario => Compile(c, scenario)).Append(SweepLinks.Compile(c)).ToArray();
+            return All.Select(queryCase => Compile(c, queryCase)).Append(DiscriminatedSchema.Compile(c)).ToArray();
         }
 
         /// <summary>
-        /// Asks every case's query of the schemas <see cref="CompileAll"/> made, and every sweep query; returns the
-        /// cases whose result does not hold, and each sweep query's extraction.
+        /// Asks every case's query of the schemas <see cref="CompileAll"/> made, and every query of the discriminated
+        /// schema; returns the cases whose result does not hold, and each discriminated-schema query's extraction.
         /// </summary>
         /// <param name="c">The theory.</param>
         /// <param name="schemas">The schemas.</param>
-        /// <returns>The names of the cases that failed, then one line per sweep query.</returns>
-        public static List<string> AskAll(CosmosTheory c, Scope[] schemas)
+        /// <returns>The names of the cases that failed, then one line per discriminated-schema query.</returns>
+        public static List<string> AskAll(PredicateTheory c, Scope[] schemas)
         {
             var lines = new List<string>();
             for (var i = 0; i < All.Count; i++)
                 if (Holds(c, schemas[i], All[i]) == false)
                     lines.Add("failed: " + All[i].Name);
 
-            foreach (var term in SweepLinks.Queries(c))
+            foreach (var term in DiscriminatedSchema.Queries(c))
             {
-                var (query, q) = SweepLinks.Ask(c, schemas[^1], term);
+                var (query, q) = DiscriminatedSchema.Ask(c, schemas[^1], term);
                 using (query)
                     lines.Add(query.Extract(q).ToString());
             }
@@ -168,9 +170,10 @@ namespace Eggnog.Tests.Cosmos.Scoped
         }
 
         /// <summary>
-        /// Scenario 06's weakened ordering comparison.
+        /// A weakened ordering comparison: <c>at</c> is present, and holds either no string or a string ordered at or
+        /// after <see cref="At"/>.
         /// </summary>
-        static ConstructorTerm<Pred> Weakened(CosmosTheory c) =>
+        static ConstructorTerm<Pred> Weakened(PredicateTheory c) =>
             c.And.Of(c.IsDefined.Of("at"), c.Or.Of(c.Not.Of(c.IsString.Of("at")), c.StrGe.Of("at", At)));
 
     }

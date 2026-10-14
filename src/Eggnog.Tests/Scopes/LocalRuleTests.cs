@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -17,7 +17,7 @@ namespace Eggnog.Tests.Scopes
     {
 
         /// <summary>
-        /// Two sibling containers under a frozen root, each with a local rule of its own.
+        /// Two sibling scopes under a frozen root, each with a local rule of its own.
         /// </summary>
         static (ScopeTheory T, Scope A, Scope B, Rule RuleA) Siblings()
         {
@@ -35,7 +35,7 @@ namespace Eggnog.Tests.Scopes
         }
 
         [Fact]
-        public void ARuleLocalToOneContainerNeverFiresInItsSibling()
+        public void ARuleLocalToOneScopeNeverFiresInItsSibling()
         {
             var (t, a, b, ruleA) = Siblings();
             a.Assume(t.Fact.Of("x"));
@@ -131,14 +131,14 @@ namespace Eggnog.Tests.Scopes
         }
 
         [Fact]
-        public void OneCosmosTheoryServesTwoContainers()
+        public void OnePredicateTheoryServesTwoSchemas()
         {
             const string Ref = "123e4567-e89b-12d3-a456-426614174000";
             var graph = new EGraph();
-            var c = new CosmosTheory(graph);
+            var c = new PredicateTheory(graph);
             graph.Root.Freeze();
 
-            // Orders carry a UUID ref in container one; invoices do in container two.
+            // Orders carry a UUID ref in schema one; invoices do in schema two.
             var one = graph.Root.CreateChild(c.Schema);
             one.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
             c.DeclareBranch(one, "kind", "order", c.Form.Of("ref", "uuid-lower"));

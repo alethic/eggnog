@@ -1,12 +1,19 @@
-namespace Eggnog.Tests.Cosmos.Scoped
+namespace Eggnog.Tests.Predicates.Scoped
 {
 
     /// <summary>
-    /// The theory of prototypes/cosmos-facts/prelude.egg, defined once per graph and shared by every container compiled
-    /// into it. It has none of the prelude's context arguments or inheritance rules: scopes are the contexts. One
-    /// theory per graph: it defines the graph's scope tags.
+    /// A theory of predicates over document paths, in which scopes are the contexts. Its facts are claims about a
+    /// path: presence, stored forms, refused values, string domains, JSON types, numeric bounds and integer domains.
+    /// Its terms are predicates (<see cref="Pred"/>) over paths. Its rules derive what a predicate's conjuncts claim,
+    /// settle the lattices, report a contradiction when no document can satisfy the claims, lower costly comparisons
+    /// and simplify the predicate. A schema scope (<see cref="Schema"/>) holds what every document satisfies; a query
+    /// scope (<see cref="Query"/>) under it adds one predicate; the cases of a discriminator split
+    /// (<see cref="Case"/>) assume one value each. Contexts carry no data argument and facts flow to a child by scope
+    /// inheritance (<see cref="Literal.ContextArgumentTheory"/> is the same theory with both written out). The theory
+    /// is defined once per graph and shared by every schema scope in it; there is one per graph, because it defines the
+    /// graph's scope tags.
     /// </summary>
-    public sealed partial class CosmosTheory
+    public sealed partial class PredicateTheory
     {
 
         static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
@@ -17,13 +24,12 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// frozen.
         /// </summary>
         /// <param name="graph">The graph.</param>
-        public CosmosTheory(EGraph graph)
+        public PredicateTheory(EGraph graph)
         {
             Graph = graph;
             graph.DefineSort<Pred>("Pred");
 
-            // The graph's own tags (a tag belongs to the graph that defines it): a container's schema scope, and a
-            // query scope.
+            // The graph's own tags (a tag belongs to the graph that defines it): a schema scope, and a query scope.
             Schema = graph.DefineScopeTag("schema");
             Query = graph.DefineScopeTag("query");
 
@@ -39,7 +45,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
             Hi = graph.DefineFunction<string, long>("hi", ValueLattice.Min<long>());
             IDom = graph.DefineFunction<string, ValueSet<long>>("idom", ValueLattice.Intersect<long>());
 
-            // Predicates, costed as in the prototype.
+            // Predicates. Truth and falsehood cost nothing, and the UUID and instant comparisons cost 1000, so that
+            // extraction prefers the string comparisons they lower to.
             PTrue = graph.DefineConstructor<Pred>("PTrue", cost: 0);
             PFalse = graph.DefineConstructor<Pred>("PFalse", cost: 0);
             And = graph.DefineConstructor<Pred, Pred, Pred>("And");
@@ -75,16 +82,16 @@ namespace Eggnog.Tests.Cosmos.Scoped
             DefineCases();
         }
 
-        /// <summary>Defines the split members (CosmosTheory.Cases.cs).</summary>
+        /// <summary>Defines the split members (PredicateTheory.Cases.cs).</summary>
         partial void DefineCases();
 
         /// <summary>Gets the graph.</summary>
         public EGraph Graph { get; }
 
-        /// <summary>Gets the tag of a container's schema scope.</summary>
+        /// <summary>Gets the tag of a schema scope: what every document satisfies.</summary>
         public ScopeTag Schema { get; }
 
-        /// <summary>Gets the tag of a query scope.</summary>
+        /// <summary>Gets the tag of a query scope: its schema plus one predicate's claims.</summary>
         public ScopeTag Query { get; }
 
         /// <summary>Gets the relation "the path is present".</summary>
@@ -129,46 +136,52 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// <summary>Gets negation.</summary>
         public Constructor<Pred, Pred> Not { get; }
 
-        /// <summary>Gets c.p = 'v'.</summary>
+        /// <summary>Gets "path p holds the string v".</summary>
         public Constructor<string, string, Pred> StrEq { get; }
 
-        /// <summary>Gets c.p &gt;= 'v'.</summary>
+        /// <summary>Gets "path p holds a string ordered at or after v".</summary>
         public Constructor<string, string, Pred> StrGe { get; }
 
-        /// <summary>Gets c.p &gt; 'v'.</summary>
+        /// <summary>Gets "path p holds a string ordered after v".</summary>
         public Constructor<string, string, Pred> StrGt { get; }
 
-        /// <summary>Gets c.p = true.</summary>
+        /// <summary>Gets "path p holds true".</summary>
         public Constructor<string, Pred> BoolTrue { get; }
 
-        /// <summary>Gets c.p &gt; n.</summary>
+        /// <summary>Gets "path p holds a number greater than n".</summary>
         public Constructor<string, long, Pred> NumGt { get; }
 
-        /// <summary>Gets c.p &lt; n.</summary>
+        /// <summary>Gets "path p holds a number less than n".</summary>
         public Constructor<string, long, Pred> NumLt { get; }
 
-        /// <summary>Gets IS_DEFINED(c.p).</summary>
+        /// <summary>Gets "path p is present".</summary>
         public Constructor<string, Pred> IsDefined { get; }
 
-        /// <summary>Gets IS_STRING(c.p).</summary>
+        /// <summary>Gets "path p holds a string".</summary>
         public Constructor<string, Pred> IsString { get; }
 
-        /// <summary>Gets a UUID comparison evaluated in process.</summary>
+        /// <summary>
+        /// Gets "path p holds the UUID v" in any spelling: a costly comparison, which lowers to <see cref="StrEq"/>
+        /// where the path's stored form is canonical lowercase (<c>uuid-lower</c>).
+        /// </summary>
         public Constructor<string, string, Pred> UuidEq { get; }
 
-        /// <summary>Gets an instant comparison evaluated in process.</summary>
+        /// <summary>
+        /// Gets "path p holds an instant after v": a costly comparison, which lowers to <see cref="StrGt"/> where the
+        /// path's stored form is a fixed-width timestamp (<c>instant-ms</c>), whose string order is its time order.
+        /// </summary>
         public Constructor<string, string, Pred> InstantGt { get; }
 
-        /// <summary>Gets the query's WHERE clause.</summary>
+        /// <summary>Gets the query's predicate.</summary>
         public Relation<Pred> WhereClause { get; }
 
-        /// <summary>Gets the WHERE clause's top-level conjuncts.</summary>
+        /// <summary>Gets the query predicate's top-level conjuncts.</summary>
         public Relation<Pred> Conjunct { get; }
 
-        /// <summary>Gets "the predicate is exactly p IN S".</summary>
+        /// <summary>Gets "the predicate holds exactly when path p holds a value of S".</summary>
         public Function<Pred, string, ValueSet<string>> InSet { get; }
 
-        /// <summary>Gets "the predicate implies p IN S".</summary>
+        /// <summary>Gets "the predicate implies that path p holds a value of S".</summary>
         public Function<Pred, string, ValueSet<string>> Admits { get; }
 
         /// <summary>Gets the Horn ruleset.</summary>
@@ -177,15 +190,17 @@ namespace Eggnog.Tests.Cosmos.Scoped
         /// <summary>Gets the lattice ruleset.</summary>
         public Ruleset Lattice { get; }
 
-        /// <summary>Gets the rewrite ruleset, erasing under <see cref="Schema"/>.</summary>
+        /// <summary>
+        /// Gets the rewrite ruleset, licensed by <see cref="Schema"/>: its rules read facts from the schema, unless a
+        /// rule says why it may read the query's own.
+        /// </summary>
         public Ruleset Rewrite { get; }
 
         /// <summary>
-        /// What a schema compiler emits for one discriminated branch: under path = value, the consequences hold. The
-        /// rule is local to the container's schema scope, so containers sharing this theory never see each other's
-        /// branches.
+        /// Declares one branch of a discriminated union: where the path holds the value, the consequences hold. The
+        /// rule is local to the schema scope, so schema scopes sharing this theory never see each other's branches.
         /// </summary>
-        /// <param name="schema">The container's schema scope, not yet frozen.</param>
+        /// <param name="schema">The schema scope, not yet frozen.</param>
         /// <param name="path">The discriminator path.</param>
         /// <param name="value">The branch's value.</param>
         /// <param name="consequences">What the branch declares.</param>
@@ -371,8 +386,8 @@ namespace Eggnog.Tests.Cosmos.Scoped
                 r.When(WhereClause.Of(e), Graph.Contradiction.Of());
                 r.Then(e.Is(PFalse.Of()));
             });
-            // NOT IS_STRING admits nothing a present string-or-null path holds: it is NOT IS_DEFINED.
-            Rewrite.DefineRule("a string path's NOT IS_STRING", r =>
+            // Not(IsString p) admits nothing a present string-or-null path holds: it is Not(IsDefined p).
+            Rewrite.DefineRule("a string path's negated string test", r =>
             {
                 var (e, p, t) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "t");
                 r.ReadsOwnFacts("an equivalence under type facts whose conjuncts stay in the predicate");
@@ -382,7 +397,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
             });
 
             // Deletions read facts only from the schema, and the ruleset's licence checks it: a conjunct's own
-            // consequences in the query (present(kind) from kind = 'A') can never delete it. present@schema and
+            // consequences in the query (present(kind) from StrEq(kind, A)) can never delete it. present@schema and
             // dom@schema are mirrors.
             Rewrite.DefineRule("declared tautology", r =>
             {

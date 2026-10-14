@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Differential.Splits;
 
 using Xunit;
@@ -13,12 +13,12 @@ namespace Eggnog.Tests.Differential
     /// <summary>
     /// A model-based soundness check of engine splits: the split oracle's programs (<see cref="SplitOracleProgram"/>)
     /// without UUID conjuncts, run in the scoped encoding, against an enumeration of their models. A model assigns each
-    /// discriminator one value of its domain that the query's <c>IN</c> lists and disequalities allow; under it,
+    /// discriminator one value of its domain that the query's in-set conjuncts and disequalities allow; under it,
     /// exactly the branches of the assigned values fire. Every such assignment is a model of the theory (governed paths
     /// are distinct per discriminator, so no two active branches constrain one path, and each branch domain is
     /// non-empty), so whatever the engine lifts must hold in each of them: a lifted <c>present</c> or <c>form</c> is
     /// derived under every model, a lifted <c>dom</c> contains every value a model allows, and a contradiction means
-    /// there is no model. The prototype comparison of <see cref="SplitOracleTests"/> checks domains only from above;
+    /// there is no model. The literal comparison of <see cref="SplitOracleTests"/> checks domains only from above;
     /// this checks them from below.
     /// </summary>
     public sealed class SplitModelOracleTests
@@ -32,8 +32,8 @@ namespace Eggnog.Tests.Differential
             CheckSeeds(program => RunScoped(program, querySplit: false));
 
         /// <summary>
-        /// What the query lifts with the query split of <see cref="CosmosTheory.Saturation"/> holds in every model of
-        /// its program.
+        /// What the query lifts with the query split of <see cref="PredicateTheory.Saturation"/> holds in every model
+        /// of its program.
         /// </summary>
         [Fact]
         public void WhatTheQuerySplitLiftsHoldsInEveryModel() =>
@@ -73,10 +73,10 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// The scoped encoding as a container runs it: the schema compiled with its split
-        /// (<see cref="CosmosTheory.Facts"/>) and frozen, then the query run with the unguarded schema split, as
-        /// <see cref="SplitOracleScoped"/> does, or with <see cref="CosmosTheory.Saturation"/>, whose split takes only
-        /// the discriminators the query mentions. Facts are read for every path, discriminators and governed paths
+        /// The scoped encoding as a schema and its query run it: the schema compiled with its split
+        /// (<see cref="PredicateTheory.Facts"/>) and frozen, then the query run with the unguarded schema split, as
+        /// <see cref="SplitOracleScoped"/> does, or with <see cref="PredicateTheory.Saturation"/>, whose split takes
+        /// only the discriminators the query mentions. Facts are read for every path, discriminators and governed paths
         /// alike.
         /// </summary>
         /// <param name="program">The program.</param>
@@ -84,7 +84,7 @@ namespace Eggnog.Tests.Differential
         /// <returns>What the query scope holds.</returns>
         static SplitOracleFacts RunScoped(SplitOracleProgram program, bool querySplit)
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
             foreach (var (path, values) in program.Discriminators)
@@ -104,7 +104,7 @@ namespace Eggnog.Tests.Differential
             Assert.Empty(schema.Children);
             schema.Freeze();
             using var query = schema.CreateChild(c.Query);
-            var terms = new List<ConstructorTerm<Cosmos.Pred>>();
+            var terms = new List<ConstructorTerm<Predicates.Pred>>();
             foreach (var conjunct in program.Conjuncts)
             {
                 if (conjunct.Kind == SplitOracleConjunctKind.In)
@@ -121,11 +121,11 @@ namespace Eggnog.Tests.Differential
                 }
             }
 
-            var where = terms[0];
+            var predicate = terms[0];
             foreach (var term in terms.Skip(1))
-                where = c.And.Of(where, term);
+                predicate = c.And.Of(predicate, term);
 
-            query.Assume(c.WhereClause.Of(query.Make(where)));
+            query.Assume(c.WhereClause.Of(query.Make(predicate)));
             var settle = Schedule.Saturate(c.Horn, c.Lattice);
             var report = query.Run(querySplit ? c.Saturation : Schedule.Saturate(settle, Schedule.Split(c.SchemaSplit, settle), c.Rewrite));
             Assert.Equal(RunStopReason.Completed, report.StopReason);
@@ -215,7 +215,7 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// Whether a conjunct allows its path to take <paramref name="value"/>: an <c>IN</c> list holds it, a
+        /// Whether a conjunct allows its path to take <paramref name="value"/>: an in-set conjunct holds it, a
         /// disequality does not name it, and a UUID conjunct says nothing of it.
         /// </summary>
         /// <param name="conjunct">The conjunct.</param>

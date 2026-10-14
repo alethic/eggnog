@@ -1,25 +1,32 @@
-namespace Eggnog.Tests.Cosmos.Literal
+namespace Eggnog.Tests.Predicates.Literal
 {
 
     /// <summary>
-    /// <c>prototypes/cosmos-facts/prelude.egg</c>, ported as written: contexts as data (<see cref="Ctx"/>), inheritance
-    /// by <c>horn</c> rules, splits and lifts written as rules in the <c>split</c> ruleset. Tables are defined in the
-    /// prelude's order, so constructors keep egglog's declaration order, which extraction breaks ties by.
+    /// The predicate theory of <see cref="Scoped.PredicateTheory"/> with contexts as data arguments, in one flat graph
+    /// that runs at its root. Every claim about a path takes a context (<see cref="Ctx"/>) as its first column:
+    /// <c>(Schema)</c> holds what every document satisfies, <c>(Query)</c> adds one predicate's claims, and
+    /// <c>(Assume c p v)</c> is the case of a split of <c>c</c> in which path <c>p</c> holds <c>v</c>. A child context
+    /// inherits its parent's facts by <c>horn</c> rules over <c>parent</c>. Splits and lifts are rules of the
+    /// <c>split</c> ruleset: a split opens a case per value of a present discriminator, a contradicted case removes its
+    /// value from the domain, and a stored form, presence or domain that every remaining case reports is lifted to the
+    /// split context. The theory has no integer domains and no upper numeric comparison.
     /// </summary>
     /// <remarks>
-    /// <c>(relation contradiction (Ctx))</c> becomes <see cref="Contradicts"/>, named <c>contradicts</c>, because the
+    /// The order in which tables are defined is part of the theory: extraction breaks ties in cost by function id,
+    /// which is declaration order, so reordering the definitions can change which of two equal-cost predicates is
+    /// extracted. A context's contradiction is <see cref="Contradicts"/>, named <c>contradicts</c>, because the
     /// graph's own nullary <see cref="EGraph.Contradiction"/> owns the name <c>contradiction</c>.
     /// </remarks>
-    public sealed class PrototypeTheory
+    public sealed class ContextArgumentTheory
     {
 
         static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
 
         /// <summary>
-        /// Defines the prelude in <paramref name="graph"/>.
+        /// Defines the theory in <paramref name="graph"/>.
         /// </summary>
         /// <param name="graph">The graph.</param>
-        public PrototypeTheory(EGraph graph)
+        public ContextArgumentTheory(EGraph graph)
         {
             Graph = graph;
             graph.DefineSort<Ctx>("Ctx");
@@ -78,10 +85,10 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// <summary>Gets the graph.</summary>
         public EGraph Graph { get; }
 
-        /// <summary>Gets <c>(Schema)</c>: what the container's declaration says on its own.</summary>
+        /// <summary>Gets <c>(Schema)</c>: what every document satisfies.</summary>
         public Constructor<Ctx> Schema { get; }
 
-        /// <summary>Gets <c>(Query)</c>: the schema plus the query's conjuncts.</summary>
+        /// <summary>Gets <c>(Query)</c>: the schema plus the query predicate's conjuncts.</summary>
         public Constructor<Ctx> Query { get; }
 
         /// <summary>
@@ -104,7 +111,7 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// <summary>Gets <c>hi</c>: an upper bound on a numeric path.</summary>
         public Function<Ctx, string, long> Hi { get; }
 
-        /// <summary>Gets <c>present</c>: IS_DEFINED holds.</summary>
+        /// <summary>Gets <c>present</c>: the path is present.</summary>
         public Relation<Ctx, string> Present { get; }
 
         /// <summary>Gets <c>form</c>: the path's strings use this stored form.</summary>
@@ -113,7 +120,7 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// <summary>Gets <c>ne</c>: the path's value is not this.</summary>
         public Relation<Ctx, string, string> Ne { get; }
 
-        /// <summary>Gets the prelude's <c>contradiction</c>: no document is in this context.</summary>
+        /// <summary>Gets <c>contradicts</c>: no document is in this context.</summary>
         public Relation<Ctx> Contradicts { get; }
 
         /// <summary>Gets <c>discriminator</c>: a path a split may discriminate on, and one of its values.</summary>
@@ -146,43 +153,49 @@ namespace Eggnog.Tests.Cosmos.Literal
         /// <summary>Gets negation.</summary>
         public Constructor<Pred, Pred> Not { get; }
 
-        /// <summary>Gets c.p = 'v'.</summary>
+        /// <summary>Gets "path p holds the string v".</summary>
         public Constructor<string, string, Pred> StrEq { get; }
 
-        /// <summary>Gets c.p &gt;= 'v'.</summary>
+        /// <summary>Gets "path p holds a string ordered at or after v".</summary>
         public Constructor<string, string, Pred> StrGe { get; }
 
-        /// <summary>Gets c.p &gt; 'v'.</summary>
+        /// <summary>Gets "path p holds a string ordered after v".</summary>
         public Constructor<string, string, Pred> StrGt { get; }
 
-        /// <summary>Gets c.p = true.</summary>
+        /// <summary>Gets "path p holds true".</summary>
         public Constructor<string, Pred> BoolTrue { get; }
 
-        /// <summary>Gets c.p &gt; n.</summary>
+        /// <summary>Gets "path p holds a number greater than n".</summary>
         public Constructor<string, long, Pred> NumGt { get; }
 
-        /// <summary>Gets IS_DEFINED(c.p).</summary>
+        /// <summary>Gets "path p is present".</summary>
         public Constructor<string, Pred> IsDefined { get; }
 
-        /// <summary>Gets IS_STRING(c.p).</summary>
+        /// <summary>Gets "path p holds a string".</summary>
         public Constructor<string, Pred> IsString { get; }
 
-        /// <summary>Gets a UUID comparison evaluated in process.</summary>
+        /// <summary>
+        /// Gets "path p holds the UUID v" in any spelling: a costly comparison, which lowers to <see cref="StrEq"/>
+        /// where the path's stored form is canonical lowercase (<c>uuid-lower</c>).
+        /// </summary>
         public Constructor<string, string, Pred> UuidEq { get; }
 
-        /// <summary>Gets an instant comparison evaluated in process.</summary>
+        /// <summary>
+        /// Gets "path p holds an instant after v": a costly comparison, which lowers to <see cref="StrGt"/> where the
+        /// path's stored form is a fixed-width timestamp (<c>instant-ms</c>), whose string order is its time order.
+        /// </summary>
         public Constructor<string, string, Pred> InstantGt { get; }
 
-        /// <summary>Gets <c>where</c>: the query's WHERE clause.</summary>
+        /// <summary>Gets <c>where</c>: the query's predicate.</summary>
         public Relation<Pred> WhereClause { get; }
 
-        /// <summary>Gets <c>conjunct</c>: the WHERE clause's top-level conjuncts.</summary>
+        /// <summary>Gets <c>conjunct</c>: the query predicate's top-level conjuncts.</summary>
         public Relation<Pred> Conjunct { get; }
 
-        /// <summary>Gets <c>inset</c>: the predicate is exactly "p IN S".</summary>
+        /// <summary>Gets <c>inset</c>: the predicate holds exactly when path p holds a value of S.</summary>
         public Function<Pred, string, ValueSet<string>> InSet { get; }
 
-        /// <summary>Gets <c>admits</c>: the predicate implies "p IN S".</summary>
+        /// <summary>Gets <c>admits</c>: the predicate implies that path p holds a value of S.</summary>
         public Function<Pred, string, ValueSet<string>> Admits { get; }
 
         /// <summary>Gets the horn ruleset.</summary>
@@ -198,12 +211,13 @@ namespace Eggnog.Tests.Cosmos.Literal
         public Ruleset Rewrite { get; }
 
         /// <summary>
-        /// Writes the prelude's top-level fact <c>(parent (Query) (Schema))</c> at the root.
+        /// Writes the theory's ground fact <c>(parent (Query) (Schema))</c> at the root: the query inherits the schema.
         /// </summary>
         public void Ground() => Graph.Root.Assume(Parent.Of(Query.Of(), Schema.Of()));
 
         /// <summary>
-        /// Declares a guarded schema rule as the scenario files write them:
+        /// Declares a guarded schema rule, in any context: where <paramref name="path"/> is present and holds only
+        /// <paramref name="value"/>, <paramref name="formPath"/> has the stored form <paramref name="form"/>:
         /// <c>(rule ((present c p) (= (dom c p) (set-of v))) ((form c q f)) :ruleset horn)</c>.
         /// </summary>
         /// <param name="path">The guard's path.</param>
@@ -497,7 +511,7 @@ namespace Eggnog.Tests.Cosmos.Literal
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
                 r.Then(e.Is(PTrue.Of()));
             });
-            Rewrite.DefineRule("a string path's NOT IS_STRING", r =>
+            Rewrite.DefineRule("a string path's negated string test", r =>
             {
                 var (e, p, t) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "t");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(Query.Of(), p)));

@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Literal;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Literal;
 
 namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
-    /// Runs a split-oracle program in the literal encoding: contexts as data at one root, with the prototype's split
-    /// rules (<see cref="PrototypeTheory.Split"/>) and its schedule <c>(saturate horn lattice split rewrite)</c>; the
+    /// Runs a split-oracle program in the literal encoding: contexts as data at one root, with splits written as rules
+    /// (<see cref="ContextArgumentTheory.Split"/>) and the schedule <c>(saturate horn lattice split rewrite)</c>; the
     /// oracle.
     /// </summary>
     public static class SplitOracleLiteral
@@ -23,7 +23,7 @@ namespace Eggnog.Tests.Differential.Splits
         /// <returns>The facts of <c>(Query)</c>.</returns>
         public static SplitOracleFacts Run(SplitOracleProgram program)
         {
-            var p = new PrototypeTheory(new EGraph());
+            var p = new ContextArgumentTheory(new EGraph());
             p.Ground();
             var root = p.Graph.Root;
             foreach (var (path, values) in program.Discriminators)
@@ -49,7 +49,7 @@ namespace Eggnog.Tests.Differential.Splits
                 });
             }
 
-            var q = root.Make(Where(p, program));
+            var q = root.Make(Predicate(p, program));
             root.Assume(p.WhereClause.Of(q));
             var report = root.Run(Schedule.Saturate(p.Horn, p.Lattice, p.Split, p.Rewrite));
             if (report.StopReason != RunStopReason.Completed)
@@ -74,9 +74,9 @@ namespace Eggnog.Tests.Differential.Splits
         }
 
         /// <summary>
-        /// The query's WHERE clause: the conjuncts joined by <c>And</c>.
+        /// The query's predicate: the conjuncts joined by <c>And</c>.
         /// </summary>
-        static ConstructorTerm<Pred> Where(PrototypeTheory p, SplitOracleProgram program)
+        static ConstructorTerm<Pred> Predicate(ContextArgumentTheory p, SplitOracleProgram program)
         {
             var terms = new List<ConstructorTerm<Pred>>();
             foreach (var conjunct in program.Conjuncts)
@@ -99,11 +99,11 @@ namespace Eggnog.Tests.Differential.Splits
                 }
             }
 
-            var where = terms[0];
+            var predicate = terms[0];
             foreach (var term in terms.Skip(1))
-                where = p.And.Of(where, term);
+                predicate = p.And.Of(predicate, term);
 
-            return where;
+            return predicate;
         }
 
     }

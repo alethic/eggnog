@@ -8,14 +8,14 @@ namespace Eggnog.Tests.Scopes
     /// <summary>
     /// The plans a freeze makes (a rule is planned once, and every later run reuses the plan): the default variants of
     /// every rule a descendant can run, planned on the frozen scope's statistics: every global rule, the scope's local
-    /// rules, every query and every mirror copy rule; another container's local rules are left to be planned on their
-    /// own statistics.
+    /// rules, every query and every mirror copy rule; a sibling scope's local rules are left to be planned on their own
+    /// statistics.
     /// </summary>
     public sealed class FreezePlanTests
     {
 
         [Fact]
-        public void AFreezePlansEveryRuleADescendantCanRunAndNoOtherContainersLocalRules()
+        public void AFreezePlansEveryRuleADescendantCanRunAndNoSiblingsLocalRules()
         {
             var t = new ScopeTheory();
             var copies = new OuterCopies(t);

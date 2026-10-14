@@ -1,8 +1,9 @@
-namespace Eggnog.Tests.Cosmos.Literal
+namespace Eggnog.Tests.Predicates.Literal
 {
 
     /// <summary>
-    /// A context of the literal encoding: <c>(Schema)</c>, <c>(Query)</c> or <c>(Assume c p v)</c>, an e-class sort.
+    /// A context of <see cref="ContextArgumentTheory"/>, an e-class sort: <c>(Schema)</c>, <c>(Query)</c> or a case
+    /// <c>(Assume c p v)</c>.
     /// </summary>
     /// <param name="Id">The class.</param>
     public readonly record struct Ctx(ClassId Id) : ISort<Ctx>
