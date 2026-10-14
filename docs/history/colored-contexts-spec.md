@@ -1,6 +1,6 @@
 # Colored contexts in Eggnog.Relations: integrated implementation spec (M9–M10)
 
-**Code baseline:** worktree `project-overview-1f1e82` at `e65f4f4`. The bridge (M8) is being ported into
+**Code baseline:** commit `ce5e75a`. The bridge (M8) is being ported into
 `src/Eggnog.Relations/Bridge` and `Extraction`; §10 names its types as egglog-bridge's.
 
 **Paths.** Engine paths are relative to `src/Eggnog/Relations/`. Test paths are relative to `src/Eggnog.Tests/Relations/` and benchmark paths to `src/Eggnog.Benchmarks/Relations/`.

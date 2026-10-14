@@ -8,7 +8,7 @@ Revision 2 answers a review of revision 1. Appendix B lists every problem raised
 rules, concurrent children, tags and mirrors (the plan's R2), and case splits and lift (its R3), on top of the
 definitions, rules, schedules, queries and extraction it calls R1b. Every phase's Eggnog entry is therefore met, and
 the R2a/R2b split of §8.3 request 1 is no longer needed. The plan still names Eggnog's features by the milestones
-that delivered them (R1b, R2, R3). Its citations of the two specifications (RLS, CCS) are of their text at `47eb33d`;
+that delivered them (R1b, R2, R3). Its citations of the two specifications (RLS, CCS) are of their text at `b041e70`;
 both are now in `docs/history`, as the design record, and so is this plan. The library requests of §8.3 that are still
 open are listed in `docs/roadmap.md`.
 
@@ -37,10 +37,10 @@ open are listed in `docs/roadmap.md`.
 - Superseded on main by #196 (`27ba003`) [gaps §3].
 
 **Eggnog**
-- Repository: Eggnog at `47eb33d`.
-- Main held R1a–R1b and colors M10.1–M10.2 when this plan was written (`3b9dda1`; the status file of that date, since
+- Repository: Eggnog at `b041e70`.
+- Main held R1a–R1b and colors M10.1–M10.2 when this plan was written (`2fd4a18`; the status file of that date, since
   replaced by `docs/roadmap.md`).
-- Abbreviations, all at `47eb33d`:
+- Abbreviations, all at `b041e70`:
   - **RLS** = `docs/history/rule-layer-spec.md`
   - **CCS** = `docs/history/colored-contexts-spec.md`
   - **PS** = `src/Eggnog.Tests/Surface/PublicSurface.txt`
@@ -50,7 +50,7 @@ open are listed in `docs/roadmap.md`.
   not kept in either repository; every claim taken from them also cites the source it rests on.
 - The study worked in throwaway copies that are not kept either: the 13 `A/Facts` files compiled alone, with a harness
   that reproduced F1–F4; read-only copies of the sources; and an R1b cost harness over a `git archive` of eggnog
-  `47eb33d` (§6.1). Phase 0a writes F1–F4 as tests, and Phase 1 repeats the measurements with the project's method.
+  `b041e70` (§6.1). Phase 0a writes F1–F4 as tests, and Phase 1 repeats the measurements with the project's method.
 
 **Provenance.** Three earlier candidate plans were written: shadow-first, value-first and architecture-first. This
 plan starts from the shadow-first plan and takes in the others' strongest parts. Wherever they disagreed, the question
@@ -63,7 +63,7 @@ was settled against the sources (§0.2).
 | 1 | The "no process-wide cache" policy | "nothing here should grow a process-wide cache"; what a schema learns hangs off the schema | `TODO.md:135-141` |
 | 2 | A numeric `CAST` also matches stored strings | "`= 30` matches a document storing `"30"`". Bounds read from a cast therefore never imply a numeric type. | `A/Rel/Convert/CosmosFilterSplitRule.cs:648-656` |
 | 3 | Saturating casts | `CAST(x AS INTEGER) = 2147483647` is true of a document storing 1e30. The split rule leaves a side open **only for equality**, when the bound is at or beyond that side's limit; it argues that the inequalities "already admit everything past the limit". That argument covers `>` near `Max` and `<` near `Min`. It does not cover `>` with a bound below `Min` or `<` with a bound above `Max` (§2.8). | `CosmosFilterSplitRule.cs:703-719` |
-| 4 | Eggnog publishing | A GitHub Packages push on every non-PR build (to the repository owner, `alethic`). A GitHub release and a nuget.org push on a tag or a manual publish. `src/dist-nuget` packs the packages; it is not a feed. | `.github/workflows/Eggnog.yml:182-241` @ `47eb33d` |
+| 4 | Eggnog publishing | A GitHub Packages push on every non-PR build (to the repository owner, `alethic`). A GitHub release and a nuget.org push on a tag or a manual publish. `src/dist-nuget` packs the packages; it is not a feed. | `.github/workflows/Eggnog.yml:182-241` @ `b041e70` |
 | 5 | Adapter package sources | nuget.org and `ikvmnet` only. Credentials for a GitHub feed are supplied out of band. | `nuget.config` |
 | 6 | Target frameworks | Eggnog targets `net8.0;net10.0` (`src/Eggnog/Eggnog.csproj:4`). The adapter targets `net8.0` (`A/Apache.Calcite.Cosmos.Adapter.csproj:4`). | — |
 | 7 | R1b surface | `Scope.IsContradictory` is at PS:304 and `Scope.Rows` at PS:314. There is no `CreateChild` or `Freeze` (PS:299-327). `Scope.Run` takes a `CancellationToken` (PS:318), checked before every step (`src/Eggnog/Scheduling/ScheduleExecutor.cs:98`). | PS |
@@ -72,7 +72,7 @@ was settled against the sources (§0.2).
 | 10 | Stored-form identity | `IJsonStoredForm` promises value equality (`A/Facts/IJsonStoredForm.cs:27`). `CosmosRepresentation` is a record struct over its name, two bits and width (`A/Metadata/CosmosRepresentation.cs:47`). | — |
 | 11 | Decimal bounds need no library change | `ValueLattice<T>` has a public constructor with a case join (PS:382), and `ValueStore.Register<T : IEquatable<T>>` takes an order (PS:407) | PS |
 | 12 | `AdmitNull` and extensions | A head that entails `Present` is kept under an added `NotEqualTo(p, null)` guard (`A/Facts/JsonSchemaFacts.cs:627-628`); `CosmosGeography` entails `Present` (`A/Metadata/CosmosGeography.cs:55-60`). An extension head at the union's own path that does **not** entail `Present` is dropped (`_ => null`, l.633-644). | — |
-| 13 | R1b status in the spec | RLS says R1b is "complete, not yet merged" (RLS:21-23, 3625, 4651). The status file of that date and `3b9dda1` show it on main. | — |
+| 13 | R1b status in the spec | RLS says R1b is "complete, not yet merged" (RLS:21-23, 3625, 4651). The status file of that date and `2fd4a18` show it on main. | — |
 | 14 | When `WithFacts` runs | Inside `ReadContainers` (`A/CosmosSchemaFactory.cs:459-463`), before the schema object exists (l.235-236); once per database for an account schema (l.313), which is built afterwards (l.318). `WithFacts` returns `this` when nothing is added (`A/Metadata/CosmosContainerMetadata.cs:587-601`), so an undeclared container keeps the process-wide `static readonly ServiceFacts` theory (l.545-547). `Copy()` shares `_facts` (l.437-448). `CosmosSchema` has a public constructor over host-built metadata (`A/CosmosSchema.cs:39-48`). | — |
 | 15 | `Lazy` and exceptions | `_stated` is a `Lazy<JsonFactSet>` with `ExecutionAndPublication` (`A/Facts/JsonFactTheory.cs:83`). Such a `Lazy` caches a factory exception and blocks other callers until the factory returns. | — |
 | 16 | Limits | `TimeLimit` is checked before every iteration and overshoots by at most one (`src/Eggnog/Scheduling/RunOptions.cs:31-36`). Limits are per top-level `Run`, and `IterationLimit` counts iterations in every scope of the run, cases included (RLS:140, D42). | — |
@@ -131,7 +131,7 @@ was settled against the sources (§0.2).
 
 ### 1.2 The gaps, by value
 
-| Gap (`Gaps.cs` line @ `a83fd2a`) | Pushed today (`prototypes/cosmos-facts/README.md:92-100` @ `47eb33d`) | After | Value | Route | First closes |
+| Gap (`Gaps.cs` line @ `a83fd2a`) | Pushed today (`prototypes/cosmos-facts/README.md:91-99` @ `b041e70`) | After | Value | Route | First closes |
 |---|---|---|---|---|---|
 | 1, `IN` (l.64; Sweep l.257) | `(c.kind = @p0 OR c.kind = @p1) AND IS_DEFINED(c.ref)`. The UUID is compared in process over every order and invoice. | `c.ref = @p` | highest | query split on the discriminator, then lift of `form` | Phase 3 (R3); optional earlier route, track H |
 | 1, per-kind spelling (l.269) | `IS_DEFINED(c.data.type) AND IS_DEFINED(c.data.data.parkId)` | both disjuncts lowered | highest | derivation per disjunct | Track D, Horn alone |
@@ -214,7 +214,7 @@ across scopes (RLS:89).
 
 `JsonFact.Entails` (`A/Facts/JsonFact.cs:32-86`) and `Excludes` (l.113-143) become nine single-path rules plus set
 tests in the questions (§2.4). The prototype found the same: "The Entails/Excludes tables became six rules"
-(`prototypes/cosmos-facts/README.md:124-127` @ `47eb33d`). Every rule touches one path, which §2.9 relies on.
+(`prototypes/cosmos-facts/README.md:123-126` @ `b041e70`). Every rule touches one path, which §2.9 relies on.
 
 Each capability is its own ruleset, so that the explainers can name and ablate it (§4.5): `L1` … `L9`, `extension` and
 `horn`. They are scheduled together as `Saturate(horn, L1, …, L9, extension)` (`Schedule.Saturate(params Schedule[])`,
@@ -298,7 +298,7 @@ the translation adds nothing, and the two engines read the same guards. The comp
 | `type`, `nullable`, `["T","null"]` | `types`. Two or more non-null types read nothing today (l.916-953). | Emit the set; this is the E+ class `multi-type` |
 | `const`, `enum`, `pattern` + recogniser, `required`, `properties`, `allOf`, `if`/`then`/`else`, `dependent*`, `not` | as translated (§2.5) | unchanged |
 | Discriminated `oneOf`/`anyOf` | branch rules plus `Meet` under the parent guard (l.307-333) | also `discriminator(disc)` |
-| Undiscriminated `anyOf`/`oneOf` | `Meet` only (l.348-357, 396-520) | a hidden discriminator `#anyOf:<schema location>`: `present(#…) ⇐ present(parent)` (unconditional at the root), `dom(#…) = {i:0 … i:k-1}`, `discriminator(#…)`, and each branch's rules under `present(#…) ∧ dom(#…) = {i}`. The coverage obligation (RLS risk 1) becomes the compiler's. Hand encoding: `src/Eggnog.Tests/Cosmos/Literal/Literal04UndiscriminatedAnyOfTests.cs:20-36` @ `47eb33d`. The compiler also emits `governs(#…, p)` for every path `p` a branch's rules state (§2.8). |
+| Undiscriminated `anyOf`/`oneOf` | `Meet` only (l.348-357, 396-520) | a hidden discriminator `#anyOf:<schema location>`: `present(#…) ⇐ present(parent)` (unconditional at the root), `dom(#…) = {i:0 … i:k-1}`, `discriminator(#…)`, and each branch's rules under `present(#…) ∧ dom(#…) = {i}`. The coverage obligation (RLS risk 1) becomes the compiler's. Hand encoding: `src/Eggnog.Tests/Cosmos/Literal/Literal04UndiscriminatedAnyOfTests.cs:20-36` @ `b041e70`. The compiler also emits `governs(#…, p)` for every path `p` a branch's rules state (§2.8). |
 | Nullable union | `AdmitNull` widening (l.625-647), with the presence guard of §2.5 | unchanged |
 | `minimum`, `maximum`, `exclusive*` | Read as `JsonBounds` through the subschema recogniser (§2.7). `AdmitNull` gains a row that keeps `JsonBounds` at the union's own path, because bounds bind numbers only and `JsonBounds` does not entail `Present` (§0.2 #12). | unchanged |
 
@@ -1067,7 +1067,7 @@ container's scheduled rulesets on every iteration (§0.2 #18); an idle local rul
 layer per body table (D5). Nothing measures that cost at 100 or 1,000 local rules.
 
 **R1b measured in this study.**
-- **Method.** A `git archive` of eggnog `47eb33d`, with a throwaway console harness compiling
+- **Method.** A `git archive` of eggnog `b041e70`, with a throwaway console harness compiling
   `src/Eggnog.Tests/Cosmos/{Pred.cs, Literal/Ctx.cs, Literal/PrototypeTheory.cs}`. net8.0 Release, workstation GC,
   serial graph, 20 warm-ups, then 300–1,000 timed runs, on a machine with 8 logical processors and background load.
 - **How to read the figures.** The prototype theory includes rewrites and extraction, so the theory figures are an
@@ -1208,7 +1208,7 @@ derivation, and B1 and B9 hold at the intended sampling rate (at 20 ms per deriv
 5. **Unsatisfiable declarations.** Proposed: a diagnostic and a metric at load; the model read does not fail.
 6. **Rendered-text premises.** Should they become their own claim kind (a pre-image set such as `{"30", 30}`)?
 7. **Gap-test port.** Who ports the gap tests? The prototype README's statement that they are on the branch
-   (`prototypes/cosmos-facts/README.md:86-90` @ `47eb33d`) needs correcting.
+   (`prototypes/cosmos-facts/README.md:86-89` @ `b041e70`) needs correcting.
 8. **Subtree facts.** Should sort, projection, aggregate and lookup probes use facts proved by filters beneath them
    (`A/DESIGN.md:868-871`)? It is one more session per subtree, against the statement budget.
 9. **Architecture B.** Is it wanted, and is the `CHECK` constraint its driver?

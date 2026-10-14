@@ -3,7 +3,16 @@
 What is open or planned. The library's model and the engine are described in [`architecture.md`](architecture.md);
 the reasoning behind the items below, where it is recorded, is in [`history/`](history/README.md).
 
+Each item is planned in [`plans/`](plans/README.md), with an evaluation of whether it is worth doing and a
+recommendation. [`plans/README.md`](plans/README.md) gives the order of work, the decision gates and the questions
+that are still open.
+
 ## Engine work
+
+Plans: [parallelism test plan](plans/parallelism-test-plan.md), [compiled plans](plans/compiled-plans.md),
+[performance parity](plans/performance-parity.md) (with the `BasicMath` regression),
+[smaller engine items](plans/smaller-engine-items.md) and
+[deferred colored-context features](plans/colored-context-deferred-features.md).
 
 - **Parallelism test plan.** The engine's parallel paths are in place (parallel table merges, index builds and
   rebuilds, rule-level and morsel parallelism, concurrent children of a frozen context) and tested for serial and
@@ -17,7 +26,7 @@ the reasoning behind the items below, where it is recorded, is in [`history/`](h
 - **Performance parity.** Profiling, SIMD probes, pooling and parallel tuning, measured with `egglog -j1` and `-jN` on
   egglog's math microbenchmark and other large programs, and on a 200,000-row frozen root with a thousand children.
 - **The root `BasicMath` regression.** `RuleSetRunBenchmarks.BasicMath` runs 10-15% slower than the root baseline
-  recorded before colored contexts were added (commit `f9b76ab`), in all four of its configurations, with allocation
+  recorded before colored contexts were added (commit `3a6e0b7`), in all four of its configurations, with allocation
   unchanged. The other root benchmark classes are within noise.
 - **Smaller engine items:**
   - a flag on the engine's lift report that says when the lift memo answered, so that `RunReport.Lifts` can count only
@@ -46,6 +55,8 @@ the reasoning behind the items below, where it is recorded, is in [`history/`](h
 
 ## Benchmarks and timed gates
 
+Plan: [idle-machine measurement](plans/idle-machine-measurement.md).
+
 Everything below needs an idle machine; until now only Release builds, dry runs and allocation counts were taken, on a
 machine shared with other work.
 
@@ -67,11 +78,15 @@ machine shared with other work.
 - **Latency of transient children,** including the per-iteration cost of idle local rules on a query child under a frozen
   scope with 100 and 1,000 local rules (one of the Cosmos plan's requests, below).
 
-The last timing of egglog-bridge's examples predates the store-backed root (commit `47eb33d`): on an i7-7700K, warm,
-`math` took about 6.6 s against the Rust's 7.4 s, and `ac` about 15.5-16 s on both. It is to be repeated on the
-current code.
+The last timing of egglog-bridge's examples was recorded at commit `b041e70`, before the store-backed root
+(`8444a46`): on an i7-7700K, warm, `math` took about 6.6 s against the Rust's 7.4 s, and `ac` about 15.5-16 s on
+both. It is to be repeated on the current code.
 
 ## Library work
+
+Plans: [interning and value lifetime](plans/interning-and-value-lifetime.md),
+[rule-layer and split features](plans/rule-layer-split-features.md) and
+[conformance, documentation and release](plans/conformance-docs-release.md).
 
 - **Requests of the Cosmos integration plan** ([`history/cosmos-integration.md`](history/cosmos-integration.md),
   "Library requests") that are still open:

@@ -148,6 +148,7 @@ Every example in this README is compiled and run by the test suite
 - [Architecture](docs/architecture.md): the library's model, the engine, threading and lifetimes, and how Eggnog is
   tested.
 - [Roadmap](docs/roadmap.md): what is open or planned.
+- [Plans](docs/plans/README.md): each open item planned, with an evaluation of whether it is worth doing.
 - The XML documentation of the public types, which your editor shows.
 - [Design history](docs/history/README.md): the specifications and reports the code was built from.
 
