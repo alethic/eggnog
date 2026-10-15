@@ -245,6 +245,9 @@ namespace Eggnog.Relations
             var set = record.Cases;
             var lifted = set.Lift(spec, options.Lift);
             report.Lifts++;
+            if (lifted.Memoized)
+                report.LiftsMemoized++;
+
             report.LiftRowsSkipped += lifted.Skipped;
             changed |= lifted.Changed;
             if (lifted.ParentContradicted)

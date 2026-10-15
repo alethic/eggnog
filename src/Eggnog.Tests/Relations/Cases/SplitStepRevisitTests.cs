@@ -154,6 +154,43 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// A revisit that finds nothing new is answered by the lift memo: the step's first lift of the new record runs
+        /// in full, and every lift of the revisit, whose cases run again and learn nothing, is a memo answer, counted in
+        /// <see cref="SplitReport.LiftsMemoized"/> among <see cref="SplitReport.Lifts"/>.
+        /// </summary>
+        [Fact]
+        public void ARevisitWithNothingNewIsAnsweredByTheMemo()
+        {
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            var (t, f, b) = (g.Root.FreshId(), g.Root.FreshId(), g.Root.FreshId());
+            g.Root.FlushUpdates();
+            var source = new TestSplitSource(0, _ => [([b.Rep], 2)], (@case, i, _) =>
+            {
+                @case.StageUnion(b, i == 0 ? t : f);
+                g.Assert(@case, g.Mark, t);
+            });
+
+            var driver = new SplitDriver([source], new RecordingSchedule(), null, MarkSpec(g), SplitOptions.Default);
+            try
+            {
+                var first = new SplitReport();
+                Assert.True(driver.Step(g.Root, 0, first));
+                Assert.True(first.Lifts >= 1);
+                Assert.True(first.LiftsMemoized < first.Lifts, $"the new record's first lift runs in full ({first})");
+
+                var revisit = new SplitReport();
+                Assert.False(driver.Step(g.Root, 0, revisit));
+                Assert.True(revisit.Lifts >= 1, "the live record is lifted again");
+                Assert.Equal(revisit.Lifts, revisit.LiftsMemoized);
+            }
+            finally
+            {
+                SplitDriver.DisposeRecords(g.Root);
+            }
+        }
+
     }
 
 }

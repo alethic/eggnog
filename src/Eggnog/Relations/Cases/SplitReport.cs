@@ -25,12 +25,18 @@ namespace Eggnog.Relations
         public int Lifts { get; set; }
 
         /// <summary>
+        /// Gets or sets the number of the <see cref="Lifts"/> that the lift memo answered
+        /// (<see cref="LiftReport.Memoized"/>).
+        /// </summary>
+        public int LiftsMemoized { get; set; }
+
+        /// <summary>
         /// Gets or sets the candidate keys the lifts skipped over their candidate limit (<see cref="LiftReport.Skipped"/>).
         /// </summary>
         public long LiftRowsSkipped { get; set; }
 
         /// <inheritdoc />
-        public override string ToString() => $"SplitReport {{ CasesOpened = {CasesOpened}, SplitsSkipped = {SplitsSkipped}, Lifts = {Lifts}, LiftRowsSkipped = {LiftRowsSkipped} }}";
+        public override string ToString() => $"SplitReport {{ CasesOpened = {CasesOpened}, SplitsSkipped = {SplitsSkipped}, Lifts = {Lifts}, LiftsMemoized = {LiftsMemoized}, LiftRowsSkipped = {LiftRowsSkipped} }}";
 
     }
 

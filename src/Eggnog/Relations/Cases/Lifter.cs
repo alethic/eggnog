@@ -121,6 +121,7 @@ namespace Eggnog.Relations
                         // parent) exactly when no live case is left now.
                         CountLive(cases, report);
                         report.ParentContradicted = live.Count == 0;
+                        report.Memoized = true;
                         return report;
                     }
 

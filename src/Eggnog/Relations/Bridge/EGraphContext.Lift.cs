@@ -228,8 +228,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The member-map part of <see cref="CheckInvariants"/>: in a child, a member map built now holds exactly the
-        /// overlay's members that are not local, each canonical in the parent and mapped by this context's find to its
-        /// group's root, with roots and members ascending; the cached map, when its version is current, equals it.
+        /// overlay's members that are not local, each in its group root's overlay class, canonical in the parent and
+        /// mapped by this context's find to its group's root, with roots and members ascending; the cached map, when its
+        /// version is current, equals it, and one that does not is checked the same way, so that its defects are named.
         /// Nothing at the root. O(overlay members × depth).
         /// </summary>
         /// <param name="violations">Receives each violation.</param>
@@ -238,10 +239,31 @@ namespace Eggnog.Relations
             if (context.Overlay is not { } overlay || parent is null)
                 return;
 
+            var map = MemberMap.Build(overlay, context.IdBlocks!);
+            CheckMemberMap(overlay, map, "member maps: ", violations);
+            if (Volatile.Read(ref memberMap) is { } cached && cached.Version == overlay.Version && SameMap(cached, map) == false)
+            {
+                Context.Report(violations, "member maps: the cached member map is current by version but differs from the overlay");
+                CheckMemberMap(overlay, cached, "member maps: the cached map: ", violations);
+            }
+        }
+
+        /// <summary>
+        /// Checks one member map of this child against its overlay: as many members as the overlay holds that are not
+        /// local; roots ascending and canonical in the context, each in an overlay class; and each group's members
+        /// ascending, not local, members of the root's overlay class, canonical in the parent and found to the root
+        /// here. With the count and the order, membership makes the map's members exactly the overlay's that are not
+        /// local. O(overlay members × depth).
+        /// </summary>
+        /// <param name="overlay">The child's overlay.</param>
+        /// <param name="map">The map to check.</param>
+        /// <param name="prefix">Starts every violation reported.</param>
+        /// <param name="violations">Receives each violation.</param>
+        void CheckMemberMap(UnionFindOverlay overlay, MemberMap map, string prefix, List<string> violations)
+        {
             var blocks = context.IdBlocks!;
-            var map = MemberMap.Build(overlay, blocks);
             var finder = context.UnionFind;
-            var parentFinder = parent.context.UnionFind;
+            var parentFinder = parent!.context.UnionFind;
             var expected = 0;
             for (var slot = 0; slot < overlay.SlotCount; slot++)
             {
@@ -254,41 +276,44 @@ namespace Eggnog.Relations
             }
 
             if (map.MemberCount != expected)
-                Context.Report(violations, $"member maps: the member map holds {map.MemberCount} member(s), the overlay {expected} that are not local");
+                Context.Report(violations, $"{prefix}the member map holds {map.MemberCount} member(s), the overlay {expected} that are not local");
 
             var roots = map.GroupRoots;
             for (var g = 0; g < roots.Length; g++)
             {
                 var root = roots[g];
                 if (g > 0 && roots[g - 1] >= root)
-                    Context.Report(violations, $"member maps: group roots are not ascending at {root}");
+                    Context.Report(violations, $"{prefix}group roots are not ascending at {root}");
 
                 if (finder.Find(root) != root)
-                    Context.Report(violations, $"member maps: group root {root} is not canonical in the context");
+                    Context.Report(violations, $"{prefix}group root {root} is not canonical in the context");
+
+                if (overlay.TryGetClass(root, out var rootSlot) == false)
+                    Context.Report(violations, $"{prefix}group root {root} is in no class of the overlay");
 
                 var members = map.GroupMembers(g);
                 if (members.IsEmpty)
-                    Context.Report(violations, $"member maps: group {root} has no member");
+                    Context.Report(violations, $"{prefix}group {root} has no member");
 
                 for (var i = 0; i < members.Length; i++)
                 {
                     var m = members[i];
                     if (i > 0 && members[i - 1] >= m)
-                        Context.Report(violations, $"member maps: the members of group {root} are not ascending at {m}");
+                        Context.Report(violations, $"{prefix}the members of group {root} are not ascending at {m}");
 
                     if (blocks.Contains(m))
-                        Context.Report(violations, $"member maps: member {m} of group {root} is local to the context");
+                        Context.Report(violations, $"{prefix}member {m} of group {root} is local to the context");
+
+                    if (rootSlot >= 0 && (overlay.TryGetClass(m, out var memberSlot) == false || memberSlot != rootSlot))
+                        Context.Report(violations, $"{prefix}member {m} of group {root} is not in the root's overlay class");
 
                     if (parentFinder.Find(m) != m)
-                        Context.Report(violations, $"member maps: member {m} of group {root} is not canonical in the parent");
+                        Context.Report(violations, $"{prefix}member {m} of group {root} is not canonical in the parent");
 
                     if (finder.Find(m) != root)
-                        Context.Report(violations, $"member maps: member {m} of group {root} finds {finder.Find(m)} in the context");
+                        Context.Report(violations, $"{prefix}member {m} of group {root} finds {finder.Find(m)} in the context");
                 }
             }
-
-            if (Volatile.Read(ref memberMap) is { } cached && cached.Version == overlay.Version && SameMap(cached, map) == false)
-                Context.Report(violations, "member maps: the cached member map is current by version but differs from the overlay");
         }
 
         /// <summary>
