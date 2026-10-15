@@ -780,7 +780,7 @@ the guard (on a writable scope), makes sure the scope is caught up, and reads th
 
 ## 5. Testing
 
-Everything is in one test project, `src/Eggnog.Tests`, an xunit v3 executable with about 12,400 tests that runs in
+Everything is in one test project, `src/Eggnog.Tests`, an xunit v3 executable with about 12,700 tests that runs in
 10-15 minutes per target framework. The engine's tests are under `Relations/` (namespace `Eggnog.Relations.Tests`),
 in folders that mirror the engine's; the library's are in the other folders (namespaces `Eggnog.Tests.*`). Both are run
 on net8.0 and net10.0 before a change is merged. CI runs the net10.0 build on Windows x64, Linux x64 and arm64, and
