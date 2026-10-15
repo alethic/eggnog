@@ -59,16 +59,41 @@ namespace Eggnog.Relations
         public const int InterContainerThreshold = 1;
 
         /// <summary>
-        /// Initializes a new instance.
+        /// The largest shard count a caller may ask for: a shard is picked by the hash bits below the top seven, and
+        /// 2^16 shards leave the low 41 bits to pick a slot within one.
+        /// </summary>
+        public const int MaxShards = 1 << 16;
+
+        /// <summary>
+        /// Initializes a new instance whose tables take the shard count that follows from
+        /// <paramref name="degreeOfParallelism"/> (<see cref="ShardData.ForParallelism"/>).
         /// </summary>
         /// <param name="degreeOfParallelism">The number of threads parallel operations may use; one disables them.</param>
         public ParallelHeuristics(int degreeOfParallelism)
+            : this(degreeOfParallelism, 0)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance whose tables take <paramref name="shards"/> shards, rounded up to a power of two,
+        /// whatever the degree of parallelism: how egglog's benches get twice the machine's threads in shards when they
+        /// build a table outside the rayon pool they then install. Zero takes the shard count that follows from
+        /// <paramref name="degreeOfParallelism"/>.
+        /// </summary>
+        /// <param name="degreeOfParallelism">The number of threads parallel operations may use; one disables them.</param>
+        /// <param name="shards">The minimum number of shards of a table's hash index; zero for the default.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="degreeOfParallelism"/> is less than one, or
+        /// <paramref name="shards"/> is negative or above <see cref="MaxShards"/>.</exception>
+        public ParallelHeuristics(int degreeOfParallelism, int shards)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(degreeOfParallelism, 1);
+            ArgumentOutOfRangeException.ThrowIfNegative(shards);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(shards, MaxShards);
 
             DegreeOfParallelism = degreeOfParallelism;
             Options = new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism };
-            ShardData = ShardData.ForParallelism(degreeOfParallelism);
+            ShardData = shards == 0 ? ShardData.ForParallelism(degreeOfParallelism) : new ShardData(shards);
         }
 
         /// <summary>
@@ -93,8 +118,9 @@ namespace Eggnog.Relations
         public ParallelOptions Options { get; }
 
         /// <summary>
-        /// Gets the shard layout of a table's hash index: one shard when serial, otherwise twice the degree of
-        /// parallelism rounded up to a power of two (egglog's <c>ShardedHashTable::default</c>,
+        /// Gets the shard layout of a table's hash index: the shard count given to the constructor rounded up to a power
+        /// of two, when one was given; otherwise one shard when serial, and twice the degree of parallelism rounded up to
+        /// a power of two when not (egglog's <c>ShardedHashTable::default</c>,
         /// core-relations/src/table/sharded_hash_table.rs:14-23).
         /// </summary>
         public ShardData ShardData { get; }

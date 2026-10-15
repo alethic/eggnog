@@ -13,7 +13,7 @@ namespace Eggnog.Relations.Benchmarks
     /// The program of egglog-bridge's <c>examples/ac.rs</c> (the bridge form of <c>examples/make-ac-bench.py</c>'s
     /// egglog program): commutativity and associativity of <c>add</c> saturate <c>(0 + ... + 12)</c> associated to the
     /// left and <c>(12 + ... + 0)</c> associated to the right into one e-class, on an e-graph with the default
-    /// parallelism.
+    /// parallelism or a given one.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -67,13 +67,26 @@ namespace Eggnog.Relations.Benchmarks
         readonly Value rightRoot;
 
         /// <summary>
-        /// Builds the e-graph and its rules, checks that the rules change nothing on the empty database, and loads the
-        /// two sums, as <c>ac.rs</c> does before its saturation loop. Part of the time <c>ac.rs</c> measures.
+        /// Builds the e-graph on every processor (<c>EGraph::default()</c>) and its rules, checks that the rules change
+        /// nothing on the empty database, and loads the two sums, as <c>ac.rs</c> does before its saturation loop. Part
+        /// of the time <c>ac.rs</c> measures.
         /// </summary>
         /// <exception cref="InvalidOperationException">Running the rules on the empty database changed it.</exception>
         public BridgeAcProgram()
+            : this(ParallelHeuristics.Default)
         {
-            egraph = new EGraph();
+
+        }
+
+        /// <summary>
+        /// Builds the program as <see cref="BridgeAcProgram()"/> does, on an e-graph whose operations use
+        /// <paramref name="parallelism"/>: the counterpart of running <c>ac.exe</c> with <c>RAYON_NUM_THREADS</c> set.
+        /// </summary>
+        /// <param name="parallelism">When the e-graph's operations go parallel, and on how many threads.</param>
+        /// <exception cref="InvalidOperationException">Running the rules on the empty database changed it.</exception>
+        public BridgeAcProgram(ParallelHeuristics parallelism)
+        {
+            egraph = new EGraph(parallelism);
             var intBase = egraph.BaseValues.RegisterType<Int64Codec, long>();
             numTable = egraph.AddTable(new FunctionConfig
             {

@@ -123,7 +123,7 @@ parent's watermark.
 - The many-children case: `Relations/Contexts/ManyChildrenBenchmarks.cs` (a thousand single-union children of a
   200,000-row frozen root, in parallel and serially), and `PerChildCostBenchmarks.cs`.
 - Not ported:
-  - egglog's `tests/math-microbenchmark.egg` (73 lines: 25 rewrites, `(run 11)`, `Const i64`). It is close to
+  - egglog's `tests/math-microbenchmark.egg` (73 lines: 24 rewrites, `(run 11)`, `Const i64`). It is close to
     `examples/math.egg`, which `BridgeMathProgram` ports in its bridge form.
   - the herbie repro `tests/repro-herbie-vanilla.egg` (3,374 lines, 471 rewrites and 165 rules over `BigRat`);
   - the eggcc samples `tests/eggcc-2mm.egg` (10,891 lines, 1,229 rules, nested `run-schedule`) and
@@ -240,6 +240,19 @@ run.
   runs. This could not be checked after the fact. A gen2 every 93 MB, under a server collector whose gen0 budget is
   larger than that, points to a collection that something other than allocation triggered, not to allocation
   pressure.
+
+  The benchmark app's probe mode (`--allocation-probe`, Release, one warm-up and three measured invocations) gives the
+  same table on both target frameworks and both collectors (workstation: `DOTNET_gcServer=0`). Bytes per invocation
+  are means; the parallel cases vary between invocations, so their range is given. The shares are from net10.0 under
+  the server collector; the other three configurations agree within six points.
+
+  | Workload | net10.0, server | net10.0, workstation | net8.0, server | net8.0, workstation | Largest shares of sampled bytes |
+  |---|---|---|---|---|---|
+  | `BasicMath`, 200,000 rows, serial | 18.4 MB | 18.4 MB | 18.4 MB | 18.4 MB | `uint[]` 54%, `TableEntry[]` 23%, `ExecutionState` 12% |
+  | `BasicMath`, 200,000 rows, parallel | 61.5 MB (52-70) | 63.3 MB (56-74) | 74.0 MB (60-97) | 82.0 MB (65-98) | `uint[]` 45%, `TrieNode` 15%, `FrameUpdate[]` 13% |
+  | Writes, 4M inserts, 1 thread | 632.0 MB | 632.1 MB | 632.0 MB | 632.1 MB | `uint[]` 52%, `TableEntry[]` 42%, `MutationBuffer` 2.8%, `byte[]` 2.7% |
+  | Writes, 4M inserts, 8 threads | 655.9 MB (645-662) | 651.6 MB (651-652) | 654.5 MB (643-661) | 657.4 MB (643-677) | `uint[]` 50%, `TableEntry[]` 42%, `MutationBuffer` 5.1%, `byte[]` 2.6% |
+  | Bridge `math`, one run | 10.46 GB | 10.55 GB | 10.38 GB | 10.63 GB | `uint[]` 54%, `TableEntry[]` 13%, `int[]` 9.3%, `PredictedEntry[]` 6.9% |
 - **Idle local rules.** These figures are from the sibling plan
   ([`./idle-machine-measurement.md`](./idle-machine-measurement.md), section 3.6). The probe is count-only, on
   `eda0c61`, net10.0 Release, server GC. The workload is a frozen schema scope with N local rules
@@ -492,7 +505,7 @@ Nothing breaks.
 - The parity campaign as scoped is not worth running. Two of its workloads are out of reach, and its question needs
   only one re-measurement on existing workloads, at both degrees of parallelism. That re-measurement is worth doing:
   the only parity figure predates the store-backed root, and E2's one-thread comparison was never run. The library-API
-  port of `math-microbenchmark.egg` is small: 25 rewrites, `i64` and strings, and the library's degree of parallelism
+  port of `math-microbenchmark.egg` is small: 24 rewrites, `i64` and strings, and the library's degree of parallelism
   lines up with egglog's `-j` default. It is the first benchmark of the published API against the egglog CLI.
 - The `BasicMath` work is worth one measured decision and no more until then. The JIT-shape data supports a real cause
   (lost inlining). The effect is about 0.5-1.2 ms per 20,000-row run, and 2-8 ms per 200,000-row run depending on the

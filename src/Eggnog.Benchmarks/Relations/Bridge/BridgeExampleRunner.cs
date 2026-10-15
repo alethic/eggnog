@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -33,6 +34,12 @@ namespace Eggnog.Relations.Benchmarks
     /// the e-graph after its timer stops ("We don't include dropping the egraph in the time"). The first repetition
     /// includes JIT compilation, which the Rust does not have.
     /// </para>
+    /// <para>
+    /// The e-graph uses every processor, as <c>EGraph::default()</c> uses rayon's global pool, unless
+    /// <see cref="ThreadsOption"/> gives a degree of parallelism: the counterpart of <c>RAYON_NUM_THREADS</c>, which sets
+    /// the size of that pool. One thread makes every operation serial and gives each table one shard, as one rayon
+    /// thread does.
+    /// </para>
     /// </remarks>
     internal static class BridgeExampleRunner
     {
@@ -43,6 +50,11 @@ namespace Eggnog.Relations.Benchmarks
         public const string Option = "--bridge-example";
 
         /// <summary>
+        /// The option that sets the e-graph's degree of parallelism; the next argument is the thread count.
+        /// </summary>
+        public const string ThreadsOption = "--threads";
+
+        /// <summary>
         /// The repetitions of each program: both Rust <c>main</c>s loop <c>for _ in 0..2</c>.
         /// </summary>
         const int Repetitions = 2;
@@ -50,21 +62,28 @@ namespace Eggnog.Relations.Benchmarks
         /// <summary>
         /// Runs the program named by <paramref name="args"/>, the arguments after <see cref="Option"/>.
         /// </summary>
-        /// <param name="args"><c>math</c> or <c>ac</c>.</param>
+        /// <param name="args"><c>math</c> or <c>ac</c>, optionally followed by <see cref="ThreadsOption"/> and a thread
+        /// count of at least one.</param>
         /// <returns>0 when every repetition's result matched egglog's; 1 when one did not; 2 for a bad command line.</returns>
         public static int Run(ReadOnlySpan<string> args)
         {
-            if (args.Length != 1 || (args[0] != "math" && args[0] != "ac"))
+            var threads = 0;
+            var valid = args.Length is 1 or 3 && (args[0] == "math" || args[0] == "ac");
+            if (valid && args.Length == 3)
+                valid = args[1] == ThreadsOption && int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out threads) && threads >= 1;
+
+            if (valid == false)
             {
-                Console.Error.WriteLine($"usage: Eggnog.Benchmarks {Option} math|ac");
+                Console.Error.WriteLine($"usage: Eggnog.Benchmarks {Option} math|ac [{ThreadsOption} <n>]");
                 return 2;
             }
 
+            var parallelism = threads == 0 ? ParallelHeuristics.Default : new ParallelHeuristics(threads);
             var isMath = args[0] == "math";
             using var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { NewLine = "\n", AutoFlush = true };
             for (var i = 0; i < Repetitions; i++)
             {
-                var error = isMath ? RunMath(stdout) : RunAc(stdout);
+                var error = isMath ? RunMath(stdout, parallelism) : RunAc(stdout, parallelism);
 
                 // Drop the e-graph outside the time, as the Rust does at the end of each repetition.
                 GC.Collect();
@@ -86,12 +105,13 @@ namespace Eggnog.Relations.Benchmarks
         /// <c>Total time</c>, then the check. Not inlined, so the e-graph is unreachable once it returns.
         /// </summary>
         /// <param name="stdout">Where the lines go.</param>
+        /// <param name="parallelism">The e-graph's parallelism.</param>
         /// <returns>The failed check's message; <c>null</c> when the result matched egglog's.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static string? RunMath(TextWriter stdout)
+        static string? RunMath(TextWriter stdout, ParallelHeuristics parallelism)
         {
             var start = Stopwatch.GetTimestamp();
-            var program = new BridgeMathProgram();
+            var program = new BridgeMathProgram(parallelism);
             var (iterations, saturated) = program.Run(stdout);
             program.WriteTableSizes(stdout);
             stdout.WriteLine($"Total time: {RustDuration.Format(RustDuration.ElapsedNanoseconds(start))}");
@@ -113,14 +133,15 @@ namespace Eggnog.Relations.Benchmarks
         /// <c>ac.rs</c> panics first). Not inlined, so the e-graph is unreachable once it returns.
         /// </summary>
         /// <param name="stdout">Where the lines go.</param>
+        /// <param name="parallelism">The e-graph's parallelism.</param>
         /// <returns>The failed check's message; <c>null</c> when the result matched egglog's.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static string? RunAc(TextWriter stdout)
+        static string? RunAc(TextWriter stdout, ParallelHeuristics parallelism)
         {
             var start = Stopwatch.GetTimestamp();
             try
             {
-                var program = new BridgeAcProgram();
+                var program = new BridgeAcProgram(parallelism);
                 var iterations = program.Saturate(stdout);
                 program.Verify(iterations);
             }
