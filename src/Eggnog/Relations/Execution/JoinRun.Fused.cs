@@ -35,12 +35,8 @@ namespace Eggnog.Relations
         {
             var cover = stage.Cover.Atom;
             var atom = cover.Index;
-            var node = nodes[atom]!;
-            if (node.IsEmpty)
-                return;
-
-            var plain = plainViews[atom];
-            if (plain is null)
+            var table = plainTables[atom];
+            if (table is null)
             {
                 RunFusedScanLayered(cur, stage, info, chunk, ref sink);
                 return;
@@ -48,14 +44,18 @@ namespace Eggnog.Relations
 
             // A plain view's nodes lie in layer 0 and hide nothing.
             const int layer = 0;
-            var table = plain.Table;
+            var node = nodes[atom]!;
+            var subset = node.SingleRows;
+            if (subset.IsEmpty)
+                return;
+
             nodes[atom] = null;
             var variables = info.BindVariables;
             var constraints = stage.Cover.Constraints;
             if (leafScans[cur])
             {
                 var rows = TakeLeafBuffer(cur, variables.Length);
-                table.ScanProject(node.Rows, info.Projection, 0, int.MaxValue, constraints, rows);
+                table.ScanProject(subset, info.Projection, 0, int.MaxValue, constraints, rows);
                 if (ExecutorCounters.Enabled)
                     counters!.NoteScanned(layer < depth, IsRoot(atom, node), node.Size);
 
@@ -78,7 +78,6 @@ namespace Eggnog.Relations
 
             var buffer = TakeScanBuffer(cur, variables.Length);
             var updates = TakeFrames(cur);
-            var subset = node.Rows;
             var offset = 0;
             while (true)
             {
@@ -132,6 +131,9 @@ namespace Eggnog.Relations
             var atom = cover.Index;
             var view = atomViews[atom]!;
             var node = nodes[atom]!;
+            if (node.IsEmpty)
+                return;
+
             nodes[atom] = null;
             var variables = info.BindVariables;
             var constraints = stage.Cover.Constraints;

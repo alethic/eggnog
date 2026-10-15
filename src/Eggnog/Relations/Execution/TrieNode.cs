@@ -122,6 +122,21 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets the rows of a node known to be single-layer, without <see cref="Rows"/>'s check: the node of an atom whose
+        /// view is plain (one layer, hiding nothing, every root view), which the join's root paths read once per frame.
+        /// Valid while the node is not released or reset.
+        /// </summary>
+        public SubsetRef SingleRows
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                Debug.Assert(multiLayer == false, "a multi-layer node read as single-layer");
+                return single.AsRef();
+            }
+        }
+
+        /// <summary>
         /// Gets the layers that hold rows: bit <c>l</c> for layer <c>l</c>.
         /// </summary>
         public uint LayerMask
@@ -422,7 +437,11 @@ namespace Eggnog.Relations
         {
             Debug.Assert((uint)layer < LayeredSubset.MaxLayers, "a layer lies outside the view");
             ResetCaches(pool);
-            DisposeRows(pool.Layers);
+            if (multiLayer)
+                DisposeLayeredRows(pool.Layers);
+            else
+                single.Dispose();
+
             single = Subset.Dense(range);
             this.layer = (byte)layer;
         }
@@ -443,7 +462,11 @@ namespace Eggnog.Relations
         {
             Debug.Assert(pooled == false, "a trie node was released twice");
             ResetCaches(pool);
-            DisposeRows(pool.Layers);
+            if (multiLayer)
+                DisposeLayeredRows(pool.Layers);
+            else
+                single.Dispose();
+
             pooled = true;
             pool.Return(this);
         }
@@ -491,22 +514,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Disposes the rows, returning a multi-layer node's per-layer array to <paramref name="layers"/>, and leaves the
-        /// node empty in layer 0.
+        /// Disposes the rows of a multi-layer node, returning its per-layer array to <paramref name="layers"/>, and leaves
+        /// the node empty in layer 0. Kept out of line, so that <see cref="ResetDense(int, OffsetRange, TrieNodePool)"/> and
+        /// <see cref="Release"/>, which the join's replay inlines once per frame, stay small for single-layer nodes.
         /// </summary>
         /// <param name="layers">The pool of per-layer arrays, or <c>null</c>.</param>
-        void DisposeRows(SubsetArrayPool? layers)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void DisposeLayeredRows(SubsetArrayPool? layers)
         {
-            if (multiLayer)
-            {
-                side!.Rows.Dispose(layers);
-                multiLayer = false;
-            }
-            else
-            {
-                single.Dispose();
-            }
-
+            Debug.Assert(multiLayer, "a single-layer node disposed as multi-layer");
+            side!.Rows.Dispose(layers);
+            multiLayer = false;
             layer = 0;
         }
 

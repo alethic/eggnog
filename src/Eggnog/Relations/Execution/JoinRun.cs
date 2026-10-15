@@ -96,6 +96,12 @@ namespace Eggnog.Relations
         /// visibility filter.
         /// </summary>
         LayerView?[] plainViews = Array.Empty<LayerView?>();
+
+        /// <summary>
+        /// Per atom, the table of its plain view (<see cref="plainViews"/>), else <c>null</c>: what the scans of a plain
+        /// atom read, one load away.
+        /// </summary>
+        Table?[] plainTables = Array.Empty<Table?>();
         TrieNode?[] nodes = Array.Empty<TrieNode?>();
         TrieNode?[] roots = Array.Empty<TrieNode?>();
         uint[] values = Array.Empty<uint>();
@@ -208,7 +214,9 @@ namespace Eggnog.Relations
 
                 var view = views.Require(info.Table);
                 atomViews[a] = view;
-                plainViews[a] = PlainLayer(view);
+                var plain = PlainLayer(view);
+                plainViews[a] = plain;
+                plainTables[a] = plain?.Table;
                 var root = pool.Rent(view.AllRows(pool.Layers));
                 roots[a] = root;
                 nodes[a] = root;
@@ -303,6 +311,7 @@ namespace Eggnog.Relations
                 atomCount = atomCount,
                 atomViews = atomViews,
                 plainViews = plainViews,
+                plainTables = plainTables,
                 nodes = (TrieNode?[])nodes.Clone(),
 
                 // Shared, never released by a task: only read to tell an atom's root rows from refined ones (counters).
@@ -419,6 +428,7 @@ namespace Eggnog.Relations
 
             atomViews = new TableView?[count];
             plainViews = new LayerView?[count];
+            plainTables = new Table?[count];
             nodes = new TrieNode?[count];
             roots = new TrieNode?[count];
             timesRefined = new long[count];
