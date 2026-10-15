@@ -96,9 +96,10 @@ A column holds either a class or a value.
 - **Sorts** are e-class types. A sort is a `readonly record struct` that implements `ISort<TSort>` over a `ClassId`
   and is registered with `EGraph.DefineSort<TSort>(name)`. A `ClassId` carries the scope that returned it (its
   origin): it is usable in that scope and its descendants until that scope is disposed, and every entry point that
-  takes one checks this and throws `ArgumentException` otherwise. Only the library makes `ClassId`s;
-  `default(ClassId)` names no class. Two `ClassId`s of one class may differ (`Find` returns the canonical one), so
-  classes are compared with `Scope.AreEqual`.
+  takes one checks this and throws `ArgumentException` otherwise. A call on that scope already in progress, a run's
+  cases included, does not refuse it because of the disposal; the call completes or is refused with
+  `ObjectDisposedException`. Only the library makes `ClassId`s; `default(ClassId)` names no class. Two `ClassId`s of
+  one class may differ (`Find` returns the canonical one), so classes are compared with `Scope.AreEqual`.
 - **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (with -0.0 normalized and NaN
   refused), `string`, and `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>` and
@@ -335,9 +336,10 @@ Extractors over a frozen scope may run concurrently, one per thread.
 ### 2.12 Lifetimes and failures
 
 - `Scope.Dispose()` never throws. It makes the scope unusable at once (`ObjectDisposedException` on use) and kills its
-  class values. Its engine state and local rules are released when it has no live children (transient query children
-  included) and no call is in progress in its domain on another thread; whichever thread removes the last obstacle
-  releases it. Disposing the root does nothing. So a frozen schema can be retired while queries beneath it finish.
+  class values, except in a call on the scope already in progress (section 2.2). Its engine state and local rules are
+  released when it has no live children (transient query children included) and no call is in progress in its domain on
+  another thread; whichever thread removes the last obstacle releases it. Disposing the root does nothing. So a frozen
+  schema can be retired while queries beneath it finish.
 - A `RuleEvaluationException` from a run or a write faults the scope: `Failure` keeps the exception, and every later
   call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the graph
   unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's writes

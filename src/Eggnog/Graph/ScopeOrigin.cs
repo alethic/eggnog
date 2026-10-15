@@ -8,7 +8,9 @@ namespace Eggnog
     /// </summary>
     /// <remarks>
     /// A scope's origin lives as long as the scope and is marked <see cref="Disposed"/> when the scope is disposed, which
-    /// kills every value it returned. A batch's origin is valid within its batch, and afterwards only once
+    /// kills every value it returned: a call on that scope already in progress, which holds it until it returns, does
+    /// not refuse them because of the disposal, in that scope or in its run's cases, and it completes or is refused with
+    /// <see cref="System.ObjectDisposedException"/>. A batch's origin is valid within its batch, and afterwards only once
     /// <see cref="Committed"/>. A scope's origin's parent is its parent scope's origin. The flags only ever go from false
     /// to true.
     /// </remarks>
@@ -64,7 +66,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets or sets, for a scope, whether it was disposed: its values are dead from then on.
+        /// Gets or sets, for a scope, whether it was disposed: its values are dead from then on, except that a call on the
+        /// scope already in progress does not refuse them because of it (see <see cref="ClassChecks.Check"/>).
         /// </summary>
         public bool Disposed
         {
