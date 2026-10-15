@@ -54,6 +54,11 @@ namespace Eggnog.Benchmarks.Probes
         public string Name => instance.GetType().Name + "." + method.Name;
 
         /// <summary>
+        /// Gets the benchmark class's instance, its parameters set.
+        /// </summary>
+        public object Instance => instance;
+
+        /// <summary>
         /// Gets the parameters set, by name, in the class's declaration order.
         /// </summary>
         public IReadOnlyList<KeyValuePair<string, object?>> Parameters { get; }

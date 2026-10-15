@@ -3,6 +3,8 @@ using System.Threading.Tasks;
 
 using BenchmarkDotNet.Attributes;
 
+using Eggnog.Benchmarks.Probes;
+
 namespace Eggnog.Relations.Benchmarks
 {
 
@@ -40,7 +42,7 @@ namespace Eggnog.Relations.Benchmarks
     /// </remarks>
     [InvocationCount(1)]
     [DistinctShardCounts]
-    public class WritesBenchmarks : IItemsPerInvocation
+    public class WritesBenchmarks : IItemsPerInvocation, IScheduledBenchmark
     {
 
         /// <summary>
@@ -70,6 +72,7 @@ namespace Eggnog.Relations.Benchmarks
         int expectedCount;
         Database? database;
         SortedWritesTable? table;
+        TaskScheduler? scheduler;
         bool ran;
 
         /// <summary>
@@ -87,6 +90,16 @@ namespace Eggnog.Relations.Benchmarks
         /// </summary>
         [Params(0, 16)]
         public int Shards { get; set; }
+
+        /// <summary>
+        /// Gets or sets the scheduler the staging loops and the table's parallel operations run on, or <c>null</c> for
+        /// the thread pool. Read by the global setup. For <see cref="AllocationProbe"/>'s per-thread count.
+        /// </summary>
+        TaskScheduler? IScheduledBenchmark.Scheduler
+        {
+            get => scheduler;
+            set => scheduler = value;
+        }
 
         /// <summary>
         /// Generates the workload of <see cref="ParallelInsert"/>: inserts only, 5% of them reusing an earlier key.
@@ -189,6 +202,9 @@ namespace Eggnog.Relations.Benchmarks
             workload = generated;
             merges = mergeCount;
             parallelism = new ParallelHeuristics(Threads, Shards);
+            if (scheduler != null)
+                parallelism.Options.TaskScheduler = scheduler;
+
             expectedCount = generated.CountLiveKeys(mergeCount);
         }
 

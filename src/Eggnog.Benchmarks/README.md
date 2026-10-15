@@ -537,7 +537,23 @@ src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --allocation-pro
   in them; they count every thread, so a parallel case's workers are included, and so is any other thread of the
   process: now and then an invocation gains a few hundred bytes the case did not allocate (672 B in one of eight
   invocations of `UnionFindFindOnlySerialBenchmarks.BestSerial`, which allocates nothing). For a case of a few bytes,
-  read the minimum beside the mean.
+  read the minimum beside the mean. The probe prints the mean, median, least and greatest.
+- Under the server collector with dynamic adaptation (the default since .NET 9) a difference of two precise readings of
+  that counter can be off by gigabytes or negative. An invocation whose precise and imprecise readings are more than
+  1 MiB apart is dropped, and the probe says how many were. That check catches gross errors only, so where a case
+  allows it, count with `--per-thread`. Under the workstation collector, and under the server collector with
+  `DOTNET_GCDynamicAdaptationMode=0`, the counter agrees with an exact count.
+- `--per-thread` counts exactly under either collector: the method runs as a task on a scheduler of dedicated threads
+  (eight, or one per logical processor if more), `WritesBenchmarks` puts its staging loops and its table's parallel
+  operations there too, and each thread's bytes are read with `GC.GetAllocatedBytesForCurrentThread`. Before the case
+  the probe counts a known allocation spread over those threads, and exits with 1 if the count misses it. A case that
+  queues work to the thread pool, such as `BasicMath` with `Mode=Parallel` or the bridge programs, cannot be counted
+  so, and the probe exits with 1. Each invocation also reads the process-wide counter, and the probe says in how many
+  invocations it was off by more than 1 MiB. For example, a write benchmark at 8 threads:
+
+  ```
+  src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --allocation-probe WritesBenchmarks.ParallelInsert Threads=8 --per-thread --types 0
+  ```
 - The types come from the runtime's `GCAllocationTick` events, read in process by an `EventListener` over the measured
   invocations: the runtime raises one about every 100 KB a thread allocates, naming the type that crossed the
   threshold. The bytes by type are a sample; their shares estimate where the bytes go. `--types <n>` (default 15) sets
