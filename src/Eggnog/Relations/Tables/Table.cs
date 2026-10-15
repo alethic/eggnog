@@ -346,6 +346,9 @@ namespace Eggnog.Relations
         public int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (hidden.IsNone)
+                return ScanGenericBounded(subset, start, count, constraints, ref sink);
+
             switch (Kind)
             {
                 case TableKind.SortedWrites:
@@ -397,6 +400,12 @@ namespace Eggnog.Relations
         public void ScanGeneric<TSink>(SubsetRef subset, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (hidden.IsNone)
+            {
+                ScanGeneric(subset, ref sink);
+                return;
+            }
+
             switch (Kind)
             {
                 case TableKind.SortedWrites:
@@ -509,6 +518,9 @@ namespace Eggnog.Relations
         public int ScanProject<TSink>(SubsetRef subset, ReadOnlySpan<ColumnId> columns, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (hidden.IsNone)
+                return ScanProject(subset, columns, start, count, constraints, ref sink);
+
             if (columns.Length == 0)
                 return -1;
 
@@ -536,6 +548,9 @@ namespace Eggnog.Relations
         /// <returns>The next position, or -1.</returns>
         public int ScanProject(SubsetRef subset, ReadOnlySpan<ColumnId> columns, int start, int count, ReadOnlySpan<Constraint> constraints, HiddenRows hidden, TaggedRowBuffer output)
         {
+            if (hidden.IsNone)
+                return ScanProject(subset, columns, start, count, constraints, output);
+
             var sink = new TaggedRowSink(output);
             return ScanProject(subset, columns, start, count, constraints, hidden, ref sink);
         }
@@ -573,6 +588,12 @@ namespace Eggnog.Relations
         public void ForEachColumn<TSink>(SubsetRef subset, ColumnId column, HiddenRows hidden, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (hidden.IsNone)
+            {
+                ForEachColumn(subset, column, ref sink);
+                return;
+            }
+
             ReadOnlySpan<int> projection = [column.Rep];
             CheckColumns(projection);
             var projecting = new ProjectingSink<TSink>(sink, projection);

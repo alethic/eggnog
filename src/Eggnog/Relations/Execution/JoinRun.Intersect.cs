@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -86,6 +87,11 @@ namespace Eggnog.Relations
         /// <summary>
         /// Two scans: iterate the side with fewer keys (the second on a tie) and probe the other.
         /// </summary>
+        /// <remarks>
+        /// When both probers have one piece (every root run) this is egglog's loop behind one test of the piece counts;
+        /// probers with several pieces take <see cref="RunIntersectTwoLayered"/>, kept out of line so that this loop stays
+        /// small.
+        /// </remarks>
         void RunIntersectTwo<TSink>(int cur, IntersectStage stage, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
         {
@@ -94,6 +100,66 @@ namespace Eggnog.Relations
             var ps = TakeProbers(cur, 2);
             GetIndex(ref ps[0], a.Atom.Index, [a.Column]);
             GetIndex(ref ps[1], b.Atom.Index, [b.Column]);
+            if ((ps[0].RestCount | ps[1].RestCount) != 0)
+            {
+                RunIntersectTwoLayered(cur, stage, ps, chunk, ref sink);
+                return;
+            }
+
+            var small = ps[0].First.Count < ps[1].First.Count ? 0 : 1;
+            var large = 1 - small;
+            ref var smaller = ref ps[small];
+            ref var larger = ref ps[large];
+            var smallScan = stage.Scans[small];
+            var largeScan = stage.Scans[large];
+            if (ExecutorCounters.Enabled)
+                NoteDriver(smallScan.Atom.Index, smaller);
+
+            var variable = stage.Variable;
+            var updates = TakeFrames(cur);
+            var cursor = default(ProberCursor);
+            while (cursor.MoveNext(smaller.First))
+            {
+                var key = cursor.Key;
+                if (larger.First.TryGetSubset(key, out var largeRows) == false)
+                    continue;
+
+                updates.PushBinding(variable, key);
+                if (RefineScan(updates, smaller.Node, smaller.First, smallScan, key, cursor.Rows) == false ||
+                    RefineScan(updates, larger.Node, larger.First, largeScan, key, largeRows) == false)
+                {
+                    updates.Rollback(pool);
+                    continue;
+                }
+
+                updates.FinishFrame();
+                if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                    return;
+            }
+
+            if (Drain(cur, ref updates, ref sink) == false)
+                return;
+
+            MoveBack(ref ps[0], a.Atom.Index);
+            MoveBack(ref ps[1], b.Atom.Index);
+        }
+
+        /// <summary>
+        /// <see cref="RunIntersectTwo"/> when a prober has several pieces: the driver enumerates its pieces in turn,
+        /// and a probed side of several pieces joins its hits across layers.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="cur">The position.</param>
+        /// <param name="stage">The stage.</param>
+        /// <param name="ps">The position's probers, holding the two scans' indexes.</param>
+        /// <param name="chunk">The number of frames to buffer before draining.</param>
+        /// <param name="sink">The sink.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void RunIntersectTwoLayered<TSink>(int cur, IntersectStage stage, Prober[] ps, int chunk, ref TSink sink)
+            where TSink : struct, IJoinSink
+        {
+            var a = stage.Scans[0];
+            var b = stage.Scans[1];
             var small = ps[0].Count < ps[1].Count ? 0 : 1;
             var large = 1 - small;
             ref var smaller = ref ps[small];

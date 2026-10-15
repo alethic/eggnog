@@ -14,6 +14,11 @@ namespace Eggnog.Relations
         /// <c>get_index</c> (core-relations/src/free_join/execute.rs:819-884) for each layer; a single-layer node
         /// (every root node) gets one piece, built exactly as egglog builds its index.
         /// </summary>
+        /// <remarks>
+        /// A single-layer node takes one flag test more than egglog's <c>get_index</c> and builds its one piece inline; the
+        /// pieces of a multi-layer node are built out of line (<see cref="GetIndexLayered"/>), so that the kernels that
+        /// inline this method stay small.
+        /// </remarks>
         /// <param name="prober">Receives the node and the pieces; its spare piece array is kept.</param>
         /// <param name="atom">The atom's index.</param>
         /// <param name="columns">The columns to index, at least one.</param>
@@ -22,10 +27,8 @@ namespace Eggnog.Relations
             var node = nodes[atom]!;
             nodes[atom] = null;
             var view = atomViews[atom]!;
-            var rest = prober.Rest;
-            prober = default;
-            prober.Rest = rest;
             prober.Node = node;
+            prober.RestCount = 0;
             var root = ExecutorCounters.Enabled && IsRoot(atom, node);
             if (node.IsMultiLayer == false)
             {
@@ -34,6 +37,21 @@ namespace Eggnog.Relations
                 return;
             }
 
+            GetIndexLayered(ref prober, node, view, columns, root);
+        }
+
+        /// <summary>
+        /// The multi-layer half of <see cref="GetIndex"/>: one piece per layer of <paramref name="node"/>'s rows, the first
+        /// in <see cref="Prober.First"/> and the others in the prober's spare piece array.
+        /// </summary>
+        /// <param name="prober">Receives the pieces; holds the node and no piece beyond the first.</param>
+        /// <param name="node">The atom's node, multi-layer.</param>
+        /// <param name="view">The atom's view.</param>
+        /// <param name="columns">The columns to index, at least one.</param>
+        /// <param name="root">Whether the node is the atom's root node, for the executor's counters.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void GetIndexLayered(ref Prober prober, TrieNode node, TableView view, ReadOnlySpan<ColumnId> columns, bool root)
+        {
             var remaining = node.LayerMask;
             var first = BitOperations.TrailingZeroCount(remaining);
             remaining &= remaining - 1;
@@ -62,8 +80,17 @@ namespace Eggnog.Relations
         /// content), so only its pieces refine for visibility (<see cref="ProberPiece.MayHoldInvisible"/>).
         /// <paramref name="root"/> (whether the node is the atom's root node) only splits the executor's counters.
         /// </summary>
+        /// <param name="piece">The piece; overwritten.</param>
+        /// <param name="node">The atom's node.</param>
+        /// <param name="layer">The layer.</param>
+        /// <param name="lv">The atom's view of the layer.</param>
+        /// <param name="rows">The node's rows of the layer.</param>
+        /// <param name="columns">The columns to index, at least one.</param>
+        /// <param name="root">Whether the node is the atom's root node, for the executor's counters.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void BuildPiece(ref ProberPiece piece, TrieNode node, int layer, LayerView lv, SubsetRef rows, ReadOnlySpan<ColumnId> columns, bool root)
         {
+            piece = default;
             piece.Layer = (byte)layer;
             piece.View = lv;
             var table = lv.Table;
@@ -138,12 +165,25 @@ namespace Eggnog.Relations
         {
             nodes[atom] = prober.Node;
             ReleasePiece(ref prober.First);
-            var rest = prober.Rest;
-            for (var i = 0; i < prober.RestCount; i++)
-                ReleasePiece(ref rest![i]);
+            if (prober.RestCount != 0)
+                ReleaseRest(ref prober);
 
-            prober = default;
-            prober.Rest = rest;
+            prober.Node = null!;
+        }
+
+        /// <summary>
+        /// Releases the pieces of <paramref name="prober"/> beyond the first, keeping its spare piece array: the
+        /// multi-layer half of <see cref="MoveBack"/>.
+        /// </summary>
+        /// <param name="prober">The prober; left with no piece beyond the first.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void ReleaseRest(ref Prober prober)
+        {
+            var rest = prober.Rest!;
+            for (var i = 0; i < prober.RestCount; i++)
+                ReleasePiece(ref rest[i]);
+
+            prober.RestCount = 0;
         }
 
         /// <summary>
@@ -205,10 +245,9 @@ namespace Eggnog.Relations
         /// <returns><c>false</c> if no row survives; the caller rolls the frame back.</returns>
         bool RefineScan(FrameUpdates updates, TrieNode node, in ProberPiece piece, SingleScanSpec scan, uint key, SubsetRef rows)
         {
-            var lv = piece.View!;
             if (rows.Size <= SmallRefinement)
             {
-                var subset = RefineVisible(rows, scan.Constraints, lv, piece.MayHoldInvisible);
+                var subset = RefineVisible(rows, scan.Constraints, piece.View!, piece.MayHoldInvisible);
                 if (subset.IsEmpty)
                 {
                     subset.Dispose();
@@ -219,13 +258,13 @@ namespace Eggnog.Relations
                 return true;
             }
 
-            var arity = lv.Table.Arity;
             var column = scan.Column.Index;
-            var slot = node.IsMultiLayer ? TrieNode.ChildSlot(column, piece.Layer + 1, arity) : column;
+            var slot = node.IsMultiLayer ? TrieNode.ChildSlot(column, piece.Layer + 1, piece.View!.Table.Arity) : column;
             if (node.TryGetChild(slot, key, out var child) == false)
             {
+                var lv = piece.View!;
                 var subset = RefineVisible(rows, scan.Constraints, lv, piece.MayHoldInvisible);
-                child = node.AddChild(slot, key, pool.Rent(piece.Layer, subset), arity, pool);
+                child = node.AddChild(slot, key, pool.Rent(piece.Layer, subset), lv.Table.Arity, pool);
             }
 
             if (child.IsEmpty)
