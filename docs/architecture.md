@@ -114,6 +114,26 @@ the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, s
 and build a new one. Host reads never intern: a constant that was never interned makes its fact false or its term
 absent.
 
+There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
+child databases share their root's base-value registry by reference, and `ColumnType<T>.Encode` takes no scope. So a
+value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
+cells across scopes and lifts. What a scope interned stays after the scope is disposed. These operations intern, in
+any scope:
+
+| Operation | What it interns |
+|---|---|
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, sets, registered values, and `long`s outside `[0, 2^31)` |
+| A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
+| A lattice merge, in a run or in a child's catch-up | each new merged value |
+| A lift's case join | each new joined value, in the shared pool for the parent |
+| A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
+| `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined |
+
+Reads, checks, query matches and `Until` conditions never intern (`TryEncodeExisting`). A host that serves requests
+from long-lived scopes keeps the pools flat by reusing its literals: a query scope that names only values already
+interned interns nothing, and one that names a new string interns the string and whatever the rules compute from it.
+`EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.12).
+
 ### 2.3 Tables
 
 There are three kinds of table, each typed by up to four key columns (`TableHandle` is the untyped base):
@@ -374,6 +394,34 @@ Extractors over a frozen scope may run concurrently, one per thread.
   fault the scope too.
 - Refusals made before anything changes (`ArgumentException`, `FactConflictException`, a definition error) do not
   fault.
+- A disposed scope gives back its own state, but not what it drew from the graph:
+
+  | State | Left behind after the scope is released |
+  |---|---|
+  | Its rows, layers, union-find overlay, journal and cursors | nothing |
+  | Its local rules, their engine rules, variants and call-site external functions | nothing; freed rule and external-function ids are reused |
+  | Values it interned: constants, primitive and merge results, case assumptions, joins | all of them, in the graph's pools (section 2.2) |
+  | Ids it reserved (one block of 16 for its first term, then blocks doubling up to 4,096) | all of them: ids are never handed out again |
+  | Epochs its writes, run iterations, rebuild passes and cases took | all of them: the clock never goes back |
+  | Scope tags and the mirror tables of scoped reads | all of them: they are graph definitions, so a host defines tags with its theory, not per request |
+
+- Ids and epochs are finite: about 2.1 billion ids (`Array.MaxLength`, the largest id a union-find holds) and about 4.3
+  billion epochs, shared by every scope of the graph. `EGraph.Usage` returns a `GraphUsage`: `InternedValues`,
+  `IdsReserved` against `IdLimit`, `Epochs` against `EpochLimit`, and `FractionUsed`, the larger share. A workload
+  that splits usually runs out of epochs first. When either runs out, every call that needs one throws
+  `OverflowException`: a write that makes a term or merges, a run whose rule makes a term or that needs another
+  iteration, pass or case, `CreateChild`, `CaseSet.Add` and `CaseSet.Lift`, a freeze that must catch up, a query read
+  (`Any`, `Count` and `ForEachMatch` run the query as a rule, which takes an epoch even on a frozen scope), and any
+  other read of a writable scope that must catch up first (`Check`, `TryGet`, `AreEqual`, `CountRows` and the rest,
+  when an ancestor changed since the scope last caught up, or its own rebuild ran out before it finished). A frozen
+  scope, and a writable one with nothing to catch up, reads facts and terms without an epoch.
+- Running out is not a fault, and the scope can be disposed. A write that ran out before its merge is dropped, so the
+  scope reads as before. One that ran out in the rebuild after its merge stays written, with the rebuild's finished
+  passes committed, so the scope reads it without an epoch unless that rebuild left work undone. A lift round that ran
+  out before its merge writes nothing. Every later call that needs an id or an epoch throws the same way, and once the
+  epochs are out the graph creates no more children. A long-lived host therefore retires a graph before
+  `FractionUsed` reaches 1: it defines a new graph from the same definitions, sends new work to it, and lets the old
+  one go once its last scope is disposed. The library has no helper for this; the host owns its definitions.
 
 ### 2.13 Differences from egglog
 
@@ -536,12 +584,40 @@ Store
 **Ownership.** Each context owns a `Database`. A child's database has its own catalog of layer tables, notification
 list, pending queues and size estimate, and shares the store's counters, external functions, strata, containers and
 base values by reference. It answers schema questions from the store's schema and planning questions from its view,
-so rules are built, planned and run in a child exactly as at the root.
+so rules are built, planned and run in a child exactly as at the root. Because the registry and the container
+environments are shared, a value a child interns has one cell in every context and stays after the child is
+disposed, as egglog's push and pop leave interned values behind; a container over base values interned from a child
+takes its id from the shared counter, not from the child's blocks, so it is never local to the child. A disposed
+child frees its own layers, overlay, journal and cursors once it has no live children; nothing else.
 
 **Ids and time.** The store has one id counter and one clock. The root mints ids directly; a child mints from blocks
 reserved on the shared counter (`IdBlockAllocator`), so ids are unique store-wide and "is this id local to the child"
-is an exact, allocation-free test. A context captures the clock at the start of each run, rebuild pass and write batch,
-stamps that batch's rows with it, and advances it at the end.
+is an exact, allocation-free test. A child that mints nothing reserves nothing; its first block is 16 ids, and each
+later one twice the ids reserved so far, up to 4,096. A context captures the clock at the start of each run, rebuild
+pass and write batch, stamps that batch's rows with it, and advances it at the end. Neither counter is reclaimed: a
+query scope that makes one term uses 16 ids, and on the predicate test theory a plain query with its snapshot read
+takes 12 to 21 epochs, depending on its shape, and a split query 21 + 9 x *cases* (`ScopeChurnTests` pins the
+split counts).
+
+Every id mint applies one bound, `UnionFind.MaxId` (`Array.MaxLength - 1`), the largest id a union-find array can
+hold: the root's own mints (`Store.CheckId`), a child's blocks, a rule's mint at the root (`Database.IncrementCounter`
+bounds the id counter there), and container ids. The clock's bound is `Value.StaleRep`, which is never an epoch
+(`Store.CheckEpoch`). Past either, the mint or the clock read throws `OverflowException`, and every path leaves the
+context consistent, so running out does not fault a child, unlike other exceptions that escape its runs and
+rebuilds:
+
+- host writes mint while they are planned, and a flush that runs out before its merge drops its staged host writes;
+- a run reads the clock before its iteration, and a rebuild before each pass; a rebuild that runs out after its first
+  pass first ends the passes that ran, as its loop ends (cursors committed, hidden sets sealed, views dropped), so the
+  context is clean if they left nothing to do, and a later rebuild goes on from the journal mark otherwise;
+- a rule search that runs out of ids discards everything it staged, in the layers it created and the ones it found;
+- a lift round that fails while it stages drops what it staged;
+- a child's constructor reads the clock before it is published.
+
+`Store.IdsReserved` and `Store.EpochsUsed` report the counters, capped at `Store.IdLimit` and `Store.EpochLimit`; the
+library's `EGraph.Usage` is built on them. A read of a writable child that must catch up (its parent changed, or its
+own rebuild stopped short) takes an epoch for the catch-up's passes; a frozen context's reads take none, and a query,
+which runs as a rule, always takes one.
 
 **The layered union-find.** A child's union-find is a `UnionFindOverlay`, a class table over ids that are canonical in
 its parent, with each class's member list, plus a `DisplacedJournal` of the ids that stopped being canonical in it.

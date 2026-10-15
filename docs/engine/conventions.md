@@ -91,7 +91,8 @@ layout and style rules below as well. How the engine is put together is in [`../
    each iteration draws a seed, a child or query count, a thread count and the programs, and a failure prints the seed
    and its draws. `EGGNOG_CONCURRENT_SEED=<seed>` with a soak of one second replays that seed first; a race may need
    several replays to recur. The differential soaks have their own variables (`EGGNOG_DIFF_SOAK`,
-   `EGGNOG_BRIDGE_DIFF_SOAK`, `EGGNOG_CONTEXT_SOAK`), named in each class's documentation.
+   `EGGNOG_BRIDGE_DIFF_SOAK`, `EGGNOG_CONTEXT_SOAK`), named in each class's documentation. `EGGNOG_CHURN_SOAK`, set to
+   any value, runs the 100,000-query churn soak of `ScopeChurnHeapTests`.
 
 ### Checking a change to a parallel kernel
 

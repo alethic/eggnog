@@ -16,8 +16,10 @@ namespace Eggnog
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types through the <c>Register*</c> methods. Thread-safe.
     /// </summary>
     /// <remarks>
-    /// Names are unique across sorts and value types. Interning pools are permanent: <see cref="InternedCount"/>
-    /// reports their growth, so a long-lived host can recycle a graph.
+    /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
+    /// graph: a value encodes to the same cell whichever scope interns it, and a value a child scope interned stays
+    /// after the child is disposed. <see cref="InternedCount"/> reports their growth, and <see cref="EGraph.Usage"/>
+    /// reports it beside the graph's ids and epochs, so a long-lived host can recycle a graph.
     /// </remarks>
     public sealed class ValueStore
     {
@@ -48,6 +50,13 @@ namespace Eggnog
         /// <summary>
         /// Gets the number of values interned in every pool of the graph; pools never shrink.
         /// </summary>
+        /// <remarks>
+        /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
+        /// constant that is not stored inline (strings, doubles, sets, registered values, and <c>long</c>s outside
+        /// <c>[0, 2^31)</c>); a run interns each new result of a primitive or a lattice merge, a split each new value its
+        /// cases assume, a lift each new case join; and a rule or query interns its constants when it is defined. Reads,
+        /// checks and query matches never intern.
+        /// </remarks>
         public long InternedCount => values.InternedCount;
 
         /// <summary>

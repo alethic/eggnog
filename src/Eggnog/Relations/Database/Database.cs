@@ -111,6 +111,7 @@ namespace Eggnog.Relations
 
             // The copy keeps the counter layout, so the clock it pins is the same counter; it belongs to no context.
             clockRep = source.clockRep;
+            idRep = source.idRep;
             view = new DatabaseView(this);
 
             // The container environments (declared in Containers/Database.Containers.cs): egglog's derived Clone copies

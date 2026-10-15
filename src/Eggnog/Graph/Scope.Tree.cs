@@ -84,6 +84,8 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
+        /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
         {
             if (tag is not null)
@@ -146,6 +148,8 @@ namespace Eggnog
         /// the freeze makes first; the scope is then faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) while the freeze
+        /// brought the scope up to date: the scope is neither frozen nor faulted.</exception>
         public void Freeze()
         {
             EngineCallMarker.ThrowIfActive();
@@ -225,6 +229,11 @@ namespace Eggnog
         /// of rules makes it local. Its class constants may come from this scope or its ancestors. It is freed when
         /// the scope is released.
         /// </summary>
+        /// <remarks>
+        /// Its value constants are interned when it is defined, into the graph's pools, which every scope shares: they
+        /// stay interned after the rule is freed (<see cref="ValueStore.InternedCount"/>). A host that defines rules per
+        /// request keeps the pools flat only by reusing their constants.
+        /// </remarks>
         /// <param name="ruleset">The ruleset that schedules it.</param>
         /// <param name="name">The rule's name.</param>
         /// <param name="define">Collects the rule.</param>

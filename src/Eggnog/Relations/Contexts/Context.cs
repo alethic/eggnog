@@ -209,7 +209,7 @@ namespace Eggnog.Relations
             // Set later by Freeze and by the contradiction stop.
             frozen = false;
             contradicted = false;
-            database.AttachRoot(this, store.ClockCounter);
+            database.AttachRoot(this, store.IdCounter, store.ClockCounter);
             database.RetractionGuard = store.Schema.RootGuard;
             store.Schema.RootGuard.AttachRoot(this);
         }

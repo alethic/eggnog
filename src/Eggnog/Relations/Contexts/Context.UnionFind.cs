@@ -136,11 +136,7 @@ namespace Eggnog.Relations
             if (idBlocks is { } blocks)
                 return blocks.Next();
 
-            var raw = store.Counters.Increment(store.IdCounter);
-            if ((ulong)raw > Relations.UnionFind.MaxId)
-                throw new OverflowException($"The store has run out of ids: {raw} exceeds the largest id a union-find can hold, {Relations.UnionFind.MaxId}.");
-
-            return (uint)raw;
+            return Store.CheckId(store.Counters.Increment(store.IdCounter));
         }
 
         /// <summary>

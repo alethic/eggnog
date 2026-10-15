@@ -35,6 +35,12 @@ namespace Eggnog.Relations
         int clockRep = -1;
 
         /// <summary>
+        /// The representation of the store's id counter, whose mints <see cref="IncrementCounterInView"/> bounds by
+        /// <see cref="UnionFind.MaxId"/> at the root; −1 when the database has no designated id counter.
+        /// </summary>
+        int idRep = -1;
+
+        /// <summary>
         /// The change stamp: moved by every merge that adds or removes rows and by every clear that empties a table.
         /// </summary>
         long changeStamp;
@@ -89,6 +95,7 @@ namespace Eggnog.Relations
             this.owner = owner;
             idBlocks = ids;
             clockRep = root.clockRep;
+            idRep = root.idRep;
             catalog = new TableCatalog(lazyNotifications: true) { Resolver = ResolveForStaging };
             tables = new DenseIdMap<TableId, TableInfo>();
             tables.Insert(owner.Store.UnionFindTable, new TableInfo(Store.UnionFindName, unionFind, ParallelHeuristics.Serial));
@@ -262,28 +269,40 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Attaches a store's root database to its root context and designates the store's clock.
+        /// Attaches a store's root database to its root context and designates the store's id counter and clock.
         /// </summary>
         /// <param name="root">The root context.</param>
+        /// <param name="ids">The store's id counter.</param>
         /// <param name="clock">The store's clock counter.</param>
-        internal void AttachRoot(Context root, CounterId clock)
+        internal void AttachRoot(Context root, CounterId ids, CounterId clock)
         {
             ArgumentNullException.ThrowIfNull(root);
             owner = root;
+            idRep = ids.Rep;
             clockRep = clock.Rep;
         }
 
         /// <summary>
         /// Increments <paramref name="counter"/> for a term mint seen from this database: in a child, the store's id
         /// counter is redirected to the child's id blocks, so every id the child mints is local to it; any other
-        /// counter, and every counter at the root, increments directly. One null test at the root.
+        /// counter, and every counter at the root, increments directly. At a store's root a mint from the id counter is
+        /// bounded by <see cref="UnionFind.MaxId"/>, as the blocks are, so a rule's mint past it fails at the mint rather
+        /// than when a union-find grows to the id. One null test and one compare against a constant at the root.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment, or the id minted from a block.</returns>
+        /// <exception cref="OverflowException">The counter is the store's id counter and has no id left.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal long IncrementCounterInView(CounterId counter)
         {
-            return idBlocks is { } blocks && counter == blocks.Counter ? blocks.Next() : counters.Increment(counter);
+            if (idBlocks is { } blocks && counter == blocks.Counter)
+                return blocks.Next();
+
+            var value = counters.Increment(counter);
+            if ((ulong)value > UnionFind.MaxId && counter.Rep == idRep)
+                Store.ThrowIdsExhausted(value);
+
+            return value;
         }
 
         /// <summary>

@@ -11,10 +11,11 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// An exception escaping a child's <c>RunRuleSet</c>, <c>ExecuteRuleSet</c> or flush faults the child, which then
-    /// refuses every write: a failed search may leave hides whose copies never merged, which cannot be repaired. The
-    /// writes the failed search staged, in the layers it created too, are discarded, and <c>Database.MergeAll</c> and
-    /// <c>MergeTable</c> refuse a faulted child, so nothing a failed run staged can ever merge. A recorded failure (a
-    /// panic) is not an exception and faults nothing.
+    /// refuses every write: a failed merge may leave hides whose copies never merged, which cannot be repaired, and a
+    /// failed search, which never hides, faults it as well. A search that ran out of ids is the one exception
+    /// (<c>StoreExhaustionTests</c>). The writes the failed search staged, in the layers it created too, are
+    /// discarded, and <c>Database.MergeAll</c> and <c>MergeTable</c> refuse a faulted child, so nothing a failed run
+    /// staged can ever merge. A recorded failure (a panic) is not an exception and faults nothing.
     /// </summary>
     public class FailedChildRunTests
     {
