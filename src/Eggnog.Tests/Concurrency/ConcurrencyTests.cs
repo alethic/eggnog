@@ -16,7 +16,8 @@ namespace Eggnog.Tests.Concurrency
     /// Children of a frozen scope run concurrently: queries under one frozen schema on parallel threads give the
     /// results of serial runs, queries that split included, and host reads, queries and extractors on a frozen scope
     /// run from many threads. Most tests run on dedicated threads that meet at a barrier first
-    /// (<see cref="DedicatedThreads"/>), so the calls overlap.
+    /// (<see cref="DedicatedThreads"/>), so the calls overlap. <see cref="Soak"/> runs random queries the same way over
+    /// fresh seeds, query counts and thread counts.
     /// </summary>
     public sealed class ConcurrencyTests
     {
@@ -25,6 +26,16 @@ namespace Eggnog.Tests.Concurrency
         /// The number of threads the tests run on.
         /// </summary>
         const int Threads = 8;
+
+        readonly ITestOutputHelper output;
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        public ConcurrencyTests(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
 
         /// <summary>
         /// Asks every query of the discriminated schema (<see cref="DiscriminatedSchema.Queries"/>) once, serially, and
@@ -381,6 +392,111 @@ namespace Eggnog.Tests.Concurrency
             }
 
             Assert.False(schema.Check(c.Form.Of("ref", "uuid-lower")));
+        }
+
+        /// <summary>
+        /// The soak (<see cref="ConcurrentSoak"/>, <c>EGGNOG_CONCURRENT_SOAK</c>): each seed draws 2 to 64 random WHERE
+        /// clauses over the discriminated schema (<see cref="RandomClause"/>), each asked with or without the query split, and
+        /// runs them as queries under one frozen schema on 2 to 8 dedicated threads, each query disposed as soon as it
+        /// is described. Every query must give what the same query gave when asked serially before; the schema must
+        /// be unchanged and left without children. In half the iterations the queries have two threads and their rule
+        /// sets are forced onto the parallel executor; their extractions are then compared by cost only, since ids,
+        /// and so ties between terms of equal cost, may differ between parallel runs.
+        /// </summary>
+        [Fact]
+        public void Soak()
+        {
+            ConcurrentSoak.Run(output, nameof(ConcurrencyTests), seed =>
+            {
+                var random = new Random(seed);
+                var queries = random.Next(2, 65);
+                var threads = random.Next(2, 9);
+                var parallel = random.Next(2) == 0;
+                return ($"{queries} queries on {threads} threads, parallel {parallel}", () => SoakOnce(seed, queries, threads, parallel));
+            });
+        }
+
+        /// <summary>
+        /// One iteration of <see cref="Soak"/>.
+        /// </summary>
+        /// <param name="seed">The seed of the clauses.</param>
+        /// <param name="queries">The number of queries.</param>
+        /// <param name="threads">The number of threads.</param>
+        /// <param name="parallel">Whether each query has two threads and runs its rule sets on the parallel
+        /// executor.</param>
+        static void SoakOnce(int seed, int queries, int threads, bool parallel)
+        {
+            var c = new PredicateTheory(new EGraph());
+            c.Graph.Root.Freeze();
+            var schema = DiscriminatedSchema.Compile(c);
+            var version = schema.Version;
+            var random = new Random(seed);
+            var jobs = Enumerable.Range(0, queries).Select(_ => (Clause: RandomClause(c, random, 3), Split: random.Next(2) == 0)).ToArray();
+
+            string Ask(int i)
+            {
+                var (clause, split) = jobs[i];
+                using var query = schema.CreateChild(c.Query, parallel ? new ScopeOptions { DegreeOfParallelism = 2 } : null);
+                if (parallel)
+                    query.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
+
+                var q = query.Make(clause);
+                query.Assume(c.WhereClause.Of(q));
+                var report = query.Run(split ? c.Saturation : Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
+                Assert.Empty(query.Children);
+                var best = query.Extract(q);
+                var term = parallel ? "" : best.ToString();
+                return $"{term} cost {best.Cost} stop {report.StopReason} cases {report.CasesOpened} contradictory {query.IsContradictory}{Environment.NewLine}{string.Join(Environment.NewLine, ScopeFacts.Of(query))}";
+            }
+
+            var expected = Enumerable.Range(0, queries).Select(Ask).ToArray();
+            var results = new string[queries];
+            var ran = DedicatedThreads.For(threads, queries, i => results[i] = Ask(i));
+
+            Assert.Equal(Math.Min(threads, queries), ran);
+            for (var i = 0; i < queries; i++)
+                Assert.True(expected[i] == results[i], $"query {i} ({jobs[i].Clause}, split {jobs[i].Split}) differs from its serial run:{Environment.NewLine}{expected[i]}{Environment.NewLine}---{Environment.NewLine}{results[i]}");
+
+            Assert.Equal(version, schema.Version);
+            Assert.Empty(schema.Children);
+            Assert.Equal(0, schema.Engine.Context.Context.ChildCount);
+        }
+
+        /// <summary>
+        /// A random WHERE clause over the discriminated schema (<see cref="DiscriminatedSchema"/>), at most
+        /// <paramref name="depth"/> connectives deep: conjunctions, disjunctions and negations of comparisons and tests
+        /// of its paths, some of which the schema declares (the discriminator <c>kind</c>, the forms that lower
+        /// <c>UuidEq</c> and <c>InstantGt</c>, the bounds of <c>seq</c>) and some of which it does not.
+        /// </summary>
+        /// <param name="c">The theory.</param>
+        /// <param name="random">The source of choices.</param>
+        /// <param name="depth">The most connectives above a leaf.</param>
+        /// <returns>The clause.</returns>
+        static ConstructorTerm<Pred> RandomClause(PredicateTheory c, Random random, int depth)
+        {
+            if (depth > 0 && random.Next(3) > 0)
+            {
+                return random.Next(5) switch
+                {
+                    0 or 1 => c.And.Of(RandomClause(c, random, depth - 1), RandomClause(c, random, depth - 1)),
+                    2 or 3 => c.Or.Of(RandomClause(c, random, depth - 1), RandomClause(c, random, depth - 1)),
+                    _ => c.Not.Of(RandomClause(c, random, depth - 1)),
+                };
+            }
+
+            string[] kinds = ["a", "b", "c", "d"];
+            string[] paths = ["kind", "label", "body.ref", "extra"];
+            return random.Next(9) switch
+            {
+                0 or 1 => c.StrEq.Of("kind", kinds[random.Next(kinds.Length)]),
+                2 => c.StrEq.Of("type", random.Next(2) == 0 ? "Record" : "Other"),
+                3 => c.UuidEq.Of(random.Next(2) == 0 ? "body.ref" : "body.key", random.Next(2) == 0 ? DiscriminatedSchema.Ref : DiscriminatedSchema.Key),
+                4 => c.BoolTrue.Of("flag"),
+                5 => c.InstantGt.Of("meta.updated", DiscriminatedSchema.Since),
+                6 => random.Next(2) == 0 ? c.NumGt.Of("seq", (long)random.Next(-2, 3)) : c.NumLt.Of("seq", (long)random.Next(-2, 3)),
+                7 => c.IsDefined.Of(paths[random.Next(paths.Length)]),
+                _ => c.IsString.Of(paths[random.Next(paths.Length)]),
+            };
         }
 
     }

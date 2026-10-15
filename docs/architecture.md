@@ -717,7 +717,9 @@ documentation).
 | Splits (`Differential`) | random discriminated schemas and queries | the literal encoding with splits written as rules, and a model-based split oracle |
 
 Inheritance and parallelism have their own equivalence tests: watermark inheritance on and off must give equal views
-with no more matches, and serial and parallel runs must give the same facts.
+with no more matches, and serial and parallel runs must give the same facts. Concurrent children of a frozen context
+(rule runs, storage programs, library queries) must each equal a serial replay; the default tests use fixed seeds, and
+an opt-in soak (`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child counts and thread counts.
 
 ### 5.3 Conformance programs
 
@@ -743,7 +745,7 @@ does not grow with the root. The test suite turns the counters on for itself; CI
 ### 5.6 Other suites
 
 - The public surface test fails on any change to the public API that `Surface/PublicSurface.txt` does not record.
-- Opt-in soaks and seed replays (about ten tests) are skipped unless their environment variable is set.
+- Opt-in soaks and seed replays (about a dozen tests) are skipped unless their environment variable is set.
 - `Readme/ReadmeExampleTests` runs the code examples of the READMEs verbatim.
 - A theory of predicates over document paths (presence, forms, domains, types, numeric bounds, and the simplification
   of predicates) is a shared test fixture under `Predicates/`, in two encodings. `PredicateTheory` uses scopes as the

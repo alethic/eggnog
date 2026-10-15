@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 
 using Xunit;
 
@@ -12,7 +15,8 @@ namespace Eggnog.Relations.Tests
     /// forced parallel (<see cref="Database.ParallelRuleSetsOverride"/>), so that the test need not grow a child past
     /// the threshold; and in children past the threshold run under <see cref="ConcurrentChildren"/>, whose rule sets go
     /// parallel by the heuristics inside a leased body. Each child must end equal to a serial run of its program and
-    /// pass its invariant checks.
+    /// pass its invariant checks. That a child given the force runs its rules on two threads at once is checked by
+    /// <see cref="ChildForcedParallelRuleSetTests"/>.
     /// </summary>
     public class ChildParallelRuleSetTests
     {
