@@ -68,6 +68,11 @@ namespace Eggnog.Relations
         long totalRemovals;
 
         /// <summary>
+        /// The rows of the row buffer published last; see <see cref="StagingRowsHint"/>.
+        /// </summary>
+        int lastPublishedRows;
+
+        /// <summary>
         /// <see cref="SealedFlag"/> and <see cref="LazyFlag"/>. Zero for an eager state that is not sealed, so a
         /// publication pays one volatile read and one compare for both flags together.
         /// </summary>
@@ -139,6 +144,14 @@ namespace Eggnog.Relations
         public long TotalRemovals => Interlocked.Read(ref totalRemovals);
 
         /// <summary>
+        /// Gets the number of rows the row buffer published last held: the capacity a new staging buffer of this table
+        /// grows to once it outgrows its first small array (<see cref="MutationBuffer"/>), so that a workload that
+        /// flushes buffers of a steady size grows each one once instead of doubling it up from empty. A hint: publishers race to set it, and any of their values
+        /// will do. Zero before the first publication.
+        /// </summary>
+        public int StagingRowsHint => Volatile.Read(ref lastPublishedRows);
+
+        /// <summary>
         /// Gets whether the state is sealed: its table belongs to a frozen context and accepts no staged writes.
         /// </summary>
         public bool IsSealed => (flags & SealedFlag) != 0;
@@ -179,6 +192,10 @@ namespace Eggnog.Relations
             var count = buffer.Count;
             rows[shard].Enqueue(buffer);
             Interlocked.Add(ref totalRows, count);
+
+            // Written only when it changes, so publishers of a steady size do not contend on the field.
+            if (count != lastPublishedRows)
+                Volatile.Write(ref lastPublishedRows, count);
         }
 
         /// <summary>

@@ -41,6 +41,13 @@ namespace Eggnog.Relations
     internal sealed class MutationBuffer
     {
 
+        /// <summary>
+        /// The most cells a shard's staging buffer grows to at once from <see cref="PendingState.StagingRowsHint"/>
+        /// (32 KiB of storage), so that the hint left by one large flush cannot make every later buffer that outgrows its
+        /// first array rent a large one.
+        /// </summary>
+        internal const int MaxStartCells = 8192;
+
         readonly PendingState state;
         readonly int arity;
         readonly int keyCount;
@@ -123,14 +130,18 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Creates a shard's row buffer on its first staged row: a staging buffer
-        /// (<see cref="RowBuffer.ForStaging(int)"/>), whose growth returns the storage it replaces to the pool, since
-        /// nothing reads it before the flush.
+        /// (<see cref="RowBuffer.ForStaging(int, int)"/>), whose growth returns the storage it replaces to the pool,
+        /// since nothing reads it before the flush. It starts with the small array of any buffer, and once it outgrows
+        /// that, grows at once to as many rows as the table's last published buffer held, at most
+        /// <see cref="MaxStartCells"/> cells; a buffer of a few rows never takes the larger array. egglog's staging
+        /// vectors start empty and grow (core-relations/src/table/mod.rs:237-242); growing to the hint only removes the
+        /// growth's intermediate allocations.
         /// </summary>
         /// <returns>The buffer.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
         RowBuffer NewRows()
         {
-            return RowBuffer.ForStaging(arity);
+            return RowBuffer.ForStaging(arity, Math.Min(state.StagingRowsHint, MaxStartCells / arity));
         }
 
         /// <summary>
