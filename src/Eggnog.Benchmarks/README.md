@@ -10,9 +10,11 @@ library through its public API (`Library/`, namespace `Eggnog.Benchmarks.Library
 - the root engine's hot paths (`Relations/Root/`): scans, index builds, the executor, actions and rebuilds, the
   baseline that changes to those paths are compared against (see [The root benchmark set](#the-root-benchmark-set));
 - what a colored context costs (`Relations/Contexts/`): per child as the root grows, per case of a split, per union,
-  and per structure (see [The context benchmarks](#the-context-benchmarks));
-- the library against the egglog command line, on a port of egglog's `math-microbenchmark.egg` (see
-  [The library benchmarks](#the-library-benchmarks)).
+  per structure, and per row a child catches up with under a busy parent (see
+  [The context benchmarks](#the-context-benchmarks));
+- the library against the egglog command line, on a port of egglog's `math-microbenchmark.egg`, and the library's own
+  paths: transient query scopes and idle local rules, and the library's work per run at the root. They use the public
+  API, except the engine baseline of `LibraryRunOverheadBenchmarks` (see [The library benchmarks](#the-library-benchmarks)).
 
 Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
 fails the run instead of producing a number.
@@ -401,6 +403,7 @@ fixed seed `0x5EED`, frozen except where a class says otherwise; the classes che
 | `CaseSplitMemoryBenchmarks` | The bytes one split allocates per case (a case set under a fresh scope, each case one union and one fact, optionally lifted), against a full clone of the root per case with the same writes, over roots of 20,000 and 200,000 ids. | Bytes per case flat in the root's size for contexts; clones grow linearly. |
 | `CopyVolumeBenchmarks` | How many ancestor rows a child copies for one union, as a histogram (printed by the setup) over unions of random ids on a root where a few ids are named by thousands of rows. | Most unions copy two or three rows; only a union whose loser is a heavily used id copies many. |
 | `LateParentMintBenchmarks` | A writable parent that lifts terms after its cases built them, so each lifted term's parent id loses to the cases' local ids: the parent-id losers, the rows they copy per lift round, and the growth of the root's id array. | Counters linear in cases times terms per round, independent of the root's size. |
+| `BusyParentCatchUpBenchmarks` | A writable 20,000-row root with 1, 8 or 64 live children, each with one union of its own, appends 100 or 10,000 rows to a shared table (one in ten naming a child's loser), and every child rebuilds. Only the rebuilds are measured; `Items` is the rows examined, so time over `Items` is the time per examined row. Each iteration is one invocation on a fresh root, below BenchmarkDotNet's recommended 100 ms, so read the time per row from the cases with 10,000 appended rows; the others are there for their counters. | Each child examines every appended row once (`Children × Appended` in all, checked after each iteration), and only the rows naming its own loser are copied (`Appended / 10` in all); after the children are disposed the root has no live child, and each iteration's setup checks that the previous iteration was checked. |
 
 Run them like any other class, for example `--filter *PerChildCostBenchmarks*`; the 2M-row root takes some seconds to
 build in the setup.
@@ -436,9 +439,18 @@ src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --stale-probe 12
 src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --plan-footprint
 ```
 
+The share of a split's work that goes to catch-up is counted in the tests, not here: `SplitCatchUpCountTests` (in
+`src/Eggnog.Tests/Cases/`) counts, per split step of a domain split on the test fixture `PredicateTheory` under a
+writable query scope, at 3 and 8 cases, the rows the cases examined in catch-ups against those their rule runs scanned
+and indexed. The query's totals are pinned to the recorded figures, so a change to them fails the test.
+
 ## The library benchmarks
 
-The classes in `Library/` measure the library through its public API, as an application uses it.
+The classes in `Library/` measure the library through its public API, as an application uses it; only the baseline of
+`LibraryRunOverheadBenchmarks`, with its setup and checks, calls the engine directly. They are not part of the root
+benchmark set.
+
+### math-microbenchmark.egg
 
 | Class | Program | Counterpart |
 | --- | --- | --- |
@@ -474,6 +486,29 @@ egglog's process time includes starting the process and parsing the file, and it
 search, merge and rebuild per ruleset; the C# mode's first repetition includes JIT compilation. Compare the C# mode's
 warm repetitions with egglog's search, merge and rebuild total, or the BenchmarkDotNet class with egglog's process
 time less its start-up, and say which.
+
+### Query scopes and run overhead
+
+`QueryScopeBenchmarks` and `LibraryRunOverheadBenchmarks` share a theory (`LongTables`): `T` relations `p0 … p(T−1)`
+over `long`, each holding 1,000 rows at the root (`p0` lacks the value 999), one head relation `q_i` per `p_i`, and a
+relation `idle` that no rule reads. Rule `r` of `A` body atoms reads `p_h(x)` with `h = r mod T` and `A − 1` other `p`
+tables (all `A` distinct, checked when the rule is defined), and derives `q_h(x)`; semi-naive evaluation gives it one
+variant per body atom, so the cost of an idle rule grows with `A`.
+
+| Class | What it measures | Checks |
+| --- | --- | --- |
+| `QueryScopeBenchmarks` | One query of a frozen schema scope: a child of the schema scope, one assumed fact, a saturating run, one check, disposal. The schema scope is a child of the frozen root that defines `Rules` local rules (0, 10, 100, 1,000) of `Atoms` body atoms (2, 4) over `Tables` relations (10, 30, 50), saturates and freezes. In `Idle` mode the query asserts `idle(1)`, so every rule is idle; in `Active` mode it asserts `p0(999)`, so every rule reading `p0` fires once. | The schema scope's `q` tables against the model; per query, the run's iterations (0 without rules, 1 idle, 2 active), saturation and the checked fact (`q0(999)` when active); no query scope left alive, after the setup's query and at cleanup. |
+| `LibraryRunOverheadBenchmarks` | One iteration at the root of `Rules` global rules (10, 100) of `Atoms` body atoms (2, 4), after they saturated, so every rule is idle: through `Scope.Run` (`LibraryRun`), against the same lowered variants run through the engine context's `RunRules` (`EngineRun`, the baseline). The ratio is the library's per-run overhead. | The saturated tables against the model; one run of each path that reports no change and no match; the engine path given the lowered variant of every rule; one call of each benchmark method that runs every variant (each variant's last run moves to the call's epoch); per invocation, no change, and for the library one iteration of every rule. |
+
+`Items` is the rules a query or iteration runs, so time over `Items` is the time per rule; the allocated bytes against
+`Rules` give the bytes per idle rule. Run each library class in its own process, once as built (server collector) and
+once with `DOTNET_gcServer=0`, since a service may run either collector.
+
+Whether sibling schema scopes compiled in either order run different plans is checked in the tests, not here:
+`SiblingScopePlanOrderTests` (in `src/Eggnog.Tests/Scopes/`) compiles the fixed corpus of `ScopedQueryCases.CompileAll`
+on `PredicateTheory` in both orders, with recorded plans, checks that each order plans every global rule once and
+shares that plan with every scope, and prints the plan of every global rule. Timing those
+queries here needs the fixture in this app.
 
 ## The allocation probe
 

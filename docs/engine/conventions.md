@@ -22,7 +22,9 @@ layout and style rules below as well. How the engine is put together is in [`../
 - One namespace for the engine: `Eggnog.Relations`. Tests: `Eggnog.Relations.Tests`, in the library's test project
   (`Eggnog.Tests`); benchmarks: `Eggnog.Relations.Benchmarks`, in `src/Eggnog.Benchmarks/Relations/`. The test and
   benchmark folders keep the engine's namespace rather than their project's, so engine types resolve as they do in the
-  engine and the library tests' `Relations.X` keeps naming the engine.
+  engine and the library tests' `Relations.X` keeps naming the engine. The library's own benchmarks are in
+  `src/Eggnog.Benchmarks/Library/`, namespace `Eggnog.Benchmarks.Library`, and use the public API, except the engine
+  baseline of `LibraryRunOverheadBenchmarks`.
 - **One type per file.** No nested types (including nested enumerators, comparers and private helper structs), no
   multi-type files. Partial classes across files are fine for large types.
 - The engine is compiled into the `Eggnog` assembly (see "Packaging" in [`decisions.md`](decisions.md)). Every engine
