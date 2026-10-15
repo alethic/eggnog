@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -23,15 +24,111 @@ namespace Eggnog.Relations
         /// Layers: the cover's rows are scanned layer by layer, each with the rows its layer's view hides, and a row's
         /// frame refines the cover to that row of that layer. A root's cover has one layer.
         /// </para>
+        /// <para>
+        /// A cover of one layer that hides nothing (every root cover) is scanned by egglog's loop with the plain scans,
+        /// behind one flag test and one hidden-set test per call, so the JIT inlines the scan here; other covers take
+        /// <see cref="RunFusedScanLayered"/>, kept out of line so that it does not grow this method.
+        /// </para>
         /// </remarks>
         void RunFusedScan<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
         {
             var cover = stage.Cover.Atom;
             var atom = cover.Index;
-            if (nodes[atom]!.IsEmpty)
+            var node = nodes[atom]!;
+            if (node.IsEmpty)
                 return;
 
+            var single = node.IsMultiLayer ? null : atomViews[atom]!.Layers[node.SingleLayer]!;
+            if (single is null || single.Hidden.IsNone == false)
+            {
+                RunFusedScanLayered(cur, stage, info, chunk, ref sink);
+                return;
+            }
+
+            var table = single.Table;
+            var layer = node.SingleLayer;
+            nodes[atom] = null;
+            var variables = info.BindVariables;
+            var constraints = stage.Cover.Constraints;
+            if (leafScans[cur])
+            {
+                var rows = TakeLeafBuffer(cur, variables.Length);
+                table.ScanProject(node.Rows, info.Projection, 0, int.MaxValue, constraints, rows);
+                if (ExecutorCounters.Enabled)
+                    counters!.NoteScanned(layer < depth, IsRoot(atom, node), node.Size);
+
+                if (rows.IsEmpty)
+                {
+                    nodes[atom] = node;
+                    return;
+                }
+
+                PushBindingSet(variables, rows);
+                var frame = TakeFrames(cur);
+                frame.FinishFrame();
+                if (Drain(cur, ref frame, ref sink) == false)
+                    return;
+
+                PopBindingSet();
+                nodes[atom] = node;
+                return;
+            }
+
+            var buffer = TakeScanBuffer(cur, variables.Length);
+            var updates = TakeFrames(cur);
+            var subset = node.Rows;
+            var offset = 0;
+            while (true)
+            {
+                buffer.Clear();
+                var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, buffer);
+                if (ExecutorCounters.Enabled)
+                    counters!.NoteScanned(layer < depth, IsRoot(atom, node), (next < 0 ? subset.Size : next) - offset);
+
+                var data = buffer.Data;
+                var stride = buffer.Stride;
+                for (var r = 0; r < buffer.Count; r++)
+                {
+                    var start = r * stride;
+                    var row = (int)data[start + variables.Length];
+                    updates.RefineAtomDense(cover, layer, new OffsetRange(row, row + 1));
+                    for (var k = 0; k < variables.Length; k++)
+                        updates.PushBinding(variables[k], data[start + k]);
+
+                    updates.FinishFrame();
+                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                        return;
+                }
+
+                if (next < 0)
+                    break;
+
+                offset = next;
+            }
+
+            if (Drain(cur, ref updates, ref sink) == false)
+                return;
+
+            nodes[atom] = node;
+        }
+
+        /// <summary>
+        /// <see cref="RunFusedScan"/> for a cover of several layers, or of one layer that hides rows: each layer is scanned
+        /// with the rows its view hides.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="cur">The position.</param>
+        /// <param name="stage">The stage.</param>
+        /// <param name="info">The stage's prepared projection.</param>
+        /// <param name="chunk">The number of frames to buffer before draining.</param>
+        /// <param name="sink">The sink.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void RunFusedScanLayered<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
+            where TSink : struct, IJoinSink
+        {
+            var cover = stage.Cover.Atom;
+            var atom = cover.Index;
             var view = atomViews[atom]!;
             var node = nodes[atom]!;
             nodes[atom] = null;

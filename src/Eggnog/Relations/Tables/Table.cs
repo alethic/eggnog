@@ -300,6 +300,12 @@ namespace Eggnog.Relations
         /// satisfy every constraint, and returns the position to resume from, or -1 when the subset is exhausted.
         /// egglog's <c>scan_generic_bounded</c>. Dispatches once on <see cref="Kind"/>.
         /// </summary>
+        /// <remarks>
+        /// A function table (<see cref="TableKind.SortedWrites"/>) is tested first and scanned inline; the union-find kinds
+        /// dispatch out of line (<see cref="ScanGenericBoundedUnionFind{TSink}"/>). With every arm inline, this method would
+        /// grow past what the JIT inlines into the join kernels that scan once per frame, and every scan would cost a
+        /// call.
+        /// </remarks>
         /// <typeparam name="TSink">The sink type; a struct, so the scan is specialized for it.</typeparam>
         /// <param name="subset">The rows to scan.</param>
         /// <param name="start">The first position.</param>
@@ -310,10 +316,29 @@ namespace Eggnog.Relations
         public int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (Kind == TableKind.SortedWrites)
+                return Unsafe.As<SortedWritesTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
+
+            return ScanGenericBoundedUnionFind(subset, start, count, constraints, ref sink);
+        }
+
+        /// <summary>
+        /// The union-find arms of <see cref="ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>,
+        /// out of line.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="count">The number of positions to visit.</param>
+        /// <param name="constraints">The constraints rows must satisfy.</param>
+        /// <param name="sink">Receives each row with its row id.</param>
+        /// <returns>The next position, or -1.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        int ScanGenericBoundedUnionFind<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
             switch (Kind)
             {
-                case TableKind.SortedWrites:
-                    return Unsafe.As<SortedWritesTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
                 case TableKind.Displaced:
                     return Unsafe.As<DisplacedTable>(this).ScanGenericBounded(subset, start, count, constraints, ref sink);
                 case TableKind.OverlayDisplaced:
@@ -364,7 +389,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Visits every live row of <paramref name="subset"/>. egglog's <c>scan_generic</c>. Dispatches once on
-        /// <see cref="Kind"/>.
+        /// <see cref="Kind"/>: a function table inline, the union-find kinds out of line
+        /// (<see cref="ScanGenericUnionFind{TSink}"/>), as
+        /// <see cref="ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/> does.
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan.</param>
@@ -372,11 +399,27 @@ namespace Eggnog.Relations
         public void ScanGeneric<TSink>(SubsetRef subset, ref TSink sink)
             where TSink : struct, IRowSink
         {
+            if (Kind == TableKind.SortedWrites)
+            {
+                Unsafe.As<SortedWritesTable>(this).ScanGeneric(subset, ref sink);
+                return;
+            }
+
+            ScanGenericUnionFind(subset, ref sink);
+        }
+
+        /// <summary>
+        /// The union-find arms of <see cref="ScanGeneric{TSink}(SubsetRef, ref TSink)"/>, out of line.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="subset">The rows to scan.</param>
+        /// <param name="sink">Receives each row with its row id.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void ScanGenericUnionFind<TSink>(SubsetRef subset, ref TSink sink)
+            where TSink : struct, IRowSink
+        {
             switch (Kind)
             {
-                case TableKind.SortedWrites:
-                    Unsafe.As<SortedWritesTable>(this).ScanGeneric(subset, ref sink);
-                    return;
                 case TableKind.Displaced:
                     Unsafe.As<DisplacedTable>(this).ScanGeneric(subset, ref sink);
                     return;
