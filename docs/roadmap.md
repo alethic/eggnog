@@ -92,7 +92,8 @@ Plans: [interning and value lifetime](plans/interning-and-value-lifetime.md),
 [rule-layer and split features](plans/rule-layer-split-features.md) and
 [conformance, documentation and release](plans/conformance-docs-release.md).
 
-- **Scopes managed by the GC:** a dropped child scope is released without `Dispose` ([plan](plans/scope-lifetime.md)).
+- **Scopes managed by the GC:** a dropped child scope or query is released without `Dispose`
+  ([plan](plans/scope-lifetime.md)).
 - **Values that die with a scope,** or interning scoped to a context. Interning pools are permanent per graph today;
   the workarounds are canonicalizing literals and retiring graphs.
 - **A tested user lattice over a registered struct** with a case join (for example a decimal bound with an open flag,
