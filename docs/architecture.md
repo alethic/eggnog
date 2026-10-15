@@ -212,11 +212,38 @@ cases included), `TimeLimit`, `RowLimit` (rows in the own layers of the scope an
 every split step; an iteration or a lift cannot be interrupted, so a run overshoots by at most one of them. Reaching a
 limit is not an error: the run stops soundly with fewer facts, and `RunReport.StopReason` says why.
 
+There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case
+schedule: `Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not
+terminate uses up the run's `IterationLimit`, and if it does so before the split step lifts, the scope gets nothing
+from any of the step's cases. `Repeat(n, Saturate(...))` bounds nothing, since each of its passes is a full
+saturation. The bound applies to each execution of the in-case schedule, not to the case over the run: a case runs it
+before the step's lift, again when the step deepens after the lift, and again at each later execution of the step. A
+case cut off this way stays live, its facts hold under its assumption, and the lift stays sound; a run that otherwise
+ends normally reports `Completed`. A host that must know a case was cut off finds, in the steps (`RunReport.Steps`,
+which stays empty unless `RunOptions.RecordSteps` is set, or an `Observer` that sees each step), an execution of the
+in-case schedule that ran all `n` passes in that case and still changed it in the last. A host sizes `n` from the
+passes its cases take when they do terminate, read from the same steps.
+
 `RunReport` gives the iterations, whether the run saturated and whether it changed the scope, search, merge and
 rebuild times, per-rule statistics (matches, search time, iterations with matches, and the plan when
 `EGraphOptions.RecordPlans` is set), and the split counts. With `RecordSteps` it keeps one `RunStep` per iteration,
 mirror sync, split step and lift; an `Observer` receives each step as it happens and may read the scopes of the run.
-There are no proofs or per-row explanations.
+There are no proofs or per-row explanations, and no record of which rule wrote a row. Two routes find where a fact came
+from:
+
+- **The first matching step.** Run with `RecordSteps` and `EGraphOptions.RecordPlans`, find the first step whose
+  `Rules` lists a rule that derives the fact, and read the rule (`Rule.ToString()`), the facts it reads
+  (`Scope.Rows`) and its plan (`RuleStatistics.Plan`).
+- **The observer diff.** An `Observer` snapshots `Scope.Rows` of every table in the step's scope after each step and
+  compares the snapshot with the previous one of the same scope. Each row that appeared, and each lattice value that
+  changed, is then tied to the step that made it, and the step's `Rules` are its candidate rules. Three caveats: a
+  case's first snapshot is compared with its parent's, since the case starts from the parent's facts; changes seen in
+  the split scope after a split step or a lift came from the cases and are set aside as lifted, not derived there; and
+  the candidates are every rule that matched in the step, not only those whose head writes the row's table, so the
+  list can be longer than the rules that could have written the row.
+
+Neither route says that leaving a rule out would remove the fact: a fact can come from a chain of rules, or from two
+rules at once. To decide that, run again without the rule's ruleset, on a fresh graph, and compare.
 
 ### 2.7 Host writes, reads and queries
 
