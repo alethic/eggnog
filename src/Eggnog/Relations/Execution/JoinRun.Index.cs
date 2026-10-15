@@ -33,7 +33,7 @@ namespace Eggnog.Relations
             var root = ExecutorCounters.Enabled && IsRoot(atom, node);
             if (plainViews[atom] is { } plain)
             {
-                BuildPiece(ref prober.First, node, 0, plain, node.Rows, columns, root);
+                BuildPiece(ref prober.First, node, 0, plain, node.SingleRows, columns, root);
                 return;
             }
 

@@ -10,11 +10,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The root twin of <see cref="LayeredHandBuiltPlanTests"/>' chunked cover: a probe-free Free Join cover that a later
-    /// stage scans again (the chunked, non-leaf <c>RunFusedScan</c>), run at the root, whose views are plain, over more
-    /// rows than one morsel. The planner never emits a probe-free cover before a stage reading its atom, so cached plans
-    /// built by hand reach this path. With the executor's counters on, each run also checks that a root scans only its
-    /// own rows, each once.
+    /// The root twins of <see cref="LayeredHandBuiltPlanTests"/>: a probe-free Free Join cover that a later stage scans
+    /// again (the chunked, non-leaf <c>RunFusedScan</c>) and the same cover with a probe (<c>RunFusedIntersect</c>), run
+    /// at the root, whose views are plain, over more rows than one morsel. The planner never emits a probe-free cover
+    /// before a stage reading its atom, so cached plans built by hand reach these paths. With the executor's counters
+    /// on, each run also checks that a root scans only its own rows, each once.
     /// </summary>
     public class RootHandBuiltPlanTests
     {
@@ -153,6 +153,51 @@ namespace Eggnog.Relations.Tests
             LayeredRuleUtil.Run(store.Root, r => r.AddRuleFromCachedPlan(cached));
             Assert.Equal(N * hs.Length, log.Count);
             Assert.Equal(N * hs.Length, ExecutionTestUtil.Distinct(log).Count);
+        }
+
+        /// <summary>
+        /// <c>f(x, y), g(x)</c> as a cover of <c>f</c> binding <c>x</c> and probing <c>g</c>, then a cover of <c>f</c>
+        /// binding <c>y</c>: the probed cover scans <c>f</c> in chunks and refines it to each row that <c>g</c> holds. Every
+        /// row comes out once, and each cover scans every row once.
+        /// </summary>
+        [Fact]
+        public void AChunkedCoverWithAProbeRefinesItsAtomToEachRow()
+        {
+            var (store, f, ids, rows) = Setup();
+            var g = store.AddTable(Relation(1), name: "g");
+            store.Root.Write(state =>
+            {
+                foreach (var id in ids)
+                    state.StageInsert(g, [id, state.Timestamp]);
+
+                return 0;
+            });
+
+            var db = store.Root.Database;
+            var log = new List<uint[]>();
+            var recorder = db.AddExternalFunction(ExecutionTestUtil.Recorder(log));
+            var rsb = db.NewRuleSet();
+            var q = rsb.NewRule();
+            var x = q.NewVariable("x");
+            var y = q.NewVariable("y");
+            q.AddAtom(f, [x, y, QueryEntry.Wildcard()]);
+            q.AddAtom(g, [x, QueryEntry.Wildcard()]);
+            var rb = q.Build();
+            rb.CallExternal(recorder, [x, y]);
+            var rule = rb.Build("hand-built");
+            using var rs = rsb.Build();
+            var fa = new AtomId(0);
+            var ga = new AtomId(1);
+            var probe = new Probe(new ScanSpec(new SubAtom(ga, [new ColumnId(0)]), []), [new ColumnId(0)]);
+            var cached = WithStages(rs, rule, "hand-built", [Cover(fa, 0, x, probe), Cover(fa, 1, y)]);
+
+            var counts = db.ExecutorCounts;
+            counts?.Reset();
+            var report = LayeredRuleUtil.Run(store.Root, r => r.AddRuleFromCachedPlan(cached));
+            Assert.Equal(rows.OrderBy(s => s, StringComparer.Ordinal), ExecutionTestUtil.Distinct(log));
+            Assert.Equal(N, log.Count);
+            Assert.Equal(N, report.NumMatches("hand-built"));
+            AssertOwnRowsOnly(counts, 2 * N);
         }
 
     }

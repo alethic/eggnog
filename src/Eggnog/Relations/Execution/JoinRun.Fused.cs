@@ -222,7 +222,100 @@ namespace Eggnog.Relations
         /// satisfying its constraints, discards the row. egglog's kernel (core-relations/src/free_join/execute.rs:1456-1569).
         /// The cover is scanned layer by layer, and each probe joins its hits across the probed atom's layers.
         /// </summary>
+        /// <remarks>
+        /// The cover of an atom with a plain view (<see cref="plainViews"/>, every root view) is scanned by egglog's loop
+        /// with the plain scans, behind one null test per call; other covers take <see cref="RunFusedIntersectLayered"/>,
+        /// kept out of line. Probes of one piece take egglog's path in either case (<see cref="ProbeRefine"/>).
+        /// </remarks>
         void RunFusedIntersect<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
+            where TSink : struct, IJoinSink
+        {
+            var cover = stage.Cover.Atom;
+            var atom = cover.Index;
+            var table = plainTables[atom];
+            if (table is null)
+            {
+                RunFusedIntersectLayered(cur, stage, info, chunk, ref sink);
+                return;
+            }
+
+            // A plain view's nodes lie in layer 0 and hide nothing.
+            const int layer = 0;
+            var node = nodes[atom]!;
+            var subset = node.SingleRows;
+            if (subset.IsEmpty)
+                return;
+
+            var probes = stage.ToIntersect;
+            var ps = TakeProbers(cur, probes.Length);
+            for (var j = 0; j < probes.Length; j++)
+                GetIndex(ref ps[j], probes[j].Scan.Atom.Index, probes[j].Scan.ToIndex.Columns);
+
+            nodes[atom] = null;
+            var variables = info.BindVariables;
+            var constraints = stage.Cover.Constraints;
+            var buffer = TakeScanBuffer(cur, variables.Length);
+            var updates = TakeFrames(cur);
+            var offset = 0;
+            while (true)
+            {
+                buffer.Clear();
+                var next = table.ScanProject(subset, info.Projection, offset, chunk, constraints, buffer);
+                if (ExecutorCounters.Enabled)
+                    counters!.NoteScanned(layer < depth, IsRoot(atom, node), (next < 0 ? subset.Size : next) - offset);
+
+                var data = buffer.Data;
+                var stride = buffer.Stride;
+                for (var r = 0; r < buffer.Count; r++)
+                {
+                    var start = r * stride;
+                    var row = (int)data[start + variables.Length];
+                    updates.RefineAtomDense(cover, layer, new OffsetRange(row, row + 1));
+                    for (var k = 0; k < variables.Length; k++)
+                        updates.PushBinding(variables[k], data[start + k]);
+
+                    var ok = true;
+                    for (var j = 0; j < probes.Length && ok; j++)
+                        ok = ProbeRefine(updates, ref ps[j], probes[j], data, start, cur);
+
+                    if (ok == false)
+                    {
+                        updates.Rollback(pool);
+                        continue;
+                    }
+
+                    updates.FinishFrame();
+                    if (updates.Frames >= chunk && Drain(cur, ref updates, ref sink) == false)
+                        return;
+                }
+
+                if (next < 0)
+                    break;
+
+                offset = next;
+            }
+
+            if (Drain(cur, ref updates, ref sink) == false)
+                return;
+
+            nodes[atom] = node;
+            for (var j = 0; j < probes.Length; j++)
+                MoveBack(ref ps[j], probes[j].Scan.Atom.Index);
+        }
+
+        /// <summary>
+        /// <see cref="RunFusedIntersect"/> for a cover whose view is not plain (several layers, or a layer that hides rows):
+        /// each layer of the cover's rows is scanned with the rows its view hides, and each probe joins its hits across the
+        /// probed atom's layers.
+        /// </summary>
+        /// <typeparam name="TSink">The sink type.</typeparam>
+        /// <param name="cur">The position.</param>
+        /// <param name="stage">The stage.</param>
+        /// <param name="info">The stage's prepared projection.</param>
+        /// <param name="chunk">The number of frames to buffer before draining.</param>
+        /// <param name="sink">The sink.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void RunFusedIntersectLayered<TSink>(int cur, FusedIntersectStage stage, PreparedStage info, int chunk, ref TSink sink)
             where TSink : struct, IJoinSink
         {
             var cover = stage.Cover.Atom;
