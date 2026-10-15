@@ -270,6 +270,18 @@ so the e-graph saturates and both modes do the same work up to renaming; each ru
 it (`Gj` for multi-atom rules, `MinCover` for single-atom and rebuild rules) where the test takes one strategy; and the
 fixture's tables take the mode's parallelism where the test fixture's are always serial.
 
+The app's executor-counts mode runs the `BasicMath` workload three times at each size and mode, and prints the
+executor's counters for each run's rule execution and its merge: the execution states cloned, by site, the mutation
+buffers they made, and the first allocations and the growths of their buffer maps. It also prints the bytes of one
+clone, alone and with the buffer of its first write. The counters are off unless `EGGNOG_COUNTERS` is set:
+
+```
+set EGGNOG_COUNTERS=1
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --executor-counts
+```
+
+Counts and bytes do not depend on the machine's load, so they need no idle machine.
+
 ### ConstrainedScanBenchmarks
 
 `Table.ScanGenericBounded` and `Table.RefineLive` on one `SortedWritesTable`, exercising the scan loops and the

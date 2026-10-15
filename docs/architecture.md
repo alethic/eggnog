@@ -739,8 +739,10 @@ The performance rules are tested, not only benchmarked. Allocation probes measur
 around hot operations and fail when a root run, a probe or a child operation allocates more than its budget; they run
 on their own, after the parallel tests. The executor's counters (`ExecutorCounters`, compiled in but free unless the
 process sets `EGGNOG_COUNTERS`) count the ancestor rows a child's run touches, so tests can assert that a child's cost
-does not grow with the root. The test suite turns the counters on for itself; CI also runs it once with
-`EGGNOG_COUNTERS=0`, as production runs.
+does not grow with the root. They also count the execution states cloned, by site, the mutation buffers those states
+make and the allocations and growths of their buffer maps; the benchmark app's `--executor-counts` mode prints them
+per `BasicMath` run. The test suite turns the counters on for itself; CI also runs it once with `EGGNOG_COUNTERS=0`, as
+production runs.
 
 ### 5.6 Other suites
 

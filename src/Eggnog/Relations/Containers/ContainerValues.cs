@@ -425,7 +425,7 @@ namespace Eggnog.Relations
             {
                 Parallel.For(0, list.Count, parallelism.Options, i =>
                 {
-                    var local = state.Clone();
+                    var local = state.Clone(ExecutionStateCloneSite.ContainerRebuild);
                     summaries[i] = list[i].ApplyRebuild(table, rebuilder, recent, local);
                     local.Flush();
                 });
