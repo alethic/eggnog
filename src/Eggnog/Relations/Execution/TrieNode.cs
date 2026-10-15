@@ -203,13 +203,10 @@ namespace Eggnog.Relations
         /// <param name="layer">The layer of the rows.</param>
         /// <param name="rows">The rows; owned by the node from now on.</param>
         /// <param name="isConcurrent">Whether the node may be shared by parallel tasks.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Initialize(int layer, Subset rows, bool isConcurrent)
         {
             Debug.Assert(hasCaches == false, "a pooled node kept its caches");
-            if ((uint)layer >= LayeredSubset.MaxLayers)
-                ThrowLayerOutOfRange(layer);
-
+            Debug.Assert((uint)layer < LayeredSubset.MaxLayers, "a layer lies outside the view");
             single = rows;
             this.layer = (byte)layer;
             multiLayer = false;
@@ -423,9 +420,7 @@ namespace Eggnog.Relations
         /// <param name="pool">Receives the released children, and a multi-layer node's per-layer array.</param>
         public void ResetDense(int layer, OffsetRange range, TrieNodePool pool)
         {
-            if ((uint)layer >= LayeredSubset.MaxLayers)
-                ThrowLayerOutOfRange(layer);
-
+            Debug.Assert((uint)layer < LayeredSubset.MaxLayers, "a layer lies outside the view");
             ResetCaches(pool);
             DisposeRows(pool.Layers);
             single = Subset.Dense(range);

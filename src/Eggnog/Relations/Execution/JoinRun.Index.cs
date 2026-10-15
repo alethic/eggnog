@@ -15,9 +15,10 @@ namespace Eggnog.Relations
         /// (every root node) gets one piece, built exactly as egglog builds its index.
         /// </summary>
         /// <remarks>
-        /// A single-layer node takes one flag test more than egglog's <c>get_index</c> and builds its one piece inline; the
-        /// pieces of a multi-layer node are built in <see cref="GetIndexLayered"/>. Kept out of line itself, so that the
-        /// kernels that call it once per stage stay small.
+        /// An atom with a plain view (<see cref="plainViews"/>, every root view) takes one null test more than egglog's
+        /// <c>get_index</c> and builds its one piece inline; other atoms build their pieces in
+        /// <see cref="GetIndexLayered"/>. Kept out of line itself, so that the kernels that call it once per stage stay
+        /// small.
         /// </remarks>
         /// <param name="prober">Receives the node and the pieces; its spare piece array is kept.</param>
         /// <param name="atom">The atom's index.</param>
@@ -27,10 +28,30 @@ namespace Eggnog.Relations
         {
             var node = nodes[atom]!;
             nodes[atom] = null;
-            var view = atomViews[atom]!;
             prober.Node = node;
             prober.RestCount = 0;
             var root = ExecutorCounters.Enabled && IsRoot(atom, node);
+            if (plainViews[atom] is { } plain)
+            {
+                BuildPiece(ref prober.First, node, 0, plain, node.Rows, columns, root);
+                return;
+            }
+
+            GetIndexLayered(ref prober, node, atomViews[atom]!, columns, root);
+        }
+
+        /// <summary>
+        /// <see cref="GetIndex"/> for an atom whose view is not plain: one piece per layer of <paramref name="node"/>'s rows,
+        /// the first in <see cref="Prober.First"/> and the others in the prober's spare piece array.
+        /// </summary>
+        /// <param name="prober">Receives the pieces; holds the node and no piece beyond the first.</param>
+        /// <param name="node">The atom's node.</param>
+        /// <param name="view">The atom's view.</param>
+        /// <param name="columns">The columns to index, at least one.</param>
+        /// <param name="root">Whether the node is the atom's root node, for the executor's counters.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void GetIndexLayered(ref Prober prober, TrieNode node, TableView view, ReadOnlySpan<ColumnId> columns, bool root)
+        {
             if (node.IsMultiLayer == false)
             {
                 var layer = node.SingleLayer;
@@ -38,21 +59,6 @@ namespace Eggnog.Relations
                 return;
             }
 
-            GetIndexLayered(ref prober, node, view, columns, root);
-        }
-
-        /// <summary>
-        /// The multi-layer half of <see cref="GetIndex"/>: one piece per layer of <paramref name="node"/>'s rows, the first
-        /// in <see cref="Prober.First"/> and the others in the prober's spare piece array.
-        /// </summary>
-        /// <param name="prober">Receives the pieces; holds the node and no piece beyond the first.</param>
-        /// <param name="node">The atom's node, multi-layer.</param>
-        /// <param name="view">The atom's view.</param>
-        /// <param name="columns">The columns to index, at least one.</param>
-        /// <param name="root">Whether the node is the atom's root node, for the executor's counters.</param>
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        void GetIndexLayered(ref Prober prober, TrieNode node, TableView view, ReadOnlySpan<ColumnId> columns, bool root)
-        {
             var remaining = node.LayerMask;
             var first = BitOperations.TrailingZeroCount(remaining);
             remaining &= remaining - 1;
@@ -98,7 +104,11 @@ namespace Eggnog.Relations
             if (rows.Size <= SparseColumnIndex.Capacity && columns.Length == 1)
             {
                 var sparse = RentSparse();
-                sparse.Build(table, rows, columns[0], lv.Hidden);
+                if (lv.Hidden.IsNone)
+                    sparse.Build(table, rows, columns[0]);
+                else
+                    sparse.Build(table, rows, columns[0], lv.Hidden);
+
                 piece.Kind = ProberKind.Sparse;
                 piece.Sparse = sparse;
                 if (ExecutorCounters.Enabled)

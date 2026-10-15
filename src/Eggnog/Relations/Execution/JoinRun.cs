@@ -88,6 +88,14 @@ namespace Eggnog.Relations
         PlanTemplate? template;
         int atomCount;
         TableView?[] atomViews = Array.Empty<TableView?>();
+
+        /// <summary>
+        /// Per atom, the only layer of its view when that layer is the whole view and hides nothing (every root view, see
+        /// <see cref="PlainLayer"/>), else <c>null</c>. The kernels test it once per stage: a plain atom's nodes all lie in
+        /// layer 0 and see every live row, so they take egglog's paths on the layer's table, with no loop over layers and no
+        /// visibility filter.
+        /// </summary>
+        LayerView?[] plainViews = Array.Empty<LayerView?>();
         TrieNode?[] nodes = Array.Empty<TrieNode?>();
         TrieNode?[] roots = Array.Empty<TrieNode?>();
         uint[] values = Array.Empty<uint>();
@@ -200,6 +208,7 @@ namespace Eggnog.Relations
 
                 var view = views.Require(info.Table);
                 atomViews[a] = view;
+                plainViews[a] = PlainLayer(view);
                 var root = pool.Rent(view.AllRows(pool.Layers));
                 roots[a] = root;
                 nodes[a] = root;
@@ -293,6 +302,7 @@ namespace Eggnog.Relations
                 template = template,
                 atomCount = atomCount,
                 atomViews = atomViews,
+                plainViews = plainViews,
                 nodes = (TrieNode?[])nodes.Clone(),
 
                 // Shared, never released by a task: only read to tell an atom's root rows from refined ones (counters).
@@ -354,6 +364,15 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets the only layer of <paramref name="view"/> when it hides nothing: a plain view, which every root view is
+        /// (<see cref="plainViews"/>).
+        /// </summary>
+        /// <param name="view">An atom's view.</param>
+        /// <returns>The layer, or <c>null</c> when the view has several layers or its layer hides rows.</returns>
+        static LayerView? PlainLayer(TableView view) =>
+            view.Layers.Length == 1 && view.Layers[0] is { Hidden.IsNone: true } only ? only : null;
+
+        /// <summary>
         /// Gets whether <paramref name="node"/> is the root node of atom <paramref name="atom"/>: its rows are the atom's
         /// view narrowed by headers only, not a refinement. What the executor's counters split ancestor rows by
         /// (<see cref="ExecutorCounters"/>).
@@ -399,6 +418,7 @@ namespace Eggnog.Relations
                 return;
 
             atomViews = new TableView?[count];
+            plainViews = new LayerView?[count];
             nodes = new TrieNode?[count];
             roots = new TrieNode?[count];
             timesRefined = new long[count];

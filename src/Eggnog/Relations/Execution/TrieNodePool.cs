@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -78,7 +77,17 @@ namespace Eggnog.Relations
         /// <returns>The node, with no caches.</returns>
         public TrieNode Rent(int layer, Subset rows)
         {
-            var node = Take();
+            TrieNode node;
+            if (count > 0)
+            {
+                node = free[--count];
+                free[count] = null!;
+            }
+            else
+            {
+                node = new TrieNode();
+            }
+
             node.Initialize(layer, rows, concurrent);
             return node;
         }
@@ -113,7 +122,6 @@ namespace Eggnog.Relations
         /// <summary>
         /// Takes a pooled node, or a new one when the pool is empty.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         TrieNode Take()
         {
             if (count == 0)

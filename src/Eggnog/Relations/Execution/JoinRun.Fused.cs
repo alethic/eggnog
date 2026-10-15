@@ -25,8 +25,8 @@ namespace Eggnog.Relations
         /// frame refines the cover to that row of that layer. A root's cover has one layer.
         /// </para>
         /// <para>
-        /// A cover of one layer that hides nothing (every root cover) is scanned by egglog's loop with the plain scans,
-        /// behind one flag test and one hidden-set test per call, so the JIT inlines the scan here; other covers take
+        /// The cover of an atom with a plain view (<see cref="plainViews"/>, every root view) is scanned by egglog's loop
+        /// with the plain scans, behind one null test per call, so the JIT inlines the scan here; other covers take
         /// <see cref="RunFusedScanLayered"/>, kept out of line so that it does not grow this method.
         /// </para>
         /// </remarks>
@@ -39,15 +39,16 @@ namespace Eggnog.Relations
             if (node.IsEmpty)
                 return;
 
-            var single = node.IsMultiLayer ? null : atomViews[atom]!.Layers[node.SingleLayer]!;
-            if (single is null || single.Hidden.IsNone == false)
+            var plain = plainViews[atom];
+            if (plain is null)
             {
                 RunFusedScanLayered(cur, stage, info, chunk, ref sink);
                 return;
             }
 
-            var table = single.Table;
-            var layer = node.SingleLayer;
+            // A plain view's nodes lie in layer 0 and hide nothing.
+            const int layer = 0;
+            var table = plain.Table;
             nodes[atom] = null;
             var variables = info.BindVariables;
             var constraints = stage.Cover.Constraints;
@@ -114,8 +115,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// <see cref="RunFusedScan"/> for a cover of several layers, or of one layer that hides rows: each layer is scanned
-        /// with the rows its view hides.
+        /// <see cref="RunFusedScan"/> for a cover whose view is not plain (several layers, or a layer that hides rows): each
+        /// layer of the cover's rows is scanned with the rows its view hides.
         /// </summary>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="cur">The position.</param>

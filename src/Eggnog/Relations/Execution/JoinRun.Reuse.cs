@@ -77,6 +77,7 @@ namespace Eggnog.Relations
         {
             Debug.Assert(parallel == false && template is null, "only an idle serial join is kept between runs");
             Array.Clear(atomViews);
+            Array.Clear(plainViews);
             for (var p = 0; p < leafBuffers.Length; p++)
             {
                 if (leafBuffers[p] is { } buffer && buffer.Data.Length > RetainedLeafCells)
