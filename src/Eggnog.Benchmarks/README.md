@@ -14,7 +14,8 @@ library through its public API (`Library/`, namespace `Eggnog.Benchmarks.Library
   [The context benchmarks](#the-context-benchmarks));
 - the library against the egglog command line, on a port of egglog's `math-microbenchmark.egg`, and the library's own
   paths: transient query scopes and idle local rules, and the library's work per run at the root. They use the public
-  API, except the engine baseline of `LibraryRunOverheadBenchmarks` (see [The library benchmarks](#the-library-benchmarks)).
+  API, except the engine baseline of `LibraryRunOverheadBenchmarks` (see
+  [The library benchmarks](#the-library-benchmarks)).
 
 Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
 fails the run instead of producing a number.
@@ -149,13 +150,13 @@ Both e-graphs are `new EGraph()`, which uses every logical processor, as `EGraph
 
 One invocation is one repetition of the Rust `main`'s loop body, timed from before the e-graph is created to where the
 Rust prints its total (`Total time`, `Time elapsed`): creating the e-graph, registering the base types, declaring the
-tables, building the rules, loading the seed data, the iterations, and then reading the table sizes (`math`, which prints
-them inside its timer) or the equality assertion (`ac`, inside its timer). The benchmarks print nothing, where the Rust
-prints a line per iteration. The Rust leaves dropping the e-graph out of its time ("We don't include dropping the egraph
-in the time"); here the e-graph stays referenced until `[IterationCleanup]`, and BenchmarkDotNet's forced collection
-before the next iteration collects it. One invocation per iteration (`[InvocationCount(1)]`): an invocation takes
-seconds; `math` builds about 16 million rows and allocates about 10 GB, `ac` builds about 1.6 million `add` rows and
-allocates about 15 GB.
+tables, building the rules, loading the seed data, the iterations, and then reading the table sizes (`math`, which
+prints them inside its timer) or the equality assertion (`ac`, inside its timer). The benchmarks print nothing, where
+the Rust prints a line per iteration. The Rust leaves dropping the e-graph out of its time ("We don't include dropping
+the egraph in the time"); here the e-graph stays referenced until `[IterationCleanup]`, and BenchmarkDotNet's forced
+collection before the next iteration collects it. One invocation per iteration (`[InvocationCount(1)]`): an invocation
+takes seconds; `math` builds about 16 million rows and allocates about 10 GB, `ac` builds about 1.6 million `add` rows
+and allocates about 15 GB.
 
 Each invocation checks its result, so a broken engine fails the run instead of producing a number:
 
@@ -273,22 +274,22 @@ or shaped as egglog's bridge lays out an e-graph. What they share:
 ### RuleSetRunBenchmarks
 
 Whole programs on `Database.RunRuleSet`, exercising header evaluation, the trie, the probers, the join kernels, the
-action interpreter and `MergeAll`. Both run on `MathEgraph`, a port of the test fixture `Relations/Execution/ExecutionMathEgraph.cs`
-(egglog's `basic_math_egraph`: a union-find, `num(value, id, ts)` and `add(x, y, id, ts)` merged with
-`UnionTakeNewMerge`).
+action interpreter and `MergeAll`. Both run on `MathEgraph`, a port of the test fixture
+`Relations/Execution/ExecutionMathEgraph.cs` (egglog's `basic_math_egraph`: a union-find, `num(value, id, ts)` and
+`add(x, y, id, ts)` merged with `UnionTakeNewMerge`).
 
-- `AcSaturation` is `AcSaturationWorkload`, a port of `Relations/Execution/AcSaturation.cs` (egglog's `ac_test_inner`): it builds
-  the left- and right-associated sums of `n` leaves before the measurement, then measures the whole saturation loop
-  (associativity and commutativity over the recent timestamp range, rule-based rebuilds, repeated until nothing
-  changes), building every rule set inside the measurement as the program does. The AC e-graph has
-  `3^n - 2^(n+1) + 1` `add` rows when saturated, so `Rows` picks the nearest size: 9 leaves (18,660 rows) for 20,000 and
-  11 leaves (173,052 rows) for 200,000. `Items` is the saturated row count. The check: the two sums are equal, and the
-  `add` table holds exactly the saturated rows, all canonical, in `2^n - n - 1` classes.
+- `AcSaturation` is `AcSaturationWorkload`, a port of `Relations/Execution/AcSaturation.cs` (egglog's `ac_test_inner`):
+  it builds the left- and right-associated sums of `n` leaves before the measurement, then measures the whole saturation
+  loop (associativity and commutativity over the recent timestamp range, rule-based rebuilds, repeated until nothing
+  changes), building every rule set inside the measurement as the program does. The AC e-graph has `3^n - 2^(n+1) + 1`
+  `add` rows when saturated, so `Rows` picks the nearest size: 9 leaves (18,660 rows) for 20,000 and 11 leaves (173,052
+  rows) for 200,000. `Items` is the saturated row count. The check: the two sums are equal, and the `add` table holds
+  exactly the saturated rows, all canonical, in `2^n - n - 1` classes.
 - `BasicMath` is `MathWorkload`: egglog's `basic_query` rule `Add(x, y, z), Num(a, x), Num(b, y) => Num(a + b, z)` over
-  `Rows / 2` `num` rows (the values `0 .. Rows/2 - 1`) and `Rows / 2` `add` rows over distinct random pairs of their ids.
-  The rule set is built before the measurement; one run, merge included, is measured. About half the sums collide with
-  existing values, so the merge stages unions into the union-find. `Items` is the matches. The check: the matches, the
-  live `num` rows and the union count equal the reference model's, which does not depend on merge order.
+  `Rows / 2` `num` rows (the values `0 .. Rows/2 - 1`) and `Rows / 2` `add` rows over distinct random pairs of their
+  ids. The rule set is built before the measurement; one run, merge included, is measured. About half the sums collide
+  with existing values, so the merge stages unions into the union-find. `Items` is the matches. The check: the matches,
+  the live `num` rows and the union count equal the reference model's, which does not depend on merge order.
 
 Differences from the test programs: commutativity matches the whole recent range (the test's `wholeRecentRange: true`)
 so the e-graph saturates and both modes do the same work up to renaming; each rule is planned as egglog's bridge plans
@@ -342,9 +343,9 @@ their `y` cells with the reference model.
 A refresh changes its index, so each invocation refreshes a batch of 16 fresh indexes made before it, and
 BenchmarkDotNet reports the time of one refresh (`OperationsPerInvoke`). `Items` is the rows one refresh indexes. After
 each iteration every refreshed index (`IndexContentChecker`) must be at the table's version, have the expected number of
-distinct keys, and list as many rows as the table holds; every listed row must be live with key cells equal to the key it
-is listed under; and the order-independent checksum of the listed (row, key) entries must equal the table's, so an index
-that lists a wrong row under the right key fails too.
+distinct keys, and list as many rows as the table holds; every listed row must be live with key cells equal to the key
+it is listed under; and the order-independent checksum of the listed (row, key) entries must equal the table's, so an
+index that lists a wrong row under the right key fails too.
 
 ### DisplacedRebuildBenchmarks
 
@@ -353,10 +354,10 @@ loop, `Database.Rebuild`, over the function tables until congruence closes (`App
 rebuild index where the delta is small, full scans elsewhere, and the congruence merges they cause). The e-graph
 (`TermGraph`) is laid out as egglog's bridge lays one out: `pair(id, id) -> id` and `wrap(id) -> id` merged with
 `UnionIdMerge`, and the lattice `low(id) -> value` merged by minimum, each sorted by its timestamp. `TermGraphWorkload`
-generates `Rows` rows (three fifths nested `pair` terms, a fifth `wrap` terms, a fifth `low` values, over a fifth as many
-leaves) and `Rows / 50` unions of leaves. `Items` is the unions. After each iteration the e-graph is checked against a
-naive congruence closure of the same input: every id's canonical id, the union-find's size, every table's live rows
-(all canonical) and `low`'s minimum per class.
+generates `Rows` rows (three fifths nested `pair` terms, a fifth `wrap` terms, a fifth `low` values, over a fifth as
+many leaves) and `Rows / 50` unions of leaves. `Items` is the unions. After each iteration the e-graph is checked
+against a naive congruence closure of the same input: every id's canonical id, the union-find's size, every table's live
+rows (all canonical) and `low`'s minimum per class.
 
 ### ActionLookupBenchmarks
 
@@ -382,9 +383,9 @@ The rule set is built before the measurement; the run, merge included, is measur
 join's matches). After each iteration the run is checked against the reference model, which does not depend on the order
 lanes, batches or merges run in: the reported matches (the lanes that survive the `Lookup`) and every table's live row
 count; the loaded `leaf` and `weight` rows unchanged; every new leaf holding a fresh id that the union-find keeps
-canonical; one `combine` row per merged `best` key, whose second key is in the class of the driver's `leaf(b)`; and every
-`best(a)` holding the output of its merge's `combine` row (or still `a` where no merge changes it). So an engine that
-drops or misstores a merge function's output fails the run.
+canonical; one `combine` row per merged `best` key, whose second key is in the class of the driver's `leaf(b)`; and
+every `best(a)` holding the output of its merge's `combine` row (or still `a` where no merge changes it). So an engine
+that drops or misstores a merge function's output fails the run.
 
 ## The context benchmarks
 
@@ -392,7 +393,8 @@ The classes in `Relations/Contexts/` measure what a colored context costs. They 
 baseline to stay within, but a shape to keep: a child must cost in proportion to what it touches, never to the size
 of its ancestors. The root workload (`RootWorkload`: `f(x) → v` and `r(x, x+1)` for every id, so a child's work over
 a fixed set of ids touches a fixed number of root rows; or `CaseGraph` for the bridge workloads) is built from the
-fixed seed `0x5EED`, frozen except where a class says otherwise; the classes check their results in the setup or in every invocation.
+fixed seed `0x5EED`, frozen except where a class says otherwise; the classes check their results in the setup or in
+every invocation.
 
 | Class | What it measures | The shape to keep |
 | --- | --- | --- |
@@ -465,8 +467,8 @@ and 8 is every logical processor of the four-core, eight-thread campaign machine
 
 Each invocation checks its result: eleven passes without saturating, and every table at the size egglog's
 `(print-size)` prints: `Add` 641,743, `Const` 5, `Cos` 1, `Diff` 13,504, `Div` 3, `Integral` 32,434, `Ln` 1, `Mul`
-345,075, `Pow` 2, `Sin` 1, `Sqrt` 1, `Sub` 15,123, `Var` 3. These are the sizes `egglog -j 1` and `egglog -j 8` print for
-the file at the commit in `ext/egglog`, built with `cargo +1.91.0 build --release --bin egglog`.
+345,075, `Pow` 2, `Sin` 1, `Sqrt` 1, `Sub` 15,123, `Var` 3. These are the sizes `egglog -j 1` and `egglog -j 8` print
+for the file at the commit in `ext/egglog`, built with `cargo +1.91.0 build --release --bin egglog`.
 
 The app also runs the program the way the egglog command line runs the file, printing the sizes as `(print-size)`
 does, the passes, and `Total time: {:?}`, timed from before the graph's creation to after the sizes are read:
@@ -606,6 +608,12 @@ The released build checks out by its tag (`git checkout 1.0.0`) and builds `src/
   launches of every class in one slot can share the directory.
 - **Launch matrix.** The root and bridge classes run on net10.0 under the server collector, as the baselines were built.
   The library classes run four ways: the net10.0 and net8.0 executables, each with and without `DOTNET_gcServer=0`.
+- **An A/A control.** Before any candidate is gated, `main` runs against itself on `RuleSetRunBenchmarks` and the warm
+  `math` example, for the spread of each configuration. No threshold is applied below twice that spread: a row whose
+  threshold is not above it is reported as unresolved, within the four-round limit of the rules below.
+- **An alignment control.** Every candidate that passes is run once more from a second build with an unrelated change.
+  An effect that the rebuild alone reproduces or erases is reported as code alignment, not as a gain.
+- **Profiles.** ETW kernel sampling, which needs administrator rights, not EventPipe.
 
 In PowerShell, from the repository root, one round per pass of the outer loop:
 
@@ -703,11 +711,12 @@ A baseline has no such parameter, so the same filter selects nothing there: give
 
 ### The order and length of a campaign
 
-The first idle night measures what has no other source; the second, the candidates and the newer benchmarks, in
-order of what their results unblock. The lengths are estimates from the case counts and the dry runs, scaled to
-BenchmarkDotNet's default job (about 25 iterations for a case of one invocation per iteration, about 15 s for a case
-that chooses its own invocation count) and checked against earlier default-job runs of the writes and union-find
-classes. The dry runs were made on a busy machine, so the lengths are rough.
+The campaign has two quiet nights, which the owner schedules. The first measures what has no other source; the second,
+the A/A control, one candidate and the newer benchmarks, in order of what their results unblock. The lengths are
+estimates from the case counts and the dry runs, scaled to BenchmarkDotNet's default job (about 25 iterations for a case
+of one invocation per iteration, about 15 s for a case that chooses its own invocation count) and checked against
+earlier default-job runs of the writes and union-find classes. The dry runs were made on a busy machine, so the lengths
+are rough.
 
 | Night | Step | Comparison | Estimate |
 | --- | --- | --- | --- |
@@ -716,10 +725,36 @@ classes. The dry runs were made on a busy machine, so the lengths are rough.
 | 1 | 3 | The example mode against the Rust examples, five pairs each, at every processor and at one thread (`--threads 1` against `RAYON_NUM_THREADS=1`); the library's `math-microbenchmark.egg` against `egglog -j 1`. | 0.5-0.8 h |
 | 2 | 1 | An A/A control: `main` against itself on `RuleSetRunBenchmarks` and the warm `math` example, for the spread of each configuration. | 0.5-1 h |
 | 2 | 2 | Each root-path candidate against `main` on the root set, as in step 1 of night 1. | 2.5-3 h each |
-| 2 | 3 | The context classes (`ContextExtractionBenchmarks`, `PerChildCostBenchmarks`, `CaseSplitMemoryBenchmarks`, `ManyChildrenBenchmarks`, `ChildFindBenchmarks`), whose ratios are within one build: about 10 minutes a launch. | 0.5 h |
+| 2 | 3 | The context classes (`ContextExtractionBenchmarks`, `PerChildCostBenchmarks`, `CaseSplitMemoryBenchmarks`, `ManyChildrenBenchmarks`, `ChildFindBenchmarks`), whose ratios are within one build, and `BusyParentCatchUpBenchmarks`, for its time per examined row: about 10 minutes a launch. | 0.5 h |
 | 2 | 4 | The library classes on the launch matrix: four launches a class. | 0.5-1 h |
 | 2 | 5 | `WritesBenchmarks --iterationCount 25` with both shard counts, against `cargo bench --bench writes`, two rounds. | 1-1.5 h |
-| 2 | 6 | ETW profiles. | 0.5 h |
+| 2 | 6 | ETW profiles of `BasicMath`, `math` and a query child, as listed under "What the campaign times". | 0.5 h |
 
-Night 1 is about 4.5-5.5 hours. Night 2 is about 5.5-7.5 hours with one candidate. A longer experiment, such as a
-three-build comparison of a ported branch over four rounds, or work left inconclusive, takes a third night.
+Night 1 is about 4.5-5.5 hours. Night 2 is about 5.5-7.5 hours with one candidate, so it holds one of the three
+campaign branches. The other two, among them the three-build comparison of `campaign/basicmath-port`, the per-plan
+profiles for kernel specialization, which wait until the staging-buffer share is settled, and any work left
+inconclusive move to a later window, which the owner schedules too.
+
+### What the campaign times
+
+The gate each result decides is in the [roadmap](../../docs/roadmap.md).
+
+- The root set against `3a6e0b7`, the baseline from before colored contexts. After the campaign the new baseline is
+  `main`, exported and kept, and named in [The root benchmark set](#the-root-benchmark-set).
+- `BridgeMathBenchmarks` and `BridgeAcBenchmarks` at `673495d`, `2fd4a18` and `main`; the bridge examples against the
+  Rust's, five pairs each, at every processor and at one thread; `math-microbenchmark.egg` against `egglog -j 1`; and
+  `WritesBenchmarks` with both shard counts against `cargo bench --bench writes`.
+- The three campaign branches against `main` on the root set: `campaign/idle-rule-fix`; `campaign/basicmath-port`, as
+  a three-build run with `3a6e0b7`, which also times `BridgeMathBenchmarks`, `BridgeAcBenchmarks`,
+  `ManyChildrenBenchmarks`, `PerChildCostBenchmarks` and the transient children of `QueryScopeBenchmarks`, because every
+  multi-layer child atom takes the port's layered paths; and `campaign/write-alloc`, under both collectors. Each is
+  rebased onto `main` and its full suite rerun on both frameworks before it lands.
+- The context classes and `BusyParentCatchUpBenchmarks`, for the time per child and per examined row.
+- The library classes (`QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks`, `MathMicrobenchmarkBenchmarks`) on the
+  launch matrix.
+- ETW profiles of `BasicMath` at 200,000 rows on `3a6e0b7` and `main`, of `math`, and of a query child at 1,000 idle
+  local rules.
+- For kernel specialization, once the staging-buffer share is settled, warm per-plan ETW profiles, each giving every
+  plan's share of run time: the bridge `math` and `ac`, `RuleSetRunBenchmarks.AcSaturation` and `BasicMath` at 200,000
+  rows, `ActionLookupBenchmarks`, a library program heavy in integer primitives, and a loop of `PredicateTheory` query
+  children under a frozen scope.

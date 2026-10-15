@@ -144,6 +144,10 @@ There are three kinds of table, each typed by up to four key columns (`TableHand
 | Function | `DefineFunction<T1, ..., TOut>(name, lattice)` | one output per key (a functional dependency) | a function with a value output; merge: the lattice's, or assert equal without one |
 | Constructor | `DefineConstructor<T1, ..., TSort>(name, cost)` | terms: one class per key | a function whose output is a class; default: a fresh id; merge: union the classes |
 
+A key of more than four columns is written as one column of a registered value type (`ValueStore.Register<T>`, a struct
+of the key's fields), each distinct value of which is interned for the graph's life, or the table is split in two,
+joined on a value key.
+
 A function with a lattice (`ValueLattice<T>`) merges two outputs for one key with the lattice's `Merge`, which must be
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
 over `ValueSet<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
@@ -301,8 +305,8 @@ root                      empty and frozen, or a shared theory
 
 - **Freeze.** `Freeze()` makes a scope read-only for good. Its parent must be frozen (the root has none). Freezing
   rebuilds the scope and, below the root, plans the rules its descendants can run on its statistics and builds the
-  indexes those plans probe. Reads, queries and extractors of a frozen scope are thread-safe, and each child of a frozen scope is
-  independent of its siblings, so a frozen scope is a base that many threads can query and extend at once.
+  indexes those plans probe. Reads, queries and extractors of a frozen scope are thread-safe, and each child of a frozen
+  scope is independent of its siblings, so a frozen scope is a base that many threads can query and extend at once.
 - **Freeze before creating children.** A table keeps the rows that later writes replaced until it compacts, which it
   does when they outnumber the rows still current and number more than 16, and when its scope freezes. Compaction
   renumbers rows, and live descendants hold the numbers of the rows they have seen, so the tables of a scope with live
@@ -356,6 +360,10 @@ they have no model.
   where every case agrees). Tables with `Lift = false` are left out. A lift runs in rounds until a round writes
   nothing, because a term lifted in one round can make the next round's facts expressible over the parent's classes.
   If every case is contradictory, the lift writes the contradiction into the parent.
+- **Guarded terms by hand.** A lift writes only what holds in every case, so it builds no term that differs by case. A
+  host that needs one for a few if-then-else guards lifts it by hand: it opens a child per distinct condition and
+  assumes the condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in
+  the parent inside the theory's if-then-else constructor and `Union`s it with the original term.
 - **Contradicted cases.** A case whose rules derive `Contradiction` stops: it answers `IsContradictory` and identity
   members, `Run` returns at once with `StopReason = Contradiction`, and other reads and writes throw
   `ScopeContradictedException`. Scopes beneath a stopped case answer as it does.
@@ -399,9 +407,9 @@ Extractors over a frozen scope may run concurrently, one per thread.
   another thread; whichever thread removes the last obstacle releases it. Disposing the root does nothing. So a frozen
   schema can be retired while queries beneath it finish.
 - A `RuleEvaluationException` from a run or a write faults the scope: `Failure` keeps the exception, and every later
-  call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the graph
-  unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's writes
-  fault the scope too.
+  call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the
+  graph unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's
+  writes fault the scope too.
 - Refusals made before anything changes (`ArgumentException`, `FactConflictException`, a definition error) do not
   fault.
 - A disposed scope gives back its own state, but not what it drew from the graph:
@@ -445,7 +453,9 @@ departs from egglog on purpose:
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
 5. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-6. No proofs or explanations, and no rule callbacks.
+6. No proofs or explanations, and no rule callbacks. Host code that must react to matches runs a host loop instead: it
+   runs a schedule, reads the matches with a query's `ForEachMatch`, writes through `Scope.Write`, and repeats until the
+   scope's `Version` stops changing. Queries match naively, so each pass matches in full.
 7. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
 ---

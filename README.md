@@ -10,8 +10,9 @@ Equality saturation for .NET, with egglog's capabilities and a typed C# API.
 An e-graph stores many equivalent terms at once: each class holds terms proven equal, and a term's arguments are
 classes, so a few thousand nodes can represent exponentially many equivalent programs. Equality saturation applies
 rewrite rules to an e-graph until no rule adds anything new, and then extracts the cheapest term of the class you
-started from, so the order in which rules fire never loses a better answer. [egglog](https://github.com/egraphs-good/egglog)
-combines this with Datalog: rules match facts and terms together, and functions merge their values with lattices.
+started from, so the order in which rules fire never loses a better answer.
+[egglog](https://github.com/egraphs-good/egglog) combines this with Datalog: rules match facts and terms together, and
+functions merge their values with lattices.
 
 Use it where a program must find the best of many equivalent forms: rewriting and optimizing expressions or queries,
 simplifying symbolic math, or deriving facts by rules (Datalog) with equality built in.
@@ -148,7 +149,6 @@ Every example in this README is compiled and run by the test suite
 - [Architecture](docs/architecture.md): the library's model, the engine, threading and lifetimes, and how Eggnog is
   tested.
 - [Roadmap](docs/roadmap.md): what is open or planned.
-- [Plans](docs/plans/README.md): each open item planned, with an evaluation of whether it is worth doing.
 - The XML documentation of the public types, which your editor shows.
 - [Design history](docs/history/README.md): the specifications and reports the code was built from.
 
@@ -172,8 +172,8 @@ comparisons build.
 
 Eggnog's engine is a reimplementation of [egglog](https://github.com/egraphs-good/egglog) by the egraphs-good
 community, and its design follows egglog's closely. egglog itself grew out of
-[egg](https://github.com/egraphs-good/egg), the same community's Rust library for e-graphs and equality saturation. The notices
-of the work Eggnog derives from are in [NOTICE](NOTICE).
+[egg](https://github.com/egraphs-good/egg), the same community's Rust library for e-graphs and equality saturation. The
+notices of the work Eggnog derives from are in [NOTICE](NOTICE).
 
 ## License
 
