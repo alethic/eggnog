@@ -104,11 +104,7 @@ namespace Eggnog.Relations
             if (rows.Size <= SparseColumnIndex.Capacity && columns.Length == 1)
             {
                 var sparse = RentSparse();
-                if (lv.Hidden.IsNone)
-                    sparse.Build(table, rows, columns[0]);
-                else
-                    sparse.Build(table, rows, columns[0], lv.Hidden);
-
+                sparse.Build(table, rows, columns[0], lv.Hidden);
                 piece.Kind = ProberKind.Sparse;
                 piece.Sparse = sparse;
                 if (ExecutorCounters.Enabled)

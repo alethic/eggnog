@@ -48,15 +48,7 @@ namespace Eggnog.Relations
         /// <param name="table">The table.</param>
         /// <param name="subset">The rows; at most <see cref="Capacity"/>.</param>
         /// <param name="column">The column.</param>
-        public void Build(Table table, SubsetRef subset, ColumnId column)
-        {
-            if (subset.Size > Capacity)
-                throw new ArgumentException($"A sparse column index holds at most {Capacity} rows.", nameof(subset));
-
-            var sink = new SparseColumnSink(pairs);
-            table.ForEachColumn(subset, column, ref sink);
-            Group(sink.Count);
-        }
+        public void Build(Table table, SubsetRef subset, ColumnId column) => Build(table, subset, column, HiddenRows.None);
 
         /// <summary>
         /// Groups the rows of <paramref name="subset"/> a view sees (live and not in <paramref name="hidden"/>) by
@@ -64,34 +56,29 @@ namespace Eggnog.Relations
         /// run's small probed pieces, whose probe results need no further visibility refinement. With
         /// <see cref="HiddenRows.None"/> it is the plain build.
         /// </summary>
+        /// <remarks>
+        /// One body for both builds, with the grouping written out after the scan as in egglog's <c>SparseColumnIndex::new</c>.
+        /// The join builds one of these per small refined node, so this method is hot. Kept whole, its loops get it profiled
+        /// by the tiered JIT; on net10.0 the JIT then inlines the plain column scan here, while on net8.0 the scan stays a
+        /// call. A body reduced to calls is compiled without a profile and keeps the scan out of line on both.
+        /// </remarks>
         /// <param name="table">The table: one layer of a view.</param>
         /// <param name="subset">The rows; at most <see cref="Capacity"/>.</param>
         /// <param name="column">The column.</param>
         /// <param name="hidden">The rows of the layer the view hides; sealed.</param>
         public void Build(Table table, SubsetRef subset, ColumnId column, HiddenRows hidden)
         {
-            if (hidden.IsNone)
-            {
-                Build(table, subset, column);
-                return;
-            }
-
             if (subset.Size > Capacity)
                 throw new ArgumentException($"A sparse column index holds at most {Capacity} rows.", nameof(subset));
 
             var sink = new SparseColumnSink(pairs);
-            table.ForEachColumn(subset, column, hidden, ref sink);
-            Group(sink.Count);
-        }
+            if (hidden.IsNone)
+                table.ForEachColumn(subset, column, ref sink);
+            else
+                table.ForEachColumn(subset, column, hidden, ref sink);
 
-        /// <summary>
-        /// Sorts the first <paramref name="n"/> collected pairs by (value, row) and lays out the distinct values, their
-        /// run starts and the rows: the body of egglog's <c>SparseColumnIndex::new</c> after the scan.
-        /// </summary>
-        /// <param name="n">The number of pairs collected; at most <see cref="Capacity"/>.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void Group(int n)
-        {
+            var n = sink.Count;
+
             // Insertion sort: at most eight words, already sorted by row.
             for (var i = 1; i < n; i++)
             {
