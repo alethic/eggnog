@@ -229,34 +229,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the rows whose sort value is at least <paramref name="value"/>, as one dense range: the fast subset of
-        /// <c>GeConst</c> on the sort column, without allocating, for compiled plans (seminaive "new" atoms). May include
-        /// tombstones. O(log runs).
-        /// </summary>
-        /// <param name="value">The smallest sort value wanted.</param>
-        /// <returns>The range.</returns>
-        public SubsetRef SortAtLeast(uint value)
-        {
-            RequireSorted();
-            BinarySearchSortValue(value, out var start, out _);
-            return SubsetRef.Dense(new OffsetRange(start, data.Count));
-        }
-
-        /// <summary>
-        /// Gets the rows whose sort value is below <paramref name="value"/>, as one dense range: the fast subset of
-        /// <c>LtConst</c> on the sort column, for compiled plans (seminaive "old" atoms). May include tombstones.
-        /// O(log runs).
-        /// </summary>
-        /// <param name="value">The smallest sort value not wanted.</param>
-        /// <returns>The range.</returns>
-        public SubsetRef SortBelow(uint value)
-        {
-            RequireSorted();
-            BinarySearchSortValue(value, out var start, out _);
-            return SubsetRef.Dense(new OffsetRange(0, start));
-        }
-
-        /// <summary>
         /// Finds the run of rows whose sort value is <paramref name="value"/>: egglog's <c>binary_search_sort_val</c>
         /// (core-relations/src/table/mod.rs:976-1002). O(log runs).
         /// </summary>
@@ -371,12 +343,6 @@ namespace Eggnog.Relations
                 return;
 
             sink.AddRow(row, values);
-        }
-
-        void RequireSorted()
-        {
-            if (sortColumn < 0)
-                throw new InvalidOperationException("The table has no sort column.");
         }
 
         [Conditional("DEBUG")]

@@ -291,8 +291,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Appends one match from a dense value array: the array form of
-        /// <see cref="Push(ReadOnlySpan{uint}, ReadOnlySpan{Variable}, ReadOnlySpan{Variable})"/> for compiled plans, which
-        /// cannot pass spans.
+        /// <see cref="Push(ReadOnlySpan{uint}, ReadOnlySpan{Variable}, ReadOnlySpan{Variable})"/>, for a caller that
+        /// holds the join's bindings and variable lists as arrays (<see cref="ActionBuffer.Push"/>, once per match).
         /// </summary>
         /// <param name="values">The join's current bindings, indexed by variable.</param>
         /// <param name="boundVariables">The variables the join has bound.</param>

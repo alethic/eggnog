@@ -153,7 +153,7 @@ namespace Eggnog.Relations
             var p = Predicted;
             var probe = p.GetProbeBuffer(key.Length);
             key.CopyTo(probe);
-            var offset = PredictCore(p, spec.KeyCount, spec.Arity, table, probe, 0, key.Length, values);
+            var offset = PredictCore(p, spec.KeyCount, spec.Arity, table, probe, key.Length, values);
             p.Cells.AsSpan(offset, spec.Arity).CopyTo(row);
         }
 
@@ -169,19 +169,7 @@ namespace Eggnog.Relations
             var p = Predicted;
             var probe = p.GetProbeBuffer(key.Length);
             key.CopyTo(probe);
-            return PredictedColumn(p, spec.KeyCount, spec.Arity, table, probe, 0, key.Length, values, column);
-        }
-
-        /// <summary>
-        /// The array form of <see cref="PredictColumn(TableId, uint[], int, int, MergeVal[], ColumnId)"/> in a child.
-        /// </summary>
-        uint PredictColumnLayered(ContextTables layers, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
-        {
-            var spec = layers.Schema.GetSpec(table);
-            if (TryGetVisibleColumn(layers, table, new ReadOnlySpan<uint>(key, keyOffset, keyLength), column, out var visible))
-                return visible;
-
-            return PredictedColumn(Predicted, spec.KeyCount, spec.Arity, table, key, keyOffset, keyLength, values, column);
+            return PredictedColumn(p, spec.KeyCount, spec.Arity, table, probe, key.Length, values, column);
         }
 
         /// <summary>

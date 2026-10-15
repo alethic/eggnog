@@ -104,12 +104,12 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void WritesSlicesFromArrays()
+        public void WritesCellSlices()
         {
             // egglog's parallel_vec_writer_writes_cell_slices: write_cell_slice is WriteSlice here.
             var v = new ParallelVecWriter<uint>([1u]);
             var source = new uint[] { 0, 2, 3, 0 };
-            Assert.Equal(1, v.WriteSlice(source, 1, 2));
+            Assert.Equal(1, v.WriteSlice(source.AsSpan(1, 2)));
             var result = v.Finish(out var count);
             Assert.Equal(new uint[] { 1, 2, 3 }, result[..count]);
         }
@@ -173,8 +173,6 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => v.WithIndex(2, x => x));
             Assert.Throws<ArgumentOutOfRangeException>(() => v.WithIndex(-1, x => x));
             Assert.Throws<ArgumentOutOfRangeException>(() => v.WithSlice(1..3, x => x.Length));
-            Assert.Throws<ArgumentNullException>(() => v.WriteSlice(null!, 0, 0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => v.WriteSlice(new int[2], 1, 2));
             var enumerator = new List<int>().GetEnumerator();
             Assert.Throws<ArgumentOutOfRangeException>(() => v.WriteContents(ref enumerator, -1));
             using (var access = v.ReadAccess())

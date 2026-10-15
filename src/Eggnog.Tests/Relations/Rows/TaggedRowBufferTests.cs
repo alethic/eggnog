@@ -202,7 +202,6 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => rows.GetRow(0));
             Assert.Throws<ArgumentOutOfRangeException>(() => rows.GetRowId(0));
             Assert.Throws<ArgumentOutOfRangeException>(() => rows.SetStale(0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => rows.AddRow(1, Row(1, 2), 1));
         }
 
         [Fact]
@@ -249,18 +248,6 @@ namespace Eggnog.Relations.Tests
 
             rows.AddRow(0, Row(1));
             Assert.Equal(PooledArray.MinGrowLength, rows.Data.Length);
-        }
-
-        [Fact]
-        public void ArrayOverloadCopiesAWholeRow()
-        {
-            var rows = new TaggedRowBuffer(2);
-            var source = Row(5, 6, 7);
-
-            rows.AddRow(1, source, 1);
-
-            Assert.Equal(Row(6, 7), rows.GetRow(0).ToArray());
-            Assert.Equal(1, rows.GetRowId(0));
         }
 
         [Fact]

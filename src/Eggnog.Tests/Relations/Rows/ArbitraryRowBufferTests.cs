@@ -31,7 +31,7 @@ namespace Eggnog.Relations.Tests
             Assert.Null(buffer.Buffer);
 
             buffer.AddRow(ReadOnlySpan<uint>.Empty);
-            buffer.AddRow(Array.Empty<uint>(), 0);
+            buffer.AddRow(Array.Empty<uint>());
             buffer.AddRow(ReadOnlySpan<uint>.Empty);
 
             Assert.Equal(3, buffer.Count);
@@ -54,14 +54,13 @@ namespace Eggnog.Relations.Tests
         {
             var buffer = new ArbitraryRowBuffer(2);
             buffer.AddRow(Row(1, 2));
-            buffer.AddRow(Row(9, 3, 4), 1);
+            buffer.AddRow(Row(9, 3, 4).AsSpan(1));
 
             Assert.Equal(2, buffer.Arity);
             Assert.Equal(2, buffer.Count);
             Assert.NotNull(buffer.Buffer);
             Assert.Equal(new List<uint[]> { Row(1, 2), Row(3, 4) }, Rows(buffer));
             Assert.Throws<ArgumentException>(() => buffer.AddRow(Row(1)));
-            Assert.Throws<ArgumentOutOfRangeException>(() => buffer.AddRow(Row(1, 2), 1));
         }
 
         [Fact]

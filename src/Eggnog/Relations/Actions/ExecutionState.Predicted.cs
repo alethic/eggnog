@@ -68,7 +68,7 @@ namespace Eggnog.Relations
             var p = Predicted;
             var probe = p.GetProbeBuffer(key.Length);
             key.CopyTo(probe);
-            var offset = PredictCore(p, t, table, probe, 0, key.Length, values);
+            var offset = PredictCore(p, t, table, probe, key.Length, values);
             p.Cells.AsSpan(offset, t.Arity).CopyTo(row);
         }
 
@@ -112,63 +112,37 @@ namespace Eggnog.Relations
             var p = Predicted;
             var probe = p.GetProbeBuffer(key.Length);
             key.CopyTo(probe);
-            return PredictedColumn(p, t, table, probe, 0, key.Length, values, column);
-        }
-
-        /// <summary>
-        /// Gets column <paramref name="column"/> of the current or predicted row for the key
-        /// <paramref name="key"/>[<paramref name="keyOffset"/>..+<paramref name="keyLength"/>]: the array form of
-        /// <see cref="PredictColumn(TableId, ReadOnlySpan{uint}, ReadOnlySpan{MergeVal}, ColumnId)"/> for compiled plans.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <param name="key">The array holding the key.</param>
-        /// <param name="keyOffset">The index of the key's first cell.</param>
-        /// <param name="keyLength">The number of key cells.</param>
-        /// <param name="values">The value columns of a new row.</param>
-        /// <param name="column">The column.</param>
-        /// <returns>The value.</returns>
-        public uint PredictColumn(TableId table, uint[] key, int keyOffset, int keyLength, MergeVal[] values, ColumnId column)
-        {
-            ArgumentNullException.ThrowIfNull(key);
-            ArgumentNullException.ThrowIfNull(values);
-            if (layers is { } l)
-                return PredictColumnLayered(l, table, key, keyOffset, keyLength, values, column);
-
-            var t = ReadRootTable(table);
-            if (t.TryGetRowColumn(new ReadOnlySpan<uint>(key, keyOffset, keyLength), column, out var value))
-                return value;
-
-            return PredictedColumn(Predicted, t, table, key, keyOffset, keyLength, values, column);
+            return PredictedColumn(p, t, table, probe, key.Length, values, column);
         }
 
         /// <summary>
         /// Reads <paramref name="column"/> of the predicted row for a key the committed table <paramref name="t"/> lacks.
         /// </summary>
-        uint PredictedColumn(PredictedValues p, Table t, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
+        uint PredictedColumn(PredictedValues p, Table t, TableId table, uint[] key, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
         {
-            return PredictedColumn(p, t.Spec.KeyCount, t.Arity, table, key, keyOffset, keyLength, values, column);
+            return PredictedColumn(p, t.Spec.KeyCount, t.Arity, table, key, keyLength, values, column);
         }
 
         /// <summary>
         /// Reads <paramref name="column"/> of the predicted row for a key the committed table lacks, given the table's key
         /// count and arity (from the table at a root, from the store's schema in a child).
         /// </summary>
-        uint PredictedColumn(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
+        uint PredictedColumn(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyLength, ReadOnlySpan<MergeVal> values, ColumnId column)
         {
             if ((uint)column.Rep >= (uint)arity)
                 throw new ArgumentOutOfRangeException(nameof(column), column, $"The table has {arity} columns.");
 
-            var offset = PredictCore(p, keyCount, arity, table, key, keyOffset, keyLength, values);
+            var offset = PredictCore(p, keyCount, arity, table, key, keyLength, values);
             return p.Cells[offset + column.Rep];
         }
 
         /// <summary>
-        /// <see cref="PredictCore(PredictedValues, int, int, TableId, uint[], int, int, ReadOnlySpan{MergeVal})"/> for the
+        /// <see cref="PredictCore(PredictedValues, int, int, TableId, uint[], int, ReadOnlySpan{MergeVal})"/> for the
         /// committed table <paramref name="t"/>, whose spec is read only here, on a miss.
         /// </summary>
-        int PredictCore(PredictedValues p, Table t, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values)
+        int PredictCore(PredictedValues p, Table t, TableId table, uint[] key, int keyLength, ReadOnlySpan<MergeVal> values)
         {
-            return PredictCore(p, t.Spec.KeyCount, t.Arity, table, key, keyOffset, keyLength, values);
+            return PredictCore(p, t.Spec.KeyCount, t.Arity, table, key, keyLength, values);
         }
 
         /// <summary>
@@ -178,13 +152,13 @@ namespace Eggnog.Relations
         /// </summary>
         /// <returns>The offset of the row in the cache's arena.</returns>
         /// <exception cref="ArgumentException">The key and values do not make a row of the table.</exception>
-        int PredictCore(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyOffset, int keyLength, ReadOnlySpan<MergeVal> values)
+        int PredictCore(PredictedValues p, int keyCount, int arity, TableId table, uint[] key, int keyLength, ReadOnlySpan<MergeVal> values)
         {
             // Checked before any id is minted: the row is staged, and a row of the wrong width cannot be.
             if (keyLength != keyCount || keyLength + values.Length != arity)
                 throw new ArgumentException($"A row of the table has {keyCount} key and {arity - keyCount} value columns, not {keyLength} and {values.Length}.", nameof(values));
 
-            var offset = p.FindOrBegin(table, key, keyOffset, keyLength, keyLength + values.Length, out var found);
+            var offset = p.FindOrBegin(table, key, 0, keyLength, keyLength + values.Length, out var found);
             if (found)
                 return offset;
 

@@ -34,7 +34,7 @@ namespace Eggnog.Relations.Tests
             Assert.Same(catalog, state.Catalog);
 
             state.StageInsert(id, R(1, 10));
-            state.StageInsert(id, new uint[] { 0, 2, 20 }, 1);
+            state.StageInsert(id, new uint[] { 0, 2, 20 }.AsSpan(1));
             Assert.True(state.Changed);
             Assert.Same(state.GetBuffer(id), state.GetBuffer(id));
             Assert.Equal(new[] { id }, catalog.Notifications.Reset());
@@ -48,7 +48,7 @@ namespace Eggnog.Relations.Tests
 
             state.Changed = false;
             state.StageRemove(id, R(1));
-            state.StageRemove(id, new uint[] { 9, 2 }, 1);
+            state.StageRemove(id, new uint[] { 9, 2 }.AsSpan(1));
             Assert.True(state.Changed);
             state.Flush();
             Assert.True(table.Merge(state).Removed);

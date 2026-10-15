@@ -106,26 +106,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Calls the external function <paramref name="function"/> with this state on the arguments
-        /// <paramref name="args"/>[<paramref name="offset"/>..+<paramref name="count"/>]: the array form of
-        /// <see cref="TryCallExternalFunction(ExternalFunctionId, ReadOnlySpan{uint}, out uint)"/> for compiled plans,
-        /// which cannot take a span. One registry lookup and one virtual call, as the span form.
-        /// </summary>
-        /// <param name="function">The function.</param>
-        /// <param name="args">The array holding the arguments.</param>
-        /// <param name="offset">The index of the first argument.</param>
-        /// <param name="count">The number of arguments.</param>
-        /// <param name="result">The value produced, when the result is <c>true</c>.</param>
-        /// <returns><c>false</c> if the function produced no value.</returns>
-        /// <exception cref="InvalidOperationException">The state is not attached to a database.</exception>
-        /// <exception cref="KeyNotFoundException">No such function.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The range lies outside <paramref name="args"/>.</exception>
-        public bool TryCallExternalFunction(ExternalFunctionId function, uint[] args, int offset, int count, out uint result)
-        {
-            return RequireView().GetExternalFunction(function).TryInvoke(this, args, offset, count, out result);
-        }
-
-        /// <summary>
         /// Gets the table with id <paramref name="table"/> as the database view sees it: egglog's <c>get_table</c>,
         /// which fails for tables the database has taken out while merging or rebuilding. Reading a table while rules
         /// run can break seminaive evaluation.

@@ -117,20 +117,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages an insertion of the row starting at <paramref name="source"/>[<paramref name="offset"/>]. The array
-        /// form for compiled plans.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <param name="source">The array holding the row.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        public void StageInsert(TableId table, uint[] source, int offset)
-        {
-            GetBuffer(table).StageInsert(source, offset);
-            catalog.Notifications.Notify(table);
-            Changed = true;
-        }
-
-        /// <summary>
         /// Stages the removal of the row with key <paramref name="key"/> from <paramref name="table"/>. egglog's
         /// <c>stage_remove</c>.
         /// </summary>
@@ -147,22 +133,6 @@ namespace Eggnog.Relations
         {
             guard?.CheckRemove(table);
             GetBuffer(table).StageRemove(key);
-            catalog.Notifications.Notify(table);
-            Changed = true;
-        }
-
-        /// <summary>
-        /// Stages the removal of the key starting at <paramref name="source"/>[<paramref name="offset"/>]. The array
-        /// form for compiled plans.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <param name="source">The array holding the key.</param>
-        /// <param name="offset">The index of the key's first cell.</param>
-        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal.</exception>
-        public void StageRemove(TableId table, uint[] source, int offset)
-        {
-            guard?.CheckRemove(table);
-            GetBuffer(table).StageRemove(source, offset);
             catalog.Notifications.Notify(table);
             Changed = true;
         }

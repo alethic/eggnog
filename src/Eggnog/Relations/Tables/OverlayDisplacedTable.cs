@@ -151,8 +151,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the canonical id of <paramref name="id"/> in the child without writing: column 1 for any id. For compiled
-        /// plans.
+        /// Gets the canonical id of <paramref name="id"/> in the child without writing: column 1 for any id.
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns>The canonical id.</returns>
@@ -418,7 +417,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets column <paramref name="column"/> for key <paramref name="key"/>: column 1 is the child's canonical id of
         /// any id; columns 0 and 2 exist for ids displaced in the child's view (its journal, then its ancestors). The form
-        /// for compiled plans and <see cref="OverlayDisplacedLookup"/>.
+        /// <see cref="OverlayDisplacedLookup"/> probes with.
         /// </summary>
         /// <param name="key">The id.</param>
         /// <param name="column">The column, 0 to 2.</param>

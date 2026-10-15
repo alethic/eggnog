@@ -10,7 +10,7 @@ namespace Eggnog.Relations
     /// Kernels over sorted runs of row ids stored in <see cref="int"/> arrays: lower-bound search, galloping search,
     /// in-place intersection and in-place retain. They are the bodies of egglog's <c>SortedOffsetSlice</c> searches
     /// and <c>Subset::intersect</c>/<c>retain</c> (core-relations/src/offsets/mod.rs:157-226, 386-509), exposed over
-    /// <c>(array, start, end)</c> so compiled plans and the hash index arena can call them without spans.
+    /// <c>(array, start, end)</c>, the form the subset types store their runs in.
     /// </summary>
     /// <remarks>
     /// <para>

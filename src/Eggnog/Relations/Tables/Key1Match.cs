@@ -7,7 +7,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Recognizes the <see cref="TableEntry"/> of a one-cell key passed by value: the form behind
-    /// <see cref="SortedWritesTable.FindRow(uint)"/>, which compiled plans call without an array.
+    /// <see cref="SortedWritesTable.FindRow(uint)"/>, whose callers pass the key cell itself.
     /// </summary>
     internal readonly struct Key1Match : IEntryMatch<TableEntry>
     {

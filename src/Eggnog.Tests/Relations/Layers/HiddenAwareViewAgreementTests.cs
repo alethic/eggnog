@@ -11,10 +11,10 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Every visibility-aware path (hidden-aware scans, projections, column walks, refinements, per-subset index
-    /// builds, <see cref="RowOps.IsVisible"/>, <see cref="TableView.AnyVisible"/> and <see cref="TableView.AllRows"/>)
-    /// agrees, on the hidden rows of real context views (frozen folds, live unions, clears, retractions, catch-up hides
-    /// and rebuild hides), with the definition of visibility, computed directly from each level's layer and hidden sets
-    /// (<see cref="TableLayer.IsHiddenHere"/>), not from the view.
+    /// builds, <see cref="TableView.AnyVisible"/> and <see cref="TableView.AllRows"/>) and the sealed-set oracle
+    /// (<see cref="RowVisibilityOracle"/>) agree, on the hidden rows of real context views (frozen folds, live unions,
+    /// clears, retractions, catch-up hides and rebuild hides), with the definition of visibility, computed directly
+    /// from each level's layer and hidden sets (<see cref="TableLayer.IsHiddenHere"/>), not from the view.
     /// </summary>
     public class HiddenAwareViewAgreementTests
     {
@@ -324,12 +324,12 @@ namespace Eggnog.Relations.Tests
             var arity = table.Arity;
             uint[] Cells(int r) => table.Rows.Data.AsSpan(r * arity, arity).ToArray();
 
-            // The view's own membership test agrees with the definition, row by row (so does RowOps).
+            // The view's own membership test agrees with the definition, row by row (so does the sealed-set oracle).
             for (var r = 0; r < count; r++)
             {
                 var visible = table.Rows.Data[r * arity] != Value.StaleRep && lv.Hidden.Contains(r) == false;
                 Assert.True(expected.Contains(r) == visible, $"{name}: row {r} is {(visible ? "visible" : "invisible")} in the view, {(expected.Contains(r) ? "visible" : "invisible")} by definition");
-                Assert.Equal(visible, RowOps.IsVisible(table.Rows.Data, r * arity, r, lv.Hidden.Frozen, lv.Hidden.Live));
+                Assert.Equal(visible, RowVisibilityOracle.IsVisible(table.Rows.Data, r * arity, r, lv.Hidden.Frozen, lv.Hidden.Live));
             }
 
             for (var trial = 0; trial < 3; trial++)

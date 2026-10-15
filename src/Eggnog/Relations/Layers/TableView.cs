@@ -20,7 +20,7 @@ namespace Eggnog.Relations
     /// views are <see cref="LayeredSchema.RootView"/>.
     /// </para>
     /// <para>
-    /// The fields are plain readonly fields so compiled kernels can read them. <see cref="AllRows"/> and
+    /// The fields are plain readonly fields, which the executor reads directly. <see cref="AllRows"/> and
     /// <see cref="AnyVisible"/> are the layered executor's entry points: the rows a root trie node starts from, and the
     /// existence test of a zero-variable atom, which requires a visible row where egglog takes a nonempty header as
     /// proof (core-relations/src/free_join/plan.rs:1502-1505).

@@ -130,7 +130,7 @@ namespace Eggnog.Relations.Tests
 
             Assert.Equal(new uint[] { ids[1], 5, 0 }.Take(2), state.PredictRow(f[0], [ids[1]], defaults).Take(2));
             Assert.Equal(1u, state.PredictColumn(f[0], [ids[0]], defaults, C(1)));
-            Assert.Equal(7u, state.PredictColumn(f[0], new[] { ids[3] }, 0, 1, defaults, C(1)));
+            Assert.Equal(7u, state.PredictColumn(f[0], [ids[3]], defaults, C(1)));
             var row = new uint[3];
             state.PredictRow(f[0], [ids[2]], defaults, row);
             Assert.Equal(1u, row[1]);

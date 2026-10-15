@@ -534,6 +534,12 @@ says go, within [`./performance-parity.md`](./performance-parity.md).
 
 ### 7.1 The recommended cleanup (do now)
 
+**Status:** C1 to C3 are done. The inventory found 13 array overloads with no engine caller (the eight below and five
+more: the array forms of `ExecutionState.TryCallExternalFunction` and `PredictColumn`, `ArbitraryRowBuffer.AddRow`,
+`TaggedRowBuffer.AddRow` and `ParallelVecWriter.WriteSlice`); all are deleted, with the four private helpers only they
+used. The optional `ActionBuffer.Push` change waits for the root gate. `TupleIndexCursor`, `TaggedRowBuffer.RowOffset`
+and `Mask.Low`/`High` have no engine caller but no compiled-plan purpose either; they are kept, called only by tests.
+
 **Phase C1: inventory.**
 
 - **Entry:** the owner accepts the drop.

@@ -101,7 +101,7 @@ namespace Eggnog.Relations
         public bool IsBitset => bits is not null;
 
         /// <summary>
-        /// Gets the sealed rows, sorted ascending, for compiled kernels; <c>null</c> for a bitset. Exactly
+        /// Gets the sealed rows, sorted ascending, for <see cref="HiddenCursor"/>; <c>null</c> for a bitset. Exactly
         /// <see cref="SortedCount"/> long.
         /// </summary>
         internal int[]? SortedRows => bits is null ? sorted : null;

@@ -12,9 +12,10 @@ namespace Eggnog.Relations.Tests
     /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, HiddenRows, ref TSink)"/>,
     /// <see cref="Table.ScanGeneric{TSink}(SubsetRef, HiddenRows, ref TSink)"/>, both <c>ScanProject</c> forms,
     /// <see cref="Table.ForEachColumn{TSink}(SubsetRef, ColumnId, HiddenRows, ref TSink)"/>,
-    /// <see cref="Table.RefineVisible"/> and <see cref="RowOps.IsVisible"/>, against a reference, for every constraint
-    /// kind, chunk sizes 1, 7, 64 and unbounded, dense and sparse subsets, with and without tombstones. With
-    /// <see cref="HiddenRows.None"/> every result, resume position included, is identical to the plain overload's.
+    /// <see cref="Table.RefineVisible"/> and the sealed-set oracle (<see cref="RowVisibilityOracle"/>), against a
+    /// reference, for every constraint kind, chunk sizes 1, 7, 64 and unbounded, dense and sparse subsets, with and
+    /// without tombstones. With <see cref="HiddenRows.None"/> every result, resume position included, is identical to
+    /// the plain overload's.
     /// </summary>
     public class HiddenScanTests
     {
@@ -289,7 +290,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Checks the projecting scans, the column walk, the refinement and <see cref="RowOps.IsVisible"/>.
+        /// Checks the projecting scans, the column walk, the refinement and the sealed-set oracle
+        /// (<see cref="RowVisibilityOracle.IsVisible"/>).
         /// </summary>
         static void CheckProjections(Random random, Table table, Func<int, uint[]?> cellsOf, SubsetRef subset, Constraint[] constraints, HiddenRows hidden, HashSet<int> hiddenReference, string context)
         {
@@ -361,10 +363,10 @@ namespace Eggnog.Relations.Tests
                     CheckScans(table, cellsOf, subset.AsRef(), constraints, hidden, hiddenReference, context);
                     CheckProjections(random, table, cellsOf, subset.AsRef(), constraints, hidden, hiddenReference, context);
 
-                    // RowOps agrees with the reference on every physical row.
+                    // The sealed-set oracle agrees with the reference on every physical row.
                     var data = table.Rows.Data;
                     for (var row = 0; row < count; row++)
-                        Assert.Equal(cellsOf(row) is not null && hiddenReference.Contains(row) == false, RowOps.IsVisible(data, row * table.Arity, row, hidden.Frozen, hidden.Live));
+                        Assert.Equal(cellsOf(row) is not null && hiddenReference.Contains(row) == false, RowVisibilityOracle.IsVisible(data, row * table.Arity, row, hidden.Frozen, hidden.Live));
 
                     subset.Dispose();
                 }

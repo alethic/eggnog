@@ -23,8 +23,8 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// One virtual call per invocation, as egglog's <c>dyn ExternalFunction</c>; rule actions call it once per live
-    /// lane of a batch of bindings (<see cref="ExternalCallProducer"/>), as egglog's <c>invoke_batch</c> does.
-    /// Compiled plans call the array overload, which cannot take a span.
+    /// lane of a batch of bindings (<see cref="ExternalCallProducer"/>), as egglog's <c>invoke_batch</c> does, through
+    /// the array overload on the cells <see cref="ArgGather"/> loaded for the lane.
     /// </para>
     /// </remarks>
     internal abstract class ExternalFunction
@@ -66,7 +66,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Invokes the function on the arguments <paramref name="args"/>[<paramref name="offset"/>..+<paramref name="count"/>].
-        /// The array form for compiled plans.
+        /// The array form, for a caller that holds the arguments in an array (<see cref="ExternalCallProducer"/>).
         /// </summary>
         /// <param name="state">The calling execution state.</param>
         /// <param name="args">The array holding the arguments.</param>

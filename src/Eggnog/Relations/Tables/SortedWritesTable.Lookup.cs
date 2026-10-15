@@ -16,8 +16,8 @@ namespace Eggnog.Relations
         static uint[]? keyScratch;
 
         /// <summary>
-        /// Finds the live row with the one-cell key <paramref name="k0"/>. For compiled plans: no span, no allocation,
-        /// a non-virtual call on a sealed class. Expected O(1).
+        /// Finds the live row with the one-cell key <paramref name="k0"/>: no span, no allocation, a non-virtual
+        /// call on a sealed class. Expected O(1).
         /// </summary>
         /// <param name="k0">The key.</param>
         /// <returns>The row id, or -1.</returns>
@@ -76,8 +76,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Finds the live row whose key is the <see cref="KeyCount"/> cells starting at
-        /// <paramref name="key"/>[<paramref name="offset"/>]: the form for compiled plans with wide keys. Expected
-        /// O(<see cref="KeyCount"/>).
+        /// <paramref name="key"/>[<paramref name="offset"/>]: the form for keys held in an array, either row storage
+        /// read in place (catch-up, invariant checks) or the cells gathered for a lane
+        /// (<see cref="TryGetColumn(uint[], int, int, out uint)"/>, which <see cref="SortedKeyNLookup"/> probes with).
+        /// Expected O(<see cref="KeyCount"/>).
         /// </summary>
         /// <param name="key">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>
@@ -125,7 +127,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets column <paramref name="column"/> of the live row with key <paramref name="k0"/>: egglog's
-        /// <c>get_row_column</c> for compiled plans. Expected O(1).
+        /// <c>get_row_column</c>, the form <see cref="SortedKey1Lookup"/> probes with. Expected O(1).
         /// </summary>
         /// <param name="k0">The key.</param>
         /// <param name="column">The column.</param>
@@ -160,7 +162,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets column <paramref name="column"/> of the live row whose key starts at
-        /// <paramref name="key"/>[<paramref name="offset"/>]. The form for compiled plans with wide keys.
+        /// <paramref name="key"/>[<paramref name="offset"/>]. The form <see cref="SortedKeyNLookup"/> probes with.
         /// </summary>
         /// <param name="key">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>

@@ -55,9 +55,16 @@ layout and style rules below as well. How the engine is put together is in [`../
 - Hot loops may use `MemoryMarshal.GetArrayDataReference` + `Unsafe.Add` to drop bounds checks, after one explicit
   range check, as egglog does with `get_unchecked`. Keep such code obviously correct and commented.
 - SIMD (`Vector128/256`) where the Rust relies on hashbrown/SwissTable group probing or bulk compares.
-- Plans will later be compiled to delegates with System.Linq.Expressions, which cannot use `Span<T>` or `ref struct`s.
-  So every primitive a plan calls on a hot path also needs an overload over `uint[]`/`int[]` plus offsets, and must
-  be a non-virtual method on a sealed type.
+- Spans, refs and ref structs are the default on hot paths. An overload over `uint[]`/`int[]` plus offsets exists only
+  where an engine caller holds the data in an array (row storage read in place, the cells gathered for a lane, the
+  join's dense bindings), and an overload nothing in the engine calls is deleted, not kept for later. A plain struct
+  stands in for a ref struct only where it must be stored in fields (`SubsetRef`, the cursors).
+- The interpreter is the only executor: nothing is generated or compiled at run time (no `System.Linq.Expressions`,
+  no `Reflection.Emit`, no generic instantiation by reflection), so the engine needs no dynamic code. Specialization
+  is closed-world C#: a fast path for a bounded set of shapes, written as a struct-constrained generic method or a
+  dedicated kernel and chosen by one of the interpreter's switches (the stage kind in `JoinRun.RunPlan`, the
+  instruction kind in `ExecutionState.RunInstr`, the probe `VectorizedLookup` picks once per batch). Every fast path
+  is tested against the general path it shortcuts.
 - Parallelism uses `Parallel.For`/the thread pool in place of rayon, with egglog's thresholds (table ops > 20000 rows,
   rebuild > 10000, database-level > 10000) and a configurable degree of parallelism instead of rayon's pool size.
 

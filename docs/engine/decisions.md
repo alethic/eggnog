@@ -13,7 +13,7 @@ for colored contexts ("Cross-cutting decisions" there) hold as written unless a 
 | 5 | Fresh-id scope | Match egglog: the predicted-value cache lives per `ExecutionState` (per batch), and merges union duplicates. |
 | 6 | Match-count parity | Not required. Counts are reported but may differ from egglog's. |
 | 7 | Plan parity | Fix egglog's planner defects (rows 5-7 of the defect list, "egglog defects: what the port does instead" in `egglog-engine-map.md`) instead of reproducing them; golden plan tests encode the fixed behaviour. |
-| 8 | Dynamic reordering when compiled | Keep it: compile per-stage kernels; the interpreter keeps the recursion and reordering. |
+| 8 | Executor | The interpreter is the only executor: no plan, stage kernel, right-hand-side program or merge function is compiled at run time (no expression trees, emitted IL or generic structs composed by reflection), so the engine needs no dynamic code. The interpreter keeps the recursion and dynamic reordering. Specialization is closed-world C#: fast paths for a bounded set of shapes, chosen by the interpreter's switches and tested against the general path; whether to build them is decided by the ceiling prototype of [`../plans/compiled-plans.md`](../plans/compiled-plans.md). |
 | 9 | Containers in children | Eq-sort containers in child contexts are not supported: interning an eq container from a child throws. Adding them is open (`docs/roadmap.md`). |
 | 10 | Rule-based rebuild | Dropped. Rebuild is the native incremental/full path only. |
 | 11 | `IterationReport.changed` | Report whether the rule application changed anything; rebuild changes are reported separately. The scheduler decides saturation from both. |

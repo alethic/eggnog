@@ -114,8 +114,8 @@ namespace Eggnog.Relations.Tests
 
             // A new key through the column form.
             Assert.Equal(1u, state.PredictColumn(f, [3], [ids, new Value(7)], C(1)));
-            Assert.Equal(7u, state.PredictColumn(f, new uint[] { 9, 3 }, 1, 1, [ids, new Value(8)], C(2)));
-            Assert.Equal(10u, state.PredictColumn(f, new uint[] { 1 }, 0, 1, [ids, new Value(8)], C(1)));
+            Assert.Equal(7u, state.PredictColumn(f, new uint[] { 9, 3 }.AsSpan(1, 1), [ids, new Value(8)], C(2)));
+            Assert.Equal(10u, state.PredictColumn(f, [1], [ids, new Value(8)], C(1)));
 
             Span<uint> row = stackalloc uint[3];
             state.PredictRow(f, [3], [ids, new Value(7)], row);

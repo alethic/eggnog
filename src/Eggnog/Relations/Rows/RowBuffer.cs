@@ -129,7 +129,7 @@ namespace Eggnog.Relations
         public int CellCount => count * arity;
 
         /// <summary>
-        /// Gets the backing array, for code that indexes rows directly (compiled plans, bulk copies). Row <c>r</c>
+        /// Gets the backing array, for code that indexes rows directly (row-major scans, bulk copies). Row <c>r</c>
         /// starts at <c>r * Arity</c>; cells at or past <see cref="CellCount"/> are garbage. The array is replaced
         /// whenever the buffer grows, hands its storage to a parallel writer, or is disposed, so read this again after
         /// any such call.
@@ -165,22 +165,6 @@ namespace Eggnog.Relations
 
             RowCells.Copy(ref MemoryMarshal.GetReference(row), ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(data), start), arity);
             return count++;
-        }
-
-        /// <summary>
-        /// Appends the row whose cells start at <paramref name="source"/>[<paramref name="offset"/>]. The array-based
-        /// form of <see cref="AddRow(ReadOnlySpan{uint})"/> for compiled plans, which cannot use spans.
-        /// </summary>
-        /// <param name="source">An array holding the row; may be this buffer's <see cref="Data"/>.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        /// <returns>The new row's id.</returns>
-        public int AddRow(uint[] source, int offset)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            if (offset < 0 || source.Length - offset < arity)
-                ThrowSourceOutOfRange();
-
-            return AddRow(new ReadOnlySpan<uint>(source, offset, arity));
         }
 
         /// <summary>
@@ -227,7 +211,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the index in <see cref="Data"/> of the first cell of row <paramref name="row"/>, checking the row id.
-        /// For compiled plans, which read <c>Data[RowOffset(row) + column]</c>.
+        /// For callers that read <c>Data[RowOffset(row) + column]</c>, such as the materialized join's value groups.
         /// </summary>
         /// <param name="row">A row id below <see cref="Count"/>.</param>
         /// <returns><c>row * Arity</c>.</returns>
@@ -488,13 +472,6 @@ namespace Eggnog.Relations
         void ThrowRowOutOfRange(int row)
         {
             throw new ArgumentOutOfRangeException(nameof(row), row, $"The buffer holds {count} rows.");
-        }
-
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowSourceOutOfRange()
-        {
-            throw new ArgumentOutOfRangeException("offset", "The source array does not hold a whole row at the offset.");
         }
 
     }

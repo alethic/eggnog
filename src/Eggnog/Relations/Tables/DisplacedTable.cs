@@ -117,7 +117,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the canonical id of <paramref name="id"/> without writing: column 1 for any id. For compiled plans.
+        /// Gets the canonical id of <paramref name="id"/> without writing: column 1 for any id.
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns>The canonical id.</returns>
@@ -372,7 +372,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets column <paramref name="column"/> for key <paramref name="key"/>; column 1 is answered for any id. The
-        /// form for compiled plans.
+        /// form <see cref="DisplacedLookup"/> probes with.
         /// </summary>
         /// <param name="key">The id.</param>
         /// <param name="column">The column, 0 to 2.</param>

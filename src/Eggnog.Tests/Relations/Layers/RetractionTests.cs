@@ -136,7 +136,7 @@ namespace Eggnog.Relations.Tests
 
             Assert.Throws<InvalidOperationException>(() => early.StageRemove([1u]));
             Assert.Throws<InvalidOperationException>(() => early.FreshHandle().StageRemove([1u]));
-            Assert.Throws<InvalidOperationException>(() => root.Database.NewBuffer(f).StageRemove(new uint[] { 1 }, 0));
+            Assert.Throws<InvalidOperationException>(() => root.Database.NewBuffer(f).StageRemove([1u]));
             root.Database.NewBuffer(p).StageRemove([1u]);
             store.Schema[f]!.Root.NewBuffer().StageRemove([1u]);
 
@@ -161,11 +161,10 @@ namespace Eggnog.Relations.Tests
             Insert(root, p, a, 1, 0);
             var child = root.CreateChild();
 
-            // The root has a live descendant: staged removals (both forms), a rule's remove and clears are refused;
+            // The root has a live descendant: a staged removal, a rule's remove and clears are refused;
             // nothing was staged, so nothing is pending afterwards.
             var state = root.Database.CreateExecutionState();
             Assert.Throws<InvalidOperationException>(() => state.StageRemove(f, [a]));
-            Assert.Throws<InvalidOperationException>(() => state.StageRemove(f, new[] { a }, 0));
             var bindings = new Bindings();
             bindings.Insert(new Variable(0), [a]);
             Assert.Throws<InvalidOperationException>(() => state.RunInstrs([new RemoveInstr(f, [QueryEntry.Var(new Variable(0))])], bindings));

@@ -19,10 +19,12 @@ Plans: [parallelism test plan](plans/parallelism-test-plan.md), [compiled plans]
   parallel equivalence on the existing suites. Still to do: serial-against-parallel equality with lattice merges that
   change values (egglog's own parallel tests never reach that branch); runs above the parallel thresholds at one and at
   N threads; and stress tests of concurrent children compared with serial runs.
-- **Compiled plans.** Compile right-hand-side programs, merge functions and join-stage kernels to delegates with
-  `System.Linq.Expressions`, cached per plan and stage order, and test them against the interpreter with the existing
-  random-program generators. The engine already gives every primitive a compiled plan would call on a hot path an
-  overload over arrays and offsets, on a sealed type, for this purpose (see [`engine/conventions.md`](engine/conventions.md)).
+- **Kernel specialization** (part of performance parity). Closed-world C# fast paths of the join kernels for a bounded
+  set of plan shapes, chosen by the interpreter's existing switches, including fused fixed-order plans of one or two
+  stages. It is decided by one hand-written ceiling prototype on an idle machine: built only for a scaled gain of 10% or
+  more on a target workload chosen in advance, with the root set within 2%, and only as fast paths if 20 or fewer
+  shapes cover 90% of run time. Compiling plans at run time (expression trees, emitted IL, generic structs composed by
+  reflection) is dropped (see [`engine/conventions.md`](engine/conventions.md)).
 - **Performance parity.** Profiling, SIMD probes, pooling and parallel tuning, measured with `egglog -j1` and `-jN` on
   egglog's math microbenchmark and other large programs, and on a 200,000-row frozen root with a thousand children.
 - **Idle local rules.** If idle local rules prove costly in a query child (see "Latency of transient children" below),
@@ -69,7 +71,9 @@ machine shared with other work.
   `WritesBenchmarks` and the union-find benchmarks) staying within 2% of the baseline recorded before colored contexts.
   The comparisons for the colored-context changes have not been timed. They include the egglog-bridge `math` and `ac`
   workloads on a store-backed root, the cost of building an `EGraph`, and extraction through the context API against
-  the root API. Allocation-only dry runs moved little (`math` 9.80 GB to 9.61 GB, `ac` 15.47 GB to 15.57 GB).
+  the root API. Allocation-only dry runs moved little (`math` 9.80 GB to 9.61 GB, `ac` 15.47 GB to 15.57 GB). The same
+  gate decides whether `ActionBuffer.Push` moves to the span form of `Bindings.Push`, which would let the array form be
+  deleted; otherwise the array form stays.
 - **Per-child cost.** Time per child flat within 1.5x as the root grows from 20,000 to 2,000,000 rows (bytes are
   already flat, at about 96 KB for 100 unions and a rebuild, and about 145 KB with a flush and a rule run); and memory
   per structure (layer tables, hidden sets, overlay, cursors, watermarks, indexes) with time and failures reported

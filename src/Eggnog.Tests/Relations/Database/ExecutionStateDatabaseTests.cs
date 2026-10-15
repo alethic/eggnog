@@ -56,27 +56,32 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void ExternalFunctionsCanBeCalledOnARangeOfAnArray()
+        public void ExternalFunctionsCanBeInvokedOnARangeOfAnArray()
         {
-            // The overload compiled plans call: the arguments are a range of a larger buffer.
+            // The array form a rule action calls once per lane: the arguments are a range of a larger buffer.
             var db = new Database(ParallelHeuristics.Serial);
-            var sum = db.AddExternalFunction(ExternalFunction.Create((ExecutionState _, ReadOnlySpan<uint> args, out uint result) =>
+            var sum = ExternalFunction.Create((ExecutionState _, ReadOnlySpan<uint> args, out uint result) =>
             {
                 result = 0;
                 foreach (var a in args)
                     result += a;
 
                 return args.IsEmpty == false;
-            }));
+            });
+            var id = db.AddExternalFunction(sum);
 
             var state = db.CreateExecutionState();
             uint[] buffer = [100, 1, 2, 3, 200];
-            Assert.True(state.TryCallExternalFunction(sum, buffer, 1, 3, out var result));
+            Assert.True(sum.TryInvoke(state, buffer, 1, 3, out var result));
             Assert.Equal(6u, result);
-            Assert.False(state.TryCallExternalFunction(sum, buffer, 2, 0, out _));
-            Assert.Throws<ArgumentOutOfRangeException>(() => state.TryCallExternalFunction(sum, buffer, 3, 3, out _));
-            Assert.Throws<KeyNotFoundException>(() => state.TryCallExternalFunction(new ExternalFunctionId(5), buffer, 0, 1, out _));
-            Assert.Throws<InvalidOperationException>(() => TableTestUtil.EmptyState().TryCallExternalFunction(sum, buffer, 0, 1, out _));
+            Assert.False(sum.TryInvoke(state, buffer, 2, 0, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sum.TryInvoke(state, buffer, 3, 3, out _));
+
+            // Through the state, the function is looked up by id.
+            Assert.True(state.TryCallExternalFunction(id, buffer.AsSpan(1, 3), out result));
+            Assert.Equal(6u, result);
+            Assert.Throws<KeyNotFoundException>(() => state.TryCallExternalFunction(new ExternalFunctionId(5), buffer, out _));
+            Assert.Throws<InvalidOperationException>(() => TableTestUtil.EmptyState().TryCallExternalFunction(id, buffer, out _));
         }
 
         [Fact]

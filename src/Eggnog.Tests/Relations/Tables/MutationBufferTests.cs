@@ -54,7 +54,7 @@ namespace Eggnog.Relations.Tests
             var state = new PendingState(new ShardData(4));
             var buffer = new MutationBuffer(state, 3, 2, true);
             buffer.StageRemove(R(1, 2));
-            buffer.StageRemove(new uint[] { 9, 3, 4 }, 1);
+            buffer.StageRemove(new uint[] { 9, 3, 4 }.AsSpan(1));
             buffer.Flush();
             Assert.Equal(0, state.TotalRows);
             Assert.Equal(2, state.TotalRemovals);
@@ -81,11 +81,9 @@ namespace Eggnog.Relations.Tests
         {
             var state = new PendingState(new ShardData(1));
             var buffer = new MutationBuffer(state, 3, 1, true);
-            Assert.Throws<ArgumentException>(() => buffer.StageInsert(R(1, 2)));
-            Assert.Throws<ArgumentException>(() => buffer.StageRemove(R(1, 2)));
-            Assert.Throws<ArgumentOutOfRangeException>(() => buffer.StageInsert(R(1, 2, 3), 1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => buffer.StageRemove(R(1, 2, 3), 3));
-            buffer.StageInsert(new uint[] { 0, 1, 2, 3 }, 1);
+            Assert.StartsWith("Expected 3 cells but got 2.", Assert.Throws<ArgumentException>(() => buffer.StageInsert(R(1, 2))).Message);
+            Assert.StartsWith("Expected 1 cells but got 2.", Assert.Throws<ArgumentException>(() => buffer.StageRemove(R(1, 2))).Message);
+            buffer.StageInsert(new uint[] { 0, 1, 2, 3 }.AsSpan(1));
             buffer.Flush();
             Assert.True(state.RowQueue(0).TryDequeue(out var rows));
             Assert.Equal(R(1, 2, 3), rows.GetRow(0).ToArray());

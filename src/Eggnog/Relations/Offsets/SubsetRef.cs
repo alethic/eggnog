@@ -19,7 +19,7 @@ namespace Eggnog.Relations
     /// dense range <c>[0, 0)</c>.
     /// </para>
     /// <para>
-    /// A plain struct (not a ref struct) of 16 bytes, so it fits in fields and compiled expression trees. It does not
+    /// A plain struct (not a ref struct) of 16 bytes, so it can be stored in fields (cursors, scratch). It does not
     /// own its array: it is valid while the owner (a <see cref="Subset"/>, an index arena, a scratch buffer)
     /// neither changes nor returns it. Turn it into an owned <see cref="Subset"/> with <see cref="ToOwned"/>.
     /// </para>
