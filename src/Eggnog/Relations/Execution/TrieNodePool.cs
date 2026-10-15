@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -112,6 +113,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Takes a pooled node, or a new one when the pool is empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         TrieNode Take()
         {
             if (count == 0)

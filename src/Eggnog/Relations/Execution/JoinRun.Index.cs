@@ -16,12 +16,13 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// A single-layer node takes one flag test more than egglog's <c>get_index</c> and builds its one piece inline; the
-        /// pieces of a multi-layer node are built out of line (<see cref="GetIndexLayered"/>), so that the kernels that
-        /// inline this method stay small.
+        /// pieces of a multi-layer node are built in <see cref="GetIndexLayered"/>. Kept out of line itself, so that the
+        /// kernels that call it once per stage stay small.
         /// </remarks>
         /// <param name="prober">Receives the node and the pieces; its spare piece array is kept.</param>
         /// <param name="atom">The atom's index.</param>
         /// <param name="columns">The columns to index, at least one.</param>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         void GetIndex(ref Prober prober, int atom, ReadOnlySpan<ColumnId> columns)
         {
             var node = nodes[atom]!;
