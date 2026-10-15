@@ -7,7 +7,10 @@ namespace Eggnog.Relations
     /// <summary>
     /// The codec for <see cref="string"/> base values (Rust <c>String</c> and <c>&amp;'static str</c>, and the egglog
     /// frontend's <c>S = Boxed&lt;String&gt;</c>): never inline; every string is interned and stored as its intern index
-    /// (core-relations/src/base_values/mod.rs:46-47). Strings are compared ordinally, as Rust compares them.
+    /// (core-relations/src/base_values/mod.rs:44-45). Strings are compared ordinally, by UTF-16 code unit. Rust orders
+    /// <c>str</c> by UTF-8 byte, which is code-point order; the two orders differ only when a supplementary character
+    /// (above U+FFFF, a surrogate pair in UTF-16) meets a character in U+E000-U+FFFF, which UTF-16 orders after it and
+    /// Rust before it.
     /// </summary>
     internal readonly struct StringCodec : IBaseValueCodec<string>
     {
