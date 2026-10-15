@@ -105,8 +105,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the context retracted rows of the table: it staged a delete (its own row tombstoned, or a row
-        /// it saw through an ancestor hidden with <see cref="HideReason.Retracted"/>), or a subsumption. A row it hid
-        /// earlier may then have lost its carrier, which the invariant checker allows.
+        /// it saw through an ancestor hidden with <see cref="HideReason.Retracted"/>) or a clear. A row it hid earlier
+        /// may then have lost its carrier, which the invariant checker allows.
         /// </summary>
         public bool HasRetractions => hasRetractions;
 

@@ -21,8 +21,13 @@ namespace Eggnog.Relations
     /// <item><term><see cref="CheckRemove"/></term><description>the context has live descendants; or it is a child
     /// whose parent is not frozen.</description></item>
     /// <item><term><see cref="CheckClear"/></term><description>as <see cref="CheckRemove"/>.</description></item>
-    /// <item><term><see cref="CheckSubsume"/></term><description>the context has live descendants.</description></item>
     /// </list>
+    /// <para>
+    /// A subsumption is not a retraction and has no check: it is a sticky value change of the row's subsumption cell,
+    /// merged like an output (<see cref="FunctionTableMerge"/>), so it is allowed wherever a write is. A child's
+    /// subsumption shadows the ancestor row as any value change does, and an ancestor's reaches its descendants when
+    /// they catch up.
+    /// </para>
     /// <para>
     /// Every context owns one: the root's is <see cref="LayeredSchema.RootGuard"/>, a child's
     /// <see cref="ContextTables.Guard"/>. Execution states and the buffers of <see cref="Database.NewBuffer"/> keep their
@@ -91,7 +96,7 @@ namespace Eggnog.Relations
             if (rootGate is { HasLiveDescendants: false })
                 return;
 
-            Check(table, true, "A delete from");
+            Check(table, "A delete from");
         }
 
         /// <summary>
@@ -104,27 +109,14 @@ namespace Eggnog.Relations
             if (rootGate is { HasLiveDescendants: false })
                 return;
 
-            Check(table, true, "Clearing");
-        }
-
-        /// <summary>
-        /// Throws unless the context may subsume a row of <paramref name="table"/> (the bridge's subsume action).
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <exception cref="InvalidOperationException">The retraction is refused.</exception>
-        public void CheckSubsume(TableId table)
-        {
-            if (rootGate is { HasLiveDescendants: false })
-                return;
-
-            Check(table, false, "Subsuming a row of");
+            Check(table, "Clearing");
         }
 
         /// <summary>
         /// Applies the rules of the table above.
         /// </summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        void Check(TableId table, bool needsFrozenParent, string operation)
+        void Check(TableId table, string operation)
         {
             if (schema[table] is { IsContextPrivate: true })
                 return;
@@ -133,7 +125,7 @@ namespace Eggnog.Relations
             if (context.Gate.HasLiveDescendants)
                 ThrowLiveDescendants(operation, table, context.Gate.LiveDescendants);
 
-            if (needsFrozenParent && context.Parent is { IsFrozen: false })
+            if (context.Parent is { IsFrozen: false })
                 ThrowWritableParent(operation, table);
 
             // A child records that it retracts rows of the table: a row it hid may then have lost its carrier to the
