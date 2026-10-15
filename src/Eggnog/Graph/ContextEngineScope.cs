@@ -74,6 +74,9 @@ namespace Eggnog
         public override bool IsFrozen => Context.IsFrozen;
 
         /// <inheritdoc />
+        public override int CompactionsBlockedAtFreeze => Context.CompactionsBlockedAtFreeze;
+
+        /// <inheritdoc />
         public override bool IsDisposed => Context.IsDisposed;
 
         /// <inheritdoc />

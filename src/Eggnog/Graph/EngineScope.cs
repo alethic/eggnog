@@ -45,6 +45,11 @@ namespace Eggnog
         public abstract bool IsFrozen { get; }
 
         /// <summary>
+        /// Gets the number of tables the freeze left uncompacted because live descendants held their row ids.
+        /// </summary>
+        public abstract int CompactionsBlockedAtFreeze { get; }
+
+        /// <summary>
         /// Gets whether the engine context is disposed.
         /// </summary>
         public abstract bool IsDisposed { get; }

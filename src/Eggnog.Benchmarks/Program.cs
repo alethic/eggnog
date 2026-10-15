@@ -37,14 +37,16 @@ namespace Eggnog.Relations.Benchmarks
         /// Runs the benchmarks the command line selects, for example <c>--filter *WritesBenchmarks*</c>; with no
         /// arguments, runs every benchmark. <c>--bridge-example math</c> or <c>--bridge-example ac</c> instead runs an
         /// egglog-bridge example program the way its Rust <c>main</c> does, without BenchmarkDotNet
-        /// (<see cref="BridgeExampleRunner"/>).
+        /// (<see cref="BridgeExampleRunner"/>). The modes <see cref="ContextFootprint.Option"/>,
+        /// <see cref="ExecutorCountsReport.Option"/>, <see cref="StaleProbe.Option"/> and
+        /// <see cref="PlanFootprint.Option"/> print counts and bytes instead.
         /// </summary>
-        /// <param name="args">BenchmarkDotNet's command-line arguments, or <see cref="BridgeExampleRunner.Option"/> and a
-        /// program name.</param>
+        /// <param name="args">BenchmarkDotNet's command-line arguments, or a mode's option and its arguments.</param>
         /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid. In the
         /// example mode, <see cref="BridgeExampleRunner.Run"/>'s exit code; in the footprint mode
         /// (<see cref="ContextFootprint.Option"/>), 0; in the executor-counts mode
-        /// (<see cref="ExecutorCountsReport.Option"/>), <see cref="ExecutorCountsReport.Run"/>'s exit code.</returns>
+        /// (<see cref="ExecutorCountsReport.Option"/>), the stale-row probe and the plan footprint mode, their
+        /// <c>Run</c>'s exit code.</returns>
         static int Main(string[] args)
         {
             if (args.Length > 0 && args[0] == BridgeExampleRunner.Option)
@@ -55,6 +57,12 @@ namespace Eggnog.Relations.Benchmarks
 
             if (args.Length > 0 && args[0] == ExecutorCountsReport.Option)
                 return ExecutorCountsReport.Run();
+
+            if (args.Length > 0 && args[0] == StaleProbe.Option)
+                return StaleProbe.Run(args.AsSpan(1));
+
+            if (args.Length > 0 && args[0] == PlanFootprint.Option)
+                return PlanFootprint.Run(args.AsSpan(1));
 
             if (args.Length == 0)
                 args = ["--filter", "*"];

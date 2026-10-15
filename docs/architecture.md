@@ -303,6 +303,16 @@ root                      empty and frozen, or a shared theory
   rebuilds the scope and, below the root, plans the rules its descendants can run on its statistics and builds the
   indexes those plans probe. Reads, queries and extractors of a frozen scope are thread-safe, and each child of a frozen scope is
   independent of its siblings, so a frozen scope is a base that many threads can query and extend at once.
+- **Freeze before creating children.** A table keeps the rows that later writes replaced until it compacts, which it
+  does when they outnumber the rows still current and number more than 16, and when its scope freezes. Compaction
+  renumbers rows, and live descendants hold the numbers of the rows they have seen, so the tables of a scope with live
+  descendants do not compact; a disposed child stays live until its own children are disposed. Once the last
+  descendant is disposed, the tables compact again at the next write that calls for it. Results never depend on it,
+  but memory and full scans do. So freeze a scope before creating children of it, and do not hold descendants of a
+  large writable scope across heavy work in it. A scope frozen with live descendants keeps its replaced rows for good,
+  and `Scope.CompactionsBlockedAtFreeze` counts the tables that kept them. A split run at a writable scope holds its
+  cases until the top-level run ends (section 2.9), so the scope keeps its replaced rows for the length of the run, and
+  a large writable scope or root that splits pays for it in memory.
 - **Tags.** A `ScopeTag` (`EGraph.DefineScopeTag`) labels scopes. Tags belong to one graph and are absolute: a tag
   resolves, from a scope, to the nearest ancestor-or-self that carries it. The root carries `EGraph.RootTag`.
 - **Local rules.** `Scope.DefineRule(ruleset, name, define)` defines a rule that is active only in that scope and its
@@ -646,6 +656,18 @@ not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants
 frozen context gets its own. A second thread entering a domain is refused rather than made to wait.
 `ConcurrentChildren` runs children of frozen contexts side by side within the graph's `ParallelismBudget`. Depth is
 limited to 31.
+
+**Compaction under live descendants.** A table compacts on egglog's trigger (more tombstones than half its physical
+rows, and more than 16), and at freeze whenever it has a tombstone. Compaction renumbers rows and starts a new
+generation, while every live descendant holds cursors and hidden sets over its ancestors' row ids of the current
+generation, which `ContextTables.CheckGenerations` and the invariant checker verify. So a table does not compact while
+its gate has live descendants: the owner's `DescendantGate` for a child's layer, the store root's for a shared root
+table; context-private tables are never gated. `SortedWritesTable.CompactionsBlocked` counts the skips. The gate opens
+when the last descendant is disposed, and the next merge that meets the trigger compacts. A frozen table never changes
+again, so a context frozen with live descendants keeps the tombstones of every gated table that had one;
+`Database.Freeze` counts those tables, which the context reports (`Context.CompactionsBlockedAtFreeze`) and the library
+surfaces as `Scope.CompactionsBlockedAtFreeze`. A split's cases live until the top-level run ends, so a split run gates
+its scope for the run's whole length.
 
 **Queries in a child.** A rule set snapshots the views of the tables it reads when it is built (`ViewSnapshot`), and
 the search reads only that snapshot. An atom's rows are a `LayeredSubset` over the layers of its view; each prober has

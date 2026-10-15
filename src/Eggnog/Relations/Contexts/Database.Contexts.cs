@@ -57,6 +57,12 @@ namespace Eggnog.Relations
         volatile bool frozen;
 
         /// <summary>
+        /// The number of tables whose compaction <see cref="Freeze"/> skipped because live descendants held their row
+        /// ids. Written by <see cref="Freeze"/> before <see cref="frozen"/>.
+        /// </summary>
+        int compactionsBlockedAtFreeze;
+
+        /// <summary>
         /// What rule building, planning and the executor read: a child's, attached with its layers; a root's or bare
         /// database's, made on first use of <see cref="View"/>.
         /// </summary>
@@ -123,6 +129,14 @@ namespace Eggnog.Relations
         /// reading this counter gets its own timestamp.
         /// </summary>
         internal int ClockCounterRep => clockRep;
+
+        /// <summary>
+        /// Gets the number of tables that kept their tombstones when the database froze, because live descendants held
+        /// cursors or hidden sets over their row ids and compaction would have renumbered the rows
+        /// (<see cref="SortedWritesTable.ForceRehash"/>). A frozen table never changes again, so those tombstones stay
+        /// for the database's life. 0 before the freeze and when nothing was blocked.
+        /// </summary>
+        internal int CompactionsBlockedAtFreeze => Volatile.Read(ref compactionsBlockedAtFreeze);
 
         /// <summary>
         /// Gets the change stamp: moved by merges that add or remove rows, by clears that empty a table, by hides and

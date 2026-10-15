@@ -391,3 +391,24 @@ src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --context-footpr
 ```
 
 Allocation counts and counters do not depend on the machine's load, so these figures need no idle machine; times do.
+
+Two more modes print counts and bytes for the questions colored contexts leave open:
+
+- `--stale-probe <iterations> none|held|caughtup` (`Relations/Bridge/StaleProbe.cs`) runs the bridge `math` program
+  at its root with no child, with a child of the root held unused from the start, or with one caught up after every
+  iteration. A table does not compact while its scope has live descendants, so the probe prints, per iteration, the
+  function tables' live rows, physical rows, tombstones, the compactions the gate blocked, the tombstones at or above
+  the child's cursor and those above egglog's compaction bound. At the end it prints the tables' row storage,
+  compaction scratch buffers and key indexes, and the managed heap after forced collections taken before the program,
+  with the graph live and after it is released, which separates the graph's own memory from what the process keeps
+  in pooled arrays. Every iteration checks its counts (no tombstone column above the tombstones, nothing blocked
+  without a child, no compaction while the child lives), and with all 12 iterations the result is checked against
+  egglog's; a failed check ends the run with exit code 1.
+- `--plan-footprint [rules...]` (`Relations/Contexts/PlanFootprint.cs`) prints the bytes a sibling scope's freeze
+  allocates and retains for planning, per rule, on a synthetic theory of 100 and 1,000 global rules (or the counts
+  given): what a plan per frozen scope would cost.
+
+```
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --stale-probe 12 held
+src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.exe --plan-footprint
+```

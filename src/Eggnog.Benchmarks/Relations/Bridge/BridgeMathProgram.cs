@@ -188,6 +188,17 @@ namespace Eggnog.Relations.Benchmarks
         public EGraph EGraph => egraph;
 
         /// <summary>
+        /// Gets the program's functions, in the order of <see cref="FunctionNames"/>.
+        /// </summary>
+        public ReadOnlySpan<FunctionId> Functions => functions;
+
+        /// <summary>
+        /// Runs every rule once at the root: one iteration of <see cref="Run"/>'s loop, without its line.
+        /// </summary>
+        /// <returns>Whether the iteration changed anything.</returns>
+        public bool RunIteration() => egraph.RunRules(rules).Changed;
+
+        /// <summary>
         /// Runs the rules for up to <see cref="N"/> iterations, stopping after the first that changes nothing: the loop
         /// of <c>math.rs</c>. With <paramref name="log"/>, writes <c>math.rs</c>'s line after each iteration
         /// (<c>Iteration {i} finished, duration={:?} (saturated={})</c>).
@@ -199,7 +210,7 @@ namespace Eggnog.Relations.Benchmarks
             for (var i = 0; i < N; i++)
             {
                 var start = Stopwatch.GetTimestamp();
-                var changed = egraph.RunRules(rules).Changed;
+                var changed = RunIteration();
                 if (log != null)
                     log.WriteLine($"Iteration {i} finished, duration={RustDuration.Format(RustDuration.ElapsedNanoseconds(start))} (saturated={(changed ? "false" : "true")})");
 

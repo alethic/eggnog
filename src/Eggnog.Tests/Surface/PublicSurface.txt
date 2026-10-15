@@ -397,6 +397,7 @@ sealed class Eggnog.Scope : IDisposable
     IReadOnlyList<Rule> LocalRules { get }
     IReadOnlyList<Scope> Children { get }
     IReadOnlyList<TableRow> Rows(TableHandle table)
+    Int32 CompactionsBlockedAtFreeze { get }
     Int64 Count(Query query)
     Int64 CountRows(TableHandle table)
     Int64 Version { get }
