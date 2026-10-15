@@ -117,8 +117,20 @@ namespace Eggnog.Relations
                 ThrowLength(row.Length, arity, nameof(row));
 
             var shard = shardData.Log2 == 0 ? 0 : shardData.ShardOf(TableKeyHash.Hash(row, keyCount));
-            (rows[shard] ??= new RowBuffer(arity)).AddRow(row);
+            (rows[shard] ??= NewRows()).AddRow(row);
             dirty = true;
+        }
+
+        /// <summary>
+        /// Creates a shard's row buffer on its first staged row: a staging buffer
+        /// (<see cref="RowBuffer.ForStaging(int)"/>), whose growth returns the storage it replaces to the pool, since
+        /// nothing reads it before the flush.
+        /// </summary>
+        /// <returns>The buffer.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        RowBuffer NewRows()
+        {
+            return RowBuffer.ForStaging(arity);
         }
 
         /// <summary>
