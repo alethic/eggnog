@@ -12,11 +12,11 @@ namespace Eggnog.Tests.Differential
 
     /// <summary>
     /// The split oracle: random discriminated schemas (one or two discriminators with two to four values; branch rules
-    /// declaring presence, stored forms and domains) and queries with <c>IN</c> lists and disequalities, run in the
-    /// scoped encoding with engine splits (<see cref="SplitOracleScoped"/>) and in the literal encoding with the
-    /// prototype's split rules (<see cref="SplitOracleLiteral"/>). In the query, for every path the query mentions,
-    /// presence, stored forms and contradiction must agree, and so must which paths have a domain; each domain the
-    /// engine lifts must lie within the prototype's, which also joins the domains of the cases that went vacuous, and
+    /// declaring presence, stored forms and domains) and queries with in-set conjuncts and disequalities, run in the
+    /// scoped encoding with engine splits (<see cref="SplitOracleScoped"/>) and in the literal encoding with splits
+    /// written as rules (<see cref="SplitOracleLiteral"/>). In the query, for every path the query mentions, presence,
+    /// stored forms and contradiction must agree, and so must which paths have a domain; each domain the engine lifts
+    /// must lie within the literal encoding's, which also joins the domains of the cases that went vacuous, and
     /// equal it where no conjunct narrows the path's discriminator, so that no case can go vacuous (see
     /// <see cref="Agree"/>). 300 seeds by default; <c>EGGNOG_SEEDS</c> raises it. A failing program prints itself.
     /// </summary>
@@ -29,11 +29,11 @@ namespace Eggnog.Tests.Differential
         const int DefaultSeeds = 300;
 
         /// <summary>
-        /// Every seed's program agrees in both encodings: engine splits in the scoped one and the prototype's split
-        /// rules in the literal one (see <see cref="Agree"/>). At most three failing programs are reported.
+        /// Every seed's program agrees in both encodings: engine splits in the scoped one and splits written as rules
+        /// in the literal one (see <see cref="Agree"/>). At most three failing programs are reported.
         /// </summary>
         [Fact]
-        public void EngineSplitsAgreeWithThePrototypesSplitRules()
+        public void EngineSplitsAgreeWithSplitsWrittenAsRules()
         {
             var failures = new List<string>();
             for (var seed = 0; seed < Seeds() && failures.Count < 3; seed++)
@@ -45,7 +45,7 @@ namespace Eggnog.Tests.Differential
 
         /// <summary>
         /// The generator produces every shape the comparison relies on: two discriminators, four-valued ones,
-        /// <c>IN</c> lists of more than one value, disequalities, and branches with stored forms and with domains; and
+        /// in-set conjuncts of more than one value, disequalities, and branches with stored forms and with domains; and
         /// the first 60 programs open cases in more than ten queries and refute at least one.
         /// </summary>
         [Fact]
@@ -73,10 +73,10 @@ namespace Eggnog.Tests.Differential
         }
 
         /// <summary>
-        /// The comparison itself (<see cref="Agree"/>): a lifted domain narrower than the prototype's, on a path whose
-        /// discriminator no conjunct narrows, is a disagreement. No case of either encoding can be vacuous there, so a
-        /// value missing from the engine's lift is a lost fact (a case join that keeps one case's value, say), not the
-        /// prototype's wider join; a check of containment alone would accept it.
+        /// The comparison itself (<see cref="Agree"/>): a lifted domain narrower than the literal encoding's, on a path
+        /// whose discriminator no conjunct narrows, is a disagreement. No case of either encoding can be vacuous there,
+        /// so a value missing from the engine's lift is a lost fact (a case join that keeps one case's value, say), not
+        /// the literal encoding's wider join; a check of containment alone would accept it.
         /// </summary>
         [Fact]
         public void ANarrowerDomainWhereNoCaseCanBeVacuousDisagrees()
@@ -137,10 +137,10 @@ namespace Eggnog.Tests.Differential
 
         /// <summary>
         /// Compares the two encodings' facts; returns what differs, or <c>null</c>. A domain the engine lifts may be
-        /// narrower than the prototype's, and only when a case went vacuous (seed 374, beyond the default 300 seeds: a
-        /// query <c>k0 IN ('a', 'c')</c> over the domain {a, b, c}; the prototype's split takes k0 = 'b' before the IN
-        /// list narrows the domain, and joins that vacuous case's domains of the other paths into what it lifts). A
-        /// case goes vacuous only where a conjunct narrows the discriminator that governs the path
+        /// narrower than the literal encoding's, and only when a case went vacuous (seed 374, beyond the default 300
+        /// seeds: a query <c>k0 in {a, c}</c> over the domain {a, b, c}; the literal encoding's split takes k0 = b
+        /// before the conjunct narrows the domain, and joins that vacuous case's domains of the other paths into
+        /// what it lifts). A case goes vacuous only where a conjunct narrows the discriminator that governs the path
         /// (<see cref="Narrowed"/>): elsewhere the domains must be equal.
         /// </summary>
         internal static string? Agree(SplitOracleProgram program, SplitOracleFacts scoped, SplitOracleFacts literal)
@@ -148,7 +148,7 @@ namespace Eggnog.Tests.Differential
             if (scoped.Contradictory != literal.Contradictory)
                 return "contradiction differs";
 
-            // A query with no model proves everything in the prototype's encoding, which keeps deriving; nothing to
+            // A query with no model proves everything in the literal encoding, which keeps deriving; nothing to
             // compare.
             if (scoped.Contradictory)
                 return null;
@@ -162,18 +162,18 @@ namespace Eggnog.Tests.Differential
             if (scoped.Domains.Keys.SequenceEqual(literal.Domains.Keys, StringComparer.Ordinal) == false)
                 return "the paths with a domain differ";
 
-            // A domain the engine lifts is the case join of its live cases' domains. The prototype's "lift a domain"
-            // joins the domains every case reported, a vacuous one's included (it keeps deriving after its
-            // contradiction), and its interleaved schedule splits before a query's IN list or disequality narrowed the
+            // A domain the engine lifts is the case join of its live cases' domains. The literal encoding's rule "lift
+            // a domain" joins the domains every case reported, a vacuous one's included (it keeps deriving after its
+            // contradiction), and its interleaved schedule splits before a query's in-set conjunct or disequality narrowed the
             // domain, so it opens cases that go vacuous. Its domain is then wider, never narrower: the engine's must
             // lie within it, and equal it when no case went vacuous.
             foreach (var (path, domain) in scoped.Domains)
             {
                 if (domain.IsSubsetOf(literal.Domains[path]) == false)
-                    return $"the domain of {path} is not within the prototype's";
+                    return $"the domain of {path} is not within the literal encoding's";
 
                 if (Narrowed(program, Governor(path)) == false && domain.Equals(literal.Domains[path]) == false)
-                    return $"the domain of {path} differs from the prototype's, and no conjunct narrows {Governor(path)}";
+                    return $"the domain of {path} differs from the literal encoding's, and no conjunct narrows {Governor(path)}";
             }
 
             return null;
@@ -186,7 +186,7 @@ namespace Eggnog.Tests.Differential
         static string Governor(string path) => "k" + path[1];
 
         /// <summary>
-        /// Gets whether a conjunct of the query rules out a value of a discriminator's domain: an <c>IN</c> list on it
+        /// Gets whether a conjunct of the query rules out a value of a discriminator's domain: an in-set conjunct on it
         /// that leaves out a value of its domain, or a disequality on it with a value of its domain. Only then can a
         /// case of a split on it be vacuous.
         /// </summary>

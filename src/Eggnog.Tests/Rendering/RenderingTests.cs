@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Literal;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Literal;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -48,7 +48,7 @@ namespace Eggnog.Tests.Rendering
         [Fact]
         public void ARuleRendersAsWritten()
         {
-            var c = new PrototypeTheory(new EGraph());
+            var c = new ContextArgumentTheory(new EGraph());
             var rule = c.Rewrite.Rules[0];
             Assert.Equal("lower uuid", rule.Name);
             Assert.Equal("(rule ((= e (UuidEq p v)) (form (Query) p \"uuid-lower\")) ((union e (StrEq p v))) :ruleset rewrite)", rule.ToString());
@@ -57,7 +57,7 @@ namespace Eggnog.Tests.Rendering
         [Fact]
         public void NamedPrimitivesRenderByName()
         {
-            var c = new PrototypeTheory(new EGraph());
+            var c = new ContextArgumentTheory(new EGraph());
             var rule = c.Lattice.DefineRule("narrow", r =>
             {
                 var (k, p, v, d) = r.Vars<Ctx, string, string, ValueSet<string>>("c", "p", "v", "d");
@@ -183,7 +183,7 @@ namespace Eggnog.Tests.Rendering
         [Fact]
         public void ScopedReadsAndLicencesRender()
         {
-            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            var c = new Predicates.Scoped.PredicateTheory(new EGraph());
             var tautology = c.Rewrite.Rules[4];
             Assert.Equal("declared tautology", tautology.Name);
             Assert.Equal(

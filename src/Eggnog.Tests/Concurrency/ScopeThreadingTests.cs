@@ -5,8 +5,8 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -220,12 +220,12 @@ namespace Eggnog.Tests.Concurrency
             using var release = new ManualResetEventSlim();
             t.DefineBlocking(entered, release);
             t.Root.Freeze();
-            var container = t.Root.CreateChild(t.Outer);
-            container.Assume(t.Fact.Of("a"));
+            var outer = t.Root.CreateChild(t.Outer);
+            outer.Assume(t.Fact.Of("a"));
 
             var errors = new Exception?[1];
             RunReport? report = null;
-            var run = Spawn(() => report = container.Run(Schedule.Saturate(t.Rules)), errors, 0);
+            var run = Spawn(() => report = outer.Run(Schedule.Saturate(t.Rules)), errors, 0);
             Assert.True(entered.Wait(Patience));
 
             // The root is frozen, so this thread may define a rule whose first scoped read creates a mirror.
@@ -240,7 +240,7 @@ namespace Eggnog.Tests.Concurrency
 
             var observed = errors[0] is null
                 ? $"completed: {report!.StopReason}"
-                : $"threw {errors[0]!.GetType().Name} after writing seen(a) = {container.Check(t.Seen.Of("a"))}: {errors[0]!.Message}";
+                : $"threw {errors[0]!.GetType().Name} after writing seen(a) = {outer.Check(t.Seen.Of("a"))}: {errors[0]!.Message}";
             if (observed.StartsWith("completed", StringComparison.Ordinal) == false)
                 Assert.Fail(observed);
         }
@@ -292,18 +292,18 @@ namespace Eggnog.Tests.Concurrency
             {
                 for (var i = 0; i < Freezes; i++)
                 {
-                    var container = t.Root.CreateChild(t.Inner);
-                    container.Assume(t.Fact.Of("b" + i));
+                    var inner = t.Root.CreateChild(t.Inner);
+                    inner.Assume(t.Fact.Of("b" + i));
                     try
                     {
-                        container.Freeze();
+                        inner.Freeze();
                     }
                     catch (Exception exception)
                     {
                         failures.Add($"{exception.GetType().Name}: {exception.Message}");
                     }
 
-                    container.Dispose();
+                    inner.Dispose();
                 }
             }
             finally
@@ -519,27 +519,27 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// A frozen container with a local rule and a scoped read, queried, extracted (one extractor per call) and
+        /// A frozen schema with a local rule and a scoped read, queried, extracted (one extractor per call) and
         /// given query children from eight dedicated threads, is disposed in the middle of it. Every call either
-        /// completes or is refused with <see cref="ObjectDisposedException"/>; the container is released once, after
+        /// completes or is refused with <see cref="ObjectDisposedException"/>; the schema is released once, after
         /// the last child and call; its local rule is freed and its tag uncounted.
         /// </summary>
         [Fact]
-        public void AFrozenContainerDisposedUnderLoadIsReleasedOnceAfterTheLastCall()
+        public void AFrozenSchemaDisposedUnderLoadIsReleasedOnceAfterTheLastCall()
         {
             const int Threads = 8;
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var present = c.Graph.DefineQuery("present", q => q.When(c.Present.In(c.Schema).Of(q.Var<string>("p"))));
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
-            SweepLinks.Declare(c, schema);
+            DiscriminatedSchema.Declare(c, schema);
             var local = schema.DefineRule(c.Horn, "local present", r =>
             {
                 var p = r.Var<string>("p");
                 r.When(c.Present.Of(p));
                 r.Then(c.Present.Of(p));
             });
-            var terms = SweepLinks.Queries(c);
+            var terms = DiscriminatedSchema.Queries(c);
             var inSchema = terms.Select(term => schema.Make(term)).ToArray();
             schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
             schema.Freeze();
@@ -660,27 +660,27 @@ namespace Eggnog.Tests.Concurrency
 
         /// <summary>
         /// Query scopes with a degree of parallelism of 4, forced onto the parallel paths, run at the same time on four
-        /// dedicated threads under one frozen container, and each has the serial run's facts.
+        /// dedicated threads under one frozen schema, and each has the serial run's facts.
         /// </summary>
         [Fact]
         public void ParallelQueryScopesOnConcurrentThreadsHaveTheSerialFacts()
         {
             const int Degree = 4;
-            static (CosmosTheory C, Scope Schema) Container(int degree)
+            static (PredicateTheory C, Scope Schema) Compile(int degree)
             {
-                var c = new CosmosTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
+                var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
                 c.Graph.Root.Freeze();
                 var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 if (degree > 1)
                     schema.Engine.Context.Context.Database.ParallelRuleSetsOverride = true;
 
-                SweepLinks.Declare(c, schema);
+                DiscriminatedSchema.Declare(c, schema);
                 schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
                 schema.Freeze();
                 return (c, schema);
             }
 
-            static IReadOnlyList<string> Ask(CosmosTheory c, Scope schema, ConstructorTerm<Pred> term, int degree)
+            static IReadOnlyList<string> Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term, int degree)
             {
                 using var query = schema.CreateChild(c.Query, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 if (degree > 1)
@@ -692,11 +692,11 @@ namespace Eggnog.Tests.Concurrency
                 return ScopeFacts.Of(query);
             }
 
-            var (serialTheory, serialSchema) = Container(1);
-            var expected = SweepLinks.Queries(serialTheory).Select(term => Ask(serialTheory, serialSchema, term, 1)).ToArray();
+            var (serialTheory, serialSchema) = Compile(1);
+            var expected = DiscriminatedSchema.Queries(serialTheory).Select(term => Ask(serialTheory, serialSchema, term, 1)).ToArray();
 
-            var (c, schema) = Container(Degree);
-            var terms = SweepLinks.Queries(c);
+            var (c, schema) = Compile(Degree);
+            var terms = DiscriminatedSchema.Queries(c);
             var results = new IReadOnlyList<string>[terms.Length * 2];
             var errors = new Exception?[Degree];
             var next = -1;
@@ -716,7 +716,7 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Two graphs, each with a frozen container under load on its own threads, never see each other's frozen tags
+        /// Two graphs, each with a frozen schema under load on its own threads, never see each other's frozen tags
         /// or guards: tags of the same name in two graphs stay independent while both are queried and disposed.
         /// </summary>
         [Fact]

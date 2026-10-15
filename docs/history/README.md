@@ -4,8 +4,10 @@ These documents are the design record from Eggnog's construction. They were writ
 and while the code was built, and they keep the reasoning behind its decisions: the alternatives considered, the
 reviews and their findings, and the deviations each milestone recorded. They do not describe the current code. Paths,
 type names, line numbers and status lines in them are those of the time they were written, and some of the code they
-cite has since been renamed, moved or removed (the storage prototype `src/Eggnog.Storage`, which they call the spike,
-among it).
+cite has since been renamed, moved or removed. Among it are the storage prototype `src/Eggnog.Storage`, which they
+call the spike, and the egglog prototype of a query planner's fact reasoning (`prelude.egg` and the scenario files
+`01`-`07`) that the rule-layer spec ported as tests; the tests' theories are now the fixtures under
+`src/Eggnog.Tests/Predicates`.
 
 For the code as it is, read [`../architecture.md`](../architecture.md). For what is open, read
 [`../roadmap.md`](../roadmap.md). The engine's living conventions and decisions are in [`../engine`](../engine).
@@ -16,7 +18,6 @@ For the code as it is, read [`../architecture.md`](../architecture.md). For what
 | [`colored-contexts-spec.md`](colored-contexts-spec.md) | The specification of colored contexts (milestones M9.0-M10.4): stores, contexts, the layered union-find, layered tables, catch-up, freeze, layered query execution, per-context rules, lift and split hooks; its invariants (I1-I35) and proof sketches; its implementation notes (§21) and what it still defers (§21.11) |
 | [`rule-layer-spec.md`](rule-layer-spec.md) | The specification of the public library (milestones R1a-R3): its decisions (D1-D49), public and internal types, semantics, invariants, test plan, the engine requests it made (E1-E12), its implementation notes (§15) and what it still defers (§15.5) |
 | [`colored-egraph-literature.md`](colored-egraph-literature.md) | A review of the literature on e-graphs with assumptions (colored e-graphs and related work) against Eggnog's design, and the requirements it produced (L1-L7 in `docs/engine/decisions.md`) |
-| [`cosmos-integration.md`](cosmos-integration.md) | The plan (revision 2, 2026-10-12) for moving the declared-fact reasoning of the Apache Calcite Cosmos DB adapter onto Eggnog: what it found in the adapter, its phases, and the library requests it made of Eggnog (§8.3), of which the open ones are in `docs/roadmap.md` |
 | [`colors-m10-reports.md`](colors-m10-reports.md) | The L6 and L7 measurement reports: what a child context costs as the root grows, memory against full clones on case splits, the cost of smaller-id-wins after a late parent mint, and the child footprint |
 
 Labels these documents use, such as decision numbers (D12), invariants (I31), conflict resolutions (X19) or notes (N86),

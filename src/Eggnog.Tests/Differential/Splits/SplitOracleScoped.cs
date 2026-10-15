@@ -2,17 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Scoped;
 
 namespace Eggnog.Tests.Differential.Splits
 {
 
     /// <summary>
     /// Runs a split-oracle program in the scoped encoding with engine splits: the schema compiled in its own scope with
-    /// the theory's <see cref="CosmosTheory.Facts"/> and frozen; the query in a child of it, with the prototype's
-    /// schedule, facts settled before the split, and the unguarded schema split, so that both encodings split the same
-    /// keys.
+    /// the theory's <see cref="PredicateTheory.Facts"/> and frozen; the query in a child of it, with the literal
+    /// encoding's schedule, facts settled before the split, and the unguarded schema split, so that both encodings
+    /// split the same keys.
     /// </summary>
     public static class SplitOracleScoped
     {
@@ -25,7 +25,7 @@ namespace Eggnog.Tests.Differential.Splits
         /// <returns>The facts.</returns>
         public static SplitOracleFacts Run(SplitOracleProgram program, out RunReport report)
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
             foreach (var (path, values) in program.Discriminators)
@@ -44,7 +44,7 @@ namespace Eggnog.Tests.Differential.Splits
 
             schema.Freeze();
             using var query = schema.CreateChild(c.Query);
-            var q = query.Make(Where(c, program));
+            var q = query.Make(Predicate(c, program));
             query.Assume(c.WhereClause.Of(q));
             var settle = Schedule.Saturate(c.Horn, c.Lattice);
             report = query.Run(Schedule.Saturate(settle, Schedule.Split(c.SchemaSplit, settle), c.Rewrite));
@@ -71,16 +71,16 @@ namespace Eggnog.Tests.Differential.Splits
         /// <summary>
         /// The facts a branch declares.
         /// </summary>
-        static Fact[] Consequences(CosmosTheory c, SplitOracleBranch branch) =>
+        static Fact[] Consequences(PredicateTheory c, SplitOracleBranch branch) =>
             branch.Present.Select(p => c.Present.Of(p))
                 .Concat(branch.Forms.Select(f => c.Form.Of(f.Path, f.Form)))
                 .Concat(branch.Domains.Select(d => c.Dom.Of(d.Path).Is(ValueSet.Of(d.Values))))
                 .ToArray();
 
         /// <summary>
-        /// The query's WHERE clause: the conjuncts joined by <c>And</c>.
+        /// The query's predicate: the conjuncts joined by <c>And</c>.
         /// </summary>
-        static ConstructorTerm<Pred> Where(CosmosTheory c, SplitOracleProgram program)
+        static ConstructorTerm<Pred> Predicate(PredicateTheory c, SplitOracleProgram program)
         {
             var terms = new List<ConstructorTerm<Pred>>();
             foreach (var conjunct in program.Conjuncts)
@@ -103,11 +103,11 @@ namespace Eggnog.Tests.Differential.Splits
                 }
             }
 
-            var where = terms[0];
+            var predicate = terms[0];
             foreach (var term in terms.Skip(1))
-                where = c.And.Of(where, term);
+                predicate = c.And.Of(predicate, term);
 
-            return where;
+            return predicate;
         }
 
     }

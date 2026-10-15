@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -13,7 +13,7 @@ namespace Eggnog.Tests.Concurrency
 {
 
     /// <summary>
-    /// Children of a frozen scope run concurrently: queries under one frozen container on parallel threads give the
+    /// Children of a frozen scope run concurrently: queries under one frozen schema on parallel threads give the
     /// results of serial runs, queries that split included, and host reads, queries and extractors on a frozen scope
     /// run from many threads. Most tests run on dedicated threads that meet at a barrier first
     /// (<see cref="DedicatedThreads"/>), so the calls overlap.
@@ -27,16 +27,17 @@ namespace Eggnog.Tests.Concurrency
         const int Threads = 8;
 
         /// <summary>
-        /// Asks every sweep query once, serially, and renders each extraction.
+        /// Asks every query of the discriminated schema (<see cref="DiscriminatedSchema.Queries"/>) once, serially, and
+        /// renders each extraction.
         /// </summary>
         static string[] Serial()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = SweepLinks.Compile(c);
-            return SweepLinks.Queries(c).Select(term =>
+            var schema = DiscriminatedSchema.Compile(c);
+            return DiscriminatedSchema.Queries(c).Select(term =>
             {
-                var (query, q) = SweepLinks.Ask(c, schema, term);
+                var (query, q) = DiscriminatedSchema.Ask(c, schema, term);
                 using (query)
                     return Describe(c, query, q);
             }).ToArray();
@@ -46,7 +47,7 @@ namespace Eggnog.Tests.Concurrency
         /// Renders what a query scope proved: the extraction, its cost, the stored forms it holds, and whether it is
         /// contradictory.
         /// </summary>
-        static string Describe(CosmosTheory c, Scope query, Pred q)
+        static string Describe(PredicateTheory c, Scope query, Pred q)
         {
             var best = query.Extract(q);
             var forms = string.Join(",", query.Rows(c.Form).Select(r => r.ToString()));
@@ -54,18 +55,18 @@ namespace Eggnog.Tests.Concurrency
         }
 
         [Fact]
-        public void ThirtyTwoQueriesUnderOneFrozenContainerOnParallelThreadsGiveTheSerialResults()
+        public void ThirtyTwoQueriesUnderOneFrozenSchemaOnParallelThreadsGiveTheSerialResults()
         {
             var expected = Serial();
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = SweepLinks.Compile(c);
-            var terms = SweepLinks.Queries(c);
+            var schema = DiscriminatedSchema.Compile(c);
+            var terms = DiscriminatedSchema.Queries(c);
             var results = new string[32];
 
             var threads = DedicatedThreads.For(Threads, results.Length, i =>
             {
-                var (query, q) = SweepLinks.Ask(c, schema, terms[i % terms.Length]);
+                var (query, q) = DiscriminatedSchema.Ask(c, schema, terms[i % terms.Length]);
                 using (query)
                     results[i] = Describe(c, query, q);
             });
@@ -82,7 +83,7 @@ namespace Eggnog.Tests.Concurrency
         [Fact]
         public void QueriesAndExtractorsOnAFrozenSchemaRunFromEightThreads()
         {
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             var present = c.Graph.DefineQuery("present", q => q.When(c.Present.Of(q.Var<string>("p"))));
             var forms = c.Graph.DefineQuery("forms", q =>
             {
@@ -91,9 +92,9 @@ namespace Eggnog.Tests.Concurrency
             });
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
-            SweepLinks.Declare(c, schema);
+            DiscriminatedSchema.Declare(c, schema);
             var terms = new List<Pred>();
-            foreach (var term in SweepLinks.Queries(c))
+            foreach (var term in DiscriminatedSchema.Queries(c))
                 terms.Add(schema.Make(term));
 
             schema.Run(Schedule.Saturate(c.Horn, c.Lattice, c.Rewrite));
@@ -262,11 +263,11 @@ namespace Eggnog.Tests.Concurrency
         [Fact]
         public void SplittingQueriesUnderOneFrozenSchemaRunOnParallelThreads()
         {
-            var c = new Cosmos.Scoped.CosmosTheory(new EGraph());
+            var c = new Predicates.Scoped.PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = Cosmos.Scoped.SweepLinks.Compile(c);
+            var schema = Predicates.Scoped.DiscriminatedSchema.Compile(c);
             ConstructorTerm<Pred> Term() =>
-                c.And.Of(c.Or.Of(c.StrEq.Of("data.type", "park"), c.StrEq.Of("data.type", "map")), c.UuidEq.Of("data.data.parkId", Cosmos.Scoped.SweepLinks.Park));
+                c.And.Of(c.Or.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("kind", "b")), c.UuidEq.Of("body.ref", Predicates.Scoped.DiscriminatedSchema.Ref));
 
             string Ask()
             {
@@ -289,14 +290,14 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Queries under one frozen container run their split steps concurrently on parallel threads (each query scope
+        /// Queries under one frozen schema run their split steps concurrently on parallel threads (each query scope
         /// is its own thread domain; split rules, their sources, lift specs and case joins are shared), and give the
         /// results of serial runs.
         /// </summary>
         [Fact]
-        public void SplitQueriesUnderOneFrozenContainerOnParallelThreadsGiveTheSerialResults()
+        public void SplitQueriesUnderOneFrozenSchemaOnParallelThreadsGiveTheSerialResults()
         {
-            static string Ask(CosmosTheory c, Scope schema, ConstructorTerm<Pred> term)
+            static string Ask(PredicateTheory c, Scope schema, ConstructorTerm<Pred> term)
             {
                 using var query = schema.CreateChild(c.Query);
                 var q = query.Make(term);
@@ -308,16 +309,16 @@ namespace Eggnog.Tests.Concurrency
                 return $"{best} cost {best.Cost} cases {report.CasesOpened} contradictory {query.IsContradictory} forms {forms}";
             }
 
-            var serial = new CosmosTheory(new EGraph());
+            var serial = new PredicateTheory(new EGraph());
             serial.Graph.Root.Freeze();
-            var serialSchema = SweepLinks.Compile(serial);
-            var expected = SweepLinks.Queries(serial).Select(term => Ask(serial, serialSchema, term)).ToArray();
+            var serialSchema = DiscriminatedSchema.Compile(serial);
+            var expected = DiscriminatedSchema.Queries(serial).Select(term => Ask(serial, serialSchema, term)).ToArray();
             Assert.Contains(expected, e => e.Contains("cases 2", StringComparison.Ordinal));
 
-            var c = new CosmosTheory(new EGraph());
+            var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
-            var schema = SweepLinks.Compile(c);
-            var terms = SweepLinks.Queries(c);
+            var schema = DiscriminatedSchema.Compile(c);
+            var terms = DiscriminatedSchema.Queries(c);
             var results = new string[32];
 
             var threads = DedicatedThreads.For(8, results.Length, i => results[i] = Ask(c, schema, terms[i % terms.Length]));
@@ -337,14 +338,14 @@ namespace Eggnog.Tests.Concurrency
 
         /// <summary>
         /// Children of a frozen scope may run concurrently, and each query's splits are its own: eight queries under
-        /// one frozen container run the scoped saturation, whose query split opens their cases, on pool threads and
+        /// one frozen schema run the scoped saturation, whose query split opens their cases, on pool threads and
         /// reach the serial result; the schema learns nothing from them.
         /// </summary>
         [Fact]
         public void SplitsInSiblingQueriesRunConcurrentlyAndAgreeWithASerialRun()
         {
             var graph = new EGraph();
-            var c = new CosmosTheory(graph);
+            var c = new PredicateTheory(graph);
             graph.Root.Freeze();
             var schema = graph.Root.CreateChild(c.Schema);
             schema.Assume(

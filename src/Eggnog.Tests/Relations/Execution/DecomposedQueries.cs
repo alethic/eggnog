@@ -67,9 +67,10 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Builds the database and the rule set of an experiment. The action records the output variables into
-        /// <paramref name="log"/>.
+        /// <paramref name="log"/>, or passes them to <paramref name="action"/> when it is given.
         /// </summary>
-        public static (Database Db, RuleSet Rules) Build(string name, PlanStrategy strategy, string mode, List<uint[]> log, bool noDecomposition = false)
+        public static (Database Db, RuleSet Rules) Build(string name, PlanStrategy strategy, string mode, List<uint[]> log, bool noDecomposition = false,
+            ExternalFunction? action = null)
         {
             var db = ExecutionTestUtil.NewDatabase(mode);
             var ids = new List<TableId>();
@@ -81,7 +82,7 @@ namespace Eggnog.Relations.Tests
             }
 
             db.MergeAll();
-            var recorder = db.AddExternalFunction(ExecutionTestUtil.Recorder(log));
+            var recorder = db.AddExternalFunction(action ?? ExecutionTestUtil.Recorder(log));
             var (atoms, varCount, output) = Spec(name);
             var rsb = db.NewRuleSet();
             var q = rsb.NewRule();

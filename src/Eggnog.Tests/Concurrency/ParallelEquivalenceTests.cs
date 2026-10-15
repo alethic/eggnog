@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos;
-using Eggnog.Tests.Cosmos.Scoped;
+using Eggnog.Tests.Predicates;
+using Eggnog.Tests.Predicates.Scoped;
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -11,10 +11,10 @@ namespace Eggnog.Tests.Concurrency
 {
 
     /// <summary>
-    /// Parallel runs are equivalent to serial ones: every query of the scoped Cosmos programs
-    /// (<see cref="ScopedScenarioCases"/> and sweep's), with a degree of parallelism of 4 on the graph and on the query
-    /// scopes, gives every scope the serial run's facts modulo renaming of classes. Extraction is compared at 1 only,
-    /// since ties may break differently in parallel.
+    /// Parallel runs are equivalent to serial ones: every query of the predicate theory's scoped programs
+    /// (<see cref="ScopedQueryCases"/> and <see cref="DiscriminatedSchema"/>'s), with a degree of parallelism of 4 on
+    /// the graph and on the query scopes, gives every scope the serial run's facts modulo renaming of classes.
+    /// Extraction is compared at 1 only, since ties may break differently in parallel.
     /// </summary>
     public sealed class ParallelEquivalenceTests
     {
@@ -25,20 +25,20 @@ namespace Eggnog.Tests.Concurrency
         const int Degree = 4;
 
         /// <summary>
-        /// Runs sweep's container and its queries; returns the schema's facts and each query's.
+        /// Runs the discriminated schema and its queries; returns the schema's facts and each query's.
         /// </summary>
-        static List<IReadOnlyList<string>> SweepFacts(int degree)
+        static List<IReadOnlyList<string>> DiscriminatedSchemaFacts(int degree)
         {
-            var c = new CosmosTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
+            var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
             ForceParallel(c.Graph.Root, degree);
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
             ForceParallel(schema, degree);
-            SweepLinks.Declare(c, schema);
+            DiscriminatedSchema.Declare(c, schema);
             schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
             schema.Freeze();
             var facts = new List<IReadOnlyList<string>> { ScopeFacts.Of(schema) };
-            foreach (var term in SweepLinks.Queries(c))
+            foreach (var term in DiscriminatedSchema.Queries(c))
             {
                 var query = schema.CreateChild(c.Query, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);
                 ForceParallel(query, degree);
@@ -53,7 +53,7 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
-        /// Makes a scope's rule sets run in parallel whatever their size, so that the small Cosmos programs take the
+        /// Makes a scope's rule sets run in parallel whatever their size, so that the small predicate programs take the
         /// parallel paths.
         /// </summary>
         static void ForceParallel(Scope scope, int degree)
@@ -63,37 +63,37 @@ namespace Eggnog.Tests.Concurrency
         }
 
         [Fact]
-        public void SweepsContainerAndQueriesHaveTheSerialFacts()
+        public void TheDiscriminatedSchemaAndItsQueriesHaveTheSerialFacts()
         {
-            var serial = SweepFacts(1);
-            var parallel = SweepFacts(Degree);
+            var serial = DiscriminatedSchemaFacts(1);
+            var parallel = DiscriminatedSchemaFacts(Degree);
 
             Assert.Equal(serial.Count, parallel.Count);
             for (var i = 0; i < serial.Count; i++)
                 Assert.Equal(serial[i], parallel[i]);
 
-            Assert.Contains(serial[0], line => line.StartsWith("(form \"data.guid\"", System.StringComparison.Ordinal));
+            Assert.Contains(serial[0], line => line.StartsWith("(form \"uid\"", System.StringComparison.Ordinal));
         }
 
         [Fact]
-        public void EachScenarioHasTheSerialFacts()
+        public void EachQueryCaseHasTheSerialFacts()
         {
-            // Every query of scenarios 01 to 06 and 08; scenario 07's are the sweep test's.
-            foreach (var scenario in ScopedScenarioCases.All)
+            // Every query that runs without a split; the discriminated schema's are the test above's.
+            foreach (var queryCase in ScopedQueryCases.All)
             {
-                var serial = Query(1, scenario.Declare, scenario.Query);
-                var parallel = Query(Degree, scenario.Declare, scenario.Query);
+                var serial = Query(1, queryCase.Declare, queryCase.Query);
+                var parallel = Query(Degree, queryCase.Declare, queryCase.Query);
                 Assert.Equal(serial, parallel);
                 Assert.NotEmpty(serial);
             }
         }
 
         /// <summary>
-        /// Compiles a container and asks one query at the given degree of parallelism; returns the query's facts.
+        /// Compiles a schema and asks one query at the given degree of parallelism; returns the query's facts.
         /// </summary>
-        static IReadOnlyList<string> Query(int degree, System.Action<CosmosTheory, Scope> declare, System.Func<CosmosTheory, ConstructorTerm<Pred>> term)
+        static IReadOnlyList<string> Query(int degree, System.Action<PredicateTheory, Scope> declare, System.Func<PredicateTheory, ConstructorTerm<Pred>> term)
         {
-            var c = new CosmosTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
+            var c = new PredicateTheory(new EGraph(new EGraphOptions { DegreeOfParallelism = degree }));
             ForceParallel(c.Graph.Root, degree);
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema, degree > 1 ? new ScopeOptions { DegreeOfParallelism = degree } : null);

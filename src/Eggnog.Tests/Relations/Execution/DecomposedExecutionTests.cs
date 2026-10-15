@@ -101,6 +101,51 @@ namespace Eggnog.Relations.Tests
             }
         }
 
+        /// <summary>
+        /// An early stop requested by the action ends a decomposed join: the serial run stops at the first check after
+        /// the first batch of matches, so it records fewer matches than a run without the stop, each of them a match of
+        /// the query.
+        /// </summary>
+        [Theory]
+        [InlineData("tree5")]
+        [InlineData("spider")]
+        public void AnEarlyStopEndsADecomposedJoin(string name)
+        {
+            var log = new List<uint[]>();
+            var stopper = ExternalFunction.Create((ExecutionState state, ReadOnlySpan<uint> args, out uint result) =>
+            {
+                log.Add(args.ToArray());
+                state.TriggerEarlyStop();
+                result = 0;
+                return true;
+            });
+            var (db, rs) = DecomposedQueries.Build(name, PlanStrategy.PureSize, "Serial", log, action: stopper);
+            using (rs)
+            {
+                Assert.IsType<DecomposedPlan>(rs[new RuleId(0)].Template);
+                var reference = DecomposedQueries.Reference(db, name);
+
+                db.RunRuleSet(rs);
+
+                Assert.NotEmpty(log);
+                Assert.True(log.Count < FullMatchCount(name), $"{name}: {log.Count} matches recorded before the stop");
+                Assert.All(log, match => Assert.Contains(string.Join(",", match), reference));
+            }
+        }
+
+        /// <summary>
+        /// The number of matches a serial run of an experiment records without a stop.
+        /// </summary>
+        static int FullMatchCount(string name)
+        {
+            var log = new List<uint[]>();
+            var (db, rs) = DecomposedQueries.Build(name, PlanStrategy.PureSize, "Serial", log);
+            using (rs)
+                db.RunRuleSet(rs);
+
+            return log.Count;
+        }
+
         static RuleSet Rebuild(Database db, RuleSet built, RulePlan original, PlanTemplate template)
         {
             var evaluator = db;

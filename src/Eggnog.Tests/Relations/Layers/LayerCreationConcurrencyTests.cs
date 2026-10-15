@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -125,6 +126,42 @@ namespace Eggnog.Relations.Tests
             Assert.NotSame(viewBefore, child.GetView(tables[0]));
             Assert.Equal(threads * rowsPerTable, child.GetView(tables[1]).VisibleCount);
             LookupPaths.Check(child);
+        }
+
+        /// <summary>
+        /// A first write that finds no layer and then waits for the layering's lock, while another writer creates the
+        /// layer, takes that layer rather than a second one.
+        /// </summary>
+        [Fact]
+        public void AFirstWriteThatWaitsForTheLockTakesTheLayerCreatedMeanwhile()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var table = store.AddTable(MaxFunction(1), name: "t");
+            store.Root.Freeze();
+            var child = store.Root.CreateChild();
+            var layering = child.Tables!;
+            var layerLock = typeof(ContextTables).GetField("layerLock", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(layering)!;
+            using var starting = new ManualResetEventSlim();
+
+            TableLayer created;
+            Task<TableLayer> waiting;
+            lock (layerLock)
+            {
+                waiting = Task.Factory.StartNew(() =>
+                {
+                    starting.Set();
+                    return layering.GetOrCreateLayer(table);
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                Assert.True(starting.Wait(TimeSpan.FromSeconds(30)));
+                Assert.False(waiting.Wait(TimeSpan.FromMilliseconds(100)));
+                Assert.Null(layering.TryGetLayer(table));
+                created = layering.GetOrCreateLayer(table);
+            }
+
+            Assert.True(waiting.Wait(TimeSpan.FromSeconds(30)));
+            Assert.Same(created, waiting.Result);
+            Assert.Same(created, layering.TryGetLayer(table));
+            Assert.Equal(1, layering.Statistics.LayersCreated);
         }
 
     }

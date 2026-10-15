@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
-using Eggnog.Tests.Cosmos.Literal;
+using Eggnog.Tests.Predicates.Literal;
 using Eggnog.Tests.Differential.Splits;
 
 using Xunit;
@@ -12,17 +12,18 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The split oracle's domain check where it can be exact: where the prototype's run contradicted no context, no
-    /// case went vacuous, so the domain the engine lifts must equal the prototype's, not merely lie within it.
-    /// <see cref="SplitOracleTests"/> accepts, for every seed, a domain within the prototype's, because the prototype's
-    /// lift joins the domains of vacuous cases too; this keeps equality for the seeds without a vacuous case. 100 seeds
+    /// The split oracle's domain check where it can be exact: where the literal encoding's run contradicted no
+    /// context, no case went vacuous, so the domain the engine lifts must equal the literal encoding's, not merely lie
+    /// within it. <see cref="SplitOracleTests"/> accepts, for every seed, a domain within the literal encoding's,
+    /// because its lift joins the domains of vacuous cases too; this keeps equality for the seeds without a vacuous
+    /// case. 100 seeds
     /// by default; <c>EGGNOG_SEEDS</c> raises it.
     /// </summary>
     public sealed class SplitOracleDomainTests
     {
 
         /// <summary>
-        /// Every seed whose prototype run contradicted no context lifts exactly the prototype's domains.
+        /// Every seed whose literal run contradicted no context lifts exactly the literal encoding's domains.
         /// </summary>
         /// <remarks>
         /// Setting <c>EGGNOG_PROBE_COUNTS</c> makes the test fail with its counts of seeds without a vacuous case and
@@ -65,7 +66,7 @@ namespace Eggnog.Tests.Differential
         /// </summary>
         static long LiteralContradictions(SplitOracleProgram program)
         {
-            var p = new PrototypeTheory(new EGraph());
+            var p = new ContextArgumentTheory(new EGraph());
             p.Ground();
             var root = p.Graph.Root;
             foreach (var (path, values) in program.Discriminators)
@@ -91,18 +92,18 @@ namespace Eggnog.Tests.Differential
                 });
             }
 
-            var q = root.Make(Where(p, program));
+            var q = root.Make(Predicate(p, program));
             root.Assume(p.WhereClause.Of(q));
             root.Run(Schedule.Saturate(p.Horn, p.Lattice, p.Split, p.Rewrite));
             return root.CountRows(p.Contradicts);
         }
 
         /// <summary>
-        /// The query's WHERE clause in the literal encoding, as <see cref="SplitOracleLiteral"/> builds it.
+        /// The query's predicate in the literal encoding, as <see cref="SplitOracleLiteral"/> builds it.
         /// </summary>
-        static ConstructorTerm<Cosmos.Pred> Where(PrototypeTheory p, SplitOracleProgram program)
+        static ConstructorTerm<Predicates.Pred> Predicate(ContextArgumentTheory p, SplitOracleProgram program)
         {
-            var terms = new List<ConstructorTerm<Cosmos.Pred>>();
+            var terms = new List<ConstructorTerm<Predicates.Pred>>();
             foreach (var conjunct in program.Conjuncts)
             {
                 switch (conjunct.Kind)

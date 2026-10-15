@@ -8,12 +8,12 @@ namespace Eggnog.Tests.Differential.Splits
     {
 
         /// <summary>
-        /// <c>path IN (values)</c>: an <c>Or</c> of <c>StrEq</c>, or one <c>StrEq</c> for a single value.
+        /// <c>path in {values}</c>: an <c>Or</c> of <c>StrEq</c>, or one <c>StrEq</c> for a single value.
         /// </summary>
         In,
 
         /// <summary>
-        /// <c>NOT (path = value)</c>.
+        /// <c>path != value</c>: a <c>Not</c> of <c>StrEq</c>.
         /// </summary>
         NotEqual,
 

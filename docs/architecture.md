@@ -69,7 +69,6 @@ because several engine and library types share simple names.
 | `src/Eggnog.Benchmarks` | BenchmarkDotNet benchmarks, run in process; the engine's are under `Relations/` |
 | `src/dist-nuget`, `src/dist-tests` | Packaging projects driven by `Eggnog.dist.msbuildproj` in CI |
 | `ext/egglog` | egglog's sources, as a git submodule: the reference for the port |
-| `prototypes/cosmos-facts` | egglog programs that prototype the fact reasoning of a Cosmos DB query planner; the tests port them |
 | `docs` | This document, the roadmap, the engine's conventions and decisions, and the design history |
 
 ---
@@ -692,10 +691,6 @@ with no more matches, and serial and parallel runs must give the same facts.
 
 - egglog's test and web-demo programs that use `push` and `pop`, translated by hand into programs over child contexts,
   must give egglog's answers. There is no `.egg` reader; the translations are C#.
-- The Cosmos fact theory of `prototypes/cosmos-facts` is ported twice under `Cosmos/`: the literal encoding (each `.egg`
-  file as written, contexts as data at the root) and the scoped encoding (scopes, frozen schemas, local rules and
-  engine splits). Both must reach the prototype's results, and the literal encoding serves as the oracle for the scoped
-  one.
 
 ### 5.4 Invariant checkers
 
@@ -718,6 +713,12 @@ does not grow with the root. The test suite turns the counters on for itself; CI
 - The public surface test fails on any change to the public API that `Surface/PublicSurface.txt` does not record.
 - Opt-in soaks and seed replays (about ten tests) are skipped unless their environment variable is set.
 - `Readme/ReadmeExampleTests` runs the code examples of the READMEs verbatim.
+- A theory of predicates over document paths (presence, forms, domains, types, numeric bounds, and the simplification
+  of predicates) is a shared test fixture under `Predicates/`, in two encodings. `PredicateTheory` uses scopes as the
+  contexts: frozen schema scopes, local rules compiled from a schema's declarations, and engine splits.
+  `ContextArgumentTheory` is the same theory in one flat graph, with contexts as data arguments, inheritance written as
+  rules and splits written as rules. Tests of splits, scopes, schedules, rendering, concurrency and diagnostics run
+  over it, and the split differentials use the context-argument encoding as the oracle for the scoped one.
 
 ---
 

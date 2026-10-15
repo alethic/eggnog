@@ -1,7 +1,7 @@
 # Eggnog rule layer: specification, version 2
 
 > **Status (2026-10-11).** This is version 2 of the rule-layer specification, revised to answer two design reviews
-> (§14 maps every finding to its resolution). It replaces version 1, which is in git history at commit `5acd00e` and was
+> (§14 maps every finding to its resolution). It replaces version 1, which is in git history at commit `673495d` and was
 > written against the API of the `Eggnog.Storage` spike. Version 2 specifies the public `Eggnog` library on top of the
 > real engine, `Eggnog.Relations`:
 > - rules compile to the bridge's rule builder (`EGraphRuleBuilder`);
@@ -18,8 +18,8 @@
 > library (definitions, rules, runs, host writes and reads, and extraction, at the root on today's engine), drops the
 > spike from the project and from the package, and merges to main before any other rule-layer work.
 >
-> **Implemented (2026-10-13).** R1a is on main (`edd1fa9`, merged with colors M9.3–M9.4), and so are R1b (`80675d8`,
-> merged with colors M10.1–M10.2 at `3b9dda1`), R2, merged with colors M10.4, and R3. R2 runs every scope, the root
+> **Implemented (2026-10-13).** R1a is on main (`3ccde1e`, merged with colors M9.3–M9.4), and so are R1b (`14cd695`,
+> merged with colors M10.1–M10.2 at `2fd4a18`), R2, merged with colors M10.4, and R3. R2 runs every scope, the root
 > included, on colors M10.3's `EGraphContext`, with no engine change. Colors M10.3 and M10.4 delivered the engine
 > requests R2 and R3 depend on (E4, E5, E7–E10; §15.6, §15.7). R3 (case splits and lift) was built on R2 merged with
 > colors M10.4, with no engine change; it was reviewed and verified (N104–N114 fix what the reviews and the
@@ -37,11 +37,12 @@
 - `docs/history/colored-contexts-spec.md` (cited as *colors*): §1, §3, §10, §11 and §19, and the rest where cited.
 - `docs/engine/conventions.md` and `docs/engine/decisions.md` (decisions 1–12, L1–L7).
 - `docs/history/egglog-engine-map.md` §3 (the bridge and what the frontend assumes).
-- `prototypes/cosmos-facts` (`prelude.egg`, `01`–`07`, `README.md`), and the adapter's gap tests in the adapter repository
+- the egglog prototype of the Cosmos fact theory (`prelude.egg`, `01`–`07`, `README.md`; no longer in the repository),
+  and the adapter's gap tests in the adapter repository
   (`src/Apache.Calcite.Cosmos.Adapter.Tests/EndToEnd/CosmosDeclaredFactPlanningTests.Gaps.cs`, on the adapter's
-  fact-gap-tests branch; see the prototype README, "Confirmed against the adapter").
+  fact-gap-tests branch).
 
-**Code baseline.** Worktree `project-overview-1f1e82` at `5acd00e`:
+**Code baseline.** Commit `673495d`:
 - The bridge (`src/Eggnog.Relations/Bridge`) and extraction (`src/Eggnog.Relations/Extraction`) are ported (M4).
 - Colors M9.0–M9.2 are in (`Store`, `Context`, the clock, id blocks, the layered union-find).
 - M9.3–M10.4 are not. Today's bridge `EGraph` runs on a bare `Database` (no `Store`) and has only a root.
@@ -2302,7 +2303,7 @@ internal static class SExpression
 ### 5.1 Engine members the layer uses
 
 All are internal to `Eggnog.Relations` (after E11, without exception). They were reached through `InternalsVisibleTo("Eggnog")`; since engine decision 13 they are in the `Eggnog` assembly itself.
-"Exists" means present at `5acd00e`.
+"Exists" means present at `673495d`.
 
 | Member | Where | Used for | From |
 |---|---|---|---|
@@ -2335,7 +2336,7 @@ edits to the colors spec.
 
 | # | Member | Why | Milestone |
 |---|---|---|---|
-| **E1** | `BaseValues.TryGetExisting<TCodec, T>(T value, out Value boxed)`: inline values succeed without the registry; interned values are looked up without inserting (needs `InternTable<TKey>.TryGetId(TKey, out uint)`). `long BaseValues.InternedCount`: the sum of the intern tables' counts. Tests in `BaseValues/BaseValuesTests`: an unseen value fails and leaves the count unchanged; a seen value round-trips; inline values never touch a table. As built: `TryGetExisting` throws as `Get`/`Unwrap` do (`ArgumentNullException` for a null reference key, `InvalidOperationException` for an unregistered type whose value would be interned), and `InternTable.TryGetId` takes the key's shard lock, because a shard can be growing concurrently. | D15: host reads never intern. | **With R1a** (landed, `0fe0477`) |
+| **E1** | `BaseValues.TryGetExisting<TCodec, T>(T value, out Value boxed)`: inline values succeed without the registry; interned values are looked up without inserting (needs `InternTable<TKey>.TryGetId(TKey, out uint)`). `long BaseValues.InternedCount`: the sum of the intern tables' counts. Tests in `BaseValues/BaseValuesTests`: an unseen value fails and leaves the count unchanged; a seen value round-trips; inline values never touch a table. As built: `TryGetExisting` throws as `Get`/`Unwrap` do (`ArgumentNullException` for a null reference key, `InvalidOperationException` for an unregistered type whose value would be interned), and `InternTable.TryGetId` takes the key's shard lock, because a shard can be growing concurrently. | D15: host reads never intern. | **With R1a** (landed, `8ca4ad4`) |
 | ~~E2~~ | **Withdrawn.** A child `Database` sharing the root's `BaseValues` is a defect of colors M9.3 that the rule layer does not depend on (its externals decode with the graph's registry); §13 asks the colors spec to track it. | — | — |
 | ~~E3~~ | **Withdrawn** with callbacks (D21). If callbacks return, their collector overrides `ExternalFunction.ReadsTables => true` (colors §10.2), which already makes `ActionReadAnalysis` refuse inheritance. | — | — |
 | **E4** | `EGraph.DesignateContradiction(FunctionId function)`: the function must be nullary; maps to `Store.DesignateContradiction`; must be called before any child exists. As built: refused once the store has ever had a child, not only while one exists, with the check and the designation under the store's definition lock, so a first `CreateChild` on another thread cannot interleave; the early stop is appended to a rule's head inserts into the function when the rule is planned, so designate before planning (N43). | Colors §10.1 lists `Contradiction` on `EGraph` without a way to set it. The rule layer calls it at graph construction with its `Contradiction` relation. | Colors M10.3 (landed; N43) |
@@ -2345,8 +2346,8 @@ edits to the colors spec.
 | **E8** | The M10.4 split hooks in this shape (any one-to-one equivalent is acceptable):<br>`interface ISplitSource { void FindRequests(EGraphContext scope, List<SplitRequest> requests, SplitReport report); void Assume(EGraphContext @case, in SplitRequest request, int caseIndex); }`<br>`readonly record struct SplitRequest(SplitKey Key, int CaseCount, object? Payload)`<br>`readonly struct SplitKey : IEquatable<SplitKey> { SplitKey(int source, uint[] values); }`<br>`interface ICaseSchedule { bool Run(EGraphContext @case, int depth, bool allowSplits); }`<br>`interface ISplitDemand { bool Wants(EGraphContext scope, in SplitRequest request); }` (the rule layer passes none, D43)<br>`sealed class SplitDriver { SplitDriver(IReadOnlyList<ISplitSource> sources, ICaseSchedule inCase, ISplitDemand? demand, LiftSpec spec, SplitOptions options); bool Step(EGraphContext scope, int depth, SplitReport report); static void DisposeRecords(EGraphContext scope); }`<br>`SplitOptions { int DepthLimit; int CaseLimit; LiftOptions Lift; ContextOptions CaseOptions; }` (`CaseOptions` must have `IsCase` and `StopOnContradiction`; default `ContextOptions.Case`)<br>`SplitReport { int CasesOpened; int SplitsSkipped; int Lifts; long LiftRowsSkipped; }`<br>`CaseSet { CaseSet(EGraphContext parent); EGraphContext AddCase(ContextOptions? options = null); IReadOnlyList<EGraphContext> Cases; LiftReport Lift(LiftSpec spec, LiftOptions options, CancellationToken cancellationToken = default); int DisposeVacuous(); void Dispose(); }`<br>Semantics: `Step` lets exceptions from an `ICaseSchedule` (cancellation, limits, evaluation failures) propagate and leaves the records it opened for `DisposeRecords`; `Step` does not hold the scope's thread domain while it calls an `ISplitSource` or an `ICaseSchedule`, because the schedule creates children (nested splits; colors §8.3 forbids `CreateChild` while the caller holds the domain); `Lift` checks the token between rounds; `DisposeVacuous` disposes the contradictory cases and returns their number.<br>As built: every member above exists with this shape. `CaseSet` also has `RunEach(schedule, depth, allowSplits)`, `VacuousCount`, `IsDisposed` and `Parent`; `AddCase` and `SplitOptions.CaseOptions` refuse options without `IsCase` and `StopOnContradiction`; a set refuses a frozen parent, and `RunEach`, `Lift` and `DisposeVacuous` refuse a set one of whose cases was disposed outside it. A lift over a set whose cases were all disposed as vacuous contradicts the parent. The lift memo is keyed on the spec, and a lift that its limits cut short leaves none. `Relation` lifts only an output every live case agrees on and refuses an id output; a case join is allowed only on a base-output `Function`. `SplitRecord` also names its `Driver`. `Step` runs and lifts every live record of the scope that its own driver opened, earlier steps' included, and returns true only when it opened cases or a lift changed the scope; B6 compares a record's source object by reference and the key cells, so several drivers can serve one scope (§6.9.3). `Step` refuses a frozen or faulted scope and returns false for a stopped or contradictory scope or at `DepthLimit` (N51–N58). | Colors §11.3 names the types but not their members. `Payload` carries the matched tuple from `FindRequests` to `Assume`; `report` lets a source count the requests it skipped; `CaseOptions` and `AddCase(options)` let `InheritWatermarks` reach cases; `DisposeVacuous` serves host-driven lifts, which never call `RunEach`. | Colors M10.4 (landed, colors §11; N51–N58) |
 | **E9** | `ParallelHeuristics` reachable from the bridge `EGraph` constructor on a `Store` (`Store(ParallelHeuristics?)` exists). As built: `EGraph(ParallelHeuristics)` builds the `Store` with them, and `EGraph.ParallelismBudget` holds the root's degree of parallelism for `ConcurrentChildren` (N46). | The root of a Store-backed graph honours `EGraphOptions.DegreeOfParallelism` (D46); children of writable scopes inherit it. | Colors M10.3 (landed; N46) |
 | **E10** | `EGraphContext.Freeze(IReadOnlyCollection<EGraphRuleId>? planRules = null)`: `null` keeps step 4 of colors §10.8 as written (plan every live rule without a cached plan); a collection plans exactly those rules that have no cached plan. As built: the freeze flushes only when host writes are staged, and throws a recorded failure as `PanicException`, leaving the context unfrozen (N47). | Plans are made once per rule (decision 7). Step 4 as written plans every live rule, including other containers' local rules, queries and split matchers, on this context's statistics. The rule layer passes the empty set for the root and, for any other scope, the default variants its descendants can run (§6.7). | Colors M10.3 (landed; N47) |
-| **E11** | Every public type of `Eggnog.Relations` becomes `internal` (D44). `InternalsVisibleTo` already covers `Eggnog`, `Eggnog.Relations.Tests` and `Eggnog.Relations.Benchmarks`; a public test fixture or benchmark member whose signature mentions an engine type becomes internal or private. | One API in the package: about 95 public engine types include `EGraph`, `Term`, `Sort`, `CostModel`, `Extractor`, `ExtractedTerm` and `NodeCostFunction`, and a file with `using Eggnog; using Eggnog.Relations;` fails with CS0104. | **With R1a** (landed, `0fe0477`; the engine files of colors M9.3–M9.4 merged with it in `edd1fa9` declare no public type either) |
-| **E12** | A serial join kept after an early stop. `JoinRun.ReleaseInterrupted()` (`Execution/JoinRun.Reuse.cs`) returns to their pools the sparse and per-stage tuple indexes that the interrupted stages never moved back, and clears every prober. `Database.RunRulesSerial` (`Execution/Database.Execution.cs`) calls it after an early stop (an action's `TriggerEarlyStop`, or a reported failure), then parks and keeps the join as after a full run. A run that throws still drops its join. Test: `AnEarlyStoppedRunKeepsItsJoin` (24.6 bytes per row with the old parking rule restored). | `Any` must stop the engine early (§6.6.4) and must not allocate per row (conventions: no allocation per match). Before E12 an early stop dropped the serial join, so the next run rebuilt it and its leaf-scan buffers. | **With R1b** (landed, `80675d8`; merged at `3b9dda1`, where the kept join releases what each of M10.2's prober pieces owns) |
+| **E11** | Every public type of `Eggnog.Relations` becomes `internal` (D44). `InternalsVisibleTo` already covers `Eggnog`, `Eggnog.Relations.Tests` and `Eggnog.Relations.Benchmarks`; a public test fixture or benchmark member whose signature mentions an engine type becomes internal or private. | One API in the package: about 95 public engine types include `EGraph`, `Term`, `Sort`, `CostModel`, `Extractor`, `ExtractedTerm` and `NodeCostFunction`, and a file with `using Eggnog; using Eggnog.Relations;` fails with CS0104. | **With R1a** (landed, `8ca4ad4`; the engine files of colors M9.3–M9.4 merged with it in `3ccde1e` declare no public type either) |
+| **E12** | A serial join kept after an early stop. `JoinRun.ReleaseInterrupted()` (`Execution/JoinRun.Reuse.cs`) returns to their pools the sparse and per-stage tuple indexes that the interrupted stages never moved back, and clears every prober. `Database.RunRulesSerial` (`Execution/Database.Execution.cs`) calls it after an early stop (an action's `TriggerEarlyStop`, or a reported failure), then parks and keeps the join as after a full run. A run that throws still drops its join. Test: `AnEarlyStoppedRunKeepsItsJoin` (24.6 bytes per row with the old parking rule restored). | `Any` must stop the engine early (§6.6.4) and must not allocate per row (conventions: no allocation per match). Before E12 an early stop dropped the serial join, so the next run rebuilt it and its leaf-scan buffers. | **With R1b** (landed, `14cd695`; merged at `2fd4a18`, where the kept join releases what each of M10.2's prober pieces owns) |
 
 Nothing else in the engine changes for this layer. In particular the rule layer needs no planner, matcher or index API:
 every body is planned and executed by the engine.
@@ -3948,7 +3949,7 @@ Every milestone has the same baseline definition of done:
 
 The first rule-layer change, kept small so that `src/Eggnog` is a real library on main as soon as possible.
 
-**Depends on:** the engine at `5acd00e`, plus E1 and E11, landed in `Eggnog.Relations` as the first changes of R1a.
+**Depends on:** the engine at `673495d`, plus E1 and E11, landed in `Eggnog.Relations` as the first changes of R1a.
 
 **Project changes.**
 - `src/Eggnog/Eggnog.csproj`: add `<ProjectReference Include="..\Eggnog.Relations\Eggnog.Relations.csproj" />` and
@@ -3991,7 +3992,7 @@ the `Eggnog` package's only Eggnog dependency is `Eggnog.Relations`; a text sear
 `src/Eggnog`, `src/Eggnog.Tests` or `src/dist-nuget`; `RootEngineScope` is the only file in `src/Eggnog` that calls the
 bridge's root-only members (`Database.CreateExecutionState`, or `CreateEngineState` since colors M10.4 (N59),
 `GetCanonInUf`, `LookupId`, `TableAction`, `UnionAction`, `FlushUpdates`, `TryTakePanic`); and the work is merged to
-main. **Status:** done; merged to main at `edd1fa9` (with colors M9.3–M9.4). §15 lists what it changed in this spec.
+main. **Status:** done; merged to main at `3ccde1e` (with colors M9.3–M9.4). §15 lists what it changed in this spec.
 
 ### R1b: queries, limits, diagnostics, the rest of the literal suite
 
@@ -4013,7 +4014,7 @@ main. **Status:** done; merged to main at `edd1fa9` (with colors M9.3–M9.4). �
 - `Differential/RuleLayerDifferentialTests` at 300 seeds.
 
 **Done when** the baseline holds, the literal suite is green in full, and the differential is green at 300 seeds with a
-5000-seed run recorded with the change. **Status:** done; added at `80675d8` and merged to main at `3b9dda1` (with
+5000-seed run recorded with the change. **Status:** done; added at `14cd695` and merged to main at `2fd4a18` (with
 colors M10.1–M10.2). The engine suite (8516 tests, E12's included) and the 5000-seed run (39.0 s on net10.0, 39.4 s on
 net8.0, recorded in the `RuleLayerDifferentialTests` class remarks) were green. §15 lists what it changed in this spec,
 and §15.5 the items still open.
@@ -4129,7 +4130,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// The theory of prototypes/cosmos-facts/prelude.egg, defined once per graph and shared by every container compiled
+    /// The theory of the prototype's prelude.egg, defined once per graph and shared by every container compiled
     /// into it. The prototype's context argument and its inheritance rules are gone: scopes are the contexts. One theory
     /// per graph: it defines the graph's scope tags.
     /// </summary>
@@ -4640,7 +4641,7 @@ namespace Eggnog.Tests.Cosmos.Scoped
 {
 
     /// <summary>
-    /// prototypes/cosmos-facts/02-query-disjunction.egg: kind IN ('order', 'invoice') lowers the UUID comparison on ref
+    /// The prototype's 02-query-disjunction.egg: kind IN ('order', 'invoice') lowers the UUID comparison on ref
     /// only through a case split, and the schema alone still proves nothing about ref, because a note carries none.
     /// </summary>
     public sealed partial class Scenario02QueryDisjunctionTests
@@ -5081,12 +5082,12 @@ the gap. Notes are numbered **N1–N115**; what is still deferred, with its mile
 
 ### 15.1 Where the work stands
 
-- **R1a** is on main. `0fe0477` landed E1 and E11 in `Eggnog.Relations`; `63225f4` added the library; `edd1fa9` merged
+- **R1a** is on main. `8ca4ad4` landed E1 and E11 in `Eggnog.Relations`; `7cf6e53` added the library; `3ccde1e` merged
   both with colors M9.3–M9.4, without conflicts. Every project change of §9 landed: `Eggnog.csproj` references
   `Eggnog.Relations` and not the spike; `dist-nuget` packs `Eggnog` and `Eggnog.Relations` only; the CI matrix lists
   `Eggnog.Tests`; the README describes the library. A search of `src/Eggnog.Relations` on main finds no public type, so
   E11 also holds for the engine files M9.3–M9.4 added.
-- **R1b** is on main. `80675d8` added it with one engine change, E12 (N5); `3b9dda1` merged it with colors M10.1–M10.2,
+- **R1b** is on main. `14cd695` added it with one engine change, E12 (N5); `2fd4a18` merged it with colors M10.1–M10.2,
   where the join kept after an early stop now releases what each of M10.2's prober pieces owns. The engine suite was
   green (8516 tests), and so was the 5000-seed differential run (39.0 s on net10.0, 39.4 s on net8.0, recorded in the
   `RuleLayerDifferentialTests` class remarks).
@@ -5161,11 +5162,11 @@ the gap. Notes are numbered **N1–N115**; what is still deferred, with its mile
 
 | Item | Milestone | Notes |
 |---|---|---|
-| Merge R1b to main, E12 included, with the 5000-seed figures of §15.1 in the commit message | Done: `80675d8`, merged at `3b9dda1` | The commit message says the 5000-seed run was made; its figures are in §15.1 and the `RuleLayerDifferentialTests` class remarks |
+| Merge R1b to main, E12 included, with the 5000-seed figures of §15.1 in the commit message | Done: `14cd695`, merged at `2fd4a18` | The commit message says the 5000-seed run was made; its figures are in §15.1 and the `RuleLayerDifferentialTests` class remarks |
 | Merge R2 to main | Done: merged with colors M10.4 | Its notes were renumbered N60–N89 at the merge, after colors M10.4's N51–N59 (§15.8) |
 | Full net8.0 runs of `Eggnog.Relations.Tests` and `Eggnog.Storage.Tests`, which §9's baseline requires | Done at the R2 merge | Both pass on net10.0 and net8.0 with R2 and colors M10.4 (11,811 tests, 10 opt-in and skipped; 816 tests) |
 | List `Eggnog.Tests` among the `InternalsVisibleTo` projects in `docs/engine/conventions.md` | Done at the R2 merge | Open since R1a; `Eggnog.Relations.csproj` and `Eggnog.csproj` already declared it |
-| Confirm the `Eggnog.Tests` CI matrix entry on a CI run | The next CI run of main | The entry is in `.github/workflows/Eggnog.yml` on main since `edd1fa9`. It cannot run locally; the equivalent local builds and test runs pass on both TFMs |
+| Confirm the `Eggnog.Tests` CI matrix entry on a CI run | The next CI run of main | The entry is in `.github/workflows/Eggnog.yml` on main since `3ccde1e`. It cannot run locally; the equivalent local builds and test runs pass on both TFMs |
 | A "no result" outcome for user primitives (a partial-primitive API) | Unscheduled; additive (D28) when a consumer needs one | Only the built-in `+` and `-` are partial (N9); a user primitive that throws fails the rule |
 | A runtime check for class constants equated in a body | Done in R2 (N63, N86): every comparison that is not already true where the rule's constants come from is an `Equal` step; class constants are never refused | §11 risk 14 (N8) |
 | The R1 adapter's new members on contexts: `CanonicalizeColumns`, `TryExtract`, `TryGetCost`, `ForEach` for the merge check, and the deferred free of disposed queries | Done in R2 | `ContextEngineScope` (§6.6.6); N8 compares a local rule's constants in its owner; N6's merge check reads the scope's view, inherited rows included |
