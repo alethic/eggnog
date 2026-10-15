@@ -137,6 +137,14 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
+        public void TheLargestCapacityIsThatOfTheLargestSlotCount()
+        {
+            Assert.Equal(RawHashTable<HashTestEntry>.MaxCapacity, RawHashTable<HashTestEntry>.BucketMaskToCapacity((1 << 30) - 1));
+            Assert.Equal(1 << 30, RawHashTable<HashTestEntry>.CapacityToBuckets(RawHashTable<HashTestEntry>.MaxCapacity));
+            Assert.Throws<InvalidOperationException>(() => RawHashTable<HashTestEntry>.CapacityToBuckets(RawHashTable<HashTestEntry>.MaxCapacity + 1));
+        }
+
+        [Fact]
         public void GrowthFollowsHashbrownSizes()
         {
             // Each growth goes to max(items + 1, capacity + 1) entries, which doubles the slot count.

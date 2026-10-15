@@ -47,6 +47,11 @@ namespace Eggnog.Relations
         /// </summary>
         const int MaxBuckets = 1 << 30;
 
+        /// <summary>
+        /// The most entries a table holds: the capacity of <see cref="MaxBuckets"/> slots.
+        /// </summary>
+        public const int MaxCapacity = MaxBuckets / 8 * 7;
+
         byte[] ctrl;
         TEntry[] entries;
         int bucketMask;
@@ -539,7 +544,7 @@ namespace Eggnog.Relations
             if (capacity < 15)
                 return capacity < 4 ? 4 : capacity < 8 ? 8 : 16;
 
-            if (capacity > BucketMaskToCapacity(MaxBuckets - 1))
+            if (capacity > MaxCapacity)
                 throw new InvalidOperationException("Hash table capacity overflow.");
 
             var adjusted = (int)((long)capacity * 8 / 7);
@@ -667,7 +672,7 @@ namespace Eggnog.Relations
                 return;
             }
 
-            if (newItems > BucketMaskToCapacity(MaxBuckets - 1))
+            if (newItems > MaxCapacity)
                 throw new InvalidOperationException("Hash table capacity overflow.");
 
             Resize((int)Math.Max(newItems, fullCapacity + 1), hasher);
