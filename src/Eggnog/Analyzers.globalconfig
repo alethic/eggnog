@@ -1,0 +1,6 @@
+is_global = true
+
+# The trimming (IL2xxx), single-file (IL3000-IL3002) and AOT (IL3050 and up) analyzers report errors, not warnings.
+dotnet_analyzer_diagnostic.category-Trimming.severity = error
+dotnet_analyzer_diagnostic.category-SingleFile.severity = error
+dotnet_analyzer_diagnostic.category-AOT.severity = error

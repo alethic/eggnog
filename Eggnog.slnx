@@ -17,6 +17,7 @@
     <Project Path="src/Eggnog/Eggnog.csproj" />
     <Project Path="src/Eggnog.Tests/Eggnog.Tests.csproj" />
     <Project Path="src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj" />
+    <Project Path="src/Eggnog.AotCheck/Eggnog.AotCheck.csproj" />
   </Folder>
   <Folder Name="/src/dist/">
     <Project Path="src/dist-nuget/dist-nuget.csproj" />

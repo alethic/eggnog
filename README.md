@@ -33,7 +33,7 @@ Eggnog brings that to .NET:
   Benchmarks that port egglog's own and compare against it are in `src/Eggnog.Benchmarks`.
 - **Deterministic by default.** Runs are serial and repeatable unless you ask for parallelism.
 
-Eggnog targets .NET 8 and .NET 10.
+Eggnog targets .NET 8 and .NET 10, and is compatible with trimming and NativeAOT.
 
 ## Installation
 
@@ -162,7 +162,9 @@ dotnet src/Eggnog.Tests/bin/Debug/net10.0/Eggnog.Tests.dll
 A full run takes 10-15 minutes per target framework. The test project holds the library's tests (namespaces
 `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace `Eggnog.Relations.Tests`). Run one group by adding
 `-namespace Eggnog.Relations.Tests` or `-namespace "Eggnog.Tests.*"`, or one class with `-class <FullName>`. The
-benchmarks are in `src/Eggnog.Benchmarks` (see [its README](src/Eggnog.Benchmarks/README.md)). Clone with
+benchmarks are in `src/Eggnog.Benchmarks` (see [its README](src/Eggnog.Benchmarks/README.md)). CI publishes
+`src/Eggnog.AotCheck`, a small app that runs this README's examples, with NativeAOT, and fails on any trimming or AOT
+warning. Clone with
 `--recurse-submodules` to get egglog's sources in `ext/egglog`, which the engine's comments cite and its benchmark
 comparisons build.
 

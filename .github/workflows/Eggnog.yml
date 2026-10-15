@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish this build to nuget.org, creating the GitHub release if one does not exist.
+        description: Publish this build to nuget.org, then create the GitHub release if one does not exist.
         type: boolean
         default: false
   push:
@@ -15,9 +15,12 @@ on:
     branches:
     - main
     - develop
+  # A release publishes when it is published: GitHub sends no event when a draft is created. Its tag must be the
+  # version GitVersion computes for the tagged commit (its semVer, exactly, with no 'v' prefix); the build refuses any
+  # other tag, so the release, its tag and the package always carry one version.
   release:
     types:
-    - created
+    - published
 
 permissions:
   contents: read
@@ -45,7 +48,19 @@ jobs:
       with:
         versionSpec: 6.x
     - name: Execute GitVersion
+      id: GitVersion
       uses: gittools/actions/gitversion/execute@v4
+    - name: Check Release Tag
+      if: github.event_name == 'release'
+      shell: bash
+      env:
+        TAG: ${{ github.event.release.tag_name }}
+        SEMVER: ${{ steps.GitVersion.outputs.semVer }}
+      run: |
+        if [ "$TAG" != "$SEMVER" ]; then
+          echo "::error::The release's tag '$TAG' is not the version GitVersion computes for it, '$SEMVER'. Release tags must be GitVersion's semVer exactly, with no 'v' prefix."
+          exit 1
+        fi
     - name: NuGet Restore
       run: dotnet restore Eggnog.slnx
     - name: Build
@@ -65,6 +80,9 @@ jobs:
           /p:BuildInParallel=true \
           /p:ContinuousIntegrationBuild=true \
           Eggnog.dist.msbuildproj
+    # The benchmarks are not packed or run here; building them keeps a change that breaks them from passing CI.
+    - name: Build Benchmarks
+      run: dotnet build src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj --no-restore -c Release -p:ContinuousIntegrationBuild=true
     - name: Upload MSBuild Log
       if: ${{ always() }}
       uses: actions/upload-artifact@v7
@@ -84,6 +102,31 @@ jobs:
       with:
         name: tests
         path: dist/tests.tar.gz
+  aot:
+    name: NativeAOT Check
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v7
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Install NativeAOT Prerequisites
+      run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+    # src/Eggnog.AotCheck runs the README's examples. Its project roots the Eggnog assembly (TrimmerRootAssembly), so
+    # the AOT compiler analyzes all of the library, not only what the app calls. Any trimming or AOT warning fails.
+    - name: Publish
+      shell: bash
+      run: |
+        set -o pipefail
+        dotnet publish src/Eggnog.AotCheck/Eggnog.AotCheck.csproj -c Release -r linux-x64 -p:PublishAot=true -tl:off -o aot | tee publish.log
+        if grep -E 'warning IL[23][0-9]{3}' publish.log; then
+          echo "::error::The NativeAOT publish reported trimming or AOT warnings."
+          exit 1
+        fi
+    - name: Run
+      run: ./aot/Eggnog.AotCheck
   test:
     strategy:
       # Let every suite finish when one fails.
@@ -100,8 +143,16 @@ jobs:
         tfm:
         - net10.0
         include:
+        # net8.0 runs on one Linux and one Windows platform; the library has no framework-conditional code, so the
+        # other platforms add little.
+        - run: Eggnog.Tests
+          sys: linux-x64
+          tfm: net8.0
+        - run: Eggnog.Tests
+          sys: win-x64
+          tfm: net8.0
         # Eggnog.Tests turns the engine's executor counters on for itself (Relations/Execution/ExecutorCountersSetup.cs).
-        # On linux-x64 it runs with them off, as production runs, and its counter tests skip there.
+        # Under net10.0 on linux-x64 it runs with them off, as production runs, and its counter tests skip there.
         - run: Eggnog.Tests
           sys: linux-x64
           tfm: net10.0
@@ -111,6 +162,12 @@ jobs:
     - build
     runs-on: ${{ fromJSON('{"win-x86":["windows-2022"],"win-x64":["windows-2022"],"linux-x64":["ubuntu-24.04"],"linux-arm64":["ubuntu-24.04-arm"],"osx-x64":["macos-15-intel"],"osx-arm64":["macos-15"]}')[matrix.sys] }}
     steps:
+    # `dotnet exec` of a net8.0 assembly does not roll forward to .NET 10, so a net8.0 entry installs .NET 8 too.
+    - name: Setup .NET 8.0
+      if: matrix.tfm == 'net8.0'
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 8.0.x
     - name: Setup .NET 10.0
       uses: actions/setup-dotnet@v6
       with:
@@ -168,6 +225,10 @@ jobs:
             }
 
             dotnet exec $tests[0].FullName @argl
+        } else {
+            # a suite that finds nothing to run is a broken artifact, not a pass
+            Write-Error "No test assembly in tests/$tst/$tfm."
+            exit 1
         }
     - name: Archive Test Results
       if: always() && startsWith(env.RET, 'TestResults--')
@@ -182,16 +243,21 @@ jobs:
     name: Release
     if: github.event_name != 'pull_request'
     needs:
+    - aot
     - test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       packages: write
       id-token: write   # required for NuGet.org Trusted Publishing (OIDC)
     env:
-      # Gates both the GitHub release and the nuget.org push: true for a tag build or a manual run that
-      # asks to publish. The GitHub Packages push is not gated and runs on every non-PR build.
-      PUBLISH: ${{ github.ref_type == 'tag' || inputs.publish == true }}
+      # Gates both the nuget.org push and the GitHub release: true for a published release, or for a manual run with
+      # publish checked (from any ref, a tag included). The GitHub Packages push is not gated and runs on every
+      # non-PR build.
+      PUBLISH: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish == true) }}
+      # The GitHub release's tag: the published release's own tag (the build checked that it is GitVersion's
+      # version), else the version GitVersion computes.
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
     steps:
     - name: Checkout Source
       uses: actions/checkout@v7
@@ -213,28 +279,6 @@ jobs:
       with:
         name: nuget
         path: dist/nuget
-    # `commit` lets the action create the tag when it does not exist. When the release already exists
-    # (a tag build or a re-run) it is updated in place, keeping hand-written notes and replacing the
-    # packages.
-    - name: Create Release
-      if: env.PUBLISH == 'true'
-      uses: ncipollo/release-action@v1
-      with:
-        tag: ${{ steps.GitVersion.outputs.semVer }}
-        commit: ${{ github.sha }}
-        allowUpdates: true
-        omitBodyDuringUpdate: true
-        replacesArtifacts: true
-        artifacts: dist/nuget/*.nupkg,dist/nuget/*.snupkg
-        prerelease: ${{ contains(steps.GitVersion.outputs.semVer, '-') }}
-        makeLatest: ${{ !contains(steps.GitVersion.outputs.semVer, '-') }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Push NuGet (GitHub)
-      shell: pwsh
-      run: dotnet nuget push dist/nuget/*.nupkg --source $env:GITHUB_REPOS --api-key $env:GITHUB_TOKEN --skip-duplicate
-      env:
-        GITHUB_REPOS: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: NuGet Login (Trusted Publishing)
       if: env.PUBLISH == 'true'
       id: nuget-login
@@ -249,3 +293,27 @@ jobs:
       env:
         NUGET_REPOS: https://api.nuget.org/v3/index.json
         NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+    # After the nuget.org push, so a failed push in a manual publish creates no tag or release. A published release
+    # exists before the run starts; if the push fails, it stays without packages until a re-run. `commit` lets the
+    # action create the tag when it does not exist. When the release already exists (a published release or a re-run)
+    # it is updated in place, keeping hand-written notes and replacing the packages.
+    - name: Create Release
+      if: env.PUBLISH == 'true'
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ env.RELEASE_TAG || steps.GitVersion.outputs.semVer }}
+        commit: ${{ github.sha }}
+        allowUpdates: true
+        omitBodyDuringUpdate: true
+        replacesArtifacts: true
+        artifacts: dist/nuget/*.nupkg,dist/nuget/*.snupkg
+        prerelease: ${{ contains(steps.GitVersion.outputs.semVer, '-') }}
+        makeLatest: ${{ !contains(steps.GitVersion.outputs.semVer, '-') }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+    # Last, so that a GitHub Packages failure cannot keep a release from nuget.org.
+    - name: Push NuGet (GitHub)
+      shell: pwsh
+      run: dotnet nuget push dist/nuget/*.nupkg --source $env:GITHUB_REPOS --api-key $env:GITHUB_TOKEN --skip-duplicate
+      env:
+        GITHUB_REPOS: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

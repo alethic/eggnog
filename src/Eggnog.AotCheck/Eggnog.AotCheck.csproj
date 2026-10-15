@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- A small app that CI publishes with NativeAOT to check that the library stays trimming and AOT compatible: the
+         publish must report no IL2xxx or IL3xxx warning, and the binary must exit with 0. Rooting the Eggnog assembly
+         makes the compiler analyze all of it, not only what this app calls. The app is never packed. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <TrimmerRootAssembly Include="Eggnog" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Eggnog\Eggnog.csproj" />
+    </ItemGroup>
+
+</Project>

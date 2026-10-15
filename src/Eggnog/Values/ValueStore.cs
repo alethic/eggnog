@@ -94,7 +94,8 @@ namespace Eggnog
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> or <paramref name="name"/> is taken, the name
         /// is empty, or <typeparamref name="T"/> is <see cref="ClassId"/>, a sort or a set.</exception>
-        public ColumnType<T> Register<T>(string name, IComparer<T>? order = null, Func<T, string>? format = null)
+        public ColumnType<T> Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>(
+            string name, IComparer<T>? order = null, Func<T, string>? format = null)
             where T : notnull, IEquatable<T>
         {
             EngineCallMarker.ThrowIfActive();
@@ -102,10 +103,10 @@ namespace Eggnog
             if (typeof(T) == typeof(ClassId))
                 throw new ArgumentException("ClassId cannot be a value type: classes are never values; compare classes with Is and IsNot, and define e-class sorts with EGraph.DefineSort.");
 
-            if (RegisterMethod(typeof(T)) == "EGraph.DefineSort")
+            if (IsSort(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a sort, not a value type: define it with EGraph.DefineSort.");
 
-            if (RegisterMethod(typeof(T)) == "ValueStore.RegisterSet")
+            if (IsSet(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a set: register it with ValueStore.RegisterSet.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
@@ -242,20 +243,44 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
         /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        [UnconditionalSuppressMessage("Trimming", "IL2067",
+            Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
+                + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
+                + "trimmer removed is not a defined sort, and the hint then names ValueStore.Register.")]
         internal static string RegisterMethod(Type clrType)
         {
-            if (clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (IsSet(clrType))
                 return "ValueStore.RegisterSet";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
 
-            foreach (var face in clrType.GetInterfaces())
-                if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(ISort<>))
-                    return "EGraph.DefineSort";
+            if (IsSort(clrType))
+                return "EGraph.DefineSort";
 
             return "ValueStore.Register";
         }
+
+        /// <summary>
+        /// Gets whether a CLR type is a sort: whether it implements <see cref="ISort{TSort}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type, with its interfaces kept by the trimmer.</param>
+        /// <returns>Whether the type is a sort.</returns>
+        internal static bool IsSort([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type clrType)
+        {
+            foreach (var face in clrType.GetInterfaces())
+                if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(ISort<>))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets whether a CLR type is a set type, a <see cref="ValueSet{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a set type.</returns>
+        internal static bool IsSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

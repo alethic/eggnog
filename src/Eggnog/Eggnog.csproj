@@ -8,6 +8,16 @@
         <PackageIcon>icon.png</PackageIcon>
     </PropertyGroup>
 
+    <!-- The library is trimming and NativeAOT compatible: IsAotCompatible turns on the trimming, single-file and AOT
+         analyzers, and Analyzers.globalconfig makes every warning they report (IL2xxx, IL3xxx) an error. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <GlobalAnalyzerConfigFiles Include="Analyzers.globalconfig" />
+    </ItemGroup>
+
     <!-- The package page's readme is this project's README.md (absolute links only: nuget.org cannot resolve relative
          ones); the repository's README.md is the GitHub page. LICENSE and NOTICE travel with the package, since NOTICE
          carries egglog's MIT notice. The pack runs in the outer, cross-targeting build, which has no default items, so

@@ -67,6 +67,7 @@ because several engine and library types share simple names.
 | `src/Eggnog` | The library (folders `Graph`, `Tables`, `Terms`, `Rules`, `Scheduling`, `Scopes`, `Cases`, `Host`, `Values`, `Extraction`, `Diagnostics`, `Rendering`) and the engine (`Relations/`) |
 | `src/Eggnog.Tests` | The library's tests (namespaces `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace `Eggnog.Relations.Tests`) |
 | `src/Eggnog.Benchmarks` | BenchmarkDotNet benchmarks, run in process; the engine's are under `Relations/` |
+| `src/Eggnog.AotCheck` | A small app, never packed, that CI publishes with NativeAOT to check the library stays trimming and AOT compatible |
 | `src/dist-nuget`, `src/dist-tests` | Packaging projects driven by `Eggnog.dist.msbuildproj` in CI |
 | `ext/egglog` | egglog's sources, as a git submodule: the reference for the port |
 | `docs` | This document, the roadmap, the engine's conventions and decisions, and the design history |
@@ -647,8 +648,10 @@ the guard (on a writable scope), makes sure the scope is caught up, and reads th
 Everything is in one test project, `src/Eggnog.Tests`, an xunit v3 executable with about 12,400 tests that runs in
 10-15 minutes per target framework. The engine's tests are under `Relations/` (namespace `Eggnog.Relations.Tests`),
 in folders that mirror the engine's; the library's are in the other folders (namespaces `Eggnog.Tests.*`). Both are run
-on net8.0 and net10.0 before a change is merged, and CI runs the net10.0 build on Windows x64, Linux x64 and arm64,
-and macOS x64 and arm64.
+on net8.0 and net10.0 before a change is merged. CI runs the net10.0 build on Windows x64, Linux x64 and arm64, and
+macOS x64 and arm64, and the net8.0 build on Windows x64 and Linux x64. It also builds the benchmarks, and publishes
+`src/Eggnog.AotCheck` with NativeAOT: the library declares itself AOT compatible, its trimming and AOT analyzer
+warnings are errors, and the publish fails on any warning the AOT compiler reports for the whole library.
 
 ```
 dotnet build src/Eggnog.Tests
