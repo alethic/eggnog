@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
 {
@@ -75,6 +76,11 @@ namespace Eggnog.Relations
         /// <param name="layer">The layer of the rows.</param>
         /// <param name="rows">The rows; owned by the node from now on.</param>
         /// <returns>The node, with no caches.</returns>
+        /// <remarks>
+        /// Kept out of line: the join's kernels call it once per sparse refinement, and inlining it into them only grows
+        /// them.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public TrieNode Rent(int layer, Subset rows)
         {
             TrieNode node;
