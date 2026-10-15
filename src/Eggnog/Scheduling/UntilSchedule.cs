@@ -41,8 +41,9 @@ namespace Eggnog
             if (scope.Engine.IsStopped)
                 return false;
 
+            // In a case, which the run does not enter, the run's scope is the one the call holds.
             foreach (var fact in Condition)
-                if (TermReader.Check(scope, fact) == false)
+                if (TermReader.Check(scope, fact, executor.Top.Origin) == false)
                     return Body.Execute(executor, scope, depth, inCase, splitsEnabled);
 
             return false;

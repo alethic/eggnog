@@ -775,8 +775,8 @@ namespace Eggnog
 
         /// <summary>
         /// Turns a constant into a value constant or a class constant. A class must name a class of this graph; outside a
-        /// query, the scope that returned it must also be committed (for a batch), not disposed, and one the rule may hold
-        /// classes from.
+        /// query, the scope that returned it must also be committed (for a batch), not disposed unless it is the owner
+        /// (whose definition holds it), and one the rule may hold classes from.
         /// </summary>
         Operand ConstantOperand(TermShape shape)
         {
@@ -800,7 +800,9 @@ namespace Eggnog
                     throw Error($"class {id} was made by a Write batch that did not commit");
 
                 var scope = origin.IsBatch ? origin.Parent! : origin;
-                if (scope.Disposed)
+
+                // The definition of a local rule holds its owner, so the owner's own classes survive its disposal.
+                if (scope.Disposed && ReferenceEquals(scope, owner?.Origin) == false)
                     throw Error($"class {id} came from scope '{scope.Path}', which is disposed");
 
                 if (ClassChecks.AllowedInRule(owner, origin) == false)

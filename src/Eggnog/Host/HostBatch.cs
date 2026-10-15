@@ -41,15 +41,19 @@ namespace Eggnog
         readonly Dictionary<string, uint> functionValues = new(StringComparer.Ordinal);
         readonly List<(uint A, uint B)> unions = new();
         readonly HashSet<(uint, uint)> unionKeys = new();
+        readonly ScopeOrigin? held;
         volatile bool rejected;
 
         /// <summary>
         /// Initializes an empty batch of <paramref name="scope"/>.
         /// </summary>
         /// <param name="scope">The scope written.</param>
-        public HostBatch(Scope scope)
+        /// <param name="held">The origin of a scope the call writing the batch holds, whose own classes the batch may use
+        /// after its disposal (see <see cref="ClassChecks.Require"/>); <c>null</c> for none.</param>
+        public HostBatch(Scope scope, ScopeOrigin? held = null)
         {
             this.scope = scope;
+            this.held = held;
             engine = scope.Engine;
             graph = scope.Graph;
             Origin = new ScopeOrigin(graph, scope.Origin, scope.Path, true);
@@ -96,7 +100,7 @@ namespace Eggnog
                     var type = TypeOf(shape);
                     if (type.Kind == ColumnKind.Sort)
                     {
-                        var cell = ClassChecks.Require(scope, type.ClassOf(shape.Constant!), nameof(term), Origin);
+                        var cell = ClassChecks.Require(scope, type.ClassOf(shape.Constant!), nameof(term), Origin, held);
                         return fresh.Contains(cell) ? cell : engine.Find(cell);
                     }
 
