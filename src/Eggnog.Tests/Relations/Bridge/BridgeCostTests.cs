@@ -1,5 +1,8 @@
 using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 
 using Xunit;
@@ -53,6 +56,42 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// Takes, and drops, every array that the shared <see cref="ArrayPool{T}"/> of <see cref="uint"/> holds for the
+        /// calling thread in the buckets a row buffer of up to <paramref name="cells"/> cells grows through: each pooled
+        /// length (<see cref="PooledArray.IsPoolable{T}"/>) up to <paramref name="cells"/> rounded up to a power of two.
+        /// A bucket is empty once a rental from it allocates, which it does only when neither the thread's slot nor any
+        /// core's stack held an array of that length.
+        /// </summary>
+        static void DrainRowPool(int cells)
+        {
+            var top = BitOperations.RoundUpToPowerOf2((uint)cells);
+            for (var length = 2 * PooledArray.MaxUnpooledLength; length <= top && PooledArray.IsPoolable<uint>(length); length *= 2)
+            {
+                long before;
+                do
+                {
+                    before = GC.GetAllocatedBytesForCurrentThread();
+                    ArrayPool<uint>.Shared.Rent(length);
+                }
+                while (GC.GetAllocatedBytesForCurrentThread() == before);
+            }
+        }
+
+        /// <summary>
+        /// Returns the bytes one call of <paramref name="body"/> allocates on this thread over one window of
+        /// <paramref name="runs"/> calls that starts from a settled row pool: the pool is drained
+        /// (<see cref="DrainRowPool"/>), then one call puts back what a call returns to it. Each call in the window
+        /// then finds in the pool exactly what the call before it returned, whatever earlier code left there, so the
+        /// count is what a warm call of <paramref name="body"/> itself allocates.
+        /// </summary>
+        static long SettledWindow(Action body, int cells, int runs)
+        {
+            DrainRowPool(cells);
+            body();
+            return Window(body, runs);
+        }
+
+        /// <summary>
         /// A root holding 1000 edges between 1001 fresh ids, and the rows that restate them.
         /// </summary>
         static (ContextGraph Graph, (FunctionId Function, Value[] Row)[] Rows) LoadedRoot(int count)
@@ -73,6 +112,15 @@ namespace Eggnog.Relations.Tests
         /// The root stages each row straight into a database buffer (<see cref="EGraphContext.AddValuesAtRoot"/>).
         /// Copying every row into a temporary list first would cost about 33 bytes per row (49.8 KB for 1000 rows
         /// against 16.8 KB for direct staging).
+        /// <para>
+        /// Both paths grow one staging buffer through pooled arrays of 512 to 4096 cells and return only the last, so
+        /// arrays of those lengths that earlier code left in the shared pool would serve a few calls' growth for free,
+        /// and whichever path ran first would look cheaper. Each window therefore starts from a drained pool
+        /// (<see cref="SettledWindow"/>), and the two paths are compared window against window. A pair that misses the
+        /// bound is measured again, up to ten times, because something outside the calls can still move one window: a
+        /// gen-2 collection trimming the pool adds bytes to it, an array another thread returns to the pool takes some
+        /// away. A path that allocates per row misses the bound in every pair.
+        /// </para>
         /// </remarks>
         [Fact]
         public void RootAddValuesAllocatesNoMoreThanStagingTheRowsDirectly()
@@ -105,26 +153,24 @@ namespace Eggnog.Relations.Tests
 
             void ViaAddValues() => egraph.AddValues(rows);
 
-            // The two paths are measured in interleaved windows, and the least window of each is kept, so a pool trim
-            // or a GC-driven reallocation under a loaded suite, which only adds bytes, inflates neither for long; the
-            // measurement stops as soon as the bound holds.
             for (var i = 0; i < 5; i++)
             {
                 Direct();
                 ViaAddValues();
             }
 
-            var direct = long.MaxValue;
-            var viaAddValues = long.MaxValue;
-            for (var round = 0; round < 10; round++)
+            var cells = rows.Length * math.TableColumns;
+            var pairs = new List<string>();
+            var held = false;
+            for (var round = 0; round < 10 && held == false; round++)
             {
-                direct = Math.Min(direct, Window(Direct, 20));
-                viaAddValues = Math.Min(viaAddValues, Window(ViaAddValues, 20));
-                if (viaAddValues <= direct + direct / 4 + 1024)
-                    break;
+                var direct = SettledWindow(Direct, cells, 20);
+                var viaAddValues = SettledWindow(ViaAddValues, cells, 20);
+                pairs.Add($"{viaAddValues} against {direct}");
+                held = viaAddValues <= direct + direct / 4 + 1024;
             }
 
-            Assert.True(viaAddValues <= direct + direct / 4 + 1024, $"AddValues of {rows.Length} rows allocated {viaAddValues} bytes; staging them directly allocated {direct}.");
+            Assert.True(held, $"AddValues of {rows.Length} rows allocated more than a quarter over staging them directly in every window (bytes per call, AddValues against direct): {string.Join(", ", pairs)}.");
         }
 
         /// <summary>
