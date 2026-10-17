@@ -53,15 +53,33 @@ namespace Eggnog.Relations.Tests
             notified.Notify();
             Assert.True(notified.WaitWithTimeout(TimeSpan.FromMilliseconds(1)));
 
+            // egglog notifies from a thread that sleeps 1 ms while this one waits with a 1 s timeout, so the test fails
+            // whenever that thread is not run within the second. Here the wait runs on its own thread with a timeout of
+            // a day, and this thread notifies once that thread is blocked or has ended. The waiting thread makes no
+            // managed wait before the call and nothing else takes the notification's lock, so once blocked it is in its
+            // timed wait. The wait must still be blocked when notified and must then return true within 30 s, where one
+            // that does not observe the notification waits out the day.
             var n = new Notification();
-            var notifier = ConcurrencyTestThread.Start(() =>
+            var calling = false;
+            var result = false;
+            var waiter = ConcurrencyTestThread.Start(() =>
             {
-                Thread.Sleep(1);
-                n.Notify();
+                Volatile.Write(ref calling, true);
+                result = n.WaitWithTimeout(TimeSpan.FromDays(1));
             });
 
-            Assert.True(n.WaitWithTimeout(TimeSpan.FromSeconds(1)));
-            notifier.Join();
+            var spin = new SpinWait();
+            var deadline = Environment.TickCount64 + 30_000;
+            while (Volatile.Read(ref calling) == false || (waiter.ThreadState & (ThreadState.WaitSleepJoin | ThreadState.Stopped)) == 0)
+            {
+                Assert.True(Environment.TickCount64 < deadline, "the wait neither blocked nor ended");
+                spin.SpinOnce();
+            }
+
+            Assert.True((waiter.ThreadState & ThreadState.Stopped) == 0, "the wait ended before the notification");
+            n.Notify();
+            Assert.True(waiter.Join(TimeSpan.FromSeconds(30)), "the wait did not return after the notification");
+            Assert.True(result);
         }
 
         [Fact]
