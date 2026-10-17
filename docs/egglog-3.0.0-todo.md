@@ -228,8 +228,11 @@ One more overlaps Eggnog's own open work. It is to be evaluated once a release c
   processed header constraints, keyed by the constraint list, so identical headers are processed once, and an empty
   result is cached as none. Upstream at `238fadce`: `core-relations/src/query.rs:97-119`, `156-181`
   (`reprocess_constraints`); related are `b92e449c` (index preparation cached with shared join plans) and `b9496100`
-  (packed join root caches). It changes the same step as the idle-rule fix (`campaign/idle-rule-fix`; roadmap, "Idle
-  local rules"): header instantiation in `RuleSetBuilder.AddRuleFromCachedPlan` and `PlanTemplate.InstantiateLayered`
-  (`Relations/Query/RuleSetBuilder.cs`, `Relations/Planning/PlanTemplate.cs`). Upstream skips repeated processing, and
-  the fix allocates nothing for an empty header. Compare it with the fix's header-scratch commit, and port it if it
-  gains as much with more fidelity.
+  (packed join root caches). It changes the same step as the idle-rule allocation commit ("Drop idle rule variants
+  without allocating"; roadmap, "Idle local rules"): header instantiation in `RuleSetBuilder.AddRuleFromCachedPlan` and
+  `PlanTemplate.InstantiateLayered` (`Relations/Query/RuleSetBuilder.cs`, `Relations/Planning/PlanTemplate.cs`).
+  Upstream skips repeated processing. The allocation commit evaluates headers into scratch: for a single plan it
+  allocates nothing for an empty header, as egglog does, and it departs from egglog only for a decomposed plan and for a
+  later empty header ([decisions](engine/decisions.md), row 19). Compare #1052 with that commit, and port it if it gains
+  as much with more fidelity. The cache commit, on the branch `idle-rule-cache`, keeps iteration rule lists on a scope
+  and is decided separately (roadmap, "Idle local rules").
