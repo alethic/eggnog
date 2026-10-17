@@ -744,17 +744,16 @@ are rough.
 | 1 | 2 | `BridgeMathBenchmarks` and `BridgeAcBenchmarks` at `673495d`, `2fd4a18` and `main`, A B C C B A, two rounds, `--warmupCount 2 --iterationCount 15`: about 2-2.6 minutes per `math` launch and 4.5-6.5 per `ac` launch. | 1.3-1.9 h |
 | 1 | 3 | The example mode against the Rust examples, five pairs each, at every processor and at one thread (`--threads 1` against `RAYON_NUM_THREADS=1`); the library's `math-microbenchmark.egg` against `egglog -j 1`. | 0.5-0.8 h |
 | 2 | 1 | An A/A control: `main` against itself on `RuleSetRunBenchmarks` and the warm `math` example, for the spread of each configuration. | 0.5-1 h |
-| 2 | 2 | Each root-path candidate against `main` on the root set, as in step 1 of night 1. The idle-rule allocation commit takes the narrowed comparison of [The idle-rule comparison](#the-idle-rule-comparison) instead. | 2.5-3 h each; 1.3-1.7 h for the idle-rule allocation commit |
+| 2 | 2 | Each root-path candidate against `main` on the root set, as in step 1 of night 1, and the idle-rule allocation commit's `BridgeMathBenchmarks` against its parent, which the CI comparison left unsettled. | 2.5-3 h each; about 0.4 h for `BridgeMathBenchmarks` |
 | 2 | 3 | The context classes (`ContextExtractionBenchmarks`, `PerChildCostBenchmarks`, `CaseSplitMemoryBenchmarks`, `ManyChildrenBenchmarks`, `ChildFindBenchmarks`), whose ratios are within one build, and `BusyParentCatchUpBenchmarks`, for its time per examined row: about 10 minutes a launch. | 0.5 h |
 | 2 | 4 | The library classes on the launch matrix: four launches a class. | 0.5-1 h |
 | 2 | 5 | `WritesBenchmarks --iterationCount 25` with both shard counts, against `cargo bench --bench writes`, two rounds. | 1-1.5 h |
 | 2 | 6 | ETW profiles of `BasicMath`, `math` and a query child, as listed under "What the campaign times". | 0.5 h |
 
-Night 1 is about 4.5-5.5 hours. Night 2 is about 5.5-7.5 hours with `campaign/basicmath-port` or `campaign/write-alloc`
-as its candidate, and about 4.3-6.2 hours with the idle-rule allocation commit, so it holds one of the three campaign
-candidates: the idle-rule allocation commit, `campaign/basicmath-port` or `campaign/write-alloc`. The other two, among
-them the three-build comparison of `campaign/basicmath-port`, the per-plan profiles for kernel specialization, which
-wait until the staging-buffer share is settled, and any work left inconclusive move to a later window, which the owner
+Night 1 is about 4.5-5.5 hours. Night 2 is about 6-8 hours with `campaign/basicmath-port` or `campaign/write-alloc` as
+its candidate and the `BridgeMathBenchmarks` recheck, so it holds one of the two campaign candidates. The other (for
+`campaign/basicmath-port`, its three-build comparison), the per-plan profiles for kernel specialization, which wait
+until the staging-buffer share is settled, and any work left inconclusive move to a later window, which the owner
 schedules too.
 
 ### What the campaign times
@@ -766,13 +765,12 @@ The gate each result decides is in the [roadmap](../../docs/roadmap.md).
 - `BridgeMathBenchmarks` and `BridgeAcBenchmarks` at `673495d`, `2fd4a18` and `main`; the bridge examples against the
   Rust's, five pairs each, at every processor and at one thread; `math-microbenchmark.egg` against `egglog -j 1`; and
   `WritesBenchmarks` with both shard counts against `cargo bench --bench writes`.
-- The three campaign candidates against `main`. The idle-rule allocation commit ("Drop idle rule variants without
-  allocating") runs on the narrowed set of [The idle-rule comparison](#the-idle-rule-comparison). The two campaign branches run on the
-  root set: `campaign/basicmath-port`, as a three-build run with `3a6e0b7`, which also times `BridgeMathBenchmarks`,
-  `BridgeAcBenchmarks`, `ManyChildrenBenchmarks`, `PerChildCostBenchmarks` and the transient children of
-  `QueryScopeBenchmarks`, because every multi-layer child atom takes the port's layered paths; and
-  `campaign/write-alloc`, under both collectors. Each of the three is rebased onto `main` and its full suite rerun on
-  both frameworks before it lands.
+- The two campaign candidates against `main` on the root set: `campaign/basicmath-port`, as a three-build run with
+  `3a6e0b7`, which also times `BridgeMathBenchmarks`, `BridgeAcBenchmarks`, `ManyChildrenBenchmarks`,
+  `PerChildCostBenchmarks` and the transient children of `QueryScopeBenchmarks`, because every multi-layer child atom
+  takes the port's layered paths; and `campaign/write-alloc`, under both collectors. Each is rebased onto `main` and its
+  full suite rerun on both frameworks before it lands. The idle-rule allocation commit's `BridgeMathBenchmarks` is
+  rechecked against its parent.
 - The context classes and `BusyParentCatchUpBenchmarks`, for the time per child and per examined row.
 - The library classes (`QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks`, `MathMicrobenchmarkBenchmarks`) on the
   launch matrix.
@@ -785,11 +783,12 @@ The gate each result decides is in the [roadmap](../../docs/roadmap.md).
 
 ### The idle-rule comparison
 
-The idle-rule allocation commit ("Drop idle rule variants without allocating"; roadmap, "Idle local rules") lands after
-a timed comparison against `main`, narrowed to the paths it changes, on an idle machine. The comparison uses the method
-of [The method](#the-method) (interleaved builds, two rounds, one class per process), but runs every class, the library
-classes too, on the net10.0 executable under the server collector only, in place of the launch matrix. Its classes are
-`RuleSetRunBenchmarks`, `BridgeMathBenchmarks` (with `--warmupCount 2 --iterationCount 15`, as on night 1),
+The idle-rule allocation commit ("Drop idle rule variants without allocating"; roadmap, "Idle local rules") was gated by
+a timed comparison against `main`, narrowed to the paths it changes. It ran on a GitHub runner ([Comparing on a CI
+runner](#comparing-on-a-ci-runner)), and the same comparison rechecks it on an idle machine. The comparison uses the
+method of [The method](#the-method) (interleaved builds, two rounds, one class per process), but runs every class, the
+library classes too, on the net10.0 executable under the server collector only, in place of the launch matrix. Its
+classes are `RuleSetRunBenchmarks`, `BridgeMathBenchmarks` (with `--warmupCount 2 --iterationCount 15`, as on night 1),
 `LibraryRunOverheadBenchmarks`, and `QueryScopeBenchmarks` at `Atoms` 2 and `Tables` 10, with every `Rules` value,
 `Idle` and `Active`. It takes about 1.3-1.7 h.
 

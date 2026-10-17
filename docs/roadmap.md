@@ -38,12 +38,13 @@ each with what would reopen it.
 - **Shrinking the prober.** Moving `ProberPiece.View` and `Prober.Rest` out of line, back to 48 B, touches the kernels
   `campaign/basicmath-port` changes. It lands only if it recovers at least 3%, and more than twice the A/A spread, on
   `BasicMath` in the parallel configurations.
-- **Idle local rules.** A query allocated about 1.5 KB per idle local rule per iteration. The idle-rule allocation
-  commit takes a query child under a frozen container with 100 idle local rules from about 165 KB to about 53 KB (Debug,
-  net10.0), and lands after [its narrowed comparison against
-  `main`](../src/Eggnog.Benchmarks/README.md#the-idle-rule-comparison). The cache commit on `idle-rule-cache` takes it
-  to about 32 KB, and is decided with the query-child figures or with "Demand-indexed local rules". Departures from
-  egglog: [decisions](engine/decisions.md), row 19.
+- **Idle local rules.** The idle-rule allocation commit was timed against `main` on a GitHub runner ([The idle-rule
+  comparison](../src/Eggnog.Benchmarks/README.md#the-idle-rule-comparison)): queries with idle local rules ran 14-40%
+  faster, and the root rule runs within about 1%. `BridgeMathBenchmarks` was left unsettled by the runner's noise and is
+  rechecked against the commit's parent at the next idle machine or CI run. The cache commit on `idle-rule-cache` takes
+  a query child under a frozen container with 100 idle local rules from about 53 KB to about 32 KB (Debug, net10.0), and
+  is decided with the query-child figures or with "Demand-indexed local rules". Departures from egglog:
+  [decisions](engine/decisions.md), row 19.
 - **Demand-indexed local rules.** After the idle-rule allocation commit, a query child under a frozen scope is timed
   at 0, 100 and 1,000 local rules. They are built only if 100 idle local rules add more than 25% to a query's own time
   at 0 rules, at p50 or p99.
@@ -85,10 +86,10 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
 
 - **Root gates.** A change to the engine's root paths is gated as a candidate: the candidate on `main` against `main`,
   within 2%, on the root benchmark set (benchmark README, "The root benchmark set") or on the narrower set its own item
-  names. The three campaign candidates (the idle-rule allocation commit, `campaign/basicmath-port` and
-  `campaign/write-alloc`), and any other change to the root paths, land only after their gate. The root set against
-  `3a6e0b7`, from before colored contexts, is the cumulative comparison only. It gates no candidate: `main` is already
-  slower than `3a6e0b7` on `BasicMath` ("The root `BasicMath` regression"), so every candidate would fail it.
+  names. The two campaign candidates (`campaign/basicmath-port` and `campaign/write-alloc`), and any other change to the
+  root paths, land only after their gate. The root set against `3a6e0b7`, from before colored contexts, is the
+  cumulative comparison only. It gates no candidate: `main` is already slower than `3a6e0b7` on `BasicMath` ("The root
+  `BasicMath` regression"), so every candidate would fail it.
 - **The cumulative comparison.** One comparison of `3a6e0b7` against `main` replaces the per-stage gates of the
   colored-contexts work, and it also times the bound check on root id mints. It records where `main` stands. A
   confirmed failure becomes a roadmap item; it is bisected over the engine-changing commits only if the owner
