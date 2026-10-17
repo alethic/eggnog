@@ -7,7 +7,7 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A dedicated OS thread whose exception is rethrown by <see cref="Join"/>, like Rust's
+    /// A dedicated OS thread whose exception is rethrown by <see cref="Join()"/>, like Rust's
     /// <c>JoinHandle::join().unwrap()</c>. Without it a failed assertion on a raw thread would crash the test host.
     /// </summary>
     sealed class ConcurrencyTestThread
@@ -58,12 +58,31 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// Gets the thread's state, which shows whether it is blocked (<see cref="ThreadState.WaitSleepJoin"/>) or has
+        /// ended (<see cref="ThreadState.Stopped"/>).
+        /// </summary>
+        public ThreadState ThreadState => thread.ThreadState;
+
+        /// <summary>
         /// Waits for the thread and rethrows its exception, if any.
         /// </summary>
         public void Join()
         {
             thread.Join();
             failure?.Throw();
+        }
+
+        /// <summary>
+        /// Waits at most <paramref name="timeout"/> for the thread, and rethrows its exception if it ended.
+        /// </summary>
+        /// <returns><c>true</c> if the thread ended within the timeout.</returns>
+        public bool Join(TimeSpan timeout)
+        {
+            if (thread.Join(timeout) == false)
+                return false;
+
+            failure?.Throw();
+            return true;
         }
 
         /// <summary>
