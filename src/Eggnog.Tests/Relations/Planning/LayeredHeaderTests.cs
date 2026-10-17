@@ -74,6 +74,53 @@ namespace Eggnog.Relations.Tests
             old.Dispose(null);
         }
 
+        /// <summary>
+        /// Header evaluation with scratch moves every layer's rows out of it, whether they span several layers or
+        /// collapse to one: a header over <c>g</c>, which has no middle layer, must not see the middle rows of the header
+        /// over <c>f</c> before it.
+        /// </summary>
+        [Fact]
+        public void ScratchKeepsNoRowsFromOneHeaderToTheNext()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var f = store.AddTable(MaxFunction(1), name: "f");
+            var g = store.AddTable(MaxFunction(1), name: "g");
+            var root = store.Root;
+            var ids = Enumerable.Range(0, 30).Select(_ => root.NewId()).ToArray();
+            var first = Write(root, f, ids[..10], 1);
+            Write(root, g, ids[..10], 1);
+            root.Freeze();
+            var middle = root.CreateChild();
+            var second = Write(middle, f, ids[10..20], 2);
+            middle.Freeze();
+            var leaf = middle.CreateChild();
+            var third = Write(leaf, f, ids[20..], 3);
+            Write(leaf, g, ids[20..], 3);
+            Assert.Equal(0b101u, leaf.GetView(g).PresentMask);
+
+            var view = leaf.Database.View;
+            var scratch = new HeaderScratch();
+            var fast = new List<Constraint>();
+            var slow = new List<Constraint>();
+            Constraint[] all = [Constraint.GeConst(new ColumnId(2), new Value(first))];
+            Constraint[] newer = [Constraint.GeConst(new ColumnId(2), new Value(second))];
+            Constraint[] middleOnly = [Constraint.GeConst(new ColumnId(2), new Value(second)), Constraint.LtConst(new ColumnId(2), new Value(third))];
+            foreach (var (constraints, mask, size) in new[] { (newer, 0b110u, 20), (middleOnly, 0b010u, 10) })
+            {
+                fast.Clear();
+                var fRows = view.Evaluate(f, constraints, fast, slow, scratch);
+                Assert.Equal(mask, fRows.LayerMask);
+                Assert.Equal(size, fRows.Size);
+
+                fast.Clear();
+                var gRows = view.Evaluate(g, all, fast, slow, scratch);
+                Assert.Equal(0b101u, gRows.LayerMask);
+                Assert.Equal(20, gRows.Size);
+                fRows.Dispose(null);
+                gRows.Dispose(null);
+            }
+        }
+
         [Fact]
         public void AnEqualityUsesEveryLayersOwnIndex()
         {

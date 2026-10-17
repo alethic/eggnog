@@ -295,7 +295,24 @@ namespace Eggnog.Relations
         /// <returns>The rows, per layer, which the caller owns; they may include tombstones and rows the view hides.</returns>
         /// <exception cref="InvalidOperationException">This is a child's view and the context is not current.</exception>
         /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find.</exception>
-        public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
+        public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow) =>
+            Evaluate(table, constraints, fast, slow, null);
+
+        /// <summary>
+        /// Evaluates a header, as <see cref="Evaluate(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>
+        /// does, with the working buffers of a header over several layers taken from <paramref name="scratch"/>: a header
+        /// that turns out empty then allocates nothing, unless its layers times its constraints exceed 256, when the
+        /// table of which constraints each layer answers fast is allocated rather than on the stack.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="constraints">The constraints.</param>
+        /// <param name="fast">Receives the fast constraints.</param>
+        /// <param name="slow">Receives the slow ones.</param>
+        /// <param name="scratch">The working buffers, or <c>null</c> to allocate them.</param>
+        /// <returns>The rows, per layer, which the caller owns.</returns>
+        /// <exception cref="InvalidOperationException">This is a child's view and the context is not current.</exception>
+        /// <exception cref="NotSupportedException">This is a child's view and the table is the union-find.</exception>
+        public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, HeaderScratch? scratch)
         {
             ArgumentNullException.ThrowIfNull(fast);
             ArgumentNullException.ThrowIfNull(slow);
@@ -317,7 +334,7 @@ namespace Eggnog.Relations
                 return LayeredSubset.Single(only, ConstraintProcessor.Process(view.Layers[only]!.Info, constraints, fast, slow));
             }
 
-            return EvaluateLayers(view, constraints, fast, slow);
+            return EvaluateLayers(view, constraints, fast, slow, scratch);
         }
 
         /// <summary>
@@ -343,7 +360,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the approximate number of rows of the atom's table the context sees that match its fast constraints, as
         /// egglog's <c>approx_size</c> counts slots, invisible ones included: the size of the header
-        /// <see cref="Evaluate"/> computes.
+        /// <see cref="Evaluate(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/> computes.
         /// </summary>
         /// <param name="atom">The atom's id.</param>
         /// <param name="info">The atom.</param>
@@ -390,35 +407,50 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Evaluates a header over two or more present layers; see <see cref="Evaluate"/>.
+        /// Evaluates a header over two or more present layers; see <see cref="Evaluate(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint}, HeaderScratch?)"/>.
+        /// With <paramref name="scratch"/>, the per-layer subsets and lists are its buffers, and only a result with rows
+        /// in two or more layers allocates (its per-layer array), or a header whose layers times constraints exceed 256
+        /// (its table of fast constraints per layer, on the stack up to that size).
         /// </summary>
-        LayeredSubset EvaluateLayers(TableView view, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow)
+        LayeredSubset EvaluateLayers(TableView view, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, HeaderScratch? scratch)
         {
             var layers = view.Layers;
-            var subsets = new Subset[layers.Length];
-            var layerFast = new List<Constraint>?[layers.Length];
-            var layerSlow = new List<Constraint>();
-            for (var l = 0; l < layers.Length; l++)
+            var count = layers.Length;
+            var width = constraints.Length;
+            var subsets = scratch?.LayerSubsets() ?? new Subset[count];
+            var layerFast = scratch?.LayerFast ?? new List<Constraint>(width);
+            var layerSlow = scratch?.LayerSlow ?? new List<Constraint>();
+
+            // Which constraints each present layer answers fast: entry l * width + j for constraint j in layer l.
+            var cells = count * width;
+            Span<bool> member = cells <= 256 ? stackalloc bool[cells] : new bool[cells];
+            var present = 0u;
+            for (var l = 0; l < count; l++)
             {
                 if (layers[l] is not { } lv)
                     continue;
 
-                var lf = new List<Constraint>(constraints.Length);
+                present |= 1u << l;
+                layerFast.Clear();
                 layerSlow.Clear();
-                subsets[l] = ConstraintProcessor.Process(lv.Info, constraints, lf, layerSlow);
-                layerFast[l] = lf;
+                subsets[l] = ConstraintProcessor.Process(lv.Info, constraints, layerFast, layerSlow);
+                for (var j = 0; j < width; j++)
+                    member[l * width + j] = layerFast.Contains(constraints[j]);
             }
 
+            layerFast.Clear();
+            layerSlow.Clear();
+
             // Fast overall when fast in some present layer, in the order the constraints were given; every layer shares
-            // the table's kind and spec, so the lists agree in practice and no layer refines.
+            // the table's kind and spec, so the layers agree in practice and no layer refines.
             var firstFast = fast.Count;
-            foreach (var constraint in constraints)
+            for (var j = 0; j < width; j++)
             {
                 var isFast = false;
-                foreach (var lf in layerFast)
-                    if (lf is not null && lf.Contains(constraint))
-                        isFast = true;
+                for (var l = 0; l < count; l++)
+                    isFast |= (present & (1u << l)) != 0 && member[l * width + j];
 
+                var constraint = constraints[j];
                 if (isFast)
                 {
                     if (fast.IndexOf(constraint, firstFast) < 0)
@@ -430,17 +462,58 @@ namespace Eggnog.Relations
                 }
             }
 
-            for (var l = 0; l < layers.Length; l++)
+            for (var l = 0; l < count; l++)
             {
-                if (layerFast[l] is not { } lf)
+                if ((present & (1u << l)) == 0)
                     continue;
 
                 for (var i = firstFast; i < fast.Count; i++)
-                    if (lf.Contains(fast[i]) == false)
+                    if (member[l * width + constraints.IndexOf(fast[i])] == false)
                         subsets[l] = layers[l]!.Table.RefineOne(subsets[l], fast[i]);
             }
 
-            return LayeredSubset.FromLayers(subsets, null);
+            if (scratch is null)
+                return LayeredSubset.FromLayers(subsets, null);
+
+            // Move the rows out of the scratch, which keeps every entry empty between uses.
+            var nonempty = 0;
+            var last = -1;
+            for (var l = 0; l < count; l++)
+            {
+                if (subsets[l].IsEmpty == false)
+                {
+                    nonempty++;
+                    last = l;
+                }
+            }
+
+            if (nonempty >= 2)
+            {
+                var owned = new Subset[count];
+                for (var l = 0; l < count; l++)
+                {
+                    owned[l] = subsets[l];
+                    subsets[l] = default;
+                }
+
+                return LayeredSubset.FromLayers(owned, null);
+            }
+
+            for (var l = 0; l < count; l++)
+            {
+                if (l != last)
+                {
+                    subsets[l].Dispose();
+                    subsets[l] = default;
+                }
+            }
+
+            if (last < 0)
+                return LayeredSubset.Empty;
+
+            var rows = subsets[last];
+            subsets[last] = default;
+            return LayeredSubset.Single(last, rows);
         }
 
         /// <summary>

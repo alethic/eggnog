@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Eggnog
@@ -94,29 +95,34 @@ namespace Eggnog
         /// syncs. Recomputed for every iteration, so rules defined meanwhile, on any thread, join the next one. A single
         /// ruleset on a path without local rules returns its snapshot, allocation-free.
         /// </summary>
+        /// <remarks>
+        /// The local rules are read from the nearest scope with local rules up, since the scopes below it have none.
+        /// O(rules + depth).
+        /// </remarks>
         /// <param name="rulesets">The rulesets of the step.</param>
         /// <param name="scope">The scope the iteration runs in.</param>
-        /// <returns>The rules.</returns>
+        /// <returns>The rules; callers must not modify the list.</returns>
         public static IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope)
         {
-            var anyLocal = false;
-            for (var up = scope; up is not null && anyLocal == false; up = up.Parent)
-                anyLocal = up.LocalCompiled.Length > 0;
+            Scope? anchor = null;
+            for (var up = scope; up is not null && anchor is null; up = up.Parent)
+                if (up.LocalCompiled.Length > 0)
+                    anchor = up;
 
-            if (rulesets.Count == 1 && anyLocal == false)
+            if (rulesets.Count == 1 && anchor is null)
                 return rulesets[0].Compiled;
 
             var seen = new HashSet<CompiledRule>(ReferenceEqualityComparer.Instance);
             var rules = new List<CompiledRule>();
-            foreach (var ruleset in rulesets)
-                foreach (var rule in ruleset.Compiled)
+            for (var r = 0; r < rulesets.Count; r++)
+                foreach (var rule in rulesets[r].Compiled)
                     if (seen.Add(rule))
                         rules.Add(rule);
 
-            if (anyLocal)
+            if (anchor is not null)
             {
                 var path = new List<Scope>();
-                for (var up = scope; up is not null; up = up.Parent)
+                for (var up = anchor; up is not null; up = up.Parent)
                     path.Add(up);
 
                 for (var k = path.Count - 1; k >= 0; k--)
@@ -124,8 +130,8 @@ namespace Eggnog
                     foreach (var rule in path[k].LocalCompiled)
                     {
                         var member = false;
-                        foreach (var ruleset in rulesets)
-                            member |= ReferenceEquals(rule.Rule.Ruleset, ruleset);
+                        for (var r = 0; r < rulesets.Count; r++)
+                            member |= ReferenceEquals(rule.Rule.Ruleset, rulesets[r]);
 
                         if (member && seen.Add(rule))
                             rules.Add(rule);
@@ -205,17 +211,23 @@ namespace Eggnog
             Statistics.Iterations++;
             var report = iteration.Report;
             List<RuleStatistics>? matched = wantsSteps ? new List<RuleStatistics>() : null;
+            var statistics = Statistics.Rules;
+            if (statistics.Count == 0)
+                statistics.EnsureCapacity(lowered.Length);
+
+            // A variant the engine reports nothing for (every variant of an idle rule) adds no matches, no time and no
+            // plan: it only enters the run's statistics. The others are looked up once, by description.
+            var reports = report.RuleReports;
             foreach (var variant in lowered)
             {
                 if (variant.Rule is not { } rule)
                     continue;
 
-                if (Statistics.Rules.TryGetValue(rule, out var builder) == false)
-                    Statistics.Rules.Add(rule, builder = new RuleStatisticsBuilder());
+                ref var builder = ref CollectionsMarshal.GetValueRefOrAddDefault(statistics, rule, out _);
+                if (reports.Count == 0 || reports.TryGetValue(variant.Description, out var variantReports) == false)
+                    continue;
 
-                var matches = report.NumMatches(variant.Description);
-                var searchTime = report.RuleSearchAndApplyTime(variant.Description);
-                var plan = PlanOf(report, variant.Description);
+                var (matches, searchTime, plan) = Sum(variantReports);
                 builder.Add(matches, searchTime, plan);
                 if (matched is not null && matches > 0)
                     matched.Add(new RuleStatistics(rule, matches, searchTime, 1, plan));
@@ -280,8 +292,8 @@ namespace Eggnog
         void SyncMirrors(Scope scope, IReadOnlyList<CompiledRule> rules)
         {
             List<ScopeTag>? tags = null;
-            foreach (var rule in rules)
-                foreach (var tag in rule.Program.ReadScopes)
+            for (var i = 0; i < rules.Count; i++)
+                foreach (var tag in rules[i].Program.ReadScopes)
                     if ((tags ??= new List<ScopeTag>()).Contains(tag) == false)
                         tags.Add(tag);
 
@@ -486,7 +498,7 @@ namespace Eggnog
         /// <returns>The report.</returns>
         public RunReport Complete(RunStopReason reason, Stopwatch clock)
         {
-            var rules = new Dictionary<Rule, RuleStatistics>(ReferenceEqualityComparer.Instance);
+            var rules = new Dictionary<Rule, RuleStatistics>(Statistics.Rules.Count, ReferenceEqualityComparer.Instance);
             foreach (var (rule, builder) in Statistics.Rules)
                 rules.Add(rule, builder.Build(rule));
 
@@ -498,17 +510,23 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the plan of a variant from an iteration's report: the first plan its description's reports carry, which the
-        /// engine records only at its plan level (<see cref="EGraphOptions.RecordPlans"/>).
+        /// Sums a variant's reports from an iteration: its matches and its search and apply time over every instance
+        /// of it the iteration ran, and the first plan they carry, which the engine records only at its plan level
+        /// (<see cref="EGraphOptions.RecordPlans"/>).
         /// </summary>
-        static string? PlanOf(Relations.RuleSetReport report, string description)
+        static (long Matches, TimeSpan SearchTime, string? Plan) Sum(List<Relations.RuleReport> reports)
         {
-            if (report.RuleReports.TryGetValue(description, out var reports))
-                foreach (var rule in reports)
-                    if (rule.Plan is { } plan)
-                        return plan;
+            long matches = 0;
+            var searchTime = TimeSpan.Zero;
+            string? plan = null;
+            foreach (var report in reports)
+            {
+                matches += report.NumMatches;
+                searchTime += report.SearchAndApplyTime;
+                plan ??= report.Plan;
+            }
 
-            return null;
+            return (matches, searchTime, plan);
         }
 
     }
