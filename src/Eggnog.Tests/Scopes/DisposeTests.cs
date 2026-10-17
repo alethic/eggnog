@@ -57,18 +57,53 @@ namespace Eggnog.Tests.Scopes
             Assert.True(t.Root.Check(t.Fact.Of("a")));
         }
 
+        /// <summary>
+        /// A disposed scope's classes stay usable in its live descendants, in reads, unions, local-rule constants and
+        /// <c>Until</c> conditions, and the descendant keeps the scope from being released until it is disposed itself.
+        /// The disposed scope refuses new calls, and outside its subtree its classes are refused as disposed.
+        /// </summary>
         [Fact]
-        public void ADisposedScopesClassesDie()
+        public void ADisposedScopesClassesStayUsableInItsLiveDescendants()
         {
             var t = new NodeTheory();
             t.Root.Freeze();
             var child = t.Root.CreateChild();
             var a = child.Make(t.A.Of());
+            var b = child.Make(t.B.Of());
             var grandchild = child.CreateChild();
-            Assert.True(grandchild.AreEqual(a, a));
+            var sibling = t.Root.CreateChild();
 
             child.Dispose();
-            Assert.Contains("disposed", Assert.Throws<ArgumentException>(() => grandchild.Find(a)).Message);
+            Assert.True(child.IsDisposed);
+            Assert.False(child.IsReleased);
+            Assert.False(child.Engine.IsDisposed);
+
+            Assert.True(grandchild.AreEqual(grandchild.Find(a), a));
+            Assert.True(grandchild.Union(a, b));
+            Assert.True(grandchild.AreEqual(a, b));
+            grandchild.DefineRule(t.Rules, "tag a", r =>
+            {
+                r.When(t.Num.Of(1L));
+                r.Then(t.Tag.Of(a));
+            });
+            grandchild.Assume(t.Num.Of(1L));
+            grandchild.Run(Schedule.Until(Schedule.Run(t.Rules), t.Tag.Of(b)));
+            Assert.True(grandchild.Check(t.Tag.Of(b)));
+
+            Assert.Throws<ObjectDisposedException>(() => child.Find(a));
+            Assert.Contains("which is disposed", Assert.Throws<ArgumentException>(() => sibling.Find(a)).Message);
+            var e = Assert.Throws<RuleDefinitionException>(() => sibling.DefineRule(t.Rules, "sibling", r =>
+            {
+                r.When(t.Num.Of(1L));
+                r.Then(t.Tag.Of(a));
+            }));
+            Assert.Equal($"class {a.Id} came from scope '{child.Path}', which is disposed", e.Message);
+
+            Assert.False(child.IsReleased);
+            grandchild.Dispose();
+            Assert.True(grandchild.Engine.IsDisposed);
+            Assert.True(child.IsReleased);
+            Assert.True(child.Engine.IsDisposed);
         }
 
         [Fact]

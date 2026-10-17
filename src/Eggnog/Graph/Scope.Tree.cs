@@ -59,6 +59,19 @@ namespace Eggnog
         public int CompactionsBlockedAtFreeze => Engine.CompactionsBlockedAtFreeze;
 
         /// <summary>
+        /// Gets whether the scope was released: disposed, with no live child, transient child or call in progress left
+        /// to defer it, its local rules freed and its engine state disposed. Readable from any thread.
+        /// </summary>
+        internal bool IsReleased
+        {
+            get
+            {
+                lock (childrenLock)
+                    return released;
+            }
+        }
+
+        /// <summary>
         /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step, in
         /// creation order (a snapshot). Disposed children are not listed, even while their release waits, and neither are
         /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope.

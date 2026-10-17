@@ -20,7 +20,7 @@ namespace Eggnog
         /// <returns>Whether the term has a value in the scope.</returns>
         /// <exception cref="ArgumentException">The term is not ground, computes, belongs to another graph, or holds a class
         /// value this scope cannot use.</exception>
-        public static bool TryRead(Scope scope, Term term, out uint cell) => TryReadIn(scope, term, null, null, out cell);
+        public static bool TryRead(Scope scope, Term term, out uint cell) => TryReadIn(scope, term, null, out cell);
 
         /// <summary>
         /// Reads a ground term inside <see cref="Fact.In"/>: its table applications read the scope
@@ -29,11 +29,9 @@ namespace Eggnog
         /// <param name="scope">The scope read.</param>
         /// <param name="term">The term.</param>
         /// <param name="enclosing">The tag of an enclosing <see cref="Fact.In"/>; <c>null</c> for none.</param>
-        /// <param name="held">The origin of <paramref name="scope"/> or an ancestor of it that the call holds, whose own
-        /// classes pass after its disposal (see <see cref="ClassChecks.Require"/>); <c>null</c> for none.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the term reads.</returns>
-        static bool TryReadIn(Scope scope, Term term, ScopeTag? enclosing, ScopeOrigin? held, out uint cell)
+        static bool TryReadIn(Scope scope, Term term, ScopeTag? enclosing, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(term);
             var shape = term.Shape;
@@ -44,7 +42,7 @@ namespace Eggnog
                     var type = TypeOf(scope, shape);
                     if (type.Kind == ColumnKind.Sort)
                     {
-                        cell = scope.Engine.Find(ClassChecks.Require(scope, type.ClassOf(shape.Constant!), nameof(term), null, held));
+                        cell = scope.Engine.Find(ClassChecks.Require(scope, type.ClassOf(shape.Constant!), nameof(term)));
                         return true;
                     }
 
@@ -58,7 +56,7 @@ namespace Eggnog
                     var keys = new uint[shape.Arguments.Length];
                     for (var i = 0; i < keys.Length; i++)
                     {
-                        if (TryReadIn(scope, shape.Arguments[i], enclosing, held, out keys[i]) == false)
+                        if (TryReadIn(scope, shape.Arguments[i], enclosing, out keys[i]) == false)
                         {
                             cell = 0;
                             return false;
@@ -87,16 +85,14 @@ namespace Eggnog
         /// </summary>
         /// <param name="scope">The scope read.</param>
         /// <param name="fact">The fact.</param>
-        /// <param name="held">The origin of <paramref name="scope"/> or an ancestor of it that the call holds, whose own
-        /// classes pass after its disposal (see <see cref="ClassChecks.Require"/>); <c>null</c> for none.</param>
         /// <returns>Whether the fact holds.</returns>
         /// <exception cref="ArgumentException">The fact is a filter, or a term in it is not a valid read.</exception>
-        public static bool Check(Scope scope, Fact fact, ScopeOrigin? held = null) => CheckIn(scope, fact, null, held);
+        public static bool Check(Scope scope, Fact fact) => CheckIn(scope, fact, null);
 
         /// <summary>
         /// Checks a ground fact, inside <see cref="Fact.In"/> when <paramref name="enclosing"/> is set.
         /// </summary>
-        static bool CheckIn(Scope scope, Fact fact, ScopeTag? enclosing, ScopeOrigin? held)
+        static bool CheckIn(Scope scope, Fact fact, ScopeTag? enclosing)
         {
             ArgumentNullException.ThrowIfNull(fact);
             switch (fact)
@@ -107,19 +103,19 @@ namespace Eggnog
                     var read = ReadScopeOf(scope, relation.Table, enclosing);
                     var keys = new uint[relation.Arguments.Length];
                     for (var i = 0; i < keys.Length; i++)
-                        if (TryReadIn(scope, relation.Arguments[i], enclosing, held, out keys[i]) == false)
+                        if (TryReadIn(scope, relation.Arguments[i], enclosing, out keys[i]) == false)
                             return false;
 
                     return read.Engine.TryLookup(relation.Table.Function, keys, out _);
                 }
                 case EqualityFact equality:
                 {
-                    var left = TryReadIn(scope, equality.Left, enclosing, held, out var x);
-                    var right = TryReadIn(scope, equality.Right, enclosing, held, out var y);
+                    var left = TryReadIn(scope, equality.Left, enclosing, out var x);
+                    var right = TryReadIn(scope, equality.Right, enclosing, out var y);
                     return left && right && x == y;
                 }
                 case ExistsFact exists:
-                    return TryReadIn(scope, exists.Application, enclosing, held, out _);
+                    return TryReadIn(scope, exists.Application, enclosing, out _);
                 case ScopedFact scoped:
                 {
                     if (enclosing is not null)
@@ -127,7 +123,7 @@ namespace Eggnog
 
                     scope.Graph.CheckTag(scoped.Scope, nameof(fact));
                     foreach (var inner in scoped.Facts)
-                        if (CheckIn(scope, inner, scoped.Scope, held) == false)
+                        if (CheckIn(scope, inner, scoped.Scope) == false)
                             return false;
 
                     return true;

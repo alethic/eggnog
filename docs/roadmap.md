@@ -105,15 +105,9 @@ of them fall on the same side of the gate; otherwise it is inconclusive, up to f
 
 ## Library work
 
-- **The class rule.** A disposed scope refuses new calls itself, and its classes stay usable in its live descendants. It
-  replaces the disposal-race fix's per-call exemption (`held` in `ClassChecks`, the scope-owner exemptions in
-  `AllowedInRule` and `ProgramBuilder.ConstantOperand`) and the refusals it documents.
-- **What the class rule changes.** The class rule removes the refusal of a disposed ancestor's class in a descendant and
-  the `Scope.Run` note on a mid-run `Until`; a run's split-step `ObjectDisposedException` stays documented. It lands if,
-  on both frameworks, only the six tests that pin those refusals change.
 - **Scopes managed by the garbage collector.** A child scope that is never disposed is never collected: it keeps 3-30
-  KB, its ancestors' live-descendant counts and its local rules. After the class rule, an internal core per scope with a
-  private sentinel makes `Dispose` optional ([decisions](engine/decisions.md), row 18).
+  KB, its ancestors' live-descendant counts and its local rules. An internal core per scope with a private sentinel
+  makes `Dispose` optional ([decisions](engine/decisions.md), row 18).
 - **The scope core's gate.** The scope core lands if the full suite passes on both frameworks in Release, tiered
   compilation on and off, with a collection forced at every run observer, split step and `CreateChild`; no sentinel
   finalizer runs for a disposed scope, a bare child costs at most 5% more, and a dropped one retains at most 64 B.

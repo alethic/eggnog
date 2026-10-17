@@ -121,10 +121,7 @@ namespace Eggnog
             var element = program.ElementAt(program.Columns[program.SetColumn], tuple[program.SetColumn], caseIndex);
             var facts = program.Template.Instantiate(tuple, element, parent);
             scope.Engine.EnsureClean();
-
-            // The assumptions' classes come from the scope the split was made in, which the run holds until it ends (its
-            // own scope, or one of its cases), so they are not refused if that scope is disposed meanwhile.
-            var batch = new HostBatch(scope, parent.Origin);
+            var batch = new HostBatch(scope);
             foreach (var fact in facts)
             {
                 try

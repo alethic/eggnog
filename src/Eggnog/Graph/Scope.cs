@@ -167,8 +167,9 @@ namespace Eggnog
         public string Path { get; }
 
         /// <summary>
-        /// Disposes the scope: never throws. It makes the scope unusable at once and invalidates the class values it
-        /// returned. Its local rules and engine state are released once it has no live children (transient query
+        /// Disposes the scope: never throws. It refuses new calls on the scope at once. The class values it returned stay
+        /// usable in its calls already in progress and in its live descendants; outside its subtree they are refused as
+        /// disposed. Its local rules and engine state are released once it has no live children (transient query
         /// children included) and no call is in progress in it or, on another thread, in its thread domain; whichever thread
         /// removes the last obstacle releases it. A second call does nothing; on the root it does nothing, because the root
         /// lives as long as the graph. A case belongs to the set that made it: disposing it marks it disposed at once,

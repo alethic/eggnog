@@ -24,12 +24,12 @@ namespace Eggnog
         /// <param name="cancellationToken">Cancels the run between iterations and split steps; an iteration or a lift already
         /// started runs to its end.</param>
         /// <returns>What the run did.</returns>
-        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="ObjectDisposedException">The scope is disposed; or it is disposed during the run, and a later
+        /// split step opens cases directly under it, which the step refuses, after earlier steps may have written. A split
+        /// step that opens no case is not refused.</exception>
         /// <exception cref="ArgumentException">A ruleset or split rule of the schedule belongs to another graph, or an
         /// <c>Until</c> condition cannot be checked here: it names a table or column type of another graph, or a class this
-        /// scope cannot use. All are refused before any work, so nothing is written, except a class of an ancestor
-        /// disposed during the run, which the <c>Until</c> refuses when it next checks it, after earlier steps may have
-        /// written.</exception>
+        /// scope cannot use. All are refused before any work, so nothing is written.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The iteration, time or row limit is negative, or the case or split
         /// depth limit is less than 1.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen or faulted; a rule or split rule the schedule
