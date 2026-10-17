@@ -103,6 +103,17 @@ namespace Eggnog.Tests.Scopes
         }
 
         /// <summary>
+        /// Interns, with no scope, the values that a derivation of <c>StrEq(kind, literal)</c> with a new literal
+        /// interns, in the same pools and order: the string, then the singleton set <c>inset</c> computes from it.
+        /// </summary>
+        /// <param name="literal">The literal.</param>
+        public void InternLiteral(string literal)
+        {
+            Graph.Values.TypeOf<string>().Encode(literal);
+            Graph.Values.TypeOf<ValueSet<string>>().Encode(ValueSet.Of(literal));
+        }
+
+        /// <summary>
         /// Defines a local rule on <paramref name="scope"/> that reads the domain of <c>kind</c>, filters it with a
         /// primitive (a call site the rule owns, registered as an engine external function) and writes
         /// <c>ne(kind, constant)</c>.
