@@ -14,14 +14,24 @@ namespace Eggnog.Relations.Tests
     /// <remarks>
     /// <see cref="EggPushPopTests"/> covers the push/pop programs at the top of <c>ext/egglog/tests</c>; this class
     /// covers the eleven programs with a <c>(push)</c> under <c>tests/web-demo</c>. Most need sorts the bridge does not
-    /// have; <c>bdd.egg</c>, <c>push-pop.egg</c>, <c>array.egg</c> and <c>cyk.egg</c> do not (strings are interned base
-    /// values, <see cref="StringCodec"/>). Their expected values are their own <c>check</c> and
-    /// <c>(fail (check ...))</c> commands, which egglog's test suite runs; <c>bdd.egg</c> is also compared with the
-    /// same commands run at a fresh root, without the push. Not translated: <c>herbie.egg</c> and
-    /// <c>herbie-tutorial.egg</c> (<c>BigRat</c>, which the bridge has no codec for); <c>lambda.egg</c>,
-    /// <c>typeinfer.egg</c> and <c>fusion.egg</c> (<c>Set</c> containers of e-classes, which children refuse);
-    /// <c>multiset.egg</c> (<c>MultiSet</c> and <c>UnstableFn</c>); and <c>math.egg</c>, which needs only <c>f64</c>
-    /// (<see cref="DoubleCodec"/>) and strings and so is in reach, but has 74 rules and 21 push blocks.
+    /// have, or eq-sort containers in children; <c>bdd.egg</c>, <c>push-pop.egg</c>, <c>array.egg</c> and
+    /// <c>cyk.egg</c> do not (strings are interned base values, <see cref="StringCodec"/>). Their expected values are
+    /// their own <c>check</c> and <c>(fail (check ...))</c> commands, which egglog's test suite runs; <c>bdd.egg</c> is
+    /// also compared with the same commands run at a fresh root, without the push.
+    /// <para>
+    /// Not translated. <c>lambda.egg</c>, <c>typeinfer.egg</c> and <c>fusion.egg</c> hold <c>Set</c> containers of
+    /// e-classes inside a push: they wait on eq-sort containers in children, which children refuse, and would be
+    /// translated with <see cref="SetContainer"/> once children have them. The rest are out of scope. <c>herbie.egg</c>
+    /// and <c>herbie-tutorial.egg</c> need <c>BigRat</c> values and primitives, which the bridge has no codec for;
+    /// <c>herbie.egg</c> is 196 rules to translate by hand, and the tutorial's oracle is three <c>check</c> commands.
+    /// <c>multiset.egg</c> needs <c>MultiSet</c> and <c>UnstableFn</c> function values, which the library does not
+    /// offer. <c>math.egg</c> needs only <c>f64</c> (<see cref="DoubleCodec"/>) and strings, but nothing runs at its
+    /// root before its push blocks, so each push starts from a root that has run nothing and tests what the root's own
+    /// tests cover; its one feature specific to children, subsumption and deletion by rules inside a push, is covered
+    /// by <see cref="ChildSubsumeAndDeleteTests"/>. A translation would have to freeze the root before the first push,
+    /// since its <c>delete</c> rule runs inside a push and a child deletes a shared table's rows only under a frozen
+    /// parent.
+    /// </para>
     /// </remarks>
     public class EggPushPopWebDemoTests
     {

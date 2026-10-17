@@ -462,22 +462,9 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="state">The interning state.</param>
         /// <returns>The id.</returns>
-        /// <exception cref="InvalidOperationException">The counter has no ids left.</exception>
-        uint MintId(ExecutionState state)
-        {
-            var raw = state.IncrementSharedCounter(counter);
-            if ((ulong)raw >= Value.StaleRep)
-                ThrowExhausted();
-
-            return (uint)raw;
-        }
-
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        void ThrowExhausted()
-        {
-            throw new InvalidOperationException($"Counter {counter} has no ids left for containers of type {typeof(TContainer).Name}.");
-        }
+        /// <exception cref="OverflowException">The counter has no ids left: the next one would exceed
+        /// <see cref="UnionFind.MaxId"/>, the bound every id mint of a store applies (<see cref="Store.CheckId"/>).</exception>
+        uint MintId(ExecutionState state) => Store.CheckId(state.IncrementSharedCounter(counter));
 
         static RawHashTable<ContainerEntry<TContainer>>[] NewShards(ShardData shardData)
         {

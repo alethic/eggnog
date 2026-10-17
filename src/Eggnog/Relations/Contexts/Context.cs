@@ -209,7 +209,7 @@ namespace Eggnog.Relations
             // Set later by Freeze and by the contradiction stop.
             frozen = false;
             contradicted = false;
-            database.AttachRoot(this, store.ClockCounter);
+            database.AttachRoot(this, store.IdCounter, store.ClockCounter);
             database.RetractionGuard = store.Schema.RootGuard;
             store.Schema.RootGuard.AttachRoot(this);
         }
@@ -352,6 +352,17 @@ namespace Eggnog.Relations
         /// Gets whether the context is frozen, and so read-only and shareable across threads.
         /// </summary>
         public bool IsFrozen => frozen;
+
+        /// <summary>
+        /// Gets the number of the context's tables that its <see cref="Freeze"/> left uncompacted because live
+        /// descendants held their row ids; they keep their tombstones for good. 0 until the freeze completes, and for a
+        /// context frozen without live descendants.
+        /// </summary>
+        /// <remarks>
+        /// The database publishes the count before the rest of the freeze ends, so it is read only once the frozen
+        /// flag, written last, is set.
+        /// </remarks>
+        public int CompactionsBlockedAtFreeze => frozen ? database.CompactionsBlockedAtFreeze : 0;
 
         /// <summary>
         /// Gets whether the context has been disposed.

@@ -22,7 +22,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the most engine iterations the run may make, in every scope of the run, cases included (mirror syncs do not
-        /// count); must be at least 0. The default is 10,000.
+        /// count); must be at least 0. The default is 10,000. Since every case's iterations count, a run that splits needs a
+        /// larger limit than the same theory without splits. There is no budget per case: to bound each case of a split,
+        /// pass <c>Repeat(n, steps)</c> as its in-case schedule (see <see cref="Schedule.Split(SplitRule, Schedule)"/>),
+        /// so that one case that does not terminate cannot use up this limit before the split step lifts.
         /// </summary>
         public int IterationLimit { get; init; } = 10_000;
 

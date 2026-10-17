@@ -8,6 +8,10 @@ using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
 
+using Eggnog.Benchmarks.Comparison;
+using Eggnog.Benchmarks.Library;
+using Eggnog.Benchmarks.Probes;
+
 namespace Eggnog.Relations.Benchmarks
 {
 
@@ -35,22 +39,50 @@ namespace Eggnog.Relations.Benchmarks
 
         /// <summary>
         /// Runs the benchmarks the command line selects, for example <c>--filter *WritesBenchmarks*</c>; with no
-        /// arguments, runs every benchmark. <c>--bridge-example math</c> or <c>--bridge-example ac</c> instead runs an
-        /// egglog-bridge example program the way its Rust <c>main</c> does, without BenchmarkDotNet
-        /// (<see cref="BridgeExampleRunner"/>).
+        /// arguments, runs every benchmark. A first argument naming a mode runs that mode instead, without
+        /// BenchmarkDotNet's runner:
+        /// <list type="bullet">
+        /// <item><c>--bridge-example math|ac [--threads n]</c> runs an egglog-bridge example program the way its Rust
+        /// <c>main</c> does (<see cref="BridgeExampleRunner"/>);</item>
+        /// <item><c>--math-microbenchmark</c> runs the library port of egglog's <c>math-microbenchmark.egg</c> the way
+        /// the egglog command line runs the file (<see cref="MathMicrobenchmarkRunner"/>);</item>
+        /// <item><c>--context-footprint</c> prints the steady-state bytes of the context structures
+        /// (<see cref="ContextFootprint"/>);</item>
+        /// <item><c>--executor-counts</c> prints the executor's clone, buffer and buffer-map counts for the BasicMath
+        /// workload (<see cref="ExecutorCountsReport"/>);</item>
+        /// <item><c>--stale-probe &lt;iterations&gt; none|held|caughtup</c> prints what the compaction gate keeps while
+        /// the bridge math program runs (<see cref="StaleProbe"/>);</item>
+        /// <item><c>--plan-footprint [rules...]</c> prints the bytes a freeze spends per planned rule
+        /// (<see cref="PlanFootprint"/>);</item>
+        /// <item><c>--allocation-probe</c> counts one case's allocated bytes, by type (<see cref="AllocationProbe"/>);</item>
+        /// <item><c>--compare</c> compares builds from their exported reports (<see cref="ComparisonCommand"/>).</item>
+        /// </list>
         /// </summary>
-        /// <param name="args">BenchmarkDotNet's command-line arguments, or <see cref="BridgeExampleRunner.Option"/> and a
-        /// program name.</param>
-        /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid. In the
-        /// example mode, <see cref="BridgeExampleRunner.Run"/>'s exit code; in the footprint mode
-        /// (<see cref="ContextFootprint.Option"/>), 0.</returns>
+        /// <param name="args">BenchmarkDotNet's command-line arguments, or a mode's option and its arguments.</param>
+        /// <returns>0 when every selected benchmark ran; 1 when one failed or the configuration was invalid. In a mode,
+        /// that mode's exit code.</returns>
         static int Main(string[] args)
         {
-            if (args.Length > 0 && args[0] == BridgeExampleRunner.Option)
-                return BridgeExampleRunner.Run(args.AsSpan(1));
-
-            if (args.Length > 0 && args[0] == ContextFootprint.Option)
-                return ContextFootprint.Run();
+            var mode = args.Length > 0 ? args[0] : null;
+            switch (mode)
+            {
+                case BridgeExampleRunner.Option:
+                    return BridgeExampleRunner.Run(args.AsSpan(1));
+                case ContextFootprint.Option:
+                    return ContextFootprint.Run();
+                case ExecutorCountsReport.Option:
+                    return ExecutorCountsReport.Run();
+                case StaleProbe.Option:
+                    return StaleProbe.Run(args.AsSpan(1));
+                case PlanFootprint.Option:
+                    return PlanFootprint.Run(args.AsSpan(1));
+                case MathMicrobenchmarkRunner.Option:
+                    return MathMicrobenchmarkRunner.Run(args.AsSpan(1));
+                case AllocationProbe.Option:
+                    return AllocationProbe.Run(args.AsSpan(1), Console.Out, Console.Error);
+                case ComparisonCommand.Option:
+                    return ComparisonCommand.Run(args.AsSpan(1), Console.Out, Console.Error);
+            }
 
             if (args.Length == 0)
                 args = ["--filter", "*"];

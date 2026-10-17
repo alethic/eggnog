@@ -22,9 +22,11 @@ namespace Eggnog.Relations.Benchmarks
     /// <para>
     /// <see cref="Threads"/> plays the size of egglog's <c>ThreadPoolBuilder</c> pool that the bench <c>install</c>s:
     /// it caps both the staging workers and the table's own parallel delete, insert and compaction, through one
-    /// <see cref="ParallelHeuristics"/>. That instance also fixes the table's shard count (twice the thread count, or
-    /// one shard serially); egglog builds the table outside <c>install</c>, so its shard count follows the global rayon
-    /// pool instead.
+    /// <see cref="ParallelHeuristics"/>. That instance also fixes the table's shard count: by default twice the thread
+    /// count, or one shard serially. egglog builds the table outside <c>install</c>, so its shard count follows the
+    /// global rayon pool instead (twice the machine's threads, 16 on an eight-thread machine);
+    /// <see cref="Shards"/> = 16 reproduces that at every thread count. At 8 threads the default is already 16 shards,
+    /// so that case is left out (<see cref="DistinctShardCountsAttribute"/>).
     /// </para>
     /// <para>
     /// The workload is generated once per parameter set from a fixed seed (the global setup runs once per benchmark
@@ -37,6 +39,7 @@ namespace Eggnog.Relations.Benchmarks
     /// </para>
     /// </remarks>
     [InvocationCount(1)]
+    [DistinctShardCounts]
     public class WritesBenchmarks : IItemsPerInvocation
     {
 
@@ -77,6 +80,15 @@ namespace Eggnog.Relations.Benchmarks
         public int Threads { get; set; }
 
         /// <summary>
+        /// Gets or sets the shard count of the table's hash index: 0, the default, takes twice <see cref="Threads"/>
+        /// (one shard at one thread), as <see cref="ParallelHeuristics"/> derives it; 16 fixes 16 shards whatever the
+        /// thread count, as egglog's bench gets on an eight-thread machine. A case of 16 whose thread count already
+        /// gives 16 shards is not run (<see cref="WritesShardCounts.IsDistinct"/>).
+        /// </summary>
+        [Params(0, 16)]
+        public int Shards { get; set; }
+
+        /// <summary>
         /// Generates the workload of <see cref="ParallelInsert"/>: inserts only, 5% of them reusing an earlier key.
         /// </summary>
         [GlobalSetup(Target = nameof(ParallelInsert))]
@@ -97,8 +109,10 @@ namespace Eggnog.Relations.Benchmarks
         public void SetupParallelInsertRemoveWithCollisions() => Setup(WritesWorkload.Generate(RemoveWorkloadSize, 0.75, 0.15, Seed), 1);
 
         /// <summary>
-        /// Builds a fresh database and an empty table for the next invocation (egglog's <c>with_inputs</c> closure).
+        /// Builds a fresh database and an empty table for the next invocation (egglog's <c>with_inputs</c> closure), and
+        /// checks that the table has the shard count <see cref="Threads"/> and <see cref="Shards"/> call for.
         /// </summary>
+        /// <exception cref="InvalidOperationException">The table has another shard count.</exception>
         [IterationSetup]
         public void IterationSetup()
         {
@@ -111,6 +125,11 @@ namespace Eggnog.Relations.Benchmarks
                 ReadOnlySpan<ColumnId>.Empty,
                 merge,
                 heuristics);
+
+            var expected = WritesShardCounts.Expected(Threads, Shards);
+            if (table.Parallelism.ShardData.Count != expected)
+                throw new InvalidOperationException(
+                    $"The table has {table.Parallelism.ShardData.Count} shards; Threads = {Threads} and Shards = {Shards} call for {expected}.");
         }
 
         /// <summary>
@@ -160,8 +179,8 @@ namespace Eggnog.Relations.Benchmarks
         };
 
         /// <summary>
-        /// Keeps a generated workload and the parallelism for <see cref="Threads"/>, and computes the live row count a
-        /// correct merge produces.
+        /// Keeps a generated workload and the parallelism for <see cref="Threads"/> and <see cref="Shards"/>, and
+        /// computes the live row count a correct merge produces.
         /// </summary>
         /// <param name="generated">The workload.</param>
         /// <param name="mergeCount">The number of epochs it is merged in.</param>
@@ -169,7 +188,7 @@ namespace Eggnog.Relations.Benchmarks
         {
             workload = generated;
             merges = mergeCount;
-            parallelism = new ParallelHeuristics(Threads);
+            parallelism = new ParallelHeuristics(Threads, Shards);
             expectedCount = generated.CountLiveKeys(mergeCount);
         }
 

@@ -29,6 +29,16 @@ namespace Eggnog.Relations
     /// reads it at the start of each run, pass or write batch and advances it at the end. Ids: the root mints directly
     /// from <see cref="IdCounter"/>, children from blocks reserved on it, so ids are unique store-wide.
     /// </para>
+    /// <para>
+    /// Limits. Neither counter is ever reclaimed. Every path that mints an id (<see cref="Context.NewId"/>, a child's
+    /// <see cref="IdBlockAllocator"/>, a rule's mint at the root through <see cref="Database.IncrementCounter"/>, and a
+    /// container's id) applies one bound, <see cref="UnionFind.MaxId"/>, through <see cref="CheckId"/> or the same
+    /// test, and throws <see cref="OverflowException"/> past it; the clock applies <see cref="CheckEpoch"/>, which throws
+    /// <see cref="OverflowException"/> at <see cref="Value.StaleRep"/>. Running out is checked before the operation that
+    /// needs the id or the epoch changes anything it cannot discard, so it does not fault a child
+    /// (<see cref="Context.Fault"/>). <see cref="IdsReserved"/> and <see cref="EpochsUsed"/> report how far each counter
+    /// has gone, against <see cref="IdLimit"/> and <see cref="EpochLimit"/>.
+    /// </para>
     /// </remarks>
     internal sealed class Store
     {
@@ -95,6 +105,41 @@ namespace Eggnog.Relations
         /// re-stamp their own rows.
         /// </summary>
         public ContainerDirtyLog ContainerDirtyLog { get; } = new();
+
+        /// <summary>
+        /// Gets the number of ids the store can hand out: ids 0 to <see cref="UnionFind.MaxId"/>.
+        /// </summary>
+        public static long IdLimit => (long)UnionFind.MaxId + 1;
+
+        /// <summary>
+        /// Gets the number of epochs the clock can hand out: 1 to <c>uint.MaxValue - 1</c>, since
+        /// <see cref="Value.StaleRep"/> is never an epoch (<see cref="ReadClock"/>).
+        /// </summary>
+        public const long EpochLimit = Value.StaleRep - 1L;
+
+        /// <summary>
+        /// Gets the ids handed out or reserved so far: the root's own mints, every block a child reserved, and
+        /// container ids. At most <see cref="IdLimit"/>: a reservation refused past the limit still moves the counter,
+        /// and is not counted. A snapshot; one volatile read.
+        /// </summary>
+        public long IdsReserved => Math.Min(Counters.Read(IdCounter), IdLimit);
+
+        /// <summary>
+        /// Gets the epochs used so far: the clock's value less its starting value, 1. At most
+        /// <see cref="EpochLimit"/>. A snapshot; one volatile read.
+        /// </summary>
+        public long EpochsUsed => Math.Min(Counters.Read(ClockCounter) - 1, EpochLimit);
+
+        /// <summary>
+        /// Gets whether the store has no id left to hand out: the id counter has passed <see cref="UnionFind.MaxId"/>.
+        /// </summary>
+        public bool IdsExhausted => Counters.Read(IdCounter) > UnionFind.MaxId;
+
+        /// <summary>
+        /// Gets whether the store's clock has run out: its value has reached <see cref="Value.StaleRep"/>, so every
+        /// clock read throws (<see cref="CheckEpoch"/>).
+        /// </summary>
+        public bool ClockExhausted => Counters.Read(ClockCounter) >= Value.StaleRep;
 
         /// <summary>
         /// Gets the counters every context shares.
@@ -246,6 +291,34 @@ namespace Eggnog.Relations
                 ThrowClockExhausted(value);
 
             return (uint)value;
+        }
+
+        /// <summary>
+        /// Converts a value of the store's id counter to an id, refusing anything past <see cref="UnionFind.MaxId"/>, the
+        /// largest id a union-find can hold: the one bound every id mint of the store applies.
+        /// </summary>
+        /// <param name="value">The value the counter handed out.</param>
+        /// <returns>The id.</returns>
+        /// <exception cref="OverflowException"><paramref name="value"/> exceeds <see cref="UnionFind.MaxId"/>.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static uint CheckId(long value)
+        {
+            if ((ulong)value > UnionFind.MaxId)
+                ThrowIdsExhausted(value);
+
+            return (uint)value;
+        }
+
+        /// <summary>
+        /// Throws the <see cref="OverflowException"/> of a store that has run out of ids.
+        /// </summary>
+        /// <param name="value">The first id past the limit that a mint asked for.</param>
+        /// <exception cref="OverflowException">Always.</exception>
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static void ThrowIdsExhausted(long value)
+        {
+            throw new OverflowException($"The store has run out of ids: {value} exceeds the largest id a union-find can hold, {UnionFind.MaxId}.");
         }
 
         [DoesNotReturn]

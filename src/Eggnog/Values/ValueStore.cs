@@ -16,8 +16,10 @@ namespace Eggnog
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types through the <c>Register*</c> methods. Thread-safe.
     /// </summary>
     /// <remarks>
-    /// Names are unique across sorts and value types. Interning pools are permanent: <see cref="InternedCount"/>
-    /// reports their growth, so a long-lived host can recycle a graph.
+    /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
+    /// graph: a value encodes to the same cell whichever scope interns it, and a value a child scope interned stays
+    /// after the child is disposed. <see cref="InternedCount"/> reports their growth, and <see cref="EGraph.Usage"/>
+    /// reports it beside the graph's ids and epochs, so a long-lived host can recycle a graph.
     /// </remarks>
     public sealed class ValueStore
     {
@@ -48,6 +50,13 @@ namespace Eggnog
         /// <summary>
         /// Gets the number of values interned in every pool of the graph; pools never shrink.
         /// </summary>
+        /// <remarks>
+        /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
+        /// constant that is not stored inline (strings, doubles, sets, registered values, and <c>long</c>s outside
+        /// <c>[0, 2^31)</c>); a run interns each new result of a primitive or a lattice merge, a split each new value its
+        /// cases assume, a lift each new case join; and a rule or query interns its constants when it is defined. Reads,
+        /// checks and query matches never intern.
+        /// </remarks>
         public long InternedCount => values.InternedCount;
 
         /// <summary>
@@ -94,7 +103,8 @@ namespace Eggnog
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> or <paramref name="name"/> is taken, the name
         /// is empty, or <typeparamref name="T"/> is <see cref="ClassId"/>, a sort or a set.</exception>
-        public ColumnType<T> Register<T>(string name, IComparer<T>? order = null, Func<T, string>? format = null)
+        public ColumnType<T> Register<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>(
+            string name, IComparer<T>? order = null, Func<T, string>? format = null)
             where T : notnull, IEquatable<T>
         {
             EngineCallMarker.ThrowIfActive();
@@ -102,10 +112,10 @@ namespace Eggnog
             if (typeof(T) == typeof(ClassId))
                 throw new ArgumentException("ClassId cannot be a value type: classes are never values; compare classes with Is and IsNot, and define e-class sorts with EGraph.DefineSort.");
 
-            if (RegisterMethod(typeof(T)) == "EGraph.DefineSort")
+            if (IsSort(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a sort, not a value type: define it with EGraph.DefineSort.");
 
-            if (RegisterMethod(typeof(T)) == "ValueStore.RegisterSet")
+            if (IsSet(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a set: register it with ValueStore.RegisterSet.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
@@ -242,20 +252,44 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
         /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        [UnconditionalSuppressMessage("Trimming", "IL2067",
+            Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
+                + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
+                + "trimmer removed is not a defined sort, and the hint then names ValueStore.Register.")]
         internal static string RegisterMethod(Type clrType)
         {
-            if (clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (IsSet(clrType))
                 return "ValueStore.RegisterSet";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
 
-            foreach (var face in clrType.GetInterfaces())
-                if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(ISort<>))
-                    return "EGraph.DefineSort";
+            if (IsSort(clrType))
+                return "EGraph.DefineSort";
 
             return "ValueStore.Register";
         }
+
+        /// <summary>
+        /// Gets whether a CLR type is a sort: whether it implements <see cref="ISort{TSort}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type, with its interfaces kept by the trimmer.</param>
+        /// <returns>Whether the type is a sort.</returns>
+        internal static bool IsSort([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type clrType)
+        {
+            foreach (var face in clrType.GetInterfaces())
+                if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(ISort<>))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets whether a CLR type is a set type, a <see cref="ValueSet{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a set type.</returns>
+        internal static bool IsSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

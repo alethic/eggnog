@@ -9,7 +9,8 @@ relations, functions with lattice merges, constructors, rules, schedules, querie
 (child contexts that inherit their parent's contents, frozen bases shared across threads, per-query layers) and case
 splits with lift. Its engine is a C# reimplementation of egglog's Rust engine.
 
-Runs are serial and deterministic unless you ask for parallelism. The package targets .NET 8 and .NET 10.
+Runs are serial and deterministic unless you ask for parallelism. The package targets .NET 8 and .NET 10, and is
+compatible with trimming and NativeAOT.
 
 ## Installation
 

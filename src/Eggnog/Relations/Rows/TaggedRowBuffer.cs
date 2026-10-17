@@ -162,23 +162,6 @@ namespace Eggnog.Relations
             return count++;
         }
 
-        /// <summary>
-        /// Appends the row whose cells start at <paramref name="source"/>[<paramref name="offset"/>], tagged with
-        /// <paramref name="rowId"/>. The array-based form for compiled plans.
-        /// </summary>
-        /// <param name="rowId">The id of the row in its source.</param>
-        /// <param name="source">An array holding the row's cells.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        /// <returns>The new row's id in this buffer.</returns>
-        public int AddRow(int rowId, uint[] source, int offset)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            if (offset < 0 || source.Length - offset < arity)
-                ThrowSourceOutOfRange();
-
-            return AddRow(rowId, new ReadOnlySpan<uint>(source, offset, arity));
-        }
-
         /// <inheritdoc />
         void IRowSink.AddRow(int rowId, ReadOnlySpan<uint> row)
         {
@@ -251,7 +234,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the index in <see cref="Data"/> of the first cell of row <paramref name="row"/>, checking the row id.
-        /// For compiled plans.
+        /// Only the buffer's tests call it.
         /// </summary>
         /// <param name="row">A row id below <see cref="Count"/>.</param>
         /// <returns><c>row * Stride</c>.</returns>
@@ -364,13 +347,6 @@ namespace Eggnog.Relations
         void ThrowRowOutOfRange(int row)
         {
             throw new ArgumentOutOfRangeException(nameof(row), row, $"The buffer holds {count} rows.");
-        }
-
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowSourceOutOfRange()
-        {
-            throw new ArgumentOutOfRangeException("offset", "The source array does not hold a whole row at the offset.");
         }
 
     }

@@ -20,7 +20,7 @@ namespace Eggnog.Relations
     /// and the helpers built on it) are where egglog's <c>WrapperImpl&lt;T&gt;</c> downcasts once and runs a
     /// monomorphized loop. Here the base class switches on <see cref="Kind"/> once per call and calls the sealed class's
     /// non-virtual generic method, so the per-row loop is specialized for the sink and has no virtual call. Code that
-    /// knows the concrete class (compiled plans, the table's own merge) calls the sealed class directly.
+    /// knows the concrete class (the table's own merge, the executor's lookup probes) calls the sealed class directly.
     /// </para>
     /// <para>
     /// Visibility: every path that yields rows to a caller filters out the rows its reader must not see. A table that

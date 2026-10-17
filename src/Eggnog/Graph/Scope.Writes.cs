@@ -21,6 +21,11 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, before the call
         /// or through it, or lies under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
+        /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
+        /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
+        /// throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws the same
+        /// way.</exception>
         public TSort Make<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
         {
             ArgumentNullException.ThrowIfNull(term);
@@ -60,6 +65,11 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (nothing is written,
         /// the scope is not faulted) or while merging, the catch-up the call makes first included (the scope is
         /// faulted).</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
+        /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
+        /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
+        /// throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws the same
+        /// way.</exception>
         public void Assume(params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(facts);
@@ -99,6 +109,11 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge failed (the scope is faulted); or a lattice merge threw in the
         /// catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is the
         /// ancestor.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
+        /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
+        /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
+        /// throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws the same
+        /// way.</exception>
         public bool Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
             EnterWrite();
@@ -145,6 +160,11 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), in a
+        /// call of the batch or as it commits, and the scope is not faulted. When the ids ran out, or the epochs before
+        /// the merge, the batch writes nothing. When the epochs ran out in the rebuild after the merge, the batch stays
+        /// written, and if that rebuild left work undone the scope's reads throw the same way (<see cref="Check"/>). Every
+        /// later call that needs an id or an epoch throws the same way.</exception>
         public void Write(Action<ScopeWriter> write)
         {
             ArgumentNullException.ThrowIfNull(write);

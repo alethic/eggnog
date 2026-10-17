@@ -111,8 +111,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Finds the visible row whose key is the <see cref="TableSpec.KeyCount"/> cells starting at
-        /// <paramref name="key"/>[<paramref name="offset"/>]: the form for compiled plans and wide keys. The key is
-        /// hashed once for every layer. See <see cref="FindRow(uint, out int)"/>.
+        /// <paramref name="key"/>[<paramref name="offset"/>]: the form for keys held in an array, either the cells
+        /// gathered for a lane (<see cref="TryGetColumn(uint[], int, int, out uint)"/>, which
+        /// <see cref="LayeredKeyNLookup"/> probes with) or the scratch copy the span form makes for empty keys and keys
+        /// wider than three cells. The key is hashed once for every layer. See <see cref="FindRow(uint, out int)"/>.
         /// </summary>
         /// <param name="key">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>
@@ -212,7 +214,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets column <paramref name="column"/> of the visible row whose key starts at
-        /// <paramref name="key"/>[<paramref name="offset"/>].
+        /// <paramref name="key"/>[<paramref name="offset"/>]: the form <see cref="LayeredKeyNLookup"/> probes with,
+        /// over the cells it gathers for a lane.
         /// </summary>
         /// <param name="key">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>

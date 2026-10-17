@@ -10,9 +10,10 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="RetractionGuard"/> and its enforcement points. A context may retract a row of a shared
-    /// table only when it has no live descendants and, in a child, its parent is frozen; a child under a writable
-    /// parent may only subsume; context-private tables are free. Every cell of the guard's table, the guard execution
-    /// states and raw buffers carry, and the raw buffers of a root or a child, which cannot bypass it.
+    /// table only when it has no live descendants and, in a child, its parent is frozen; context-private tables are
+    /// free. A subsumption is a value change, not a retraction, and is not checked
+    /// (<see cref="ChildSubsumeAndDeleteTests"/>). Every cell of the guard's table, the guard execution states and raw
+    /// buffers carry, and the raw buffers of a root or a child, which cannot bypass it.
     /// </summary>
     public class RetractionTests
     {
@@ -34,16 +35,14 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Asserts the three checks of <paramref name="guard"/> for a shared and a private table.
+        /// Asserts the two checks of <paramref name="guard"/> for a shared and a private table.
         /// </summary>
-        static void AssertCell(RetractionGuard guard, TableId shared, TableId @private, bool remove, bool clear, bool subsume)
+        static void AssertCell(RetractionGuard guard, TableId shared, TableId @private, bool remove, bool clear)
         {
             Assert.Equal(remove, Allowed(() => guard.CheckRemove(shared)));
             Assert.Equal(clear, Allowed(() => guard.CheckClear(shared)));
-            Assert.Equal(subsume, Allowed(() => guard.CheckSubsume(shared)));
             guard.CheckRemove(@private);
             guard.CheckClear(@private);
-            guard.CheckSubsume(@private);
         }
 
         [Fact]
@@ -57,33 +56,33 @@ namespace Eggnog.Relations.Tests
             Assert.Same(rootGuard, root.Database.RetractionGuard);
 
             // Root, no live descendants: everything.
-            AssertCell(rootGuard, f, p, true, true, true);
+            AssertCell(rootGuard, f, p, true, true);
 
             // Root, live descendants: nothing shared; the union-find is never private.
             var writable = root.CreateChild();
-            AssertCell(rootGuard, f, p, false, false, false);
+            AssertCell(rootGuard, f, p, false, false);
             Assert.False(Allowed(() => rootGuard.CheckClear(store.UnionFindTable)));
 
-            // Child, no live descendants, parent writable: subsume only.
+            // Child, no live descendants, parent writable: nothing shared.
             var guard = writable.Tables!.Guard;
             Assert.Same(guard, writable.Database.RetractionGuard);
-            AssertCell(guard, f, p, false, false, true);
+            AssertCell(guard, f, p, false, false);
 
             // Child, live descendants: nothing shared.
             var grandchild = writable.CreateChild();
-            AssertCell(guard, f, p, false, false, false);
-            AssertCell(grandchild.Tables!.Guard, f, p, false, false, true);
+            AssertCell(guard, f, p, false, false);
+            AssertCell(grandchild.Tables!.Guard, f, p, false, false);
             grandchild.Dispose();
             writable.Dispose();
 
             // Child, no live descendants, parent frozen: everything.
             root.Freeze();
             var child = root.CreateChild();
-            AssertCell(child.Tables!.Guard, f, p, true, true, true);
+            AssertCell(child.Tables!.Guard, f, p, true, true);
             var below = child.CreateChild();
-            AssertCell(child.Tables.Guard, f, p, false, false, false);
+            AssertCell(child.Tables.Guard, f, p, false, false);
             below.Dispose();
-            AssertCell(child.Tables.Guard, f, p, true, true, true);
+            AssertCell(child.Tables.Guard, f, p, true, true);
         }
 
         /// <summary>
@@ -136,7 +135,7 @@ namespace Eggnog.Relations.Tests
 
             Assert.Throws<InvalidOperationException>(() => early.StageRemove([1u]));
             Assert.Throws<InvalidOperationException>(() => early.FreshHandle().StageRemove([1u]));
-            Assert.Throws<InvalidOperationException>(() => root.Database.NewBuffer(f).StageRemove(new uint[] { 1 }, 0));
+            Assert.Throws<InvalidOperationException>(() => root.Database.NewBuffer(f).StageRemove([1u]));
             root.Database.NewBuffer(p).StageRemove([1u]);
             store.Schema[f]!.Root.NewBuffer().StageRemove([1u]);
 
@@ -161,11 +160,10 @@ namespace Eggnog.Relations.Tests
             Insert(root, p, a, 1, 0);
             var child = root.CreateChild();
 
-            // The root has a live descendant: staged removals (both forms), a rule's remove and clears are refused;
+            // The root has a live descendant: a staged removal, a rule's remove and clears are refused;
             // nothing was staged, so nothing is pending afterwards.
             var state = root.Database.CreateExecutionState();
             Assert.Throws<InvalidOperationException>(() => state.StageRemove(f, [a]));
-            Assert.Throws<InvalidOperationException>(() => state.StageRemove(f, new[] { a }, 0));
             var bindings = new Bindings();
             bindings.Insert(new Variable(0), [a]);
             Assert.Throws<InvalidOperationException>(() => state.RunInstrs([new RemoveInstr(f, [QueryEntry.Var(new Variable(0))])], bindings));

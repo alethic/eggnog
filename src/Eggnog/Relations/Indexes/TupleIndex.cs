@@ -200,8 +200,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Looks up the rows of the key held at <paramref name="key"/>[<paramref name="offset"/>]: the array form for
-        /// compiled plans. egglog's <c>get_subset</c>. O(1) expected, no allocation.
+        /// Looks up the rows of the key held at <paramref name="key"/>[<paramref name="offset"/>]: the array form,
+        /// which the span form uses for keys wider than three cells. egglog's <c>get_subset</c>. O(1) expected, no
+        /// allocation.
         /// </summary>
         /// <param name="key">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>
@@ -336,7 +337,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the first entry of shard <paramref name="shard"/> at or after hash slot <paramref name="slot"/>, for
-        /// external iteration (<see cref="TupleIndexCursor"/>).
+        /// external iteration (<see cref="TupleIndexCursor"/>, which only the index tests use).
         /// </summary>
         /// <param name="shard">The shard, in <c>[0, ShardCount)</c>.</param>
         /// <param name="slot">The slot to start from.</param>

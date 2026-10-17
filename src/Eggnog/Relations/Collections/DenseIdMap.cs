@@ -49,6 +49,12 @@ namespace Eggnog.Relations
         public int IdCount => idCount;
 
         /// <summary>
+        /// Gets the number of slots the map holds arrays for: at least <see cref="IdCount"/>. It changes only when an
+        /// insertion grows the arrays.
+        /// </summary>
+        public int Capacity => values.Length;
+
+        /// <summary>
         /// Gets the number of present entries. Linear in <see cref="IdCount"/>.
         /// </summary>
         public int Count

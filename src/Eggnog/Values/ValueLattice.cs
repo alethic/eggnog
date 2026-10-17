@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -49,18 +50,35 @@ namespace Eggnog
         /// <summary>
         /// The maximum lattice: merge max, case join min (a lower bound).
         /// </summary>
+        /// <remarks>
+        /// Values are ordered as <see cref="ValueSet{T}"/> orders its elements: strings ordinally, by UTF-16 code unit,
+        /// never by the current culture, so the result does not depend on the machine or the thread; every other type
+        /// by <see cref="Comparer{T}.Default"/>, which calls <see cref="IComparable{T}.CompareTo"/>. A type's
+        /// <c>CompareTo</c> must be a total order consistent with <see cref="IEquatable{T}.Equals(T)"/>: two values
+        /// that compare as 0 but are not equal make the merge depend on the order of its arguments, which
+        /// <see cref="ValueLattice{T}.Verify"/> reports as a commutativity violation.
+        /// </remarks>
         /// <typeparam name="T">The value type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Max<T>() where T : IComparable<T> =>
-            new("max", static (a, b) => a.CompareTo(b) >= 0 ? a : b, static (a, b) => a.CompareTo(b) <= 0 ? a : b);
+            new("max",
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b,
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b);
 
         /// <summary>
         /// The minimum lattice: merge min, case join max (an upper bound).
         /// </summary>
+        /// <remarks>
+        /// Values are ordered as for <see cref="Max{T}"/>: strings ordinally, as <see cref="ValueSet{T}"/> orders them,
+        /// and every other type by its <see cref="IComparable{T}.CompareTo"/>, which must be a total order consistent
+        /// with <see cref="IEquatable{T}.Equals(T)"/>; <see cref="ValueLattice{T}.Verify"/> checks this on samples.
+        /// </remarks>
         /// <typeparam name="T">The value type.</typeparam>
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Min<T>() where T : IComparable<T> =>
-            new("min", static (a, b) => a.CompareTo(b) <= 0 ? a : b, static (a, b) => a.CompareTo(b) >= 0 ? a : b);
+            new("min",
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b,
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b);
 
         /// <summary>
         /// Gets the lattice's name.

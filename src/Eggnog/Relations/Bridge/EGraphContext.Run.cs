@@ -131,6 +131,13 @@ namespace Eggnog.Relations
         /// does not rebuild first, whatever was merged raw before (egglog's <c>run_rules</c> never rebuilds before the
         /// rules), and the root's panic side channel drops a panic a failed run recorded.
         /// </summary>
+        /// <remarks>
+        /// In a child, the catch-up before the run (<see cref="EnsureClean"/>) can record a failing lattice merge without
+        /// throwing. The database keeps only the first failure, so the run then reports the catch-up's failure as its
+        /// own and commits no progress, and a failure of the run itself is not reported beside it. The outcome is sound:
+        /// the child is faulted either way. Callers that need the two told apart take the catch-up's failure before the
+        /// run, as the library does after each scope's rebuild and on entry to each case.
+        /// </remarks>
         internal IterationReport RunRulesCore(ReadOnlySpan<EGraphRuleId> rules, bool egglogCompatible)
         {
             ThrowIfUnwritable();

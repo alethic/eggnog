@@ -202,7 +202,7 @@ namespace Eggnog.Relations
                 return;
 
             var arity = Arity;
-            var local = state.Clone();
+            var local = state.Clone(ExecutionStateCloneSite.InsertShard);
             work.Local = local;
             var staged = new StagedOutputs(keyCount, arity, capacity);
             work.Batches.Add(staged);

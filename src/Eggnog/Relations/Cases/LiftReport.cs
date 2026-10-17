@@ -67,8 +67,15 @@ namespace Eggnog.Relations
         /// </summary>
         public bool Changed { get; internal set; }
 
+        /// <summary>
+        /// Gets whether the memo answered the lift: nothing the last settled lift over these cases read had changed, so
+        /// no round ran. A lift that ran and wrote nothing reports the same <see cref="Rounds"/> and
+        /// <see cref="Changed"/>, and <c>false</c> here.
+        /// </summary>
+        public bool Memoized { get; internal set; }
+
         /// <inheritdoc />
-        public override string ToString() => $"LiftReport {{ Rounds = {Rounds}, Live = {LiveCases}, Vacuous = {VacuousCases}, ParentContradicted = {ParentContradicted}, Unions = {Unions}, Rows = {Rows}, Terms = {Terms}, Values = {Values}, Skipped = {Skipped}, HitRoundLimit = {HitRoundLimit}, Changed = {Changed} }}";
+        public override string ToString() => $"LiftReport {{ Rounds = {Rounds}, Live = {LiveCases}, Vacuous = {VacuousCases}, ParentContradicted = {ParentContradicted}, Unions = {Unions}, Rows = {Rows}, Terms = {Terms}, Values = {Values}, Skipped = {Skipped}, HitRoundLimit = {HitRoundLimit}, Changed = {Changed}, Memoized = {Memoized} }}";
 
     }
 

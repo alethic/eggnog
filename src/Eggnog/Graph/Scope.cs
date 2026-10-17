@@ -174,6 +174,12 @@ namespace Eggnog
         /// lives as long as the graph. A case belongs to the set that made it: disposing it marks it disposed at once,
         /// and its release waits for its <see cref="CaseSet"/> to be disposed, or for the run whose split made it to end.
         /// </summary>
+        /// <remarks>
+        /// What the scope drew from the graph stays with the graph: the values it interned (its constants, the results of
+        /// primitives and lattice merges its runs computed, the sets its splits assumed) stay in the graph's pools, and
+        /// the ids and epochs it used are never handed out again (<see cref="EGraph.Usage"/>). Its own rows, local rules
+        /// and engine state are what the release frees.
+        /// </remarks>
         public void Dispose()
         {
             if (IsRoot || Interlocked.Exchange(ref disposed, 1) != 0)

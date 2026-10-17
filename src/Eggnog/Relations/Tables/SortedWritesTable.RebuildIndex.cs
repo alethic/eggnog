@@ -195,7 +195,7 @@ namespace Eggnog.Relations
                 0,
                 chunks,
                 parallelism.Options,
-                () => (Writes: NewBuffer(), Rebuilt: new TaggedRowBuffer(Arity), State: state.Clone(), Changed: false),
+                () => (Writes: NewBuffer(), Rebuilt: new TaggedRowBuffer(Arity), State: state.Clone(ExecutionStateCloneSite.TableRebuild), Changed: false),
                 (chunk, _, local) =>
                 {
                     var start = chunk * RebuildStepSize;

@@ -277,23 +277,7 @@ namespace Eggnog.Relations.Tests
             {
                 var id = rows.AddRow(rows.GetRow(i));
                 Assert.Equal(Row(1, 2, 3), rows.GetRow(id).ToArray());
-
-                var viaArray = rows.AddRow(rows.Data, rows.RowOffset(i));
-                Assert.Equal(Row(1, 2, 3), rows.GetRow(viaArray).ToArray());
             }
-        }
-
-        [Fact]
-        public void ArrayOverloadChecksItsRange()
-        {
-            var rows = new RowBuffer(2);
-            var source = Row(5, 6, 7);
-
-            Assert.Equal(0, rows.AddRow(source, 1));
-            Assert.Equal(Row(6, 7), rows.GetRow(0).ToArray());
-            Assert.Throws<ArgumentOutOfRangeException>(() => rows.AddRow(source, 2));
-            Assert.Throws<ArgumentOutOfRangeException>(() => rows.AddRow(source, -1));
-            Assert.Throws<ArgumentNullException>(() => rows.AddRow(null!, 0));
         }
 
         [Fact]

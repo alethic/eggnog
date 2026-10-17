@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 
@@ -453,8 +454,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Formats a value with the built-in literal syntax, culture-invariantly.
+        /// Formats a value with the built-in literal syntax, culture-invariantly. A sort value renders as its class,
+        /// found by reflection over its <see cref="ISort{TSort}"/> implementation.
         /// </summary>
+        [UnconditionalSuppressMessage("Trimming", "IL2075",
+            Justification = "Renders a sort value whose column type is unknown. When the trimmer has removed the value's ISort<> "
+                + "implementation or its Id property, the value renders by its ToString().")]
         static string DefaultLiteral(object value)
         {
             switch (value)

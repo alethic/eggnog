@@ -18,6 +18,10 @@ namespace Eggnog
         /// function.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public bool IsContradictory
         {
             get
@@ -53,6 +57,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public bool Check(params Fact[] facts)
         {
             ArgumentNullException.ThrowIfNull(facts);
@@ -89,6 +97,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public T Get<T>(Term<T> term)
         {
             if (TryGet(term, out var value))
@@ -115,6 +127,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public bool TryGet<T>(Term<T> term, [MaybeNullWhen(false)] out T value)
         {
             ArgumentNullException.ThrowIfNull(term);
@@ -152,6 +168,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public TSort Find<TSort>(TSort value) where TSort : struct, ISort<TSort>
         {
             var held = EnterRead();
@@ -183,6 +203,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public bool AreEqual<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
             var held = EnterRead();
@@ -215,6 +239,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public bool AreEqual<TSort>(TSort a, Term<TSort> b) where TSort : struct, ISort<TSort>
         {
             ArgumentNullException.ThrowIfNull(b);
@@ -246,6 +274,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public long CountRows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
@@ -277,6 +309,10 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
+        /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
+        /// nothing to catch up, reads without an epoch.</exception>
         public IReadOnlyList<TableRow> Rows(TableHandle table)
         {
             ArgumentNullException.ThrowIfNull(table);
@@ -309,6 +345,9 @@ namespace Eggnog
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
+        /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
+        /// not faulted, but every later query throws the same way.</exception>
         public bool Any(Query query)
         {
             using var matches = RunQuery(query, true);
@@ -330,6 +369,9 @@ namespace Eggnog
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
+        /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
+        /// not faulted, but every later query throws the same way.</exception>
         public long Count(Query query)
         {
             using var matches = RunQuery(query, false);
@@ -355,6 +397,9 @@ namespace Eggnog
         /// merge into the scope, so the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): a query runs as
+        /// a rule, here or in a transient child of a frozen scope, and takes an epoch. Nothing is read and the scope is
+        /// not faulted, but every later query throws the same way.</exception>
         public void ForEachMatch(Query query, QueryCallback callback)
         {
             ArgumentNullException.ThrowIfNull(query);

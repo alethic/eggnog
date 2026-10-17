@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -8,7 +9,8 @@ namespace Eggnog.Relations
     /// What the layered executor did to the rows of each kind of layer: rows its cover scans, drivers and existence
     /// checks enumerated, rows it put into indexes built for one stage or node (sparse, per-node and per-stage tuple
     /// indexes), cached-index pieces, and probes joined across layers, split between the context's own layer and its
-    /// ancestors' layers.
+    /// ancestors' layers; and the execution states it cloned, by site, with the mutation buffers they made and the
+    /// allocations and growths of their buffer maps.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -26,7 +28,18 @@ namespace Eggnog.Relations
     /// JIT folds, so a run without <c>EGGNOG_COUNTERS</c> carries no counting code. With the environment variable set (to
     /// anything but <c>0</c> or <c>false</c>) each <see cref="Database"/> keeps one instance
     /// (<see cref="Database.ExecutorCounts"/>) that its runs add to, with interlocked adds since a parallel run's tasks
-    /// count at once. The counts are per stage call or per index build, never per row.
+    /// count at once. The counts are per stage call, per index build, per clone or per buffer made, never per row.
+    /// </para>
+    /// <para>
+    /// The clone counts cover every <see cref="ExecutionState"/> clone over a database view, whatever runs it: a rule
+    /// set's action batches, and the parallel inserts and rebuilds of its merge. A state's mutation buffers are made in
+    /// two ways: a clone takes a fresh handle of each buffer its parent holds (<see cref="BuffersInherited"/>), and any
+    /// state makes one on its first write to a table it holds none for (<see cref="BuffersCreated"/>). The second kind
+    /// records the buffer in the state's buffer map, a <see cref="DenseIdMap{TKey, TValue}"/> indexed by table id that
+    /// a clone sizes to its parent's. A record that finds the map without arrays allocates its first ones
+    /// (<see cref="BufferMapAllocations"/>); a record past the end of the arrays it has replaces them with larger ones
+    /// (<see cref="BufferMapGrowths"/>). Sizing a clone's map up front would avoid only the growths: an empty map's
+    /// first arrays are allocated either way.
     /// </para>
     /// <para>
     /// A row is an ancestor's when its layer is below the running context's depth; a root's run has only its own layer.
@@ -51,6 +64,16 @@ namespace Eggnog.Relations
         long ancestorCachedPieces;
         long layeredProbes;
         long rules;
+        readonly long[] clones = new long[CloneSiteCount];
+        long buffersCreated;
+        long buffersInherited;
+        long bufferMapAllocations;
+        long bufferMapGrowths;
+
+        /// <summary>
+        /// The number of <see cref="ExecutionStateCloneSite"/> values.
+        /// </summary>
+        static readonly int CloneSiteCount = Enum.GetValues<ExecutionStateCloneSite>().Length;
 
         /// <summary>
         /// Gets the rows of the context's own layer that scans, drivers and existence checks enumerated.
@@ -103,6 +126,50 @@ namespace Eggnog.Relations
         /// Gets the rules the executor began.
         /// </summary>
         public long Rules => Interlocked.Read(ref rules);
+
+        /// <summary>
+        /// Gets the execution states cloned, at every site.
+        /// </summary>
+        public long TotalClones
+        {
+            get
+            {
+                var total = 0L;
+                for (var i = 0; i < clones.Length; i++)
+                    total += Interlocked.Read(ref clones[i]);
+
+                return total;
+            }
+        }
+
+        /// <summary>
+        /// Gets the mutation buffers execution states made on their first write to a table they held none for.
+        /// </summary>
+        public long BuffersCreated => Interlocked.Read(ref buffersCreated);
+
+        /// <summary>
+        /// Gets the mutation buffers clones took as fresh handles of their parents' buffers.
+        /// </summary>
+        public long BuffersInherited => Interlocked.Read(ref buffersInherited);
+
+        /// <summary>
+        /// Gets the buffers made on first write whose record found the state's buffer map without arrays, and allocated
+        /// its first two.
+        /// </summary>
+        public long BufferMapAllocations => Interlocked.Read(ref bufferMapAllocations);
+
+        /// <summary>
+        /// Gets the buffers made on first write whose record outgrew the arrays the state's buffer map already had:
+        /// each growth replaces both arrays with larger ones.
+        /// </summary>
+        public long BufferMapGrowths => Interlocked.Read(ref bufferMapGrowths);
+
+        /// <summary>
+        /// Gets the execution states cloned at <paramref name="site"/>.
+        /// </summary>
+        /// <param name="site">The clone site.</param>
+        /// <returns>The clones.</returns>
+        public long Clones(ExecutionStateCloneSite site) => Interlocked.Read(ref clones[(int)site]);
 
         /// <summary>
         /// Counts <paramref name="rows"/> rows a scan, a driver or an existence check enumerated in a layer.
@@ -158,6 +225,36 @@ namespace Eggnog.Relations
         public void NoteRule() => Interlocked.Increment(ref rules);
 
         /// <summary>
+        /// Counts an execution state cloned at <paramref name="site"/>, with the <paramref name="inherited"/> buffers it
+        /// took from its parent.
+        /// </summary>
+        /// <param name="site">The clone site.</param>
+        /// <param name="inherited">The fresh handles the clone took of its parent's buffers.</param>
+        public void NoteClone(ExecutionStateCloneSite site, int inherited)
+        {
+            Interlocked.Increment(ref clones[(int)site]);
+            if (inherited > 0)
+                Interlocked.Add(ref buffersInherited, inherited);
+        }
+
+        /// <summary>
+        /// Counts a mutation buffer an execution state made on its first write to a table.
+        /// </summary>
+        /// <param name="capacityBefore">The slots of the state's buffer map before the buffer was recorded.</param>
+        /// <param name="capacityAfter">The slots of the state's buffer map after the buffer was recorded.</param>
+        public void NoteBufferCreated(int capacityBefore, int capacityAfter)
+        {
+            Interlocked.Increment(ref buffersCreated);
+            if (capacityAfter == capacityBefore)
+                return;
+
+            if (capacityBefore == 0)
+                Interlocked.Increment(ref bufferMapAllocations);
+            else
+                Interlocked.Increment(ref bufferMapGrowths);
+        }
+
+        /// <summary>
         /// Sets every count to zero.
         /// </summary>
         public void Reset()
@@ -172,13 +269,39 @@ namespace Eggnog.Relations
             Interlocked.Exchange(ref ancestorCachedPieces, 0);
             Interlocked.Exchange(ref layeredProbes, 0);
             Interlocked.Exchange(ref rules, 0);
+            for (var i = 0; i < clones.Length; i++)
+                Interlocked.Exchange(ref clones[i], 0);
+
+            Interlocked.Exchange(ref buffersCreated, 0);
+            Interlocked.Exchange(ref buffersInherited, 0);
+            Interlocked.Exchange(ref bufferMapAllocations, 0);
+            Interlocked.Exchange(ref bufferMapGrowths, 0);
         }
 
         /// <inheritdoc />
         public override string ToString() =>
             $"rules {Rules}; scanned own {OwnRowsScanned}, ancestor {AncestorRowsScanned} (refined {AncestorRefinedRowsScanned}); " +
             $"dynamic-index rows own {OwnDynamicIndexRows}, ancestor {AncestorDynamicIndexRows} (refined {AncestorRefinedIndexRows}); " +
-            $"cached pieces {CachedIndexPieces} (ancestor {AncestorCachedIndexPieces}); layered probes {LayeredProbes}";
+            $"cached pieces {CachedIndexPieces} (ancestor {AncestorCachedIndexPieces}); layered probes {LayeredProbes}; " +
+            $"clones {TotalClones}{ClonesBySite()}; buffers created {BuffersCreated}, inherited {BuffersInherited}; " +
+            $"buffer maps allocated {BufferMapAllocations}, grown {BufferMapGrowths}";
+
+        /// <summary>
+        /// Lists the clone counts of the sites with any, as <c>site count</c> pairs in parentheses after a space, or
+        /// nothing when no site has any.
+        /// </summary>
+        string ClonesBySite()
+        {
+            var parts = new List<string>(CloneSiteCount);
+            for (var i = 0; i < clones.Length; i++)
+            {
+                var count = Interlocked.Read(ref clones[i]);
+                if (count > 0)
+                    parts.Add($"{(ExecutionStateCloneSite)i} {count}");
+            }
+
+            return parts.Count == 0 ? string.Empty : $" ({string.Join(", ", parts)})";
+        }
 
         /// <summary>
         /// Reads the environment variable's value.

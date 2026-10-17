@@ -42,6 +42,10 @@ namespace Eggnog
         /// while a split step caught a case up); the scope is then faulted, and so is the case. Or a lattice merge
         /// threw in the catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is
         /// the ancestor.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>): the step
+        /// that ran out changes nothing, what the run's earlier iterations and lifts wrote stays, and the scope is not
+        /// faulted, but every later call that needs an id or an epoch throws the same way. A rule that makes a term
+        /// needs an id, and every iteration, rebuild pass and case needs epochs.</exception>
         public RunReport Run(Schedule schedule, RunOptions? options = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(schedule);

@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+
+using Eggnog.Tests.Support;
 
 using Xunit;
 
@@ -34,6 +37,16 @@ namespace Eggnog.Relations.Tests
         const int RootIds = 10;
         const int MaxIterations = 64;
 
+        readonly ITestOutputHelper output;
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        public ConcurrentChildRulesTests(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
+
         /// <summary>
         /// Serial children (the default under a frozen parent) lease one thread each and run eight at a time; children
         /// given two threads through <see cref="ContextOptions.Parallelism"/> lease two and run four at a time.
@@ -47,9 +60,57 @@ namespace Eggnog.Relations.Tests
         [InlineData(6, 2)]
         public void SixteenChildrenOnEightThreadsEqualSerialReplays(int seed, int childThreads)
         {
+            Run(seed, Children, Threads, childThreads, forceParallel: false, rounds: 2, freezeRaces: 0);
+        }
+
+        /// <summary>
+        /// The soak (<see cref="ConcurrentSoak"/>, <c>EGGNOG_CONCURRENT_SOAK</c>): each seed draws 2 to 32 children, a
+        /// budget of 2 to 8 threads, programs of 1 to 4 rounds, and in half the iterations children of two or four
+        /// threads. In half, the children's rule sets are forced onto the parallel executor; when the children also have
+        /// two or four threads, about a quarter of the iterations, the tasks of one child's run create its layers
+        /// concurrently, while at one thread the executor runs every task on the calling thread. In half, a relation is
+        /// defined on another thread while the root freezes, and the children write it, after the same race has run on
+        /// up to 400 fresh graphs.
+        /// </summary>
+        [Fact]
+        public void Soak()
+        {
+            ConcurrentSoak.Run(output, nameof(ConcurrentChildRulesTests), seed =>
+            {
+                var random = new Random(seed);
+                var children = random.Next(2, 33);
+                var threads = random.Next(2, 9);
+                var childThreads = random.Next(4) switch { 2 => 2, 3 => 4, _ => 1 };
+                var forceParallel = random.Next(2) == 0;
+                var rounds = random.Next(1, 5);
+                var freezeRaces = random.Next(2) == 0 ? 0 : random.Next(1, 401);
+                var draws = $"{children} children, {threads} threads, {childThreads} per child, forced parallel {forceParallel}, {rounds} rounds, {freezeRaces} freeze races";
+                return (draws, () => Run(seed, children, threads, childThreads, forceParallel, rounds, freezeRaces));
+            });
+        }
+
+        /// <summary>
+        /// Runs <paramref name="children"/> children of a frozen root concurrently within a budget of
+        /// <paramref name="threads"/> threads, and compares each with a serial replay and the root with itself.
+        /// </summary>
+        /// <param name="seed">The seed of the root's facts and of every child's program.</param>
+        /// <param name="children">The number of children.</param>
+        /// <param name="threads">The e-graph's degree of parallelism: the budget the children share.</param>
+        /// <param name="childThreads">Each child's degree of parallelism.</param>
+        /// <param name="forceParallel">Whether every child's rule sets, and every replay's, run on the parallel executor
+        /// whatever their size.</param>
+        /// <param name="rounds">The number of rounds of each child's program.</param>
+        /// <param name="freezeRaces">When positive, the root freezes while a relation is defined on another thread
+        /// (<see cref="FreezeWhileDefining"/>), and the children write that relation; the same race runs first on this
+        /// many less one fresh graphs without rules or rows, where it is cheap. Zero freezes the root alone.</param>
+        static void Run(int seed, int children, int threads, int childThreads, bool forceParallel, int rounds, int freezeRaces)
+        {
+            for (var race = 1; race < freezeRaces; race++)
+                FreezeWhileDefining(new ContextGraph());
+
             var options = childThreads == 1 ? null : new ContextOptions { Parallelism = new ParallelHeuristics(childThreads) };
-            var g = new ContextGraph(new ParallelHeuristics(Threads));
-            var rules = Rules(g);
+            var g = new ContextGraph(new ParallelHeuristics(threads));
+            var (rules, seen) = Rules(g);
             var random = new Random(seed);
             var ids = Enumerable.Range(0, RootIds).Select(_ => g.Root.FreshId()).ToArray();
             for (var i = 0; i < RootIds; i++)
@@ -61,53 +122,114 @@ namespace Eggnog.Relations.Tests
 
             // One root iteration, so that the children inherit the root's watermarks and still have work of their own.
             g.Root.RunRules(rules);
-            g.Root.Freeze();
+            var extra = freezeRaces > 0 ? FreezeWhileDefining(g) : FreezeOnly(g);
             Assert.All(rules, r => Assert.True(g.EGraph.GetRuleInfo(r).AllowInheritance));
             var rootIdBound = g.EGraph.Database.ReadCounter(g.EGraph.IdCounter);
             var before = RootSnapshot(g);
 
-            var programs = Enumerable.Range(0, Children).Select(i => Program(g, ids, new Random(seed * 1000 + i))).ToArray();
-            var children = Enumerable.Range(0, Children).Select(_ => g.Root.CreateChild(options)).ToArray();
-            Assert.All(children, c => Assert.Equal(childThreads, c.Parallelism.DegreeOfParallelism));
-            var transcripts = new string[Children];
+            var programs = Enumerable.Range(0, children).Select(i => Program(g, ids, new Random(seed * 1000 + i), rounds, extra)).ToArray();
+            var contexts = Enumerable.Range(0, children).Select(_ => g.Root.CreateChild(options)).ToArray();
+            Assert.All(contexts, c => Assert.Equal(childThreads, c.Parallelism.DegreeOfParallelism));
+            if (forceParallel)
+                foreach (var child in contexts)
+                    child.Context.Database.ParallelRuleSetsOverride = true;
+
+            var transcripts = new string[children];
             var arrived = 0;
-            var degree = Threads / childThreads;
-            ConcurrentChildren.Run(children, (child, i) =>
+            var degree = Math.Min(children, Math.Max(1, threads / childThreads));
+            ConcurrentChildren.Run(contexts, (child, i) =>
             {
                 // Best effort to overlap the first bodies of every worker (the thread pool may supply fewer in time).
                 Interlocked.Increment(ref arrived);
                 SpinWait.SpinUntil(() => Volatile.Read(ref arrived) >= degree, TimeSpan.FromSeconds(1));
                 var log = Replay(child, programs[i], rules);
                 child.CheckInvariants();
-                transcripts[i] = log + Normalize(g, child, (uint)rootIdBound);
+                transcripts[i] = log + Normalize(g, child, (uint)rootIdBound, seen, extra);
             });
 
             Assert.Equal(before, RootSnapshot(g));
-            for (var i = 0; i < Children; i++)
+            for (var i = 0; i < children; i++)
             {
                 using var replay = g.Root.CreateChild(options);
+                if (forceParallel)
+                    replay.Context.Database.ParallelRuleSetsOverride = true;
+
                 var log = Replay(replay, programs[i], rules);
                 replay.CheckInvariants();
-                Assert.Equal(log + Normalize(g, replay, (uint)rootIdBound), transcripts[i]);
+                Assert.Equal(log + Normalize(g, replay, (uint)rootIdBound, seen, extra), transcripts[i]);
                 Assert.Equal(before, RootSnapshot(g));
             }
 
-            foreach (var child in children)
+            foreach (var child in contexts)
             {
                 child.CheckInvariants();
                 child.Dispose();
             }
 
             Assert.Equal(before, RootSnapshot(g));
-            Assert.Equal(Threads, g.EGraph.ParallelismBudget.Available);
+            Assert.Equal(threads, g.EGraph.ParallelismBudget.Available);
+        }
+
+        /// <summary>
+        /// Freezes the root.
+        /// </summary>
+        /// <returns><c>null</c>: no relation is defined.</returns>
+        static FunctionId? FreezeOnly(ContextGraph g)
+        {
+            g.Root.Freeze();
+            return null;
+        }
+
+        /// <summary>
+        /// Defines the relation <c>extra(id)</c> on a pool thread while this one freezes the root. Either call may be
+        /// refused while the other holds the root's domain; the freeze is then repeated, or the relation defined on the
+        /// frozen root. However the two calls meet, the relation's root table must end frozen and shared, as every
+        /// table of a frozen root is.
+        /// </summary>
+        /// <returns>The relation.</returns>
+        static FunctionId? FreezeWhileDefining(ContextGraph g)
+        {
+            FunctionId? extra = null;
+            using var start = new Barrier(2);
+            var definer = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                try
+                {
+                    extra = g.Relation("extra", ColumnTy.Id);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            });
+            start.SignalAndWait();
+            try
+            {
+                g.Root.Freeze();
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            definer.Wait();
+            if (g.Root.IsFrozen == false)
+                g.Root.Freeze();
+
+            extra ??= g.Relation("extra", ColumnTy.Id);
+            var schema = g.EGraph.Store.Schema[g.EGraph.GetTable(extra.Value)]!;
+            Assert.True(schema.Root.IsShared, "A relation defined while the root froze is not frozen with it.");
+            return extra;
         }
 
         /// <summary>
         /// The rule set, every rule query-determined (constructors, relations, a lattice; no table reads in actions):
         /// <c>edge → path</c>, transitivity, <c>path(x, y) → add(x, y)</c>, commutativity of <c>add</c>, two-cycles
-        /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>.
+        /// collapse, <c>low</c> flows along edges, and <c>low(x) = v → mark(num(v))</c>; and six rules that write the
+        /// relation <c>seen</c> from <c>edge</c>, <c>path</c>, <c>low</c> and <c>add</c>, so that on the parallel executor
+        /// the tasks of a child's first iteration create its layer of <c>seen</c> concurrently.
         /// </summary>
-        static EGraphRuleId[] Rules(ContextGraph g)
+        /// <returns>The rules, and the relation <c>seen</c>.</returns>
+        static (EGraphRuleId[] Rules, FunctionId Seen) Rules(ContextGraph g)
         {
             var list = new List<EGraphRuleId> { g.EdgeToPath(), g.Transitive() };
 
@@ -151,18 +273,37 @@ namespace Eggnog.Relations.Tests
             rb.Set(g.Mark, [n, RuleEntry.Const(g.Unit, g.UnitType)]);
             list.Add(rb.Build());
 
-            return list.ToArray();
+            var seen = g.Relation("seen", ColumnTy.Id);
+            foreach (var (source, column) in new[] { (g.Edge, 0), (g.Edge, 1), (g.Path, 0), (g.Path, 1), (g.Low, 0), (g.Add, 2) })
+            {
+                rb = g.EGraph.NewRule($"seen-{list.Count}", true);
+                var columns = new List<RuleEntry>();
+                var arity = source == g.Add ? 3 : 2;
+                for (var i = 0; i < arity; i++)
+                    columns.Add(rb.NewVar(source == g.Low && i == 1 ? g.I64 : ColumnTy.Id));
+
+                if (source != g.Low && source != g.Add)
+                    columns.Add(rb.NewVar(g.UnitType));
+
+                rb.QueryTable(source, [.. columns], false);
+                rb.Set(seen, [columns[column], RuleEntry.Const(g.Unit, g.UnitType)]);
+                list.Add(rb.Build());
+            }
+
+            return (list.ToArray(), seen);
         }
 
         /// <summary>
-        /// A random child program in two rounds: each stages edges over root ids, a union of root ids, a term over root
-        /// ids with an edge from it, a union of a minted term with a root id (second round), and a <c>low</c> value;
-        /// then flushes and saturates. Each step receives the ids the program minted so far, so a replay mints its own.
+        /// A random child program in <paramref name="rounds"/> rounds: each stages edges over root ids, a union of root
+        /// ids, a term over root ids with an edge from it, a union of a minted term with a root id (from the second
+        /// round), a <c>low</c> value, and when <paramref name="extra"/> is given an <c>extra</c> row over a root id or a
+        /// minted term; then flushes and saturates. Each step receives the ids the program minted so far, so a replay
+        /// mints its own.
         /// </summary>
-        static List<Action<EGraphContext, List<Value>>> Program(ContextGraph g, Value[] ids, Random random)
+        static List<Action<EGraphContext, List<Value>>> Program(ContextGraph g, Value[] ids, Random random, int rounds, FunctionId? extra)
         {
             var steps = new List<Action<EGraphContext, List<Value>>>();
-            for (var round = 0; round < 2; round++)
+            for (var round = 0; round < rounds; round++)
             {
                 for (var e = 0; e < 3; e++)
                 {
@@ -182,14 +323,20 @@ namespace Eggnog.Relations.Tests
                     g.Assert(c, g.Edge, term, target);
                 });
 
-                if (round == 1)
+                if (round >= 1)
                 {
-                    var (which, other) = (random.Next(2), ids[random.Next(RootIds)]);
+                    var (which, other) = (random.Next(round + 1), ids[random.Next(RootIds)]);
                     steps.Add((c, minted) => c.StageUnion(minted[which], other));
                 }
 
                 var (low, value) = (ids[random.Next(RootIds)], random.Next(100));
                 steps.Add((c, _) => c.StageRow(g.Low, [low, g.Int(value)]));
+                if (extra is { } relation)
+                {
+                    var (fromRoot, key) = (random.Next(2) == 0, ids[random.Next(RootIds)]);
+                    steps.Add((c, minted) => g.Assert(c, relation, fromRoot ? key : minted[^1]));
+                }
+
                 steps.Add(null!);
             }
 
@@ -224,9 +371,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Writes every function's rows as <paramref name="child"/> sees them, sorted, with root ids kept and every
-        /// other class named by its smallest constructor term.
+        /// other class named by its smallest constructor term; <paramref name="extra"/>'s rows too when it is given.
         /// </summary>
-        static string Normalize(ContextGraph g, EGraphContext child, uint rootIdBound)
+        static string Normalize(ContextGraph g, EGraphContext child, uint rootIdBound, FunctionId seen, FunctionId? extra)
         {
             var names = new Dictionary<uint, string>();
             string? Name(uint id) => id < rootIdBound ? "r" + id : names.GetValueOrDefault(id);
@@ -268,6 +415,10 @@ namespace Eggnog.Relations.Tests
             Write("num", g.Num, [false, true]);
             Write("add", g.Add, [true, true, true]);
             Write("low", g.Low, [true, false]);
+            Write("seen", seen, [true, false]);
+            if (extra is { } relation)
+                Write("extra", relation, [true, false]);
+
             return text.ToString();
         }
 

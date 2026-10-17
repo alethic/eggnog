@@ -23,10 +23,10 @@ namespace Eggnog.Relations
         /// displacement is held by an eq-sort container: the storage check
         /// <see cref="Context.CheckEqContainerElements"/>); <b>the tree</b> (the storage context's host is this
         /// context, and each live storage child's host is a bridge child of this one); <b>member maps</b> (in a child,
-        /// a member map built now has exactly the overlay's members that are not local, each canonical in the parent
-        /// and mapped to its group's root here, and the cached map, when current, equals it). Each violation starts
-        /// with the name of its part: <c>rule progress:</c>, <c>frozen state:</c>, <c>stop flag:</c>,
-        /// <c>eq-sort containers:</c>, <c>tree:</c> or <c>member maps:</c>.
+        /// a member map built now has exactly the overlay's members that are not local, each in its group root's
+        /// overlay class, canonical in the parent and mapped to its group's root here, and the cached map, when current,
+        /// equals it). Each violation starts with the name of its part: <c>rule progress:</c>, <c>frozen state:</c>,
+        /// <c>stop flag:</c>, <c>eq-sort containers:</c>, <c>tree:</c> or <c>member maps:</c>.
         /// </para>
         /// <para>
         /// A stopped context answers only <see cref="IsContradictory"/> and may have stopped its merge with writes

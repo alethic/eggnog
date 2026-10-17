@@ -91,7 +91,7 @@ namespace Eggnog.Relations
             // Without a scope, or when the scope is backlogged, run the batch inline (see WorkScope.IsBacklogged).
             if (scope is null || scope.IsBacklogged)
             {
-                var state = root.Clone();
+                var state = root.Clone(ExecutionStateCloneSite.InlineBatch);
                 var succeeded = state.RunInstrs(info.Instrs, batch.Bindings);
                 state.Flush();
                 batch.Bindings.Clear();
@@ -103,7 +103,7 @@ namespace Eggnog.Relations
             var full = batch.Bindings;
             batch.Bindings = new Bindings(Bindings.DefaultBatchSize);
             batch.Length = 0;
-            scope.Spawn(new ActionBatchWork(root.Clone(), info, full, counter, action));
+            scope.Spawn(new ActionBatchWork(root.Clone(ExecutionStateCloneSite.SpawnedBatch), info, full, counter, action));
         }
 
         /// <summary>
@@ -148,7 +148,7 @@ namespace Eggnog.Relations
         /// </summary>
         public void FlushOnClone()
         {
-            var state = root.Clone();
+            var state = root.Clone(ExecutionStateCloneSite.PartialBatches);
             Flush(state);
             state.Flush();
         }

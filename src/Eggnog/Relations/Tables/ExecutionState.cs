@@ -19,9 +19,9 @@ namespace Eggnog.Relations
     /// become visible at the table's next merge.
     /// </para>
     /// <para>
-    /// Not thread-safe. Parallel work clones the state per task (<see cref="Clone"/>): a clone stages into fresh
-    /// handles of the same tables, starts with <see cref="Changed"/> false, and shares the catalog, timestamp and
-    /// signals; each task flushes its clone when done.
+    /// Not thread-safe. Parallel work clones the state per task (<see cref="Clone(ExecutionStateCloneSite)"/>): a clone
+    /// stages into fresh handles of the same tables, starts with <see cref="Changed"/> false, and shares the catalog,
+    /// timestamp and signals; each task flushes its clone when done.
     /// </para>
     /// </remarks>
     internal sealed partial class ExecutionState
@@ -117,20 +117,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages an insertion of the row starting at <paramref name="source"/>[<paramref name="offset"/>]. The array
-        /// form for compiled plans.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <param name="source">The array holding the row.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        public void StageInsert(TableId table, uint[] source, int offset)
-        {
-            GetBuffer(table).StageInsert(source, offset);
-            catalog.Notifications.Notify(table);
-            Changed = true;
-        }
-
-        /// <summary>
         /// Stages the removal of the row with key <paramref name="key"/> from <paramref name="table"/>. egglog's
         /// <c>stage_remove</c>.
         /// </summary>
@@ -152,22 +138,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages the removal of the key starting at <paramref name="source"/>[<paramref name="offset"/>]. The array
-        /// form for compiled plans.
-        /// </summary>
-        /// <param name="table">The table.</param>
-        /// <param name="source">The array holding the key.</param>
-        /// <param name="offset">The index of the key's first cell.</param>
-        /// <exception cref="InvalidOperationException">The retraction guard refuses the removal.</exception>
-        public void StageRemove(TableId table, uint[] source, int offset)
-        {
-            guard?.CheckRemove(table);
-            GetBuffer(table).StageRemove(source, offset);
-            catalog.Notifications.Notify(table);
-            Changed = true;
-        }
-
-        /// <summary>
         /// Gets this state's mutation buffer for <paramref name="table"/>, creating it on first use. egglog's
         /// <c>lazy_init</c>.
         /// </summary>
@@ -184,10 +154,26 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Creates a state for a parallel task: fresh buffers for the same tables, <see cref="Changed"/> false, the
-        /// same catalog, timestamp and signals. egglog's <c>clone</c>.
+        /// same catalog, timestamp and signals. egglog's <c>clone</c>. Counted, when the executor counts, under
+        /// <see cref="ExecutionStateCloneSite.Other"/>.
         /// </summary>
         /// <returns>The clone.</returns>
-        public ExecutionState Clone() => new(this);
+        public ExecutionState Clone() => Clone(ExecutionStateCloneSite.Other);
+
+        /// <summary>
+        /// Creates a state for a parallel task, as <see cref="Clone()"/> does, counted under <paramref name="site"/>
+        /// when the executor counts (<see cref="ExecutorCounters"/>) and the state runs over a database view.
+        /// </summary>
+        /// <param name="site">Where the clone is made.</param>
+        /// <returns>The clone.</returns>
+        public ExecutionState Clone(ExecutionStateCloneSite site)
+        {
+            var clone = new ExecutionState(this);
+            if (ExecutorCounters.Enabled)
+                view?.Owner.ExecutorCounts?.NoteClone(site, clone.buffers.Count);
+
+            return clone;
+        }
 
         /// <summary>
         /// Publishes every staged write to the tables' pending queues: what dropping the state's buffers does in
@@ -221,6 +207,14 @@ namespace Eggnog.Relations
         MutationBuffer CreateBuffer(TableId table)
         {
             var buffer = catalog.GetForStaging(table).NewBuffer();
+            if (ExecutorCounters.Enabled)
+            {
+                var capacity = buffers.Capacity;
+                buffers.Insert(table, buffer);
+                view?.Owner.ExecutorCounts?.NoteBufferCreated(capacity, buffers.Capacity);
+                return buffer;
+            }
+
             buffers.Insert(table, buffer);
             return buffer;
         }

@@ -34,7 +34,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Hashes the <paramref name="keyCount"/> cells starting at <paramref name="data"/>[<paramref name="offset"/>].
-        /// The array form for rows stored in row buffers and for compiled plans. O(<paramref name="keyCount"/>).
+        /// The array form, for keys held in an array: row storage read in place, or a key gathered or copied into a
+        /// scratch array. O(<paramref name="keyCount"/>).
         /// </summary>
         /// <param name="data">The array holding the key.</param>
         /// <param name="offset">The index of the key's first cell.</param>

@@ -10,8 +10,8 @@ namespace Eggnog.Relations
     /// <remarks>
     /// The layer's table is live: rows appended to it after the view was built are seen through the view. That is
     /// correct because only the view's own context appends to its own layer, and an ancestor that appends makes the
-    /// context not clean until it catches up, which drops its views. The fields are plain readonly fields so compiled
-    /// kernels can read them.
+    /// context not clean until it catches up, which drops its views. The fields are plain readonly fields, which the
+    /// executor reads directly.
     /// </remarks>
     internal sealed class LayerView
     {

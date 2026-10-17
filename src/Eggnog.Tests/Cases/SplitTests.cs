@@ -1517,6 +1517,189 @@ namespace Eggnog.Tests.Cases
             Assert.Equal(0, shallow.SplitsSkipped);
         }
 
+        /// <summary>
+        /// A writable root with a domain split on <c>k</c> over {a, b} and one ruleset: in each case <c>fact(x)</c> holds,
+        /// and in the case <c>a</c> also <c>fact(a only)</c>; the <c>Max</c> function <c>counter(c)</c>, 0 at the root,
+        /// counts up to 2 in the case <c>a</c>, and in the case <c>b</c> up to <paramref name="limitInB"/>, or without end
+        /// when it is <c>null</c>.
+        /// </summary>
+        static (EGraph Graph, SplitRule Split, Ruleset Rules, Function<string, ValueSet<string>> Dom, Function<string, long> Counter, Relation<string> Fact) CountingCases(long? limitInB)
+        {
+            var graph = new EGraph();
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var discriminator = graph.DefineRelation<string>("discriminator");
+            var counter = graph.DefineFunction<string, long>("counter", ValueLattice.Max<long>());
+            var fact = graph.DefineRelation<string>("fact");
+            var split = graph.DefineDomainSplit("k", dom, [discriminator]);
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("count in a", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(dom.Of("k").Is(ValueSet.Of("a")), n.Is(counter.Of("c")));
+                r.Where(n, n => n < 2);
+                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+            });
+            rules.DefineRule("count in b", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(dom.Of("k").Is(ValueSet.Of("b")), n.Is(counter.Of("c")));
+                r.Where(n, n => limitInB is null || n < limitInB);
+                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+            });
+            rules.DefineRule("facts in a", r => { r.When(dom.Of("k").Is(ValueSet.Of("a"))); r.Then(fact.Of("x"), fact.Of("a only")); });
+            rules.DefineRule("fact in b", r => { r.When(dom.Of("k").Is(ValueSet.Of("b"))); r.Then(fact.Of("x")); });
+            graph.Root.Assume(discriminator.Of("k"), dom.Of("k").Is(ValueSet.Of("a", "b")), counter.Of("c").Is(0L));
+            return (graph, split, rules, dom, counter, fact);
+        }
+
+        /// <summary>
+        /// <c>Repeat(n, rules)</c> as a split's in-case schedule bounds each case: the case <c>b</c>, which counts without
+        /// end, is cut off after <c>n</c> passes and stays live, so the lift keeps only what both cases prove (not
+        /// <c>fact(a only)</c>), the sibling's <c>fact(x)</c> reaches the root, the counter's case join (the lesser) gives
+        /// the root 2, and the run completes well inside its iteration limit.
+        /// </summary>
+        [Fact]
+        public void RepeatAsTheInCaseScheduleBoundsEachCaseAndTheSiblingsFactsLift()
+        {
+            var (graph, split, rules, _, counter, fact) = CountingCases(null);
+            var root = graph.Root;
+
+            var report = root.Run(Schedule.Saturate(rules, Schedule.Split(split, Schedule.Repeat(5, rules))), new RunOptions { IterationLimit = 200 });
+
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.True(report.Iterations < 200);
+            Assert.Equal(2, report.CasesOpened);
+            Assert.True(root.Check(fact.Of("x")));
+            Assert.False(root.Check(fact.Of("a only")));
+            Assert.Equal(2L, root.Get(counter.Of("c")));
+            Assert.Empty(root.Children);
+        }
+
+        /// <summary>
+        /// The same run with <c>Saturate(rules)</c> as the in-case schedule: the case <c>b</c>, which counts far past
+        /// the limit, uses up the run-wide <see cref="RunOptions.IterationLimit"/> before the split step lifts, so the
+        /// run stops on the limit and the root gets nothing from either case, not even the facts the case <c>a</c>
+        /// saturated on. The count in <c>b</c> is finite so that the test fails, rather than hangs, if case iterations
+        /// stop counting towards the limit.
+        /// </summary>
+        [Fact]
+        public void SaturateAsTheInCaseScheduleLetsOneCaseUseUpTheIterationLimitBeforeTheLift()
+        {
+            var (graph, split, rules, _, counter, fact) = CountingCases(5_000);
+            var root = graph.Root;
+
+            var report = root.Run(Schedule.Saturate(rules, Schedule.Split(split, Schedule.Saturate(rules))), new RunOptions { IterationLimit = 200 });
+
+            Assert.Equal(RunStopReason.IterationLimit, report.StopReason);
+            Assert.Equal(200, report.Iterations);
+            Assert.False(root.Check(fact.Of("x")));
+            Assert.Equal(0L, root.Get(counter.Of("c")));
+            Assert.Empty(root.Children);
+        }
+
+        /// <summary>
+        /// The bound of <c>Repeat(n, rules)</c> applies to each execution of the in-case schedule, not to the case over
+        /// the run: the runaway case runs <c>n</c> iterations in each of the four executions of this run (before the
+        /// lift and again when the step deepens, at each of the split step's two executions), and its counter rises by
+        /// <c>n</c> in each.
+        /// </summary>
+        /// <param name="n">The passes of the in-case schedule.</param>
+        [Theory]
+        [InlineData(3)]
+        [InlineData(5)]
+        public void TheBoundOfRepeatAppliesToEachExecutionOfTheInCaseSchedule(int n)
+        {
+            var (graph, split, rules, dom, counter, _) = CountingCases(null);
+            var inB = new List<(int Index, long Counter)>();
+            void Observe(RunStep step)
+            {
+                if (step.Kind == RunStepKind.Iteration && step.Scope.IsCase && step.Scope.Get(dom.Of("k")).Equals(ValueSet.Of("b")))
+                    inB.Add((step.Index, step.Scope.Get(counter.Of("c"))));
+            }
+
+            var report = graph.Root.Run(
+                Schedule.Saturate(rules, Schedule.Split(split, Schedule.Repeat(n, rules))),
+                new RunOptions { IterationLimit = 200, RecordSteps = true, Observer = Observe });
+
+            // An execution is a run of consecutive steps in the case b: the steps of the case a, the lifts and the split
+            // steps come between them.
+            var executions = new List<int> { 1 };
+            for (var i = 1; i < inB.Count; i++)
+            {
+                if (inB[i].Index == inB[i - 1].Index + 1)
+                    executions[^1]++;
+                else
+                    executions.Add(1);
+            }
+
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(2, report.Steps.Count(s => s.Kind == RunStepKind.SplitStep && s.Scope.IsRoot));
+            Assert.Equal(new[] { n, n, n, n }, executions);
+            Assert.Equal(4L * n, inB[^1].Counter);
+        }
+
+        /// <summary>
+        /// A single split step with <c>Repeat(3, rules)</c> as the in-case schedule: the case <c>a</c> derives
+        /// <c>fact(y)</c> at once, the case <c>b</c> only once its counter reaches 4, which it does in the execution of
+        /// the in-case schedule when the step deepens. The step's first lift leaves <c>fact(y)</c> out, and the lift
+        /// after deepening brings it to the root.
+        /// </summary>
+        [Fact]
+        public void TheLiftAfterTheStepDeepensTakesWhatACutOffCaseDerivedWhileDeepening()
+        {
+            var (graph, split, rules, dom, counter, fact) = CountingCases(null);
+            rules.DefineRule("y in a", r => { r.When(dom.Of("k").Is(ValueSet.Of("a"))); r.Then(fact.Of("y")); });
+            rules.DefineRule("y in b from 4", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(dom.Of("k").Is(ValueSet.Of("b")), n.Is(counter.Of("c")));
+                r.Where(n, n => n >= 4);
+                r.Then(fact.Of("y"));
+            });
+            var root = graph.Root;
+
+            var report = root.Run(Schedule.Split(split, Schedule.Repeat(3, rules)));
+
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(2, report.CasesOpened);
+            Assert.Equal(2, report.Lifts);
+            Assert.True(root.Check(fact.Of("x")));
+            Assert.True(root.Check(fact.Of("y")));
+            Assert.False(root.Check(fact.Of("a only")));
+        }
+
+        /// <summary>
+        /// On a theory whose cases terminate, <c>Repeat</c> of a large <c>n</c> as the in-case schedule lifts what
+        /// <c>Saturate</c> lifts, in as many iterations and lifts: the bound changes nothing when no case reaches it.
+        /// </summary>
+        [Fact]
+        public void RepeatOfALargeBoundLiftsWhatSaturateLiftsWhenTheCasesTerminate()
+        {
+            var lifted = new List<string[]>();
+            var counts = new List<(int Iterations, int Lifts)>();
+            foreach (var bounded in new[] { false, true })
+            {
+                var (graph, split, rules, dom, counter, fact) = CountingCases(3);
+                var inCase = bounded ? Schedule.Repeat(1000, rules) : Schedule.Saturate(rules);
+                var report = graph.Root.Run(Schedule.Saturate(rules, Schedule.Split(split, inCase)));
+
+                Assert.Equal(RunStopReason.Completed, report.StopReason);
+                Assert.Equal(2, report.CasesOpened);
+                counts.Add((report.Iterations, report.Lifts));
+                lifted.Add(new TableHandle[] { dom, counter, fact }
+                    .SelectMany(table => graph.Root.Rows(table))
+                    .Select(row => row.ToString())
+                    .Order(StringComparer.Ordinal)
+                    .ToArray());
+            }
+
+            Assert.Equal(lifted[0], lifted[1]);
+            Assert.Equal(counts[0], counts[1]);
+            Assert.Contains("(counter \"c\") = 2", lifted[1]);
+            Assert.Contains("(fact \"x\")", lifted[1]);
+            Assert.DoesNotContain("(fact \"a only\")", lifted[1]);
+        }
+
     }
 
 }

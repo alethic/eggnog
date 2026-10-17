@@ -11,7 +11,7 @@ namespace Eggnog.Relations
     /// </summary>
     /// <remarks>
     /// It exists so that <c>foreach</c> works over the subset types; it is created by them, never directly.
-    /// A plain (non-ref) struct, so compiled plans can hold one in a local and drive it with
+    /// A plain (non-ref) struct, so it can be stored in fields and driven by hand with
     /// <see cref="MoveNext"/> and <see cref="Current"/>. For a dense range <c>rows</c> is <see langword="null"/>
     /// and the cursor walks row ids; otherwise it walks array positions. The enumerator borrows the array: it is
     /// valid only while the owner does not change or return it. Hot loops should prefer the <c>ForEach</c> visitor

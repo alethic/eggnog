@@ -67,6 +67,7 @@ because several engine and library types share simple names.
 | `src/Eggnog` | The library (folders `Graph`, `Tables`, `Terms`, `Rules`, `Scheduling`, `Scopes`, `Cases`, `Host`, `Values`, `Extraction`, `Diagnostics`, `Rendering`) and the engine (`Relations/`) |
 | `src/Eggnog.Tests` | The library's tests (namespaces `Eggnog.Tests.*`) and, under `Relations/`, the engine's (namespace `Eggnog.Relations.Tests`) |
 | `src/Eggnog.Benchmarks` | BenchmarkDotNet benchmarks, run in process; the engine's are under `Relations/` |
+| `src/Eggnog.AotCheck` | A small app, never packed, that CI publishes with NativeAOT to check the library stays trimming and AOT compatible |
 | `src/dist-nuget`, `src/dist-tests` | Packaging projects driven by `Eggnog.dist.msbuildproj` in CI |
 | `ext/egglog` | egglog's sources, as a git submodule: the reference for the port |
 | `docs` | This document, the roadmap, the engine's conventions and decisions, and the design history |
@@ -113,6 +114,26 @@ the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, s
 and build a new one. Host reads never intern: a constant that was never interned makes its fact false or its term
 absent.
 
+There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
+child databases share their root's base-value registry by reference, and `ColumnType<T>.Encode` takes no scope. So a
+value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
+cells across scopes and lifts. What a scope interned stays after the scope is disposed. These operations intern, in
+any scope:
+
+| Operation | What it interns |
+|---|---|
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, sets, registered values, and `long`s outside `[0, 2^31)` |
+| A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
+| A lattice merge, in a run or in a child's catch-up | each new merged value |
+| A lift's case join | each new joined value, in the shared pool for the parent |
+| A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
+| `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined |
+
+Reads, checks, query matches and `Until` conditions never intern (`TryEncodeExisting`). A host that serves requests
+from long-lived scopes keeps the pools flat by reusing its literals: a query scope that names only values already
+interned interns nothing, and one that names a new string interns the string and whatever the rules compute from it.
+`EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.12).
+
 ### 2.3 Tables
 
 There are three kinds of table, each typed by up to four key columns (`TableHandle` is the untyped base):
@@ -122,6 +143,10 @@ There are three kinds of table, each typed by up to four key columns (`TableHand
 | Relation | `DefineRelation<T1, ...>(name)` | a set of key tuples | a function whose output is the unit value; merge: assert equal |
 | Function | `DefineFunction<T1, ..., TOut>(name, lattice)` | one output per key (a functional dependency) | a function with a value output; merge: the lattice's, or assert equal without one |
 | Constructor | `DefineConstructor<T1, ..., TSort>(name, cost)` | terms: one class per key | a function whose output is a class; default: a fresh id; merge: union the classes |
+
+A key of more than four columns is written as one column of a registered value type (`ValueStore.Register<T>`, a struct
+of the key's fields), each distinct value of which is interned for the graph's life, or the table is split in two,
+joined on a value key.
 
 A function with a lattice (`ValueLattice<T>`) merges two outputs for one key with the lattice's `Merge`, which must be
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
@@ -211,11 +236,38 @@ cases included), `TimeLimit`, `RowLimit` (rows in the own layers of the scope an
 every split step; an iteration or a lift cannot be interrupted, so a run overshoots by at most one of them. Reaching a
 limit is not an error: the run stops soundly with fewer facts, and `RunReport.StopReason` says why.
 
+There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case
+schedule: `Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not
+terminate uses up the run's `IterationLimit`, and if it does so before the split step lifts, the scope gets nothing
+from any of the step's cases. `Repeat(n, Saturate(...))` bounds nothing, since each of its passes is a full
+saturation. The bound applies to each execution of the in-case schedule, not to the case over the run: a case runs it
+before the step's lift, again when the step deepens after the lift, and again at each later execution of the step. A
+case cut off this way stays live, its facts hold under its assumption, and the lift stays sound; a run that otherwise
+ends normally reports `Completed`. A host that must know a case was cut off finds, in the steps (`RunReport.Steps`,
+which stays empty unless `RunOptions.RecordSteps` is set, or an `Observer` that sees each step), an execution of the
+in-case schedule that ran all `n` passes in that case and still changed it in the last. A host sizes `n` from the
+passes its cases take when they do terminate, read from the same steps.
+
 `RunReport` gives the iterations, whether the run saturated and whether it changed the scope, search, merge and
 rebuild times, per-rule statistics (matches, search time, iterations with matches, and the plan when
 `EGraphOptions.RecordPlans` is set), and the split counts. With `RecordSteps` it keeps one `RunStep` per iteration,
 mirror sync, split step and lift; an `Observer` receives each step as it happens and may read the scopes of the run.
-There are no proofs or per-row explanations.
+There are no proofs or per-row explanations, and no record of which rule wrote a row. Two routes find where a fact came
+from:
+
+- **The first matching step.** Run with `RecordSteps` and `EGraphOptions.RecordPlans`, find the first step whose
+  `Rules` lists a rule that derives the fact, and read the rule (`Rule.ToString()`), the facts it reads
+  (`Scope.Rows`) and its plan (`RuleStatistics.Plan`).
+- **The observer diff.** An `Observer` snapshots `Scope.Rows` of every table in the step's scope after each step and
+  compares the snapshot with the previous one of the same scope. Each row that appeared, and each lattice value that
+  changed, is then tied to the step that made it, and the step's `Rules` are its candidate rules. Three caveats: a
+  case's first snapshot is compared with its parent's, since the case starts from the parent's facts; changes seen in
+  the split scope after a split step or a lift came from the cases and are set aside as lifted, not derived there; and
+  the candidates are every rule that matched in the step, not only those whose head writes the row's table, so the
+  list can be longer than the rules that could have written the row.
+
+Neither route says that leaving a rule out would remove the fact: a fact can come from a chain of rules, or from two
+rules at once. To decide that, run again without the rule's ruleset, on a fresh graph, and compare.
 
 ### 2.7 Host writes, reads and queries
 
@@ -253,8 +305,18 @@ root                      empty and frozen, or a shared theory
 
 - **Freeze.** `Freeze()` makes a scope read-only for good. Its parent must be frozen (the root has none). Freezing
   rebuilds the scope and, below the root, plans the rules its descendants can run on its statistics and builds the
-  indexes those plans probe. Reads, queries and extractors of a frozen scope are thread-safe, and each child of a frozen scope is
-  independent of its siblings, so a frozen scope is a base that many threads can query and extend at once.
+  indexes those plans probe. Reads, queries and extractors of a frozen scope are thread-safe, and each child of a frozen
+  scope is independent of its siblings, so a frozen scope is a base that many threads can query and extend at once.
+- **Freeze before creating children.** A table keeps the rows that later writes replaced until it compacts, which it
+  does when they outnumber the rows still current and number more than 16, and when its scope freezes. Compaction
+  renumbers rows, and live descendants hold the numbers of the rows they have seen, so the tables of a scope with live
+  descendants do not compact; a disposed child stays live until its own children are disposed. Once the last
+  descendant is disposed, the tables compact again at the next write that calls for it. Results never depend on it,
+  but memory and full scans do. So freeze a scope before creating children of it, and do not hold descendants of a
+  large writable scope across heavy work in it. A scope frozen with live descendants keeps its replaced rows for good,
+  and `Scope.CompactionsBlockedAtFreeze` counts the tables that kept them. A split run at a writable scope holds its
+  cases until the top-level run ends (section 2.9), so the scope keeps its replaced rows for the length of the run, and
+  a large writable scope or root that splits pays for it in memory.
 - **Tags.** A `ScopeTag` (`EGraph.DefineScopeTag`) labels scopes. Tags belong to one graph and are absolute: a tag
   resolves, from a scope, to the nearest ancestor-or-self that carries it. The root carries `EGraph.RootTag`.
 - **Local rules.** `Scope.DefineRule(ruleset, name, define)` defines a rule that is active only in that scope and its
@@ -298,6 +360,10 @@ they have no model.
   where every case agrees). Tables with `Lift = false` are left out. A lift runs in rounds until a round writes
   nothing, because a term lifted in one round can make the next round's facts expressible over the parent's classes.
   If every case is contradictory, the lift writes the contradiction into the parent.
+- **Guarded terms by hand.** A lift writes only what holds in every case, so it builds no term that differs by case. A
+  host that needs one for a few if-then-else guards lifts it by hand: it opens a child per distinct condition and
+  assumes the condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in
+  the parent inside the theory's if-then-else constructor and `Union`s it with the original term.
 - **Contradicted cases.** A case whose rules derive `Contradiction` stops: it answers `IsContradictory` and identity
   members, `Run` returns at once with `StopReason = Contradiction`, and other reads and writes throw
   `ScopeContradictedException`. Scopes beneath a stopped case answer as it does.
@@ -341,11 +407,39 @@ Extractors over a frozen scope may run concurrently, one per thread.
   another thread; whichever thread removes the last obstacle releases it. Disposing the root does nothing. So a frozen
   schema can be retired while queries beneath it finish.
 - A `RuleEvaluationException` from a run or a write faults the scope: `Failure` keeps the exception, and every later
-  call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the graph
-  unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's writes
-  fault the scope too.
+  call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the
+  graph unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's
+  writes fault the scope too.
 - Refusals made before anything changes (`ArgumentException`, `FactConflictException`, a definition error) do not
   fault.
+- A disposed scope gives back its own state, but not what it drew from the graph:
+
+  | State | Left behind after the scope is released |
+  |---|---|
+  | Its rows, layers, union-find overlay, journal and cursors | nothing |
+  | Its local rules, their engine rules, variants and call-site external functions | nothing; freed rule and external-function ids are reused |
+  | Values it interned: constants, primitive and merge results, case assumptions, joins | all of them, in the graph's pools (section 2.2) |
+  | Ids it reserved (one block of 16 for its first term, then blocks doubling up to 4,096) | all of them: ids are never handed out again |
+  | Epochs its writes, run iterations, rebuild passes and cases took | all of them: the clock never goes back |
+  | Scope tags and the mirror tables of scoped reads | all of them: they are graph definitions, so a host defines tags with its theory, not per request |
+
+- Ids and epochs are finite: about 2.1 billion ids (`Array.MaxLength`, the largest id a union-find holds) and about 4.3
+  billion epochs, shared by every scope of the graph. `EGraph.Usage` returns a `GraphUsage`: `InternedValues`,
+  `IdsReserved` against `IdLimit`, `Epochs` against `EpochLimit`, and `FractionUsed`, the larger share. A workload
+  that splits usually runs out of epochs first. When either runs out, every call that needs one throws
+  `OverflowException`: a write that makes a term or merges, a run whose rule makes a term or that needs another
+  iteration, pass or case, `CreateChild`, `CaseSet.Add` and `CaseSet.Lift`, a freeze that must catch up, a query read
+  (`Any`, `Count` and `ForEachMatch` run the query as a rule, which takes an epoch even on a frozen scope), and any
+  other read of a writable scope that must catch up first (`Check`, `TryGet`, `AreEqual`, `CountRows` and the rest,
+  when an ancestor changed since the scope last caught up, or its own rebuild ran out before it finished). A frozen
+  scope, and a writable one with nothing to catch up, reads facts and terms without an epoch.
+- Running out is not a fault, and the scope can be disposed. A write that ran out before its merge is dropped, so the
+  scope reads as before. One that ran out in the rebuild after its merge stays written, with the rebuild's finished
+  passes committed, so the scope reads it without an epoch unless that rebuild left work undone. A lift round that ran
+  out before its merge writes nothing. Every later call that needs an id or an epoch throws the same way, and once the
+  epochs are out the graph creates no more children. A long-lived host therefore retires a graph before
+  `FractionUsed` reaches 1: it defines a new graph from the same definitions, sends new work to it, and lets the old
+  one go once its last scope is disposed. The library has no helper for this; the host owns its definitions.
 
 ### 2.13 Differences from egglog
 
@@ -359,7 +453,9 @@ departs from egglog on purpose:
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
 5. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-6. No proofs or explanations, and no rule callbacks.
+6. No proofs or explanations, and no rule callbacks. Host code that must react to matches runs a host loop instead: it
+   runs a schedule, reads the matches with a query's `ForEachMatch`, writes through `Scope.Write`, and repeats until the
+   scope's `Version` stops changing. Queries match naively, so each pass matches in full.
 7. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
 ---
@@ -508,12 +604,40 @@ Store
 **Ownership.** Each context owns a `Database`. A child's database has its own catalog of layer tables, notification
 list, pending queues and size estimate, and shares the store's counters, external functions, strata, containers and
 base values by reference. It answers schema questions from the store's schema and planning questions from its view,
-so rules are built, planned and run in a child exactly as at the root.
+so rules are built, planned and run in a child exactly as at the root. Because the registry and the container
+environments are shared, a value a child interns has one cell in every context and stays after the child is
+disposed, as egglog's push and pop leave interned values behind; a container over base values interned from a child
+takes its id from the shared counter, not from the child's blocks, so it is never local to the child. A disposed
+child frees its own layers, overlay, journal and cursors once it has no live children; nothing else.
 
 **Ids and time.** The store has one id counter and one clock. The root mints ids directly; a child mints from blocks
 reserved on the shared counter (`IdBlockAllocator`), so ids are unique store-wide and "is this id local to the child"
-is an exact, allocation-free test. A context captures the clock at the start of each run, rebuild pass and write batch,
-stamps that batch's rows with it, and advances it at the end.
+is an exact, allocation-free test. A child that mints nothing reserves nothing; its first block is 16 ids, and each
+later one twice the ids reserved so far, up to 4,096. A context captures the clock at the start of each run, rebuild
+pass and write batch, stamps that batch's rows with it, and advances it at the end. Neither counter is reclaimed: a
+query scope that makes one term uses 16 ids, and on the predicate test theory a plain query with its snapshot read
+takes 12 to 21 epochs, depending on its shape, and a split query 21 + 9 x *cases* (`ScopeChurnTests` pins the
+split counts).
+
+Every id mint applies one bound, `UnionFind.MaxId` (`Array.MaxLength - 1`), the largest id a union-find array can
+hold: the root's own mints (`Store.CheckId`), a child's blocks, a rule's mint at the root (`Database.IncrementCounter`
+bounds the id counter there), and container ids. The clock's bound is `Value.StaleRep`, which is never an epoch
+(`Store.CheckEpoch`). Past either, the mint or the clock read throws `OverflowException`, and every path leaves the
+context consistent, so running out does not fault a child, unlike other exceptions that escape its runs and
+rebuilds:
+
+- host writes mint while they are planned, and a flush that runs out before its merge drops its staged host writes;
+- a run reads the clock before its iteration, and a rebuild before each pass; a rebuild that runs out after its first
+  pass first ends the passes that ran, as its loop ends (cursors committed, hidden sets sealed, views dropped), so the
+  context is clean if they left nothing to do, and a later rebuild goes on from the journal mark otherwise;
+- a rule search that runs out of ids discards everything it staged, in the layers it created and the ones it found;
+- a lift round that fails while it stages drops what it staged;
+- a child's constructor reads the clock before it is published.
+
+`Store.IdsReserved` and `Store.EpochsUsed` report the counters, capped at `Store.IdLimit` and `Store.EpochLimit`; the
+library's `EGraph.Usage` is built on them. A read of a writable child that must catch up (its parent changed, or its
+own rebuild stopped short) takes an epoch for the catch-up's passes; a frozen context's reads take none, and a query,
+which runs as a rule, always takes one.
 
 **The layered union-find.** A child's union-find is a `UnionFindOverlay`, a class table over ids that are canonical in
 its parent, with each class's member list, plus a `DisplacedJournal` of the ids that stopped being canonical in it.
@@ -542,6 +666,18 @@ not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants
 frozen context gets its own. A second thread entering a domain is refused rather than made to wait.
 `ConcurrentChildren` runs children of frozen contexts side by side within the graph's `ParallelismBudget`. Depth is
 limited to 31.
+
+**Compaction under live descendants.** A table compacts on egglog's trigger (more tombstones than half its physical
+rows, and more than 16), and at freeze whenever it has a tombstone. Compaction renumbers rows and starts a new
+generation, while every live descendant holds cursors and hidden sets over its ancestors' row ids of the current
+generation, which `ContextTables.CheckGenerations` and the invariant checker verify. So a table does not compact while
+its gate has live descendants: the owner's `DescendantGate` for a child's layer, the store root's for a shared root
+table; context-private tables are never gated. `SortedWritesTable.CompactionsBlocked` counts the skips. The gate opens
+when the last descendant is disposed, and the next merge that meets the trigger compacts. A frozen table never changes
+again, so a context frozen with live descendants keeps the tombstones of every gated table that had one;
+`Database.Freeze` counts those tables, which the context reports (`Context.CompactionsBlockedAtFreeze`) and the library
+surfaces as `Scope.CompactionsBlockedAtFreeze`. A split's cases live until the top-level run ends, so a split run gates
+its scope for the run's whole length.
 
 **Queries in a child.** A rule set snapshots the views of the tables it reads when it is built (`ViewSnapshot`), and
 the search reads only that snapshot. An atom's rows are a `LayeredSubset` over the layers of its view; each prober has
@@ -644,11 +780,13 @@ the guard (on a writable scope), makes sure the scope is caught up, and reads th
 
 ## 5. Testing
 
-Everything is in one test project, `src/Eggnog.Tests`, an xunit v3 executable with about 12,400 tests that runs in
+Everything is in one test project, `src/Eggnog.Tests`, an xunit v3 executable with about 12,700 tests that runs in
 10-15 minutes per target framework. The engine's tests are under `Relations/` (namespace `Eggnog.Relations.Tests`),
 in folders that mirror the engine's; the library's are in the other folders (namespaces `Eggnog.Tests.*`). Both are run
-on net8.0 and net10.0 before a change is merged, and CI runs the net10.0 build on Windows x64, Linux x64 and arm64,
-and macOS x64 and arm64.
+on net8.0 and net10.0 before a change is merged. CI runs the net10.0 build on Windows x64, Linux x64 and arm64, and
+macOS x64 and arm64, and the net8.0 build on Windows x64 and Linux x64. It also builds the benchmarks, and publishes
+`src/Eggnog.AotCheck` with NativeAOT: the library declares itself AOT compatible, its trimming and AOT analyzer
+warnings are errors, and the publish fails on any warning the AOT compiler reports for the whole library.
 
 ```
 dotnet build src/Eggnog.Tests
@@ -687,7 +825,9 @@ documentation).
 | Splits (`Differential`) | random discriminated schemas and queries | the literal encoding with splits written as rules, and a model-based split oracle |
 
 Inheritance and parallelism have their own equivalence tests: watermark inheritance on and off must give equal views
-with no more matches, and serial and parallel runs must give the same facts.
+with no more matches, and serial and parallel runs must give the same facts. Concurrent children of a frozen context
+(rule runs, storage programs, library queries) must each equal a serial replay; the default tests use fixed seeds, and
+an opt-in soak (`EGGNOG_CONCURRENT_SOAK`) draws fresh seeds, child counts and thread counts.
 
 ### 5.3 Conformance programs
 
@@ -707,13 +847,15 @@ The performance rules are tested, not only benchmarked. Allocation probes measur
 around hot operations and fail when a root run, a probe or a child operation allocates more than its budget; they run
 on their own, after the parallel tests. The executor's counters (`ExecutorCounters`, compiled in but free unless the
 process sets `EGGNOG_COUNTERS`) count the ancestor rows a child's run touches, so tests can assert that a child's cost
-does not grow with the root. The test suite turns the counters on for itself; CI also runs it once with
-`EGGNOG_COUNTERS=0`, as production runs.
+does not grow with the root. They also count the execution states cloned, by site, the mutation buffers those states
+make and the allocations and growths of their buffer maps; the benchmark app's `--executor-counts` mode prints them
+per `BasicMath` run. The test suite turns the counters on for itself; CI also runs it once with `EGGNOG_COUNTERS=0`, as
+production runs.
 
 ### 5.6 Other suites
 
 - The public surface test fails on any change to the public API that `Surface/PublicSurface.txt` does not record.
-- Opt-in soaks and seed replays (about ten tests) are skipped unless their environment variable is set.
+- Opt-in soaks and seed replays (about a dozen tests) are skipped unless their environment variable is set.
 - `Readme/ReadmeExampleTests` runs the code examples of the READMEs verbatim.
 - A theory of predicates over document paths (presence, forms, domains, types, numeric bounds, and the simplification
   of predicates) is a shared test fixture under `Predicates/`, in two encodings. `PredicateTheory` uses scopes as the

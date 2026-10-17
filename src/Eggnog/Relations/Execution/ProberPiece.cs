@@ -24,7 +24,7 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// A plain struct kept in per-position scratch, so building one allocates nothing beyond the index itself. Its fields
-    /// are plain fields so compiled kernels can read them.
+    /// are plain fields, which the stage kernels read and set directly.
     /// </para>
     /// </remarks>
     internal struct ProberPiece

@@ -97,6 +97,22 @@ namespace Eggnog
         public IReadOnlyList<Ruleset> Rulesets => Volatile.Read(ref rulesetsView);
 
         /// <summary>
+        /// Gets how far the graph has used its interned values, ids and epochs, none of which a disposed scope gives
+        /// back: a snapshot, from any thread, at the cost of two counter reads and a sum over the intern pools. A host
+        /// that keeps a graph for a long time watches <see cref="GraphUsage.FractionUsed"/> and retires the graph before
+        /// it reaches 1, when the next write, run or child that needs an id or an epoch throws
+        /// <see cref="OverflowException"/>.
+        /// </summary>
+        public GraphUsage Usage
+        {
+            get
+            {
+                var store = Engine.Store;
+                return new GraphUsage(Values.InternedCount, store.IdsReserved, Relations.Store.IdLimit, store.EpochsUsed, Relations.Store.EpochLimit);
+            }
+        }
+
+        /// <summary>
         /// Gets the bridge e-graph the graph runs on.
         /// </summary>
         internal Relations.EGraph Engine { get; }

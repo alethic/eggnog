@@ -41,6 +41,24 @@ namespace Eggnog
         public bool IsFrozen => Engine.IsFrozen;
 
         /// <summary>
+        /// Gets the number of the scope's tables that its <see cref="Freeze"/> left uncompacted because the scope had live
+        /// descendants: 0 while the scope is writable, and for a scope frozen with no live descendant. A disposed child
+        /// whose own children are still live counts as live until they are disposed, though <see cref="Children"/> no
+        /// longer lists it.
+        /// </summary>
+        /// <remarks>
+        /// A table keeps the rows that later writes replaced until it compacts: when they outnumber the rows still
+        /// current and number more than 16, and always when its scope freezes. Compaction renumbers the rows, and the
+        /// descendants of a scope hold the numbers of the rows they have seen, so a scope's tables do not compact while
+        /// it has live descendants (the cases of a running split included); once the last of them is disposed, they
+        /// compact again at the next write that calls for it. A frozen scope never changes again, so each table counted
+        /// here keeps its replaced rows for the scope's life: memory, and rows that full scans and probes step over.
+        /// Results are never affected. Freezing a scope before creating its children avoids it. Readable at any time,
+        /// from any thread.
+        /// </remarks>
+        public int CompactionsBlockedAtFreeze => Engine.CompactionsBlockedAtFreeze;
+
+        /// <summary>
         /// Gets the live children made by <see cref="CreateChild"/>, a <see cref="CaseSet"/> or a split step, in
         /// creation order (a snapshot). Disposed children are not listed, even while their release waits, and neither are
         /// the cases a split or a lift dropped; nor are the transient children made for queries on a frozen scope.
@@ -71,6 +89,13 @@ namespace Eggnog
         /// Thread-safe on a frozen scope, whose children each get their own thread domain; a child of a writable scope
         /// shares its thread domain.
         /// </summary>
+        /// <remarks>
+        /// While a writable scope has live descendants its tables do not compact, so the rows its later writes and runs
+        /// replace stay in memory until the last descendant is disposed (a disposed child stays live until its own
+        /// children are disposed), and for good if the scope is frozen meanwhile
+        /// (<see cref="CompactionsBlockedAtFreeze"/>). Freeze a scope before creating children of it, or dispose them
+        /// and their descendants before heavy work in it.
+        /// </remarks>
         /// <param name="tag">The child's tag, which scoped atoms resolve; <c>null</c> for none.</param>
         /// <param name="options">The child's options; <c>null</c> for <see cref="ScopeOptions.Default"/>.</param>
         /// <returns>The child.</returns>
@@ -84,6 +109,8 @@ namespace Eggnog
         /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no child is
+        /// created, the scope is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope CreateChild(ScopeTag? tag = null, ScopeOptions? options = null)
         {
             if (tag is not null)
@@ -138,6 +165,10 @@ namespace Eggnog
         /// gets its own; a child another thread created once the scope read as frozen keeps the domain it was given. A
         /// second call does nothing.
         /// </summary>
+        /// <remarks>
+        /// Freezing compacts the scope's tables, except while the scope has live descendants: those tables keep the rows
+        /// that later writes replaced for the scope's life, and <see cref="CompactionsBlockedAtFreeze"/> counts them.
+        /// </remarks>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The parent is writable; the scope is faulted or in use on another
         /// thread; or the call comes from a run observer ("Not allowed inside a run observer"), from inside another call of
@@ -146,6 +177,8 @@ namespace Eggnog
         /// the freeze makes first; the scope is then faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) while the freeze
+        /// brought the scope up to date: the scope is neither frozen nor faulted.</exception>
         public void Freeze()
         {
             EngineCallMarker.ThrowIfActive();
@@ -225,6 +258,11 @@ namespace Eggnog
         /// of rules makes it local. Its class constants may come from this scope or its ancestors. It is freed when
         /// the scope is released.
         /// </summary>
+        /// <remarks>
+        /// Its value constants are interned when it is defined, into the graph's pools, which every scope shares: they
+        /// stay interned after the rule is freed (<see cref="ValueStore.InternedCount"/>). A host that defines rules per
+        /// request keeps the pools flat only by reusing their constants.
+        /// </remarks>
         /// <param name="ruleset">The ruleset that schedules it.</param>
         /// <param name="name">The rule's name.</param>
         /// <param name="define">Collects the rule.</param>

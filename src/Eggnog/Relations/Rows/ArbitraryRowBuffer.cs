@@ -85,21 +85,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Appends the row whose cells start at <paramref name="source"/>[<paramref name="offset"/>]. The array-based
-        /// form for compiled plans.
-        /// </summary>
-        /// <param name="source">An array holding the row's cells.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        public void AddRow(uint[] source, int offset)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            if (offset < 0 || source.Length - offset < arity)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "The source array does not hold a whole row at the offset.");
-
-            AddRow(new ReadOnlySpan<uint>(source, offset, arity));
-        }
-
-        /// <summary>
         /// Enumerates the rows in insertion order; for arity zero, <see cref="Count"/> empty rows. egglog's
         /// <c>for_each</c>.
         /// </summary>

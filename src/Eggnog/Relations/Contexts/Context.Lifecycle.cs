@@ -173,8 +173,12 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// The loop ends by committing the child's cursors, sealing its hidden sets and, when it caught up with an
-        /// ancestor, dropping its cached views. An exception escaping a child's rebuild faults it. DEBUG builds check
-        /// the context's invariants at the end (<see cref="CheckInvariants"/>).
+        /// ancestor, dropping its cached views (<see cref="EndPasses"/>). An exception escaping a child's pass faults
+        /// it; a clock that has run out, which a pass finds before its work (<see cref="BeginEpoch"/>), does not. When
+        /// the clock runs out before a later pass, the loop's end runs first, so what the passes before it did is
+        /// committed, sealed and visible, and the next rebuild that has an epoch goes on from there: the context is
+        /// clean if those passes left nothing to do, and otherwise stays unclean. DEBUG builds check the context's
+        /// invariants at the end, and after a clock that ran out if the context is clean (<see cref="CheckInvariants"/>).
         /// </para>
         /// <para>
         /// Before any pass, a child refuses to catch up with a parent that a contradiction stopped: such a parent is
@@ -191,6 +195,8 @@ namespace Eggnog.Relations
         /// batch's action or a visitor of the same domain, where a rebuild with nothing to do is allowed.</exception>
         /// <exception cref="NotSupportedException">The child displaced an id an eq-sort container holds; the child is
         /// faulted.</exception>
+        /// <exception cref="OverflowException">The store's clock has run out (<see cref="Store.ReadClock"/>); the
+        /// context is not faulted.</exception>
         public bool Rebuild()
         {
             if (frozen)
@@ -224,55 +230,65 @@ namespace Eggnog.Relations
             var first = true;
             var changed = false;
             var caughtUp = false;
-            try
+            while (true)
             {
-                while (true)
+                // Each pass reads the clock before its work and outside the fault: a clock that has run out throws
+                // here, before the pass changes anything, so it leaves the context unfaulted. Each pass takes the
+                // journal from where the last one stopped (ContextTables.RebuildPass), so the passes that already ran
+                // are ended as the loop ends them, and a later rebuild goes on from there.
+                uint epoch;
+                try
                 {
-                    var epoch = BeginEpoch();
-                    bool pass;
-                    try
-                    {
-                        pass = false;
-                        if (first && parent is not null)
-                        {
-                            pass |= CatchUpUnionFind(epoch) != journal!.Count;
-                            caughtUp |= tables!.CatchUpRows(epoch);
-                            pass |= caughtUp;
-                            pass |= RefreshDirtyContainerIds(epoch);
-                        }
-
-                        pass |= parent is null
-                            ? database.RebuildPass(store.UnionFindTable, store.Schema.FunctionTables, epoch)
-                            : tables!.RebuildPass(epoch);
-
-                        if (parent is not null)
-                            EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
-                    }
-                    finally
-                    {
-                        EndEpoch();
-                    }
-
-                    changed |= pass;
-                    first = false;
-                    lastRebuildPasses++;
-                    if (pass == false || contradicted)
-                        break;
+                    epoch = BeginEpoch();
                 }
-            }
-            catch when (IsRoot == false)
-            {
-                Fault();
-                throw;
+                catch (OverflowException) when (first == false)
+                {
+                    EndPasses(caughtUp);
+#if DEBUG
+                    if (contradicted == false && IsClean)
+                        CheckInvariants();
+#endif
+                    throw;
+                }
+
+                bool pass;
+                try
+                {
+                    pass = false;
+                    if (first && parent is not null)
+                    {
+                        pass |= CatchUpUnionFind(epoch) != journal!.Count;
+                        caughtUp |= tables!.CatchUpRows(epoch);
+                        pass |= caughtUp;
+                        pass |= RefreshDirtyContainerIds(epoch);
+                    }
+
+                    pass |= parent is null
+                        ? database.RebuildPass(store.UnionFindTable, store.Schema.FunctionTables, epoch)
+                        : tables!.RebuildPass(epoch);
+
+                    if (parent is not null)
+                        EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
+                }
+                catch when (IsRoot == false)
+                {
+                    Fault();
+                    throw;
+                }
+                finally
+                {
+                    EndEpoch();
+                }
+
+                changed |= pass;
+                first = false;
+                lastRebuildPasses++;
+                if (pass == false || contradicted)
+                    break;
             }
 
             journalMark = DisplacedCount;
-            if (tables is { } t)
-            {
-                caughtUp |= t.CommitCursors();
-                t.SealHidden();
-                t.InvalidateViews(caughtUp);
-            }
+            EndPasses(caughtUp);
 
 #if DEBUG
             // A contradiction stopped the merge with writes pending: the context answers only IsContradictory.
@@ -280,6 +296,22 @@ namespace Eggnog.Relations
                 CheckInvariants();
 #endif
             return changed;
+        }
+
+        /// <summary>
+        /// Ends the passes of a <see cref="Rebuild"/> in a child: commits its cursors to what the first pass's catch-up
+        /// read, seals the hidden sets the passes grew, and drops its cached views, every one when it caught up with an
+        /// ancestor or a cursor moved, else the ones the passes made stale. Nothing at the root. Domain thread only.
+        /// </summary>
+        /// <param name="caughtUp">Whether the first pass copied and hid ancestor rows.</param>
+        void EndPasses(bool caughtUp)
+        {
+            if (tables is not { } t)
+                return;
+
+            caughtUp |= t.CommitCursors();
+            t.SealHidden();
+            t.InvalidateViews(caughtUp);
         }
 
         /// <summary>
@@ -307,7 +339,8 @@ namespace Eggnog.Relations
         /// is allowed: they catch up once, and get their own domains.
         /// </para>
         /// <para>
-        /// An exception escaping a child's rebuild or freeze proper faults it. A failure recorded and not taken, before
+        /// An exception escaping a child's rebuild or freeze proper faults it, except a clock that has run out before a
+        /// rebuild pass changed anything (<see cref="Rebuild"/>). A failure recorded and not taken, before
         /// the call or by its own rebuild or settle, refuses the freeze without faulting: the context stays consistent
         /// and unfrozen, and its caller may take the failure and freeze again. So does a contradiction its rebuild
         /// found.
@@ -319,6 +352,7 @@ namespace Eggnog.Relations
         /// (or its rebuild stopped it); a failure was recorded and not taken, before the call or by its rebuild or
         /// settle; writes are staged in it and were never notified for merging; the call comes from inside another
         /// operation of the same thread domain; or the domain is held by another thread.</exception>
+        /// <exception cref="OverflowException">The store's clock has run out; the context is not faulted.</exception>
         public void Freeze(FreezeWarmup? warmup = null)
         {
             if (frozen)
@@ -344,19 +378,13 @@ namespace Eggnog.Relations
                 // could never take it.
                 ThrowIfFailureNotTaken();
 
-                try
+                // The rebuild faults a child itself, except where the clock has run out before a pass changed
+                // anything; only the root settles, and the root is never faulted.
+                Rebuild();
+                if (parent is null)
                 {
-                    Rebuild();
-                    if (parent is null)
-                    {
-                        Settle();
-                        AssertRootSettled();
-                    }
-                }
-                catch when (IsRoot == false)
-                {
-                    Fault();
-                    throw;
+                    Settle();
+                    AssertRootSettled();
                 }
 
                 // The same for a failure the rebuild or the settle just recorded (a merge conflict found by a copy, a

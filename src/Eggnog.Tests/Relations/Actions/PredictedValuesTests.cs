@@ -47,6 +47,20 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
+        public void AReservationCopiesTheKeyFromItsOffset()
+        {
+            var p = new PredictedValues();
+            var t = new TableId(0);
+            var offset = p.FindOrBegin(t, [9, 5, 6], 1, 2, 3, out var found);
+            Assert.False(found);
+            Assert.Equal(new uint[] { 5, 6 }, p.Cells.AsSpan(offset, 2).ToArray());
+            p.Commit();
+
+            Assert.Equal(offset, p.FindOrBegin(t, [5, 6], 0, 2, 3, out found));
+            Assert.True(found);
+        }
+
+        [Fact]
         public void AnAbandonedReservationLeavesTheCacheUnchanged()
         {
             var p = new PredictedValues();

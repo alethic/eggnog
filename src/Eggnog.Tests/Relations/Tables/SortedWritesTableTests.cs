@@ -372,9 +372,6 @@ namespace Eggnog.Relations.Tests
             Assert.False(table.TryFastSubset(Constraint.EqConst(C(0), 1), out _));
             Assert.False(table.TryFastSubset(Constraint.Eq(C(1), C(1)), out _));
 
-            Assert.Equal(SubsetRef.Dense(new OffsetRange(2, 6)).ToString(), table.SortAtLeast(4).ToString());
-            Assert.Equal(SubsetRef.Dense(new OffsetRange(0, 2)).ToString(), table.SortBelow(4).ToString());
-
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var split = table.SplitFastSlow([Constraint.GeConst(C(1), 4), Constraint.EqConst(C(0), 3), Constraint.LtConst(C(1), 7)], fast, slow);
@@ -384,7 +381,6 @@ namespace Eggnog.Relations.Tests
 
             var unsorted = TableTestUtil.FillTable([R(1, 2)], 1, null, ClosureMerge.TakeNew);
             Assert.False(unsorted.TryFastSubset(Constraint.GeConst(C(1), 0), out _));
-            Assert.Throws<InvalidOperationException>(() => unsorted.SortAtLeast(0));
         }
 
         static void AssertFast(SortedWritesTable table, Constraint constraint, int start, int end)

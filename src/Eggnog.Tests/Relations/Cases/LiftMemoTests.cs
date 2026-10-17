@@ -17,7 +17,8 @@ namespace Eggnog.Relations.Tests
     /// once. A lift that skipped candidates in its last round, or stopped at its round limit, is not memoized, so a
     /// wider limit lifts what a narrower one skipped; a lift with another spec is no memo hit; a memoized all-vacuous
     /// lift still reports the parent contradicted; and a lift that writes nothing leaves the root's clock and version
-    /// alone.
+    /// alone. A memo answer is told from a lift that ran and wrote nothing by <see cref="LiftReport.Memoized"/>, which
+    /// the tests assert on every lift.
     /// </summary>
     public class LiftMemoTests
     {
@@ -50,18 +51,55 @@ namespace Eggnog.Relations.Tests
 
             var first = set.Lift(MarkSpec(g), LiftOptions.Default);
             Assert.True(first.Changed);
+            Assert.False(first.Memoized);
             Assert.True(g.Root.ContainsKey(g.Mark, [ids[0]]));
 
             var again = set.Lift(MarkSpec(g), LiftOptions.Default);
             Assert.False(again.Changed);
             Assert.Equal(0, again.Rounds);
+            Assert.True(again.Memoized);
 
             // Another spec reads other rows: not a memo hit, though nothing changed.
             var other = set.Lift(new LiftSpec(new LiftTable(g.Mark, LiftTableKind.Relation), new LiftTable(g.Edge, LiftTableKind.Relation)), LiftOptions.Default);
             Assert.True(other.Changed);
+            Assert.False(other.Memoized);
             Assert.True(g.Root.ContainsKey(g.Edge, [ids[0], ids[1]]));
             Assert.True(MarkSpec(g).HasSameTables(MarkSpec(g)));
             Assert.False(MarkSpec(g).HasSameTables(new LiftSpec(new LiftTable(g.Edge, LiftTableKind.Relation))));
+        }
+
+        /// <summary>
+        /// The memo answers exactly while nothing the settled lift read has changed: a repeat is answered; a fact a case
+        /// learns, or a write to the parent, makes the next lift run; and its repeat is answered again.
+        /// </summary>
+        [Fact]
+        public void TheMemoAnswersOnlyWhileNothingTheLiftReadChanges()
+        {
+            var (g, ids) = Setup(4);
+            using var set = new CaseSet(g.Root);
+            var one = set.AddCase();
+            var two = set.AddCase();
+            foreach (var @case in new[] { one, two })
+                g.Assert(@case, g.Mark, ids[0]);
+
+            var spec = EdgeAndMarkSpec(g);
+            Assert.False(set.Lift(spec, LiftOptions.Default).Memoized);
+            Assert.True(set.Lift(spec, LiftOptions.Default).Memoized);
+
+            // A case learns a fact: the next lift runs, and writes nothing, since the other case lacks it.
+            g.Assert(one, g.Edge, ids[1], ids[2]);
+            var afterCase = set.Lift(spec, LiftOptions.Default);
+            Assert.False(afterCase.Memoized);
+            Assert.False(afterCase.Changed);
+            Assert.True(set.Lift(spec, LiftOptions.Default).Memoized);
+
+            // The parent learns a fact: its version moved, so the next lift runs.
+            g.Assert(g.Root, g.Edge, ids[2], ids[3]);
+            g.Root.FlushUpdates();
+            var afterParent = set.Lift(spec, LiftOptions.Default);
+            Assert.False(afterParent.Memoized);
+            Assert.False(afterParent.Changed);
+            Assert.True(set.Lift(spec, LiftOptions.Default).Memoized);
         }
 
         /// <summary>
@@ -88,6 +126,8 @@ namespace Eggnog.Relations.Tests
             var second = set.Lift(new LiftSpec(new LiftTable(g.Edge, LiftTableKind.Relation)), LiftOptions.Default);
             Assert.True(g.Root.ContainsKey(g.Edge, [a, d]), $"edge(a, d) holds in both cases (first: skipped {first.Skipped}, rounds {first.Rounds}; second: changed {second.Changed}, rounds {second.Rounds})");
             Assert.Equal(g.Root.Find(a), g.Root.Find(c));
+            Assert.False(first.Memoized);
+            Assert.True(second.Memoized, "the first lift settled, so the second is a memo hit");
         }
 
         static LiftSpec EdgeSpec(ContextGraph g) => new(new LiftTable(g.Edge, LiftTableKind.Relation));
@@ -119,11 +159,13 @@ namespace Eggnog.Relations.Tests
             var report = set.Lift(EdgeAndMarkSpec(g), LiftOptions.Default);
             Assert.False(report.Changed);
             Assert.Equal(0, report.Rounds);
+            Assert.False(report.Memoized, "the first lift ran, though it wrote nothing");
             Assert.Equal(clock, g.EGraph.Store.ReadClock());
             Assert.Equal(version, g.Root.Version);
 
             var again = set.Lift(EdgeAndMarkSpec(g), LiftOptions.Default);
             Assert.False(again.Changed);
+            Assert.True(again.Memoized);
             Assert.Equal(clock, g.EGraph.Store.ReadClock());
             Assert.Equal(version, g.Root.Version);
         }
@@ -155,11 +197,13 @@ namespace Eggnog.Relations.Tests
 
             var narrow = set.Lift(EdgeSpec(g), new LiftOptions { CandidateLimit = 2 });
             Assert.Equal(3, narrow.Skipped);
+            Assert.False(narrow.Memoized);
             Assert.False(g.Root.ContainsKey(g.Edge, [a, d]));
 
             // edge(a, d) holds in every live case, and the wider limit admits it.
             var wide = set.Lift(EdgeSpec(g), new LiftOptions { CandidateLimit = 64 });
             Assert.True(g.Root.ContainsKey(g.Edge, [a, d]), $"edge(a, d) holds in every live case but was not lifted (Changed = {wide.Changed}, Rounds = {wide.Rounds}, Skipped = {wide.Skipped})");
+            Assert.False(wide.Memoized);
         }
 
         /// <summary>
@@ -181,10 +225,12 @@ namespace Eggnog.Relations.Tests
 
             var first = set.Lift(EdgeSpec(g), LiftOptions.Default);
             Assert.True(first.Changed);
+            Assert.False(first.Memoized);
             Assert.True(g.Root.ContainsKey(g.Edge, [ids[0], ids[1]]));
 
             var wider = set.Lift(EdgeAndMarkSpec(g), LiftOptions.Default);
             Assert.True(g.Root.ContainsKey(g.Mark, [ids[2]]), $"mark(c) holds in every live case but was not lifted (Changed = {wider.Changed}, Rounds = {wider.Rounds})");
+            Assert.False(wider.Memoized);
         }
 
         /// <summary>
@@ -205,11 +251,13 @@ namespace Eggnog.Relations.Tests
                 g.Assert(@case, g.Edge, a, b);
             }
 
-            set.Lift(new LiftSpec(new LiftTable(g.Edge, LiftTableKind.Relation)), LiftOptions.Default);
+            var first = set.Lift(new LiftSpec(new LiftTable(g.Edge, LiftTableKind.Relation)), LiftOptions.Default);
+            Assert.False(first.Memoized);
             Assert.True(g.Root.ContainsKey(g.Edge, [a, b]));
 
-            set.Lift(new LiftSpec(new LiftTable(g.Mark, LiftTableKind.Relation)), LiftOptions.Default);
+            var second = set.Lift(new LiftSpec(new LiftTable(g.Mark, LiftTableKind.Relation)), LiftOptions.Default);
             Assert.True(g.Root.ContainsKey(g.Mark, [a]), "mark(a) holds in every case, but the memo skipped the lift that lists mark");
+            Assert.False(second.Memoized);
         }
 
         /// <summary>
@@ -233,10 +281,12 @@ namespace Eggnog.Relations.Tests
 
             var narrow = set.Lift(spec, new LiftOptions { CandidateLimit = 1 });
             Assert.True(narrow.Skipped > 0);
+            Assert.False(narrow.Memoized);
             Assert.False(g.Root.ContainsKey(g.Mark, [a]));
 
             var wide = set.Lift(spec, LiftOptions.Default);
             Assert.True(g.Root.ContainsKey(g.Mark, [a]), $"mark(a) holds in every case, but the memo skipped the wider lift (Changed = {wide.Changed})");
+            Assert.False(wide.Memoized);
         }
 
         /// <summary>
@@ -254,7 +304,9 @@ namespace Eggnog.Relations.Tests
             var spec = new LiftSpec(new LiftTable(g.Mark, LiftTableKind.Relation));
             var first = set.Lift(spec, LiftOptions.Default);
             Assert.True(first.ParentContradicted);
+            Assert.False(first.Memoized);
             var second = set.Lift(spec, LiftOptions.Default);
+            Assert.True(second.Memoized);
             Assert.Equal(0, second.LiveCases);
             Assert.True(second.ParentContradicted, "every case is vacuous, but the memoized lift reports the parent not contradicted");
         }
@@ -297,11 +349,13 @@ namespace Eggnog.Relations.Tests
 
             var narrow = set.Lift(Spec(g), new LiftOptions { CandidateLimit = 2 });
             Assert.Equal(3, narrow.Skipped);
+            Assert.False(narrow.Memoized);
             Assert.False(g.Root.ContainsKey(g.Edge, [a, d]));
 
             var wide = set.Lift(Spec(g), new LiftOptions { CandidateLimit = 64 });
             Assert.True(g.Root.ContainsKey(g.Edge, [a, d]), "edge(a, d) holds in both cases and fits the wider limit, but the memo skipped the lift");
             Assert.True(wide.Changed);
+            Assert.False(wide.Memoized);
         }
 
         /// <summary>
@@ -322,6 +376,7 @@ namespace Eggnog.Relations.Tests
 
             var first = set.Lift(Spec(g), LiftOptions.Default);
             Assert.False(first.Changed);
+            Assert.False(first.Memoized);
 
             g.Assert(g.Root, g.Edge, t, c);
             g.Assert(g.Root, g.Edge, f, c);
@@ -329,6 +384,7 @@ namespace Eggnog.Relations.Tests
 
             var second = set.Lift(Spec(g), LiftOptions.Default);
             Assert.True(second.Changed);
+            Assert.False(second.Memoized, "the root, an ancestor that is not frozen, changed since the first lift");
             Assert.True(scope.ContainsKey(g.Edge, [b, c]));
             Assert.False(g.Root.ContainsKey(g.Edge, [b, c]));
             scope.CheckInvariants();

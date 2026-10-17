@@ -24,6 +24,17 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The benchmark app's comparison mode does not depend on BenchmarkDotNet; its sources are compiled into the tests
+             too, so Benchmarks/ can test its parsing, arithmetic and outcome rules. The same goes for the writes
+             benchmarks' shard counts, and for the allocation probe's invoker, which needs only BenchmarkDotNet's
+             attributes. -->
+        <Compile Include="..\Eggnog.Benchmarks\Comparison\*.cs" Link="Benchmarks\Comparison\%(Filename)%(Extension)" />
+        <Compile Include="..\Eggnog.Benchmarks\Relations\Writes\WritesShardCounts.cs" Link="Benchmarks\Writes\WritesShardCounts.cs" />
+        <Compile Include="..\Eggnog.Benchmarks\Probes\BenchmarkInvoker.cs" Link="Benchmarks\Probes\BenchmarkInvoker.cs" />
+        <PackageReference Include="BenchmarkDotNet.Annotations" Version="0.15.8" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- The library's public surface, which Surface/PublicSurfaceTests compares with the built assembly. -->
         <EmbeddedResource Include="Surface\PublicSurface.txt" LogicalName="Eggnog.Tests.Surface.PublicSurface.txt" />
     </ItemGroup>

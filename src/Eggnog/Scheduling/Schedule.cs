@@ -92,12 +92,31 @@ namespace Eggnog
         /// skipped.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// Run it once the facts its rule reads have settled, as in <c>Saturate(Saturate(horn, lattice), Split(rule,
         /// inCase), rewrite)</c>: a split made before its domain narrowed opens cases that go vacuous later, and its record
         /// keeps the key until the run ends, so later steps do not split it again more narrowly.
+        /// </para>
+        /// <para>
+        /// To bound each case, pass <c>Repeat(n, steps)</c> as <paramref name="inCase"/>, with rulesets as the steps; not
+        /// <c>Saturate(steps)</c>, nor <c>Repeat(n, Saturate(steps))</c>, each of whose passes is a full saturation.
+        /// <see cref="RunOptions.IterationLimit"/> counts the iterations of every case, so a case that does not terminate
+        /// under <c>Saturate</c> uses up the run's limit; when that happens before the step lifts, the scope gets nothing
+        /// from any of the step's cases, those that saturated included. The bound applies to each execution of
+        /// <paramref name="inCase"/> in a case: once before the step lifts, once more after it when the step deepens
+        /// (below <see cref="RunOptions.SplitDepthLimit"/>), and again at each later execution of the step, so a case can
+        /// run <c>n</c> passes several times in one run. A case cut off this way stays live: what it derived holds under
+        /// its assumption, the lift keeps what it and its siblings prove, and <see cref="RunReport.StopReason"/> does not
+        /// show the cut: a run that otherwise ends normally reports <see cref="RunStopReason.Completed"/>. A host can tell
+        /// from <see cref="RunReport.Steps"/>, which stays empty unless <see cref="RunOptions.RecordSteps"/> is set, or
+        /// through <see cref="RunOptions.Observer"/>, that a case was cut off: an execution of <paramref name="inCase"/>
+        /// in the case ran all <c>n</c> passes, and its last pass still changed the case. Size <c>n</c> from the passes
+        /// the cases take when they do terminate, read from the same steps.
+        /// </para>
         /// </remarks>
         /// <param name="rule">The split rule.</param>
-        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction.</param>
+        /// <param name="inCase">The schedule run in each case; a case always stops on contradiction. <c>Repeat(n,
+        /// steps)</c> bounds each case.</param>
         /// <returns>The schedule.</returns>
         public static Schedule Split(SplitRule rule, Schedule inCase)
         {

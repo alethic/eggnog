@@ -17,6 +17,10 @@ namespace Eggnog
         /// immediately like a rule body. Any thread, any time. Define a reusable query once; dispose one made for a
         /// single request.
         /// </summary>
+        /// <remarks>
+        /// Its value constants are interned when it is defined, into the graph's pools, and stay interned after it is
+        /// disposed (<see cref="ValueStore.InternedCount"/>). Matching never interns.
+        /// </remarks>
         /// <param name="name">The query's name, unique among the graph's live queries.</param>
         /// <param name="define">Declares the variables (the columns of a match) and the body.</param>
         /// <returns>The query.</returns>

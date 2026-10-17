@@ -79,6 +79,8 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A failure the parent recorded surfaced when the case was created, or a
         /// lattice merge threw in the catch-up the call makes first, in the parent or a writable ancestor of it; the parent
         /// is faulted, and so is that ancestor.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>): no case is
+        /// created, the parent is not faulted, and from then on the graph creates no child at all.</exception>
         public Scope Add(ScopeTag? tag = null)
         {
             var graph = Parent.Graph;
@@ -179,6 +181,11 @@ namespace Eggnog
         /// threw (nothing of that round is written; the parent is not faulted); or a lattice merge threw in the catch-up the
         /// call makes first, in the parent or a writable ancestor of it: the parent is faulted, and so is the
         /// ancestor.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>): a lift
+        /// round takes an epoch, and so may the catch-up of the parent and its cases. Neither the parent nor a case is
+        /// faulted. What earlier rounds lifted stays. A round that ran out of ids, or of epochs before its merge, merges
+        /// nothing and leaves nothing staged; one that ran out in the rebuild after its merge stays merged. Every later
+        /// call that needs an id or an epoch throws the same way.</exception>
         public LiftReport Lift(LiftOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= LiftOptions.Default;

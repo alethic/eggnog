@@ -21,13 +21,16 @@ namespace Eggnog.Relations.Tests
     /// child mints from its own blocks, egglog from one counter), only sizes, iteration counts and checks.
     /// </para>
     /// <para>
-    /// The other push/pop programs of <c>ext/egglog/tests</c> need features the bridge lacks, and are not translated:
-    /// <c>container-rebuild.egg</c>, <c>container-fail.egg</c> and <c>vec.egg</c> intern or rebuild <c>Vec</c>
-    /// containers of e-classes inside a push (children refuse eq-sort containers: they cannot intern one, and a child
-    /// union that displaces an element of one is refused), and <c>vec.egg</c> also needs <c>UnstableFn</c>;
-    /// <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need <c>UnstableFn</c>, <c>String</c> and
-    /// <c>Vec</c> sorts and rulesets of the frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue
-    /// #113) only type-check <c>Map</c> sorts over <c>String</c>, which the bridge does not have.
+    /// The other push/pop programs of <c>ext/egglog/tests</c> are not translated. <c>container-rebuild.egg</c>,
+    /// <c>container-fail.egg</c> and the eq-container half of <c>vec.egg</c> intern or rebuild <c>Vec</c> containers of
+    /// e-classes inside a push: they wait on eq-sort containers in children, which children refuse (a child cannot
+    /// intern one, and a child union that displaces an element of one is refused), and would be translated with
+    /// <see cref="VecContainer"/> once children have them. The rest are out of scope: the <c>UnstableFn</c> half of
+    /// <c>vec.egg</c>, <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need function values (a
+    /// container that names a function, called from inside a rule), which the library does not offer, and the last two
+    /// also rulesets of egglog's frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue #113) only
+    /// exercise egglog's type checker choosing between two <c>Map</c> sorts, which has no counterpart here, and have no
+    /// <c>check</c>, so there is nothing to compare.
     /// </para>
     /// </remarks>
     public class EggPushPopTests

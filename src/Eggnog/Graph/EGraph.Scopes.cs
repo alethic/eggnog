@@ -32,6 +32,11 @@ namespace Eggnog
         /// Defines a scope tag of this graph: a label a scope carries, which scoped atoms resolve to the nearest
         /// ancestor-or-self carrying it. Any thread, any time.
         /// </summary>
+        /// <remarks>
+        /// A tag is a definition of the graph, kept for its life, and so is the mirror table that the first scoped read
+        /// of a table through the tag creates. Define tags with the theory, one per role a scope plays (a schema, a
+        /// query, a case), never one per request: each tag grows the graph's tags and mirrors for good.
+        /// </remarks>
         /// <param name="name">The tag's name: non-empty, unique among the graph's tags; <c>root</c> is the root's.</param>
         /// <returns>The tag.</returns>
         /// <exception cref="ArgumentException">The name is empty or taken.</exception>

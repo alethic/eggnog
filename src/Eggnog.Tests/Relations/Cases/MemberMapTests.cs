@@ -249,6 +249,101 @@ namespace Eggnog.Relations.Tests
             Assert.Contains("member maps:", thrown.Message);
         }
 
+        /// <summary>
+        /// Reads the private instance field <paramref name="name"/> of <paramref name="owner"/>.
+        /// </summary>
+        static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(owner)!;
+
+        /// <summary>
+        /// The member-map check reports a map member that is not canonical in the parent, with the member-map
+        /// violation itself: the overlay check reports the same corruption under "overlay members:", so only the
+        /// specific line shows that the member-map check ran. The root displaces <c>1</c> into <c>0</c>; a child merges
+        /// <c>{2, 3}</c>; then the child's overlay is corrupted behind the engine's back so that the class names
+        /// <c>1</c> in place of <c>3</c>, and a member map built from it lists <c>1</c> in the group of <c>2</c>.
+        /// </summary>
+        [Fact]
+        public void AMemberMapMemberNotCanonicalInTheParentIsReported()
+        {
+            var g = new ContextGraph();
+            var ids = Ids(g, 4).Select(id => id.Rep).ToArray();
+            g.Root.StageUnion(new Value(ids[1]), new Value(ids[0]));
+            g.Root.FlushUpdates();
+            Assert.Equal(ids[0], g.Root.Find(new Value(ids[1])).Rep);
+
+            using var child = g.Root.CreateChild();
+            child.StageUnion(new Value(ids[3]), new Value(ids[2]));
+            child.EnsureClean();
+            child.CheckInvariants();
+
+            var overlay = child.Context.Overlay!;
+            Assert.True(overlay.TryGetClass(ids[3], out var slot));
+            var members = Field<uint[]?[]>(overlay, "members")[slot]!;
+            members[Array.IndexOf(members, ids[3])] = ids[1];
+            var classOf = Field<RawHashTable<IdEntry>>(overlay, "classOf");
+            var match = new IdEntryMatch(ids[3]);
+            Assert.True(classOf.Remove(FxHasher.Hash(ids[3]), ref match, out _));
+            classOf.InsertUnique(FxHasher.Hash(ids[1]), new IdEntry(ids[1], (uint)slot), default(IdEntryHasher));
+            Assert.True(child.IsClean);
+
+            var thrown = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
+            Assert.Contains($"member maps: member {ids[1]} of group {ids[2]} is not canonical in the parent", thrown.Violations);
+        }
+
+        /// <summary>
+        /// The member-map check reports a member that is not in its group root's overlay class. The cached map of a
+        /// child that merged <c>{0, 1}</c> is corrupted behind the engine's back so that the group of <c>0</c> lists
+        /// <c>3</c>, a parent id the child never merged, in place of <c>1</c>; the check finds the cached map current by
+        /// version but different, and checks it as it checks a map built afresh. The overlay itself is sound, so the
+        /// overlay check reports nothing.
+        /// </summary>
+        [Fact]
+        public void AMemberMapMemberOutsideItsRootsOverlayClassIsReported()
+        {
+            var g = new ContextGraph();
+            var ids = Ids(g, 4).Select(id => id.Rep).ToArray();
+            using var child = g.Root.CreateChild();
+            child.StageUnion(new Value(ids[0]), new Value(ids[1]));
+            child.EnsureClean();
+            var map = child.GetMemberMap();
+            Assert.Equal([ids[0], ids[1]], map.GroupMembers(0).ToArray());
+            child.CheckInvariants();
+
+            var members = Field<uint[]>(map, "members");
+            members[1] = ids[3];
+
+            var thrown = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
+            Assert.Contains($"member maps: the cached map: member {ids[3]} of group {ids[0]} is not in the root's overlay class", thrown.Violations);
+            Assert.Contains("member maps: the cached member map is current by version but differs from the overlay", thrown.Violations);
+            Assert.DoesNotContain(thrown.Violations, v => v.StartsWith("overlay", StringComparison.Ordinal));
+        }
+
+        /// <summary>
+        /// The member-map check reports a group root that is in no class of the overlay. The cached map of a child that
+        /// merged <c>{0, 1}</c> is corrupted behind the engine's back so that its one group is rooted at <c>3</c>, a
+        /// parent id the child never merged; the check finds the cached map current by version but different and reports
+        /// the root itself, since without the root's class it cannot check its members' membership. The overlay itself
+        /// is sound, so the overlay check reports nothing.
+        /// </summary>
+        [Fact]
+        public void AMemberMapRootInNoOverlayClassIsReported()
+        {
+            var g = new ContextGraph();
+            var ids = Ids(g, 4).Select(id => id.Rep).ToArray();
+            using var child = g.Root.CreateChild();
+            child.StageUnion(new Value(ids[0]), new Value(ids[1]));
+            child.EnsureClean();
+            var map = child.GetMemberMap();
+            Assert.Equal([ids[0]], map.GroupRoots.ToArray());
+            child.CheckInvariants();
+
+            Field<uint[]>(map, "roots")[0] = ids[3];
+
+            var thrown = Assert.Throws<ContextInvariantException>(() => child.CheckInvariants());
+            Assert.Contains($"member maps: the cached map: group root {ids[3]} is in no class of the overlay", thrown.Violations);
+            Assert.Contains("member maps: the cached member map is current by version but differs from the overlay", thrown.Violations);
+            Assert.DoesNotContain(thrown.Violations, v => v.StartsWith("overlay", StringComparison.Ordinal));
+        }
+
     }
 
 }

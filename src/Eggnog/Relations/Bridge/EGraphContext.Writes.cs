@@ -156,7 +156,10 @@ namespace Eggnog.Relations
         /// context drops what is staged and returns <c>false</c>.
         /// </para>
         /// <para>
-        /// An exception escaping a child's flush faults it.
+        /// An exception escaping a child's flush faults it, except a clock that has run out, which faults no context.
+        /// When it runs out before the merge (in the parent's rebuild, the catch-up or the flush's own epoch), the
+        /// staged host writes are dropped, so nothing is merged and nothing is left staged. When it runs out in the
+        /// rebuild after the merge, the merge stays and the rebuild stops between two passes (<see cref="Context.Rebuild"/>).
         /// </para>
         /// </remarks>
         /// <returns>Whether the merge changed the context; changes made by the rebuild are not reported.</returns>
@@ -164,6 +167,8 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is frozen or faulted; its domain is held by another
         /// thread; or the call comes from inside an operation of the same domain.</exception>
         /// <exception cref="PanicException">A failure was recorded.</exception>
+        /// <exception cref="OverflowException">The store's clock has run out; the context is not faulted, and the staged
+        /// host writes are dropped if the merge had not run.</exception>
         public bool FlushUpdates() => FlushCore(throwOnFailure: true);
 
         /// <summary>
@@ -313,6 +318,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Drops every host write staged here and not flushed: for a caller that stages several writes as one step and
+        /// fails part-way, so that none of the step merges (<see cref="Lifter"/>). Rows staged by rule runs are not host
+        /// writes and stay. O(staged writes).
+        /// </summary>
+        internal void DropHostWrites()
+        {
+            using var scope = context.Domain.Enter();
+            hostWrites.Clear();
+        }
+
+        /// <summary>
         /// The body of <see cref="FlushUpdates"/> and of the e-graph's egglog-compatible <see cref="EGraph.FlushUpdates"/>,
         /// which leaves a failure recorded for the next run (<paramref name="throwOnFailure"/> <c>false</c>).
         /// </summary>
@@ -329,20 +345,32 @@ namespace Eggnog.Relations
                 return false;
             }
 
-            if (parent is { IsFrozen: false } p)
-                p.EnsureClean();
-
-            // Catch up before anything is staged: replayed rows are stamped after every ancestor change they could
-            // collide with, and canonicalized against the current union-find.
-            context.PrepareForWrite();
-            if (IsStopped)
+            uint timestamp;
+            try
             {
+                if (parent is { IsFrozen: false } p)
+                    p.EnsureClean();
+
+                // Catch up before anything is staged: replayed rows are stamped after every ancestor change they could
+                // collide with, and canonicalized against the current union-find.
+                context.PrepareForWrite();
+                if (IsStopped)
+                {
+                    hostWrites.Clear();
+                    return false;
+                }
+
+                timestamp = context.BeginEpoch();
+            }
+            catch (OverflowException) when (owner.Store.ClockExhausted)
+            {
+                // The clock ran out before the merge: the writes could only merge at an epoch, and none is left, so they
+                // are dropped rather than left staged for every later read to trip over.
                 hostWrites.Clear();
-                return false;
+                throw;
             }
 
             var database = context.Database;
-            var timestamp = context.BeginEpoch();
             var unionsBefore = context.DisplacedCount;
             bool changed;
             try

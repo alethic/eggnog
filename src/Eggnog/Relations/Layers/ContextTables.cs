@@ -222,9 +222,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Discards every write staged in the layers created during the search that just failed, which still wait on
         /// the deferred list and so are not in the database's table map that <see cref="Database.ExecuteRuleSet"/>'s
-        /// rollback walks: an exception in a child's search faults it, and the rollback then leaves no staged write
-        /// behind. Called on the domain thread after every task of the search has finished; the layers stay deferred,
-        /// empty. O(deferred layers).
+        /// rollback walks, so that a failed search leaves no staged write behind, whether it faults the child or, having
+        /// run out of ids, does not. Called on the domain thread after every task of the search has finished; the layers
+        /// stay deferred, empty. O(deferred layers).
         /// </summary>
         internal void DiscardDeferredStaged()
         {

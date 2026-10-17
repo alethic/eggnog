@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     /// A closed hierarchy of sealed classes, one per variant: <see cref="Kind"/> says which, so the interpreter
     /// dispatches with a <c>switch</c> plus <c>Unsafe.As</c>, never a virtual call. Instructions are immutable data
     /// (operand arrays are copied in and must not be modified through the properties), shared by every batch and
-    /// thread that runs the rule, and complete enough for a compiler to turn a program into a delegate.
+    /// thread that runs the rule.
     /// </para>
     /// <para>
     /// Operands are <see cref="QueryEntry"/> values: a variable bound by the join or defined by an earlier instruction,

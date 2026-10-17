@@ -7,7 +7,7 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Recognizes the <see cref="TupleIndexEntry"/> of a two-cell key passed by value: the stored hash must match and the
-    /// key buffer's row must hold the key. The form two-column tuple indexes and compiled plans probe with.
+    /// key buffer's row must hold the key. The form two-column tuple indexes probe with.
     /// </summary>
     /// <remarks>
     /// The key buffer is read without bounds checks: an entry only names a key row its shard stored, which debug builds

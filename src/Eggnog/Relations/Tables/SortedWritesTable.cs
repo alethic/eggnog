@@ -192,7 +192,7 @@ namespace Eggnog.Relations
         public ParallelHeuristics Parallelism => parallelism;
 
         /// <summary>
-        /// Gets the row storage, for code that reads rows directly (compiled plans): row <c>r</c> starts at
+        /// Gets the row storage, for code that reads rows directly: row <c>r</c> starts at
         /// <c>Rows.Data[r * Arity]</c>; rows whose first cell is <see cref="Value.StaleRep"/> are tombstones. The
         /// buffer and its array are replaced by merges, compaction and clearing, never during a read phase, so read
         /// them once per scan.

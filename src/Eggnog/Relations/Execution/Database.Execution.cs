@@ -200,7 +200,11 @@ namespace Eggnog.Relations
         /// <remarks>
         /// A failed run: an exception escaping a child's <see cref="RunRuleSet"/> or <see cref="ExecuteRuleSet"/> (an
         /// action, an external or a merge function throwing) faults the child, the rule layer's direct
-        /// <see cref="ExecuteRuleSet"/> calls included, since a hide whose copy was never merged cannot be repaired.
+        /// <see cref="ExecuteRuleSet"/> calls included. A failed merge may leave a hide whose copy was never merged,
+        /// which cannot be repaired. A search never hides (hides happen only in merges and rebuilds), so faulting on a
+        /// failed search is conservative. The one exception is a search that ran out of ids (an
+        /// <see cref="OverflowException"/> while <see cref="Store.IdsExhausted"/>): the search changed nothing it does
+        /// not discard, and the store's limit is not the child's fault.
         /// Every write the failed search staged is discarded, in the layers it created as well (they wait on the
         /// deferred list, outside the table map that the rollback walks,
         /// <see cref="ContextTables.DiscardDeferredStaged"/>), and <see cref="MergeAll"/> and <see cref="MergeTable"/>
@@ -228,9 +232,9 @@ namespace Eggnog.Relations
             // The run stamps every row it merges with the timestamp, so the timestamp must keep every layer's sort
             // column nondecreasing and the context's new rows at or above its floor.
             context.UseEpoch(timestamp);
+            RuleSetReport executed;
             try
             {
-                RuleSetReport executed;
                 tables.InSearch = true;
                 domain.EnterCallback();
                 try
@@ -242,11 +246,24 @@ namespace Eggnog.Relations
                     domain.ExitCallback();
                     tables.InSearch = false;
                 }
+            }
+            catch (Exception e) when (e is not OverflowException || context.Store.IdsExhausted == false)
+            {
+                // A search that ran out of ids discarded everything it staged (ExecuteRuleSetCore) and changed nothing
+                // else, so it leaves the child unfaulted; any other failure faults it.
+                context.Fault();
+                throw;
+            }
 
-                // Nothing drops a view while the search runs, layer creation included, so the headers and the run read
-                // the same views.
-                Debug.Assert(View.Generation == generation, "a context's views changed during a rule search");
-                return merge ? MergeRuleSetCore(executed, timestamp) : executed;
+            // Nothing drops a view while the search runs, layer creation included, so the headers and the run read the
+            // same views.
+            Debug.Assert(View.Generation == generation, "a context's views changed during a rule search");
+            if (merge == false)
+                return executed;
+
+            try
+            {
+                return MergeRuleSetCore(executed, timestamp);
             }
             catch
             {

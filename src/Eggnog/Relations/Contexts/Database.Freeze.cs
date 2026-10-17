@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -18,7 +19,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// Called by <see cref="Context.Freeze"/> on the context's domain thread, after its rebuild: nothing is staged.
-        /// Every table is checked before any is frozen, so a refusal leaves the database as it was. Cost: O(ids + rows) for
+        /// Every table is checked before any is frozen, so a refusal leaves the database as it was. The tables whose
+        /// compaction a live descendant blocked are counted (<see cref="CompactionsBlockedAtFreeze"/>). Cost: O(ids + rows) for
         /// the union-find and the compactions, plus the rebuild indexes and the warm-up.
         /// </remarks>
         /// <param name="warmup">The cached indexes to build, or <c>null</c>.</param>
@@ -44,13 +46,23 @@ namespace Eggnog.Relations
             // warm-up and every descendant would take an index that lags the frozen table. Every table whose generation
             // the freeze moved has its indexes re-armed here, and their next use rebuilds them; a table the freeze did
             // not compact keeps its indexes. O(indexes).
+            // A sorted-writes table whose gate has live descendants keeps its tombstones (ForceRehash counts the skip);
+            // the tables it happened to are counted for the context's diagnostics.
+            var blocked = 0;
             foreach (var (_, info) in tables)
             {
                 var generation = info.Table.Version.Major;
+                var sorted = info.Table as SortedWritesTable;
+                var skips = sorted?.CompactionsBlocked ?? 0;
                 info.Table.Freeze();
                 if (info.Table.Version.Major != generation)
                     info.ResetIndexes();
+
+                if (sorted is not null && sorted.CompactionsBlocked != skips)
+                    blocked++;
             }
+
+            Volatile.Write(ref compactionsBlockedAtFreeze, blocked);
 
             if (warmup is not null)
             {

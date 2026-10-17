@@ -9,7 +9,7 @@ namespace Eggnog.Relations
     /// <summary>
     /// A borrowed, sorted (non-decreasing) run of row ids: <c>Array[Start..End)</c>. Port of egglog's
     /// <c>SortedOffsetSlice</c> (core-relations/src/offsets/mod.rs:124-253), with the slice reference replaced by
-    /// an <c>(array, start, end)</c> triple so it can live in fields, closures and compiled expression trees.
+    /// an <c>(array, start, end)</c> triple so it can live in fields and closures.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -125,7 +125,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the row ids as a span, for callers that are not compiled expression trees.
+        /// Gets the row ids as a span.
         /// </summary>
         /// <returns>The span.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

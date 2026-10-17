@@ -449,7 +449,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets a copy of the entry in a slot, which the caller knows is full. The non-<c>ref</c> form of
-        /// <see cref="EntryAt"/>, for callers that cannot take references (expression-compiled plans).
+        /// <see cref="EntryAt"/>, for callers that keep a copy (the indexes' <c>NextEntry</c>, the intern table's
+        /// lookups, the container walks).
         /// </summary>
         /// <param name="slot">A full slot.</param>
         /// <returns>The entry.</returns>
@@ -458,8 +459,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the first full slot at or after <paramref name="slot"/>, scanning a group at a time: an external
-        /// cursor over the entries for callers that cannot use the struct enumerator (expression-compiled plans).
-        /// Slots come in ascending order.
+        /// walk by slot, for callers that need the slot (the container walks) or resume the walk across calls (the
+        /// indexes' <c>NextEntry</c>) instead of holding the struct enumerator. Slots come in ascending order.
         /// </summary>
         /// <param name="slot">The slot to start from, at least zero.</param>
         /// <returns>The slot, or <c>-1</c> if there is none.</returns>

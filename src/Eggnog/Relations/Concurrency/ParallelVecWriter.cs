@@ -238,21 +238,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Copies <paramref name="count"/> items of <paramref name="items"/> starting at <paramref name="offset"/> to a
-        /// contiguous range of the vector. The array form of <see cref="WriteSlice(ReadOnlySpan{T})"/>, for callers
-        /// that cannot use spans (compiled plans).
-        /// </summary>
-        /// <param name="items">The source array.</param>
-        /// <param name="offset">The first item to copy.</param>
-        /// <param name="count">The number of items to copy.</param>
-        /// <returns>The index of the first item.</returns>
-        public int WriteSlice(T[] items, int offset, int count)
-        {
-            ArgumentNullException.ThrowIfNull(items);
-            return WriteSlice(new ReadOnlySpan<T>(items, offset, count));
-        }
-
-        /// <summary>
         /// Returns the vector: the storage array, whose first <paramref name="count"/> elements are the original
         /// elements followed by every written range. Requires exclusive access; the writer is left empty, as after
         /// <see cref="Take"/>, and the Rust's writer is consumed.

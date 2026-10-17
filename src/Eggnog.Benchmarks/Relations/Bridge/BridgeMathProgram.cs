@@ -11,7 +11,7 @@ namespace Eggnog.Relations.Benchmarks
     /// <summary>
     /// The program of egglog-bridge's <c>examples/math.rs</c>: the math benchmark of the egg and egglog suites
     /// (<c>examples/math.egg</c>) written against the bridge API, with 13 constructors, 24 rules and seven seed
-    /// expressions, run for at most <see cref="N"/> iterations on an e-graph with the default parallelism.
+    /// expressions, run for at most <see cref="N"/> iterations on an e-graph with the default parallelism or a given one.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -56,12 +56,23 @@ namespace Eggnog.Relations.Benchmarks
         readonly EGraphRuleId[] rules;
 
         /// <summary>
-        /// Builds the e-graph, its tables and rules, and adds the seed expressions, as <c>math.rs</c> does before its
-        /// iteration loop. Part of the time <c>math.rs</c> measures.
+        /// Builds the e-graph on every processor (<c>EGraph::default()</c>), its tables and rules, and adds the seed
+        /// expressions, as <c>math.rs</c> does before its iteration loop. Part of the time <c>math.rs</c> measures.
         /// </summary>
         public BridgeMathProgram()
+            : this(ParallelHeuristics.Default)
         {
-            egraph = new EGraph();
+
+        }
+
+        /// <summary>
+        /// Builds the program as <see cref="BridgeMathProgram()"/> does, on an e-graph whose operations use
+        /// <paramref name="parallelism"/>: the counterpart of running <c>math.exe</c> with <c>RAYON_NUM_THREADS</c> set.
+        /// </summary>
+        /// <param name="parallelism">When the e-graph's operations go parallel, and on how many threads.</param>
+        public BridgeMathProgram(ParallelHeuristics parallelism)
+        {
+            egraph = new EGraph(parallelism);
             var rationalTy = ColumnTy.Base(egraph.BaseValues.RegisterType<InternedCodec<Rational>, Rational>());
             var stringTy = ColumnTy.Base(egraph.BaseValues.RegisterType<StringCodec, string>());
 
@@ -188,6 +199,17 @@ namespace Eggnog.Relations.Benchmarks
         public EGraph EGraph => egraph;
 
         /// <summary>
+        /// Gets the program's functions, in the order of <see cref="FunctionNames"/>.
+        /// </summary>
+        public ReadOnlySpan<FunctionId> Functions => functions;
+
+        /// <summary>
+        /// Runs every rule once at the root: one iteration of <see cref="Run"/>'s loop, without its line.
+        /// </summary>
+        /// <returns>Whether the iteration changed anything.</returns>
+        public bool RunIteration() => egraph.RunRules(rules).Changed;
+
+        /// <summary>
         /// Runs the rules for up to <see cref="N"/> iterations, stopping after the first that changes nothing: the loop
         /// of <c>math.rs</c>. With <paramref name="log"/>, writes <c>math.rs</c>'s line after each iteration
         /// (<c>Iteration {i} finished, duration={:?} (saturated={})</c>).
@@ -199,7 +221,7 @@ namespace Eggnog.Relations.Benchmarks
             for (var i = 0; i < N; i++)
             {
                 var start = Stopwatch.GetTimestamp();
-                var changed = egraph.RunRules(rules).Changed;
+                var changed = RunIteration();
                 if (log != null)
                     log.WriteLine($"Iteration {i} finished, duration={RustDuration.Format(RustDuration.ElapsedNanoseconds(start))} (saturated={(changed ? "false" : "true")})");
 

@@ -31,8 +31,8 @@ namespace Eggnog.Relations
     /// <para>
     /// A mutable struct: callers keep it in a local and pass it by reference. The consumers are generic over struct
     /// callbacks (<see cref="ILaneFilter"/>, <see cref="ILaneProducer"/>, <see cref="ILaneVisitor"/>), so each lane loop
-    /// is specialized for its callback with no virtual or delegate call, as Rust monomorphizes the closures. Compiled
-    /// plans can keep the two words in locals instead (<see cref="Low"/>, <see cref="High"/>).
+    /// is specialized for its callback with no virtual or delegate call, as Rust monomorphizes the closures.
+    /// <see cref="Low"/> and <see cref="High"/> expose the two words.
     /// </para>
     /// </remarks>
     internal struct Mask

@@ -118,6 +118,12 @@ namespace Eggnog.Relations
         public bool IsFrozen => context.IsFrozen;
 
         /// <summary>
+        /// Gets the number of the context's tables that <see cref="Freeze"/> left uncompacted because live descendants
+        /// held their row ids (<see cref="Context.CompactionsBlockedAtFreeze"/>).
+        /// </summary>
+        public int CompactionsBlockedAtFreeze => context.CompactionsBlockedAtFreeze;
+
+        /// <summary>
         /// Gets whether the context is disposed.
         /// </summary>
         public bool IsDisposed => context.IsDisposed;

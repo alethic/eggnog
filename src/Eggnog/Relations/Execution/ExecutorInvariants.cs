@@ -69,7 +69,9 @@ namespace Eggnog.Relations
                 Context.Report(violations, $"view coherence: the view's generation {view.Generation} is not the layers' {tables.ViewGeneration}");
 
             var floor = context.SemiNaiveFloor;
-            var clock = context.Store.ReadClock();
+            // The raw counter, not ReadClock: the check also runs once the clock has run out.
+            var store = context.Store;
+            var clock = store.Counters.Read(store.ClockCounter);
             if (floor < context.CreatedAt || floor > clock)
                 Context.Report(violations, $"watermark bounds: the semi-naive floor {floor} lies outside [{context.CreatedAt}, {clock}]");
 

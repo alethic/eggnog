@@ -134,8 +134,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A freeze does not compact a table while a live child's hides index its rows, and the child reads through the
-        /// stale slots; without descendants, a freeze compacts.
+        /// A freeze does not compact a table while a live child's hides index its rows, counts the table it left, and the
+        /// child reads through the stale slots; without descendants, a freeze compacts and counts nothing.
         /// </summary>
         [Fact]
         public void CompactionAtFreezeRespectsTheGate()
@@ -172,6 +172,8 @@ namespace Eggnog.Relations.Tests
             root.Freeze();
             Assert.Equal(30, table.StaleCount);
             Assert.True(table.CompactionsBlocked > 0);
+            Assert.Equal(1, root.CompactionsBlockedAtFreeze);
+            Assert.Equal(0, child.CompactionsBlockedAtFreeze);
             Assert.False(child.Tables!.NeedsCatchUp);
             Assert.Equal(5u, Row(child, f, ids[40])![1]);
             Assert.Equal(2u, Row(child, f, ids[0])![1]);
@@ -194,6 +196,7 @@ namespace Eggnog.Relations.Tests
 
             Assert.Equal(30, other.Schema[g]!.Root.StaleCount);
             other.Root.Freeze();
+            Assert.Equal(0, other.Root.CompactionsBlockedAtFreeze);
             Assert.Equal(0, other.Schema[g]!.Root.StaleCount);
             Assert.Equal(64, other.Schema[g]!.Root.Count);
         }

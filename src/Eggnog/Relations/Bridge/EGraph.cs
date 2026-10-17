@@ -226,8 +226,9 @@ namespace Eggnog.Relations
         /// Mints a fresh e-class id at the root. egglog's <c>fresh_id</c>.
         /// </summary>
         /// <returns>The id.</returns>
-        /// <exception cref="OverflowException">The id counter does not fit in 32 bits.</exception>
-        public Value FreshId() => new(checked((uint)db.IncrementCounter(idCounter)));
+        /// <exception cref="OverflowException">The store has run out of ids: the next one would exceed
+        /// <see cref="UnionFind.MaxId"/> (<see cref="Database.IncrementCounter"/> bounds the root's mints).</exception>
+        public Value FreshId() => new((uint)db.IncrementCounter(idCounter));
 
         /// <summary>
         /// Gets the canonical id of <paramref name="value"/> in the root's union-find; an id never unioned is its own

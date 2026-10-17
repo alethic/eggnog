@@ -122,21 +122,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages the row whose cells start at <paramref name="source"/>[<paramref name="offset"/>] for insertion. The
-        /// array form for compiled plans.
-        /// </summary>
-        /// <param name="source">The array holding the row.</param>
-        /// <param name="offset">The index of the row's first cell.</param>
-        public void StageInsert(uint[] source, int offset)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            if (offset < 0 || source.Length - offset < arity)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "The source array does not hold a whole row at the offset.");
-
-            StageInsert(new ReadOnlySpan<uint>(source, offset, arity));
-        }
-
-        /// <summary>
         /// Stages the removal of the row with key <paramref name="key"/>, if there is one when the table merges.
         /// Removals of a merge apply before its inserts. egglog's <c>stage_remove</c>.
         /// </summary>
@@ -155,21 +140,6 @@ namespace Eggnog.Relations
             var shard = shardData.Log2 == 0 ? 0 : shardData.ShardOf(TableKeyHash.Hash(key, keyCount));
             (removals[shard] ??= new ArbitraryRowBuffer(keyCount)).AddRow(key);
             dirty = true;
-        }
-
-        /// <summary>
-        /// Stages the removal of the key whose cells start at <paramref name="source"/>[<paramref name="offset"/>]. The
-        /// array form for compiled plans.
-        /// </summary>
-        /// <param name="source">The array holding the key.</param>
-        /// <param name="offset">The index of the key's first cell.</param>
-        public void StageRemove(uint[] source, int offset)
-        {
-            ArgumentNullException.ThrowIfNull(source);
-            if (offset < 0 || source.Length - offset < keyCount)
-                throw new ArgumentOutOfRangeException(nameof(offset), offset, "The source array does not hold a whole key at the offset.");
-
-            StageRemove(new ReadOnlySpan<uint>(source, offset, keyCount));
         }
 
         /// <summary>

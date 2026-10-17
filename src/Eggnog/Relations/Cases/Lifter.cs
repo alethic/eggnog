@@ -121,6 +121,7 @@ namespace Eggnog.Relations
                         // parent) exactly when no live case is left now.
                         CountLive(cases, report);
                         report.ParentContradicted = live.Count == 0;
+                        report.Memoized = true;
                         return report;
                     }
 
@@ -144,7 +145,19 @@ namespace Eggnog.Relations
                         break;
 
                     var before = parent.Version;
-                    writes.ApplyTo(parent);
+                    try
+                    {
+                        writes.ApplyTo(parent);
+                    }
+                    catch
+                    {
+                        // Staging failed part-way (a lifted term that ran out of ids): the round merges nothing. The
+                        // parent was brought up to date as the round began, so every host write staged in it is the
+                        // round's.
+                        parent.DropHostWrites();
+                        throw;
+                    }
+
                     writes.Clear();
                     parent.FlushUpdates();
                     report.Rounds++;

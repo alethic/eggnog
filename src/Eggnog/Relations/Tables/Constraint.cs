@@ -119,7 +119,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the row whose first cell is <paramref name="data"/>[<paramref name="offset"/>] satisfies the
-        /// constraint. The array form of <see cref="Evaluate(ReadOnlySpan{uint})"/> for compiled plans. O(1).
+        /// constraint. The array form of <see cref="Evaluate(ReadOnlySpan{uint})"/>, for a row read in place from row
+        /// storage (<see cref="LiveConstraintFilter"/>). O(1).
         /// </summary>
         /// <param name="data">The array holding the row.</param>
         /// <param name="offset">The index of the row's first cell.</param>
