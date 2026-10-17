@@ -38,12 +38,15 @@ each with what would reopen it.
 - **Shrinking the prober.** Moving `ProberPiece.View` and `Prober.Rest` out of line, back to 48 B, touches the kernels
   `campaign/basicmath-port` changes. It lands only if it recovers at least 3%, and more than twice the A/A spread, on
   `BasicMath` in the parallel configurations.
-- **Idle local rules.** A query allocated about 1.5 KB per idle local rule per iteration. The fix on
-  `campaign/idle-rule-fix` takes a query at 100 idle local rules from 165,214 B to 31,902 B, and lands after the root
-  gate ([decisions](engine/decisions.md), row 19).
-- **Demand-indexed local rules.** After the idle-rule fix, a query child under a frozen scope is timed at 0, 100 and
-  1,000 local rules. They are built only if 100 idle local rules add more than 25% to a query's own time at 0 rules, at
-  p50 or p99.
+- **Idle local rules.** A query allocated about 1.5 KB per idle local rule per iteration. The idle-rule allocation
+  commit takes a query child under a frozen container with 100 idle local rules from about 165 KB to about 53 KB (Debug,
+  net10.0), and lands after [its narrowed comparison against
+  `main`](../src/Eggnog.Benchmarks/README.md#the-idle-rule-comparison). The cache commit on `idle-rule-cache` takes it
+  to about 32 KB, and is decided with the query-child figures or with "Demand-indexed local rules". Departures from
+  egglog: [decisions](engine/decisions.md), row 19.
+- **Demand-indexed local rules.** After the idle-rule allocation commit, a query child under a frozen scope is timed
+  at 0, 100 and 1,000 local rules. They are built only if 100 idle local rules add more than 25% to a query's own time
+  at 0 rules, at p50 or p99.
 - **Write allocation.** Pooled staging arrays, a growth hint and a sampled index reserve on `campaign/write-alloc` cut
   `ParallelInsert`'s bytes by 32-44%, and the bridge `math` and `ac` by 12% and 8% ([decisions](engine/decisions.md),
   row 19).
@@ -80,12 +83,16 @@ owner schedules, and the benchmark README lays out what each night times and wha
 differ by more than 1%, or whose spread is unknown, is dropped; a case is decided if at least two rounds remain and all
 of them fall on the same side of the gate; otherwise it is inconclusive, up to four rounds, then reported and ungated.
 
-- **Root gates.** Each change to the engine's root paths keeps the root benchmark set (benchmark README, "The root
-  benchmark set") within 2% of `3a6e0b7`, from before colored contexts. The three campaign branches, and any other
-  change to the root paths, land only after it.
+- **Root gates.** A change to the engine's root paths is gated as a candidate: the candidate on `main` against `main`,
+  within 2%, on the root benchmark set (benchmark README, "The root benchmark set") or on the narrower set its own item
+  names. The three campaign candidates (the idle-rule allocation commit, `campaign/basicmath-port` and
+  `campaign/write-alloc`), and any other change to the root paths, land only after their gate. The root set against
+  `3a6e0b7`, from before colored contexts, is the cumulative comparison only. It gates no candidate: `main` is already
+  slower than `3a6e0b7` on `BasicMath` ("The root `BasicMath` regression"), so every candidate would fail it.
 - **The cumulative comparison.** One comparison of `3a6e0b7` against `main` replaces the per-stage gates of the
-  colored-contexts work, and it also times the bound check on root id mints. A confirmed failure becomes a roadmap item;
-  it is bisected over the engine-changing commits only if the owner schedules it.
+  colored-contexts work, and it also times the bound check on root id mints. It records where `main` stands. A
+  confirmed failure becomes a roadmap item; it is bisected over the engine-changing commits only if the owner
+  schedules it.
 - **The bridge on a store-backed root.** `math` and `ac` within 2% of `2fd4a18`; allocation-only dry runs moved little
   (`math` 9.80 GB to 9.61 GB, `ac` 15.47 GB to 15.57 GB). The run at `673495d` against `main` is a record, not a gate.
 - **Extraction through the context API.** `ContextExtractionBenchmarks`' `RootContext` within 2% of its `RootApi` at
