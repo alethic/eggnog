@@ -166,7 +166,8 @@ benchmarks are in `src/Eggnog.Benchmarks` (see [its README](src/Eggnog.Benchmark
 `src/Eggnog.AotCheck`, a small app that runs this README's examples, with NativeAOT, and fails on any trimming or AOT
 warning. Clone with
 `--recurse-submodules` to get egglog's sources in `ext/egglog`, which the engine's comments cite and its benchmark
-comparisons build.
+comparisons build. The submodule holds egglog 3.0.0; the engine follows commit `5e655cae`, the earlier pin, until the
+items in [`docs/egglog-3.0.0-todo.md`](docs/egglog-3.0.0-todo.md) are evaluated.
 
 ## Credits
 

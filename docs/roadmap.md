@@ -68,6 +68,9 @@ each with what would reopen it.
 - **Tie-breaks by code point.** Extraction tie-breaks compare strings by UTF-16 code unit, where Rust compares code
   points; they differ only when a supplementary character meets U+E000-U+FFFF. Code-point order follows when a test or a
   user needs it.
+- **egglog 3.0.0.** The submodule holds egglog 3.0.0, but the engine still follows `5e655cae`, the earlier pin. The
+  changes between them that bear on Eggnog are listed in [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md), with those
+  that change behaviour the engine follows marked. The engine follows 3.0.0 once those are settled.
 
 ## Benchmarks and timed gates
 

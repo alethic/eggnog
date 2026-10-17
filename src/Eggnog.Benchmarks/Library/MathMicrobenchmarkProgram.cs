@@ -19,7 +19,7 @@ namespace Eggnog.Benchmarks.Library
     /// </para>
     /// <para>
     /// The expected sizes are what <c>egglog -j 1 tests/math-microbenchmark.egg</c> prints, built with
-    /// <c>cargo +1.91.0 build --release</c> from egglog at the commit in <c>ext/egglog</c>; <c>-j 8</c> prints the same.
+    /// <c>cargo +1.91.0 build --release</c> from egglog at commit <c>5e655cae</c>; <c>-j 8</c> prints the same.
     /// egglog's rewrite <c>(rewrite lhs rhs)</c> is <see cref="RuleBuilder.Rewrite"/>: a match of the left side
     /// unions its class with the right side's. The run makes all eleven passes; the last still changes the graph.
     /// </para>
