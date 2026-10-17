@@ -26,8 +26,9 @@ namespace Eggnog.Relations
         /// <param name="constraints">The constraints.</param>
         /// <param name="fast">Receives the constraints the subset answers.</param>
         /// <param name="slow">Receives the others.</param>
+        /// <param name="scratch">Working buffers the evaluation may use instead of allocating, or <c>null</c>.</param>
         /// <returns>The rows, which the caller owns (they may include tombstones and rows the view hides).</returns>
-        LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow);
+        LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, HeaderScratch? scratch);
 
     }
 

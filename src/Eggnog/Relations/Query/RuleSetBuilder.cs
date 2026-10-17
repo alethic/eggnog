@@ -35,6 +35,12 @@ namespace Eggnog.Relations
         readonly ContextView view;
         readonly IdVec<RuleId, RulePlan> rules = new();
         readonly DenseIdMap<ActionId, ActionInfo> actions = new();
+
+        /// <summary>
+        /// The buffers every header evaluation of this builder uses, so a rule proved empty allocates nothing.
+        /// </summary>
+        readonly HeaderScratch scratch = new();
+
         object? open;
         bool built;
 
@@ -118,7 +124,10 @@ namespace Eggnog.Relations
         /// is how a semi-naive variant whose focus atom has no new rows is skipped.
         /// </para>
         /// <para>
-        /// O(headers) constraint evaluations, typically binary searches on a sorted timestamp column; no planning.
+        /// O(headers) constraint evaluations, typically binary searches on a sorted timestamp column; no planning. The
+        /// headers are evaluated into the builder's scratch (<see cref="HeaderScratch"/>), so a rule proved empty allocates
+        /// nothing once the scratch has held as many headers, unless the cached plan has extra constraints of its own to
+        /// combine with <paramref name="extraConstraints"/>.
         /// </para>
         /// <para>
         /// Id constants: the rule runs K, the canonical form of each of its Id constants in this database's context
@@ -142,7 +151,10 @@ namespace Eggnog.Relations
             ThrowIfBuilt();
             open = null;
 
-            var extras = CombineExtras(extraConstraints, cached.ExtraConstraints);
+            // The constraints are evaluated from the caller's span when the cached plan adds none, and the rule's own
+            // array is made only once it is known to be nonempty.
+            var combined = cached.ExtraConstraints.Length == 0 ? null : CombineExtras(extraConstraints, cached.ExtraConstraints);
+            ReadOnlySpan<(AtomId Atom, Constraint Constraint)> evaluated = combined is null ? extraConstraints : combined;
             canonical ??= CanonicalConstants.Compute(view, cached.IdConstants, cached.Actions.IdConstants, cached.WrittenConstants);
             var (template, program) = cached.GetVariantFor(canonical);
 
@@ -150,9 +162,11 @@ namespace Eggnog.Relations
             var action = actions.NextId;
             PinViews();
             var evaluator = view;
-            var instance = template.InstantiateLayered(ref evaluator, extras, action);
+            var instance = template.InstantiateLayered(ref evaluator, evaluated, action, scratch);
             if (instance is null)
                 return null;
+
+            var extras = combined ?? (extraConstraints.IsEmpty ? cached.ExtraConstraints : extraConstraints.ToArray());
 
             var pushed = actions.Push(program);
             Debug.Assert(pushed == action, "the peeked action id must be the one pushed");
@@ -260,7 +274,7 @@ namespace Eggnog.Relations
 
             PinViews();
             var evaluator = view;
-            var instance = template.InstantiateLayered(ref evaluator, default, action);
+            var instance = template.InstantiateLayered(ref evaluator, default, action, scratch);
 
             var pushed = actions.Push(program);
             Debug.Assert(pushed == action, "the peeked action id must be the one pushed");
@@ -283,7 +297,7 @@ namespace Eggnog.Relations
         {
             PinViews();
             var evaluator = view;
-            return cached.Plan.InstantiateLayered(ref evaluator, extraConstraints, action);
+            return cached.Plan.InstantiateLayered(ref evaluator, extraConstraints, action, scratch);
         }
 
         /// <summary>
