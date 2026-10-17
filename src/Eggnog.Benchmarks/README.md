@@ -705,6 +705,18 @@ src\Eggnog.Benchmarks\bin\Release\net10.0\Eggnog.Benchmarks.exe --compare dry --
 `main` match: the 129 root cases at every build, and the two bridge cases from `673495d` on; `main` adds the nine cases
 of `WritesBenchmarks.Shards = 16`.
 
+### Comparing on a CI runner
+
+`compare-builds.ps1` runs the rounds of one comparison, interleaved as above, and then `--compare`. It takes the two
+builds' `Eggnog.Benchmarks.dll`, the classes as JSON (each run's name and its arguments), the campaign directory and the
+number of rounds; `-Job dry` checks the procedure without timing anything. The `benchmarks` workflow
+(`.github/workflows/benchmarks.yml`) runs it on one GitHub runner: started by hand with the baseline, the candidate, the
+classes and the rounds, or by pushing a branch under `benchmark/`, which compares that branch with `main` on the
+idle-rule set (`RuleSetRunBenchmarks`, `BridgeMathBenchmarks`, `LibraryRunOverheadBenchmarks`, and
+`QueryScopeBenchmarks` at `Atoms` 2 and `Tables` 10). It builds both on the runner, writes the comparison to the job's
+summary and uploads the campaign. A shared runner is noisier than an idle machine and its hardware can change between
+runs; the comparison's per-round spreads show how far a result can be trusted.
+
 ### Selecting cases by parameter
 
 BenchmarkDotNet's `--filter` also matches a case's full name with its parameters, as
