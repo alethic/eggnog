@@ -8,7 +8,8 @@ namespace Eggnog.Relations
     /// egglog's <c>process_constraints</c> (core-relations/src/free_join/mod.rs:718-761) on one table entry: the split of
     /// an atom's constraints into fast and slow ones and the rows matching the fast ones.
     /// <see cref="Database.ProcessConstraints(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>
-    /// runs it on a database's own entry, and a layered context's view (<see cref="ContextView.Evaluate"/>) runs it once
+    /// runs it on a database's own entry, and a layered context's view
+    /// (<see cref="ContextView.Evaluate(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint})"/>) runs it once
     /// per present layer, each over that layer's own <see cref="TableInfo"/> and cached indexes.
     /// </summary>
     /// <remarks>

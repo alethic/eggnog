@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -123,7 +124,7 @@ namespace Eggnog.Relations
             {
                 if (2 * (progressCount + 1) > keys.Length)
                 {
-                    GrowProgress();
+                    GrowProgress(Math.Max(MinProgressCapacity, keys.Length * 2));
                     keys = progressKeys;
                 }
 
@@ -137,10 +138,14 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Commits the progress a run staged, in listing order, so a rule listed twice keeps its last staging.
-        /// Domain thread only; O(rules run).
+        /// Domain thread only; O(rules run). A context's first commit sizes the map for every listing at once, so a
+        /// transient child that runs many rules grows it once, to the capacity doubling would reach.
         /// </summary>
         void Commit(ReadOnlySpan<EGraphRuleId> rules, RuleProgress[] staged)
         {
+            if (progressCount == 0 && 2 * rules.Length > progressKeys.Length)
+                GrowProgress((int)BitOperations.RoundUpToPowerOf2((uint)Math.Max(MinProgressCapacity, 2 * rules.Length)));
+
             for (var i = 0; i < rules.Length; i++)
                 SetProgress(rules[i], staged[i]);
         }
@@ -189,14 +194,14 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Doubles the progress map (to <see cref="MinProgressCapacity"/> from empty) and rehashes it; the new arrays are
-        /// published together, keys last.
+        /// Grows the progress map to <paramref name="capacity"/> slots, a power of two larger than it has (doubling, or
+        /// <see cref="MinProgressCapacity"/> from empty), and rehashes it; the new arrays are published together, keys
+        /// last.
         /// </summary>
-        void GrowProgress()
+        void GrowProgress(int capacity)
         {
             var oldKeys = progressKeys;
             var oldValues = progressValues;
-            var capacity = Math.Max(MinProgressCapacity, oldKeys.Length * 2);
             var keys = new int[capacity];
             var values = new RuleProgress[capacity];
             for (var i = 0; i < oldKeys.Length; i++)

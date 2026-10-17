@@ -38,8 +38,9 @@ namespace Eggnog.Relations
         /// <param name="constraints">The constraints.</param>
         /// <param name="fast">Receives the constraints the subset answers.</param>
         /// <param name="slow">Receives the others.</param>
+        /// <param name="scratch">Unused: one layer needs no working buffers.</param>
         /// <returns>The rows, in layer 0, which the caller owns.</returns>
-        public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow) =>
+        public LayeredSubset Evaluate(TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, HeaderScratch? scratch) =>
             LayeredSubset.Single(0, inner.Evaluate(table, constraints, fast, slow));
 
     }

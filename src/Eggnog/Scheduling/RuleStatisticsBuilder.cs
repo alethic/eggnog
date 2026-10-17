@@ -4,9 +4,11 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Accumulates one rule's <see cref="RuleStatistics"/> over a run.
+    /// Accumulates one rule's <see cref="RuleStatistics"/> over a run. A mutable struct, held in place as a value of
+    /// <see cref="RunStatistics.Rules"/> and updated through a reference to it, so a run allocates no object per rule
+    /// until its report is built; <c>default</c> is a rule that has not matched.
     /// </summary>
-    internal sealed class RuleStatisticsBuilder
+    internal struct RuleStatisticsBuilder
     {
 
         long matches;
@@ -36,7 +38,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns>The statistics.</returns>
-        public RuleStatistics Build(Rule rule) => new(rule, matches, searchTime, iterationsWithMatches, plan);
+        public readonly RuleStatistics Build(Rule rule) => new(rule, matches, searchTime, iterationsWithMatches, plan);
 
     }
 
