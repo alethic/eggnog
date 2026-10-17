@@ -20,6 +20,13 @@ library through its public API (`Library/`, namespace `Eggnog.Benchmarks.Library
 Benchmarks with a result to check check it, against a reference model or against known counts, so a broken engine
 fails the run instead of producing a number.
 
+The Rust side of every comparison is egglog at commit `5e655cae`, the version the engine follows, and the commands,
+counts and sizes below are for it. The submodule `ext/egglog` holds egglog 3.0.0, so check out that commit in it
+before building the Rust (`git -C ext/egglog checkout 5e655cae`), and the submodule's own commit afterwards
+(`git submodule update ext/egglog`). egglog 3.0.0 replaced Rayon's global pool with a thread pool per e-graph: the
+bridge examples' `EGraph::default()` runs on one thread, and `RAYON_NUM_THREADS` no longer sets their thread count
+([`docs/egglog-3.0.0-todo.md`](../../docs/egglog-3.0.0-todo.md)).
+
 Besides running benchmarks, the app has modes that count allocations by type
 ([The allocation probe](#the-allocation-probe)) and compare two or more builds from their exported reports under the
 measurement campaign's rules ([Comparing two builds](#comparing-two-builds)).
@@ -468,7 +475,7 @@ and 8 is every logical processor of the four-core, eight-thread campaign machine
 Each invocation checks its result: eleven passes without saturating, and every table at the size egglog's
 `(print-size)` prints: `Add` 641,743, `Const` 5, `Cos` 1, `Diff` 13,504, `Div` 3, `Integral` 32,434, `Ln` 1, `Mul`
 345,075, `Pow` 2, `Sin` 1, `Sqrt` 1, `Sub` 15,123, `Var` 3. These are the sizes `egglog -j 1` and `egglog -j 8` print
-for the file at the commit in `ext/egglog`, built with `cargo +1.91.0 build --release --bin egglog`.
+for the file at commit `5e655cae`, built with `cargo +1.91.0 build --release --bin egglog`.
 
 The app also runs the program the way the egglog command line runs the file, printing the sizes as `(print-size)`
 does, the passes, and `Total time: {:?}`, timed from before the graph's creation to after the sizes are read:

@@ -27,7 +27,7 @@ namespace Eggnog.Relations.Benchmarks
     /// </para>
     /// <para>
     /// With <see cref="N"/> = 12 egglog's run never saturates and ends with the sizes in <see cref="ExpectedSizes"/>
-    /// (printed by <c>math.exe</c>, built from egglog at the commit in <c>ext/egglog</c>); <see cref="Verify"/> checks
+    /// (printed by <c>math.exe</c>, built from egglog at commit <c>5e655cae</c>); <see cref="Verify"/> checks
     /// them. The run builds about 16 million rows (11.4 million in <c>add</c>), so one program takes seconds and
     /// gigabytes.
     /// </para>

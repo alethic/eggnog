@@ -15,10 +15,11 @@ namespace Eggnog.Relations.Tests
     /// <remarks>
     /// <para>
     /// The expected values come from egglog itself: the <c>egglog</c> CLI (egglog 2.0.0) built from a copy of
-    /// <c>ext/egglog</c> with <c>cargo +1.91.0 build --release --bin egglog</c>. Each test names the file and the
-    /// command. The instrumented copies add <c>(print-size)</c> around pushes and pops, and iteration counts are the
-    /// <c>Finished ruleset</c> lines that <c>RUST_LOG=debug</c> prints once per iteration. Ids are not compared (a
-    /// child mints from its own blocks, egglog from one counter), only sizes, iteration counts and checks.
+    /// <c>ext/egglog</c> at commit <c>5e655cae</c> with <c>cargo +1.91.0 build --release --bin egglog</c>. Each test
+    /// names the file and the command. The instrumented copies add <c>(print-size)</c> around pushes and pops, and
+    /// iteration counts are the <c>Finished ruleset</c> lines that <c>RUST_LOG=debug</c> prints once per iteration.
+    /// Ids are not compared (a child mints from its own blocks, egglog from one counter), only sizes, iteration counts
+    /// and checks.
     /// </para>
     /// <para>
     /// The other push/pop programs of <c>ext/egglog/tests</c> are not translated. <c>container-rebuild.egg</c>,
