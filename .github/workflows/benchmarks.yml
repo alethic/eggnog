@@ -1,0 +1,109 @@
+name: benchmarks
+
+# Times two builds against each other on one runner, by the method of "Comparing two builds" in
+# src/Eggnog.Benchmarks/README.md: interleaved runs, rounds, one class per process. A shared runner is noisier than an
+# idle machine; the comparison prints each round's spread, by which a result is judged.
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: The baseline's branch, tag or commit.
+        type: string
+        default: main
+      candidate:
+        description: The candidate's branch, tag or commit; empty for the ref the workflow runs on.
+        type: string
+        default: ''
+      classes:
+        description: The classes to time, as JSON (see compare-builds.ps1); empty for the idle-rule set.
+        type: string
+        default: ''
+      rounds:
+        description: The rounds to run.
+        type: number
+        default: 2
+  # A branch under benchmark/ is compared with main on the idle-rule set as soon as it is pushed.
+  push:
+    branches:
+    - benchmark/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The narrowed set of "The idle-rule comparison" in src/Eggnog.Benchmarks/README.md.
+  IDLE_RULE_CLASSES: >-
+    {
+      "RuleSetRunBenchmarks": ["--filter", "*.RuleSetRunBenchmarks.*"],
+      "BridgeMathBenchmarks": ["--filter", "*.BridgeMathBenchmarks.*", "--warmupCount", "2", "--iterationCount", "15"],
+      "LibraryRunOverheadBenchmarks": ["--filter", "*.LibraryRunOverheadBenchmarks.*"],
+      "QueryScopeBenchmarks": ["--filter", "*.QueryScopeBenchmarks.*(Atoms: 2, Tables: 10, *"]
+    }
+
+jobs:
+  compare:
+    name: Compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+    # The script comes from the workflow's own commit, so a candidate or baseline from before it can be timed too.
+    - name: Checkout Script
+      uses: actions/checkout@v7
+      with:
+        path: tools
+        sparse-checkout: src/Eggnog.Benchmarks/compare-builds.ps1
+        sparse-checkout-cone-mode: false
+    - name: Checkout Baseline
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.baseline || 'main' }}
+        path: baseline
+    - name: Checkout Candidate
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.candidate || github.sha }}
+        path: candidate
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Record Machine
+      run: |
+        dotnet --list-runtimes
+        nproc
+        cat /proc/cpuinfo | grep 'model name' | head -1
+        git -C baseline log -1 --format='baseline %H %s'
+        git -C candidate log -1 --format='candidate %H %s'
+    - name: Build Baseline
+      run: dotnet build baseline/src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj -c Release -f net10.0 -p:ContinuousIntegrationBuild=true
+    - name: Build Candidate
+      run: dotnet build candidate/src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj -c Release -f net10.0 -p:ContinuousIntegrationBuild=true
+    - name: Compare
+      shell: pwsh
+      env:
+        CLASSES: ${{ inputs.classes }}
+        ROUNDS: ${{ inputs.rounds || 2 }}
+      run: |
+        $classes = if ($env:CLASSES) { $env:CLASSES } else { $env:IDLE_RULE_CLASSES }
+        ./tools/src/Eggnog.Benchmarks/compare-builds.ps1 `
+          -Baseline baseline/src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.dll `
+          -Candidate candidate/src/Eggnog.Benchmarks/bin/Release/net10.0/Eggnog.Benchmarks.dll `
+          -Classes $classes -Campaign campaign -Rounds ([int]$env:ROUNDS) `
+          -CompareArguments '--min-time 0us'
+    - name: Summarize
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        if [ -f campaign/compare.txt ]; then
+          { echo '## Comparison'; echo '```'; cat campaign/compare.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+    - name: Upload Campaign
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: campaign
+        path: campaign
