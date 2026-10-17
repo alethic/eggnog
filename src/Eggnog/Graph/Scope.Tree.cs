@@ -22,6 +22,7 @@ namespace Eggnog
         bool frozenWithTag;
         CompiledRule[] localCompiled = Array.Empty<CompiledRule>();
         ReadOnlyCollection<Rule> localRulesView = Array.AsReadOnly(Array.Empty<Rule>());
+        IterationRules[] iterationRules = Array.Empty<IterationRules>();
 
         /// <summary>
         /// Gets the parent scope; <c>null</c> for the root.
@@ -350,6 +351,51 @@ namespace Eggnog
         internal CompiledRule[] LocalCompiled => Volatile.Read(ref localCompiled);
 
         /// <summary>
+        /// Gets the iteration rules of <paramref name="ruleset"/> last built with this scope as the anchor (the nearest
+        /// scope with local rules) by <see cref="ScheduleExecutor.RulesFor(Ruleset, Scope)"/>, or <c>null</c>; the
+        /// reader checks that they still apply (<see cref="IterationRules.Matches"/>). The scope keeps one list per
+        /// ruleset run below it, so a schedule that alternates rulesets keeps each of theirs. Lock-free, from any thread
+        /// that runs below the scope; O(rulesets kept). The cache stays on the scope and never moves to an internal per-scope core, since
+        /// its local rules reference their scopes and would keep the scope alive from there.
+        /// </summary>
+        /// <param name="ruleset">The ruleset.</param>
+        /// <returns>The rules kept for the ruleset, or <c>null</c>.</returns>
+        internal IterationRules? CachedIterationRules(Ruleset ruleset)
+        {
+            foreach (var cached in Volatile.Read(ref iterationRules))
+                if (ReferenceEquals(cached.Ruleset, ruleset))
+                    return cached;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Keeps <paramref name="rules"/> as the iteration rules of its ruleset (<see cref="CachedIterationRules"/>), in
+        /// place of the list kept for that ruleset before. Copy-on-write with a compare-and-swap, so a thread that keeps
+        /// the list of another ruleset meanwhile loses nothing. O(rulesets kept).
+        /// </summary>
+        /// <param name="rules">The rules.</param>
+        internal void CacheIterationRules(IterationRules rules)
+        {
+            var current = Volatile.Read(ref iterationRules);
+            while (true)
+            {
+                var index = 0;
+                while (index < current.Length && ReferenceEquals(current[index].Ruleset, rules.Ruleset) == false)
+                    index++;
+
+                var next = new IterationRules[Math.Max(current.Length, index + 1)];
+                Array.Copy(current, next, current.Length);
+                next[index] = rules;
+                var seen = Interlocked.CompareExchange(ref iterationRules, next, current);
+                if (ReferenceEquals(seen, current))
+                    return;
+
+                current = seen;
+            }
+        }
+
+        /// <summary>
         /// Gets whether the mirrors of <paramref name="tag"/> in this scope are current: synced when the rows this
         /// scope's views show were as they are now, with every copy rule the tag has now. The rows are stamped with the
         /// view stamp (the change stamps of this scope and its ancestors), not <see cref="Version"/>: a write into a
@@ -483,6 +529,9 @@ namespace Eggnog
 
                 foreach (var rule in LocalCompiled)
                     rule.Variants.Free(Graph);
+
+                // No scope reads the lists any more: every scope below this one was released before it.
+                Volatile.Write(ref iterationRules, Array.Empty<IterationRules>());
 
                 try
                 {

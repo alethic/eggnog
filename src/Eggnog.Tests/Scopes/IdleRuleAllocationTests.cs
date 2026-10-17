@@ -9,8 +9,9 @@ namespace Eggnog.Tests.Scopes
     /// <summary>
     /// What an idle local rule costs a query: the transient child of a frozen container runs every local rule, and a
     /// rule whose body reads nothing new must cost little per iteration. Its semi-naive variants are dropped on their
-    /// first header without allocating, and the run's bookkeeping for it is an entry in the run's statistics, in the
-    /// child's progress and in the iteration's rule list. The workload is <see cref="IdleRuleWorkload"/>.
+    /// first header without allocating, and the run's bookkeeping for it is an entry in the run's statistics and in
+    /// the child's progress; the iteration's rule list is the container's, shared. The workload is
+    /// <see cref="IdleRuleWorkload"/>.
     /// </summary>
     [Collection(Relations.Tests.AllocationProbeCollection.Name)]
     public sealed class IdleRuleAllocationTests
@@ -19,12 +20,14 @@ namespace Eggnog.Tests.Scopes
         /// <summary>
         /// The bound on the bytes a query allocates per idle local rule per iteration, above a query without rules. Each
         /// rule has two body atoms. The run's statistics (an entry and a <see cref="RuleStatistics"/> in the report) and
-        /// the child's progress map take about 210 bytes, and the iteration's rule list, merged and lowered afresh per
-        /// iteration, about 220 more, so the bound leaves room for runtime differences and fails when a header
-        /// instantiation allocates before it finds its first header empty (about 900 bytes more). A progress map grown
-        /// by doubling adds less than the margin; its own test is <see cref="AQueryChildSizesItsProgressMapOnce"/>.
+        /// the child's progress map take about 210 bytes, so the bound leaves room for runtime differences and fails when
+        /// a header instantiation allocates before it finds its first header empty (about 900 bytes more), or when the
+        /// iteration's rule list is merged and lowered afresh per iteration instead of shared (about 220 bytes more). A
+        /// progress map grown by doubling adds less than the margin; its own test is
+        /// <see cref="AQueryChildSizesItsProgressMapOnce"/>, and the shared list's are in
+        /// <see cref="Scheduling.IterationRulesTests"/>.
         /// </summary>
-        const double BytesPerIdleRule = 600;
+        const double BytesPerIdleRule = 400;
 
         /// <summary>
         /// With <paramref name="layered"/>, the tables the rules read lie in two layers of the query (the root's and the

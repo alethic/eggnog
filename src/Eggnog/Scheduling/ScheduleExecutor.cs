@@ -92,26 +92,27 @@ namespace Eggnog
         /// Gets the rules of an iteration in <paramref name="scope"/>: the rulesets' global rules (snapshots, in definition
         /// order), then the local rules belonging to those rulesets of each scope from the root down to
         /// <paramref name="scope"/>, deduplicated by reference. Mirror copy rules are never among them; they run only in
-        /// syncs. Recomputed for every iteration, so rules defined meanwhile, on any thread, join the next one. A single
-        /// ruleset on a path without local rules returns its snapshot, allocation-free.
+        /// syncs. Checked every iteration, so rules defined meanwhile, on any thread, join the next one.
         /// </summary>
         /// <remarks>
-        /// The local rules are read from the nearest scope with local rules up, since the scopes below it have none.
-        /// O(rules + depth).
+        /// <para>
+        /// The local rules are read from the nearest scope with local rules up (the anchor), since the scopes below it
+        /// have none. A single ruleset takes <see cref="RulesFor(Ruleset, Scope)"/>, which allocates nothing in the
+        /// common cases. Several rulesets in one step are merged afresh, at every iteration of the step.
+        /// </para>
+        /// <para>
+        /// O(depth + rulesets kept) for a single ruleset when cached, else O(rules + depth).
+        /// </para>
         /// </remarks>
         /// <param name="rulesets">The rulesets of the step.</param>
         /// <param name="scope">The scope the iteration runs in.</param>
         /// <returns>The rules; callers must not modify the list.</returns>
         public static IReadOnlyList<CompiledRule> RulesFor(IReadOnlyList<Ruleset> rulesets, Scope scope)
         {
-            Scope? anchor = null;
-            for (var up = scope; up is not null && anchor is null; up = up.Parent)
-                if (up.LocalCompiled.Length > 0)
-                    anchor = up;
+            if (rulesets.Count == 1)
+                return RulesFor(rulesets[0], scope);
 
-            if (rulesets.Count == 1 && anchor is null)
-                return rulesets[0].Compiled;
-
+            var anchor = AnchorOf(scope);
             var seen = new HashSet<CompiledRule>(ReferenceEqualityComparer.Instance);
             var rules = new List<CompiledRule>();
             for (var r = 0; r < rulesets.Count; r++)
@@ -140,6 +141,56 @@ namespace Eggnog
             }
 
             return rules;
+        }
+
+        /// <summary>
+        /// Gets the rules of an iteration of one ruleset in <paramref name="scope"/>: its global rules (a snapshot, in
+        /// definition order), then its local rules of each scope from the root down to <paramref name="scope"/>. Mirror
+        /// copy rules are never among them. Checked every iteration, so rules defined meanwhile, on any thread, join the
+        /// next one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Allocation-free in the common cases: on a path without local rules it returns the ruleset's snapshot, and
+        /// below the nearest scope with local rules up (the anchor) it returns the <see cref="IterationRules"/> the
+        /// anchor keeps for the ruleset, built again only after a rule is defined in the ruleset or on the path. The
+        /// anchor keeps one list per ruleset, so a schedule that alternates rulesets, such as
+        /// <c>Saturate(Horn, Lattice, Rewrite)</c>, builds each list once, not at every switch. <see cref="Scope.Run"/>
+        /// checks the tags of a schedule's rules through this method too, one ruleset at a time.
+        /// </para>
+        /// <para>
+        /// O(depth + rulesets kept) when cached, else O(rules + depth).
+        /// </para>
+        /// </remarks>
+        /// <param name="ruleset">The ruleset.</param>
+        /// <param name="scope">The scope the iteration runs in.</param>
+        /// <returns>The rules; callers must not modify the list.</returns>
+        public static IReadOnlyList<CompiledRule> RulesFor(Ruleset ruleset, Scope scope)
+        {
+            var anchor = AnchorOf(scope);
+            if (anchor is null)
+                return ruleset.Compiled;
+
+            if (anchor.CachedIterationRules(ruleset) is { } cached && cached.Matches(ruleset, anchor))
+                return cached;
+
+            var built = IterationRules.Build(ruleset, anchor);
+            anchor.CacheIterationRules(built);
+            return built;
+        }
+
+        /// <summary>
+        /// Gets the nearest scope with local rules from <paramref name="scope"/> up, or <c>null</c> if the path has none.
+        /// </summary>
+        /// <param name="scope">The scope.</param>
+        /// <returns>The scope, or <c>null</c>.</returns>
+        static Scope? AnchorOf(Scope scope)
+        {
+            for (var up = scope; up is not null; up = up.Parent)
+                if (up.LocalCompiled.Length > 0)
+                    return up;
+
+            return null;
         }
 
         /// <summary>
@@ -191,10 +242,19 @@ namespace Eggnog
             engine.EnsureClean();
             SyncMirrors(scope, rules);
             var started = Stopwatch.GetTimestamp();
-            var lowered = engine.PrepareRules(rules, Options.SemiNaive);
-            var ids = new Relations.EGraphRuleId[lowered.Length];
-            for (var i = 0; i < ids.Length; i++)
-                ids[i] = lowered[i].Id;
+            LoweredRule[] lowered;
+            Relations.EGraphRuleId[] ids;
+            if (rules is IterationRules cached)
+            {
+                (lowered, ids) = cached.Lower(scope, Options.SemiNaive);
+            }
+            else
+            {
+                lowered = engine.PrepareRules(rules, Options.SemiNaive);
+                ids = new Relations.EGraphRuleId[lowered.Length];
+                for (var i = 0; i < ids.Length; i++)
+                    ids[i] = lowered[i].Id;
+            }
 
             scope.Runtime.TakeFailure();
             EngineIteration iteration;
