@@ -91,10 +91,13 @@ namespace Eggnog
                         throw new ArgumentException($"An until condition cannot be checked in scope '{Path}': {error}: {fact}.", nameof(schedule));
 
                 // Every tag a reachable rule or split rule reads must resolve from here. A case only adds
-                // its own tag below this scope, so what resolves here resolves in every case of the run.
-                foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(rulesets), this))
-                    foreach (var tag in rule.Program.ReadScopes)
-                        ScopeResolver.Resolve(this, tag, $"Rule '{rule.Rule.Name}'");
+                // its own tag below this scope, so what resolves here resolves in every case of the run. Each rule
+                // belongs to one ruleset, so a ruleset at a time reaches every rule once, through the lists the
+                // iterations use, without merging them.
+                foreach (var ruleset in rulesets)
+                    foreach (var rule in ScheduleExecutor.RulesFor(ruleset, this))
+                        foreach (var tag in rule.Program.ReadScopes)
+                            ScopeResolver.Resolve(this, tag, $"Rule '{rule.Rule.Name}'");
 
                 foreach (var split in splits)
                     foreach (var tag in split.Program.Matcher.ReadScopes)
