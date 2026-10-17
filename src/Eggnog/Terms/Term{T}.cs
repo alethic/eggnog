@@ -46,7 +46,8 @@ namespace Eggnog
 
         /// <summary>
         /// A constant; for a sort, a class constant, checked where it is used: a class is usable only in the scope that
-        /// returned it and that scope's descendants, until that scope is disposed.
+        /// returned it and that scope's descendants. A disposed scope refuses new calls itself; its classes stay usable in
+        /// its live descendants.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>

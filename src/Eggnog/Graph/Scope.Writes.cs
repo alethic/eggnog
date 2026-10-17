@@ -12,7 +12,8 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The term.</param>
-        /// <returns>The class, usable in this scope and its descendants until this scope is disposed.</returns>
+        /// <returns>The class, usable in this scope and its descendants; once this scope is disposed it refuses new calls
+        /// itself, and the class stays usable in its live descendants.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A subterm reads a function (<c>Get</c> it first), computes, is a variable, or
         /// holds a class value this scope cannot use.</exception>

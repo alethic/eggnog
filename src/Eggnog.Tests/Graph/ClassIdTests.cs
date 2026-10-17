@@ -9,8 +9,8 @@ namespace Eggnog.Tests.Graph
 
     /// <summary>
     /// Class values carry the scope that returned them, their origin, and are refused where that origin is not usable:
-    /// <c>default(ClassId)</c>, another graph's class, a value of a batch that did not commit, a class of a sibling or
-    /// of a disposed scope, and a class a rule holds from a scope it cannot run in.
+    /// <c>default(ClassId)</c>, another graph's class, a value of a batch that did not commit, a class of a sibling, a
+    /// class of a disposed scope used outside its subtree, and a class a rule holds from a scope it cannot run in.
     /// </summary>
     public sealed class ClassIdTests
     {
@@ -196,8 +196,8 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// A class a case returned dies with the case, which the run that made it disposes when it ends; the same class
-        /// obtained from the scope itself stays usable.
+        /// A class a case returned is refused as disposed outside the case's subtree once the run that made the case
+        /// disposes it when it ends; the same class obtained from the scope itself stays usable.
         /// </summary>
         [Fact]
         public void ACasesClassIsRefusedAfterTheRunThatMadeTheCase()

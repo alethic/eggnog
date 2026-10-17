@@ -6,10 +6,10 @@ namespace Eggnog
 
     /// <summary>
     /// An e-class identifier, as a scope returned it. Only the library makes one: <c>default(ClassId)</c> names no
-    /// class and every scope rejects it. A value is usable in the scope that returned it and that scope's descendants,
-    /// until that scope is disposed. Two values are equal when they belong to one graph and hold the same identifier;
-    /// members of one class may differ, so compare classes with <see cref="Scope.AreEqual{TSort}(TSort, TSort)"/>.
-    /// Renders as <c>#17</c>.
+    /// class and every scope rejects it. A value is usable in the scope that returned it and that scope's descendants;
+    /// once that scope is disposed it refuses new calls itself, and the value stays usable in its live descendants.
+    /// Two values are equal when they belong to one graph and hold the same identifier; members of one class may
+    /// differ, so compare classes with <see cref="Scope.AreEqual{TSort}(TSort, TSort)"/>. Renders as <c>#17</c>.
     /// </summary>
     public readonly struct ClassId : IEquatable<ClassId>
     {

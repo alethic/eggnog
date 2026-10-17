@@ -37,7 +37,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Contains($"which is not '{t.Root.Path}' or an ancestor of it", Assert.Throws<ArgumentException>(() => t.Root.Find(whole)).Message);
             Assert.Contains($"which is not '{two.Path}' or an ancestor of it", Assert.Throws<ArgumentException>(() => two.Find(part)).Message);
 
-            // Dead once its scope is disposed.
+            // Refused as disposed outside its subtree once its scope is disposed.
             one.Dispose();
             Assert.Contains("which is disposed", Assert.Throws<ArgumentException>(() => t.Root.CreateChild().Find(whole)).Message);
         }

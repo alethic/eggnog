@@ -7,12 +7,11 @@ namespace Eggnog
     /// a class value checks it (<see cref="ClassChecks.Require"/>).
     /// </summary>
     /// <remarks>
-    /// A scope's origin lives as long as the scope and is marked <see cref="Disposed"/> when the scope is disposed, which
-    /// kills every value it returned: a call on that scope already in progress, which holds it until it returns, does
-    /// not refuse them because of the disposal, in that scope or in its run's cases, and it completes or is refused with
-    /// <see cref="System.ObjectDisposedException"/>. A batch's origin is valid within its batch, and afterwards only once
-    /// <see cref="Committed"/>. A scope's origin's parent is its parent scope's origin. The flags only ever go from false
-    /// to true.
+    /// A scope's origin lives as long as the scope and is marked <see cref="Disposed"/> when the scope is disposed. Its
+    /// values stay usable in the scope's calls already in progress and in its live descendants, which keep it from being
+    /// released (<see cref="ClassChecks.Require"/>); the flag only chooses the message of a refusal. A batch's origin is
+    /// valid within its batch, and afterwards only once <see cref="Committed"/>. A scope's origin's parent is its parent
+    /// scope's origin. The flags only ever go from false to true.
     /// </remarks>
     internal sealed class ScopeOrigin
     {
@@ -66,8 +65,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets or sets, for a scope, whether it was disposed: its values are dead from then on, except that a call on the
-        /// scope already in progress does not refuse them because of it (see <see cref="ClassChecks.Check"/>).
+        /// Gets or sets, for a scope, whether it was disposed. The flag does not change where the scope's values pass (the
+        /// scope and its descendants, <see cref="ClassChecks.Check"/>); it only makes a refused value of the scope report
+        /// that the scope is disposed.
         /// </summary>
         public bool Disposed
         {

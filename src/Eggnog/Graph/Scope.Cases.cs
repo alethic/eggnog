@@ -83,9 +83,8 @@ namespace Eggnog
 
         /// <summary>
         /// Ends the engine set's ownership of this case and releases it as <see cref="Dispose"/> would: the case is
-        /// marked disposed, its class values die, and once nothing defers it its local rules are freed, its context
-        /// disposed (a no-op when the engine set disposed it already) and it leaves its parent's children. Never throws;
-        /// idempotent.
+        /// marked disposed, and once nothing defers it its local rules are freed, its context disposed (a no-op when the
+        /// engine set disposed it already) and it leaves its parent's children. Never throws; idempotent.
         /// </summary>
         internal void ReleaseCase()
         {
