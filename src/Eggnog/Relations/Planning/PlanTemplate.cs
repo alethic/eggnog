@@ -83,8 +83,9 @@ namespace Eggnog.Relations
         /// Evaluates the headers for one run: egglog's <c>get_rule_with_extra_constraints</c>
         /// (core-relations/src/query.rs:191-243). Each extra constraint becomes a header of its own, followed by each of
         /// the template's headers re-evaluated against the current tables. Forwards to
-        /// <see cref="InstantiateLayered{TEvaluator}"/> through <see cref="SingleLayerEvaluator{TEvaluator}"/>, so every
-        /// header subset lies in layer 0 (C# cannot overload on constraints alone, hence the second name).
+        /// <see cref="InstantiateLayered{TEvaluator}"/> through <see cref="SingleLayerEvaluator{TEvaluator}"/>, with
+        /// scratch of its own, so every header subset lies in layer 0 (C# cannot overload on constraints alone, hence the
+        /// second name).
         /// </summary>
         /// <typeparam name="TEvaluator">The evaluator type; a struct type argument specializes the calls.</typeparam>
         /// <param name="evaluator">Evaluates constraints against the current tables.</param>
@@ -101,7 +102,7 @@ namespace Eggnog.Relations
             var layered = new SingleLayerEvaluator<TEvaluator>(evaluator);
             try
             {
-                return InstantiateLayered(ref layered, extraConstraints, action);
+                return InstantiateLayered(ref layered, extraConstraints, action, new HeaderScratch());
             }
             finally
             {
@@ -114,78 +115,82 @@ namespace Eggnog.Relations
         /// <c>get_rule_with_extra_constraints</c> with every header subset a <see cref="LayeredSubset"/>.
         /// A header is empty iff it is empty in every layer; the run is then skipped before an action id is taken.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Every extra constraint's atom is checked before any header is evaluated. The headers are evaluated into
+        /// <paramref name="scratch"/>, in order, and the instance's arrays are allocated only once every header has
+        /// proved nonempty: an instantiation that returns <c>null</c> (a semi-naive variant whose focus atom has no new
+        /// rows) allocates nothing, given scratch that has held as many headers before. egglog's header vector
+        /// allocates on its first push, so for a single plan whose first header is empty egglog allocates nothing
+        /// either; this departs from it only for a decomposed plan and for an empty header after the first
+        /// (<see cref="HeaderScratch"/>).
+        /// </para>
+        /// <para>
+        /// O(headers) evaluations, typically one binary search per layer of a sorted timestamp column.
+        /// </para>
+        /// </remarks>
         /// <typeparam name="TEvaluator">The evaluator type: a context's <see cref="ContextView"/>, or a wrapped
         /// single-table evaluator.</typeparam>
         /// <param name="evaluator">Evaluates constraints against the context's views of the tables.</param>
         /// <param name="extraConstraints">Additional constraints, typically semi-naive timestamp bounds.</param>
         /// <param name="action">The action id of this run.</param>
+        /// <param name="scratch">The caller's buffers; empty again when the call returns.</param>
         /// <returns>The instance, or <c>null</c> when some header selects no rows.</returns>
         /// <exception cref="ArgumentException">An extra constraint names an atom the plan does not have.</exception>
         /// <exception cref="InvalidOperationException">A constraint has no fast evaluation.</exception>
-        public PlanInstance? InstantiateLayered<TEvaluator>(ref TEvaluator evaluator, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints, ActionId action)
+        public PlanInstance? InstantiateLayered<TEvaluator>(ref TEvaluator evaluator, ReadOnlySpan<(AtomId Atom, Constraint Constraint)> extraConstraints, ActionId action, HeaderScratch scratch)
             where TEvaluator : ILayeredHeaderEvaluator
         {
-            var count = extraConstraints.Length + Headers.Length;
-            var specs = new JoinHeaderSpec[count];
-            var subsets = new LayeredSubset[count];
-            var fast = new List<Constraint>();
-            var slow = new List<Constraint>();
-            var n = 0;
-            for (var i = 0; i < extraConstraints.Length; i++)
-            {
-                var (atom, constraint) = extraConstraints[i];
-                if (Atoms.TryGetValue(atom, out var info) == false)
-                {
-                    Release(subsets, n);
+            ArgumentNullException.ThrowIfNull(scratch);
+            foreach (var (atom, _) in extraConstraints)
+                if (Atoms.TryGetValue(atom, out _) == false)
                     throw new ArgumentException($"Atom {atom} is not part of the plan.", nameof(extraConstraints));
-                }
 
-                if (TryEvaluate(ref evaluator, atom, info.Table, [constraint], fast, slow, specs, subsets, n) == false)
-                    return null;
-
-                n++;
-            }
-
-            foreach (var header in Headers)
+            scratch.BeginHeaders(extraConstraints.Length + Headers.Length);
+            try
             {
-                if (TryEvaluate(ref evaluator, header.Atom, Atoms[header.Atom].Table, header.Constraints, fast, slow, specs, subsets, n) == false)
-                    return null;
+                foreach (var (atom, constraint) in extraConstraints)
+                    if (TryEvaluate(ref evaluator, atom, Atoms[atom].Table, new ReadOnlySpan<Constraint>(in constraint), scratch) == false)
+                        return null;
 
-                n++;
+                foreach (var header in Headers)
+                    if (TryEvaluate(ref evaluator, header.Atom, Atoms[header.Atom].Table, header.Constraints, scratch) == false)
+                        return null;
+
+                var (specs, subsets) = scratch.TakeHeaders();
+                return new PlanInstance(this, action, specs, subsets);
             }
-
-            return new PlanInstance(this, action, specs, subsets);
+            finally
+            {
+                scratch.ReleaseHeaders();
+            }
         }
 
-        static bool TryEvaluate<TEvaluator>(ref TEvaluator evaluator, AtomId atom, TableId table, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, JoinHeaderSpec[] specs, LayeredSubset[] subsets, int n)
+        /// <summary>
+        /// Evaluates one header into <paramref name="scratch"/>: <c>false</c>, with nothing added, when it selects no rows.
+        /// </summary>
+        static bool TryEvaluate<TEvaluator>(ref TEvaluator evaluator, AtomId atom, TableId table, ReadOnlySpan<Constraint> constraints, HeaderScratch scratch)
             where TEvaluator : ILayeredHeaderEvaluator
         {
+            var fast = scratch.Fast;
+            var slow = scratch.Slow;
             fast.Clear();
             slow.Clear();
-            var subset = evaluator.Evaluate(table, constraints, fast, slow);
+            var subset = evaluator.Evaluate(table, constraints, fast, slow, scratch);
             if (slow.Count > 0)
             {
                 subset.Dispose(null);
-                Release(subsets, n);
                 throw new InvalidOperationException($"Cached plans only support constraints with a fast pushdown. Got [{string.Join(", ", slow)}] for table {table}.");
             }
 
             if (subset.IsEmpty)
             {
                 subset.Dispose(null);
-                Release(subsets, n);
                 return false;
             }
 
-            specs[n] = new JoinHeaderSpec(atom, fast.ToArray());
-            subsets[n] = subset;
+            scratch.AddHeader(atom, fast, subset);
             return true;
-        }
-
-        static void Release(LayeredSubset[] subsets, int n)
-        {
-            for (var i = 0; i < n; i++)
-                subsets[i].Dispose(null);
         }
 
     }

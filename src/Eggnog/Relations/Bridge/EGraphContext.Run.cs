@@ -1,6 +1,7 @@
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.Diagnostics;
+using System.Numerics;
 
 namespace Eggnog.Relations
 {
@@ -9,7 +10,7 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// The longest rule list in which a repeated rule is found by scanning back; longer lists use a dictionary, so a
+        /// The longest rule list in which a repeated rule is found by scanning back; longer lists use a hash table, so a
         /// run stays O(rules) (<see cref="FindEarlierListing"/>).
         /// </summary>
         const int RepeatScanLimit = 16;
@@ -161,11 +162,41 @@ namespace Eggnog.Relations
             if (IsStopped)
                 return IterationReport.WhenStopped;
 
+            // The per-rule buffers of the run come from the shared pools and go back cleared, so a run allocates nothing
+            // per rule for its own bookkeeping.
+            var count = rules.Length;
+            var infos = ArrayPool<RuleInfo>.Shared.Rent(count);
+            var plans = ArrayPool<CachedPlanInfo>.Shared.Rent(count);
+            var staged = ArrayPool<RuleProgress>.Shared.Rent(count);
+            var listed = count > RepeatScanLimit ? RentListingTable(count) : null;
+            try
+            {
+                return RunRulesCore(rules, infos, plans, staged, listed);
+            }
+            finally
+            {
+                Array.Clear(infos, 0, count);
+                Array.Clear(plans, 0, count);
+                Array.Clear(staged, 0, count);
+                ArrayPool<RuleInfo>.Shared.Return(infos);
+                ArrayPool<CachedPlanInfo>.Shared.Return(plans);
+                ArrayPool<RuleProgress>.Shared.Return(staged);
+                if (listed is not null)
+                    ArrayPool<int>.Shared.Return(listed);
+            }
+        }
+
+        /// <summary>
+        /// The body of <see cref="RunRulesCore(ReadOnlySpan{EGraphRuleId}, bool)"/> once the context is clean, over the
+        /// run's buffers: <paramref name="infos"/>, <paramref name="plans"/> and <paramref name="staged"/> hold at least one
+        /// entry per listing, and <paramref name="listed"/> is the repeat table of a long list
+        /// (<see cref="RentListingTable"/>) or <c>null</c>.
+        /// </summary>
+        IterationReport RunRulesCore(ReadOnlySpan<EGraphRuleId> rules, RuleInfo[] infos, CachedPlanInfo[] plans, RuleProgress[] staged, int[]? listed)
+        {
             // Resolve and plan every rule before the epoch, so a bad id or a rejected rule changes nothing (lib.rs:1404).
             var database = context.Database;
             var count = rules.Length;
-            var infos = new RuleInfo[count];
-            var plans = new CachedPlanInfo[count];
             for (var i = 0; i < count; i++)
                 infos[i] = owner.GetRuleInfo(rules[i]);
 
@@ -176,8 +207,6 @@ namespace Eggnog.Relations
             context.NoteRuleRun(timestamp);
             var unionsBefore = context.DisplacedCount;
             var hadPanic = parent is null && owner.PanicChannel.HasValue;
-            var staged = new RuleProgress[count];
-            var listed = count > RepeatScanLimit ? new Dictionary<EGraphRuleId, int>(count) : null;
             RuleSet? ruleSet = null;
             RuleSetReport report;
             try
@@ -300,13 +329,32 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Rents the repeat table of a run of <paramref name="count"/> listings from the shared pool, cleared: open
+        /// addressing over a power-of-two number of slots at least twice <paramref name="count"/>, slot <c>s</c> being
+        /// entries <c>2s</c> (a rule's index plus one, 0 when free) and <c>2s + 1</c> (its latest listing). The caller
+        /// returns it to <see cref="ArrayPool{T}.Shared"/>.
+        /// </summary>
+        static int[] RentListingTable(int count)
+        {
+            var slots = ListingSlots(count);
+            var table = ArrayPool<int>.Shared.Rent(2 * slots);
+            Array.Clear(table, 0, 2 * slots);
+            return table;
+        }
+
+        /// <summary>
+        /// Gets the number of slots of the repeat table of a run of <paramref name="count"/> listings.
+        /// </summary>
+        static int ListingSlots(int count) => (int)BitOperations.RoundUpToPowerOf2((uint)(2 * count));
+
+        /// <summary>
         /// Gets the position of the latest earlier listing of <c>rules[index]</c> in the run being built, or -1 for a
         /// rule's first listing; a rule listed again runs with the run's own timestamp when its constants agree
-        /// (<see cref="RunRulesCore"/>). O(1) amortized per rule: a scan back over at most
-        /// <see cref="RepeatScanLimit"/> listings, or <paramref name="listed"/> for longer lists, which it records
-        /// <c>index</c> in.
+        /// (<see cref="RunRulesCore(ReadOnlySpan{EGraphRuleId}, bool)"/>). O(1) amortized per rule: a scan back over at
+        /// most <see cref="RepeatScanLimit"/> listings, or <paramref name="listed"/> for longer lists
+        /// (<see cref="RentListingTable"/> for <c>rules.Length</c>), which it records <c>index</c> in.
         /// </summary>
-        static int FindEarlierListing(ReadOnlySpan<EGraphRuleId> rules, Dictionary<EGraphRuleId, int>? listed, int index)
+        static int FindEarlierListing(ReadOnlySpan<EGraphRuleId> rules, int[]? listed, int index)
         {
             var id = rules[index];
             if (listed is null)
@@ -318,9 +366,27 @@ namespace Eggnog.Relations
                 return -1;
             }
 
-            var earlier = listed.TryGetValue(id, out var j2) ? j2 : -1;
-            listed[id] = index;
-            return earlier;
+            // Fibonacci hashing of the rule's index, as the progress map spreads it.
+            var mask = ListingSlots(rules.Length) - 1;
+            var key = id.Index + 1;
+            var hash = (uint)id.Index * 0x9E3779B9u;
+            for (var slot = (int)(hash ^ (hash >> 16)) & mask; ; slot = (slot + 1) & mask)
+            {
+                var k = listed[2 * slot];
+                if (k == 0)
+                {
+                    listed[2 * slot] = key;
+                    listed[2 * slot + 1] = index;
+                    return -1;
+                }
+
+                if (k == key)
+                {
+                    var earlier = listed[2 * slot + 1];
+                    listed[2 * slot + 1] = index;
+                    return earlier;
+                }
+            }
         }
 
     }
