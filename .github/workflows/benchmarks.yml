@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       baseline:
-        description: The baseline's branch, tag or commit.
+        description: The baseline's branch, tag or full commit hash (a short hash is taken for a branch name).
         type: string
         default: main
       candidate:
-        description: The candidate's branch, tag or commit; empty for the ref the workflow runs on.
+        description: The candidate's branch, tag or full commit hash; empty for the ref the workflow runs on.
         type: string
         default: ''
       classes:
@@ -22,6 +22,13 @@ on:
         description: The rounds to run.
         type: number
         default: 2
+      collector:
+        description: The garbage collector both builds run under.
+        type: choice
+        options:
+        - server
+        - workstation
+        default: server
   # A branch under benchmark/ is compared with main on the idle-rule set as soon as it is pushed.
   push:
     branches:
@@ -78,6 +85,7 @@ jobs:
         cat /proc/cpuinfo | grep 'model name' | head -1
         git -C baseline log -1 --format='baseline %H %s'
         git -C candidate log -1 --format='candidate %H %s'
+        echo "collector ${{ inputs.collector || 'server' }}"
     - name: Build Baseline
       run: dotnet build baseline/src/Eggnog.Benchmarks/Eggnog.Benchmarks.csproj -c Release -f net10.0 -p:ContinuousIntegrationBuild=true
     - name: Build Candidate
@@ -87,6 +95,8 @@ jobs:
       env:
         CLASSES: ${{ inputs.classes }}
         ROUNDS: ${{ inputs.rounds || 2 }}
+        # The app's project file selects the server collector; the variable overrides it for each run.
+        DOTNET_gcServer: ${{ inputs.collector == 'workstation' && '0' || '1' }}
       run: |
         $classes = if ($env:CLASSES) { $env:CLASSES } else { $env:IDLE_RULE_CLASSES }
         ./tools/src/Eggnog.Benchmarks/compare-builds.ps1 `

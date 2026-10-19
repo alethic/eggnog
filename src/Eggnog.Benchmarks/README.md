@@ -711,10 +711,11 @@ of `WritesBenchmarks.Shards = 16`.
 builds' `Eggnog.Benchmarks.dll`, the classes as JSON (each run's name and its arguments), the campaign directory and the
 number of rounds; `-Job dry` checks the procedure without timing anything. The `benchmarks` workflow
 (`.github/workflows/benchmarks.yml`) runs it on one GitHub runner: started by hand with the baseline, the candidate, the
-classes and the rounds, or by pushing a branch under `benchmark/`, which compares that branch with `main` on the
-idle-rule set (`RuleSetRunBenchmarks`, `BridgeMathBenchmarks`, `LibraryRunOverheadBenchmarks`, and
-`QueryScopeBenchmarks` at `Atoms` 2 and `Tables` 10). It builds both on the runner, writes the comparison to the job's
-summary and uploads the campaign. A shared runner is noisier than an idle machine and its hardware can change between
+classes, the rounds and the collector, or by pushing a branch under `benchmark/`, which compares that branch with `main`
+on the idle-rule set (`RuleSetRunBenchmarks`, `BridgeMathBenchmarks`, `LibraryRunOverheadBenchmarks`, and
+`QueryScopeBenchmarks` at `Atoms` 2 and `Tables` 10) under the server collector. A commit is given by its full hash,
+since the checkout takes a short one for a branch name; the workstation collector sets `DOTNET_gcServer=0` for every
+run. It builds both on the runner, writes the comparison to the job's summary and uploads the campaign. A shared runner is noisier than an idle machine and its hardware can change between
 runs; the comparison's per-round spreads show how far a result can be trusted.
 
 ### Selecting cases by parameter
