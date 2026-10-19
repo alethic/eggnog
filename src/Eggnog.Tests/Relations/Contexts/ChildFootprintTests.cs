@@ -25,18 +25,40 @@ namespace Eggnog.Relations.Tests
     {
 
         const int Warmup = 50;
-        const int Repetitions = 500;
+        const int Repetitions = 100;
 
+        /// <summary>
+        /// The windows of <see cref="Repetitions"/> calls <see cref="Measure"/> takes.
+        /// </summary>
+        const int Windows = 5;
+
+        /// <summary>
+        /// Runs <paramref name="action"/> to warm the pools, then returns the bytes one call allocates on this thread:
+        /// the least, over <see cref="Windows"/> windows, of a window's bytes divided by its <see cref="Repetitions"/>
+        /// calls.
+        /// </summary>
+        /// <remarks>
+        /// A child rents its storage from the shared array pool, which the runtime trims after a full collection under
+        /// memory pressure, so on a loaded machine one window can rent fresh arrays: a single window of 500 calls once
+        /// read 1,760 B for an empty layer on an osx-x64 runner, against about 1,190 B elsewhere (Debug, net10.0). An
+        /// allocation of every call shows in every window, so the least still catches it.
+        /// </remarks>
         static double Measure(Action action)
         {
             for (var i = 0; i < Warmup; i++)
                 action();
 
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < Repetitions; i++)
-                action();
+            var least = long.MaxValue;
+            for (var window = 0; window < Windows; window++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                for (var i = 0; i < Repetitions; i++)
+                    action();
 
-            return (GC.GetAllocatedBytesForCurrentThread() - before) / (double)Repetitions;
+                least = Math.Min(least, GC.GetAllocatedBytesForCurrentThread() - before);
+            }
+
+            return least / (double)Repetitions;
         }
 
         static (Store Store, TableId F) FrozenRoot()
