@@ -32,6 +32,12 @@ namespace Eggnog.Relations
         /// <see cref="Table.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>, which
         /// this hides, dispatches here; the contract is the same.
         /// </para>
+        /// <para>
+        /// Never inlined. The table's dispatch inlines into its callers and calls this directly; inlined in turn into a
+        /// caller's chunk loop, as the JIT does at a hot call site with profile data, the tested loops ran 10-40% slower
+        /// than when called (<c>ConstrainedScanBenchmarks</c>: slow constraints, tombstones, sparse subsets), which costs
+        /// more than one call per chunk.
+        /// </para>
         /// </remarks>
         /// <typeparam name="TSink">The sink type.</typeparam>
         /// <param name="subset">The rows to scan; within the table's physical rows.</param>
@@ -40,6 +46,7 @@ namespace Eggnog.Relations
         /// <param name="constraints">The constraints rows must satisfy.</param>
         /// <param name="sink">Receives each row with its row id; must not keep the span.</param>
         /// <returns>The next position, or -1.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public new int ScanGenericBounded<TSink>(SubsetRef subset, int start, int count, ReadOnlySpan<Constraint> constraints, ref TSink sink)
             where TSink : struct, IRowSink
         {

@@ -301,10 +301,11 @@ namespace Eggnog.Relations
         /// egglog's <c>scan_generic_bounded</c>. Dispatches once on <see cref="Kind"/>.
         /// </summary>
         /// <remarks>
-        /// A function table (<see cref="TableKind.SortedWrites"/>) is tested first and scanned inline; the union-find kinds
-        /// dispatch out of line (<see cref="ScanGenericBoundedUnionFind{TSink}"/>). With every arm inline, this method would
-        /// grow past what the JIT inlines into the join kernels that scan once per frame, and every scan would cost a
-        /// call.
+        /// A function table (<see cref="TableKind.SortedWrites"/>) is tested first and its scan called directly; the
+        /// union-find kinds dispatch out of line (<see cref="ScanGenericBoundedUnionFind{TSink}"/>). With every arm inline,
+        /// this method would grow past what the JIT inlines into the join kernels that scan once per frame, and every scan
+        /// would cost a second call. The function table's scan itself is never inlined
+        /// (<see cref="SortedWritesTable.ScanGenericBounded{TSink}(SubsetRef, int, int, ReadOnlySpan{Constraint}, ref TSink)"/>).
         /// </remarks>
         /// <typeparam name="TSink">The sink type; a struct, so the scan is specialized for it.</typeparam>
         /// <param name="subset">The rows to scan.</param>
