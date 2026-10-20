@@ -39,6 +39,9 @@ namespace Eggnog
         public Func<T, T, T>? Function { get; }
 
         /// <inheritdoc />
+        public override bool CallsFunction => Function is not null;
+
+        /// <inheritdoc />
         public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type)
         {
             if (ReferenceEquals(this, NewMerge))

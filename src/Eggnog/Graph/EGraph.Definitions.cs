@@ -107,83 +107,87 @@ namespace Eggnog
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, null, options, null, 0);
 
         /// <summary>
-        /// Defines a nullary function with a value output. With no lattice, two different values are an error: a host
+        /// Defines a nullary function. With no lattice, two different values are an error: a host
         /// write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run with
         /// <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of one key with a value output. With no lattice, two different values are an error: a
+        /// Defines a function of one key. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
         /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of two keys with a value output. With no lattice, two different values are an error: a
+        /// Defines a function of two keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
         /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of three keys with a value output. With no lattice, two different values are an error: a
+        /// Defines a function of three keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
         /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="T3">The third key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a function of four keys with a value output. With no lattice, two different values are an error: a
+        /// Defines a function of four keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> and writes nothing, and a rule's write fails its run
         /// with <see cref="RuleEvaluationException"/>, faulting the scope.
         /// </summary>
@@ -191,103 +195,112 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="T4">The fourth key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
-        /// Defines a nullary function with a value output whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
+        /// Defines a nullary function whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
         /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, the options make it subsumable, or the merge is a default
-        /// value.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
+        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
+        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
+        /// classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, null, 0,
                 merge: merge.Definition);
 
         /// <summary>
-        /// Defines a function of one key with a value output whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
+        /// Defines a function of one key whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
         /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, the options make it subsumable, or the merge is a default
-        /// value.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
+        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
+        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
+        /// classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, null, 0,
                 merge: merge.Definition);
 
         /// <summary>
-        /// Defines a function of two keys with a value output whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
+        /// Defines a function of two keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
         /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, the options make it subsumable, or the merge is a default
-        /// value.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
+        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
+        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
+        /// classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, null, 0,
                 merge: merge.Definition);
 
         /// <summary>
-        /// Defines a function of three keys with a value output whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
+        /// Defines a function of three keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
         /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="T3">The third key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, the options make it subsumable, or the merge is a default
-        /// value.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
+        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
+        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
+        /// classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, null, 0,
                 merge: merge.Definition);
 
         /// <summary>
-        /// Defines a function of four keys with a value output whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
+        /// Defines a function of four keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
         /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
@@ -295,15 +308,17 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="T4">The fourth key's type.</typeparam>
-        /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
+        /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
+        /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
-        /// the role is <see cref="TableRole.Term"/>, the options make it subsumable, or the merge is a default
-        /// value.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
+        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
+        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
+        /// classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), options, null, 0,
@@ -443,7 +458,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The key types, of this graph.</param>
-        /// <param name="output">The value type, of this graph; not a sort.</param>
+        /// <param name="output">The output type, of this graph: a value type or a sort.</param>
         /// <param name="lattice">The merge, of values of the output type; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
@@ -497,8 +512,16 @@ namespace Eggnog
                     if (role == TableRole.Term)
                         throw new ArgumentException($"The role of {(kind == TableKind.Relation ? "relation" : "function")} '{name}' is Term; only constructors are terms.", nameof(options));
 
+                    // A function may output a class, as egglog's function of an e-class sort: its merge then asserts
+                    // the classes equal, or keeps the old or the new one; a lattice and a merge function decode values.
                     if (kind == TableKind.Function && output!.Kind == ColumnKind.Sort)
-                        throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; a function's output is a value type, so use DefineConstructor.", nameof(name));
+                    {
+                        if (lattice is not null)
+                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
+
+                        if (merge is { CallsFunction: true })
+                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New and Old merge classes.", nameof(merge));
+                    }
 
                     if (lattice is not null && lattice.ValueType != output!.ClrType)
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));

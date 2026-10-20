@@ -23,8 +23,6 @@ gates").
   (`FunctionMerge`, architecture 2.13, item 2). Only the root writes such a table (decisions row 2).
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read (architecture 2.13, item 4). Such a rule inherits no progress in a child.
-- **Functions with an e-class output.** egglog's `function` may output an e-class sort, with a merge; here a function's
-  output is a value, and only constructors output classes.
 - **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
   engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their

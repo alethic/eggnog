@@ -22,6 +22,12 @@ namespace Eggnog
         public string Name { get; }
 
         /// <summary>
+        /// Gets whether the merge calls a function of the old and the new value (<see cref="FunctionMerge.Of{T}"/>), which
+        /// decodes values; <c>false</c> for <c>new</c> and <c>old</c>, which merge classes too.
+        /// </summary>
+        public abstract bool CallsFunction { get; }
+
+        /// <summary>
         /// Creates the engine merge of a function with this merge, registering its external function if it has one: not a
         /// lattice merge, so that only the root writes the function.
         /// </summary>

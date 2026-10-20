@@ -64,12 +64,21 @@ namespace Eggnog.Tests.Definitions
             Assert.Single(graph.Tables);
         }
 
+        /// <summary>
+        /// A function may output a sort, as egglog's function of an e-class sort, but its merge cannot decode classes: a
+        /// lattice or a merge function is refused, and only the default, <c>New</c> and <c>Old</c> are left.
+        /// </summary>
         [Fact]
-        public void ASortOutputToDefineFunctionIsRefused()
+        public void ASortOutputToDefineFunctionTakesNoLatticeAndNoMergeFunction()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
-            Assert.Contains("DefineConstructor", Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Node>("f")).Message);
+            graph.DefineFunction<string, Node>("f");
+            graph.DefineFunction<string, Node>("newest", FunctionMerge.New<Node>());
+            var lattice = Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Node>("g", new ValueLattice<Node>("first", (a, b) => a)));
+            var merge = Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Node>("h", FunctionMerge.Of<Node>("first", (a, b) => a)));
+            Assert.Contains("merges values, not classes", lattice.Message, StringComparison.Ordinal);
+            Assert.Contains("only FunctionMerge.New and Old merge classes", merge.Message, StringComparison.Ordinal);
         }
 
         [Fact]

@@ -121,21 +121,25 @@ namespace Eggnog
             var element = program.ElementAt(program.Columns[program.SetColumn], tuple[program.SetColumn], caseIndex);
             var facts = program.Template.Instantiate(tuple, element, parent);
             scope.Engine.EnsureClean();
+            // A case's assumptions hold together, so their order is the batch's to choose: the function writes go first,
+            // before any union or constructor write that merges classes, after which a batch would refuse to write a
+            // class.
             var batch = new HostBatch(scope);
-            foreach (var fact in facts)
+            foreach (var pass in new[] { true, false })
             {
-                try
+                foreach (var fact in facts)
                 {
-                    batch.PlanFact(fact);
-                }
-                catch (Exception refused) when (refused is FactConflictException or ArgumentException)
-                {
-                    // The run writes the assumption, so its conflict is a run's write conflict: an evaluation failure, which
-                    // Run turns into a fault of its scope as well. Nothing of the batch is written.
-                    var failure = new RuleEvaluationException(rule.Name, null,
-                        $"split '{rule.Name}': case {caseIndex} of '{parent.Path}' assumes {fact}, which cannot be written: {refused.Message}", refused);
-                    scope.Fault(failure);
-                    throw failure;
+                    if (HostBatch.IsFunctionWrite(fact) != pass)
+                        continue;
+
+                    try
+                    {
+                        batch.PlanFact(fact);
+                    }
+                    catch (Exception refused) when (refused is FactConflictException or ArgumentException or InvalidOperationException)
+                    {
+                        throw Refuse(scope, parent, caseIndex, $"assumes {fact}, which cannot be written", refused);
+                    }
                 }
             }
 
@@ -150,9 +154,26 @@ namespace Eggnog
                 {
                     throw scope.FaultWith(panic);
                 }
+                catch (FactConflictException conflict)
+                {
+                    throw Refuse(scope, parent, caseIndex, "makes two rows meet that hold different classes", conflict);
+                }
             }
 
             batch.Origin.Committed = true;
+        }
+
+        /// <summary>
+        /// Faults a case whose assumptions cannot be written: the run writes them, so the refusal is a run's write
+        /// conflict, an evaluation failure, which <c>Run</c> turns into a fault of its scope as well. Nothing of the
+        /// batch is written.
+        /// </summary>
+        RuleEvaluationException Refuse(Scope scope, Scope parent, int caseIndex, string what, Exception refused)
+        {
+            var failure = new RuleEvaluationException(rule.Name, null,
+                $"split '{rule.Name}': case {caseIndex} of '{parent.Path}' {what}: {refused.Message}", refused);
+            scope.Fault(failure);
+            return failure;
         }
 
         /// <summary>
