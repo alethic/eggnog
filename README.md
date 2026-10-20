@@ -20,8 +20,9 @@ simplifying symbolic math, or deriving facts by rules (Datalog) with equality bu
 Eggnog brings that to .NET:
 
 - **egglog's model with a typed API.** Relations, functions with merges, constructors (terms), rules with a
-  join body and a head, subsumption, rulesets, schedules (`Run`, `Repeat`, `Saturate`, `Sequence`, `Until`), queries
-  and extraction, all as C# generics checked by the compiler. No text frontend to embed and no strings to parse.
+  join body and a head, subsumption, deletion, rulesets, schedules (`Run`, `Repeat`, `Saturate`, `Sequence`,
+  `Until`), queries and extraction, all as C# generics checked by the compiler. No text frontend to embed and no
+  strings to parse.
 - **Scopes.** A child scope starts as a copy of its parent and costs in proportion to what it touches. Freeze a scope
   that holds a schema or a theory, and any number of threads can query it and extend it in children of their own, one
   per request. Rules can be local to a scope, and can read another scope's facts through tags.

@@ -229,6 +229,88 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Deletes the row of a ground function or constructor application as one atomic batch: egglog's
+        /// <c>(delete (f args...))</c>. The row of the application's keys goes, if there is one, and nothing else: a
+        /// deleted constructor term's class stays, with its other members, and rows that name the class stay. The keys
+        /// are evaluated as egglog's top-level action evaluates them: a constructor term among them that does not exist
+        /// yet is made, and a function read must find a value. A key with no row deletes nothing; when every term of it
+        /// exists already, the call moves neither <see cref="Version"/> nor any extractor. A deletion is no change for a
+        /// run's saturation, as in egglog. The root, and any scope without live descendants under a frozen
+        /// parent, may delete; a scope with live descendants, a child of a writable parent and a case may not (the
+        /// descendants would not see the deletion). Delete is a call of its own: a <see cref="ScopeWriter"/> batch does
+        /// not delete. On a case whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// </summary>
+        /// <typeparam name="T">The application's type.</typeparam>
+        /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="ArgumentException">The term is not an application of a function or a constructor, it
+        /// applies a scoped view (<c>T.In(tag)</c>), or a term in its keys is a variable or holds a class value this
+        /// scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">The scope may not delete (it has live descendants or a writable
+        /// parent, or the function's merge is not a lattice and the scope is not the root); the scope is frozen or
+        /// faulted, or in use on another thread; a function read in the keys has no value; or the call comes from a run
+        /// observer or a user delegate the engine invoked. Nothing is written.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive in the keys threw or has no result, and nothing is
+        /// written; or a merge failed, and the scope is faulted.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), as
+        /// for <see cref="Subsume{TSort}"/>.</exception>
+        public void Delete<T>(Term<T> term)
+        {
+            ArgumentNullException.ThrowIfNull(term);
+            EnterWrite();
+            try
+            {
+                // A stopped case, or a scope under one, has no model: a deletion changes nothing.
+                if (IsStopped)
+                    return;
+
+                var batch = new HostBatch(this);
+                batch.PlanDelete(term);
+                Commit(batch);
+            }
+            finally
+            {
+                Exit(true);
+            }
+        }
+
+        /// <summary>
+        /// Deletes ground relation rows (<c>r.Of(a, b)</c>) as one atomic batch: egglog's <c>(delete (r a b))</c>. A row
+        /// that does not exist deletes nothing. The rows' terms are evaluated as for <see cref="Delete{T}"/>, and the
+        /// same scopes may delete. Nothing is written when a row fails. On a case whose contradiction stopped it, or a
+        /// scope under one, the call does nothing.
+        /// </summary>
+        /// <param name="rows">The rows.</param>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="ArgumentException">A fact is not a relation row, a term in a row is a variable or holds a
+        /// class value this scope cannot use, or a row is of a scoped view (<c>T.In(tag)</c>) or a
+        /// <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="InvalidOperationException">As for <see cref="Delete{T}"/>. Nothing is written.</exception>
+        /// <exception cref="RuleEvaluationException">As for <see cref="Delete{T}"/>.</exception>
+        /// <exception cref="OverflowException">As for <see cref="Delete{T}"/>.</exception>
+        public void Delete(params Fact[] rows)
+        {
+            ArgumentNullException.ThrowIfNull(rows);
+            EnterWrite();
+            try
+            {
+                // A stopped case, or a scope under one, has no model: a deletion changes nothing.
+                if (IsStopped)
+                    return;
+
+                var batch = new HostBatch(this);
+                foreach (var row in rows)
+                    batch.PlanDelete(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+
+                Commit(batch);
+            }
+            finally
+            {
+                Exit(true);
+            }
+        }
+
+        /// <summary>
         /// Makes several writes one atomic batch: each call is checked as it is made, and the batch is staged,
         /// flushed and rebuilt once, after <paramref name="write"/> returns. If <paramref name="write"/> throws or a call is
         /// rejected, nothing is written and the class values the batch's <c>Make</c> calls returned are invalid.

@@ -141,6 +141,16 @@ namespace Eggnog
             Context.StageRow(function, MemoryMarshal.Cast<uint, Relations.Value>(row), subsume);
 
         /// <inheritdoc />
+        public override void StageRemove(Relations.FunctionId function, ReadOnlySpan<uint> key) =>
+            Context.StageRemove(function, MemoryMarshal.Cast<uint, Relations.Value>(key));
+
+        /// <inheritdoc />
+        public override string? RetractionRefusal => Context.RetractionRefusal;
+
+        /// <inheritdoc />
+        public override bool CanDelete => Context.CanRetract;
+
+        /// <inheritdoc />
         public override void StageUnion(uint a, uint b) => Context.StageUnion(new Relations.Value(a), new Relations.Value(b));
 
         /// <inheritdoc />

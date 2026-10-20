@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -39,14 +40,17 @@ namespace Eggnog
             IdConstantOrigins = idConstantOrigins;
             NamedRegisters = namedRegisters;
             WritesAnalysis = writesAnalysis;
+            List<TableHandle>? deletes = null;
             foreach (var op in head)
             {
-                if (op.Kind == HeadOpKind.Write && op.Table is FunctionHandle { Merge: not null } function)
-                {
-                    RootOnlyWrite = function;
-                    break;
-                }
+                if (op.Kind is HeadOpKind.Write or HeadOpKind.Delete && op.Table is FunctionHandle { Merge: not null } function)
+                    RootOnlyWrite ??= function;
+
+                if (op.Kind == HeadOpKind.Delete && (deletes ??= new()).Contains(op.Table!) == false)
+                    deletes.Add(op.Table!);
             }
+
+            Deletes = deletes?.ToArray() ?? Array.Empty<TableHandle>();
         }
 
         /// <summary>
@@ -97,10 +101,17 @@ namespace Eggnog
         public ScopeTag[] ReadScopes { get; }
 
         /// <summary>
-        /// Gets the first function the head writes whose merge is not a lattice (<see cref="FunctionMerge"/>), which only
-        /// the root may write, so that the program runs only there; <c>null</c> when there is none.
+        /// Gets the first function the head writes or deletes from whose merge is not a lattice
+        /// (<see cref="FunctionMerge"/>), which only the root may write, so that the program runs only there; <c>null</c>
+        /// when there is none.
         /// </summary>
         public FunctionHandle? RootOnlyWrite { get; }
+
+        /// <summary>
+        /// Gets the distinct tables the head deletes rows of, in first-use order: the program runs only where the scope
+        /// may delete, and a run reconciles the scope's mirrors of them under its own tag after each iteration.
+        /// </summary>
+        public TableHandle[] Deletes { get; }
 
         /// <summary>
         /// Gets whether the head writes an analysis table; such a program reads no fact table and no scoped atom, so

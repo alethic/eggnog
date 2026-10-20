@@ -236,6 +236,16 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
   subsumable and no function is; `TableOptions.Subsumable = false` opts a table out, an addition that stores no
   subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
+- **Deletion** is egglog's `delete`. `Delete(application)` and `Delete(rows)` in a head, and the host's `Scope.Delete`
+  (section 2.7), delete the row of a key of a relation, a function or a constructor, if there is one, and nothing else:
+  a deleted constructor term's class stays, with its other members and the rows that name it, and making the term again
+  mints a new class. The keys are evaluated as head terms, made if absent. Every deletion of an iteration lands before
+  its writes, so a row the same iteration writes stays, and a deletion is no change for saturation, as in egglog. A
+  scope deletes only when the engine's retraction guard lets it (section 3.8): not with live descendants, which would
+  not see the deletion, and not under a writable parent; so not in a case either. `Run` refuses, before any work, a rule
+  that deletes where the scope may not, and in a run that splits, whose cases stay live until it ends; one defined on
+  another thread during the run takes part only in the iterations where it may run. `graph.Contradiction` is not
+  deleted.
 - **Heads never read tables.** A function value used in a head must be matched in the body. This keeps every match a
   function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
@@ -317,8 +327,9 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 
 ### 2.7 Host writes, reads and queries
 
-A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, and `Subsume(term)`
-and `Subsume(rows)` (section 2.5). Each call is one atomic batch; `Write(w => ...)` makes several calls one batch
+A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)`
+and `Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer:
+a deletion is a call of its own. Each call is one atomic batch; `Write(w => ...)` makes several calls one batch
 through a `ScopeWriter`. A batch is planned first, reading only: it validates the facts, checks class origins, interns
 constants, evaluates primitives and reads function values as egglog's top-level actions do (a read sees the batch's
 earlier writes, merged by the function's lattice, as egglog's next command sees the last; the batch stages its unions
@@ -386,7 +397,10 @@ root                      empty and frozen, or a shared theory
   and once more when it freezes. Creating a mirror is a table definition, and is refused while a live frozen scope
   carries the tag (its mirror would stay empty there). A subsumable relation's mirror is subsumable, and a second copy
   rule subsumes in it the rows the tagged scope subsumed, so scoped atoms skip exactly the rows the tagged scope's own
-  atoms skip.
+  atoms skip. A deletion in the tagged scope deletes the mirror's row too: a host deletion in the same batch, a rule's
+  after the iteration, which removes every mirror row the table no longer holds as it is (its key gone, or written
+  again with another value or subsumption), for the next sync to copy afresh. A scope with live descendants deletes
+  nothing, so a mirror's readers below the tagged scope never miss a deletion.
 - **Subsumption in scopes.** A subsumption is a sticky change of the row's subsumption cell, written in the scope that
   makes it, like any other write (decision 1 in [`engine/decisions.md`](engine/decisions.md)). A child's shadows its
   ancestors' row: the child and its descendants stop matching the row, while the ancestors and the siblings still match
@@ -517,14 +531,8 @@ semi-naive Datalog rules, schedules, primitives, lattices and extraction) and ad
 egglog comes first, so each departure below is to be removed, or confined to the additions, as the roadmap's "Fidelity
 with egglog" lists:
 
-1. No deletion in the API. The engine has it, but inheritance of semi-naive progress, the soundness of lift and the
-   exactness of mirrors all rest on contents that only grow. Subsumption is in the API (section 2.5), because it keeps
-   all three: a subsumed row stays and what was derived from it stays, so inherited progress misses nothing, and a rule
-   that subsumes never inherits (section 3.8); a lift writes rows, not their subsumption; and mirrors copy subsumptions
-   too, a later subsumption reaching the mirror because the merge restamps the row. Every relation and constructor is
-   subsumable, as in egglog, unless the user opts it out. Queries and split rules skip subsumed rows as rule bodies do,
-   where egglog's `check` sees them; the other departures are listed in decision 20 of
-   [`engine/decisions.md`](engine/decisions.md).
+1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
+   departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. A merge that is not a lattice is a C# function of the old and the new value (`FunctionMerge.Of`): egglog's merges
    that call a table (`MergeFn::Function`) are not offered, nor are functions whose output is a class (egglog's
    `function` over an e-class sort).
@@ -770,13 +778,16 @@ watermark applies only while those forms are unchanged. A child's first run of a
 ancestor's progress (the minimum of the ancestor's watermark and the creation time of the ancestor's child on the path),
 provided the rule's actions read no table whose contents can change; then the child matches only what is new to it. A
 rule that subsumes reads the row's subsumption cell, so it never inherits. Inheritance changes the work, not the result,
-which the tests check.
+which the tests check, except after a deletion, in the child or in an ancestor before the child's first run: an
+inheriting rule, as egglog's semi-naive rules after `push`, does not derive again what the deletion removed, while a
+rule that matches in full there (a naive rule, or one that subsumes and so cannot inherit) may.
 
 **Retraction.** The engine supports deletion under strict rules ("Deletion across contexts" in
 [`engine/decisions.md`](engine/decisions.md)): a context with live descendants may not retract rows, and a child may
 delete its own rows and hide visible ancestor rows. A merge that is not a lattice merge may be used only at the root.
-The library uses no deletion. It uses subsumption, which is not a retraction: a sticky value change of the row's
-subsumption cell, merged like an output (decision 1).
+The library's deletion (section 2.5) is the engine's, and the library refuses before any work what the guard would
+refuse. Subsumption is not a retraction: a sticky value change of the row's subsumption cell, merged like an output
+(decision 1).
 
 **Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set,
 the rebuild loop checks it, and a stopped case is skipped by the lift and disposed.

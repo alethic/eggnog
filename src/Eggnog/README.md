@@ -78,7 +78,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `Function<..., TOut>`, `ValueLattice<T>`, `FunctionMerge<T>` | One value per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own), or by egglog's `:merge new`, `old` or `(f old new)` (`FunctionMerge.New`, `Old`, `Of`), which only the root writes. |
 | `Constructor<..., TSort>` | Terms: one class per key (`DefineConstructor`), with a cost for extraction. |
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
-| `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`). |
+| `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`). |
 | `TableOptions` | A table's role, lift policy and extractability, and whether its rows may be subsumed (`Subsumable`): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
 | `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, `Split`. |
 | `Scope` | Where facts are written, rules run and reads answered: the root or a child (`CreateChild`), writable or frozen (`Freeze`). |

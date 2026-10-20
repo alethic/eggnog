@@ -34,6 +34,12 @@ namespace Eggnog
         Subsume,
 
         /// <summary>
+        /// Deletes the row of a key, if there is one: egglog's <c>delete</c>. The table's merge deletes before it
+        /// inserts, so a row the same iteration also writes stays.
+        /// </summary>
+        Delete,
+
+        /// <summary>
         /// Calls a primitive into a head register.
         /// </summary>
         Compute,

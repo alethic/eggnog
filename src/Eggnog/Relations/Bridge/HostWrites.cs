@@ -61,6 +61,7 @@ namespace Eggnog.Relations
         int[] offsets = Array.Empty<int>();
         bool[] canonicalize = Array.Empty<bool>();
         bool[] subsumed = Array.Empty<bool>();
+        bool[] removes = Array.Empty<bool>();
         int rowCount;
         uint[] unions = Array.Empty<uint>();
         int unionCount;
@@ -99,6 +100,7 @@ namespace Eggnog.Relations
                 Array.Resize(ref offsets, size);
                 Array.Resize(ref canonicalize, size);
                 Array.Resize(ref subsumed, size);
+                Array.Resize(ref removes, size);
             }
 
             if (cellCount + row.Length > cells.Length)
@@ -109,8 +111,23 @@ namespace Eggnog.Relations
             offsets[rowCount] = cellCount;
             canonicalize[rowCount] = canonicalizeIds;
             subsumed[rowCount] = subsume;
+            removes[rowCount] = false;
             rowCount++;
             cellCount += row.Length;
+        }
+
+        /// <summary>
+        /// Stages the removal of the row of <paramref name="key"/> from <paramref name="function"/>: egglog's
+        /// <c>stage_remove</c> of a top-level <c>delete</c>. Its id cells are canonicalized when it is replayed. It
+        /// counts as a staged row for <see cref="RowCount"/>, <see cref="TruncateRows"/> and <see cref="RemoveRows"/>.
+        /// The caller has checked the key's width and the retraction. O(key) amortized.
+        /// </summary>
+        /// <param name="function">The function.</param>
+        /// <param name="key">One cell per key column; copied.</param>
+        public void AddRemove(FunctionId function, ReadOnlySpan<uint> key)
+        {
+            AddRow(function, key, canonicalizeIds: true);
+            removes[rowCount - 1] = true;
         }
 
         /// <summary>
@@ -129,10 +146,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Stages every row and union into <paramref name="state"/>, in staging order, stamped with
-        /// <paramref name="timestamp"/> and subsumed as staged: rows through their function's table, unions through the
-        /// union-find. The id cells of rows staged through the context API are canonicalized with
-        /// <paramref name="finder"/>, which is current once the context prepared for the write. Does not clear.
+        /// Stages every row, removal and union into <paramref name="state"/>, in staging order, stamped with
+        /// <paramref name="timestamp"/> and subsumed as staged: rows and removals through their function's table (the
+        /// state's retraction guard checks each removal again), unions through the union-find. The id cells of rows and
+        /// removals staged through the context API are canonicalized with <paramref name="finder"/>, which is current
+        /// once the context prepared for the write. Does not clear.
         /// </summary>
         /// <remarks>O(staged cells) plus one find per id cell of a canonicalized row; no allocation for rows of up to 32
         /// columns.</remarks>
@@ -150,6 +168,21 @@ namespace Eggnog.Relations
             {
                 var info = graph.GetFunctionInfo(functions[i]);
                 var math = info.Math;
+                if (removes[i])
+                {
+                    // The table's merge deletes before it inserts, whatever the staging order, as egglog's does.
+                    var keyCount = math.KeyCount;
+                    var key = keyCount <= MaxStackRow ? stack.Slice(0, keyCount) : new uint[keyCount];
+                    cells.AsSpan(offsets[i], keyCount).CopyTo(key);
+                    var keySchema = info.Schema;
+                    for (var c = 0; c < keyCount; c++)
+                        if (keySchema[c].IsId)
+                            key[c] = finder.Find(key[c]);
+
+                    state.StageRemove(info.Table, key);
+                    continue;
+                }
+
                 var columns = math.TableColumns;
                 var full = columns <= MaxStackRow ? stack.Slice(0, columns) : new uint[columns];
                 cells.AsSpan(offsets[i], math.FunctionColumns).CopyTo(full);
@@ -220,6 +253,7 @@ namespace Eggnog.Relations
                     functions[kept] = functions[i];
                     canonicalize[kept] = canonicalize[i];
                     subsumed[kept] = subsumed[i];
+                    removes[kept] = removes[i];
                 }
 
                 offsets[kept] = keptCells;
@@ -251,6 +285,7 @@ namespace Eggnog.Relations
                 offsets = Array.Empty<int>();
                 canonicalize = Array.Empty<bool>();
                 subsumed = Array.Empty<bool>();
+                removes = Array.Empty<bool>();
             }
 
             if (unions.Length > 2 * RetainedUnions)
@@ -268,6 +303,7 @@ namespace Eggnog.Relations
             offsets = Array.Empty<int>();
             canonicalize = Array.Empty<bool>();
             subsumed = Array.Empty<bool>();
+            removes = Array.Empty<bool>();
             unions = Array.Empty<uint>();
         }
 

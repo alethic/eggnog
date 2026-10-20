@@ -140,6 +140,9 @@ namespace Eggnog
                         case HeadOpKind.Subsume:
                             builder.Subsume(op.Table!.Function, inputs);
                             break;
+                        case HeadOpKind.Delete:
+                            builder.Remove(op.Table!.Function, inputs);
+                            break;
                         case HeadOpKind.Collect:
                         {
                             // The collector never fails, so its panic message is never built; the call stages nothing.

@@ -183,7 +183,7 @@ namespace Eggnog
         public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase)
         {
             BeforeStep(scope);
-            rules = Resolvable(scope, rules);
+            rules = Permitted(scope, Resolvable(scope, rules));
             if (rules.Count == 0)
                 return false;
 
@@ -218,6 +218,7 @@ namespace Eggnog
             // A variant the engine reports nothing for (every variant of an idle rule) adds no matches, no time and no
             // plan: it only enters the run's statistics. The others are looked up once, by description.
             var reports = report.RuleReports;
+            var deleted = false;
             foreach (var variant in lowered)
             {
                 if (variant.Rule is not { } rule)
@@ -231,7 +232,12 @@ namespace Eggnog
                 builder.Add(matches, searchTime, plan);
                 if (matched is not null && matches > 0)
                     matched.Add(new RuleStatistics(rule, matches, searchTime, 1, plan));
+
+                deleted |= matches > 0 && rule.Compiled.Program.Deletes.Length > 0;
             }
+
+            if (deleted && scope.Tag is { } tag)
+                ReconcileMirrors(scope, rules, tag);
 
             Statistics.SearchTime += report.SearchAndApplyTime;
             Statistics.MergeTime += report.MergeTime;
@@ -245,6 +251,111 @@ namespace Eggnog
 
             RecordStep(RunStepKind.Iteration, scope, changed, elapsed, matched);
             return changed;
+        }
+
+        /// <summary>
+        /// Deletes from the scope's mirrors under its own tag the rows that the iteration's rules deleted from their
+        /// tables, as a host deletion does (<c>HostBatch.Deletes.cs</c>): a scoped read of the scope's own tag reads the
+        /// scope's own table, so its mirror must stay equal to it. Each row of such a mirror that the table no longer
+        /// holds as it is (its key gone, or written again after the deletion with another value or subsumption) goes;
+        /// the next sync copies the row the table holds now, which is newer than the copy rule's watermark. Called only
+        /// after an iteration in which a rule that deletes matched. O(rows of each such mirror); nothing when no such rule
+        /// deletes from a table the tag mirrors. The iteration ran only rules the scope may run (<see cref="Permitted"/>).
+        /// </summary>
+        /// <param name="scope">The scope the iteration ran in.</param>
+        /// <param name="rules">The iteration's rules.</param>
+        /// <param name="tag">The scope's tag.</param>
+        static void ReconcileMirrors(Scope scope, IReadOnlyList<CompiledRule> rules, ScopeTag tag)
+        {
+            // Indexed, not enumerated: this runs every iteration, and an idle iteration allocates nothing here.
+            List<MirrorTable>? mirrors = null;
+            for (var r = 0; r < rules.Count; r++)
+            {
+                var deletes = rules[r].Program.Deletes;
+                for (var d = 0; d < deletes.Length; d++)
+                    if (scope.Graph.Mirrors.TryGet(deletes[d], tag, out var mirror) && (mirrors ??= new()).Contains(mirror) == false)
+                        mirrors.Add(mirror);
+            }
+
+            if (mirrors is null)
+                return;
+
+            var engine = scope.Engine;
+            var stale = new List<(MirrorTable Mirror, uint[] Key)>();
+            foreach (var mirror in mirrors)
+            {
+                // The mirror's rows, read first: the lookups below may not run inside the visitor.
+                var keyCount = mirror.Handle.KeyArray.Length;
+                var rows = new List<(uint[] Key, uint Output, bool Subsumed)>();
+                engine.ForEach(mirror.Handle.Function, row =>
+                {
+                    var key = new uint[keyCount];
+                    for (var i = 0; i < keyCount; i++)
+                        key[i] = row.Values[i].Rep;
+
+                    rows.Add((key, row.Values[keyCount].Rep, row.Subsumed));
+                });
+
+                foreach (var (key, output, subsumed) in rows)
+                {
+                    if (engine.TryLookup(mirror.Source.Function, key, out var held, out var heldSubsumed) == false
+                        || held != output || heldSubsumed != subsumed)
+                        stale.Add((mirror, key));
+                }
+            }
+
+            if (stale.Count == 0)
+                return;
+
+            foreach (var (mirror, key) in stale)
+                engine.StageRemove(mirror.Handle.Function, key);
+
+            try
+            {
+                engine.Flush();
+            }
+            catch (Relations.PanicException panic)
+            {
+                throw scope.FaultWith(panic);
+            }
+        }
+
+        /// <summary>
+        /// Leaves out of an iteration the rules that may not run in <paramref name="scope"/>: one that deletes where the
+        /// scope may not delete (it has live descendants, such as a split's cases, or a writable parent, as a case has),
+        /// and one that writes a function whose merge is not a lattice below the root. <c>Run</c> refuses such a rule
+        /// before any work when the schedule reaches it at the start; one defined on another thread during the run takes
+        /// part only in the iterations where it may run, as a rule whose tag does not resolve does
+        /// (<see cref="Resolvable"/>). Returns <paramref name="rules"/> itself, allocation-free, when every rule may run.
+        /// </summary>
+        /// <param name="scope">The scope the iteration runs in.</param>
+        /// <param name="rules">The iteration's rules.</param>
+        /// <returns>The rules that may run in <paramref name="scope"/>.</returns>
+        static IReadOnlyList<CompiledRule> Permitted(Scope scope, IReadOnlyList<CompiledRule> rules)
+        {
+            bool? canDelete = null;
+            List<CompiledRule>? kept = null;
+            for (var i = 0; i < rules.Count; i++)
+            {
+                var program = rules[i].Program;
+                var refused = (program.RootOnlyWrite is not null && scope.IsRoot == false)
+                    || (program.Deletes.Length > 0 && (canDelete ??= scope.Engine.CanDelete) == false);
+                if (refused)
+                {
+                    if (kept is null)
+                    {
+                        kept = new List<CompiledRule>(rules.Count);
+                        for (var j = 0; j < i; j++)
+                            kept.Add(rules[j]);
+                    }
+                }
+                else
+                {
+                    kept?.Add(rules[i]);
+                }
+            }
+
+            return kept ?? rules;
         }
 
         /// <summary>

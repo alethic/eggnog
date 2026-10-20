@@ -267,6 +267,43 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Deletes the row of a function or constructor application: egglog's <c>(delete (f args...))</c>. The row of the
+        /// application's keys goes, if there is one, and nothing else: a deleted constructor term's class stays, with its
+        /// other members. The keys are evaluated as head terms, made if absent. Every deletion of an iteration lands
+        /// before its writes, so a row the same iteration also writes stays, as in egglog, and a deletion is no change
+        /// for saturation. A rule that deletes runs only where the scope may delete: not in a scope with live
+        /// descendants, a child of a writable parent, or a run that splits (<see cref="Scope.Run"/> refuses it before any
+        /// work). The application must be of the running scope, not a scoped view (a
+        /// <see cref="RuleDefinitionException"/> otherwise).
+        /// </summary>
+        /// <typeparam name="T">The application's type.</typeparam>
+        /// <param name="term">The application: <c>f.Of(k)</c> of a function or a constructor.</param>
+        public void Delete<T>(Term<T> term)
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(term);
+            draft.Head.Add(new HeadItem(HeadItemKind.Delete, null, null, term, null));
+        }
+
+        /// <summary>
+        /// Deletes relation rows (<c>r.Of(a, b)</c>): egglog's <c>(delete (r a b))</c>. A row that does not exist deletes
+        /// nothing. Otherwise as <see cref="Delete{T}(Term{T})"/>: each fact must be a relation row of the running scope,
+        /// not a scoped view (a <see cref="RuleDefinitionException"/> otherwise).
+        /// </summary>
+        /// <param name="rows">The relation rows.</param>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
+        public void Delete(params Fact[] rows)
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(rows);
+            foreach (var row in rows)
+            {
+                graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));
+                draft.Head.Add(new HeadItem(HeadItemKind.Delete, row, null, null, null));
+            }
+        }
+
+        /// <summary>
         /// Makes every run match in full: against every row, not only the rows new since the rule last ran here or in
         /// an ancestor.
         /// </summary>

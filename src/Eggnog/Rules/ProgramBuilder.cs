@@ -529,6 +529,9 @@ namespace Eggnog
                 case HeadItemKind.Subsume:
                     AddSubsume(item);
                     break;
+                case HeadItemKind.Delete:
+                    AddDelete(item);
+                    break;
                 default:
                     AddHeadFact(new EqualityFact(item.Variable!, item.Right!));
                     break;
@@ -591,6 +594,48 @@ namespace Eggnog
             }
 
             head.Add(new HeadOp(HeadOpKind.Subsume, table, inputs, -1, null));
+        }
+
+        /// <summary>
+        /// Turns a deletion into a <see cref="HeadOpKind.Delete"/> of the key of a relation row or a function or
+        /// constructor application. The key's terms are evaluated as head terms, as egglog lowers <c>(delete (f
+        /// args...))</c> with the arguments evaluated as actions.
+        /// </summary>
+        void AddDelete(HeadItem item)
+        {
+            TableHandle table;
+            Term[] arguments;
+            if (item.Fact is { } fact)
+            {
+                if (fact is ScopedFact scoped)
+                    throw Error($"head facts are writes; Fact.In('{scoped.Scope.Name}') is read-only");
+
+                if (fact is not RelationFact relation)
+                    throw Error($"Delete takes relation rows and function or constructor applications; {fact} is not a relation row");
+
+                table = relation.Table;
+                arguments = relation.Arguments;
+            }
+            else
+            {
+                var shape = item.Left!.Shape;
+                if (shape.Kind != TermShapeKind.Application)
+                    throw Error($"Delete takes relation rows and function or constructor applications; {item.Left} is not an application");
+
+                table = shape.Table!;
+                arguments = shape.Arguments;
+            }
+
+            CheckTable(table);
+            CheckWritable(table);
+            if (ReferenceEquals(table, graph.Contradiction))
+                throw Error($"'{table.Name}' is the graph's contradiction, which a deletion does not undo");
+
+            var inputs = new Operand[arguments.Length];
+            for (var i = 0; i < inputs.Length; i++)
+                inputs[i] = EvalHead(arguments[i]);
+
+            head.Add(new HeadOp(HeadOpKind.Delete, table, inputs, -1, null));
         }
 
         /// <summary>
@@ -758,7 +803,7 @@ namespace Eggnog
             TableHandle? written = null;
             foreach (var op in head)
             {
-                if (op.Kind is HeadOpKind.Insert or HeadOpKind.Write or HeadOpKind.Subsume && op.Table!.Role == TableRole.Analysis)
+                if (op.Kind is HeadOpKind.Insert or HeadOpKind.Write or HeadOpKind.Subsume or HeadOpKind.Delete && op.Table!.Role == TableRole.Analysis)
                 {
                     written = op.Table;
                     break;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading;
 
@@ -162,6 +163,19 @@ namespace Eggnog
         {
             lock (sync)
                 return mirrors[(table, tag)];
+        }
+
+        /// <summary>
+        /// Gets an existing mirror, if there is one.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <param name="tag">The tag.</param>
+        /// <param name="mirror">The mirror, or <c>null</c>.</param>
+        /// <returns>Whether the mirror exists.</returns>
+        public bool TryGet(TableHandle table, ScopeTag tag, [MaybeNullWhen(false)] out MirrorTable mirror)
+        {
+            lock (sync)
+                return mirrors.TryGetValue((table, tag), out mirror);
         }
 
         /// <summary>
