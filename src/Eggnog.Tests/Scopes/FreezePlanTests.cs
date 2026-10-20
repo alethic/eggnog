@@ -1,3 +1,5 @@
+using System.Linq;
+
 using Eggnog.Tests.Support;
 
 using Xunit;
@@ -45,15 +47,17 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Seen.Of(x));
                 r.Then(t.Fact.Of("other"));
             });
+            // The mirrors of fact@outer, fact@inner and the function best@outer: the relations' copy their subsumed rows
+            // too, as every relation is subsumable.
             var copyRules = t.Graph.Mirrors.AllCopyRules();
-            Assert.Equal(3, copyRules.Length);
+            Assert.Equal(5, copyRules.Length);
 
             var planned = new[]
             {
                 global.Compiled.Variants.Default!, copies.FactRule.Compiled.Variants.Default!, innerReader.Compiled.Variants.Default!,
                 own.Compiled.Variants.Default!, query.Compiled.Variants.Default!,
-                copyRules[0].Variants.Default!, copyRules[1].Variants.Default!, copyRules[2].Variants.Default!,
             };
+            planned = planned.Concat(copyRules.Select(rule => rule.Variants.Default!)).ToArray();
             var unplanned = other.Compiled.Variants.Default!;
             foreach (var variant in planned)
                 Assert.Null(t.Graph.Engine.GetRuleInfo(variant.Id).CachedPlan);

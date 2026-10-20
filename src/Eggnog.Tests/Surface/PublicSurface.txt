@@ -498,6 +498,7 @@ sealed class Eggnog.Scope : IDisposable
     Scope CreateChild(ScopeTag tag = null, ScopeOptions options = null)
     Scope Parent { get }
     ScopeTag Tag { get }
+    SerializedGraph Serialize(SerializeOptions options = null)
     String Path { get }
     T Get<T>(Term<T> term)
     TSort Find<TSort : struct, ISort<TSort>>(TSort value)
@@ -529,6 +530,35 @@ sealed class Eggnog.ScopeWriter
     Void Subsume(params Fact[] rows)
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
+sealed class Eggnog.SerializeOptions
+    IReadOnlyList<ClassId> Roots { get; init }
+    Int32? MaxRowsPerTable { get; init }
+    Int32? MaxTables { get; init }
+    ctor()
+sealed class Eggnog.SerializedClass
+    String Id { get }
+    String Type { get }
+    override String ToString()
+sealed class Eggnog.SerializedGraph
+    Boolean IsComplete { get }
+    Boolean TryGetClass(String id, out SerializedClass class)
+    Boolean TryGetNode(String id, out SerializedNode node)
+    IReadOnlyList<SerializedClass> Classes { get }
+    IReadOnlyList<SerializedNode> Nodes { get }
+    IReadOnlyList<String> DiscardedTables { get }
+    IReadOnlyList<String> RootClasses { get }
+    IReadOnlyList<String> TruncatedTables { get }
+    String OmittedDescription { get }
+    String ToJson()
+    Void WriteJson(Stream stream)
+sealed class Eggnog.SerializedNode
+    Boolean Subsumed { get }
+    Double Cost { get }
+    IReadOnlyList<String> Children { get }
+    String Class { get }
+    String Id { get }
+    String Op { get }
+    override String ToString()
 sealed class Eggnog.SplitBuilder
     ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
@@ -568,8 +598,8 @@ enum Eggnog.TableKind
     Constructor
 sealed class Eggnog.TableOptions
     Boolean Extractable { get; init }
-    Boolean Subsumable { get; init }
     Boolean? Lift { get; init }
+    Boolean? Subsumable { get; init }
     TableRole Role { get; init }
     ctor()
 enum Eggnog.TableRole

@@ -163,7 +163,8 @@ alone), whether lifts copy the table into a case's parent (`Lift`; by default fa
 do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
 rows may be subsumed (`Subsumable`, section 2.5).
 
-`EGraph.Contradiction` is a built-in nullary relation. A rule that derives it says the scope has no model. In a case it
+`EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction` so that it
+takes no name a user's table may take (the `$` prefix is reserved). A rule that derives it says the scope has no model. In a case it
 stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run asks to stop on it
 (`RunOptions.StopOnContradiction`).
 
@@ -204,14 +205,15 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   shorthand for "where `t = left`, make `t = right`". `Ruleset.DefineBiRewrite` (and `Scope.DefineBiRewrite` for local
   rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
-  (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a table defined
-  `Subsumable` as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
+  (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
+  constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
   lookups, `Check`, `Get` and `Rows` (whose `TableRow.Subsumed` says so) still find it, and a head that makes the term
   gets its class. But no rule body, query or split rule matches it any more (from the next iteration, when a rule
   subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
   rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
-  nothing undoes it. What earlier matches derived from the row stays. Only relations and constructors can opt in, as
-  egglog's language subsumes only those; a table that does not opt in stores no subsumption cell (section 2.13).
+  nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
+  subsumable and no function is; `TableOptions.Subsumable = false` opts a table out, an addition that stores no
+  subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
 - **Heads never read tables.** A function value used in a head must be matched in the body. This keeps every match a
   function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
@@ -308,9 +310,11 @@ visible when the call returns. A batch whose facts all hold already stages nothi
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do, and
-compute primitives as `check` does, over values, never interning: a result no write interned is no value, so a fact
-over it is false.
-`Version` counts the effective changes the scope's own calls made to its own contents.
+compute primitives as `check` does, over values, never interning: a result no write interned is no value, so a fact over
+it is false. `Version` counts the effective changes the scope's own calls made to its own contents. `Serialize(options)`
+is egglog's `EGraph::serialize`: the scope's view as the graph of the egraph-serialize crate (`SerializedGraph`, and its
+JSON from `ToJson`), which egglog's visualizer reads; its departures are decision 23 of
+[`engine/decisions.md`](engine/decisions.md).
 
 A query (`EGraph.DefineQuery`) is a conjunctive body with variables, defined once and run in any scope with `Any`,
 `Count` or `ForEachMatch`, which delivers the distinct bindings in content order. Its atoms skip subsumed rows, as a
@@ -419,7 +423,8 @@ Unextractable heads and subsumed rows are skipped.
 Costs are computed with Knuth's generalization of Dijkstra's algorithm over the classes reachable from the ones asked
 about, so the chosen terms are always finite, even with zero costs. Ties are broken by content (cost, then
 constructor declaration order, then arguments), so the result depends only on the scope's contents. An extractor
-reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws.
+reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
+so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.
 
 ### 2.11 Threading
@@ -486,17 +491,18 @@ Extractors over a frozen scope may run concurrently, one per thread.
 ### 2.13 Differences from egglog
 
 The library offers egglog's core (tables with functional dependencies and merges, union-find with congruence closure,
-semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. It also
-departs from egglog on purpose:
+semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. Fidelity with
+egglog comes first, so each departure below is to be removed, or confined to the additions, as the roadmap's "Fidelity
+with egglog" lists:
 
 1. No deletion in the API. The engine has it, but inheritance of semi-naive progress, the soundness of lift and the
    exactness of mirrors all rest on contents that only grow. Subsumption is in the API (section 2.5), because it keeps
    all three: a subsumed row stays and what was derived from it stays, so inherited progress misses nothing, and a rule
    that subsumes never inherits (section 3.8); a lift writes rows, not their subsumption; and mirrors copy subsumptions
-   too, a later subsumption reaching the mirror because the merge restamps the row. A table opts in with `Subsumable`,
-   where egglog makes every constructor and relation subsumable, so that a table that is never subsumed pays no cell per
-   row and no filter per atom. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees
-   them; the other departures are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
+   too, a later subsumption reaching the mirror because the merge restamps the row. Every relation and constructor is
+   subsumable, as in egglog, unless the user opts it out. Queries and split rules skip subsumed rows as rule bodies do,
+   where egglog's `check` sees them; the other departures are listed in decision 20 of
+   [`engine/decisions.md`](engine/decisions.md).
 2. Merges are lattices or assert-equal; there is no `:merge old` or `new`.
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.

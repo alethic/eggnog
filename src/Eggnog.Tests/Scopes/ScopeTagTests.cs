@@ -144,8 +144,10 @@ namespace Eggnog.Tests.Scopes
             var b = new EGraph();
             var bTheory = new PredicateTheory(b);
             Assert.Equal(0, b.Mirrors.FrozenCount(bTheory.Schema));
-            Assert.Equal(2, b.Mirrors.CopyRules(bTheory.Schema).Length);
-            Assert.Equal(new[] { "dom@schema", "present@schema" }, b.Mirrors.AllCopyRules().Select(r => r.Rule.Name.Replace("copy ", "", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal));
+            // The relation present is subsumable, as every relation is, so its mirror has a copy rule for its subsumed rows.
+            Assert.Equal(3, b.Mirrors.CopyRules(bTheory.Schema).Length);
+            Assert.Equal(new[] { "dom@schema", "present@schema", "subsumed present@schema" },
+                b.Mirrors.AllCopyRules().Select(r => r.Rule.Name.Replace("copy ", "", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal));
         }
 
         /// <summary>

@@ -73,6 +73,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override string FormatValue(T value) => format(value);
 
+        /// <inheritdoc />
+        internal override string DebugValue(T value) => TCodec.Format(value);
+
         /// <summary>
         /// Compares two values in content order: by the type's order, else by cell. Cells are read with
         /// <see cref="TryEncodeExisting"/>, so comparing never interns and never grows the graph's permanent pools: a

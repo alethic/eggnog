@@ -358,15 +358,25 @@ namespace Eggnog
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
+        /// Defines the built-in nullary relation <see cref="Contradiction"/>, under a name a user's table cannot take
+        /// (<c>$contradiction</c>, a reserved prefix), so that it takes no name an egglog program may use.
+        /// </summary>
+        /// <returns>The relation.</returns>
+        Relation DefineContradiction() =>
+            DefineTable(static () => new Relation(), ContradictionName, TableKind.Relation, Array.Empty<ColumnType>(), null, null, null, 0, builtIn: true);
+
+        /// <summary>
         /// Defines a table: validates, then under the definition lock adds the engine function
         /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
-        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost)
+        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost,
+            bool builtIn = false)
             where T : TableHandle
         {
             EngineCallMarker.ThrowIfActive();
-            NameRules.ValidateTableName(name, nameof(name));
+            if (builtIn == false)
+                NameRules.ValidateTableName(name, nameof(name));
             options ??= DefaultTableOptions;
             foreach (var key in keys)
                 CheckOwnType(key ?? throw new ArgumentNullException(nameof(keys), "A column type is null."));
@@ -389,7 +399,7 @@ namespace Eggnog
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));
 
                     // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
-                    if (kind == TableKind.Function && options.Subsumable)
+                    if (kind == TableKind.Function && options.Subsumable == true)
                         throw new ArgumentException($"Function '{name}' cannot be subsumable; only relations and constructors can be subsumed.", nameof(options));
 
                     break;
@@ -410,7 +420,9 @@ namespace Eggnog
                 var columns = new ColumnType[keys.Length + 1];
                 keys.CopyTo(columns, 0);
                 columns[^1] = output ?? Unit;
-                var function = AddEngineTable(name, kind, columns, lattice, output, options.Subsumable);
+                // As egglog, every relation and constructor is subsumable unless the options opt it out.
+                var subsumable = options.Subsumable ?? kind != TableKind.Function;
+                var function = AddEngineTable(name, kind, columns, lattice, output, subsumable);
                 var handle = create();
                 handle.Graph = this;
                 handle.Name = name;
@@ -420,7 +432,7 @@ namespace Eggnog
                 handle.KeyArray = keys;
                 handle.Output = output;
                 handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
-                handle.Subsumable = options.Subsumable;
+                handle.Subsumable = subsumable;
                 handle.Function = function;
                 handle.Columns = columns;
                 if (handle is FunctionHandle functionHandle)

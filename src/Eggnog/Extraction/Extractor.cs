@@ -9,8 +9,9 @@ namespace Eggnog
     /// Finds the cheapest terms of classes, or several variants of a class, in one scope as it is now; reusable for many
     /// roots. Reads, queries and
     /// writes that change nothing never invalidate it; a write that changes the scope, or a run in it or in a writable
-    /// ancestor, may, and it then throws <see cref="InvalidOperationException"/>; staleness ignores the clock. Ties are
-    /// broken by content, so a serial graph extracts deterministically.
+    /// ancestor, may, and it then throws <see cref="InvalidOperationException"/>; so does a constructor defined after the
+    /// extractor once it has rows that extraction may use. Staleness ignores the clock. Ties are broken by content, so a
+    /// serial graph extracts deterministically. Terms of any depth extract: nothing recurses once per level.
     /// </summary>
     /// <remarks>
     /// On a writable scope, a call takes the scope's thread domain: from another thread while the scope is in use it
@@ -24,6 +25,7 @@ namespace Eggnog
 
         readonly Relations.Extractor engine;
         readonly object sync = new();
+        readonly int constructorsAtCreation;
 
         /// <summary>
         /// Initializes a new instance.
@@ -36,6 +38,7 @@ namespace Eggnog
             Scope = scope;
             Costs = costs;
             this.engine = engine;
+            constructorsAtCreation = scope.Graph.Extraction.ConstructorCount;
         }
 
         /// <summary>
@@ -94,6 +97,7 @@ namespace Eggnog
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
                 lock (sync)
                 {
+                    ThrowIfConstructorAdded();
                     if (Scope.Engine.TryExtract(engine, SortOf<TSort>(), cell, out var raw) == false || raw is null)
                     {
                         term = null;
@@ -153,6 +157,7 @@ namespace Eggnog
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
                 lock (sync)
                 {
+                    ThrowIfConstructorAdded();
                     var raw = Scope.Engine.ExtractVariants(engine, SortOf<TSort>(), cell, count);
                     var wrapped = new Dictionary<Relations.ExtractedTerm, ExtractedTerm>(ReferenceEqualityComparer.Instance);
                     var variants = new ExtractedTerm[raw.Count];
@@ -193,6 +198,7 @@ namespace Eggnog
                 ThrowIfStopped(held);
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
                 lock (sync)
+                    ThrowIfConstructorAdded();
                     return Scope.Engine.TryGetCost(engine, SortOf<TSort>(), cell, out cost);
             }
             finally
@@ -229,29 +235,66 @@ namespace Eggnog
         Relations.Sort SortOf<TSort>() where TSort : struct, ISort<TSort> => Scope.Graph.Values.TypeOf<TSort>().ExtractionSort;
 
         /// <summary>
-        /// Wraps an engine term, sharing the wrappers of shared subterms.
+        /// Throws when a constructor defined after the extractor has rows in the scope's view that extraction may use:
+        /// the engine extractor reads the constructors declared when it was made, so it would miss those nodes and answer
+        /// a dearer term, or none. Defining a constructor alone leaves the extractor usable; its first row makes it stale,
+        /// as any other change of what it reads does. Called under the scope's guard. O(constructors defined since).
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Such a constructor has rows.</exception>
+        void ThrowIfConstructorAdded()
+        {
+            foreach (var constructor in Scope.Graph.Extraction.ConstructorsSince(constructorsAtCreation))
+                if (constructor.Extractable && Costs.IsUnextractable(constructor) == false && Scope.Engine.TableSize(constructor.Function) > 0)
+                    throw new InvalidOperationException(
+                        $"Constructor '{constructor.Name}' was defined after the extractor was created, and has rows in scope '{Scope.Path}'; create a new one.");
+        }
+
+        /// <summary>
+        /// Wraps an engine term, sharing the wrappers of shared subterms. A node is wrapped once its node children are, in
+        /// a post-order walk on a stack of its own, so a term of any depth needs no deeper call stack, as the engine's
+        /// <c>Build</c> and <see cref="Relations.ExtractedTerm"/>'s <c>AddTo</c> need none.
         /// </summary>
         ExtractedTerm Wrap(Relations.ExtractedTerm raw, Dictionary<Relations.ExtractedTerm, ExtractedTerm> wrapped)
         {
             if (wrapped.TryGetValue(raw, out var existing))
                 return existing;
 
-            var head = Scope.Graph.Extraction.HeadOf(raw.Function);
-            var children = raw.Children;
-            var arguments = new object[children.Length];
-            var cells = new uint[children.Length];
-            for (var i = 0; i < children.Length; i++)
+            // Each entry is a node and the index of its next child to look at; a node is wrapped when none is left.
+            var stack = new Stack<(Relations.ExtractedTerm Node, int Next)>();
+            stack.Push((raw, 0));
+            while (stack.Count > 0)
             {
-                var child = children[i];
-                cells[i] = child.Value.Rep;
-                arguments[i] = child.Kind == Relations.ExtractedTermKind.Node
-                    ? Wrap(child, wrapped)
-                    : head.KeyArray[i].DecodeObject(child.Value.Rep, Scope);
+                var (node, next) = stack.Pop();
+                var children = node.Children;
+                while (next < children.Length && (children[next].Kind != Relations.ExtractedTermKind.Node || wrapped.ContainsKey(children[next])))
+                    next++;
+
+                if (next < children.Length)
+                {
+                    stack.Push((node, next + 1));
+                    stack.Push((children[next], 0));
+                    continue;
+                }
+
+                if (wrapped.ContainsKey(node))
+                    continue;
+
+                var head = Scope.Graph.Extraction.HeadOf(node.Function);
+                var arguments = new object[children.Length];
+                var cells = new uint[children.Length];
+                for (var i = 0; i < children.Length; i++)
+                {
+                    var child = children[i];
+                    cells[i] = child.Value.Rep;
+                    arguments[i] = child.Kind == Relations.ExtractedTermKind.Node
+                        ? wrapped[child]
+                        : head.KeyArray[i].DecodeObject(child.Value.Rep, Scope);
+                }
+
+                wrapped.Add(node, new ExtractedTerm(head, new ClassId(node.Value.Rep, Scope.Origin), node.Cost, arguments, cells, Scope, node));
             }
 
-            var term = new ExtractedTerm(head, new ClassId(raw.Value.Rep, Scope.Origin), raw.Cost, arguments, cells, Scope, raw);
-            wrapped.Add(raw, term);
-            return term;
+            return wrapped[raw];
         }
 
     }

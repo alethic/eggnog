@@ -24,8 +24,9 @@ namespace Eggnog.Tests.Definitions
             graph.DefineRelation<long>("t");
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("t"));
             Assert.Throws<ArgumentException>(() => graph.DefineFunction<long, long>("t"));
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation("contradiction"));
-            Assert.Equal(2, graph.Tables.Count);
+            Assert.Equal("contradiction", graph.DefineRelation("contradiction").Name);
+            Assert.Throws<ArgumentException>(() => graph.DefineRelation("$contradiction"));
+            Assert.Equal(3, graph.Tables.Count);
         }
 
         [Fact]
@@ -43,7 +44,7 @@ namespace Eggnog.Tests.Definitions
         public void TheGraphsContradictionIsTheFirstTable()
         {
             var graph = new EGraph();
-            Assert.Equal("contradiction", graph.Contradiction.Name);
+            Assert.Equal("$contradiction", graph.Contradiction.Name);
             Assert.Same(graph.Contradiction, graph.Tables[0]);
             Assert.Equal(0, graph.Contradiction.Index);
             Assert.Equal(TableRole.Fact, graph.Contradiction.Role);
@@ -158,7 +159,10 @@ namespace Eggnog.Tests.Definitions
             Assert.Equal(Relations.DefaultValKind.Const, relation.Default.Kind);
             Assert.Equal(graph.Unit.Unit, relation.Default.Constant.Rep);
             Assert.Equal(Relations.MergeFnKind.AssertEq, relation.Merge.Kind);
-            Assert.False(relation.CanSubsume);
+            Assert.True(relation.CanSubsume);
+
+            Assert.False(graph.Engine.GetFunctionInfo(plain.Function).CanSubsume);
+            Assert.True(graph.Engine.GetFunctionInfo(c.Function).CanSubsume);
 
             var withLattice = graph.Engine.GetFunctionInfo(latticed.Function);
             Assert.Equal(new[] { text, number }, withLattice.Schema.ToArray());

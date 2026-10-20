@@ -33,11 +33,12 @@ namespace Eggnog
         /// of a <see cref="ScopeWriter"/>. A subsumed row stays in the table and is still found by lookups, checks and
         /// host reads, but rule bodies, queries and split rules no longer match it, and extraction skips it.
         /// Subsumption is sticky: nothing makes a row unsubsumed. Only relations and constructors can be subsumable, as
-        /// in egglog, whose language refuses to subsume a function. The default, <c>false</c>, stores no subsumption
-        /// cell, so a table that is never subsumed pays nothing for it, where egglog gives every constructor and
-        /// relation one.
+        /// in egglog, whose language refuses to subsume a function. The default, <c>null</c>, is egglog's: every relation
+        /// and constructor is subsumable, and no function. <c>false</c> opts a relation or constructor out, an addition:
+        /// it stores no subsumption cell, so a table that is never subsumed pays nothing for it, and refuses to be
+        /// subsumed; <c>true</c> for a function is refused.
         /// </summary>
-        public bool Subsumable { get; init; }
+        public bool? Subsumable { get; init; }
 
     }
 

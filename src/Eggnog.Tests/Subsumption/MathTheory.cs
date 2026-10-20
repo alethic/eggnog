@@ -15,6 +15,9 @@ namespace Eggnog.Tests.Subsumption
         /// </summary>
         public static readonly TableOptions Subsumable = new() { Subsumable = true };
 
+        /// <summary>Gets the options of a relation or constructor that opts out of subsumption.</summary>
+        public static readonly TableOptions NotSubsumable = new() { Subsumable = false };
+
         /// <summary>
         /// Defines the theory in a new graph.
         /// </summary>
@@ -26,7 +29,7 @@ namespace Eggnog.Tests.Subsumption
             Var = Graph.DefineConstructor<string, Node>("Var", 1, Subsumable);
             Add = Graph.DefineConstructor<Node, Node, Node>("Add", 1, Subsumable);
             Mul = Graph.DefineConstructor<Node, Node, Node>("Mul", 1, Subsumable);
-            Seen = Graph.DefineRelation<long>("seen");
+            Seen = Graph.DefineRelation<long>("seen", NotSubsumable);
             Rules = Graph.DefineRuleset("rules");
         }
 
@@ -48,7 +51,7 @@ namespace Eggnog.Tests.Subsumption
         /// <summary>Gets <c>(Mul x y)</c>.</summary>
         public Constructor<Node, Node, Node> Mul { get; }
 
-        /// <summary>Gets the relation <c>seen</c> over numbers, which is not subsumable.</summary>
+        /// <summary>Gets the relation <c>seen</c> over numbers, which opts out of subsumption.</summary>
         public Relation<long> Seen { get; }
 
         /// <summary>Gets an empty ruleset.</summary>

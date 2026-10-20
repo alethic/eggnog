@@ -53,8 +53,10 @@ namespace Eggnog
         internal override string FormatValue(double value) => Relations.LiteralText.Float(value);
 
         /// <inheritdoc />
-        internal override int CompareValues(double x, double y) => OrderedDouble.CompareValues(x, y);
+        internal override string DebugValue(double value) => Relations.DoubleCodec.Format(value);
 
+        /// <inheritdoc />
+        internal override int CompareValues(double x, double y) => OrderedDouble.CompareValues(x, y);
 
     }
 
