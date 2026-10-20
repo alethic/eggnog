@@ -14,6 +14,11 @@ namespace Eggnog
         /// </summary>
         const string RootTagName = "root";
 
+        /// <summary>
+        /// The name of <see cref="Contradiction"/>, under the reserved <c>$</c> prefix.
+        /// </summary>
+        const string ContradictionName = "$contradiction";
+
         readonly Dictionary<string, ScopeTag> scopeTagsByName = new(StringComparer.Ordinal);
         ScopeTag[] scopeTags;
         ReadOnlyCollection<ScopeTag> scopeTagsView;

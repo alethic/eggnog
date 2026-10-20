@@ -69,7 +69,9 @@ namespace Eggnog.Tests.Scopes
             outer.Assume(t.Fact.Of("a"), t.Best.Of("k").Is(4L));
             outer.Run(Schedule.Saturate(t.Rules));
             Assert.True(outer.Check(facts.Of("a")));
-            Assert.Single(t.Graph.Mirrors.CopyRules(t.Outer));
+
+            // The relation fact is subsumable, as every relation is: its mirror copies its rows and its subsumed rows.
+            Assert.Equal(2, t.Graph.Mirrors.CopyRules(t.Outer).Length);
 
             // A second mirror of the same tag, made after that sync; outer has not changed since.
             var bests = t.Graph.DefineFunction<string, long>("bests", ValueLattice.Max<long>());
@@ -79,7 +81,7 @@ namespace Eggnog.Tests.Scopes
                 r.When(v.Is(t.Best.In(t.Outer).Of(k)));
                 r.Then(bests.Of(k).Is(v));
             });
-            Assert.Equal(2, t.Graph.Mirrors.CopyRules(t.Outer).Length);
+            Assert.Equal(3, t.Graph.Mirrors.CopyRules(t.Outer).Length);
 
             outer.Run(Schedule.Saturate(t.Rules));
 

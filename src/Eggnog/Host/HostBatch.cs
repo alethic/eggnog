@@ -419,7 +419,7 @@ namespace Eggnog
         static void CheckSubsumable(TableHandle table, string parameter)
         {
             if (table.Subsumable == false)
-                throw new ArgumentException($"'{table.Name}' is not subsumable; define it with TableOptions.Subsumable to subsume its rows.", parameter);
+                throw new ArgumentException($"'{table.Name}' is not subsumable: only relations and constructors are, unless defined with TableOptions.Subsumable false.", parameter);
         }
 
         /// <summary>

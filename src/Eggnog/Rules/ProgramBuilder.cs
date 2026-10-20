@@ -86,16 +86,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
         public RuleProgram Build()
         {
-            DeclareVariables();
-            foreach (var fact in draft.Body)
-                AddBodyFact(fact, null);
-
-            ResolveBody();
-            CheckLicence();
-            foreach (var item in draft.Head)
-                AddHeadItem(item);
-
-            var writesAnalysis = CheckAnalysisWriters();
+            var writesAnalysis = CheckRule();
             ReadMirrors();
             var named = new List<int>();
             foreach (var (_, _, variable) in draft.Variables)
@@ -110,6 +101,33 @@ namespace Eggnog
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
                 named.ToArray(), writesAnalysis, readScopes.ToArray());
+        }
+
+        /// <summary>
+        /// Checks the draft as <see cref="Build"/> does, short of creating the mirrors of its scoped reads: what a
+        /// definition of several rules runs on a rule before it creates any mirror, so that a refused definition
+        /// registers none. The builder is spent afterwards.
+        /// </summary>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
+        public void Check() => CheckRule();
+
+        /// <summary>
+        /// Every check of <see cref="Build"/> before the mirrors: variables, body normalization with scoped reads, range
+        /// restriction and step order, the licence, the head and the analysis-writer check.
+        /// </summary>
+        /// <returns>Whether the rule writes an analysis table.</returns>
+        bool CheckRule()
+        {
+            DeclareVariables();
+            foreach (var fact in draft.Body)
+                AddBodyFact(fact, null);
+
+            ResolveBody();
+            CheckLicence();
+            foreach (var item in draft.Head)
+                AddHeadItem(item);
+
+            return CheckAnalysisWriters();
         }
 
         /// <summary>
@@ -558,7 +576,7 @@ namespace Eggnog
             CheckTable(table);
             CheckWritable(table);
             if (table.Subsumable == false)
-                throw Error($"'{table.Name}' is not subsumable; define it with TableOptions.Subsumable to subsume its rows");
+                throw Error($"'{table.Name}' is not subsumable: only relations and constructors are, unless defined with TableOptions.Subsumable false");
 
             Operand[] inputs;
             if (item.Fact is null && item.Variable is not null)

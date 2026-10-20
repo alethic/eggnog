@@ -6,7 +6,9 @@ namespace Eggnog
     /// <summary>
     /// Computed values from C# lambdas, which render as <c>&lt;lambda&gt;</c>; prefer named primitives
     /// (<see cref="Primitive.Create{T1, TResult}(string, Func{T1, TResult})"/>, <see cref="Primitives"/>) where
-    /// rendering matters. Lambdas must be pure, deterministic and thread-safe, and must not call into any graph.
+    /// rendering matters. Lambdas must be pure, deterministic and thread-safe, and must not call into any graph. A lambda
+    /// is never partial (<see cref="Primitive.IsPartial"/>): one that throws fails the rule, so a function with no result
+    /// for some arguments is a named primitive (<see cref="Primitive.CreatePartial{T1, TResult}(string, PartialFunc{T1, TResult})"/>).
     /// </summary>
     public static class Compute
     {

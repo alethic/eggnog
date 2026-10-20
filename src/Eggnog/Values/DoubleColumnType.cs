@@ -5,9 +5,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>. Encoding maps −0.0 to +0.0 and rejects NaN, because
-    /// equal values must have equal cells: <c>DoubleCodec</c> treats −0.0 and +0.0 as one value and decodes whichever
-    /// was interned first, and NaN equals nothing.
+    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>, with egglog's <c>OrderedFloat</c> semantics
+    /// (<see cref="OrderedDouble"/>): NaN is a value, equal to itself and greater than every other value, and −0.0
+    /// equals +0.0. As in egglog, the codec interns both zeros as one value and every NaN as one, and decodes whichever
+    /// was interned first: in a graph that interned −0.0 before +0.0, the zero reads back as −0.0.
     /// </summary>
     internal sealed class DoubleColumnType : ColumnType<double>
     {
@@ -25,7 +26,7 @@ namespace Eggnog
         {
             this.values = values;
             engineType = Relations.ColumnTy.Base(values.RegisterType<Relations.DoubleCodec, double>());
-            sort = new Relations.BaseSort<Relations.DoubleCodec, double>("f64", Relations.LiteralText.Float, Comparer<double>.Default);
+            sort = new Relations.BaseSort<Relations.DoubleCodec, double>("f64", Relations.LiteralText.Float, OrderedDouble.Instance);
         }
 
         /// <inheritdoc />
@@ -35,18 +36,12 @@ namespace Eggnog
         internal override Relations.Sort ExtractionSort => sort;
 
         /// <inheritdoc />
-        internal override uint Encode(double value) => values.Get<Relations.DoubleCodec, double>(Normalize(value)).Rep;
+        internal override uint Encode(double value) => values.Get<Relations.DoubleCodec, double>(value).Rep;
 
         /// <inheritdoc />
         internal override bool TryEncodeExisting(double value, out uint cell)
         {
-            if (double.IsNaN(value))
-            {
-                cell = 0;
-                return false;
-            }
-
-            var found = values.TryGetExisting<Relations.DoubleCodec, double>(value == 0 ? 0.0 : value, out var boxed);
+            var found = values.TryGetExisting<Relations.DoubleCodec, double>(value, out var boxed);
             cell = boxed.Rep;
             return found;
         }
@@ -58,22 +53,10 @@ namespace Eggnog
         internal override string FormatValue(double value) => Relations.LiteralText.Float(value);
 
         /// <inheritdoc />
-        internal override string DebugValue(double value) => Relations.DoubleCodec.Format(value == 0 ? 0.0 : value);
+        internal override string DebugValue(double value) => Relations.DoubleCodec.Format(value);
 
         /// <inheritdoc />
-        internal override int CompareValues(double x, double y) => x.CompareTo(y);
-
-        /// <summary>
-        /// Maps −0.0 to +0.0 and rejects NaN.
-        /// </summary>
-        /// <exception cref="ArgumentException"><paramref name="value"/> is NaN.</exception>
-        static double Normalize(double value)
-        {
-            if (double.IsNaN(value))
-                throw new ArgumentException("NaN is not a value: it equals nothing, so no column can hold it.", nameof(value));
-
-            return value == 0 ? 0.0 : value;
-        }
+        internal override int CompareValues(double x, double y) => OrderedDouble.CompareValues(x, y);
 
     }
 

@@ -66,7 +66,7 @@ namespace Eggnog
             scopeTagsByName.Add(RootTagName, RootTag);
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
-            Contradiction = DefineRelation("contradiction");
+            Contradiction = DefineContradiction();
             Engine.DesignateContradiction(Contradiction.Function);
         }
 
@@ -81,8 +81,10 @@ namespace Eggnog
         public Scope Root { get; }
 
         /// <summary>
-        /// Gets the built-in nullary relation "this scope has no model", named <c>contradiction</c>: a fact table like any
-        /// other, which <see cref="Scope.IsContradictory"/> reads and <see cref="RunOptions.StopOnContradiction"/> obeys.
+        /// Gets the built-in nullary relation "this scope has no model", an addition egglog lacks, named
+        /// <c>$contradiction</c>, a name no user's table can take (the <c>$</c> prefix is reserved), so that it leaves
+        /// <c>contradiction</c> to an egglog program: a fact table like any other, which <see cref="Scope.IsContradictory"/>
+        /// reads and <see cref="RunOptions.StopOnContradiction"/> obeys.
         /// </summary>
         public Relation Contradiction { get; }
 

@@ -8,6 +8,61 @@ the campaign method of the benchmark README ([`Eggnog.Benchmarks`](../src/Eggnog
 builds"). Items that wait on a trigger are under "Parked", and items considered and not planned are under "Closed",
 each with what would reopen it.
 
+## Fidelity with egglog
+
+Fidelity with upstream egglog comes first. A way an egglog feature behaves differently here is a defect to remove,
+unless .NET makes it unavoidable, and then it is recorded as such; an addition (scopes, case splits, host queries,
+partial and variadic user primitives) may restrict only itself, never an egglog feature, and takes no name or form egglog
+gives a meaning. The root, and any scope without live descendants, behaves as egglog does; restrictions apply only in
+child scopes and splits, where soundness needs them. Each item lands when egglog's own tests of the feature, ported to
+the C# API, pass; an item that touches the engine's root paths also passes the root gate ("Benchmarks and timed
+gates").
+
+- **Every constructor and relation subsumable.** egglog lets any constructor or relation be subsumed; here a table opts
+  in (`TableOptions.Subsumable`, decisions row 20a). If the subsumption cell costs more than the root gate allows, it is
+  added to a table on its first subsumption instead.
+- **Merges that are not lattices.** egglog's `:merge` is any expression over `old` and `new` (`(+ old new)`, `new`);
+  here only lattices and assert-equal. They are allowed at the root; a child's write to such a table is refused
+  (decisions row 2).
+- **`delete`.** egglog's `delete` action and command; here not in the API (architecture 2.13, item 1). Allowed where no
+  descendant is live, and in a child for its own rows (decisions row 1); the mirrors of scoped reads delete with it.
+- **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
+  heads never read (architecture 2.13, item 4). Such a rule inherits no progress in a child.
+- **Functions with an e-class output.** egglog's `function` may output an e-class sort, with a merge; here a function's
+  output is a value, and only constructors output classes.
+- **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
+  engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
+  order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
+  rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
+  22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
+- **Primitives over classes.** egglog's `bool-!=`, `ordering-min`, `ordering-max`, `value-eq` and user primitives take
+  e-class sorts; here primitives take values only (decisions row 22).
+- **Any arity.** egglog's tables and primitives take any number of columns and arguments; the typed API stops at four
+  key columns and four parameters. An untyped definition API serves the rest.
+- **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort
+  by function name and row values; here ties go by content (architecture 2.10, decisions row 21b).
+- **Strings by code point.** Rust compares strings by code point; here extraction and set order compare UTF-16 code
+  units, which differ only when a supplementary character meets U+E000-U+FFFF.
+- **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`.
+- **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
+  [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
+  literals, duplicate rule names, the thread count per graph.
+- **Schedulers.** egglog's `Scheduler` (`add_scheduler`, `step_rules_with_scheduler`), and the back-off scheduler of
+  egglog-experimental; here none. Matches a scheduler holds back stay pending in a child that inherits progress.
+- **Rule callbacks.** egglog's rules that call host code (`rust_rule`); here a host loop instead (architecture 2.13,
+  item 6).
+- **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child
+  scopes with their definitions scoped too. It runs egglog's own test files, the fidelity suite for every item above,
+  and the benchmark programs that need it (herbie, eggcc, `math.egg`, the transformer programs).
+- **`BigRat`.** egglog's rational sort; .NET has no rational type, so it needs one.
+- **Proofs.** As in Parked, when upstream's proof API settles in a release.
+
+Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
+[`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
+relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
+item 7), observable only in serialization, which emulates egglog's form; and the `BigInt` shift past `int.MaxValue`
+bits, which no .NET `BigInteger` holds.
+
 ## Engine work
 
 - **Kernel specialization.** Closed-world C# fast paths for a bounded set of plan shapes, chosen by the interpreter's
@@ -71,12 +126,6 @@ each with what would reopen it.
 - **Cancelling split-step lifts.** A cancellation token checked between lift rounds, so a run overshoots `TimeLimit` by
   at most one iteration or one lift round. Worth doing if one lift's p99, from the library-path timings, exceeds 10% of
   a typical `TimeLimit`.
-- **Tie-breaks by code point.** Extraction tie-breaks compare strings by UTF-16 code unit, where Rust compares code
-  points; they differ only when a supplementary character meets U+E000-U+FFFF. Code-point order follows when a test or a
-  user needs it.
-- **egglog 3.0.0.** The submodule holds egglog 3.0.0, but the engine still follows `5e655cae`, the earlier pin. The
-  changes between them that bear on Eggnog are listed in [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md), with those
-  that change behaviour the engine follows marked. The engine follows 3.0.0 once those are settled.
 
 ## Benchmarks and timed gates
 
@@ -150,9 +199,6 @@ Each waits on its trigger.
 - **Compaction above the highest live descendant cursor:** when a workload holds a child of a large writable scope, or
   splits at one, once the `BasicMath` regression is understood. A held child on `math` leaves 2.41 physical rows per
   live row (1.25 with none). Built if a held child is 10% or more slower than none and compaction brings it within 3%.
-- **Eq-sort containers in child contexts:** when the library offers containers of classes. The push/pop programs that
-  intern them in a child (`container-rebuild.egg`, `container-fail.egg`, the eq-container half of `vec.egg`, and the web
-  demo's `lambda.egg`, `typeinfer.egg` and `fusion.egg`) are then translated with `VecContainer` and `SetContainer`.
 - **The hidden-set remap:** when a split workload shows tombstones below the cases' cursors. On it, the tombstones below
   the highest live cursor and the row-buffer bytes are measured at the run's peak; the remap is built only if those
   tombstones are at least 25% of the peak's and hold at least 100 MB of row buffers.
@@ -172,8 +218,6 @@ Each waits on its trigger.
 - **Scoped interning:** when a host that cannot canonicalize literals would retire graphs more often than it can afford,
   or exceed its memory budget between retirements: 2-3 values (150-230 B) per fresh-literal query, 1.3-2 GB a day at 100
   queries a second. Gate: `RuleSetRunBenchmarks` and bridge `math` and `ac` within 2%.
-- **A "no result" outcome for user primitives:** when a user's partial function forces a `Where` filter and a
-  computation that duplicate parse logic. Until then, write a `Where` filter followed by the total computation.
 - **A per-case budget across executions, and a count of truncated cases:** when `Split(rule, Repeat(n, steps))`, which
   bounds each execution of a case, is not enough for a user, or a user must tell from the report that a case was cut
   off.
@@ -194,10 +238,6 @@ Considered and not planned. Each line says what would reopen it.
 
 - Compiling plans at run time (expression trees, emitted IL, generic structs composed by reflection): if kernel
   specialization goes ahead and its shapes prove open-ended.
-- The herbie and eggcc ports, and `math.egg`: if a `.egg` reader is built. `math.egg`'s pushes start from a root that
-  has run nothing; `ChildSubsumeAndDeleteTests` covers its one child-specific feature.
-- The `UnstableFn` programs and `MultiSet`: if the library gains function values. The `Map` blocks of
-  `tricky-type-checking.egg` and the `BigRat` programs: if a `.egg` reader is built.
 - 64-bit cells, and recycling ids or the clock globally in place: if a host cannot retire its graph on the gauge.
 - Timing the cost of building an `EGraph` against `2fd4a18`: closed by allocation (6,193 B for the engine's graph and
   56,000 B for the library's, both under one child's 96 KB); reopen if construction allocates more than a child.
@@ -213,10 +253,6 @@ Considered and not planned. Each line says what would reopen it.
 - Case-only tags (`T.In(caseTag)`): for a theory that needs a nested split or an in-case rule to read an outer case's
   view.
 - Counting depth-limited splits in `RunReport.SplitsSkipped`: for a user who tunes `SplitDepthLimit` and needs a signal.
-- Rule callbacks that write: for host logic that must run inside a `Saturate` loop and cannot use the host loop
-  ([`architecture.md`](architecture.md), section 2.13).
-- A public untyped layer beyond four key columns: for a user who cannot use a struct key
-  ([`architecture.md`](architecture.md), section 2.3).
 - A guarded lift as a feature: for a user who reasons over if-then-else guards in volume; the guidance is in
   [`architecture.md`](architecture.md), section 2.9.
 - Per-lift reporting for split steps: if a consumer needs exact per-lift figures.

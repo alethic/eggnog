@@ -16,20 +16,30 @@ namespace Eggnog.Tests.Subsumption
     public sealed class SubsumeDefinitionTests
     {
 
+        /// <summary>
+        /// As in egglog, every relation and constructor is subsumable and no function is; a relation or constructor may
+        /// opt out, which stores no subsumption cell.
+        /// </summary>
         [Fact]
-        public void RelationsAndConstructorsOptIn()
+        public void RelationsAndConstructorsAreSubsumableUnlessTheyOptOut()
         {
             var t = new MathTheory();
             var tag = t.Graph.DefineScopeTag("schema");
             var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
-            var plain = t.Graph.DefineConstructor<long, Node>("Plain");
+            var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
+            var byDefault = t.Graph.DefineConstructor<long, Node>("ByDefault");
+            var relation = t.Graph.DefineRelation<string>("relation");
+            var function = t.Graph.DefineFunction<string, long>("function");
 
             Assert.True(t.Num.Subsumable);
             Assert.True(fact.Subsumable);
             Assert.True(fact.In(tag).Subsumable);
+            Assert.True(byDefault.Subsumable);
+            Assert.True(relation.Subsumable);
+            Assert.False(function.Subsumable);
             Assert.False(plain.Subsumable);
             Assert.False(t.Seen.Subsumable);
-            Assert.False(new TableOptions().Subsumable);
+            Assert.Null(new TableOptions().Subsumable);
         }
 
         [Fact]
@@ -45,10 +55,10 @@ namespace Eggnog.Tests.Subsumption
         }
 
         [Fact]
-        public void ARuleSubsumesOnlyTablesThatOptedIn()
+        public void ARuleCannotSubsumeATableThatOptedOut()
         {
             var t = new MathTheory();
-            var plain = t.Graph.DefineConstructor<long, Node>("Plain");
+            var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
 
             var term = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("plain term", r =>
             {
@@ -181,10 +191,10 @@ namespace Eggnog.Tests.Subsumption
         }
 
         [Fact]
-        public void AHostSubsumesRelationRowsAndConstructorTermsOfTablesThatOptedIn()
+        public void AHostSubsumesRelationRowsAndConstructorTermsButNotOfTablesThatOptedOut()
         {
             var t = new MathTheory();
-            var plain = t.Graph.DefineConstructor<long, Node>("Plain");
+            var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
             var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
             var tag = t.Graph.DefineScopeTag("schema");
             var version = t.Root.Version;

@@ -75,7 +75,7 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void NegativeZeroIsNormalizedAndNaNIsRefused()
+        public void BothZerosAreOneValueAndNaNIsAValue()
         {
             var graph = new EGraph();
             var type = graph.Values.TypeOf<double>();
@@ -86,9 +86,10 @@ namespace Eggnog.Tests.Values
             graph.Root.Assume(f.Of("k").Is(-0.0));
             Assert.True(graph.Root.Check(f.Of("k").Is(0.0)));
             Assert.True(double.IsPositiveInfinity(1 / graph.Root.Get(f.Of("k"))));
-            Assert.Throws<ArgumentException>(() => graph.Root.Assume(f.Of("j").Is(double.NaN)));
+            graph.Root.Assume(f.Of("j").Is(double.NaN));
             Assert.False(graph.Root.Check(f.Of("k").Is(double.NaN)));
-            Assert.False(graph.Root.TryGet(f.Of("j"), out _));
+            Assert.True(graph.Root.TryGet(f.Of("j"), out var nan));
+            Assert.True(double.IsNaN(nan));
         }
 
         [Fact]

@@ -25,6 +25,27 @@ namespace Eggnog
         {
             var licence = draft.Erasing ?? ruleset.Licence;
             var program = new ProgramBuilder(graph, draft, owner, licence: licence).Build();
+            return Lower(graph, draft, ruleset, owner, licence, program);
+        }
+
+        /// <summary>
+        /// Checks a rule as <see cref="Compile"/> does, short of creating the mirrors of its scoped reads and lowering it,
+        /// so that a definition of several rules can check each before it registers anything. Called under the graph's
+        /// definition lock.
+        /// </summary>
+        /// <param name="graph">The graph.</param>
+        /// <param name="draft">What the rule's builder collected.</param>
+        /// <param name="ruleset">The rule's ruleset.</param>
+        /// <param name="owner">The scope of a local rule; <c>null</c> for a global one.</param>
+        /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
+        public static void Check(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner) =>
+            new ProgramBuilder(graph, draft, owner, licence: draft.Erasing ?? ruleset.Licence).Check();
+
+        /// <summary>
+        /// Lowers a rule's program to its engine variants.
+        /// </summary>
+        static CompiledRule Lower(EGraph graph, RuleDraft draft, Ruleset ruleset, Scope? owner, ScopeTag? licence, RuleProgram program)
+        {
             var serial = graph.NextSerial();
             var effective = draft.OwnFactsReason is null ? licence : null;
             var rule = new Rule(draft.Name, ruleset, owner, draft.Naive, draft, effective, Array.AsReadOnly(program.ReadScopes));

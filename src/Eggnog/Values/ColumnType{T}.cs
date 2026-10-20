@@ -63,8 +63,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns>The cell.</returns>
-        /// <exception cref="ArgumentException">The value is not representable (a NaN double, a default
-        /// class).</exception>
+        /// <exception cref="ArgumentException">The value is not representable (a default class).</exception>
         internal abstract uint Encode(T value);
 
         /// <summary>

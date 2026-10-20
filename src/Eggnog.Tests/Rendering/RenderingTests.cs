@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Rendering
                 r.Where(x, y, (a, b) => a < b);
                 r.Then(t.Num.Of(Compute.Of(x, y, (a, b) => a + b)));
             });
-            Assert.Equal("(rule ((num x) (num y) (<lambda> x y)) ((num (<lambda> x y))) :ruleset rules)", rule.ToString());
+            Assert.Equal("(rule ((num x) (num y) (guard (<lambda> x y))) ((num (<lambda> x y))) :ruleset rules)", rule.ToString());
         }
 
         [Fact]
@@ -111,7 +111,7 @@ namespace Eggnog.Tests.Rendering
                 r.Naive();
                 r.Then(t.Num.Of(1L), t.Graph.Contradiction.Of());
             });
-            Assert.Equal("(rule () ((num 1) (contradiction)) :ruleset rules :naive)", naive.ToString());
+            Assert.Equal("(rule () ((num 1) ($contradiction)) :ruleset rules :naive)", naive.ToString());
         }
 
         [Fact]
@@ -177,7 +177,7 @@ namespace Eggnog.Tests.Rendering
             Assert.Equal("(present \"kind\")", t.Root.Rows(present)[0].ToString());
             Assert.Equal("(dom \"kind\") = (set-of \"a\" \"b\")", t.Root.Rows(dom)[0].ToString());
             Assert.Equal($"(StrEq \"kind\" \"a\") = {made.Id}", t.Root.Rows(strEq)[0].ToString());
-            Assert.Equal("(contradiction)", RowOf(t, t.Graph.Contradiction));
+            Assert.Equal("($contradiction)", RowOf(t, t.Graph.Contradiction));
         }
 
         [Fact]
@@ -187,7 +187,7 @@ namespace Eggnog.Tests.Rendering
             var tautology = c.Rewrite.Rules[4];
             Assert.Equal("declared tautology", tautology.Name);
             Assert.Equal(
-                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (set-subset d s)) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
+                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (guard (set-subset d s))) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
                 tautology.ToString());
 
             var lower = c.Rewrite.Rules[0];
@@ -225,7 +225,7 @@ namespace Eggnog.Tests.Rendering
             t.Root.Assume(f.Of().Is(5L), t.Graph.Contradiction.Of(), dom.Of(default(Shade)).Is(ValueSet.Of("b", "a")));
 
             Assert.Equal("(f) = 5", t.Root.Rows(f).Single().ToString());
-            Assert.Equal("(contradiction)", t.Root.Rows(t.Graph.Contradiction).Single().ToString());
+            Assert.Equal("($contradiction)", t.Root.Rows(t.Graph.Contradiction).Single().ToString());
             Assert.Equal(string.Create(CultureInfo.InvariantCulture, $"(dom {default(Shade)}) = (set-of \"a\" \"b\")"), t.Root.Rows(dom).Single().ToString());
         }
 
