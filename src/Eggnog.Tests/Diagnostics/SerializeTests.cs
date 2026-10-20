@@ -145,6 +145,25 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Equal(new[] { "primitive-i64-1" }, row0.Children);
         }
 
+        /// <summary>
+        /// Rows are numbered in the table's storage order, as egglog's <c>for_each_while</c> walks it, not in content
+        /// order: rows written one batch after another keep the order they were written in.
+        /// </summary>
+        [Fact]
+        public void RowsAreNumberedInStorageOrder()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            graph.Root.Assume(r.Of(3L));
+            graph.Root.Assume(r.Of(1L));
+            graph.Root.Assume(r.Of(2L));
+
+            var serialized = graph.Root.Serialize();
+
+            var children = Enumerable.Range(0, 3).Select(i => serialized.Nodes.Single(n => n.Id == $"function-{i}-R").Children.Single());
+            Assert.Equal(new[] { "primitive-i64-3", "primitive-i64-1", "primitive-i64-2" }, children);
+        }
+
         [Fact]
         public void TooManyRowsTruncateATable()
         {

@@ -334,7 +334,7 @@ namespace Eggnog
         /// Serializes this scope's e-graph as egglog's <c>EGraph::serialize</c> does, into the graph of the
         /// egraph-serialize crate that egglog's visualizer reads (<see cref="SerializedGraph.ToJson"/>): for debugging.
         /// It is the scope's view, as <see cref="Rows"/> lists it, classes canonical here: every table but the hidden
-        /// mirrors, in definition order, its rows in content order, subsumed ones marked. Reads only: it never interns.
+        /// mirrors, in definition order, its rows in the table's storage order, as egglog numbers them, subsumed ones marked. Reads only: it never interns.
         /// </summary>
         /// <param name="options">What to include; <c>null</c> for everything.</param>
         /// <returns>The serialized graph.</returns>

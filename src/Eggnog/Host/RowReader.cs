@@ -130,6 +130,61 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Reads the rows of <paramref name="table"/> in <paramref name="scope"/>'s view as cells, a class canonical in
+        /// the scope, in the engine's table order, the order of its storage, which egglog's <c>for_each_while</c> walks;
+        /// two rows that canonicalize alike are one, at the first's place, subsumed if either is. What
+        /// <see cref="Scope.Serialize"/> numbers its rows by. O(rows).
+        /// </summary>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="table">The table.</param>
+        /// <returns>The rows: their cells (keys, then the output unless the table is a relation) and subsumption.</returns>
+        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
+        public static List<(uint[] Cells, bool Subsumed)> ReadCellsInTableOrder(Scope scope, TableHandle table)
+        {
+            var source = Source(scope, table);
+            var columns = table.Columns;
+            var width = columns.Length;
+            var subsumable = table.Subsumable;
+            using var cells = new TupleBuffer(width);
+            var subsumed = new List<bool>();
+            var row = new uint[width];
+            source.Engine.ForEach(table.Function, visited =>
+            {
+                var values = visited.Values;
+                for (var i = 0; i < width; i++)
+                    row[i] = values[i].Rep;
+
+                cells.Add(row);
+                subsumed.Add(subsumable && visited.Subsumed);
+            });
+
+            var sorts = new List<int>();
+            for (var column = 0; column < width; column++)
+                if (columns[column].Kind == ColumnKind.Sort)
+                    sorts.Add(column);
+
+            scope.Engine.CanonicalizeColumns(cells.Cells, width, sorts.ToArray());
+            var rows = new List<(uint[] Cells, bool Subsumed)>(cells.Count);
+            var seen = new Dictionary<uint[], int>(CellsComparer.Instance);
+            for (var i = 0; i < cells.Count; i++)
+            {
+                var tuple = cells[i].ToArray();
+                if (seen.TryGetValue(tuple, out var at))
+                {
+                    if (subsumed[i])
+                        rows[at] = (rows[at].Cells, true);
+
+                    continue;
+                }
+
+                seen.Add(tuple, rows.Count);
+                rows.Add((tuple, subsumed[i]));
+            }
+
+            return rows;
+        }
+
+        /// <summary>
         /// Decodes a cell: a class as a <see cref="ClassId"/> with the scope's origin, a value as its CLR value.
         /// </summary>
         static object Decode(Scope scope, ColumnType type, uint cell) =>

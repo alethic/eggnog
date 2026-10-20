@@ -31,8 +31,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the node's id: <c>function-{row}-{table}</c> for a table's row (its position in the table's content
-        /// order), <c>primitive-{class}</c> for a value, <c>dummy-{class}</c> for a placeholder.
+        /// Gets the node's id: <c>function-{row}-{table}</c> for a table's row (its position in the table's storage order,
+        /// as egglog's), <c>primitive-{class}</c> for a value, <c>dummy-{class}</c> for a placeholder.
         /// </summary>
         public string Id { get; }
 
