@@ -494,11 +494,6 @@ namespace Eggnog.Relations
         /// </summary>
         internal FunctionId FunctionOf(int node) => slots[nodeSlot[node]].Id;
 
-        /// <summary>
-        /// Gets the final cost of the class a node belongs to.
-        /// </summary>
-        internal long ClassCostOf(int node) => classCost[nodeClass[node]];
-
         void GrowNodes()
         {
             var size = nodeSlot.Length * 2;

@@ -9,8 +9,9 @@ namespace Eggnog.Relations
     /// One node of an extracted term, as a tree of objects: an e-class's chosen node (a function applied to its
     /// children's terms), a base value, or a container applied to its elements' terms. Each subterm carries its sort, its
     /// value (the canonical e-class id, the base value or the container id) and its cost. Subterms for the same value are
-    /// the same instance, so the tree is a DAG of shared objects. <see cref="Extractor.TryExtractTerm"/> builds it; the
-    /// rule layer's <c>ExtractedTerm</c> is a typed view of it.
+    /// the same instance, so the tree is a DAG of shared objects; the root of a variant, one node of its class with its
+    /// own cost, is the exception. <see cref="Extractor.TryExtractTerm"/> and <see cref="Extractor.ExtractVariantTerms"/>
+    /// build it; the rule layer's <c>ExtractedTerm</c> is a typed view of it.
     /// </summary>
     /// <remarks>
     /// Immutable and thread-safe.
@@ -139,8 +140,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Adds the term to <paramref name="dag"/>, as
-        /// <see cref="Extractor.TryExtractBest(Sort, Value, TermDag, out ExtractionResult)"/> would have. Iterative and
-        /// memoized per subterm.
+        /// <see cref="Extractor.TryExtractBest(Sort, Value, TermDag, out ExtractionResult)"/> would have, or for a
+        /// variant <see cref="Extractor.ExtractVariants(Sort, Value, int, TermDag)"/>. Iterative and memoized per
+        /// subterm.
         /// </summary>
         /// <param name="dag">The DAG.</param>
         /// <returns>The term's id in the DAG.</returns>

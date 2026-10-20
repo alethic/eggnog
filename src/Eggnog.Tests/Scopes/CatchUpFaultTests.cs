@@ -74,8 +74,10 @@ namespace Eggnog.Tests.Scopes
         /// An extractor query of a writable scope catches the scope up: a merge that throws there fails the query with
         /// the scope's fault, and the extractor is refused afterwards as every call of a faulted scope is.
         /// </summary>
-        [Fact]
-        public void AnExtractorQueryWhoseCatchUpMergeThrowsFaultsTheScope()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AnExtractorQueryWhoseCatchUpMergeThrowsFaultsTheScope(bool variants)
         {
             var w = new ThrowingLatticeWorld();
             var child = w.Parent.CreateChild();
@@ -86,10 +88,13 @@ namespace Eggnog.Tests.Scopes
             w.Parent.Assume(w.F.Of("x").Is(2L));
             w.Arm();
 
-            var failure = Assert.Throws<RuleEvaluationException>(() => extractor.TryGetCost(node, out _));
+            var failure = variants
+                ? Assert.Throws<RuleEvaluationException>(() => extractor.ExtractVariants(node, 2))
+                : Assert.Throws<RuleEvaluationException>(() => extractor.TryGetCost(node, out _));
 
             Assert.Same(failure, child.Failure);
             Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => extractor.Extract(node)).InnerException);
+            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => extractor.ExtractVariants(node, 2)).InnerException);
         }
 
         /// <summary>

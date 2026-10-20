@@ -397,6 +397,11 @@ namespace Eggnog.Tests.Concurrency
             if (extract[0] is not InvalidOperationException)
                 refusedAll.Add($"extractor: {extract[0]?.GetType().Name ?? "ran"}");
 
+            var variants = new Exception?[1];
+            Assert.True(Spawn(() => extractor.ExtractVariants(a, 2), variants, 0).Join(Patience));
+            if (variants[0] is not InvalidOperationException)
+                refusedAll.Add($"extractor variants: {variants[0]?.GetType().Name ?? "ran"}");
+
             release.Set();
             Assert.True(run.Join(Patience));
             Assert.Null(errors[0]);

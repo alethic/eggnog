@@ -85,7 +85,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `ScopeTag` | A label on scopes, through which rules read another scope's facts (`In(tag)`) and rulesets restrict what their rules may judge on. |
 | `Query` | A reusable conjunctive query (`DefineQuery`), run with `Any`, `Count` or `ForEachMatch`. |
 | `SplitRule`, `CaseSet` | Case splits: `Schedule.Split` opens one case per value of a key and lifts what every case proves; `Scope.OpenCases` lets the host drive cases. |
-| `Extractor`, `CostModel` | The cheapest equivalent term of a class (`Scope.Extract`), under a cost model. |
+| `Extractor`, `CostModel` | The cheapest equivalent term of a class (`Scope.Extract`), or several of its variants cheapest first (`Scope.ExtractVariants`, egglog's `(extract x n)`), under a cost model. |
 | `RunOptions`, `RunReport` | Limits for a run (iterations, time, rows, cases), and what it did (iterations, per-rule statistics, steps). |
 
 ## Threads

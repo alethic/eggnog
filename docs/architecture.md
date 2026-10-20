@@ -390,7 +390,10 @@ they have no model.
 ### 2.10 Extraction
 
 `Scope.Extract(class, costs)` returns the cheapest term of a class as an `ExtractedTerm` (head, arguments, child
-terms, cost, and an s-expression `ToString`). `CreateExtractor(costs)` returns an `Extractor` that answers several
+terms, cost, and an s-expression `ToString`). `Scope.ExtractVariants(class, count, costs)` returns up to `count`
+variants of a class, egglog's `(extract x n)`: one node of the class each, with its arguments' cheapest terms, cheapest
+first, the node `Extract` chooses leading; its departures from egglog are decision 21 of
+[`engine/decisions.md`](engine/decisions.md). `CreateExtractor(costs)` returns an `Extractor` that answers several
 questions over one state of the scope. A `CostModel` gives each constructor a head cost (its declared cost by
 default), optionally a per-row cost function, and value costs (1 by default); a term costs the sum over its nodes.
 Unextractable heads and subsumed rows are skipped.

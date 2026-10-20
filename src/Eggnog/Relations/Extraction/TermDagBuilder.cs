@@ -25,7 +25,7 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        public TermId Node(int sort, uint value, int node, ReadOnlySpan<TermId> children) => dag.App(extractor.TermNameOf(node), children);
+        public TermId Node(int sort, uint value, int node, long cost, ReadOnlySpan<TermId> children) => dag.App(extractor.TermNameOf(node), children);
 
         /// <inheritdoc />
         public TermId Base(int sort, uint value)

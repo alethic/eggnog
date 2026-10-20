@@ -219,6 +219,17 @@ namespace Eggnog
         public abstract bool TryExtract(Relations.Extractor extractor, Relations.Sort sort, uint id, out Relations.ExtractedTerm? term);
 
         /// <summary>
+        /// Extracts up to <paramref name="count"/> variants of a class with an extractor this scope created.
+        /// </summary>
+        /// <param name="extractor">The extractor.</param>
+        /// <param name="sort">The class's extraction sort.</param>
+        /// <param name="id">The class; canonicalized here.</param>
+        /// <param name="count">The number of variants wanted; at least 0.</param>
+        /// <returns>The variants, cheapest first.</returns>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
+        public abstract IReadOnlyList<Relations.ExtractedTerm> ExtractVariants(Relations.Extractor extractor, Relations.Sort sort, uint id, int count);
+
+        /// <summary>
         /// Gets the cost of the cheapest term of a class with an extractor this scope created.
         /// </summary>
         /// <param name="extractor">The extractor.</param>

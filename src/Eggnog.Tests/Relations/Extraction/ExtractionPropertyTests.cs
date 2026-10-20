@@ -13,7 +13,8 @@ namespace Eggnog.Relations.Tests
     /// cost, recomputed over its tree, equals the reported cost; the term evaluates back to its class; no term found by
     /// brute-force enumeration is cheaper; on-demand and root-sort extractors agree, whatever order classes are asked
     /// in (also with mostly zero and saturated costs, where the on-demand extractor must replay earlier queries'
-    /// finalizations); the first variant is the best term; and with positive costs each class's choice is the least of
+    /// finalizations); the first variant is the best term, the variants are the class's ten cheapest nodes with a cost,
+    /// and as object terms they are the same terms with their own costs; and with positive costs each class's choice is the least of
     /// its cheapest nodes in the extractor's tie-break order (<see cref="D10Order"/>).
     /// </summary>
     public class ExtractionPropertyTests
@@ -110,7 +111,32 @@ namespace Eggnog.Relations.Tests
                 Assert.Equal(best, variants[0]);
 
                 Assert.True(variants.Zip(variants.Skip(1)).All(p => p.First.Cost <= p.Second.Cost), context);
+
+                // They are the class's nodes that are not subsumed and have a cost, the ten cheapest of them.
+                var nodeCosts = graph.Nodes
+                    .Where(n => n.Row[^1].Rep == owner)
+                    .Select(n => graph.NodeCost(n.Function, n.Row, graph.ReferenceCosts))
+                    .OfType<long>()
+                    .Order()
+                    .Take(10)
+                    .ToArray();
+                Assert.Equal(nodeCosts, variants.Select(v => v.Cost).ToArray());
                 Assert.Equal(variants.ToArray(), onDemand.ExtractVariants(graph.E, value, 10, dag).ToArray());
+
+                // As object trees they are the same terms: each root carries the class and its own cost, the head's
+                // plus its children's, which are the cheapest terms of their classes.
+                var variantTerms = onDemand.ExtractVariantTerms(graph.E, value, 10);
+                Assert.Equal(variants.Select(v => dag.ToString(v.Term)), variantTerms.Select(t => t.ToString()));
+                foreach (var (variant, variantTerm) in variants.Zip(variantTerms))
+                {
+                    Assert.Equal(owner, variantTerm.Value.Rep);
+                    var headAndChildren = graph.Costs[Array.IndexOf(graph.Functions, variantTerm.Function)];
+                    foreach (var child in variantTerm.Children)
+                        headAndChildren = RandomExtractionGraph.Add(headAndChildren, TreeCost(graph, child, new Dictionary<ExtractedTerm, long>(ReferenceEqualityComparer.Instance)));
+
+                    Assert.Equal(variant.Cost, variantTerm.Cost);
+                    Assert.Equal(headAndChildren, variantTerm.Cost);
+                }
 
                 // With positive costs, the choice is the least node of the cheapest, in the tie-break order.
                 if (positiveCosts)

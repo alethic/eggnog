@@ -21,7 +21,7 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        public ExtractedTerm Node(int sort, uint value, int node, ReadOnlySpan<ExtractedTerm> children)
+        public ExtractedTerm Node(int sort, uint value, int node, long cost, ReadOnlySpan<ExtractedTerm> children)
         {
             return new ExtractedTerm(
                 extractor.EGraph,
@@ -30,7 +30,7 @@ namespace Eggnog.Relations
                 new Value(value),
                 extractor.FunctionOf(node),
                 extractor.TermNameOf(node),
-                extractor.ClassCostOf(node),
+                cost,
                 children.ToArray());
         }
 
