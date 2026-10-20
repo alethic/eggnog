@@ -16,17 +16,12 @@ namespace Eggnog
         // without a lattice that meet with different values are a FactConflictException, before anything is staged.
         //
         // The check starts at the batch's first merge, and only when the graph has a function without a lattice keyed by
-        // a sort; otherwise no merge can conflict, and none of this state exists. It then reads every row of the tables
-        // whose keys a merge can change (those functions, and the constructors whose outputs can reach their keys): an
-        // O(rows of those tables) scan, once per batch that merges.
-        //
-        // A function with a merge that is not a lattice (FunctionMerge) counts here as one with a lattice at the root: the
-        // rebuild merges its two rows with the merge, as egglog's does, so they never conflict. Below the root, where only
-        // the root may write such a function, the rebuild could not rewrite a row of it, so its rows join the check there.
-        // The engine keeps the smaller id of two merged classes and rewrites the rows that mention the larger, so a merge
-        // in which a class keying such a row is the larger is an InvalidOperationException, before anything is staged.
-        // The overlay therefore tracks each class's smallest cell; a class keying such a row is always its class's
-        // smallest, since a merge that made it larger was refused.
+        // a sort (or, below the root, a function with a merge that only the root writes, keyed by a sort or holding
+        // one); otherwise no merge can conflict, and none of this state exists. It then reads every row of the tables
+        // whose keys a merge can change (those functions, and the constructors whose outputs can reach their keys or
+        // the classes they hold): an O(rows of those tables) scan, once per batch that merges. Two rows of a function
+        // of a sort that meet are checked at the end of the planning instead (CheckClassOutputs), since whether their
+        // classes are one when the rebuild compares them depends on the rebuild's passes.
 
         List<(TableHandle Table, uint[] Key, uint Output, bool Stored)>? mergeRows;
         HashSet<TableHandle>? congruent;
@@ -36,6 +31,8 @@ namespace Eggnog
         Queue<(uint A, uint B)>? merges;
         Dictionary<uint, TableHandle>? rootOnlyKeys;
         Dictionary<uint, uint>? smallest;
+        List<(int First, int Second)>? classOutputs;
+        Dictionary<uint, uint>? direct;
         bool mergeCheckDecided;
         bool mergedClasses;
 
@@ -52,6 +49,11 @@ namespace Eggnog
             mergedClasses = true;
             if (StartMergeCheck() == false)
                 return;
+
+            var x = Find(direct!, a);
+            var y = Find(direct!, b);
+            if (x != y)
+                direct![x] = y;
 
             merges!.Enqueue((a, b));
             Close();
@@ -106,6 +108,7 @@ namespace Eggnog
             congruent = new HashSet<TableHandle>(tables, ReferenceEqualityComparer.Instance);
             signatures = new Dictionary<string, int>(System.StringComparer.Ordinal);
             overlay = new Dictionary<uint, uint>();
+            direct = new Dictionary<uint, uint>();
             uses = new Dictionary<uint, List<int>>();
             merges = new Queue<(uint, uint)>();
 
@@ -151,10 +154,16 @@ namespace Eggnog
             var sorts = new HashSet<ColumnType>(ReferenceEqualityComparer.Instance);
             foreach (var table in tables)
             {
-                if (table is FunctionHandle { Lattice: null } function && (function.Merge is null || scope.IsRoot == false) && HasSortKey(table))
+                if (table is FunctionHandle { Lattice: null } function && (function.Merge is null || scope.IsRoot == false)
+                    && (HasSortKey(table) || (function.Merge is not null && table.Output!.Kind == ColumnKind.Sort)))
                 {
                     result.Add(table);
                     AddSortKeys(table, sorts);
+
+                    // Classes a function holds become equal through the constructors that reach their sort, which the
+                    // check of meeting rows (CheckClassOutputs) and the refusal below the root follow.
+                    if (table.Output!.Kind == ColumnKind.Sort)
+                        sorts.Add(table.Output);
                 }
             }
 
@@ -220,6 +229,10 @@ namespace Eggnog
                     (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(key[i], table);
             }
 
+            // Below the root, a merge of a class a row of such a function outputs would rewrite the row too.
+            if (table is FunctionHandle { Merge: not null } && table.Output!.Kind == ColumnKind.Sort)
+                (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(output, table);
+
             Place(index);
         }
 
@@ -268,6 +281,14 @@ namespace Eggnog
 
             if (a.Output == b.Output)
                 return;
+
+            // Two classes agree when the rebuild has made them equal by the pass in which the rows meet, which the
+            // check at the end of the planning works out (CheckClassOutputs).
+            if (a.Table.Output!.Kind == ColumnKind.Sort)
+            {
+                (classOutputs ??= new List<(int, int)>()).Add((first, second));
+                return;
+            }
 
             var (held, incoming) = a.Stored || b.Stored == false ? (a, b) : (b, a);
             var output = held.Table.Output!;
@@ -330,6 +351,96 @@ namespace Eggnog
         /// </summary>
         uint Smallest(uint representative) =>
             smallest is not null && smallest.TryGetValue(representative, out var cell) ? cell : representative;
+
+        /// <summary>
+        /// Checks, at the end of the planning, the rows of a function of a sort that the batch's merges make meet, as the
+        /// rebuild will: once the closure says some do (<see cref="Meet"/>), this replays the rebuild's passes over the
+        /// rows of the check. Each pass compares every row under the union-find the earlier passes left, starting from
+        /// the batch's own merges (its unions and its constructor writes), and then merges what met: a constructor's
+        /// meeting rows union their classes for the next pass, and two rows of a function of a sort that meet must hold
+        /// one class already, since its assert-equal merge panics on two, as egglog's does, before a later pass could
+        /// merge them. The batch refuses that, rather than let the panic fault the scope. O(passes × rows of the check),
+        /// and nothing unless such rows meet.
+        /// </summary>
+        /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
+        void CheckClassOutputs()
+        {
+            if (classOutputs is null)
+                return;
+
+            var finder = new Dictionary<uint, uint>(direct!);
+            while (true)
+            {
+                var placed = new Dictionary<string, int>(System.StringComparer.Ordinal);
+                var found = new List<(uint, uint)>();
+                for (var i = 0; i < mergeRows!.Count; i++)
+                {
+                    var row = mergeRows[i];
+                    var columns = row.Table.KeyArray;
+                    var canonical = new uint[row.Key.Length];
+                    for (var c = 0; c < canonical.Length; c++)
+                        canonical[c] = columns[c].Kind == ColumnKind.Sort ? Find(finder, row.Key[c]) : row.Key[c];
+
+                    var signature = Key(row.Table, canonical);
+                    if (placed.TryGetValue(signature, out var j) == false)
+                    {
+                        placed.Add(signature, i);
+                        continue;
+                    }
+
+                    // Values never change, so the closure checked them as they met; a function with a merge only the
+                    // root writes never meets a row here, since its key's merge is refused below the root.
+                    if (row.Table.Output!.Kind != ColumnKind.Sort || row.Table is FunctionHandle { Merge: not null })
+                        continue;
+
+                    var other = mergeRows[j];
+                    var x = Find(finder, other.Output);
+                    var y = Find(finder, row.Output);
+                    if (x == y)
+                        continue;
+
+                    if (row.Table.Kind == TableKind.Constructor)
+                    {
+                        found.Add((x, y));
+                        continue;
+                    }
+
+                    var (held, incoming) = other.Stored || row.Stored == false ? (other, row) : (row, other);
+                    var output = held.Table.Output!;
+                    throw new FactConflictException(held.Table, DecodeKeys(held.Table, held.Key), Decode(output, held.Output), Decode(output, incoming.Output));
+                }
+
+                if (found.Count == 0)
+                    return;
+
+                foreach (var (a, b) in found)
+                {
+                    var x = Find(finder, a);
+                    var y = Find(finder, b);
+                    if (x != y)
+                        finder[x] = y;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets a cell's class in a union-find of parent links, compressing the path.
+        /// </summary>
+        static uint Find(Dictionary<uint, uint> parents, uint cell)
+        {
+            var root = cell;
+            while (parents.TryGetValue(root, out var parent))
+                root = parent;
+
+            while (cell != root)
+            {
+                var next = parents[cell];
+                parents[cell] = root;
+                cell = next;
+            }
+
+            return root;
+        }
 
         /// <summary>
         /// Gets a cell's class in the overlay, compressing the path.

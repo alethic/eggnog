@@ -533,7 +533,12 @@ namespace Eggnog
                     AddDelete(item);
                     break;
                 default:
-                    AddHeadFact(new EqualityFact(item.Variable!, item.Right!));
+                    // A rewrite's right side is made, and a function application there would be read, which egglog
+                    // refuses in an action (LookupInRuleDisallowed, src/typechecking.rs:896-904); here it would be a write.
+                    if (item.Right!.Shape is { Kind: TermShapeKind.Application, Table.Kind: TableKind.Function })
+                        throw Error($"a rewrite's right side is made, and '{item.Right.Shape.Table.Name}' is a function, which a head does not read");
+
+                    AddHeadFact(new EqualityFact(item.Variable!, item.Right));
                     break;
             }
         }

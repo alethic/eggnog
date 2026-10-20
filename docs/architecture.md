@@ -143,7 +143,7 @@ There are three kinds of table, each typed by up to four key columns (`TableHand
 | Kind | Defined by | Rows | In the engine |
 |---|---|---|---|
 | Relation | `DefineRelation<T1, ...>(name)` | a set of key tuples | a function whose output is the unit value; merge: assert equal |
-| Function | `DefineFunction<T1, ..., TOut>(name, lattice)` or `(name, merge)` | one output per key (a functional dependency) | a function with a value output; merge: the lattice's or the `FunctionMerge`'s, or assert equal without either |
+| Function | `DefineFunction<T1, ..., TOut>(name, lattice)` or `(name, merge)` | one output per key (a functional dependency) | a function with a value or class output; merge: the lattice's or the `FunctionMerge`'s, or assert equal without either |
 | Constructor | `DefineConstructor<T1, ..., TSort>(name, cost)` | terms: one class per key | a function whose output is a class; default: a fresh id; merge: union the classes |
 
 A key of more than four columns is written as one column of a registered value type (`ValueStore.Register<T>`, a struct
@@ -157,6 +157,20 @@ over `ValueSet<T>`. A lattice also has a `CaseJoin`, the join a lift uses to com
 checks the laws on samples. A function with neither a lattice nor a merge refuses two different outputs for one key: a
 host write throws `FactConflictException` and writes nothing; a rule that derives a conflict fails with
 `RuleEvaluationException`.
+
+A function may output a class, as egglog's `function` of an e-class sort does (`DefineFunction<T1, ..., TSort>`): it
+holds the class written for a key without making a term or a union, the rebuild keeps the output canonical, and
+extraction leaves it out, as egglog's does. Its merge asserts the classes equal, or is `FunctionMerge.New` or `Old`; a
+lattice or `FunctionMerge.Of` decodes values, and is refused. A host write's value may then be a constructor term too,
+made if absent, as egglog's `set` evaluates it, and the class written again after a union that made it equal holds. Two
+rows that a union makes meet must hold one class by then: the rebuild compares them in the pass that makes them meet,
+under the merges of the passes before it, and its assert-equal merge panics on two classes that only that pass's
+congruences would make one, as egglog's does. A host batch replays those passes when it commits and refuses that before
+anything is written; a rule's run fails with `RuleEvaluationException`. A batch that merged classes refuses a later
+write of such a function without a merge, which a later call can make; a split's case writes its functions before its
+unions. A rewrite's right side may not be a function application, which egglog would look up in the head. Below the root
+a function with `New` or `Old` is root-only like any other, and a union in which a class one of its rows outputs would
+lose is refused as for its keys.
 
 A function with a merge that is not a lattice (`FunctionMerge<T>`) merges as egglog's `:merge new`, `:merge old` and
 `:merge (f old new)` do: `FunctionMerge.New`, `Old` and `Of(name, f)`, where `f` need be neither associative,
@@ -177,8 +191,8 @@ that assumes one; and a run in which a rule that writes one would run below the 
 No rule, query or split rule reads one in another scope (`In`), since its mirror would be written below the root; a host
 read may. Two cases depend on the data, so only the engine refuses them, with its `InvalidOperationException`: a rule's
 union below the root that would rewrite one of the function's rows fails the run (and faults a child); and a root write
-or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying the row,
-faults that child at its next call, and not the root.
+or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying or held
+by the row, faults that child at its next call, and not the root.
 
 `TableOptions` sets a relation's or function's role (`Fact`, the default, or `Analysis`, a table derived from terms
 alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and analyses
@@ -534,8 +548,8 @@ with egglog" lists:
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. A merge that is not a lattice is a C# function of the old and the new value (`FunctionMerge.Of`): egglog's merges
-   that call a table (`MergeFn::Function`) are not offered, nor are functions whose output is a class (egglog's
-   `function` over an e-class sort).
+   that call a table (`MergeFn::Function`) are not offered, and a function whose output is a class merges only as
+   `New`, `Old` or assert-equal (section 2.3).
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
 5. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.

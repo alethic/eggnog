@@ -249,9 +249,9 @@ namespace Eggnog
                 {
                     var left = equality.Left.Shape;
                     var right = equality.Right.Shape;
-                    if (IsApplication(left, TableKind.Function) && IsValue(right))
+                    if (IsApplication(left, TableKind.Function) && IsWritable(left, right))
                         PlanFunctionWrite(left, equality.Right);
-                    else if (IsApplication(right, TableKind.Function) && IsValue(left))
+                    else if (IsApplication(right, TableKind.Function) && IsWritable(right, left))
                         PlanFunctionWrite(right, equality.Left);
                     else if (IsApplication(left, TableKind.Constructor) && IsClassConstant(right))
                         PlanConstructorWrite(left, equality.Right);
@@ -368,11 +368,15 @@ namespace Eggnog
         /// when <see cref="IsEmpty"/>.
         /// </summary>
         /// <returns>Whether the scope changed.</returns>
+        /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
+        /// different classes when the rebuild compares them (<c>CheckClassOutputs</c>); nothing is staged.</exception>
         /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
         public bool Commit()
         {
             if (IsEmpty)
                 return false;
+
+            CheckClassOutputs();
 
             foreach (var term in pending)
             {
@@ -409,6 +413,13 @@ namespace Eggnog
         {
             var table = (FunctionHandle)application.Table!;
             CheckTable(table);
+
+            // egglog's next command would write a class after the merge's rebuild; the batch stages its merges after its
+            // writes, so a class it compares now may become equal to another only later. New and Old compare nothing.
+            if (mergedClasses && table.Output!.Kind == ColumnKind.Sort && table.Merge is null)
+                throw new InvalidOperationException(
+                    $"'{table.Name}' is written after this batch merged classes, and its output is a class; write it in a later call, which sees the merge as egglog's next command does.");
+
             if (table.Merge is not null)
             {
                 PlanMergeWrite(table, application, value);
@@ -709,11 +720,28 @@ namespace Eggnog
         static bool IsApplication(TermShape shape, TableKind kind) => shape.Kind == TermShapeKind.Application && shape.Table!.Kind == kind;
 
         /// <summary>
+        /// Gets whether a fact is a write of a function's value: an equality one side of which applies a function.
+        /// </summary>
+        /// <param name="fact">The fact.</param>
+        /// <returns>Whether <see cref="PlanFact"/> would plan it as a function write.</returns>
+        public static bool IsFunctionWrite(Fact fact) =>
+            fact is EqualityFact equality
+            && (IsApplication(equality.Left.Shape, TableKind.Function) || IsApplication(equality.Right.Shape, TableKind.Function));
+
+        /// <summary>
         /// Gets whether a shape stands for a value a function may be written: a constant, a computation, or a function's
         /// value read.
         /// </summary>
         static bool IsValue(TermShape shape) =>
             shape.Kind is TermShapeKind.Constant or TermShapeKind.Computation || IsApplication(shape, TableKind.Function);
+
+        /// <summary>
+        /// Gets whether <paramref name="value"/> may be written as the value of the function
+        /// <paramref name="application"/> applies: a value (<see cref="IsValue"/>), or, for a function of a sort, a
+        /// constructor term too, made if absent, as egglog's <c>set</c> of a function of an e-class sort evaluates it.
+        /// </summary>
+        static bool IsWritable(TermShape application, TermShape value) =>
+            IsValue(value) || (application.Table!.Output!.Kind == ColumnKind.Sort && IsApplication(value, TableKind.Constructor));
 
         /// <summary>
         /// Decodes key cells for an exception.

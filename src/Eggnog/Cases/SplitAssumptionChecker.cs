@@ -63,9 +63,9 @@ namespace Eggnog
                 {
                     var left = equality.Left.Shape;
                     var right = equality.Right.Shape;
-                    if (IsApplication(left, TableKind.Function) && right.Kind != TermShapeKind.Application)
+                    if (IsApplication(left, TableKind.Function) && (right.Kind != TermShapeKind.Application || IsClassWrite(left, right)))
                         CheckWrite(equality.Left, equality.Right);
-                    else if (IsApplication(right, TableKind.Function) && left.Kind != TermShapeKind.Application)
+                    else if (IsApplication(right, TableKind.Function) && (left.Kind != TermShapeKind.Application || IsClassWrite(right, left)))
                         CheckWrite(equality.Right, equality.Left);
                     else if (IsApplication(left, TableKind.Constructor) && IsClassValue(equality.Right))
                         CheckWrite(equality.Left, equality.Right);
@@ -239,6 +239,13 @@ namespace Eggnog
         /// Gets whether a shape is an application of a table of <paramref name="kind"/>.
         /// </summary>
         static bool IsApplication(TermShape shape, TableKind kind) => shape.Kind == TermShapeKind.Application && shape.Table!.Kind == kind;
+
+        /// <summary>
+        /// Gets whether <paramref name="value"/> is a constructor term written as the class of a function of a sort, as
+        /// egglog's <c>set</c> of a function of an e-class sort makes it.
+        /// </summary>
+        static bool IsClassWrite(TermShape application, TermShape value) =>
+            application.Table!.Output!.Kind == ColumnKind.Sort && IsApplication(value, TableKind.Constructor);
 
         /// <summary>
         /// Makes a definition error naming the split rule.

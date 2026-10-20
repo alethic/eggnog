@@ -45,7 +45,8 @@ namespace Eggnog
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">A fact is not a write.</exception>
         /// <exception cref="FactConflictException">A function without a lattice would get a second value, from the facts
-        /// or from a merge of the batch.</exception>
+        /// or from a merge of the batch. Two classes of a function of a sort that the batch's merges make meet are
+        /// compared when the batch commits, and <see cref="Scope.Write"/> throws then.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
@@ -109,7 +110,8 @@ namespace Eggnog
         /// <param name="b">The other class.</param>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values.</exception>
+        /// hold different values; two that hold classes are compared when the batch commits, and
+        /// <see cref="Scope.Write"/> throws then.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>

@@ -104,7 +104,8 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values, directly or through the congruences it causes; nothing is written.</exception>
+        /// hold different values or classes, directly or through the congruences it causes, when the rebuild compares
+        /// them; nothing is written.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed (the scope is faulted); or a lattice merge threw in the
@@ -320,7 +321,8 @@ namespace Eggnog
         /// <paramref name="write"/> caught still rejects the batch: <see cref="Write"/> then returns without writing
         /// anything, and <see cref="Version"/> does not move. A <see cref="ScopeWriter"/> call from another thread is
         /// refused and rejects the batch too. A conflict a merge of the batch would cause is found as the call that
-        /// causes it is made. While the batch is open, the scopes it reads through (its writable ancestors) refuse
+        /// causes it is made, except that two rows of a function of a sort that its merges make meet are compared when
+        /// it commits, as the rebuild's passes will compare them. While the batch is open, the scopes it reads through (its writable ancestors) refuse
         /// writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
         /// batch is brought up to date with them before each of its calls and before it commits, without moving
@@ -330,6 +332,8 @@ namespace Eggnog
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
+        /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
+        /// different classes when the rebuild compares them; nothing is written.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
