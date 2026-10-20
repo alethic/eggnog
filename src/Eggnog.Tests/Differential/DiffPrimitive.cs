@@ -56,8 +56,8 @@ namespace Eggnog.Tests.Differential
         /// <summary>Gets <c>set-length</c>.</summary>
         public static DiffPrimitive SetLength { get; } = Named("set-length", "Count<int>()", new[] { DiffType.IntSet }, DiffType.I64, a => (long)((ValueSet<int>)a[0]).Count, () => Primitives.Count<int>());
 
-        /// <summary>Gets <c>set-empty</c>.</summary>
-        public static DiffPrimitive SetEmpty { get; } = Named("set-empty", "IsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((ValueSet<int>)a[0]).IsEmpty, () => Primitives.IsEmpty<int>());
+        /// <summary>Gets <c>set-is-empty</c>.</summary>
+        public static DiffPrimitive SetEmpty { get; } = Named("set-is-empty", "IsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((ValueSet<int>)a[0]).IsEmpty, () => Primitives.IsEmpty<int>());
 
         /// <summary>Gets <c>set-union</c>.</summary>
         public static DiffPrimitive SetUnion { get; } = Named("set-union", "Union<int>()", new[] { DiffType.IntSet, DiffType.IntSet }, DiffType.IntSet,

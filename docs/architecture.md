@@ -101,8 +101,10 @@ A column holds either a class or a value.
   descendants and in its calls already in progress, which keep it from being released. Only the library makes
   `ClassId`s; `default(ClassId)` names no class. Two `ClassId`s of one class may differ (`Find` returns the canonical
   one), so classes are compared with `Scope.AreEqual`.
-- **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (with -0.0 normalized and NaN
-  refused), `string`, and `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
+- **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (egglog's `f64`, with its
+  `OrderedFloat` semantics: both zeros are one value, and so are all NaNs, which equal each other and sort above every
+  other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
+  `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>` and
   `RegisterSet<T>`.
 - **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
@@ -122,7 +124,7 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, sets, registered values, and `long`s outside `[0, 2^31)` |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, `BigInt`s, sets, registered values, and `long`s outside `[0, 2^31)` |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
@@ -169,7 +171,13 @@ stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run ask
 
 `Term<T>` is an expression of type `T`: a constant (any `T` converts implicitly), a variable (`Var<T>`), a table
 application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
-user primitive made with `Primitive.Create`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`).
+user primitive made with `Primitive.Create` or `Primitive.CreatePartial`), or a computation over a lambda
+(`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
+value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
+(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A comparison returns a `bool`: as a filter it
+is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<` for `i64` and `BigInt`, and an addition for
+`f64`, which egglog compares only as a filter; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
+`Primitive.CreateVariadic`). What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
 (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule
@@ -193,7 +201,8 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   variables). Primitives in the body bind new variables (lets).
 - `Then` adds head facts: relation rows, function outputs, constructor terms (made if absent), and equalities
   between classes (unions). `Make` binds a head variable to a term made by get-or-add. `Rewrite(left, right)` is
-  shorthand for "where `t = left`, make `t = right`".
+  shorthand for "where `t = left`, make `t = right`". `Ruleset.DefineBiRewrite` (and `Scope.DefineBiRewrite` for local
+  rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
   (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a table defined
   `Subsumable` as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
@@ -207,8 +216,11 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
 - A primitive or lambda that throws fails the rule: the run throws `RuleEvaluationException` naming the rule and the
-  bindings, and the scope is faulted (section 2.12). The built-in `Add` and `Subtract` are partial, as egglog's
-  checked arithmetic is: an overflow in the body drops the match; in the head it fails the rule.
+  bindings, and the scope is faulted (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
+  (`Primitive.IsPartial`): it has no result for some arguments. The built-ins are partial where egglog's are (checked
+  `i64` arithmetic, division by zero, `log`, `sqrt`, `from-string`); `Primitive.CreatePartial` makes a user's. No result drops the match in a body let, a
+  filter and a query; in a head and in a split's case assumptions the primitive's function throws, which fails the
+  rule, where egglog panics.
 
 A rule definition is checked and compiled at once (`RuleCompiler`): errors are `RuleDefinitionException`s naming the
 rule. The compiler normalizes the builder's draft into a `RuleProgram`, an engine-independent form with registers,

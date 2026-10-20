@@ -52,8 +52,9 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Values are ordered as <see cref="ValueSet{T}"/> orders its elements: strings ordinally, by UTF-16 code unit,
-        /// never by the current culture, so the result does not depend on the machine or the thread; every other type
-        /// by <see cref="Comparer{T}.Default"/>, which calls <see cref="IComparable{T}.CompareTo"/>. A type's
+        /// never by the current culture, so the result does not depend on the machine or the thread; doubles as egglog's
+        /// <c>OrderedFloat</c>, NaN the greatest, so that <c>max</c> keeps NaN as egglog's <c>(max old new)</c> does; every
+        /// other type by <see cref="Comparer{T}.Default"/>, which calls <see cref="IComparable{T}.CompareTo"/>. A type's
         /// <c>CompareTo</c> must be a total order consistent with <see cref="IEquatable{T}.Equals(T)"/>: two values
         /// that compare as 0 but are not equal make the merge depend on the order of its arguments, which
         /// <see cref="ValueLattice{T}.Verify"/> reports as a commutativity violation.
@@ -70,7 +71,7 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Values are ordered as for <see cref="Max{T}"/>: strings ordinally, as <see cref="ValueSet{T}"/> orders them,
-        /// and every other type by its <see cref="IComparable{T}.CompareTo"/>, which must be a total order consistent
+        /// doubles as <c>OrderedFloat</c>, and every other type by its <see cref="IComparable{T}.CompareTo"/>, which must be a total order consistent
         /// with <see cref="IEquatable{T}.Equals(T)"/>; <see cref="ValueLattice{T}.Verify"/> checks this on samples.
         /// </remarks>
         /// <typeparam name="T">The value type.</typeparam>

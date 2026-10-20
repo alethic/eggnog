@@ -326,15 +326,7 @@ namespace Eggnog
                 lock (Graph.DefinitionLock)
                 {
                     var rule = RuleCompiler.Compile(Graph, builder.Draft, ruleset, this);
-                    var nextCompiled = new CompiledRule[localCompiled.Length + 1];
-                    localCompiled.CopyTo(nextCompiled, 0);
-                    nextCompiled[^1] = rule;
-                    var nextRules = new Rule[nextCompiled.Length];
-                    for (var i = 0; i < nextRules.Length; i++)
-                        nextRules[i] = nextCompiled[i].Rule;
-
-                    Volatile.Write(ref localCompiled, nextCompiled);
-                    Volatile.Write(ref localRulesView, Array.AsReadOnly(nextRules));
+                    AddLocal(rule);
                     return rule.Rule;
                 }
             }
@@ -342,6 +334,82 @@ namespace Eggnog
             {
                 Exit(true);
             }
+        }
+
+        /// <summary>
+        /// Defines egglog's <c>birewrite</c> as two rules local to this scope, as
+        /// <see cref="Ruleset.DefineBiRewrite{TSort}"/> defines two global ones: <c>{name}=&gt;</c> rewrites the left side
+        /// to the right, and <c>{name}&lt;=</c> the right side to the left, each under the same conditions and local as
+        /// <see cref="DefineRule"/> makes a rule. Both are compiled before either is registered.
+        /// </summary>
+        /// <typeparam name="TSort">The sort of both sides.</typeparam>
+        /// <param name="ruleset">The ruleset that schedules them.</param>
+        /// <param name="name">The name the two rules' names start with.</param>
+        /// <param name="define">Called once for each rule with its builder: declares the variables, adds the conditions
+        /// (When and Where) and returns the two sides, each of which must be a pattern.</param>
+        /// <returns>The two rules.</returns>
+        /// <exception cref="ArgumentException">The ruleset belongs to another graph, or the name is empty.</exception>
+        /// <exception cref="InvalidOperationException">As for <see cref="DefineRule"/>.</exception>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="RuleDefinitionException">A rule is not valid; nothing is registered.</exception>
+        /// <exception cref="RuleEvaluationException">As for <see cref="DefineRule"/>.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
+        /// under one.</exception>
+        public (Rule Forward, Rule Backward) DefineBiRewrite<TSort>(Ruleset ruleset, string name,
+            Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define)
+            where TSort : struct, ISort<TSort>
+        {
+            ArgumentNullException.ThrowIfNull(ruleset);
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(define);
+            if (ReferenceEquals(ruleset.Graph, Graph) == false)
+                throw new ArgumentException($"Ruleset '{ruleset.Name}' belongs to another graph.", nameof(ruleset));
+
+            EngineCallMarker.ThrowIfActive();
+            ThrowIfNotUsable();
+            if (IsFrozen)
+                throw new InvalidOperationException($"Scope '{Path}' is frozen; its local rules are fixed");
+
+            Enter();
+            try
+            {
+                if (IsFrozen)
+                    throw new InvalidOperationException($"Scope '{Path}' is frozen; its local rules are fixed");
+
+                if (Guard.InObserver)
+                    throw new InvalidOperationException("Not allowed inside a run observer");
+
+                CatchUpAndThrowIfStopped();
+                var (forward, backward) = BiRewrite.Draft(Graph, name, define);
+                lock (Graph.DefinitionLock)
+                {
+                    var (first, second) = BiRewrite.Compile(Graph, forward, backward, ruleset, this);
+                    AddLocal(first);
+                    AddLocal(second);
+                    return (first.Rule, second.Rule);
+                }
+            }
+            finally
+            {
+                Exit(true);
+            }
+        }
+
+        /// <summary>
+        /// Appends a compiled local rule, copy-on-write. Called under the graph's definition lock.
+        /// </summary>
+        /// <param name="rule">The rule.</param>
+        void AddLocal(CompiledRule rule)
+        {
+            var nextCompiled = new CompiledRule[localCompiled.Length + 1];
+            localCompiled.CopyTo(nextCompiled, 0);
+            nextCompiled[^1] = rule;
+            var nextRules = new Rule[nextCompiled.Length];
+            for (var i = 0; i < nextRules.Length; i++)
+                nextRules[i] = nextCompiled[i].Rule;
+
+            Volatile.Write(ref localCompiled, nextCompiled);
+            Volatile.Write(ref localRulesView, Array.AsReadOnly(nextRules));
         }
 
         /// <summary>

@@ -12,10 +12,10 @@ namespace Eggnog
     /// <remarks>
     /// An exception from the primitive is recorded with the rule, the primitive and the decoded arguments, reported with
     /// <c>ExecutionState.ReportFailure</c> (which stops the engine call early and ends it in a panic), and the call
-    /// produces nothing. The exception is a partial primitive's "no result" (<see cref="Primitive.IsPartial"/>, an
-    /// <see cref="OverflowException"/>) in a let: the call then produces nothing and records nothing, which drops the
-    /// match, as egglog drops a body match whose <c>-?&gt;</c> primitive returns no result. Immutable and thread-safe:
-    /// rule tasks may call it concurrently.
+    /// produces nothing. A partial primitive's call with no result (<see cref="Primitive.IsPartial"/>) in a let produces
+    /// nothing and records nothing, which drops the match, as egglog drops a body match whose <c>-?&gt;</c> primitive
+    /// returns no result; in a head the primitive's function throws there, which fails the rule, where egglog panics.
+    /// Immutable and thread-safe: rule tasks may call it concurrently.
     /// </remarks>
     internal sealed class PrimitiveCall : Relations.ExternalFunction
     {
@@ -57,13 +57,11 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
+                if (inBody)
+                    return primitive.TryInvokeCore(args, parameters, this.result, out result);
+
                 result = primitive.InvokeCore(args, parameters, this.result);
                 return true;
-            }
-            catch (OverflowException) when (inBody && primitive.IsPartial)
-            {
-                result = 0;
-                return false;
             }
             catch (Exception exception)
             {

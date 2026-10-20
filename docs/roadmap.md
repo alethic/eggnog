@@ -172,8 +172,6 @@ Each waits on its trigger.
 - **Scoped interning:** when a host that cannot canonicalize literals would retire graphs more often than it can afford,
   or exceed its memory budget between retirements: 2-3 values (150-230 B) per fresh-literal query, 1.3-2 GB a day at 100
   queries a second. Gate: `RuleSetRunBenchmarks` and bridge `math` and `ac` within 2%.
-- **A "no result" outcome for user primitives:** when a user's partial function forces a `Where` filter and a
-  computation that duplicate parse logic. Until then, write a `Where` filter followed by the total computation.
 - **A per-case budget across executions, and a count of truncated cases:** when `Split(rule, Repeat(n, steps))`, which
   bounds each execution of a case, is not enough for a user, or a user must tell from the report that a case was cut
   off.

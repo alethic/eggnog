@@ -1,3 +1,32 @@
+static class Eggnog.BigIntegerPrimitives
+    static Primitive<BigInteger, BigInteger, BigInteger> Add { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> BitwiseAnd { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> BitwiseOr { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> BitwiseXor { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Divide { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Max { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Min { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Multiply { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Remainder { get }
+    static Primitive<BigInteger, BigInteger, BigInteger> Subtract { get }
+    static Primitive<BigInteger, BigInteger, Boolean> Equal { get }
+    static Primitive<BigInteger, BigInteger, Boolean> Greater { get }
+    static Primitive<BigInteger, BigInteger, Boolean> GreaterOrEqual { get }
+    static Primitive<BigInteger, BigInteger, Boolean> Less { get }
+    static Primitive<BigInteger, BigInteger, Boolean> LessOrEqual { get }
+    static Primitive<BigInteger, BigInteger> Bits { get }
+    static Primitive<BigInteger, BigInteger> BitwiseNot { get }
+    static Primitive<BigInteger, Int64, BigInteger> ShiftLeft { get }
+    static Primitive<BigInteger, Int64, BigInteger> ShiftRight { get }
+    static Primitive<BigInteger, String> Format { get }
+    static Primitive<Int64, BigInteger> FromInt64 { get }
+    static Primitive<String, BigInteger> Parse { get }
+static class Eggnog.BooleanPrimitives
+    static Primitive<Boolean, Boolean, Boolean> And { get }
+    static Primitive<Boolean, Boolean, Boolean> Implies { get }
+    static Primitive<Boolean, Boolean, Boolean> Xor { get }
+    static Primitive<Boolean, Boolean> Not { get }
+    static VariadicPrimitive<Boolean, Boolean> Or { get }
 sealed class Eggnog.CaseSet : IDisposable
     IReadOnlyList<Scope> Cases { get }
     LiftReport Lift(LiftOptions options = null, CancellationToken cancellationToken = null)
@@ -51,6 +80,26 @@ sealed class Eggnog.CostModel
     CostModel WithValueCost(ColumnType type, Int64 cost)
     CostModel WithValueCost<T>(ColumnType<T> type, Func<T, Int64> cost)
     static CostModel Default { get }
+static class Eggnog.DoublePrimitives
+    static Primitive<Double, Double, Boolean> Greater { get }
+    static Primitive<Double, Double, Boolean> GreaterOrEqual { get }
+    static Primitive<Double, Double, Boolean> Less { get }
+    static Primitive<Double, Double, Boolean> LessOrEqual { get }
+    static Primitive<Double, Double, Double> Add { get }
+    static Primitive<Double, Double, Double> Divide { get }
+    static Primitive<Double, Double, Double> Max { get }
+    static Primitive<Double, Double, Double> Min { get }
+    static Primitive<Double, Double, Double> Multiply { get }
+    static Primitive<Double, Double, Double> Power { get }
+    static Primitive<Double, Double, Double> Remainder { get }
+    static Primitive<Double, Double, Double> Subtract { get }
+    static Primitive<Double, Double> Abs { get }
+    static Primitive<Double, Double> Exp { get }
+    static Primitive<Double, Double> Log { get }
+    static Primitive<Double, Double> Negate { get }
+    static Primitive<Double, Double> Sqrt { get }
+    static Primitive<Double, Int64> ToInt64 { get }
+    static Primitive<Double, String> Format { get }
 sealed class Eggnog.EGraph
     ColumnType<TSort> DefineSort<TSort : struct, ISort<TSort>>(String name)
     Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
@@ -193,46 +242,83 @@ ref struct Eggnog.NodeView
     Int32 Arity { get }
     Object Get(Int32 column)
     T Get<T>(Int32 column)
+delegate Eggnog.PartialFunc<T1, TResult>
+    Boolean Invoke(T1 arg1, out TResult result)
+delegate Eggnog.PartialFunc<T1, T2, TResult>
+    Boolean Invoke(T1 arg1, T2 arg2, out TResult result)
+delegate Eggnog.PartialFunc<T1, T2, T3, TResult>
+    Boolean Invoke(T1 arg1, T2 arg2, T3 arg3, out TResult result)
+delegate Eggnog.PartialFunc<T1, T2, T3, T4, TResult>
+    Boolean Invoke(T1 arg1, T2 arg2, T3 arg3, T4 arg4, out TResult result)
 abstract class Eggnog.Primitive
+    Boolean IsPartial { get }
     IReadOnlyList<Type> ParameterTypes { get }
     String Name { get }
     Type ResultType { get }
     override String ToString()
     static Primitive<T1, T2, T3, T4, TResult> Create<T1, T2, T3, T4, TResult>(String name, Func<T1, T2, T3, T4, TResult> function)
+    static Primitive<T1, T2, T3, T4, TResult> CreatePartial<T1, T2, T3, T4, TResult>(String name, PartialFunc<T1, T2, T3, T4, TResult> function)
     static Primitive<T1, T2, T3, TResult> Create<T1, T2, T3, TResult>(String name, Func<T1, T2, T3, TResult> function)
+    static Primitive<T1, T2, T3, TResult> CreatePartial<T1, T2, T3, TResult>(String name, PartialFunc<T1, T2, T3, TResult> function)
     static Primitive<T1, T2, TResult> Create<T1, T2, TResult>(String name, Func<T1, T2, TResult> function)
+    static Primitive<T1, T2, TResult> CreatePartial<T1, T2, TResult>(String name, PartialFunc<T1, T2, TResult> function)
     static Primitive<T1, TResult> Create<T1, TResult>(String name, Func<T1, TResult> function)
+    static Primitive<T1, TResult> CreatePartial<T1, TResult>(String name, PartialFunc<T1, TResult> function)
+    static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(String name, Func<IReadOnlyList<T>, TResult> function)
 sealed class Eggnog.Primitive<T1, TResult> : Primitive
+    Boolean TryInvoke(T1 a, out TResult result)
     Func<T1, TResult> Function { get }
     Term<TResult> Of(Term<T1> a)
 sealed class Eggnog.Primitive<T1, T2, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, out TResult result)
     Func<T1, T2, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b)
 sealed class Eggnog.Primitive<T1, T2, T3, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, T3 c, out TResult result)
     Func<T1, T2, T3, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c)
 sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, T3 c, T4 d, out TResult result)
     Func<T1, T2, T3, T4, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 static class Eggnog.Primitives
+    static Primitive<Int64, Double> ToDouble { get }
+    static Primitive<Int64, Int64, Boolean> Equal { get }
     static Primitive<Int64, Int64, Boolean> Greater { get }
     static Primitive<Int64, Int64, Boolean> GreaterOrEqual { get }
     static Primitive<Int64, Int64, Boolean> Less { get }
     static Primitive<Int64, Int64, Boolean> LessOrEqual { get }
     static Primitive<Int64, Int64, Int64> Add { get }
+    static Primitive<Int64, Int64, Int64> BitwiseAnd { get }
+    static Primitive<Int64, Int64, Int64> BitwiseOr { get }
+    static Primitive<Int64, Int64, Int64> BitwiseXor { get }
+    static Primitive<Int64, Int64, Int64> Divide { get }
     static Primitive<Int64, Int64, Int64> Max { get }
     static Primitive<Int64, Int64, Int64> Min { get }
+    static Primitive<Int64, Int64, Int64> Multiply { get }
+    static Primitive<Int64, Int64, Int64> Remainder { get }
+    static Primitive<Int64, Int64, Int64> ShiftLeft { get }
+    static Primitive<Int64, Int64, Int64> ShiftRight { get }
     static Primitive<Int64, Int64, Int64> Subtract { get }
+    static Primitive<Int64, Int64> Abs { get }
+    static Primitive<Int64, Int64> BitwiseNot { get }
+    static Primitive<Int64, Int64> Log2 { get }
+    static Primitive<Int64, String> Format { get }
+    static Primitive<T, T, Boolean> NotEqual<T>()
+    static Primitive<T, T, T> OrderingMax<T>()
+    static Primitive<T, T, T> OrderingMin<T>()
     static Primitive<T, ValueSet<T>> Singleton<T>()
     static Primitive<ValueSet<T>, Boolean> IsEmpty<T>()
     static Primitive<ValueSet<T>, Int64> Count<T>()
     static Primitive<ValueSet<T>, T, Boolean> Contains<T>()
+    static Primitive<ValueSet<T>, T, Boolean> NotContains<T>()
     static Primitive<ValueSet<T>, T, ValueSet<T>> Insert<T>()
     static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, Boolean> IsSubsetOf<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Except<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Intersect<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Union<T>()
+    static VariadicPrimitive<T, ValueSet<T>> SetOf<T>()
 sealed class Eggnog.Query : IDisposable
     Boolean IsDisposed { get }
     IReadOnlyList<Term> Variables { get }
@@ -317,6 +403,7 @@ sealed class Eggnog.Ruleset
     Rule DefineRule(String name, Action<RuleBuilder> define)
     ScopeTag Licence { get }
     String Name { get }
+    ValueTuple<Rule, Rule> DefineBiRewrite<TSort : struct, ISort<TSort>>(String name, Func<RuleBuilder, ValueTuple<Term<TSort>, Term<TSort>>> define)
     override String ToString()
     static Schedule op_Implicit(Ruleset ruleset)
 sealed class Eggnog.RulesetOptions
@@ -415,6 +502,7 @@ sealed class Eggnog.Scope : IDisposable
     T Get<T>(Term<T> term)
     TSort Find<TSort : struct, ISort<TSort>>(TSort value)
     TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
+    ValueTuple<Rule, Rule> DefineBiRewrite<TSort : struct, ISort<TSort>>(Ruleset ruleset, String name, Func<RuleBuilder, ValueTuple<Term<TSort>, Term<TSort>>> define)
     Void Assume(params Fact[] facts)
     Void Dispose()
     Void ForEachMatch(Query query, QueryCallback callback)
@@ -457,6 +545,10 @@ sealed class Eggnog.SplitRule
     ScopeTag CaseTag { get }
     String Name { get }
     override String ToString()
+static class Eggnog.StringPrimitives
+    static Primitive<String, String, Int64> CountMatches { get }
+    static Primitive<String, String, String, String> Replace { get }
+    static VariadicPrimitive<String, String> Concat { get }
 abstract class Eggnog.TableHandle
     Boolean IsValueOnly { get }
     Boolean Lift { get }
@@ -542,3 +634,8 @@ sealed class Eggnog.ValueStore
     Int64 InternedCount { get }
 sealed class Eggnog.Var<T> : Term<T>
     String Name { get }
+sealed class Eggnog.VariadicPrimitive<T, TResult>
+    Func<IReadOnlyList<T>, TResult> Function { get }
+    String Name { get }
+    Term<TResult> Of(params Term<T>[] arguments)
+    override String ToString()

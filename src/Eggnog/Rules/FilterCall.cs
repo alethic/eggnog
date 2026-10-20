@@ -5,7 +5,8 @@ namespace Eggnog
 
     /// <summary>
     /// A call site of a boolean filter in a rule body: produces the unit value when the primitive returns true, and
-    /// nothing (which drops the match) when it returns false. Failures are handled as in <see cref="PrimitiveCall"/>.
+    /// nothing (which drops the match) when it returns false or, being partial, has no result. Failures are handled as in
+    /// <see cref="PrimitiveCall"/>.
     /// </summary>
     internal sealed class FilterCall : Relations.ExternalFunction
     {
@@ -45,7 +46,7 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                if (primitive.InvokeCore(args, parameters, boolean) == trueCell)
+                if (primitive.TryInvokeCore(args, parameters, boolean, out var cell) && cell == trueCell)
                 {
                     result = unit;
                     return true;
