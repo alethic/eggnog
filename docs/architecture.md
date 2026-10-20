@@ -401,7 +401,8 @@ Unextractable heads and subsumed rows are skipped.
 Costs are computed with Knuth's generalization of Dijkstra's algorithm over the classes reachable from the ones asked
 about, so the chosen terms are always finite, even with zero costs. Ties are broken by content (cost, then
 constructor declaration order, then arguments), so the result depends only on the scope's contents. An extractor
-reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws.
+reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
+so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.
 
 ### 2.11 Threading

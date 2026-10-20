@@ -58,6 +58,29 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets the number of constructors declared.
+        /// </summary>
+        public int ConstructorCount
+        {
+            get
+            {
+                lock (sync)
+                    return constructors.Count;
+            }
+        }
+
+        /// <summary>
+        /// Gets the constructors declared after the first <paramref name="count"/>, in declaration order.
+        /// </summary>
+        /// <param name="count">The number declared before.</param>
+        /// <returns>The constructors declared since; empty when none was.</returns>
+        public IReadOnlyList<ConstructorHandle> ConstructorsSince(int count)
+        {
+            lock (sync)
+                return count >= constructors.Count ? Array.Empty<ConstructorHandle>() : constructors.GetRange(count, constructors.Count - count).ToArray();
+        }
+
+        /// <summary>
         /// Gets the schema for a cost model: every constructor declared, unextractable where the constructor says so or the
         /// model marks it.
         /// </summary>
