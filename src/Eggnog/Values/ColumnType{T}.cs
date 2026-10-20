@@ -98,6 +98,17 @@ namespace Eggnog
         /// <returns>The order.</returns>
         internal abstract int CompareValues(T x, T y);
 
+        /// <summary>
+        /// Formats a non-null value as its engine codec formats its cell (<see cref="ColumnType.FormatDebug"/>).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="InvalidOperationException">The type is a sort, which has no codec.</exception>
+        internal virtual string DebugValue(T value) => throw new InvalidOperationException($"{Name} is a sort, which has no base value codec.");
+
+        /// <inheritdoc />
+        internal override string FormatDebug(object value) => DebugValue(Cast(value));
+
         /// <inheritdoc />
         internal override uint EncodeObject(object value) => Encode(Cast(value));
 

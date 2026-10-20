@@ -51,6 +51,9 @@ namespace Eggnog
         internal override string FormatValue(ValueTuple value) => "()";
 
         /// <inheritdoc />
+        internal override string DebugValue(ValueTuple value) => "()";
+
+        /// <inheritdoc />
         internal override int CompareValues(ValueTuple x, ValueTuple y) => 0;
 
     }

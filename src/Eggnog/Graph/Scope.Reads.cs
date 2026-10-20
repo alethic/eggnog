@@ -331,6 +331,51 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Serializes this scope's e-graph as egglog's <c>EGraph::serialize</c> does, into the graph of the
+        /// egraph-serialize crate that egglog's visualizer reads (<see cref="SerializedGraph.ToJson"/>): for debugging.
+        /// It is the scope's view, as <see cref="Rows"/> lists it, classes canonical here: every table but the hidden
+        /// mirrors, in definition order, its rows in the table's storage order, as egglog numbers them, subsumed ones marked. Reads only: it never interns.
+        /// </summary>
+        /// <param name="options">What to include; <c>null</c> for everything.</param>
+        /// <returns>The serialized graph.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">A limit is negative.</exception>
+        /// <exception cref="ArgumentNullException">The options' <see cref="SerializeOptions.Roots"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">A root is a class this scope cannot use, or no row holds it.</exception>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
+        /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
+        /// writable ancestor; the scope is faulted, and so is the ancestor.</exception>
+        /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
+        /// under one.</exception>
+        /// <exception cref="OverflowException">The graph has run out of epochs (<see cref="EGraph.Usage"/>) and the scope,
+        /// which is not frozen, has catch-up work, which takes one. The scope is not faulted.</exception>
+        public SerializedGraph Serialize(SerializeOptions? options = null)
+        {
+            options ??= new SerializeOptions();
+            if (options.MaxTables is < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.MaxTables, "MaxTables must not be negative.");
+
+            if (options.MaxRowsPerTable is < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.MaxRowsPerTable, "MaxRowsPerTable must not be negative.");
+
+            if (options.Roots is null)
+                throw new ArgumentNullException(nameof(options), "Roots is null.");
+
+            var held = EnterRead();
+            try
+            {
+                ThrowIfStopped();
+                return GraphSerializer.Serialize(this, options);
+            }
+            finally
+            {
+                Exit(held);
+            }
+        }
+
+        /// <summary>
         /// Gets whether a query has a match here. The engine stops at the first match. A query writes nothing: it
         /// moves neither <see cref="Version"/> nor any extractor; the mirrors of the tags it reads are brought
         /// current first, which neither does either. Like a rule body, and unlike <see cref="Check"/>, a query does not

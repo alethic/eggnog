@@ -230,6 +230,17 @@ namespace Eggnog
         internal bool TryGetType(Type clrType, [NotNullWhen(true)] out ColumnType? type) => byType.TryGetValue(clrType, out type);
 
         /// <summary>
+        /// Gets whether a sort or value type holds a name.
+        /// </summary>
+        /// <param name="name">The name.</param>
+        /// <returns>Whether it is taken.</returns>
+        internal bool IsNameTaken(string name)
+        {
+            lock (sync)
+                return byName.ContainsKey(name);
+        }
+
+        /// <summary>
         /// Registers a sort (<see cref="EGraph.DefineSort{TSort}(string)"/>).
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>

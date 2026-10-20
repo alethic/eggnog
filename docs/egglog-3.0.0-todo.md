@@ -204,8 +204,9 @@ gains them.
 
 Tooling and the text front end, which Eggnog does not have: release-mode tests with debug assertions (#917), nightly
 benchmark reports (#935, #936, #939, #942), a build without default features (#961), `print_function`'s new signature,
-sort names with `-` in serialization and CLI exit codes (#920), lazy rule names (#991), one typechecker pass fewer
-(#992), `check` stopping at its first match (#990), the crate docs (`src/lib.md`) and `release-instructions.md`.
+CLI exit codes (#920), lazy rule names (#991), one typechecker pass fewer (#992), `check` stopping at its first match
+(#990), the crate docs (`src/lib.md`) and `release-instructions.md`. Sort names with `-` in serialization (#920) are
+followed already: `Scope.Serialize` ports 3.0.0's class ids ([decisions](engine/decisions.md), row 23).
 
 ## After 3.0.0
 

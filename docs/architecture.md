@@ -306,7 +306,10 @@ scope's `Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do.
-`Version` counts the effective changes the scope's own calls made to its own contents.
+`Version` counts the effective changes the scope's own calls made to its own contents. `Serialize(options)` is egglog's
+`EGraph::serialize`: the scope's view as the graph of the egraph-serialize crate (`SerializedGraph`, and its JSON from
+`ToJson`), which egglog's visualizer reads; its departures are decision 23 of
+[`engine/decisions.md`](engine/decisions.md).
 
 A query (`EGraph.DefineQuery`) is a conjunctive body with variables, defined once and run in any scope with `Any`,
 `Count` or `ForEachMatch`, which delivers the distinct bindings in content order. Its atoms skip subsumed rows, as a
