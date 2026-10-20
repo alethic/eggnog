@@ -120,6 +120,27 @@ namespace Eggnog
         public abstract void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row, bool subsume = false);
 
         /// <summary>
+        /// Stages the removal of a row of a host batch by its key: egglog's top-level <c>delete</c>. Sort cells must be
+        /// canonical; they are canonicalized again.
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <param name="key">The key.</param>
+        /// <exception cref="InvalidOperationException">The scope may not delete (<see cref="RetractionRefusal"/>).
+        /// </exception>
+        public abstract void StageRemove(Relations.FunctionId function, ReadOnlySpan<uint> key);
+
+        /// <summary>
+        /// Gets why the scope may not delete rows, as the engine's retraction guard decides: it has live descendants, or
+        /// its parent is writable; <c>null</c> when it may.
+        /// </summary>
+        public abstract string? RetractionRefusal { get; }
+
+        /// <summary>
+        /// Gets whether the scope may delete rows (<see cref="RetractionRefusal"/> is <c>null</c>), without allocating.
+        /// </summary>
+        public abstract bool CanDelete { get; }
+
+        /// <summary>
         /// Stages a union of a host batch.
         /// </summary>
         /// <param name="a">One class.</param>

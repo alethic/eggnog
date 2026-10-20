@@ -68,6 +68,60 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Gets whether this context may delete a row of a shared table, as its retraction guard decides (decision 1): it
+        /// has no live descendant, and no writable parent. Two volatile reads.
+        /// </summary>
+        public bool CanRetract => context.Gate.HasLiveDescendants == false && context.Parent is not { IsFrozen: false };
+
+        /// <summary>
+        /// Gets why this context may not delete a row of a shared table, as its retraction guard decides (decision 1):
+        /// it has live descendants, or its parent is writable; <c>null</c> when it may.
+        /// </summary>
+        public string? RetractionRefusal
+        {
+            get
+            {
+                if (context.Gate.HasLiveDescendants)
+                    return $"it has {context.Gate.LiveDescendants} live descendant context(s), which would not see the deletion";
+
+                if (context.Parent is { IsFrozen: false })
+                    return "its parent is writable, and a child deletes only under a frozen parent";
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Stages the removal of the row of <paramref name="key"/> from <paramref name="function"/> for the next
+        /// <see cref="FlushUpdates"/>: egglog's <c>stage_remove</c> of a top-level <c>delete</c>. A key with no row
+        /// removes nothing; the table's merge deletes before it inserts. The context's retraction guard decides here,
+        /// before anything is staged. A stopped context ignores it.
+        /// </summary>
+        /// <param name="function">The function.</param>
+        /// <param name="key">One value per key column.</param>
+        /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
+        /// count.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the retraction guard refuses the
+        /// removal (<see cref="RetractionRefusal"/>); the domain is held by another thread; or the call comes from inside
+        /// a callback of the domain.</exception>
+        public void StageRemove(FunctionId function, ReadOnlySpan<Value> key)
+        {
+            ThrowIfUnwritable();
+            var domain = context.Domain;
+            using var scope = domain.Enter();
+            Context.ThrowIfInCallback(domain, nameof(StageRemove));
+            var info = owner.GetFunctionInfo(function);
+            if (key.Length != info.Math.KeyCount)
+                throw new ArgumentException($"{info.Name} takes {info.Math.KeyCount} keys, not {key.Length}.", nameof(key));
+
+            context.Database.RetractionGuard?.CheckRemove(info.Table);
+            if (IsStopped)
+                return;
+
+            hostWrites.AddRemove(function, MemoryMarshal.Cast<Value, uint>(key));
+        }
+
+        /// <summary>
         /// Stages the term <paramref name="function"/>(<paramref name="key"/>) with a fresh id as its output and
         /// returns the id: minted from the context's id blocks in a child (so it is local), from the store's counter at
         /// the root. After the flush the term's canonical id is <see cref="Find"/> of it: the fresh id for a new key,

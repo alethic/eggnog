@@ -29,6 +29,12 @@ namespace Eggnog
         /// </summary>
         Subsume,
 
+        /// <summary>
+        /// <see cref="RuleBuilder.Delete{T}(Term{T})"/> or <see cref="RuleBuilder.Delete(Fact[])"/>: egglog's
+        /// <c>delete</c> action.
+        /// </summary>
+        Delete,
+
     }
 
 }

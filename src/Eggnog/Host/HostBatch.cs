@@ -25,7 +25,8 @@ namespace Eggnog
     /// </para>
     /// <para>
     /// Phase 2 (<see cref="Commit"/>) stages the new terms' rows children first (subsumed where the batch subsumes the
-    /// term), then the rows, then the subsumed rows, then the unions, and flushes, which merges and rebuilds. A batch
+    /// term), then the rows, then the removals (see <c>HostBatch.Deletes.cs</c>), then the subsumed rows, then the
+    /// unions, and flushes, which merges (each table deleting before it inserts) and rebuilds. A batch
     /// whose facts all hold stages nothing and is never flushed, so it moves neither the scope's version nor the clock.
     /// Not thread-safe: used under the scope's guard, except <see cref="Reject"/>, which any thread may call.
     /// </para>
@@ -71,7 +72,7 @@ namespace Eggnog
         /// <summary>
         /// Gets whether there is nothing to stage: every fact held already.
         /// </summary>
-        public bool IsEmpty => pending.Count == 0 && rows.Count == 0 && subsumes.Count == 0 && unions.Count == 0;
+        public bool IsEmpty => pending.Count == 0 && rows.Count == 0 && subsumes.Count == 0 && unions.Count == 0 && removes.Count == 0;
 
         /// <summary>
         /// Gets whether a call of the batch was rejected (<see cref="Reject"/>): the batch must then write nothing.
@@ -363,8 +364,8 @@ namespace Eggnog
 
         /// <summary>
         /// Stages the new terms' rows children first (subsumed where the batch subsumes the term), then the rows, then
-        /// the subsumed rows, then the unions; flushes; commits <see cref="Origin"/>. Does nothing when
-        /// <see cref="IsEmpty"/>.
+        /// the removals, then the subsumed rows, then the unions; flushes; commits <see cref="Origin"/>. Does nothing
+        /// when <see cref="IsEmpty"/>.
         /// </summary>
         /// <returns>Whether the scope changed.</returns>
         /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
@@ -384,6 +385,9 @@ namespace Eggnog
 
             foreach (var (table, row) in rows)
                 engine.StageRow(table.Function, row);
+
+            foreach (var (table, key) in removes)
+                engine.StageRemove(table.Function, key);
 
             foreach (var (table, row) in subsumes)
                 engine.StageRow(table.Function, row, subsume: true);

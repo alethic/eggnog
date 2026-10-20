@@ -10,6 +10,12 @@ namespace Eggnog
     {
 
         /// <summary>
+        /// The refusal of a rule that writes a function whose merge is not a lattice where it would run below the root.
+        /// </summary>
+        static InvalidOperationException RootOnly(CompiledRule rule, FunctionHandle function, string why) =>
+            new($"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {why}.");
+
+        /// <summary>
         /// Runs a schedule in this scope.
         /// </summary>
         /// <remarks>
@@ -34,9 +40,10 @@ namespace Eggnog
         /// depth limit is less than 1.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen or faulted; a rule or split rule the schedule
         /// reaches reads a tag no ancestor-or-self of the scope carries, or a rule that would run below the root, here or
-        /// in a split's cases, writes a function whose merge is not a lattice (both before any work); or the call comes
-        /// from another thread while the scope is in use, from a primitive, lattice, filter or cost function, or from a
-        /// run observer.</exception>
+        /// in a split's cases, writes a function whose merge is not a lattice, or a rule deletes and the scope may not
+        /// delete (it has live descendants or a writable parent) or the schedule splits (all before any work); or the
+        /// call comes from another thread while the scope is in use, from a primitive, lattice, filter or cost function,
+        /// or from a run observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
         /// <exception cref="RuleEvaluationException">An evaluation failure, in this scope or in a case of the run (a split's
         /// assumption that gives a function without a lattice a second value included, and a lattice merge that threw
@@ -92,24 +99,42 @@ namespace Eggnog
                     if (TermReader.Validate(this, fact) is { } error)
                         throw new ArgumentException($"An until condition cannot be checked in scope '{Path}': {error}: {fact}.", nameof(schedule));
 
-                // Every tag a reachable rule or split rule reads must resolve from here. A case only adds
-                // its own tag below this scope, so what resolves here resolves in every case of the run.
-                foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(rulesets), this))
+                // One pass over the reachable rules, listed once: a query runs here too, so these checks stay cheap per
+                // rule. Every tag a reachable rule reads must resolve from here; a case only adds its own tag below this
+                // scope, so what resolves here resolves in every case of the run. Only the root writes a function whose
+                // merge is not a lattice, so no rule that writes one runs in this scope when it is a child. And egglog's
+                // delete: the engine's retraction guard lets a scope delete only with no live descendant and no writable
+                // parent, and a split's cases are children of this scope, live until the run ends.
+                var reachable = ScheduleExecutor.RulesFor(new List<Ruleset>(rulesets), this);
+                for (var r = 0; r < reachable.Count; r++)
+                {
+                    var rule = reachable[r];
                     foreach (var tag in rule.Program.ReadScopes)
                         ScopeResolver.Resolve(this, tag, $"Rule '{rule.Rule.Name}'");
+
+                    if (IsRoot == false && rule.Program.RootOnlyWrite is { } function)
+                        throw RootOnly(rule, function, $"'{Path}' is not the root");
+
+                    if (rule.Program.Deletes is [var deleted, ..])
+                    {
+                        if (splits.Count > 0)
+                            throw new InvalidOperationException(
+                                $"Rule '{rule.Rule.Name}' deletes rows of '{deleted.Name}', and the schedule splits: the cases are children of '{Path}', which may not delete while they are live.");
+
+                        if (Engine.RetractionRefusal is { } why)
+                            throw new InvalidOperationException($"Rule '{rule.Rule.Name}' deletes rows of '{deleted.Name}', and '{Path}' may not delete: {why}.");
+                    }
+                }
 
                 foreach (var split in splits)
                     foreach (var tag in split.Program.Matcher.ReadScopes)
                         ScopeResolver.Resolve(this, tag, $"Split rule '{split.Name}'");
 
-                // Only the root writes a function whose merge is not a lattice, so no rule that writes one runs below it:
-                // in this scope when it is a child, or in the cases of a split, which are children.
-                var below = IsRoot ? inCases : rulesets;
-                if (below.Count > 0)
-                    foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(below), this))
+                // The cases of a split are children, at the root too.
+                if (IsRoot && inCases.Count > 0)
+                    foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(inCases), this))
                         if (rule.Program.RootOnlyWrite is { } function)
-                            throw new InvalidOperationException(
-                                $"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {(IsRoot ? "the cases of a split are children" : $"'{Path}' is not the root")}.");
+                            throw RootOnly(rule, function, "the cases of a split are children");
 
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
                 RunStopReason reason;

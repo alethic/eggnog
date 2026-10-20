@@ -77,7 +77,8 @@ namespace Eggnog
                         builder.Append(')');
                         break;
                     case HeadItemKind.Subsume:
-                        builder.Append("(subsume ");
+                    case HeadItemKind.Delete:
+                        builder.Append(item.Kind == HeadItemKind.Subsume ? "(subsume " : "(delete ");
                         if (item.Fact is { } row)
                             Append(builder, row);
                         else
