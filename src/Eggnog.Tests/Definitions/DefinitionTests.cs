@@ -24,8 +24,9 @@ namespace Eggnog.Tests.Definitions
             graph.DefineRelation<long>("t");
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("t"));
             Assert.Throws<ArgumentException>(() => graph.DefineFunction<long, long>("t"));
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation("contradiction"));
-            Assert.Equal(2, graph.Tables.Count);
+            Assert.Equal("contradiction", graph.DefineRelation("contradiction").Name);
+            Assert.Throws<ArgumentException>(() => graph.DefineRelation("$contradiction"));
+            Assert.Equal(3, graph.Tables.Count);
         }
 
         [Fact]
@@ -43,7 +44,7 @@ namespace Eggnog.Tests.Definitions
         public void TheGraphsContradictionIsTheFirstTable()
         {
             var graph = new EGraph();
-            Assert.Equal("contradiction", graph.Contradiction.Name);
+            Assert.Equal("$contradiction", graph.Contradiction.Name);
             Assert.Same(graph.Contradiction, graph.Tables[0]);
             Assert.Equal(0, graph.Contradiction.Index);
             Assert.Equal(TableRole.Fact, graph.Contradiction.Role);

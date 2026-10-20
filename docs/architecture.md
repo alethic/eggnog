@@ -161,7 +161,8 @@ alone), whether lifts copy the table into a case's parent (`Lift`; by default fa
 do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
 rows may be subsumed (`Subsumable`, section 2.5).
 
-`EGraph.Contradiction` is a built-in nullary relation. A rule that derives it says the scope has no model. In a case it
+`EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction` so that it
+takes no name a user's table may take (the `$` prefix is reserved). A rule that derives it says the scope has no model. In a case it
 stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run asks to stop on it
 (`RunOptions.StopOnContradiction`).
 
