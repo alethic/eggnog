@@ -35,6 +35,34 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The table belongs to another graph.</exception>
         public static IReadOnlyList<TableRow> Read(Scope scope, TableHandle table)
         {
+            var columns = table.Columns;
+            var keyCount = table.KeyArray.Length;
+            var cells = ReadCells(scope, table);
+            var rows = new List<TableRow>(cells.Count);
+            foreach (var (tuple, subsumed) in cells)
+            {
+                var keys = new object[keyCount];
+                for (var column = 0; column < keyCount; column++)
+                    keys[column] = Decode(scope, columns[column], tuple[column]);
+
+                var output = table.IsRelation ? null : Decode(scope, columns[keyCount], tuple[keyCount]);
+                rows.Add(new TableRow(table, keys, output, subsumed));
+            }
+
+            return rows.AsReadOnly();
+        }
+
+        /// <summary>
+        /// Reads the rows of <paramref name="table"/> in <paramref name="scope"/>'s view as cells, a class canonical in
+        /// the scope, in content order, each with whether it is subsumed: what <see cref="Read"/> decodes, and what
+        /// <see cref="Scope.Serialize"/> serializes. O(rows log rows).
+        /// </summary>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="table">The table.</param>
+        /// <returns>The rows: their cells (keys, then the output unless the table is a relation) and subsumption.</returns>
+        /// <exception cref="ArgumentException">The table belongs to another graph, or is a mirror.</exception>
+        public static List<(uint[] Cells, bool Subsumed)> ReadCells(Scope scope, TableHandle table)
+        {
             var source = Source(scope, table);
             var columns = table.Columns;
             var width = columns.Length;
@@ -80,8 +108,7 @@ namespace Eggnog
                 cells.SortByContent(columns);
             }
 
-            var keyCount = table.KeyArray.Length;
-            var rows = new List<TableRow>(cells.Count);
+            var rows = new List<(uint[] Cells, bool Subsumed)>(cells.Count);
             for (var i = 0; i < cells.Count; i++)
             {
                 var tuple = cells[i];
@@ -90,21 +117,16 @@ namespace Eggnog
                 // adjacent: one row, subsumed if either is, as the merge's combine_subsumed keeps the larger cell.
                 if (subsumable && i > 0 && tuple[..width].SequenceEqual(cells[i - 1][..width]))
                 {
-                    if (tuple[width] != 0 && rows[^1].Subsumed == false)
-                        rows[^1] = new TableRow(table, rows[^1].Keys.ToArray(), rows[^1].Output, true);
+                    if (tuple[width] != 0)
+                        rows[^1] = (rows[^1].Cells, true);
 
                     continue;
                 }
 
-                var keys = new object[keyCount];
-                for (var column = 0; column < keyCount; column++)
-                    keys[column] = Decode(scope, columns[column], tuple[column]);
-
-                var output = table.IsRelation ? null : Decode(scope, columns[keyCount], tuple[keyCount]);
-                rows.Add(new TableRow(table, keys, output, subsumable && tuple[width] != 0));
+                rows.Add((tuple[..width].ToArray(), subsumable && tuple[width] != 0));
             }
 
-            return rows.AsReadOnly();
+            return rows;
         }
 
         /// <summary>

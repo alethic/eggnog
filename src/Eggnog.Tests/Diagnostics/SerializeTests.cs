@@ -1,0 +1,320 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+using Eggnog.Tests.Support;
+
+using Xunit;
+
+namespace Eggnog.Tests.Diagnostics
+{
+
+    /// <summary>
+    /// <see cref="Scope.Serialize"/>, egglog's <c>EGraph::serialize</c>: egglog's tests of it ported (the class and node
+    /// counts of <c>test_serialize_617</c>, <c>test_serialize_subsume_status</c>, the root class of an extracted term and
+    /// a sort name with a dash), and the shape egglog gives values, relations, sets, placeholders, edges and the JSON.
+    /// </summary>
+    public sealed class SerializeTests
+    {
+
+        /// <summary>
+        /// egglog's <c>test_serialize_617</c>: after the rewrite <c>mkb x =&gt; mk x</c> and the unions of <c>mk 1</c>,
+        /// <c>mk 3</c> and <c>mk 5</c>, there are two classes of <c>Node</c> and four of <c>i64</c>, and twelve nodes:
+        /// eight rows and four values.
+        /// </summary>
+        [Fact]
+        public void TheGraphOfIssue617HasSixClassesAndTwelveNodes()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var mk = graph.DefineConstructor<long, Node>("mk");
+            var mkb = graph.DefineConstructor<long, Node>("mkb");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("mkb", r =>
+            {
+                var x = r.Var<long>("x");
+                r.Rewrite(mkb.Of(x), mk.Of(x));
+            });
+            foreach (var n in new[] { 1L, 3L, 5L, 6L })
+                graph.Root.Make(mkb.Of(n));
+
+            graph.Root.Union(graph.Root.Make(mk.Of(1L)), graph.Root.Make(mk.Of(3L)));
+            graph.Root.Union(graph.Root.Make(mk.Of(3L)), graph.Root.Make(mk.Of(5L)));
+            graph.Root.Run(Schedule.Saturate(rules));
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.IsComplete);
+            Assert.Equal(6, serialized.Classes.Count);
+            Assert.Equal(12, serialized.Nodes.Count);
+            Assert.Equal(2, serialized.Classes.Count(c => c.Type == "Node"));
+        }
+
+        /// <summary>
+        /// egglog's <c>test_serialize_subsume_status</c>: a subsumed row's node is marked.
+        /// </summary>
+        [Fact]
+        public void ASubsumedRowsNodeIsMarked()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var a = graph.DefineConstructor<Node>("a", options: new TableOptions { Subsumable = true });
+            var b = graph.DefineConstructor<Node>("b", options: new TableOptions { Subsumable = true });
+            graph.Root.Make(a.Of());
+            graph.Root.Make(b.Of());
+            graph.Root.Subsume(a.Of());
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.IsComplete);
+            Assert.True(serialized.TryGetNode("function-0-a", out var nodeA));
+            Assert.True(serialized.TryGetNode("function-0-b", out var nodeB));
+            Assert.True(nodeA.Subsumed);
+            Assert.False(nodeB.Subsumed);
+        }
+
+        /// <summary>
+        /// egglog's tests of the class of an extracted value, with a sort name holding a dash
+        /// (<c>test_serialize_sort_name_with_dash</c>): the root's class is <c>{sort}-{cell}</c>, and is among the classes.
+        /// </summary>
+        [Fact]
+        public void ARootIsItsClassUnderTheSortsName()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math-Expr");
+            var lit = graph.DefineConstructor<long, Node>("Lit");
+            var five = graph.Root.Make(lit.Of(5L));
+
+            var serialized = graph.Root.Serialize(new SerializeOptions { Roots = new[] { five.Id } });
+
+            var root = Assert.Single(serialized.RootClasses);
+            Assert.StartsWith("Math-Expr-", root);
+            Assert.True(serialized.TryGetClass(root, out var @class));
+            Assert.Equal("Math-Expr", @class.Type);
+            Assert.Equal(root, serialized.Nodes.Single(n => n.Op == "Lit").Class);
+        }
+
+        /// <summary>
+        /// A function's row joins its value's class, beside the value's own node; values print as egglog prints them,
+        /// a string quoted.
+        /// </summary>
+        [Fact]
+        public void AFunctionsRowIsInItsValuesClass()
+        {
+            var graph = new EGraph();
+            var f = graph.DefineFunction<long, long>("f");
+            var g = graph.DefineFunction<string, double>("g");
+            graph.Root.Assume(f.Of(1L).Is(5L), g.Of("a b").Is(1.5));
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.TryGetNode("function-0-f", out var row));
+            Assert.Equal("i64-5", row.Class);
+            Assert.Equal(new[] { "primitive-i64-1" }, row.Children);
+            Assert.Equal(1.0, row.Cost);
+            Assert.True(serialized.TryGetNode("primitive-i64-5", out var five));
+            Assert.Equal("5", five.Op);
+            Assert.Equal("i64-5", five.Class);
+            var key = serialized.Nodes.Single(n => n.Op == "\"a b\"");
+            Assert.Equal("String", serialized.Classes.Single(c => c.Id == key.Class).Type);
+            Assert.Contains(serialized.Nodes, n => n.Op == "1.5");
+        }
+
+        /// <summary>
+        /// A relation's row is a class of its own, of egglog's relation sort <c>@{name}Sort</c>, which egglog's symbol
+        /// generator names without dashes and counts when two names meet.
+        /// </summary>
+        [Fact]
+        public void ARelationsRowIsAClassOfItsOwn()
+        {
+            var graph = new EGraph();
+            var first = graph.DefineRelation<long>("a-b");
+            var second = graph.DefineRelation<long>("ab");
+            graph.Root.Assume(first.Of(1L), first.Of(2L), second.Of(1L));
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.TryGetNode("function-0-a-b", out var row0));
+            Assert.True(serialized.TryGetNode("function-1-a-b", out var row1));
+            Assert.True(serialized.TryGetNode("function-0-ab", out var other));
+            Assert.Equal("@abSort-0", row0.Class);
+            Assert.Equal("@abSort-1", row1.Class);
+            Assert.Equal("@abSort1-0", other.Class);
+            Assert.Equal("@abSort", serialized.Classes.Single(c => c.Id == "@abSort-0").Type);
+            Assert.Equal(new[] { "primitive-i64-1" }, row0.Children);
+        }
+
+        [Fact]
+        public void TooManyRowsTruncateATable()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            graph.Root.Assume(r.Of(1L), r.Of(2L), r.Of(3L));
+
+            var serialized = graph.Root.Serialize(new SerializeOptions { MaxRowsPerTable = 2 });
+
+            Assert.False(serialized.IsComplete);
+            Assert.Equal(new[] { "R" }, serialized.TruncatedTables);
+            Assert.Equal(2, serialized.Nodes.Count(n => n.Op == "R"));
+            Assert.Equal("Truncated: R\n", serialized.OmittedDescription);
+        }
+
+        /// <summary>
+        /// Past <see cref="SerializeOptions.MaxTables"/> tables with rows, the rest are discarded; a class whose every
+        /// node was left out is one placeholder, <c>[...]</c>, of infinite cost, which the JSON writes as <c>null</c>.
+        /// </summary>
+        [Fact]
+        public void TooManyTablesDiscardTheRestAndLeavePlaceholders()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var wrap = graph.DefineConstructor<Node, Node>("Wrap");
+            var leaf = graph.DefineConstructor<Node>("Leaf");
+            graph.Root.Make(wrap.Of(leaf.Of()));
+
+            var serialized = graph.Root.Serialize(new SerializeOptions { MaxTables = 1 });
+
+            Assert.Equal(new[] { "Leaf" }, serialized.DiscardedTables);
+            Assert.Equal("Omitted: Leaf\n", serialized.OmittedDescription);
+            Assert.True(serialized.TryGetNode("function-0-Wrap", out var row));
+            var placeholder = Assert.Single(row.Children);
+            Assert.StartsWith("dummy-Node-", placeholder);
+            Assert.True(serialized.TryGetNode(placeholder, out var dummy));
+            Assert.Equal("[...]", dummy.Op);
+            Assert.Equal(double.PositiveInfinity, dummy.Cost);
+            Assert.Contains("\"cost\": null", serialized.ToJson());
+        }
+
+        /// <summary>
+        /// The edges into a class take its nodes in turn, as egglog's do: each serialization of the class, its own rows'
+        /// outputs included, rotates them.
+        /// </summary>
+        [Fact]
+        public void EdgesIntoAClassTakeItsNodesInTurn()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var pair = graph.DefineConstructor<Node, Node, Node>("Pair");
+            var x = graph.Root.Make(a.Of());
+            graph.Root.Union(x, graph.Root.Make(b.Of()));
+            graph.Root.Make(pair.Of(x, x));
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.TryGetNode("function-0-Pair", out var row));
+            Assert.Equal(new[] { "function-0-B", "function-0-A" }, row.Children);
+        }
+
+        /// <summary>
+        /// A set is a node <c>set-of</c> whose children are its elements, as an egglog container's inner values are.
+        /// </summary>
+        [Fact]
+        public void ASetsElementsAreItsChildren()
+        {
+            var graph = new EGraph();
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")));
+
+            var serialized = graph.Root.Serialize();
+
+            var set = serialized.Nodes.Single(n => n.Op == "set-of");
+            Assert.Equal(2, set.Children.Count);
+            var elements = set.Children.Select(id => serialized.Nodes.Single(n => n.Id == id).Op).ToArray();
+            Assert.Equal(new[] { "\"a\"", "\"b\"" }, elements);
+            Assert.True(serialized.TryGetNode("function-0-dom", out var row));
+            Assert.Equal(set.Class, row.Class);
+        }
+
+        /// <summary>
+        /// A scope serializes its own view: a child that unions two classes of its frozen parent shows one class where the
+        /// parent shows two.
+        /// </summary>
+        [Fact]
+        public void AChildSerializesItsOwnView()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var x = graph.Root.Make(a.Of());
+            var y = graph.Root.Make(b.Of());
+            graph.Root.Freeze();
+            var child = graph.Root.CreateChild();
+            child.Union(x, y);
+
+            Assert.Equal(2, graph.Root.Serialize().Classes.Count);
+            Assert.Single(child.Serialize().Classes);
+        }
+
+        [Fact]
+        public void SerializingInternsNothing()
+        {
+            var graph = new EGraph();
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("never on its own")));
+            var interned = graph.Values.InternedCount;
+
+            graph.Root.Serialize().ToJson();
+
+            Assert.Equal(interned, graph.Values.InternedCount);
+        }
+
+        /// <summary>
+        /// The JSON is egraph-serialize's, as its <c>to_json_file</c> writes it: two-space indents, <c>\n</c> line ends,
+        /// and the fields in its order.
+        /// </summary>
+        [Fact]
+        public void TheJsonIsEgraphSerializes()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Node");
+            var a = graph.DefineConstructor<Node>("A", cost: 3);
+            var x = graph.Root.Make(a.Of());
+
+            var serialized = graph.Root.Serialize(new SerializeOptions { Roots = new[] { x.Id } });
+            var id = serialized.RootClasses[0];
+
+            var expected =
+                "{\n" +
+                "  \"nodes\": {\n" +
+                "    \"function-0-A\": {\n" +
+                "      \"op\": \"A\",\n" +
+                "      \"children\": [],\n" +
+                $"      \"eclass\": \"{id}\",\n" +
+                "      \"cost\": 3.0,\n" +
+                "      \"subsumed\": false\n" +
+                "    }\n" +
+                "  },\n" +
+                "  \"root_eclasses\": [\n" +
+                $"    \"{id}\"\n" +
+                "  ],\n" +
+                "  \"class_data\": {\n" +
+                $"    \"{id}\": {{\n" +
+                "      \"type\": \"Node\"\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+            Assert.Equal(expected, serialized.ToJson());
+            using var stream = new MemoryStream();
+            serialized.WriteJson(stream);
+            Assert.Equal(expected, Encoding.UTF8.GetString(stream.ToArray()));
+        }
+
+        [Fact]
+        public void TheOptionsAreChecked()
+        {
+            var t = new NodeTheory();
+            var other = new NodeTheory();
+            var foreign = other.Root.Make(other.A.Of());
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.Serialize(new SerializeOptions { MaxTables = -1 }));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.Serialize(new SerializeOptions { MaxRowsPerTable = -1 }));
+            Assert.Throws<ArgumentException>(() => t.Root.Serialize(new SerializeOptions { Roots = new[] { foreign.Id } }));
+        }
+
+    }
+
+}
