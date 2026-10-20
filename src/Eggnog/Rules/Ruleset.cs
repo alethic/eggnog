@@ -88,6 +88,37 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Defines egglog's <c>birewrite</c> as two global rules, as egglog desugars it: <c>{name}=&gt;</c> rewrites the
+        /// left side to the right, and <c>{name}&lt;=</c> the right side to the left
+        /// (<see cref="RuleBuilder.Rewrite{TSort}(Term{TSort}, Term{TSort})"/>), each under the same conditions. Both are
+        /// compiled before either is registered.
+        /// </summary>
+        /// <typeparam name="TSort">The sort of both sides.</typeparam>
+        /// <param name="name">The name the two rules' names start with.</param>
+        /// <param name="define">Called once for each rule with its builder: declares the variables, adds the conditions
+        /// (When and Where) and returns the two sides, each of which must be a pattern.</param>
+        /// <returns>The two rules.</returns>
+        /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
+        /// <exception cref="RuleDefinitionException">A rule is not valid; nothing is registered.</exception>
+        /// <exception cref="InvalidOperationException">As for <see cref="DefineRule"/>.</exception>
+        public (Rule Forward, Rule Backward) DefineBiRewrite<TSort>(string name, Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define)
+            where TSort : struct, ISort<TSort>
+        {
+            EngineCallMarker.ThrowIfActive();
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(define);
+            var (forward, backward) = BiRewrite.Draft(Graph, name, define);
+            lock (Graph.DefinitionLock)
+            {
+                var (first, second) = BiRewrite.Compile(Graph, forward, backward, this, null);
+                Add(first);
+                Add(second);
+                return (first.Rule, second.Rule);
+            }
+        }
+
+        /// <summary>
         /// Gets a schedule of one iteration of this ruleset: <see cref="Schedule.Run(Ruleset[])"/>.
         /// </summary>
         /// <param name="ruleset">The ruleset.</param>

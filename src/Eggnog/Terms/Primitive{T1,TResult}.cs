@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Eggnog
 {
@@ -11,20 +12,36 @@ namespace Eggnog
     public sealed class Primitive<T1, TResult> : Primitive
     {
 
+        readonly PartialFunc<T1, TResult>? partial;
+
         /// <summary>
-        /// Initializes a new instance.
+        /// Initializes a new instance of a total primitive.
         /// </summary>
         /// <param name="name">The name it renders as.</param>
         /// <param name="function">The function.</param>
         /// <param name="isLambda">Whether it is an anonymous lambda.</param>
         internal Primitive(string name, Func<T1, TResult> function, bool isLambda)
-            : base(name, new[] { typeof(T1) }, typeof(TResult), isLambda)
+            : base(name, new[] { typeof(T1) }, typeof(TResult), isLambda, false)
         {
             Function = function;
         }
 
         /// <summary>
-        /// Gets the function.
+        /// Initializes a new instance of a named partial primitive.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="function">The function, which throws where there is no result.</param>
+        /// <param name="partial">The partial function, which says where there is no result.</param>
+        internal Primitive(string name, Func<T1, TResult> function, PartialFunc<T1, TResult> partial)
+            : base(name, new[] { typeof(T1) }, typeof(TResult), false, true)
+        {
+            Function = function;
+            this.partial = partial;
+        }
+
+        /// <summary>
+        /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
+        /// result.
         /// </summary>
         public Func<T1, TResult> Function { get; }
 
@@ -39,9 +56,40 @@ namespace Eggnog
             return new ComputeTerm<TResult>(this, new Term[] { a });
         }
 
+        /// <summary>
+        /// Calls the primitive on values: the partial function for a partial primitive, else the function.
+        /// </summary>
+        /// <param name="a">The first argument.</param>
+        /// <param name="result">The result, when there is one.</param>
+        /// <returns>Whether there is a result.</returns>
+        internal bool TryInvoke(T1 a, [MaybeNullWhen(false)] out TResult result)
+        {
+            if (partial is null)
+            {
+                result = Function(a);
+                return true;
+            }
+
+            return partial(a, out result);
+        }
+
         /// <inheritdoc />
         internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
             ((ColumnType<TResult>)result).Encode(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], null)));
+
+        /// <inheritdoc />
+        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell)
+        {
+            var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], null);
+            if (TryInvoke(a, out var value))
+            {
+                cell = ((ColumnType<TResult>)result).Encode(value);
+                return true;
+            }
+
+            cell = 0;
+            return false;
+        }
 
     }
 
