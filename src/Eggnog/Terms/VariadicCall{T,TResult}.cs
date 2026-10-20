@@ -60,6 +60,17 @@ namespace Eggnog
             return true;
         }
 
+        /// <inheritdoc />
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        {
+            var values = new T[arguments.Length];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = (T)arguments[i];
+
+            value = function(values);
+            return true;
+        }
+
         /// <summary>
         /// Gets the parameter types of an arity.
         /// </summary>

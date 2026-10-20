@@ -159,12 +159,12 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void ReadsAreGround()
+        public void ReadsAreGroundAndCompute()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
-            Assert.Throws<ArgumentException>(() => t.Root.Get(f.Of(Primitives.Add.Of(1L, 2L))));
-            Assert.Throws<ArgumentException>(() => t.Root.Get(Primitives.Add.Of(1L, 2L)));
+            Assert.Throws<InvalidOperationException>(() => t.Root.Get(f.Of(Primitives.Add.Of(1L, 2L))));
+            Assert.Equal(3L, t.Root.Get(Primitives.Add.Of(1L, 2L)));
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(1L)));
         }

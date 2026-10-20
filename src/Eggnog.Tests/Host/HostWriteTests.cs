@@ -377,11 +377,10 @@ namespace Eggnog.Tests.Host
             var byLength = t.Graph.DefineConstructor<long, Node>("ByLength");
 
             Assert.Equal("value equality is not a write: 1 = 2", Assert.Throws<ArgumentException>(() => t.Root.Assume(((Term<long>)1L).Is(2L))).Message.Split(" (Parameter")[0]);
-            Assert.Throws<ArgumentException>(() => t.Root.Assume(f.Of("k").Is(g.Of("k"))));
+            Assert.Contains("(g \"k\") has no value", Assert.Throws<InvalidOperationException>(() => t.Root.Assume(f.Of("k").Is(g.Of("k")))).Message);
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.Exists(t.A.Of())));
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.True(true)));
-            Assert.Contains("host terms do not read; Get 'f' first", Assert.Throws<ArgumentException>(() => t.Root.Make(byLength.Of(f.Of("k")))).Message);
-            Assert.Throws<ArgumentException>(() => t.Root.Make(byLength.Of(Primitives.Add.Of(1L, 2L))));
+            Assert.Contains("(f \"k\") has no value", Assert.Throws<InvalidOperationException>(() => t.Root.Make(byLength.Of(f.Of("k")))).Message);
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Assume(other.Num.Of(1L)));
             Assert.False(t.Root.IsFaulted);
@@ -564,7 +563,7 @@ namespace Eggnog.Tests.Host
                 {
                     w.Assume(t.Num.Of(f.Of(1L)));
                 }
-                catch (ArgumentException)
+                catch (InvalidOperationException)
                 {
                     // The call was rejected; the batch must write nothing.
                 }
@@ -614,10 +613,11 @@ namespace Eggnog.Tests.Host
             {
                 try
                 {
-                    // Plans Wrap(A) and A as new terms, then rejects the fact at its second argument (a function read).
+                    // Plans Wrap(A) and A as new terms, then rejects the fact at its second argument (a function read
+                    // with no value).
                     w.Assume(link.Of(t.Wrap.Of(t.A.Of()), f.Of(1L)));
                 }
-                catch (ArgumentException)
+                catch (InvalidOperationException)
                 {
                     // Rejected.
                 }

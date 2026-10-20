@@ -231,6 +231,21 @@ namespace Eggnog.Tests.Scheduling
             Assert.False(t.Root.Check(t.Num.Of(7L)));
         }
 
+        /// <summary>
+        /// A condition may compute, as egglog's <c>check</c> does: the computation is evaluated each time the condition
+        /// is checked.
+        /// </summary>
+        [Fact]
+        public void AnUntilConditionMayCompute()
+        {
+            var t = Counter(10);
+            var report = t.Root.Run(Schedule.Saturate(Schedule.Until(t.Rules, t.Num.Of(Primitives.Add.Of(2L, 2L)))));
+
+            Assert.Equal(4, report.Iterations);
+            Assert.True(t.Root.Check(t.Num.Of(4L)));
+            Assert.False(t.Root.Check(t.Num.Of(5L)));
+        }
+
         [Fact]
         public void UntilChecksTheConditionBeforeEveryPass()
         {
@@ -255,7 +270,7 @@ namespace Eggnog.Tests.Scheduling
         }
 
         [Fact]
-        public void UntilRefusesAnEmptyConditionAndTermsAHostCheckCannotRead()
+        public void UntilRefusesAnEmptyConditionAndVariables()
         {
             var t = Counter(10);
             var empty = Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules));
@@ -269,9 +284,7 @@ namespace Eggnog.Tests.Scheduling
             });
             var variable = Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, t.Num.Of(leaked)));
             Assert.Contains("'v' is a variable", variable.Message, StringComparison.Ordinal);
-            var computation = Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, t.Num.Of(Primitives.Add.Of(1L, 1L))));
-            Assert.Contains("'+' is a computation", computation.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, Fact.Exists(t.Wrap.Of(t.Lit.Of(Primitives.Max.Of(1L, 2L))))));
+            Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, Fact.Exists(t.Wrap.Of(t.Lit.Of(leaked)))));
         }
 
         [Fact]
@@ -529,11 +542,12 @@ namespace Eggnog.Tests.Scheduling
 
         /// <summary>
         /// <c>Schedule.Until</c> refuses filters at construction; a condition no host check of the scope can read (a
-        /// computation, or another graph's table) is refused by <c>Run</c> before any work, as another graph's ruleset
-        /// is: the earlier steps do not iterate, and the version does not move.
+        /// scoped read under a tag no ancestor of the scope carries, or another graph's table) is refused by <c>Run</c>
+        /// before any work, as another graph's ruleset is: the earlier steps do not iterate, and the version does not
+        /// move.
         /// </summary>
-        /// <param name="foreignTable">Whether the condition reads another graph's table rather than a
-        /// computation.</param>
+        /// <param name="foreignTable">Whether the condition reads another graph's table rather than a tag that does not
+        /// resolve.</param>
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
@@ -550,7 +564,7 @@ namespace Eggnog.Tests.Scheduling
                 r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
             });
             var version = t.Root.Version;
-            var condition = foreignTable ? other.Num.Of(2L) : t.Num.Of(Primitives.Add.Of(1L, 1L));
+            var condition = foreignTable ? other.Num.Of(2L) : t.Num.In(t.Graph.DefineScopeTag("elsewhere")).Of(2L);
 
             var error = Record.Exception(() => t.Root.Run(Schedule.Sequence(t.Rules, Schedule.Until(t.Rules, condition))));
 

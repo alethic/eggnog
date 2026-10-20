@@ -102,6 +102,19 @@ namespace Eggnog
             return false;
         }
 
+        /// <inheritdoc />
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        {
+            if (TryInvoke((T1)arguments[0], (T2)arguments[1], (T3)arguments[2], out var result))
+            {
+                value = result;
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
     }
 
 }

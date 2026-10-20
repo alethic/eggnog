@@ -75,8 +75,91 @@ namespace Eggnog
                 case TermShapeKind.Variable:
                     throw new ArgumentException($"host reads are ground; '{shape.Name}' is a variable", nameof(term));
                 default:
-                    throw new ArgumentException($"host reads do not compute; '{shape.Primitive!.Name}' is a computation", nameof(term));
+                    return TryCompute(scope, shape, enclosing, out cell);
             }
+        }
+
+        /// <summary>
+        /// Evaluates a primitive's term as egglog's <c>check</c> does, without interning: over the arguments' values, a
+        /// constant as it is, so that a constant no write interned still computes; then the result's cell, which a value
+        /// never interned has not, and then the term is absent, as it is when the primitive has no result.
+        /// </summary>
+        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
+        /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
+        static bool TryCompute(Scope scope, TermShape shape, ScopeTag? enclosing, out uint cell)
+        {
+            cell = 0;
+            return TryEvaluate(scope, shape, enclosing, out var value, out var result) && result.TryEncodeExistingObject(value!, out cell);
+        }
+
+        /// <summary>
+        /// Evaluates a primitive's term to its CLR value, on the calling thread under <see cref="EngineCallMarker"/>.
+        /// </summary>
+        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
+        /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
+        static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
+        {
+            value = null;
+            var primitive = shape.Primitive!;
+            var parameters = new ColumnType[primitive.ParameterTypes.Count];
+            for (var i = 0; i < parameters.Length; i++)
+                parameters[i] = ValueTypeOf(scope, primitive.ParameterTypes[i], primitive);
+
+            result = ValueTypeOf(scope, primitive.ResultType, primitive);
+            var arguments = new object[parameters.Length];
+            for (var i = 0; i < arguments.Length; i++)
+            {
+                var argument = shape.Arguments[i].Shape;
+                if (argument.Kind == TermShapeKind.Constant)
+                {
+                    arguments[i] = argument.Constant!;
+                }
+                else if (argument.Kind == TermShapeKind.Computation)
+                {
+                    if (TryEvaluate(scope, argument, enclosing, out var inner, out _) == false)
+                        return false;
+
+                    arguments[i] = inner!;
+                }
+                else
+                {
+                    if (TryReadIn(scope, shape.Arguments[i], enclosing, out var argumentCell) == false)
+                        return false;
+
+                    arguments[i] = parameters[i].DecodeObject(argumentCell, scope);
+                }
+            }
+
+            bool found;
+            EngineCallMarker.Enter();
+            try
+            {
+                found = primitive.TryInvokeValue(arguments, parameters, out value);
+            }
+            catch (Exception exception)
+            {
+                throw new RuleEvaluationException(null, null,
+                    $"primitive '{primitive.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
+            }
+            finally
+            {
+                EngineCallMarker.Exit();
+            }
+
+            return found;
+        }
+
+        /// <summary>
+        /// Gets the value type of a primitive's parameter or result.
+        /// </summary>
+        /// <exception cref="ArgumentException">The type is a sort: primitives never take or return classes.</exception>
+        static ColumnType ValueTypeOf(Scope scope, Type clrType, Primitive primitive)
+        {
+            var type = scope.Graph.Values.TypeOf(clrType);
+            if (type.Kind == ColumnKind.Sort)
+                throw new ArgumentException($"primitive '{primitive.Name}' takes or returns the sort {type.Name}; primitives are over values only");
+
+            return type;
         }
 
         /// <summary>
@@ -140,7 +223,7 @@ namespace Eggnog
         /// <summary>
         /// Checks, without reading the scope's contents, that <see cref="Check"/> can test <paramref name="fact"/>: what it
         /// would refuse whatever the scope holds. With no scope, only the fact's shape: a relation row, an equality or an
-        /// existence, whose terms are constants and table applications (no variable, no computation). With a scope, also
+        /// existence, whose terms are constants, computations and table applications (no variable). With a scope, also
         /// every table and column type is of its graph and every class constant may be used in it. Used for
         /// <c>Until</c> conditions, which <see cref="Check"/> reads only when their node executes.
         /// </summary>
@@ -242,7 +325,13 @@ namespace Eggnog
                 case TermShapeKind.Variable:
                     return $"host reads are ground; '{shape.Name}' is a variable";
                 default:
-                    return $"host reads do not compute; '{shape.Primitive!.Name}' is a computation";
+                {
+                    foreach (var argument in shape.Arguments)
+                        if (ValidateTerm(scope, argument, enclosing) is { } error)
+                            return error;
+
+                    return null;
+                }
             }
         }
 
