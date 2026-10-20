@@ -268,6 +268,17 @@ namespace Eggnog
         internal abstract bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell);
 
         /// <summary>
+        /// Calls the primitive on CLR values, the arguments neither encoded nor the result: what a host read does, which
+        /// must not intern.
+        /// </summary>
+        /// <param name="arguments">The arguments, of the parameters' types.</param>
+        /// <param name="parameters">The parameters' column types, which a primitive over cells needs.</param>
+        /// <param name="value">The result, when there is one.</param>
+        /// <returns>Whether there is a result: <c>false</c> for a partial primitive with none, and for a primitive over
+        /// cells whose arguments have none.</returns>
+        internal abstract bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value);
+
+        /// <summary>
         /// Gets what <c>Function</c> throws for a partial primitive's call that has no result.
         /// </summary>
         /// <param name="name">The primitive's name.</param>

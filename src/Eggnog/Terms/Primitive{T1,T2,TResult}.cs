@@ -120,6 +120,31 @@ namespace Eggnog
             return false;
         }
 
+        /// <inheritdoc />
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        {
+            if (cells is not null)
+            {
+                if (parameters[0].TryEncodeExistingObject(arguments[0], out var a) && parameters[1].TryEncodeExistingObject(arguments[1], out var b))
+                {
+                    value = parameters[0].DecodeObject(cells(a, b), null);
+                    return true;
+                }
+
+                value = null;
+                return false;
+            }
+
+            if (TryInvoke((T1)arguments[0], (T2)arguments[1], out var result))
+            {
+                value = result;
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
     }
 
 }

@@ -99,6 +99,15 @@ namespace Eggnog
         internal abstract bool Absorbs(ColumnType type, uint stored, uint incoming);
 
         /// <summary>
+        /// Merges two cells of a function's output: the cell of the merged value, interned if it is new.
+        /// </summary>
+        /// <param name="type">The function's output type.</param>
+        /// <param name="stored">The stored cell.</param>
+        /// <param name="incoming">The incoming cell.</param>
+        /// <returns>The merged cell.</returns>
+        internal abstract uint MergeCells(ColumnType type, uint stored, uint incoming);
+
+        /// <summary>
         /// Creates the merge external function of a function with this lattice.
         /// </summary>
         /// <param name="graph">The graph.</param>

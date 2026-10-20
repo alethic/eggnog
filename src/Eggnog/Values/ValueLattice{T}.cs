@@ -96,6 +96,13 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        internal override uint MergeCells(ColumnType type, uint stored, uint incoming)
+        {
+            var typed = (ColumnType<T>)type;
+            return typed.Encode(Merge(typed.Decode(stored, null), typed.Decode(incoming, null)));
+        }
+
+        /// <inheritdoc />
         internal override Func<uint, uint, uint>? CreateCaseJoin(ColumnType type, string functionName) =>
             CaseJoinAdapter<T>.Create(this, (ColumnType<T>)type, functionName);
 

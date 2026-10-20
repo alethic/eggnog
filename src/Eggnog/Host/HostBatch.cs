@@ -13,9 +13,10 @@ namespace Eggnog
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), resolves existing
-    /// terms by lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold
-    /// already, and
+    /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), evaluates primitives and
+    /// reads function values, as egglog's top-level actions do (a read sees the batch's earlier writes, merged, as
+    /// egglog's next command would), resolves existing terms by lookup, mints a fresh id per new term, records only the
+    /// rows, subsumptions and unions that do not hold already, and
     /// checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
     /// <c>HostBatch.Merges.cs</c>). An exception discards the batch: nothing is staged and <see cref="Origin"/> never
     /// commits. A <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
@@ -40,6 +41,7 @@ namespace Eggnog
         readonly List<(TableHandle Table, uint[] Row)> rows = new();
         readonly HashSet<string> rowKeys = new(StringComparer.Ordinal);
         readonly Dictionary<string, uint> functionValues = new(StringComparer.Ordinal);
+        readonly Dictionary<string, uint> currentValues = new(StringComparer.Ordinal);
         readonly List<(TableHandle Table, uint[] Row)> subsumes = new();
         readonly HashSet<string> subsumeKeys = new(StringComparer.Ordinal);
         readonly HashSet<string> subsumedTerms = new(StringComparer.Ordinal);
@@ -83,12 +85,15 @@ namespace Eggnog
 
         /// <summary>
         /// Plans a ground term and gets its class or value: an existing class (looked up), or a fresh id minted now for a
-        /// new term, memoised by head and keys so a batch mints each new term once.
+        /// new term, memoised by head and keys so a batch mints each new term once; a function's value, read as the batch
+        /// has written it so far; or a primitive's result, interned if it is new.
         /// </summary>
         /// <param name="term">The term.</param>
         /// <returns>The cell: canonical, or fresh.</returns>
-        /// <exception cref="ArgumentException">The term is not ground, reads a function, computes, belongs to another
-        /// graph, or holds a class value this scope cannot use.</exception>
+        /// <exception cref="ArgumentException">The term is not ground, applies a relation, belongs to another graph, or
+        /// holds a class value this scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">A function it reads has no value for its keys.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive it computes threw, or has no result.</exception>
         public uint PlanTerm(Term term)
         {
             ArgumentNullException.ThrowIfNull(term);
@@ -110,10 +115,13 @@ namespace Eggnog
                 {
                     var table = shape.Table!;
                     CheckTable(table);
-                    if (table.Kind != TableKind.Constructor)
-                        throw new ArgumentException($"host terms do not read; Get '{table.Name}' first", nameof(term));
+                    if (table.Kind == TableKind.Relation)
+                        throw new ArgumentException($"'{table.Name}' is a relation, whose rows are facts, not terms", nameof(term));
 
                     var keys = PlanKeys(table, shape.Arguments, out var existing);
+                    if (table.Kind == TableKind.Function)
+                        return ReadFunction(table, keys, existing);
+
                     if (existing && engine.TryLookup(table.Function, keys, out var output))
                         return output;
 
@@ -122,8 +130,83 @@ namespace Eggnog
                 case TermShapeKind.Variable:
                     throw new ArgumentException($"host terms are ground; '{shape.Name}' is a variable", nameof(term));
                 default:
-                    throw new ArgumentException($"host terms do not compute; '{shape.Primitive!.Name}' is a computation", nameof(term));
+                    return Compute(shape);
             }
+        }
+
+        /// <summary>
+        /// Reads a function's value for planned keys, as egglog's top-level lookup does: the value the batch's earlier
+        /// writes left, merged as the engine will merge them, else the stored one.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The function has no value for the keys.</exception>
+        uint ReadFunction(TableHandle table, uint[] keys, bool existing)
+        {
+            if (currentValues.TryGetValue(Key(table, keys), out var current))
+                return current;
+
+            if (existing && engine.TryLookup(table.Function, keys, out var stored))
+                return stored;
+
+            var text = new StringBuilder("(").Append(table.Name);
+            for (var i = 0; i < keys.Length; i++)
+                text.Append(' ').Append(table.KeyArray[i].FormatCell(keys[i]));
+
+            throw new InvalidOperationException(text.Append(") has no value here.").ToString());
+        }
+
+        /// <summary>
+        /// Evaluates a primitive over its planned arguments, as egglog's top-level actions do, on the calling thread under
+        /// <see cref="EngineCallMarker"/>; the result is interned if it is new, as any value a write holds.
+        /// </summary>
+        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
+        /// <exception cref="RuleEvaluationException">The primitive threw, or has no result; nothing is written and the
+        /// scope is not faulted.</exception>
+        uint Compute(TermShape shape)
+        {
+            var primitive = shape.Primitive!;
+            var parameters = new ColumnType[primitive.ParameterTypes.Count];
+            for (var i = 0; i < parameters.Length; i++)
+                parameters[i] = ValueTypeOf(primitive.ParameterTypes[i], primitive);
+
+            var result = ValueTypeOf(primitive.ResultType, primitive);
+            var arguments = new uint[parameters.Length];
+            for (var i = 0; i < arguments.Length; i++)
+                arguments[i] = PlanTerm(shape.Arguments[i]);
+
+            bool found;
+            uint cell;
+            EngineCallMarker.Enter();
+            try
+            {
+                found = primitive.TryInvokeCore(arguments, parameters, result, out cell);
+            }
+            catch (Exception exception)
+            {
+                throw new RuleEvaluationException(null, null,
+                    $"primitive '{primitive.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
+            }
+            finally
+            {
+                EngineCallMarker.Exit();
+            }
+
+            if (found == false)
+                throw new RuleEvaluationException(null, null, $"primitive '{primitive.Name}' has no result for these arguments", null);
+
+            return cell;
+        }
+
+        /// <summary>
+        /// Gets the value type of a primitive's parameter or result.
+        /// </summary>
+        /// <exception cref="ArgumentException">The type is a sort: primitives never take or return classes.</exception>
+        ColumnType ValueTypeOf(Type clrType, Primitive primitive)
+        {
+            var type = graph.Values.TypeOf(clrType);
+            if (type.Kind == ColumnKind.Sort)
+                throw new ArgumentException($"primitive '{primitive.Name}' takes or returns the sort {type.Name}; primitives are over values only");
+
+            return type;
         }
 
         /// <summary>
@@ -157,9 +240,9 @@ namespace Eggnog
                 {
                     var left = equality.Left.Shape;
                     var right = equality.Right.Shape;
-                    if (IsApplication(left, TableKind.Function) && right.Kind == TermShapeKind.Constant)
+                    if (IsApplication(left, TableKind.Function) && IsValue(right))
                         PlanFunctionWrite(left, equality.Right);
-                    else if (IsApplication(right, TableKind.Function) && left.Kind == TermShapeKind.Constant)
+                    else if (IsApplication(right, TableKind.Function) && IsValue(left))
                         PlanFunctionWrite(right, equality.Left);
                     else if (IsApplication(left, TableKind.Constructor) && IsClassConstant(right))
                         PlanConstructorWrite(left, equality.Right);
@@ -339,11 +422,42 @@ namespace Eggnog
                     return;
             }
 
+            // The value a later read in the batch sees: the incoming one, merged by the lattice with the value before it.
+            if (table.Lattice is null)
+                currentValues[key] = cell;
+            else if (currentValues.TryGetValue(key, out var before) || (existing && engine.TryLookup(table.Function, keys, out before)))
+                currentValues[key] = MergeCells(table, before, cell);
+            else
+                currentValues[key] = cell;
+
             functionValues[key] = cell;
             var row = new uint[keys.Length + 1];
             keys.CopyTo(row, 0);
             row[^1] = cell;
             AddRow(table, row);
+        }
+
+        /// <summary>
+        /// Merges two values of a function with a lattice, on the calling thread under <see cref="EngineCallMarker"/>.
+        /// </summary>
+        /// <exception cref="RuleEvaluationException">The merge threw; nothing is written and the scope is not
+        /// faulted.</exception>
+        uint MergeCells(FunctionHandle table, uint stored, uint incoming)
+        {
+            EngineCallMarker.Enter();
+            try
+            {
+                return table.Lattice!.MergeCells(table.Output!, stored, incoming);
+            }
+            catch (Exception exception) when (exception is not RuleEvaluationException)
+            {
+                throw new RuleEvaluationException(null, null,
+                    $"lattice '{table.Lattice!.Name}' of '{table.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
+            }
+            finally
+            {
+                EngineCallMarker.Exit();
+            }
         }
 
         /// <summary>
@@ -526,6 +640,13 @@ namespace Eggnog
         /// Gets whether a shape is an application of a table of <paramref name="kind"/>.
         /// </summary>
         static bool IsApplication(TermShape shape, TableKind kind) => shape.Kind == TermShapeKind.Application && shape.Table!.Kind == kind;
+
+        /// <summary>
+        /// Gets whether a shape stands for a value a function may be written: a constant, a computation, or a function's
+        /// value read.
+        /// </summary>
+        static bool IsValue(TermShape shape) =>
+            shape.Kind is TermShapeKind.Constant or TermShapeKind.Computation || IsApplication(shape, TableKind.Function);
 
         /// <summary>
         /// Decodes key cells for an exception.
