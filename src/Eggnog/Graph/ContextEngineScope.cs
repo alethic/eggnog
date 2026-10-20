@@ -137,8 +137,8 @@ namespace Eggnog
         public override uint FreshId() => Context.FreshId().Rep;
 
         /// <inheritdoc />
-        public override void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row) =>
-            Context.StageRow(function, MemoryMarshal.Cast<uint, Relations.Value>(row));
+        public override void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row, bool subsume = false) =>
+            Context.StageRow(function, MemoryMarshal.Cast<uint, Relations.Value>(row), subsume);
 
         /// <inheritdoc />
         public override void StageUnion(uint a, uint b) => Context.StageUnion(new Relations.Value(a), new Relations.Value(b));
@@ -199,9 +199,30 @@ namespace Eggnog
                 return false;
             }
 
-            var columns = graph.TableOf(function).Columns;
-            output = columns[^1].Kind == ColumnKind.Sort ? Context.Find(value).Rep : value.Rep;
+            output = Canonical(function, value);
             return true;
+        }
+
+        /// <inheritdoc />
+        public override bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output, out bool subsumed)
+        {
+            if (Context.TryLookup(function, MemoryMarshal.Cast<uint, Relations.Value>(key), out var value, out subsumed) == false)
+            {
+                output = 0;
+                return false;
+            }
+
+            output = Canonical(function, value);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets a looked-up output's cell: a class through <see cref="Find"/>, a value as it is.
+        /// </summary>
+        uint Canonical(Relations.FunctionId function, Relations.Value value)
+        {
+            var columns = graph.TableOf(function).Columns;
+            return columns[^1].Kind == ColumnKind.Sort ? Context.Find(value).Rep : value.Rep;
         }
 
         /// <inheritdoc />

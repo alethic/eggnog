@@ -44,7 +44,30 @@ namespace Eggnog.Relations
         /// count.</exception>
         /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is held
         /// by another thread.</exception>
-        public bool TryLookup(FunctionId function, ReadOnlySpan<Value> key, out Value value)
+        public bool TryLookup(FunctionId function, ReadOnlySpan<Value> key, out Value value) =>
+            TryLookupCore(function, key, out value, false, out _);
+
+        /// <summary>
+        /// Looks up the output of <paramref name="function"/> for <paramref name="key"/> in this context's view (<see
+        /// cref="TryLookup(FunctionId, ReadOnlySpan{Value}, out Value)"/>), and whether the row the context sees is
+        /// subsumed: always <c>false</c> for a function that cannot subsume.
+        /// </summary>
+        /// <param name="function">The function.</param>
+        /// <param name="key">One value per key column.</param>
+        /// <param name="value">The output, or default.</param>
+        /// <param name="subsumed">Whether the row is subsumed; <c>false</c> when there is none.</param>
+        /// <returns><c>true</c> if the context sees a row for the key.</returns>
+        /// <exception cref="ArgumentException">The function is not declared, or the key's width is not its key
+        /// count.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted, stopped or not clean, or its domain is
+        /// held by another thread.</exception>
+        public bool TryLookup(FunctionId function, ReadOnlySpan<Value> key, out Value value, out bool subsumed) =>
+            TryLookupCore(function, key, out value, true, out subsumed);
+
+        /// <summary>
+        /// The lookup of both <c>TryLookup</c> forms; the subsumption cell is read only when asked for.
+        /// </summary>
+        bool TryLookupCore(FunctionId function, ReadOnlySpan<Value> key, out Value value, bool readSubsumed, out bool subsumed)
         {
             var current = context.IsFrozen ? null : context.Domain;
             using var scope = current is null ? default : current.Enter();
@@ -70,12 +93,26 @@ namespace Eggnog.Relations
                 found = context.Tables!.GetView(info.Table).TryGetColumn(canonical, output.Rep, out cell);
 
             value = new Value(cell);
+            subsumed = false;
+            if (readSubsumed && found && math.Subsume)
+            {
+                // The second probe reads the same row: the view's topmost layer holding the key decides both cells.
+                var column = new ColumnId(math.SubsumeColumn);
+                uint flag;
+                if (parent is null)
+                    context.Database.GetTable(info.Table).TryGetRowColumn(canonical, column, out flag);
+                else
+                    context.Tables!.GetView(info.Table).TryGetColumn(canonical, column.Rep, out flag);
+
+                subsumed = flag == SchemaMath.Subsumed;
+            }
+
             return found;
         }
 
         /// <summary>
         /// Gets whether this context sees a row of <paramref name="function"/> for <paramref name="key"/>
-        /// (<see cref="TryLookup"/>).
+        /// (<see cref="TryLookup(FunctionId, ReadOnlySpan{Value}, out Value)"/>).
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="key">One value per key column.</param>
@@ -85,7 +122,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the output of <paramref name="function"/> for <paramref name="key"/> in this context, or <c>null</c>:
         /// egglog's <c>lookup_id</c> (lib.rs:387-399) for a context, with the key's id cells canonicalized here
-        /// (<see cref="TryLookup"/>).
+        /// (<see cref="TryLookup(FunctionId, ReadOnlySpan{Value}, out Value)"/>).
         /// </summary>
         /// <param name="function">The function.</param>
         /// <param name="key">One value per key column.</param>

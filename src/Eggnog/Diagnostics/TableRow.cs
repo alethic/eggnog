@@ -16,11 +16,13 @@ namespace Eggnog
         /// <param name="table">The table.</param>
         /// <param name="keys">The decoded keys; owned by the new instance.</param>
         /// <param name="output">The decoded value or class; <c>null</c> for a relation.</param>
-        internal TableRow(TableHandle table, object[] keys, object? output)
+        /// <param name="subsumed">Whether the row is subsumed.</param>
+        internal TableRow(TableHandle table, object[] keys, object? output, bool subsumed = false)
         {
             Table = table;
             Keys = Array.AsReadOnly(keys);
             Output = output;
+            Subsumed = subsumed;
         }
 
         /// <summary>
@@ -38,6 +40,12 @@ namespace Eggnog
         /// Gets the function's value or the constructor's class (a <see cref="ClassId"/>); <c>null</c> for a relation.
         /// </summary>
         public object? Output { get; }
+
+        /// <summary>
+        /// Gets whether the row is subsumed (<see cref="TableOptions.Subsumable"/>): rule bodies, queries and split
+        /// rules no longer match it, and extraction skips it. Always <c>false</c> for a table that is not subsumable.
+        /// </summary>
+        public bool Subsumed { get; }
 
         /// <summary>
         /// Renders the row as an s-expression: <c>(present "kind")</c>, <c>(dom "kind") = (set-of "a" "b")</c>,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Eggnog
 {
@@ -37,8 +38,13 @@ namespace Eggnog
             var source = Source(scope, table);
             var columns = table.Columns;
             var width = columns.Length;
-            using var cells = new TupleBuffer(width);
-            var row = new uint[width];
+
+            // A subsumable table's tuples carry the subsumption flag in one more cell, encoded as a bool is (0 or 1), so
+            // that it sorts last, after the row's content.
+            var subsumable = table.Subsumable;
+            var cellWidth = subsumable ? width + 1 : width;
+            using var cells = new TupleBuffer(cellWidth);
+            var row = new uint[cellWidth];
 
             // Copied out during the visit, which must not call the engine; canonicalized afterwards, in place, which can
             // only make rows equal in a scope that is not clean.
@@ -48,6 +54,9 @@ namespace Eggnog
                 for (var i = 0; i < width; i++)
                     row[i] = values[i].Rep;
 
+                if (subsumable)
+                    row[width] = visited.Subsumed ? 1u : 0u;
+
                 cells.Add(row);
             });
 
@@ -56,24 +65,46 @@ namespace Eggnog
                 if (columns[column].Kind == ColumnKind.Sort)
                     sorts.Add(column);
 
-            if (scope.Engine.CanonicalizeColumns(cells.Cells, width, sorts.ToArray()))
+            if (scope.Engine.CanonicalizeColumns(cells.Cells, cellWidth, sorts.ToArray()))
                 cells.Deduplicate();
 
-            cells.SortByContent(columns);
+            if (subsumable)
+            {
+                var order = new ColumnType[cellWidth];
+                columns.CopyTo(order, 0);
+                order[width] = scope.Graph.Values.TypeOf<bool>();
+                cells.SortByContent(order);
+            }
+            else
+            {
+                cells.SortByContent(columns);
+            }
+
             var keyCount = table.KeyArray.Length;
-            var rows = new TableRow[cells.Count];
-            for (var i = 0; i < rows.Length; i++)
+            var rows = new List<TableRow>(cells.Count);
+            for (var i = 0; i < cells.Count; i++)
             {
                 var tuple = cells[i];
+
+                // Two rows that canonicalized to the same content differ only in the flag, which sorts last, so they are
+                // adjacent: one row, subsumed if either is, as the merge's combine_subsumed keeps the larger cell.
+                if (subsumable && i > 0 && tuple[..width].SequenceEqual(cells[i - 1][..width]))
+                {
+                    if (tuple[width] != 0 && rows[^1].Subsumed == false)
+                        rows[^1] = new TableRow(table, rows[^1].Keys.ToArray(), rows[^1].Output, true);
+
+                    continue;
+                }
+
                 var keys = new object[keyCount];
                 for (var column = 0; column < keyCount; column++)
                     keys[column] = Decode(scope, columns[column], tuple[column]);
 
                 var output = table.IsRelation ? null : Decode(scope, columns[keyCount], tuple[keyCount]);
-                rows[i] = new TableRow(table, keys, output);
+                rows.Add(new TableRow(table, keys, output, subsumable && tuple[width] != 0));
             }
 
-            return Array.AsReadOnly(rows);
+            return rows.AsReadOnly();
         }
 
         /// <summary>

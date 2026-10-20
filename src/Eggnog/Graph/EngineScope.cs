@@ -116,7 +116,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="function">The table's engine function.</param>
         /// <param name="row">The row.</param>
-        public abstract void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row);
+        /// <param name="subsume">Whether the row is staged subsumed; only for a table that can subsume.</param>
+        public abstract void StageRow(Relations.FunctionId function, ReadOnlySpan<uint> row, bool subsume = false);
 
         /// <summary>
         /// Stages a union of a host batch.
@@ -158,6 +159,18 @@ namespace Eggnog
         /// <param name="output">The output cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the table holds a row for the key.</returns>
         public abstract bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output);
+
+        /// <summary>
+        /// Looks up a row by key (<see cref="TryLookup(Relations.FunctionId, ReadOnlySpan{uint}, out uint)"/>), and
+        /// whether it is subsumed.
+        /// </summary>
+        /// <param name="function">The table's engine function.</param>
+        /// <param name="key">The key cells.</param>
+        /// <param name="output">The output cell, when the result is <c>true</c>.</param>
+        /// <param name="subsumed">Whether the row is subsumed; <c>false</c> when there is none or the table cannot
+        /// subsume.</param>
+        /// <returns>Whether the table holds a row for the key.</returns>
+        public abstract bool TryLookup(Relations.FunctionId function, ReadOnlySpan<uint> key, out uint output, out bool subsumed);
 
         /// <summary>
         /// Gets the number of rows of a table in this scope's view (<c>Scope.CountRows</c>). O(1).

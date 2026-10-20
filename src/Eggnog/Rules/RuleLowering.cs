@@ -64,7 +64,9 @@ namespace Eggnog
                     if (atom.Table.IsRelation)
                         columns[^1] = unit;
 
-                    builder.QueryTable(atom.Table.Function, columns, false);
+                    // Rows that are not subsumed, as egglog's rules match (src/lib.rs:2525-2537); a table without a
+                    // subsumption column ignores the flag.
+                    builder.QueryTable(atom.Table.Function, columns, atom.SubsumedOnly);
                 }
 
                 foreach (var step in program.Steps)
@@ -134,6 +136,9 @@ namespace Eggnog
                         }
                         case HeadOpKind.Union:
                             builder.Union(inputs[0], inputs[1]);
+                            break;
+                        case HeadOpKind.Subsume:
+                            builder.Subsume(op.Table!.Function, inputs);
                             break;
                         case HeadOpKind.Collect:
                         {

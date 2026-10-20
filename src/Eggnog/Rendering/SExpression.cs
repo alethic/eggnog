@@ -75,6 +75,15 @@ namespace Eggnog
                         Append(builder, item.Left!, null);
                         builder.Append(')');
                         break;
+                    case HeadItemKind.Subsume:
+                        builder.Append("(subsume ");
+                        if (item.Fact is { } row)
+                            Append(builder, row);
+                        else
+                            Append(builder, item.Left!, null);
+
+                        builder.Append(')');
+                        break;
                     default:
                         builder.Append("(union ");
                         Append(builder, item.Variable!, null);

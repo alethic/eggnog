@@ -157,8 +157,9 @@ throws `FactConflictException` and writes nothing; a rule that derives a conflic
 `RuleEvaluationException`.
 
 `TableOptions` sets a relation's or function's role (`Fact`, the default, or `Analysis`, a table derived from terms
-alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and
-analyses do not), and whether extraction may use a constructor's rows (`Extractable`).
+alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and analyses
+do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
+rows may be subsumed (`Subsumable`, section 2.5).
 
 `EGraph.Contradiction` is a built-in nullary relation. A rule that derives it says the scope has no model. In a case it
 stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run asks to stop on it
@@ -193,6 +194,15 @@ rules.DefineRule("a singleton domain makes a path present", r =>
 - `Then` adds head facts: relation rows, function outputs, constructor terms (made if absent), and equalities
   between classes (unions). `Make` binds a head variable to a term made by get-or-add. `Rewrite(left, right)` is
   shorthand for "where `t = left`, make `t = right`".
+- **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
+  (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a table defined
+  `Subsumable` as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
+  lookups, `Check`, `Get` and `Rows` (whose `TableRow.Subsumed` says so) still find it, and a head that makes the term
+  gets its class. But no rule body, query or split rule matches it any more (from the next iteration, when a rule
+  subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
+  rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
+  nothing undoes it. What earlier matches derived from the row stays. Only relations and constructors can opt in, as
+  egglog's language subsumes only those; a table that does not opt in stores no subsumption cell (section 2.13).
 - **Heads never read tables.** A function value used in a head must be matched in the body. This keeps every match a
   function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
@@ -271,22 +281,24 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 
 ### 2.7 Host writes, reads and queries
 
-A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class) and `Union(a, b)`. Each call is one
-atomic batch; `Write(w => ...)` makes several calls one batch through a `ScopeWriter`. A batch is planned first,
-reading only: it validates the facts, checks class origins, interns constants, resolves existing terms, mints ids for
-new ones, keeps only the rows and unions that do not already hold, and checks every conflict a function without a
-lattice would see, including conflicts a union in the batch would cause through congruence. An exception discards the
-whole batch. The batch is then staged and flushed: merged, rebuilt, and visible when the call returns. A batch whose
-facts all hold already stages nothing, so it moves neither the scope's `Version` nor any extractor.
+A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, and `Subsume(term)`
+and `Subsume(rows)` (section 2.5). Each call is one atomic batch; `Write(w => ...)` makes several calls one batch
+through a `ScopeWriter`. A batch is planned first, reading only: it validates the facts, checks class origins, interns
+constants, resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not
+already hold, and checks every conflict a function without a lattice would see, including conflicts a union in the batch
+would cause through congruence. An exception discards the whole batch. The batch is then staged and flushed: merged,
+rebuilt, and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the
+scope's `Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
-`AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. `Version` counts the effective changes the scope's own calls
-made to its own contents.
+`AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do.
+`Version` counts the effective changes the scope's own calls made to its own contents.
 
 A query (`EGraph.DefineQuery`) is a conjunctive body with variables, defined once and run in any scope with `Any`,
-`Count` or `ForEachMatch`, which delivers the distinct bindings in content order. A query is `IDisposable`: dispose a
-query made for one request to free its engine rule. A query that fails throws `RuleEvaluationException` without
-faulting the scope, since it wrote nothing.
+`Count` or `ForEachMatch`, which delivers the distinct bindings in content order. Its atoms skip subsumed rows, as a
+rule body's do, since a query is what a host loop matches with in place of a rule. A query is `IDisposable`: dispose a
+query made for one request to free its engine rule. A query that fails throws `RuleEvaluationException` without faulting
+the scope, since it wrote nothing.
 
 ### 2.8 Scopes, tags, local rules and scoped reads
 
@@ -322,13 +334,19 @@ root                      empty and frozen, or a shared theory
 - **Local rules.** `Scope.DefineRule(ruleset, name, define)` defines a rule that is active only in that scope and its
   descendants, for the rulesets a schedule runs. Local rules may be added until the scope is frozen, and are freed when
   it is released. A schema can therefore carry rules compiled from its own declarations.
-- **Scoped reads.** `table.In(tag)` (and `Fact.In(tag, facts)`) reads a table as the scope tagged `tag` sees it, from
-  a rule running in a descendant. Only value-only tables (every column a value type, never a sort) can be read this
-  way, so no class id crosses a scope boundary inside a rule. A scoped read compiles to an ordinary atom over a hidden
+- **Scoped reads.** `table.In(tag)` (and `Fact.In(tag, facts)`) reads a table as the scope tagged `tag` sees it, from a
+  rule running in a descendant. Only value-only tables (every column a value type, never a sort) can be read this way,
+  so no class id crosses a scope boundary inside a rule. A scoped read compiles to an ordinary atom over a hidden
   *mirror table* `T@tag`, which copy rules keep equal to the tagged scope's own view of `T`. The copy rules run in the
-  tagged scope just before anything reads the mirror, when that scope is writable and has changed since its last
-  sync, and once more when it freezes. Creating a mirror is a table definition, and is refused while a live frozen
-  scope carries the tag (its mirror would stay empty there).
+  tagged scope just before anything reads the mirror, when that scope is writable and has changed since its last sync,
+  and once more when it freezes. Creating a mirror is a table definition, and is refused while a live frozen scope
+  carries the tag (its mirror would stay empty there). A subsumable relation's mirror is subsumable, and a second copy
+  rule subsumes in it the rows the tagged scope subsumed, so scoped atoms skip exactly the rows the tagged scope's own
+  atoms skip.
+- **Subsumption in scopes.** A subsumption is a sticky change of the row's subsumption cell, written in the scope that
+  makes it, like any other write (decision 1 in [`engine/decisions.md`](engine/decisions.md)). A child's shadows its
+  ancestors' row: the child and its descendants stop matching the row, while the ancestors and the siblings still match
+  it. An ancestor's reaches its descendants when they catch up, and a frozen scope's stays for its children.
 - **Queries on frozen scopes** run in a transient child created for the call and disposed after it, so the frozen
   scope stays read-only. In a writable scope a query runs as an iteration that writes nothing.
 
@@ -354,12 +372,13 @@ they have no model.
 - **Host-driven cases.** `Scope.OpenCases()` returns a `CaseSet`. `Add()` makes a case, the host writes its
   assumptions and runs schedules in it, and `Lift()` writes into the parent what holds in every live case. Disposing the
   set disposes its cases.
-- **What a lift writes.** Equalities between the parent's classes that hold in every live case (the meet of the
-  cases' partitions); relation rows present in every live case; constructor terms over the parent's classes; and
-  function values, joined over the cases with the lattice's case join (or, for a function without a lattice, only
-  where every case agrees). Tables with `Lift = false` are left out. A lift runs in rounds until a round writes
-  nothing, because a term lifted in one round can make the next round's facts expressible over the parent's classes.
-  If every case is contradictory, the lift writes the contradiction into the parent.
+- **What a lift writes.** Equalities between the parent's classes that hold in every live case (the meet of the cases'
+  partitions); relation rows present in every live case; constructor terms over the parent's classes; and function
+  values, joined over the cases with the lattice's case join (or, for a function without a lattice, only where every
+  case agrees). Tables with `Lift = false` are left out. A row arrives in the parent not subsumed, unless the parent
+  subsumed it: a lift writes what every case holds, not what the cases chose to stop matching. A lift runs in rounds
+  until a round writes nothing, because a term lifted in one round can make the next round's facts expressible over the
+  parent's classes. If every case is contradictory, the lift writes the contradiction into the parent.
 - **Guarded terms by hand.** A lift writes only what holds in every case, so it builds no term that differs by case. A
   host that needs one for a few if-then-else guards lifts it by hand: it opens a child per distinct condition and
   assumes the condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in
@@ -374,7 +393,7 @@ they have no model.
 terms, cost, and an s-expression `ToString`). `CreateExtractor(costs)` returns an `Extractor` that answers several
 questions over one state of the scope. A `CostModel` gives each constructor a head cost (its declared cost by
 default), optionally a per-row cost function, and value costs (1 by default); a term costs the sum over its nodes.
-Unextractable heads are skipped.
+Unextractable heads and subsumed rows are skipped.
 
 Costs are computed with Knuth's generalization of Dijkstra's algorithm over the classes reachable from the ones asked
 about, so the chosen terms are always finite, even with zero costs. Ties are broken by content (cost, then
@@ -449,8 +468,14 @@ The library offers egglog's core (tables with functional dependencies and merges
 semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. It also
 departs from egglog on purpose:
 
-1. No deletion and no subsumption in the API. The engine has both, but inheritance of semi-naive progress, the
-   soundness of lift and the exactness of mirrors all rest on monotone contents.
+1. No deletion in the API. The engine has it, but inheritance of semi-naive progress, the soundness of lift and the
+   exactness of mirrors all rest on contents that only grow. Subsumption is in the API (section 2.5), because it keeps
+   all three: a subsumed row stays and what was derived from it stays, so inherited progress misses nothing, and a rule
+   that subsumes never inherits (section 3.8); a lift writes rows, not their subsumption; and mirrors copy subsumptions
+   too, a later subsumption reaching the mirror because the merge restamps the row. A table opts in with `Subsumable`,
+   where egglog makes every constructor and relation subsumable, so that a table that is never subsumed pays no cell per
+   row and no filter per atom. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees
+   them; the other departures are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. Merges are lattices or assert-equal; there is no `:merge old` or `new`.
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
@@ -691,14 +716,16 @@ layer changes no view.
 **Watermarks.** Semi-naive progress is kept per rule and per context (`RuleProgress`), with the rule's id constants as
 they were when it last ran. Every id constant of a rule runs in its canonical form in the context that runs it, and a
 watermark applies only while those forms are unchanged. A child's first run of a rule may inherit its watermark from an
-ancestor's progress (the minimum of the ancestor's watermark and the creation time of the ancestor's child on the
-path), provided the rule's actions read no table whose contents can change; then the child matches only what is new
-to it. Inheritance changes the work, not the result, which the tests check.
+ancestor's progress (the minimum of the ancestor's watermark and the creation time of the ancestor's child on the path),
+provided the rule's actions read no table whose contents can change; then the child matches only what is new to it. A
+rule that subsumes reads the row's subsumption cell, so it never inherits. Inheritance changes the work, not the result,
+which the tests check.
 
 **Retraction.** The engine supports deletion under strict rules ("Deletion across contexts" in
 [`engine/decisions.md`](engine/decisions.md)): a context with live descendants may not retract rows, and a child may
 delete its own rows and hide visible ancestor rows. A merge that is not a lattice merge may be used only at the root.
-The library uses none of this; its contents are monotone.
+The library uses no deletion. It uses subsumption, which is not a retraction: a sticky value change of the row's
+subsumption cell, merged like an output (decision 1).
 
 **Contradiction.** A context created as a case stops when the contradiction relation gets a row: its stop flag is set,
 the rebuild loop checks it, and a stopped case is skipped by the lift and disposed.
@@ -750,7 +777,7 @@ concurrency to its caller's threads.
 | Primitives, lambdas, lattices, query collectors | engine external functions registered by the library |
 | `ScopeTag`, `In(tag)` | library labels; mirror tables and copy rules are ordinary engine functions and rules |
 | One iteration | `EGraphContext.RunRules(rules)` and its `IterationReport` |
-| Host writes | `StageRow`, `StageUnion`, `FreshId`, then `FlushUpdates`, which canonicalizes and rebuilds |
+| Host writes | `StageRow` (subsumed or not), `StageUnion`, `FreshId`, then `FlushUpdates`, which canonicalizes and rebuilds |
 | Host reads | `TryLookup`, `Find`, `TableSize`, `ForEach` on the context |
 | Queries | a naive engine rule whose only action is a collector; in a frozen scope, run in a transient child |
 | `Freeze`, `CreateChild`, `Dispose` | the context's, with the plans the library asks the freeze to make |

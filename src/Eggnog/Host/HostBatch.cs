@@ -7,24 +7,25 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// One host write batch: <c>Make</c>, <c>Assume</c> and <c>Union</c> are batches of one call;
+    /// One host write batch: <c>Make</c>, <c>Assume</c>, <c>Union</c> and <c>Subsume</c> are batches of one call;
     /// <see cref="Scope.Write"/> makes larger ones. Each call is planned as it is made, reading only (plus minting fresh
     /// ids); <see cref="Commit"/> stages and flushes.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), resolves existing
-    /// terms by lookup, mints a fresh id per new term, records only the rows and unions that do not hold already, and
+    /// terms by lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold
+    /// already, and
     /// checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
     /// <c>HostBatch.Merges.cs</c>). An exception discards the batch: nothing is staged and <see cref="Origin"/> never
     /// commits. A <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
     /// <see cref="Scope.Write"/> then commits nothing, even when its callback caught the exception.
     /// </para>
     /// <para>
-    /// Phase 2 (<see cref="Commit"/>) stages the new terms' rows children first, then the rows, then the unions, and
-    /// flushes, which merges and rebuilds. A batch whose facts all hold stages nothing and is never flushed, so it moves
-    /// neither the scope's version nor the clock. Not thread-safe: used under the scope's guard, except
-    /// <see cref="Reject"/>, which any thread may call.
+    /// Phase 2 (<see cref="Commit"/>) stages the new terms' rows children first (subsumed where the batch subsumes the
+    /// term), then the rows, then the subsumed rows, then the unions, and flushes, which merges and rebuilds. A batch
+    /// whose facts all hold stages nothing and is never flushed, so it moves neither the scope's version nor the clock.
+    /// Not thread-safe: used under the scope's guard, except <see cref="Reject"/>, which any thread may call.
     /// </para>
     /// </remarks>
     internal sealed partial class HostBatch
@@ -39,6 +40,9 @@ namespace Eggnog
         readonly List<(TableHandle Table, uint[] Row)> rows = new();
         readonly HashSet<string> rowKeys = new(StringComparer.Ordinal);
         readonly Dictionary<string, uint> functionValues = new(StringComparer.Ordinal);
+        readonly List<(TableHandle Table, uint[] Row)> subsumes = new();
+        readonly HashSet<string> subsumeKeys = new(StringComparer.Ordinal);
+        readonly HashSet<string> subsumedTerms = new(StringComparer.Ordinal);
         readonly List<(uint A, uint B)> unions = new();
         readonly HashSet<(uint, uint)> unionKeys = new();
         volatile bool rejected;
@@ -64,7 +68,7 @@ namespace Eggnog
         /// <summary>
         /// Gets whether there is nothing to stage: every fact held already.
         /// </summary>
-        public bool IsEmpty => pending.Count == 0 && rows.Count == 0 && unions.Count == 0;
+        public bool IsEmpty => pending.Count == 0 && rows.Count == 0 && subsumes.Count == 0 && unions.Count == 0;
 
         /// <summary>
         /// Gets whether a call of the batch was rejected (<see cref="Reject"/>): the batch must then write nothing.
@@ -113,17 +117,7 @@ namespace Eggnog
                     if (existing && engine.TryLookup(table.Function, keys, out var output))
                         return output;
 
-                    var key = Key(table, keys);
-                    if (pendingByKey.TryGetValue(key, out var planned))
-                        return planned.Id;
-
-                    var id = engine.FreshId();
-                    fresh.Add(id);
-                    var term1 = new PendingTerm((ConstructorHandle)table, keys, id);
-                    pending.Add(term1);
-                    pendingByKey.Add(key, term1);
-                    TrackRow(table, keys, id);
-                    return id;
+                    return PlanNewTerm((ConstructorHandle)table, keys, Key(table, keys));
                 }
                 case TermShapeKind.Variable:
                     throw new ArgumentException($"host terms are ground; '{shape.Name}' is a variable", nameof(term));
@@ -192,6 +186,68 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Plans the subsumption of a ground constructor term (egglog's <c>subsume</c>): a term whose row is not
+        /// subsumed yet gets a subsumed copy of its row, which the constructor's merge makes sticky; a new term is
+        /// planned as by <see cref="PlanTerm"/> and staged subsumed; a term already subsumed plans nothing.
+        /// </summary>
+        /// <param name="term">The term: an application of a subsumable constructor.</param>
+        /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function,
+        /// computes, is a variable, belongs to another graph, or holds a class value this scope cannot use.</exception>
+        public void PlanSubsume(Term term)
+        {
+            ArgumentNullException.ThrowIfNull(term);
+            var shape = term.Shape;
+            if (shape.Kind != TermShapeKind.Application || shape.Table!.Kind != TableKind.Constructor)
+                throw new ArgumentException($"Subsume takes a constructor term; {term} is not one", nameof(term));
+
+            var table = shape.Table;
+            CheckTable(table);
+            CheckSubsumable(table, nameof(term));
+            var keys = PlanKeys(table, shape.Arguments, out var existing);
+            if (existing && engine.TryLookup(table.Function, keys, out var output, out var subsumed))
+            {
+                if (subsumed == false)
+                    AddSubsume(table, Row(keys, output));
+
+                return;
+            }
+
+            var key = Key(table, keys);
+            if (pendingByKey.ContainsKey(key) == false)
+                PlanNewTerm((ConstructorHandle)table, keys, key);
+
+            subsumedTerms.Add(key);
+        }
+
+        /// <summary>
+        /// Plans the subsumption of a ground relation row (egglog's <c>subsume</c>): a row that is not subsumed yet, or
+        /// is missing, gets a subsumed row, which the relation's merge makes sticky; a row already subsumed plans
+        /// nothing.
+        /// </summary>
+        /// <param name="fact">The row: <c>r.Of(a, b)</c> of a subsumable relation.</param>
+        /// <exception cref="ArgumentException">The fact is not a relation row of the scope written, the relation is not
+        /// subsumable, or a term in it is not a ground value or class this scope can use.</exception>
+        public void PlanSubsume(Fact fact)
+        {
+            ArgumentNullException.ThrowIfNull(fact);
+            if (fact is not RelationFact relation)
+            {
+                throw fact is ScopedFact scoped
+                    ? new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact))
+                    : new ArgumentException($"Subsume(rows) takes relation rows, r.Of(...); {fact} is not one (subsume a term with Subsume(term))", nameof(fact));
+            }
+
+            var table = relation.Table;
+            CheckTable(table);
+            CheckSubsumable(table, nameof(fact));
+            var keys = PlanKeys(table, relation.Arguments, out var existing);
+            if (existing && engine.TryLookup(table.Function, keys, out _, out var subsumed) && subsumed)
+                return;
+
+            AddSubsume(table, Row(keys, graph.Unit.Unit));
+        }
+
+        /// <summary>
         /// Plans a union, unless the classes are equal already; repeated unions are planned once. A union that would
         /// merge two keys of a function without a lattice holding different values is a conflict.
         /// </summary>
@@ -215,8 +271,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Stages the new terms' rows children first, then the rows, then the unions; flushes; commits
-        /// <see cref="Origin"/>. Does nothing when <see cref="IsEmpty"/>.
+        /// Stages the new terms' rows children first (subsumed where the batch subsumes the term), then the rows, then
+        /// the subsumed rows, then the unions; flushes; commits <see cref="Origin"/>. Does nothing when
+        /// <see cref="IsEmpty"/>.
         /// </summary>
         /// <returns>Whether the scope changed.</returns>
         /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
@@ -230,11 +287,15 @@ namespace Eggnog
                 var row = new uint[term.Keys.Length + 1];
                 term.Keys.CopyTo(row, 0);
                 row[^1] = term.Id;
-                engine.StageRow(term.Head.Function, row);
+                var subsume = subsumedTerms.Count > 0 && subsumedTerms.Contains(Key(term.Head, term.Keys));
+                engine.StageRow(term.Head.Function, row, subsume);
             }
 
             foreach (var (table, row) in rows)
                 engine.StageRow(table.Function, row);
+
+            foreach (var (table, row) in subsumes)
+                engine.StageRow(table.Function, row, subsume: true);
 
             foreach (var (a, b) in unions)
                 engine.StageUnion(a, b);
@@ -319,6 +380,57 @@ namespace Eggnog
             pending.Add(term);
             pendingByKey.Add(key, term);
             TrackRow(table, keys, cell);
+        }
+
+        /// <summary>
+        /// Plans a new term: mints a fresh id for it, memoised by <paramref name="key"/> so that a batch mints each new
+        /// term once.
+        /// </summary>
+        /// <returns>The fresh id.</returns>
+        uint PlanNewTerm(ConstructorHandle table, uint[] keys, string key)
+        {
+            if (pendingByKey.TryGetValue(key, out var planned))
+                return planned.Id;
+
+            var id = engine.FreshId();
+            fresh.Add(id);
+            var term = new PendingTerm(table, keys, id);
+            pending.Add(term);
+            pendingByKey.Add(key, term);
+            TrackRow(table, keys, id);
+            return id;
+        }
+
+        /// <summary>
+        /// Records a subsumed row once, and adds it to the congruence check as <see cref="AddRow"/> does.
+        /// </summary>
+        void AddSubsume(TableHandle table, uint[] row)
+        {
+            if (subsumeKeys.Add(Key(table, row)))
+            {
+                subsumes.Add((table, row));
+                TrackRow(table, row);
+            }
+        }
+
+        /// <summary>
+        /// Checks that a table may be subsumed.
+        /// </summary>
+        static void CheckSubsumable(TableHandle table, string parameter)
+        {
+            if (table.Subsumable == false)
+                throw new ArgumentException($"'{table.Name}' is not subsumable; define it with TableOptions.Subsumable to subsume its rows.", parameter);
+        }
+
+        /// <summary>
+        /// Makes a row of keys then an output.
+        /// </summary>
+        static uint[] Row(uint[] keys, uint output)
+        {
+            var row = new uint[keys.Length + 1];
+            keys.CopyTo(row, 0);
+            row[^1] = output;
+            return row;
         }
 
         /// <summary>

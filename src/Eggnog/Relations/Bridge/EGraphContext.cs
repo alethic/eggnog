@@ -7,10 +7,10 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// One context of an <see cref="EGraph"/>: the bridge's side of a storage <see cref="Relations.Context"/>. It runs
-    /// rules with semi-naive progress of its own (<see cref="RunRules"/>), stages and flushes host writes
-    /// (<see cref="StageRow"/>, <see cref="FlushUpdates"/>), answers reads in its view (<see cref="Find"/>,
-    /// <see cref="TryLookup"/>), and creates, freezes and disposes contexts (<see cref="CreateChild"/>,
-    /// <see cref="Freeze"/>, <see cref="Dispose"/>).
+    /// rules with semi-naive progress of its own (<see cref="RunRules"/>), stages and flushes host writes (<see
+    /// cref="StageRow(FunctionId, ReadOnlySpan{Value})"/>, <see cref="FlushUpdates"/>), answers reads in its view (<see
+    /// cref="Find"/>, <see cref="TryLookup(FunctionId, ReadOnlySpan{Value}, out Value)"/>), and creates, freezes and
+    /// disposes contexts (<see cref="CreateChild"/>, <see cref="Freeze"/>, <see cref="Dispose"/>).
     /// </summary>
     /// <remarks>
     /// <para>

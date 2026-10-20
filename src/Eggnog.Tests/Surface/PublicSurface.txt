@@ -286,6 +286,9 @@ sealed class Eggnog.RuleBuilder
     Void Naive()
     Void ReadsOwnFacts(String reason)
     Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right)
+    Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right, Boolean subsume)
+    Void Subsume(params Fact[] rows)
+    Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Then(params Fact[] facts)
     Void When(params Fact[] facts)
     Void Where(Term<Boolean> condition)
@@ -414,6 +417,8 @@ sealed class Eggnog.Scope : IDisposable
     Void Dispose()
     Void ForEachMatch(Query query, QueryCallback callback)
     Void Freeze()
+    Void Subsume(params Fact[] rows)
+    Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Write(Action<ScopeWriter> write)
     override String ToString()
 sealed class Eggnog.ScopeContradictedException : InvalidOperationException
@@ -431,6 +436,8 @@ sealed class Eggnog.ScopeWriter
     Scope Scope { get }
     TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Assume(params Fact[] facts)
+    Void Subsume(params Fact[] rows)
+    Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.SplitBuilder
     ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
@@ -451,6 +458,7 @@ sealed class Eggnog.SplitRule
 abstract class Eggnog.TableHandle
     Boolean IsValueOnly { get }
     Boolean Lift { get }
+    Boolean Subsumable { get }
     ColumnType Output { get }
     EGraph Graph { get }
     IReadOnlyList<ColumnType> Keys { get }
@@ -466,6 +474,7 @@ enum Eggnog.TableKind
     Constructor
 sealed class Eggnog.TableOptions
     Boolean Extractable { get; init }
+    Boolean Subsumable { get; init }
     Boolean? Lift { get; init }
     TableRole Role { get; init }
     ctor()
@@ -474,6 +483,7 @@ enum Eggnog.TableRole
     Fact
     Analysis
 sealed class Eggnog.TableRow
+    Boolean Subsumed { get }
     IReadOnlyList<Object> Keys { get }
     Object Output { get }
     TableHandle Table { get }

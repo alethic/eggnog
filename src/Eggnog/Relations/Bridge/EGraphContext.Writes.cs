@@ -32,7 +32,24 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is frozen or faulted; the function cannot be written
         /// in a child; the domain is held by another thread; or the call comes from inside a callback of the domain (a
         /// raw escape's action or a visitor).</exception>
-        public void StageRow(FunctionId function, ReadOnlySpan<Value> row)
+        public void StageRow(FunctionId function, ReadOnlySpan<Value> row) => StageRow(function, row, false);
+
+        /// <summary>
+        /// Stages a row of <paramref name="function"/> (<see cref="StageRow(FunctionId, ReadOnlySpan{Value})"/>),
+        /// subsumed when <paramref name="subsume"/> is set: egglog's <c>subsume</c> of the row. The function's merge
+        /// keeps the larger subsumption cell (<c>combine_subsumed</c>), so a subsumed row stays subsumed, and a key the
+        /// context does not see yet is inserted subsumed. In a child, the subsumed copy of an ancestor's row shadows it
+        /// through the child's layer, as any value change does; a subsumption is not a retraction (decision 1).
+        /// </summary>
+        /// <param name="function">The function.</param>
+        /// <param name="row">One value per schema column: the keys, then the output.</param>
+        /// <param name="subsume">Whether the row is staged subsumed.</param>
+        /// <exception cref="ArgumentException">The function is not declared, the row's width is not its column count,
+        /// or <paramref name="subsume"/> is set and the function cannot subsume.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen or faulted; the function cannot be written
+        /// in a child; the domain is held by another thread; or the call comes from inside a callback of the domain (a
+        /// raw escape's action or a visitor).</exception>
+        public void StageRow(FunctionId function, ReadOnlySpan<Value> row, bool subsume)
         {
             ThrowIfUnwritable();
             var domain = context.Domain;
@@ -40,11 +57,14 @@ namespace Eggnog.Relations
             Context.ThrowIfInCallback(domain, nameof(StageRow));
             var info = owner.GetFunctionInfo(function);
             CheckRow(info, row.Length);
+            if (subsume && info.CanSubsume == false)
+                throw new ArgumentException($"{info.Name} cannot subsume.", nameof(function));
+
             CheckWritable(info);
             if (IsStopped)
                 return;
 
-            hostWrites.AddRow(function, MemoryMarshal.Cast<Value, uint>(row), canonicalizeIds: true);
+            hostWrites.AddRow(function, MemoryMarshal.Cast<Value, uint>(row), canonicalizeIds: true, subsume);
         }
 
         /// <summary>
@@ -101,8 +121,8 @@ namespace Eggnog.Relations
         public Value FreshId() => new(context.NewId());
 
         /// <summary>
-        /// Stages <paramref name="values"/> (<see cref="StageRow"/>) and flushes (<see cref="FlushUpdates"/>). If a row
-        /// is malformed, nothing is staged.
+        /// Stages <paramref name="values"/> (<see cref="StageRow(FunctionId, ReadOnlySpan{Value})"/>) and flushes (<see
+        /// cref="FlushUpdates"/>). If a row is malformed, nothing is staged.
         /// </summary>
         /// <param name="values">The rows, each with its function.</param>
         /// <exception cref="ArgumentException">A function is not declared, or a row's width is not its column
@@ -147,13 +167,13 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A parent that is not frozen is brought up to date first, and the context catches up with it
-        /// (<see cref="Context.PrepareForWrite"/>) before anything is staged. Then the staged rows and unions are replayed
-        /// into one state stamped with the flush's epoch <c>T</c> (rows not subsumed; the id cells of rows staged through
-        /// this API canonicalized here), merged at <c>T</c>, and the clock advances; a flush that grew the union-find
-        /// rebuilds. A failure the merge or the rebuild recorded is taken and thrown as <see cref="PanicException"/> (the
-        /// e-graph's egglog-compatible <see cref="EGraph.FlushUpdates"/> leaves it to the next run instead). A stopped
-        /// context drops what is staged and returns <c>false</c>.
+        /// A parent that is not frozen is brought up to date first, and the context catches up with it (<see
+        /// cref="Context.PrepareForWrite"/>) before anything is staged. Then the staged rows and unions are replayed
+        /// into one state stamped with the flush's epoch <c>T</c> (rows subsumed as staged; the id cells of rows staged
+        /// through this API canonicalized here), merged at <c>T</c>, and the clock advances; a flush that grew the
+        /// union-find rebuilds. A failure the merge or the rebuild recorded is taken and thrown as <see
+        /// cref="PanicException"/> (the e-graph's egglog-compatible <see cref="EGraph.FlushUpdates"/> leaves it to the
+        /// next run instead). A stopped context drops what is staged and returns <c>false</c>.
         /// </para>
         /// <para>
         /// An exception escaping a child's flush faults it, except a clock that has run out, which faults no context.
@@ -455,10 +475,10 @@ namespace Eggnog.Relations
         /// malformed nothing of the batch is published. A stopped root ignores the rows.
         /// <para>
         /// Writes land in the order the host issued them: rows and unions the root staged earlier through the context
-        /// API (<see cref="StageRow"/>, <see cref="StageTerm"/>, <see cref="AddValues"/>, <see cref="StageUnion"/>) are
-        /// flushed first, in an epoch of their own, so an order-dependent merge (<c>:merge new</c>, <c>:merge old</c>)
-        /// sees them before this batch. When nothing is staged bridge-side, as under egglog's API alone, this costs one
-        /// test and the timestamp sequence is egglog's.
+        /// API (<see cref="StageRow(FunctionId, ReadOnlySpan{Value})"/>, <see cref="StageTerm"/>, <see
+        /// cref="AddValues"/>, <see cref="StageUnion"/>) are flushed first, in an epoch of their own, so an
+        /// order-dependent merge (<c>:merge new</c>, <c>:merge old</c>) sees them before this batch. When nothing is
+        /// staged bridge-side, as under egglog's API alone, this costs one test and the timestamp sequence is egglog's.
         /// </para>
         /// </remarks>
         internal void AddValuesAtRoot(IEnumerable<(FunctionId Function, Value[] Row)> values)

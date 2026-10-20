@@ -134,6 +134,68 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Adds the subsumption of a ground constructor term to the batch (see <see
+        /// cref="Scope.Subsume{TSort}(ConstructorTerm{TSort})"/>). A term the batch makes, before or after this call,
+        /// is made subsumed.
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="term">The term: an application of a constructor defined <see
+        /// cref="TableOptions.Subsumable"/>.</param>
+        /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function,
+        /// computes, is a variable, or holds a class value this scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
+        /// engine invoked.</exception>
+        /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
+        public void Subsume<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
+        {
+            Enter();
+            try
+            {
+                ArgumentNullException.ThrowIfNull(term);
+                batch.PlanSubsume(term);
+            }
+            catch
+            {
+                batch.Reject();
+                throw;
+            }
+            finally
+            {
+                Scope.Guard.Exit();
+            }
+        }
+
+        /// <summary>
+        /// Adds the subsumption of ground relation rows to the batch (see <see cref="Scope.Subsume(Fact[])"/>). A row
+        /// the batch inserts, before or after this call, is inserted subsumed.
+        /// </summary>
+        /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
+        /// <exception cref="ArgumentException">A fact is not a relation row of the scope written, a relation is not
+        /// subsumable, or a term in a row is not ground or holds a class value this scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
+        /// engine invoked.</exception>
+        /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
+        public void Subsume(params Fact[] rows)
+        {
+            Enter();
+            try
+            {
+                ArgumentNullException.ThrowIfNull(rows);
+                foreach (var row in rows)
+                    batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+            }
+            catch
+            {
+                batch.Reject();
+                throw;
+            }
+            finally
+            {
+                Scope.Guard.Exit();
+            }
+        }
+
+        /// <summary>
         /// Ends the batch's calls.
         /// </summary>
         internal void Close() => closed = true;

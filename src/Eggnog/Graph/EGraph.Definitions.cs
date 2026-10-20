@@ -39,7 +39,7 @@ namespace Eggnog
         /// Defines a nullary relation: a fact that holds or not.
         /// </summary>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or the role is <see cref="TableRole.Term"/>.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
@@ -51,7 +51,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T1">The column's type: a registered value type or a defined sort.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
         /// <see cref="TableRole.Term"/>.</exception>
@@ -65,7 +65,7 @@ namespace Eggnog
         /// <typeparam name="T1">The first column's type.</typeparam>
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
         /// <see cref="TableRole.Term"/>.</exception>
@@ -80,7 +80,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
         /// <see cref="TableRole.Term"/>.</exception>
@@ -97,7 +97,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <typeparam name="T4">The fourth column's type.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
         /// <see cref="TableRole.Term"/>.</exception>
@@ -114,10 +114,11 @@ namespace Eggnog
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
+        /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort, or the
-        /// role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
+        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
@@ -131,10 +132,11 @@ namespace Eggnog
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
+        /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort, or the
-        /// role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
+        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
@@ -149,10 +151,11 @@ namespace Eggnog
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
+        /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort, or the
-        /// role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
+        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function,
@@ -169,10 +172,11 @@ namespace Eggnog
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
+        /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort, or the
-        /// role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
+        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function,
@@ -190,10 +194,11 @@ namespace Eggnog
         /// <typeparam name="TOut">The value type; not a sort (use <c>DefineConstructor</c>).</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="lattice">The merge of two values; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
+        /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort, or the
-        /// role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the output is a sort,
+        /// the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function,
@@ -205,7 +210,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy; the role is always a term.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
@@ -220,7 +226,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy; the role is always a term.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
@@ -236,7 +243,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy; the role is always a term.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
@@ -254,7 +262,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy; the role is always a term.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
@@ -273,7 +282,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy; the role is always a term.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
@@ -318,7 +328,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The column types, of this graph.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         internal RelationHandle DefineRelation(string name, IReadOnlyList<ColumnType> keys, TableOptions? options = null) =>
             DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, options, null, 0);
@@ -378,6 +388,10 @@ namespace Eggnog
                     if (lattice is not null && lattice.ValueType != output!.ClrType)
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));
 
+                    // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
+                    if (kind == TableKind.Function && options.Subsumable)
+                        throw new ArgumentException($"Function '{name}' cannot be subsumable; only relations and constructors can be subsumed.", nameof(options));
+
                     break;
                 default:
                     ArgumentOutOfRangeException.ThrowIfNegative(cost);
@@ -396,7 +410,7 @@ namespace Eggnog
                 var columns = new ColumnType[keys.Length + 1];
                 keys.CopyTo(columns, 0);
                 columns[^1] = output ?? Unit;
-                var function = AddEngineTable(name, kind, columns, lattice, output);
+                var function = AddEngineTable(name, kind, columns, lattice, output, options.Subsumable);
                 var handle = create();
                 handle.Graph = this;
                 handle.Name = name;
@@ -406,6 +420,7 @@ namespace Eggnog
                 handle.KeyArray = keys;
                 handle.Output = output;
                 handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
+                handle.Subsumable = options.Subsumable;
                 handle.Function = function;
                 handle.Columns = columns;
                 if (handle is FunctionHandle functionHandle)
@@ -435,12 +450,14 @@ namespace Eggnog
         /// <summary>
         /// Adds the engine function of a table: a relation's unit default and assert-equal merge, a
         /// function's lattice merge (its own <c>LatticeMerge</c> external) or assert-equal, a constructor's fresh-id
-        /// default and union merge. A table definition: while the root is writable, the call enters the root's guard,
+        /// default and union merge; with a subsumption column when <paramref name="subsumable"/> is set (egglog's
+        /// <c>can_subsume</c>). A table definition: while the root is writable, the call enters the root's guard,
         /// so it throws when another thread is using the root; once the root is frozen, any thread may define one. Called
         /// under the definition lock. Nothing is registered when the engine refuses the table.
         /// </summary>
         /// <exception cref="InvalidOperationException">Another thread is using the writable root.</exception>
-        Relations.FunctionId AddEngineTable(string name, TableKind kind, ColumnType[] columns, ValueLattice? lattice, ColumnType? output)
+        Relations.FunctionId AddEngineTable(string name, TableKind kind, ColumnType[] columns, ValueLattice? lattice, ColumnType? output,
+            bool subsumable)
         {
             var guarded = Root.IsFrozen == false;
             if (guarded)
@@ -488,6 +505,7 @@ namespace Eggnog
                         Default = defaultValue,
                         Merge = mergeFn,
                         Name = name,
+                        CanSubsume = subsumable,
                     });
                 }
                 catch
