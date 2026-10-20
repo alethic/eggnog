@@ -157,6 +157,13 @@ namespace Eggnog
         internal IReadOnlyCollection<ConstructorHandle> UnextractableHeads => unextractable;
 
         /// <summary>
+        /// Gets whether this model marks a head unextractable (<see cref="Unextractable"/>).
+        /// </summary>
+        /// <param name="head">The head.</param>
+        /// <returns>Whether it is marked.</returns>
+        internal bool IsUnextractable(ConstructorHandle head) => unextractable.Contains(head);
+
+        /// <summary>
         /// Checks that a type can have a value cost.
         /// </summary>
         static void CheckValueType(ColumnType type)
