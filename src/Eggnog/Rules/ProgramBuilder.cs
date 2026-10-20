@@ -801,6 +801,11 @@ namespace Eggnog
             if (source.IsValueOnly == false)
                 throw Error($"scoped reads are limited to tables whose columns are all values; '{source.Name}' has a sort column");
 
+            // A scoped read copies the table into a mirror in the scope that reads it, which below the root only a lattice
+            // merge may write.
+            if (source is FunctionHandle { Merge: { } merge })
+                throw Error($"a scoped read copies the table into a mirror, which only the root may write when the merge is not a lattice; '{source.Name}' has the merge '{merge.Name}', which is not a lattice");
+
             if (readScopes.Contains(scope) == false)
                 readScopes.Add(scope);
 
@@ -833,12 +838,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a head never writes a scoped view: actions write only to the running scope.
+        /// Checks that a head never writes a scoped view: actions write only to the running scope. A rule local to a scope
+        /// below the root never runs at the root, so it may not write a function whose merge is not a lattice.
         /// </summary>
         void CheckWritable(TableHandle table)
         {
             if (table.ReadScope is { } tag)
                 throw Error($"'{table.Name}@{tag.Name}' is read-only");
+
+            if (owner is { IsRoot: false } && table is FunctionHandle { Merge: { } merge })
+                throw Error($"'{table.Name}' has the merge '{merge.Name}', which is not a lattice, so only the root may write it, and a rule local to '{owner.Path}' never runs there");
         }
 
         /// <summary>

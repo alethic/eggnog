@@ -107,10 +107,15 @@ sealed class Eggnog.EGraph
     Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
     Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
     Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
+    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<T1, TOut> DefineFunction<T1, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Function<TOut> DefineFunction<TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     GraphUsage Usage { get }
     IReadOnlyList<Ruleset> Rulesets { get }
@@ -179,6 +184,13 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
     ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
+static class Eggnog.FunctionMerge
+    static FunctionMerge<T> New<T>()
+    static FunctionMerge<T> Of<T>(String name, Func<T, T, T> merge)
+    static FunctionMerge<T> Old<T>()
+struct Eggnog.FunctionMerge<T>
+    String Name { get }
+    override String ToString()
 sealed class Eggnog.Function<TOut> : FunctionHandle
     Function<TOut> In(ScopeTag scope)
     Term<TOut> Of()

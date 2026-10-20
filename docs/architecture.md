@@ -143,7 +143,7 @@ There are three kinds of table, each typed by up to four key columns (`TableHand
 | Kind | Defined by | Rows | In the engine |
 |---|---|---|---|
 | Relation | `DefineRelation<T1, ...>(name)` | a set of key tuples | a function whose output is the unit value; merge: assert equal |
-| Function | `DefineFunction<T1, ..., TOut>(name, lattice)` | one output per key (a functional dependency) | a function with a value output; merge: the lattice's, or assert equal without one |
+| Function | `DefineFunction<T1, ..., TOut>(name, lattice)` or `(name, merge)` | one output per key (a functional dependency) | a function with a value output; merge: the lattice's or the `FunctionMerge`'s, or assert equal without either |
 | Constructor | `DefineConstructor<T1, ..., TSort>(name, cost)` | terms: one class per key | a function whose output is a class; default: a fresh id; merge: union the classes |
 
 A key of more than four columns is written as one column of a registered value type (`ValueStore.Register<T>`, a struct
@@ -154,9 +154,31 @@ A function with a lattice (`ValueLattice<T>`) merges two outputs for one key wit
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
 over `ValueSet<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
 (`Max` merges, so its case join is `Min`; `Intersect` merges, so its case join is `Union`). `ValueLattice<T>.Verify`
-checks the laws on samples. A function without a lattice refuses two different outputs for one key: a host write
-throws `FactConflictException` and writes nothing; a rule that derives a conflict fails with
+checks the laws on samples. A function with neither a lattice nor a merge refuses two different outputs for one key: a
+host write throws `FactConflictException` and writes nothing; a rule that derives a conflict fails with
 `RuleEvaluationException`.
+
+A function with a merge that is not a lattice (`FunctionMerge<T>`) merges as egglog's `:merge new`, `:merge old` and
+`:merge (f old new)` do: `FunctionMerge.New`, `Old` and `Of(name, f)`, where `f` need be neither associative,
+commutative nor idempotent. Each write folds into the value before it, in the order the writes come, so a host write of
+the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys equal merges the
+row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild does. A batch stages
+its unions after its writes, so after it merges classes it refuses a write of such a function whose keys are classes; a
+later call gives egglog's result. A rule's matches reach the merge in the engine's match order, which is not egglog's
+(the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so a rule that writes one key more
+than once in an iteration may leave another value than egglog's. A parallel insert (a flush of many rows with
+`DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the stored row, as egglog's does,
+so its order is not the serial one, which a batch's own reads assume.
+
+Only the root writes such a function (decision 2 of [`engine/decisions.md`](engine/decisions.md)). Below it the library
+refuses, before anything is written: a host write of one; a host merge of classes in which a class that keys one of its
+rows would be the larger, whose rows the engine would rewrite; a rule local to a child that writes one, and a split rule
+that assumes one; and a run in which a rule that writes one would run below the root, in a child or in a split's cases.
+No rule, query or split rule reads one in another scope (`In`), since its mirror would be written below the root; a host
+read may. Two cases depend on the data, so only the engine refuses them, with its `InvalidOperationException`: a rule's
+union below the root that would rewrite one of the function's rows fails the run (and faults a child); and a root write
+or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying the row,
+faults that child at its next call, and not the root.
 
 `TableOptions` sets a relation's or function's role (`Fact`, the default, or `Analysis`, a table derived from terms
 alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and analyses
@@ -503,7 +525,9 @@ with egglog" lists:
    subsumable, as in egglog, unless the user opts it out. Queries and split rules skip subsumed rows as rule bodies do,
    where egglog's `check` sees them; the other departures are listed in decision 20 of
    [`engine/decisions.md`](engine/decisions.md).
-2. Merges are lattices or assert-equal; there is no `:merge old` or `new`.
+2. A merge that is not a lattice is a C# function of the old and the new value (`FunctionMerge.Of`): egglog's merges
+   that call a table (`MergeFn::Function`) are not offered, nor are functions whose output is a class (egglog's
+   `function` over an e-class sort).
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
 5. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.

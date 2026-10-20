@@ -171,12 +171,15 @@ namespace Eggnog
 
         /// <summary>
         /// Collects the rulesets the schedule reaches, the facts of its <c>Until</c> conditions, and its split rules, which
-        /// <c>Scope.Run</c> checks before any work.
+        /// <c>Scope.Run</c> checks before any work; and the rulesets it runs in the cases of a split.
         /// </summary>
         /// <param name="rulesets">The set to add to.</param>
         /// <param name="conditions">The list to add the condition facts to.</param>
         /// <param name="splits">The set to add the split rules to.</param>
-        internal abstract void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits);
+        /// <param name="inCases">The set to add the rulesets that run in the cases of a split to.</param>
+        /// <param name="inCase">Whether this schedule runs in the cases of a split.</param>
+        internal abstract void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
+            bool inCase);
 
         /// <summary>
         /// Copies an array of non-null items.
