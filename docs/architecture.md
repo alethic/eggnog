@@ -123,7 +123,7 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, sets, registered values, and `long`s outside `[0, 2^31)` |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, `BigInt`s, sets, registered values, and `long`s outside `[0, 2^31)` |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
@@ -173,9 +173,9 @@ application (`f.Of(a, b)` for a function or constructor), a primitive applicatio
 user primitive made with `Primitive.Create` or `Primitive.CreatePartial`), or a computation over a lambda
 (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
 value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). Their comparisons return a `bool`, which is
-egglog's `bool-<` family as a value and its `<` family as a filter; egglog's variadic `or` and string `+` take two
-arguments.
+(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). Their comparisons return a `bool`: as a
+filter they are egglog's `<` family, and as a value its `bool-<` family where egglog has one. egglog's variadic `or` and
+string `+` take two arguments here; the departures are decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
 (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule

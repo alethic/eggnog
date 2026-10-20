@@ -93,6 +93,54 @@ namespace Eggnog.Tests.Rules
             Assert.False(t.Root.AreEqual(wrapped, t.A.Of()));
         }
 
+        /// <summary>
+        /// A refused birewrite registers no mirror. The left-to-right rule would compile, creating the mirror of its
+        /// scoped condition, but the right-to-left one does not, so the pair is checked before either compiles; the same
+        /// holds for a local birewrite.
+        /// </summary>
+        [Fact]
+        public void ARefusedBiRewriteRegistersNoMirror()
+        {
+            var t = new ScopeTheory();
+            t.Graph.DefineSort<Node>("Node");
+            var wrap = t.Graph.DefineConstructor<Node, Node>("Wrap");
+            var variants = t.Graph.VariantsByDescription.Count;
+            (Term<Node> Left, Term<Node> Right) Unwrap(RuleBuilder r)
+            {
+                var (x, s) = r.Vars<Node, string>("x", "s");
+                r.When(t.Fact.In(t.Outer).Of(s));
+                return (wrap.Of(x), x);
+            }
+
+            Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineBiRewrite<Node>("unwrap", Unwrap));
+            Assert.Throws<RuleDefinitionException>(() => t.Root.DefineBiRewrite<Node>(t.Rules, "unwrap", Unwrap));
+
+            Assert.Empty(t.Graph.Mirrors.AllCopyRules());
+            Assert.Equal(variants, t.Graph.VariantsByDescription.Count);
+            Assert.Empty(t.Rules.Rules);
+            Assert.Empty(t.Root.LocalRules);
+        }
+
+        /// <summary>
+        /// egglog's <c>birewrite</c> has no head but the rewrite, so a <c>define</c> that adds a head item is refused, and
+        /// nothing is registered.
+        /// </summary>
+        [Fact]
+        public void ABiRewritesDefineAddsConditionsOnly()
+        {
+            var t = new NodeTheory();
+
+            var e = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineBiRewrite<Node>("tagging", r =>
+            {
+                var x = r.Var<Node>("x");
+                r.Then(t.Tag.Of(x));
+                return (t.Wrap.Of(x), t.Add.Of(x, x));
+            }));
+
+            Assert.Contains("define adds variables and conditions (When, Where) only", e.Message);
+            Assert.Empty(t.Rules.Rules);
+        }
+
         [Fact]
         public void ALocalBiRewriteRewritesOnlyInItsScope()
         {

@@ -1,10 +1,13 @@
+using System.Collections.Generic;
+
 namespace Eggnog
 {
 
     /// <summary>
-    /// The set primitives of <see cref="Primitives"/> for one element type, made once per <typeparamref name="T"/>.
+    /// The generic primitives of <see cref="Primitives"/> for one type, made once per <typeparamref name="T"/>: the set
+    /// primitives over its sets, and <c>bool-!=</c> over its values.
     /// </summary>
-    /// <typeparam name="T">The element type.</typeparam>
+    /// <typeparam name="T">The element or value type.</typeparam>
     internal static class PrimitiveCache<T> where T : notnull
     {
 
@@ -57,6 +60,11 @@ namespace Eggnog
         /// <c>set-length</c>.
         /// </summary>
         public static readonly Primitive<ValueSet<T>, long> Count = new("set-length", static s => s.Count, false);
+
+        /// <summary>
+        /// <c>bool-!=</c>.
+        /// </summary>
+        public static readonly Primitive<T, T, bool> NotEqual = new("bool-!=", static (a, b) => EqualityComparer<T>.Default.Equals(a, b) == false, false);
 
     }
 

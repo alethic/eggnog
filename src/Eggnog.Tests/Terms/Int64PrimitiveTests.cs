@@ -178,6 +178,21 @@ namespace Eggnog.Tests.Terms
             Assert.Equal(4, Primitives.Max.Function(3, 4));
         }
 
+        /// <summary>
+        /// <c>bool-!=</c> is egglog's generic disequality as a <c>bool</c>, here over any value type, made once per type.
+        /// </summary>
+        [Fact]
+        public void NotEqualIsEgglogsGenericBoolNotEqual()
+        {
+            Assert.Equal("bool-!=", Primitives.NotEqual<long>().Name);
+            Assert.False(Primitives.NotEqual<long>().IsPartial);
+            Assert.Same(Primitives.NotEqual<string>(), Primitives.NotEqual<string>());
+            Assert.True(Primitives.NotEqual<long>().Function(1, 2));
+            Assert.False(Primitives.NotEqual<string>().Function("a", "a"));
+            Assert.False(Primitives.NotEqual<double>().Function(0.0, -0.0));
+            Assert.False(Primitives.NotEqual<ValueSet<long>>().Function(ValueSet.Of(1L, 2L), ValueSet.Of(2L, 1L)));
+        }
+
         [Fact]
         public void TheConversionsAreRusts()
         {
@@ -188,18 +203,27 @@ namespace Eggnog.Tests.Terms
         }
 
         /// <summary>
-        /// A partial primitive's <c>Function</c> throws where there is no result: <see cref="Primitives.Add"/> and
-        /// <see cref="Primitives.Subtract"/> an <see cref="OverflowException"/>, as they always have, the others an
-        /// <see cref="InvalidOperationException"/>.
+        /// A partial primitive's <c>Function</c> throws where there is no result, what .NET's own operation throws: an
+        /// <see cref="OverflowException"/> for an overflow, a <see cref="DivideByZeroException"/> for a zero divisor, and
+        /// an <see cref="InvalidOperationException"/> for a shift count or a logarithm out of range.
         /// </summary>
         [Fact]
         public void APartialFunctionThrowsWhereThereIsNoResult()
         {
             Assert.Throws<OverflowException>(() => Primitives.Add.Function(long.MaxValue, 1));
             Assert.Throws<OverflowException>(() => Primitives.Subtract.Function(long.MinValue, 1));
-            Assert.Throws<InvalidOperationException>(() => Primitives.Divide.Function(1, 0));
+            Assert.Throws<OverflowException>(() => Primitives.Multiply.Function(long.MaxValue, 2));
+            Assert.Throws<OverflowException>(() => Primitives.Divide.Function(long.MinValue, -1));
+            Assert.Throws<OverflowException>(() => Primitives.Remainder.Function(long.MinValue, -1));
+            Assert.Throws<OverflowException>(() => Primitives.Abs.Function(long.MinValue));
+            Assert.Throws<DivideByZeroException>(() => Primitives.Divide.Function(1, 0));
+            Assert.Throws<DivideByZeroException>(() => Primitives.Remainder.Function(1, 0));
+            Assert.Throws<InvalidOperationException>(() => Primitives.ShiftLeft.Function(1, 64));
             Assert.Throws<InvalidOperationException>(() => Primitives.Log2.Function(0));
             Assert.Equal(3, Primitives.Divide.Function(7, 2));
+            Assert.Equal(-1, Primitives.Remainder.Function(-7, 2));
+            Assert.Equal(42, Primitives.Multiply.Function(6, 7));
+            Assert.Equal(5, Primitives.Abs.Function(-5));
         }
 
         static long Some(Primitive<long, long, long> primitive, long a, long b)

@@ -61,7 +61,9 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether the primitive is partial, as egglog's <c>-?&gt;</c> primitives are: it has no result for some
-        /// arguments. In a rule body that drops the match, as in egglog; in a head it fails the rule, where egglog panics.
+        /// arguments. In a rule body (a let or a filter) and a query that drops the match, as in egglog; in a head or a
+        /// split's case assumptions it fails the rule, where egglog panics. Lambdas (<see cref="Compute"/>) are never
+        /// partial: one that throws fails the rule.
         /// </summary>
         public bool IsPartial { get; }
 

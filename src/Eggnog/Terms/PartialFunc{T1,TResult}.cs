@@ -4,7 +4,9 @@ namespace Eggnog
     /// <summary>
     /// A partial function of one argument, the shape of egglog's <c>-?&gt;</c> primitives: it returns <c>false</c> when it
     /// has no result for its arguments. <see cref="Primitive.CreatePartial{T1, TResult}(string, PartialFunc{T1, TResult})"/>
-    /// makes a primitive of it.
+    /// makes a primitive of it. Its <c>out</c> parameter carries no nullability attribute, so that a lambda with explicit
+    /// parameter types converts without a warning; a .NET <c>Try</c> method annotated <c>[MaybeNullWhen(false)]</c>, such
+    /// as <c>TryGetValue</c>, converts with one, and is better wrapped in a lambda.
     /// </summary>
     /// <typeparam name="T1">The argument type.</typeparam>
     /// <typeparam name="TResult">The result type.</typeparam>

@@ -14,11 +14,11 @@ namespace Eggnog
     /// The <c>i64</c> primitives are partial where egglog's are (<see cref="Primitive.IsPartial"/>): checked arithmetic
     /// has no result on overflow, division and remainder none by zero, shifts none by a count outside 0 to 63, and
     /// <see cref="Log2"/> none for a value below 1, as in egglog 3.0.0. No result drops the match in a rule body and
-    /// fails the rule in a head. A partial primitive's <c>Function</c> throws where there is no result:
-    /// <see cref="OverflowException"/> for <see cref="Add"/> and <see cref="Subtract"/>,
-    /// <see cref="InvalidOperationException"/> for the others. The comparisons return a <c>bool</c>, which is egglog's
-    /// <c>bool-&lt;</c> family as a value and its <c>&lt;</c> family as a filter
-    /// (<see cref="RuleBuilder.Where(Term{bool})"/>); they render with the filter's name.
+    /// fails the rule in a head. A partial primitive's <c>Function</c> throws where there is no result, what .NET's own
+    /// operation throws: <see cref="OverflowException"/> for an overflow, <see cref="DivideByZeroException"/> for a zero
+    /// divisor, and <see cref="InvalidOperationException"/> for a shift count or a <see cref="Log2"/> out of range. The
+    /// comparisons return a <c>bool</c>, which is egglog's <c>bool-&lt;</c> family as a value and its <c>&lt;</c> family
+    /// as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>); they render with the filter's name.
     /// </remarks>
     public static class Primitives
     {
@@ -94,6 +94,15 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, long> Count<T>() where T : notnull => PrimitiveCache<T>.Count;
 
         /// <summary>
+        /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>. egglog's is generic over every sort; this one is
+        /// generic over the value types, since primitives never take classes (classes are told apart with
+        /// <see cref="Term{T}.IsNot(Term{T})"/>).
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, T, bool> NotEqual<T>() where T : notnull => PrimitiveCache<T>.NotEqual;
+
+        /// <summary>
         /// Gets <c>+</c> over <c>i64</c>: partial, like egglog's (<c>checked_add</c>). An overflow has no result: in a
         /// rule body the match is dropped; in a head the rule fails.
         /// <see cref="Primitive{T1, T2, TResult}.Function"/> throws <see cref="OverflowException"/>.
@@ -110,19 +119,22 @@ namespace Eggnog
         /// <summary>
         /// Gets <c>*</c> over <c>i64</c>: partial, like egglog's (<c>checked_mul</c>); an overflow has no result.
         /// </summary>
-        public static Primitive<long, long, long> Multiply { get; } = BuiltInPrimitive.Partial<long, long, long>("*", TryMultiply);
+        public static Primitive<long, long, long> Multiply { get; } =
+            BuiltInPrimitive.Partial<long, long, long>("*", static (a, b) => checked(a * b), TryMultiply);
 
         /// <summary>
         /// Gets <c>/</c> over <c>i64</c>, truncating toward zero: partial, like egglog's (<c>checked_div</c>); a zero
         /// divisor, or <c>long.MinValue / -1</c>, has no result.
         /// </summary>
-        public static Primitive<long, long, long> Divide { get; } = BuiltInPrimitive.Partial<long, long, long>("/", TryDivide);
+        public static Primitive<long, long, long> Divide { get; } =
+            BuiltInPrimitive.Partial<long, long, long>("/", static (a, b) => CheckDivision(a, b) / b, TryDivide);
 
         /// <summary>
         /// Gets <c>%</c> over <c>i64</c>, with the dividend's sign: partial, like egglog's (<c>checked_rem</c>); a zero
         /// divisor, or <c>long.MinValue % -1</c>, has no result.
         /// </summary>
-        public static Primitive<long, long, long> Remainder { get; } = BuiltInPrimitive.Partial<long, long, long>("%", TryRemainder);
+        public static Primitive<long, long, long> Remainder { get; } =
+            BuiltInPrimitive.Partial<long, long, long>("%", static (a, b) => CheckDivision(a, b) % b, TryRemainder);
 
         /// <summary>
         /// Gets <c>&amp;</c> over <c>i64</c>: bitwise and.
@@ -166,7 +178,7 @@ namespace Eggnog
         /// Gets <c>abs</c> over <c>i64</c>: partial, like egglog's (<c>checked_abs</c>); <c>long.MinValue</c> has no
         /// result.
         /// </summary>
-        public static Primitive<long, long> Abs { get; } = BuiltInPrimitive.Partial<long, long>("abs", TryAbs);
+        public static Primitive<long, long> Abs { get; } = BuiltInPrimitive.Partial<long, long>("abs", static a => Math.Abs(a), TryAbs);
 
         /// <summary>
         /// Gets <c>max</c> over <c>i64</c>.
@@ -245,6 +257,22 @@ namespace Eggnog
         {
             var high = Math.BigMul(a, b, out result);
             return high == result >> 63;
+        }
+
+        /// <summary>
+        /// The dividend of a division whose function throws where <c>checked_div</c> and <c>checked_rem</c> have no
+        /// result: <see cref="DivideByZeroException"/> for a zero divisor, <see cref="OverflowException"/> for
+        /// <c>long.MinValue</c> by -1, which .NET's remainder does not refuse.
+        /// </summary>
+        static long CheckDivision(long a, long b)
+        {
+            if (b == 0)
+                throw new DivideByZeroException();
+
+            if (a == long.MinValue && b == -1)
+                throw new OverflowException("long.MinValue divided by -1 overflows.");
+
+            return a;
         }
 
         /// <summary>

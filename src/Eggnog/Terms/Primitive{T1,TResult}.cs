@@ -57,12 +57,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Calls the primitive on values: the partial function for a partial primitive, else the function.
+        /// Calls the primitive on values without throwing for a missing result: the partial function for a partial
+        /// primitive (<see cref="Primitive.IsPartial"/>), else the function, which always has a result.
         /// </summary>
         /// <param name="a">The first argument.</param>
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
-        internal bool TryInvoke(T1 a, [MaybeNullWhen(false)] out TResult result)
+        public bool TryInvoke(T1 a, [MaybeNullWhen(false)] out TResult result)
         {
             if (partial is null)
             {

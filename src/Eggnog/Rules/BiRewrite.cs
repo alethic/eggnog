@@ -25,8 +25,11 @@ namespace Eggnog
             (One(graph, name + "=>", define, false), One(graph, name + "<=", define, true));
 
         /// <summary>
-        /// Compiles both drafts, freeing the first rule's engine rules when the second fails, so that nothing is
-        /// registered then. Called under the graph's definition lock.
+        /// Compiles both drafts so that a refused pair registers nothing: the right-to-left rule is checked first, short
+        /// of its mirrors, then the left-to-right rule compiles, creating the mirrors of its scoped reads, then the
+        /// right-to-left one. Its scoped reads are the conditions', whose mirrors the first rule created: the right side
+        /// is the first rule's head, which reads no scoped view. Should the engine reject the second, the first's engine
+        /// rules are freed. Called under the graph's definition lock.
         /// </summary>
         /// <param name="graph">The graph.</param>
         /// <param name="forward">The left-to-right draft.</param>
@@ -37,6 +40,7 @@ namespace Eggnog
         public static (CompiledRule Forward, CompiledRule Backward) Compile(EGraph graph, RuleDraft forward, RuleDraft backward, Ruleset ruleset,
             Scope? owner)
         {
+            RuleCompiler.Check(graph, backward, ruleset, owner);
             var first = RuleCompiler.Compile(graph, forward, ruleset, owner);
             try
             {
@@ -50,8 +54,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Collects one direction's draft.
+        /// Collects one direction's draft. <paramref name="define"/> adds variables and conditions only: egglog's
+        /// <c>birewrite</c> has no head but the rewrite.
         /// </summary>
+        /// <exception cref="RuleDefinitionException"><paramref name="define"/> added a head item.</exception>
         static RuleDraft One<TSort>(EGraph graph, string name, Func<RuleBuilder, (Term<TSort> Left, Term<TSort> Right)> define, bool backward)
             where TSort : struct, ISort<TSort>
         {
@@ -59,6 +65,9 @@ namespace Eggnog
             try
             {
                 var (left, right) = define(builder);
+                if (builder.Draft.Head.Count > 0)
+                    throw new RuleDefinitionException(name, "a birewrite's head is its rewrite: define adds variables and conditions (When, Where) only");
+
                 if (backward)
                     builder.Rewrite(right, left);
                 else

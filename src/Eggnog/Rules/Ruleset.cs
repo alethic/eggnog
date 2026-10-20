@@ -112,8 +112,7 @@ namespace Eggnog
             lock (Graph.DefinitionLock)
             {
                 var (first, second) = BiRewrite.Compile(Graph, forward, backward, this, null);
-                Add(first);
-                Add(second);
+                Add(first, second);
                 return (first.Rule, second.Rule);
             }
         }
@@ -136,17 +135,20 @@ namespace Eggnog
         internal CompiledRule[] Compiled => Volatile.Read(ref compiled);
 
         /// <summary>
-        /// Appends a compiled rule, copy-on-write. Called under the definition lock.
+        /// Appends compiled rules in one copy-on-write publication, so that a run sees all of them or none. Called under
+        /// the definition lock.
         /// </summary>
-        /// <param name="rule">The rule.</param>
-        internal void Add(CompiledRule rule)
+        /// <param name="added">The rules.</param>
+        internal void Add(params CompiledRule[] added)
         {
-            var nextCompiled = new CompiledRule[compiled.Length + 1];
+            var nextCompiled = new CompiledRule[compiled.Length + added.Length];
             compiled.CopyTo(nextCompiled, 0);
-            nextCompiled[^1] = rule;
-            var nextRules = new Rule[rules.Length + 1];
+            added.CopyTo(nextCompiled, compiled.Length);
+            var nextRules = new Rule[rules.Length + added.Length];
             rules.CopyTo(nextRules, 0);
-            nextRules[^1] = rule.Rule;
+            for (var i = 0; i < added.Length; i++)
+                nextRules[rules.Length + i] = added[i].Rule;
+
             rules = nextRules;
             Volatile.Write(ref compiled, nextCompiled);
             Volatile.Write(ref rulesView, Array.AsReadOnly(nextRules));

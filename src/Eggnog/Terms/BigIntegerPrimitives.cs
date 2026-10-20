@@ -12,8 +12,9 @@ namespace Eggnog
     /// <see cref="Divide"/>, <see cref="Remainder"/>, <see cref="ShiftLeft"/>, <see cref="ShiftRight"/> and
     /// <see cref="Parse"/> are partial where egglog 3.0.0's are (<see cref="Primitive.IsPartial"/>): a zero divisor, a
     /// shift count outside 0 to <c>u32::MAX</c> and text that is not an integer have no result. No result drops the match
-    /// in a rule body and fails the rule in a head; a partial primitive's <c>Function</c> throws
-    /// <see cref="InvalidOperationException"/> there. Division truncates toward zero, the remainder takes the dividend's
+    /// in a rule body and fails the rule in a head; a partial primitive's <c>Function</c> throws there,
+    /// <see cref="DivideByZeroException"/> for a zero divisor, as <see cref="BigInteger"/>'s own division does, and
+    /// <see cref="InvalidOperationException"/> otherwise. Division truncates toward zero, the remainder takes the dividend's
     /// sign, and the bitwise operators and shifts act on the two's complement, as in egglog (num-bigint). The comparisons
     /// return a <c>bool</c>; as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>) they are egglog's <c>&lt;</c>
     /// family.
@@ -49,14 +50,14 @@ namespace Eggnog
         /// result.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, BigInteger> Divide { get; } =
-            BuiltInPrimitive.Partial<BigInteger, BigInteger, BigInteger>("/", TryDivide);
+            BuiltInPrimitive.Partial<BigInteger, BigInteger, BigInteger>("/", BigInteger.Divide, TryDivide);
 
         /// <summary>
         /// Gets <c>%</c> over <c>BigInt</c>, with the dividend's sign: partial, like egglog's; a zero divisor has no
         /// result.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, BigInteger> Remainder { get; } =
-            BuiltInPrimitive.Partial<BigInteger, BigInteger, BigInteger>("%", TryRemainder);
+            BuiltInPrimitive.Partial<BigInteger, BigInteger, BigInteger>("%", BigInteger.Remainder, TryRemainder);
 
         /// <summary>
         /// Gets <c>&amp;</c> over <c>BigInt</c>: bitwise and.
@@ -78,8 +79,9 @@ namespace Eggnog
 
         /// <summary>
         /// Gets <c>&lt;&lt;</c> over <c>BigInt</c> by an <c>i64</c> count: partial, like egglog 3.0.0's; a count outside 0
-        /// to <c>u32::MAX</c> has no result. A count above <c>int.MaxValue</c> of a nonzero value throws
-        /// <see cref="OverflowException"/>, which fails the rule: the result would not fit a <see cref="BigInteger"/>.
+        /// to <c>u32::MAX</c> has no result. A result longer than <c>int.MaxValue</c> bits throws
+        /// <see cref="OverflowException"/>, which fails the rule, on every runtime: no <see cref="BigInteger"/> of .NET 9
+        /// and later holds it.
         /// </summary>
         public static Primitive<BigInteger, long, BigInteger> ShiftLeft { get; } =
             BuiltInPrimitive.Partial<BigInteger, long, BigInteger>("<<", TryShiftLeft);
@@ -198,10 +200,16 @@ namespace Eggnog
                 return false;
             }
 
-            if (b > int.MaxValue && a.IsZero == false)
-                throw new OverflowException($"Shifting a nonzero BigInt left by {b} bits needs more bits than a BigInteger holds.");
+            if (a.IsZero)
+            {
+                result = a;
+                return true;
+            }
 
-            result = a.IsZero ? a : a << (int)b;
+            if (BigInteger.Abs(a).GetBitLength() + b > int.MaxValue)
+                throw new OverflowException($"Shifting this BigInt left by {b} bits makes more than int.MaxValue bits, more than a BigInteger holds.");
+
+            result = a << (int)b;
             return true;
         }
 

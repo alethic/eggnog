@@ -265,15 +265,19 @@ abstract class Eggnog.Primitive
     static Primitive<T1, TResult> Create<T1, TResult>(String name, Func<T1, TResult> function)
     static Primitive<T1, TResult> CreatePartial<T1, TResult>(String name, PartialFunc<T1, TResult> function)
 sealed class Eggnog.Primitive<T1, TResult> : Primitive
+    Boolean TryInvoke(T1 a, out TResult result)
     Func<T1, TResult> Function { get }
     Term<TResult> Of(Term<T1> a)
 sealed class Eggnog.Primitive<T1, T2, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, out TResult result)
     Func<T1, T2, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b)
 sealed class Eggnog.Primitive<T1, T2, T3, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, T3 c, out TResult result)
     Func<T1, T2, T3, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c)
 sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
+    Boolean TryInvoke(T1 a, T2 b, T3 c, T4 d, out TResult result)
     Func<T1, T2, T3, T4, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 static class Eggnog.Primitives
@@ -299,6 +303,7 @@ static class Eggnog.Primitives
     static Primitive<Int64, Int64> BitwiseNot { get }
     static Primitive<Int64, Int64> Log2 { get }
     static Primitive<Int64, String> Format { get }
+    static Primitive<T, T, Boolean> NotEqual<T>()
     static Primitive<T, ValueSet<T>> Singleton<T>()
     static Primitive<ValueSet<T>, Boolean> IsEmpty<T>()
     static Primitive<ValueSet<T>, Int64> Count<T>()

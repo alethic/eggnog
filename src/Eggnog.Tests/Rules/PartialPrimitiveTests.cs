@@ -53,9 +53,9 @@ namespace Eggnog.Tests.Rules
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(Schedule.Saturate(t.Rules)));
 
             Assert.Equal("hundred over", e.RuleName);
-            Assert.Contains("primitive '/' threw InvalidOperationException: Primitive '/' has no result for these arguments.", e.Message);
+            Assert.Contains("primitive '/' threw DivideByZeroException", e.Message);
             Assert.Contains("x=0", e.Bindings);
-            Assert.IsType<InvalidOperationException>(e.InnerException);
+            Assert.IsType<DivideByZeroException>(e.InnerException);
             Assert.True(t.Root.IsFaulted);
         }
 
@@ -238,11 +238,40 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("(from-string \"7\")", graph.Values.TypeOf<BigInteger>().Format(7));
         }
 
+        /// <summary>
+        /// A <c>BigInt</c> constant renders as <c>(from-string "…")</c> where no column says its type, too: in a
+        /// primitive's arguments, a disequality and a bare term, and as a set's elements.
+        /// </summary>
+        [Fact]
+        public void BigIntConstantsRenderAsFromStringWhereverTheyStand()
+        {
+            var graph = new EGraph();
+            var mark = graph.DefineRelation<BigInteger>("mark");
+            var rules = graph.DefineRuleset("rules");
+            var rule = rules.DefineRule("bump", r =>
+            {
+                var v = r.Var<BigInteger>("v");
+                r.When(mark.Of(v), v.IsNot(new BigInteger(7)));
+                r.Where(BigIntegerPrimitives.Less.Of(v, new BigInteger(100)));
+                r.Then(mark.Of(BigIntegerPrimitives.Add.Of(v, new BigInteger(5))));
+            });
+
+            Assert.Equal("(rule ((mark v) (!= v (from-string \"7\")) (< v (from-string \"100\"))) ((mark (+ v (from-string \"5\")))) :ruleset rules)",
+                rule.ToString());
+            Assert.Equal("(from-string \"5\")", ((Term<BigInteger>)new BigInteger(5)).ToString());
+            Assert.Equal("(set-of (from-string \"1\"))", ((Term<ValueSet<BigInteger>>)ValueSet.Of(BigInteger.One)).ToString());
+        }
+
+        /// <summary>
+        /// <see cref="BigInteger"/> is built in, so registering it again is refused, saying under which name it is
+        /// built in.
+        /// </summary>
         [Fact]
         public void BigIntegerCannotBeRegisteredAgain()
         {
             var graph = new EGraph();
-            Assert.Throws<ArgumentException>(() => graph.Values.Register<BigInteger>("Big"));
+            var e = Assert.Throws<ArgumentException>(() => graph.Values.Register<BigInteger>("Big"));
+            Assert.Contains("already registered, as 'BigInt'", e.Message);
         }
 
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 
 namespace Eggnog
@@ -479,6 +480,8 @@ namespace Eggnog
                     return flag ? "true" : "false";
                 case double number:
                     return Relations.LiteralText.Float(number);
+                case BigInteger big:
+                    return ValueStore.FormatBigInteger(big);
                 case ClassId id:
                     return id.ToString();
                 case Enum member:

@@ -74,7 +74,8 @@ namespace Eggnog.Tests.Terms
         {
             Assert.False(BigIntegerPrimitives.Divide.TryInvoke(1, BigInteger.Zero, out _));
             Assert.False(BigIntegerPrimitives.Remainder.TryInvoke(1, BigInteger.Zero, out _));
-            Assert.Throws<InvalidOperationException>(() => BigIntegerPrimitives.Divide.Function(1, BigInteger.Zero));
+            Assert.Throws<DivideByZeroException>(() => BigIntegerPrimitives.Divide.Function(1, BigInteger.Zero));
+            Assert.Throws<InvalidOperationException>(() => BigIntegerPrimitives.Parse.Function("x"));
         }
 
         [Fact]
@@ -102,16 +103,19 @@ namespace Eggnog.Tests.Terms
 
         /// <summary>
         /// A count above <c>int.MaxValue</c>, which egglog takes as a <c>u32</c>, shifts every bit of a
-        /// <see cref="BigInteger"/> out to the right, and cannot be held to the left.
+        /// <see cref="BigInteger"/> out to the right. To the left, a result longer than <c>int.MaxValue</c> bits throws
+        /// before it is computed, on every runtime.
         /// </summary>
         [Fact]
-        public void ShiftsBeyondTheLargestBigIntegerShift()
+        public void ShiftsBeyondTheLargestBigInteger()
         {
             const long count = (long)int.MaxValue + 1;
             Assert.Equal(-1, Some(BigIntegerPrimitives.ShiftRight, -3, count));
             Assert.Equal(0, Some(BigIntegerPrimitives.ShiftRight, 3, count));
             Assert.Equal(0, Some(BigIntegerPrimitives.ShiftLeft, 0, uint.MaxValue));
             Assert.Throws<OverflowException>(() => BigIntegerPrimitives.ShiftLeft.TryInvoke(1, count, out _));
+            Assert.Throws<OverflowException>(() => BigIntegerPrimitives.ShiftLeft.TryInvoke(1, int.MaxValue, out _));
+            Assert.Throws<OverflowException>(() => BigIntegerPrimitives.ShiftLeft.TryInvoke(-1024, int.MaxValue - 10, out _));
         }
 
         [Theory]
