@@ -28,6 +28,12 @@ namespace Eggnog
         Union,
 
         /// <summary>
+        /// Subsumes the row of a key in a subsumable relation or constructor, inserting it subsumed when it is missing:
+        /// egglog's <c>subsume</c>.
+        /// </summary>
+        Subsume,
+
+        /// <summary>
         /// Calls a primitive into a head register.
         /// </summary>
         Compute,

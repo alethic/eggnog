@@ -3,7 +3,9 @@ namespace Eggnog
 
     /// <summary>
     /// The mirror of one value-only table under one tag: the engine function <c>T@tag</c> that scoped atoms read, and
-    /// the copy rule that keeps it equal to the tagged scope's own view of <c>T</c>.
+    /// the copy rules that keep it equal to the tagged scope's own view of <c>T</c>: one copies the rows that are not
+    /// subsumed, and for a subsumable relation a second subsumes in the mirror the rows that are, so that scoped atoms
+    /// skip exactly the rows the tagged scope's own atoms skip.
     /// </summary>
     internal sealed class MirrorTable
     {
@@ -15,12 +17,15 @@ namespace Eggnog
         /// <param name="tag">The tag it is read under.</param>
         /// <param name="handle">The internal handle over the mirror's engine function.</param>
         /// <param name="copyRule">The copy rule.</param>
-        public MirrorTable(TableHandle source, ScopeTag tag, TableHandle handle, CompiledRule copyRule)
+        /// <param name="subsumeRule">The copy rule of subsumed rows, for a subsumable relation; <c>null</c>
+        /// otherwise.</param>
+        public MirrorTable(TableHandle source, ScopeTag tag, TableHandle handle, CompiledRule copyRule, CompiledRule? subsumeRule)
         {
             Source = source;
             Tag = tag;
             Handle = handle;
             CopyRule = copyRule;
+            SubsumeRule = subsumeRule;
         }
 
         /// <summary>
@@ -55,6 +60,12 @@ namespace Eggnog
         /// (merged by its lattice). Semi-naive and inheritable; it runs only in mirror syncs.
         /// </summary>
         public CompiledRule CopyRule { get; }
+
+        /// <summary>
+        /// Gets the copy rule of subsumed rows: it subsumes in the mirror each row the tagged scope sees subsumed. Only
+        /// a subsumable relation has one; <c>null</c> otherwise.
+        /// </summary>
+        public CompiledRule? SubsumeRule { get; }
 
         /// <inheritdoc />
         public override string ToString() => Name;

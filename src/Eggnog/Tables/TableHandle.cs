@@ -63,6 +63,11 @@ namespace Eggnog
         public bool Lift { get; internal set; }
 
         /// <summary>
+        /// Gets whether rows of the table may be subsumed (<see cref="TableOptions.Subsumable"/>).
+        /// </summary>
+        public bool Subsumable { get; internal set; }
+
+        /// <summary>
         /// Gets whether every key, and the output, is a value type: only such a table may be read scoped.
         /// </summary>
         public bool IsValueOnly
@@ -142,6 +147,7 @@ namespace Eggnog
             view.KeyArray = table.KeyArray;
             view.Output = table.Output;
             view.Lift = table.Lift;
+            view.Subsumable = table.Subsumable;
             view.Function = table.Function;
             view.Columns = table.Columns;
             view.Source = table;

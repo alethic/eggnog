@@ -22,6 +22,13 @@ namespace Eggnog
         /// </summary>
         Rewrite,
 
+        /// <summary>
+        /// <see cref="RuleBuilder.Subsume{TSort}(ConstructorTerm{TSort})"/>, <see cref="RuleBuilder.Subsume(Fact[])"/>,
+        /// or the subsumption of a rewrite's left side
+        /// (<see cref="RuleBuilder.Rewrite{TSort}(Term{TSort}, Term{TSort}, bool)"/>): egglog's <c>subsume</c> action.
+        /// </summary>
+        Subsume,
+
     }
 
 }

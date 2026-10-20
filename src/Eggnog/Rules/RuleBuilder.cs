@@ -5,9 +5,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Collects one rule: <see cref="When"/> and <c>Where</c> make the body; <see cref="Then"/>, <see cref="Make{TSort}"/>
-    /// and <see cref="Rewrite{TSort}"/> make the head. Body calls are unordered; head items are lowered in the order the
-    /// builder calls were made. Usable only inside the definition's callback.
+    /// Collects one rule: <see cref="When"/> and <c>Where</c> make the body; <see cref="Then"/>, <see
+    /// cref="Make{TSort}"/>, <c>Rewrite</c> and <c>Subsume</c> make the head. Body calls are unordered; head items are
+    /// lowered in the order the builder calls were made. Usable only inside the definition's callback.
     /// </summary>
     public sealed class RuleBuilder
     {
@@ -201,7 +201,22 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="left">The pattern.</param>
         /// <param name="right">The replacement.</param>
-        public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right) where TSort : struct, ISort<TSort>
+        public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right) where TSort : struct, ISort<TSort> => Rewrite(left, right, false);
+
+        /// <summary>
+        /// A rewrite (<see cref="Rewrite{TSort}(Term{TSort}, Term{TSort})"/>) that, with <paramref name="subsume"/>,
+        /// also subsumes the matched left side: egglog's <c>rewrite ... :subsume</c>, whose head is <c>t = right</c>
+        /// then <c>(subsume left)</c>. Later matches skip the left side's row, so no other rule rewrites it again, and
+        /// extraction skips it. The row subsumed is the one the body matched: the left side's arguments are the values
+        /// the match bound, so a left side may read a function, as in a plain rewrite. The left side must then be an
+        /// application of a constructor defined <see cref="TableOptions.Subsumable"/> (a <see
+        /// cref="RuleDefinitionException"/> otherwise).
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="left">The pattern.</param>
+        /// <param name="right">The replacement.</param>
+        /// <param name="subsume">Whether to subsume the matched left side.</param>
+        public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right, bool subsume) where TSort : struct, ISort<TSort>
         {
             ThrowIfClosed();
             ArgumentNullException.ThrowIfNull(left);
@@ -209,6 +224,46 @@ namespace Eggnog
             var variable = Var<TSort>("$rw" + (rewrites++).ToString(CultureInfo.InvariantCulture));
             draft.Body.Add(variable.Is(left));
             draft.Head.Add(new HeadItem(HeadItemKind.Rewrite, null, variable, left, right));
+            if (subsume)
+                draft.Head.Add(new HeadItem(HeadItemKind.Subsume, null, variable, left, null));
+        }
+
+        /// <summary>
+        /// Subsumes a constructor term: egglog's <c>(subsume (f args...))</c>. The term's row stays, and lookups,
+        /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
+        /// longer match it, and extraction skips it; its class keeps every other member. A term that does not exist yet
+        /// is made, subsumed, and the rule's later head items still run for the match. Subsumption is sticky. The
+        /// constructor must be defined <see cref="TableOptions.Subsumable"/> (a <see cref="RuleDefinitionException"/>
+        /// otherwise). The term's arguments are evaluated as head terms, made if absent.
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="term">The constructor term.</param>
+        public void Subsume<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(term);
+            draft.Head.Add(new HeadItem(HeadItemKind.Subsume, null, null, term, null));
+        }
+
+        /// <summary>
+        /// Subsumes relation rows (<c>r.Of(a, b)</c>): egglog's <c>(subsume (r a b))</c>. Each row stays, and lookups,
+        /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
+        /// longer match it. A row that does not exist yet is inserted, subsumed, and the rule's later head items still
+        /// run for the match. Subsumption is sticky. Each relation must be defined <see
+        /// cref="TableOptions.Subsumable"/>, and each fact must be a relation row of the running scope, not a scoped
+        /// view (a <see cref="RuleDefinitionException"/> otherwise).
+        /// </summary>
+        /// <param name="rows">The relation rows.</param>
+        /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
+        public void Subsume(params Fact[] rows)
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(rows);
+            foreach (var row in rows)
+            {
+                graph.CheckFactTags(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."), nameof(rows));
+                draft.Head.Add(new HeadItem(HeadItemKind.Subsume, row, null, null, null));
+            }
         }
 
         /// <summary>

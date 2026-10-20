@@ -173,10 +173,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Looks up the output of <paramref name="info"/>'s function for <paramref name="key"/> in this context's view, the
-        /// key's id cells canonicalized here first: the body of <see cref="TryLookup"/> without its checks, for the lift,
-        /// which checks readability once per round (<see cref="LiftFinder"/>) and holds the domain. O(id cells × depth)
-        /// finds plus one probe per layer; no allocation for keys of up to 32 cells.
+        /// Looks up the output of <paramref name="info"/>'s function for <paramref name="key"/> in this context's view,
+        /// the key's id cells canonicalized here first: the body of
+        /// <see cref="TryLookup(FunctionId, ReadOnlySpan{Value}, out Value)"/> without its checks, for the lift, which
+        /// checks readability once per round (<see cref="LiftFinder"/>) and holds the domain. O(id cells × depth) finds
+        /// plus one probe per layer; no allocation for keys of up to 32 cells.
         /// </summary>
         /// <param name="info">The function.</param>
         /// <param name="key">One cell per key column.</param>

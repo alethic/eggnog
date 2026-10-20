@@ -9,6 +9,8 @@ namespace Eggnog
     /// <param name="Table">The table, or a scoped atom's mirror handle.</param>
     /// <param name="Scope">The tag a scoped atom reads; <c>null</c> for an atom over the running scope.</param>
     /// <param name="Columns">The operands of its columns.</param>
-    internal sealed record ProgramAtom(TableHandle Table, ScopeTag? Scope, Operand[] Columns);
+    /// <param name="SubsumedOnly">Whether the atom matches only subsumed rows, for a mirror's copy rule of subsumed
+    /// rows; every other atom matches only rows that are not subsumed.</param>
+    internal sealed record ProgramAtom(TableHandle Table, ScopeTag? Scope, Operand[] Columns, bool SubsumedOnly = false);
 
 }

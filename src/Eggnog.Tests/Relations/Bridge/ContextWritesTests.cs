@@ -19,9 +19,9 @@ namespace Eggnog.Relations.Tests
     /// egglog's <c>clear_table</c> (egglog-bridge/src/lib.rs:409-424) drops "any rows staged for this table by an
     /// in-flight <c>MutationBuffer</c> ... along with the table contents", and <see cref="EGraph.ClearTable"/> removes
     /// every row of the function and every write staged for it. A context stages host rows bridge-side until its next
-    /// flush, so a clear issued after <see cref="EGraphContext.StageRow"/> drops those rows too; otherwise the
-    /// operations would take effect out of order, the clear first and the earlier write after it. Rows staged raw into
-    /// database buffers are dropped the same way.
+    /// flush, so a clear issued after <see cref="EGraphContext.StageRow(FunctionId, ReadOnlySpan{Value})"/> drops those
+    /// rows too; otherwise the operations would take effect out of order, the clear first and the earlier write after
+    /// it. Rows staged raw into database buffers are dropped the same way.
     /// </remarks>
     public class ContextWritesTests
     {
@@ -298,8 +298,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The same through the context API at the root: <see cref="EGraphContext.ClearTable"/> after
-        /// <see cref="EGraphContext.StageRow"/> leaves the function empty once flushed.
+        /// The same through the context API at the root: <see cref="EGraphContext.ClearTable"/> after <see
+        /// cref="EGraphContext.StageRow(FunctionId, ReadOnlySpan{Value})"/> leaves the function empty once flushed.
         /// </summary>
         [Fact]
         public void TheContextApiClearDropsRowsStagedBeforeItAtTheRoot()

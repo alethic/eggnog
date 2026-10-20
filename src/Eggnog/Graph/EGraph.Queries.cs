@@ -15,7 +15,7 @@ namespace Eggnog
         /// Defines a compiled conjunctive query for host reads (<see cref="Scope.Any(Query)"/>,
         /// <see cref="Scope.Count(Query)"/>, <see cref="Scope.ForEachMatch(Query, QueryCallback)"/>), compiled
         /// immediately like a rule body. Any thread, any time. Define a reusable query once; dispose one made for a
-        /// single request.
+        /// single request. Its atoms skip subsumed rows (<see cref="TableOptions.Subsumable"/>), as a rule body's do.
         /// </summary>
         /// <remarks>
         /// Its value constants are interned when it is defined, into the graph's pools, and stay interned after it is

@@ -43,7 +43,8 @@ namespace Eggnog
         /// <summary>
         /// Gets whether every ground fact holds. Never creates terms and never interns: a constant that was never
         /// interned makes its fact false. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
-        /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors).
+        /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors). A subsumed row holds, as in
+        /// egglog's <c>check</c> (<see cref="TableOptions.Subsumable"/>).
         /// </summary>
         /// <param name="facts">The facts: relation rows, equalities of classes or values, existences.</param>
         /// <returns>Whether every fact holds.</returns>
@@ -260,8 +261,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of rows of a table in this scope's view: egglog's <c>print-size</c>. A scoped view
-        /// (<c>T.In(tag)</c>) counts the rows of the nearest ancestor-or-self tagged <c>tag</c>.
+        /// Gets the number of rows of a table in this scope's view, subsumed rows included: egglog's <c>print-size</c>.
+        /// A scoped view (<c>T.In(tag)</c>) counts the rows of the nearest ancestor-or-self tagged <c>tag</c>.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The row count.</returns>
@@ -296,7 +297,8 @@ namespace Eggnog
         /// <summary>
         /// Gets the rows of a table in this scope's view, decoded and in content order: for debugging and tests. A
         /// sort cell is a <see cref="ClassId"/>, canonical here and usable in this scope. A scoped view (<c>T.In(tag)</c>)
-        /// lists the rows of the nearest ancestor-or-self tagged <c>tag</c>.
+        /// lists the rows of the nearest ancestor-or-self tagged <c>tag</c>. Subsumed rows are listed, with
+        /// <see cref="TableRow.Subsumed"/> set.
         /// </summary>
         /// <param name="table">The table.</param>
         /// <returns>The rows.</returns>
@@ -331,7 +333,8 @@ namespace Eggnog
         /// <summary>
         /// Gets whether a query has a match here. The engine stops at the first match. A query writes nothing: it
         /// moves neither <see cref="Version"/> nor any extractor; the mirrors of the tags it reads are brought
-        /// current first, which neither does either.
+        /// current first, which neither does either. Like a rule body, and unlike <see cref="Check"/>, a query does not
+        /// match subsumed rows (<see cref="TableOptions.Subsumable"/>).
         /// </summary>
         /// <param name="query">The query.</param>
         /// <returns>Whether it has a match.</returns>
@@ -355,7 +358,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the number of a query's matches here: its distinct full bindings. A query writes nothing.
+        /// Gets the number of a query's matches here: its distinct full bindings. A query writes nothing, and does not
+        /// match subsumed rows (<see cref="Any"/>).
         /// </summary>
         /// <param name="query">The query.</param>
         /// <returns>The number of matches.</returns>
@@ -379,11 +383,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Delivers a query's matches here, its distinct full bindings, in content order, until the callback
-        /// returns <c>false</c>. The matches are collected, and ordered, before the first callback, so the callback may call
-        /// the scope, writes and runs included: a class a match returns is canonical when it is read
-        /// (<see cref="QueryMatch.Get{T}(Var{T})"/>), so after a union made by an earlier callback two matches may name one
-        /// class. A query writes nothing; the query counts as in use until this returns.
+        /// Delivers a query's matches here, its distinct full bindings, in content order, until the callback returns
+        /// <c>false</c>. The matches are collected, and ordered, before the first callback, so the callback may call
+        /// the scope, writes and runs included: a class a match returns is canonical when it is read (<see
+        /// cref="QueryMatch.Get{T}(Var{T})"/>), so after a union made by an earlier callback two matches may name one
+        /// class. A query writes nothing, and does not match subsumed rows (<see cref="Any"/>); the query counts as in
+        /// use until this returns.
         /// </summary>
         /// <param name="query">The query.</param>
         /// <param name="callback">Receives each match; returns <c>false</c> to stop.</param>

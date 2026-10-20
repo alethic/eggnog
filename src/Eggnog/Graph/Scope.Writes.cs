@@ -139,6 +139,96 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Subsumes a ground constructor term as one atomic batch: egglog's <c>(subsume (f args...))</c>. The term's
+        /// row stays, and <see cref="Check"/>, <see cref="Get{T}"/> and <see cref="Rows"/> still find it, but rule
+        /// bodies, queries and split rules no longer match it, and extraction skips it; its class keeps every other
+        /// member. A term that does not exist yet is made, subsumed; its subterms are made as by <see
+        /// cref="Make{TSort}"/>, not subsumed. Subsumption is sticky, and a term already subsumed writes nothing, so it
+        /// moves neither <see cref="Version"/> nor any extractor. In a child, the subsumption shadows the ancestor's
+        /// row: the ancestors and the siblings still match it. On a case whose contradiction stopped it, or a scope
+        /// under one, the call does nothing.
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="term">The term: an application of a constructor defined <see
+        /// cref="TableOptions.Subsumable"/>.</param>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function
+        /// (<c>Get</c> it first), computes, is a variable, or holds a class value this scope cannot use.</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in
+        /// use on another thread; or the call comes from a run observer or a user delegate the engine
+        /// invoked.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and
+        /// the scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the
+        /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
+        /// scope's reads throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws
+        /// the same way.</exception>
+        public void Subsume<TSort>(ConstructorTerm<TSort> term) where TSort : struct, ISort<TSort>
+        {
+            ArgumentNullException.ThrowIfNull(term);
+            EnterWrite();
+            try
+            {
+                // A stopped case, or a scope under one, has no model: a subsumption changes nothing.
+                if (IsStopped)
+                    return;
+
+                var batch = new HostBatch(this);
+                batch.PlanSubsume(term);
+                Commit(batch);
+            }
+            finally
+            {
+                Exit(true);
+            }
+        }
+
+        /// <summary>
+        /// Subsumes ground relation rows (<c>r.Of(a, b)</c>) as one atomic batch: egglog's <c>(subsume (r a b))</c>.
+        /// Each row stays, and <see cref="Check"/> and <see cref="Rows"/> still find it, but rule bodies, queries and
+        /// split rules no longer match it. A row that does not exist yet is inserted, subsumed. Subsumption is sticky,
+        /// and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any extractor. In a
+        /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. Nothing is
+        /// written when a row fails. On a case whose contradiction stopped it, or a scope under one, the call does
+        /// nothing.
+        /// </summary>
+        /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
+        /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
+        /// <exception cref="ArgumentException">A fact is not a relation row, a relation is not subsumable, a term in a
+        /// row is not ground or holds a class value this scope cannot use, or a row writes through a scoped view
+        /// (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in
+        /// use on another thread; or the call comes from a run observer or a user delegate the engine
+        /// invoked.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and
+        /// the scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the
+        /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
+        /// scope's reads throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws
+        /// the same way.</exception>
+        public void Subsume(params Fact[] rows)
+        {
+            ArgumentNullException.ThrowIfNull(rows);
+            EnterWrite();
+            try
+            {
+                // A stopped case, or a scope under one, has no model: a subsumption changes nothing.
+                if (IsStopped)
+                    return;
+
+                var batch = new HostBatch(this);
+                foreach (var row in rows)
+                    batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+
+                Commit(batch);
+            }
+            finally
+            {
+                Exit(true);
+            }
+        }
+
+        /// <summary>
         /// Makes several writes one atomic batch: each call is checked as it is made, and the batch is staged,
         /// flushed and rebuilt once, after <paramref name="write"/> returns. If <paramref name="write"/> throws or a call is
         /// rejected, nothing is written and the class values the batch's <c>Make</c> calls returned are invalid.

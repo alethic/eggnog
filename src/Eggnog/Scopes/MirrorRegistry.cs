@@ -63,8 +63,10 @@ namespace Eggnog
             }
 
             var handle = graph.DefineMirrorTable(table, tag, -1 - mirrors.Count);
-            var copyRule = CompileCopyRule(table, handle);
-            var mirror = new MirrorTable(table, tag, handle, copyRule);
+            var copyRule = CompileCopyRule(table, handle, false);
+            var subsumeRule = table.Subsumable ? CompileCopyRule(table, handle, true) : null;
+            var mirror = new MirrorTable(table, tag, handle, copyRule, subsumeRule);
+            CompiledRule[] added = subsumeRule is null ? [copyRule] : [copyRule, subsumeRule];
             lock (sync)
             {
                 mirrors.Add((table, tag), mirror);
@@ -75,13 +77,13 @@ namespace Eggnog
                     rules = (CompiledRule[][])rules.Clone();
 
                 var forTag = rules[tag.Serial] ?? Array.Empty<CompiledRule>();
-                var nextForTag = new CompiledRule[forTag.Length + 1];
+                var nextForTag = new CompiledRule[forTag.Length + added.Length];
                 forTag.CopyTo(nextForTag, 0);
-                nextForTag[^1] = copyRule;
+                added.CopyTo(nextForTag, forTag.Length);
                 rules[tag.Serial] = nextForTag;
-                var all = new CompiledRule[allCopyRules.Length + 1];
+                var all = new CompiledRule[allCopyRules.Length + added.Length];
                 allCopyRules.CopyTo(all, 0);
-                all[^1] = copyRule;
+                added.CopyTo(all, allCopyRules.Length);
                 Volatile.Write(ref copyRules, rules);
                 Volatile.Write(ref allCopyRules, all);
             }
@@ -223,11 +225,14 @@ namespace Eggnog
         int FrozenCountCore(ScopeTag tag) => tag.Serial < frozenCounts.Length ? frozenCounts[tag.Serial] : 0;
 
         /// <summary>
-        /// Compiles the copy rule of a mirror: one register per column, one atom over the source, one write into the
+        /// Compiles a copy rule of a mirror: one register per column, one atom over the source, one write into the
         /// mirror; semi-naive, with its default variant lowered now, under the description
-        /// <c>$mirror/{mirror name}#{serial}</c>.
+        /// <c>$mirror/{mirror name}#{serial}</c>. The plain copy rule's atom skips subsumed rows, as every atom does.
+        /// With <paramref name="subsumed"/> (a subsumable relation), the atom matches only subsumed rows and the head
+        /// subsumes the row in the mirror, inserting it subsumed when the plain copy has not; a row the tagged scope
+        /// subsumes after it was copied is restamped by its merge, so the semi-naive atom sees it again.
         /// </summary>
-        CompiledRule CompileCopyRule(TableHandle source, TableHandle mirror)
+        CompiledRule CompileCopyRule(TableHandle source, TableHandle mirror, bool subsumed)
         {
             var columns = source.IsRelation ? source.KeyArray : source.Columns;
             var registers = new ProgramRegister[columns.Length];
@@ -238,9 +243,11 @@ namespace Eggnog
                 operands[i] = Operand.Register(i, columns[i]);
             }
 
-            var head = new HeadOp(source.IsRelation ? HeadOpKind.Insert : HeadOpKind.Write, mirror, operands, -1, null);
-            var name = "copy " + mirror.Name;
-            var program = new RuleProgram(name, registers, [new ProgramAtom(source, null, operands)], Array.Empty<ProgramStep>(), [head],
+            var kind = subsumed ? HeadOpKind.Subsume : source.IsRelation ? HeadOpKind.Insert : HeadOpKind.Write;
+            var head = new HeadOp(kind, mirror, operands, -1, null);
+            var name = (subsumed ? "copy subsumed " : "copy ") + mirror.Name;
+            var atom = new ProgramAtom(source, null, operands, subsumed);
+            var program = new RuleProgram(name, registers, [atom], Array.Empty<ProgramStep>(), [head],
                 Array.Empty<uint>(), Array.Empty<ScopeOrigin>(), Array.Empty<int>(), false, Array.Empty<ScopeTag>());
             var serial = graph.NextSerial();
             var rule = new Rule(name, copyRuleset, null, false, new RuleDraft(name, this), null, Array.Empty<ScopeTag>());

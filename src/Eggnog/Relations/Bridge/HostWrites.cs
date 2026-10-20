@@ -20,13 +20,16 @@ namespace Eggnog.Relations
     /// through the context API are, at every level, the root included, so every id the rule layer writes is canonical
     /// in the target context; a row staged as given is replayed as given (a child canonicalizes it at its merge
     /// anyway). The e-graph's egglog-compatible root API does not stage here: its rows go straight into database
-    /// buffers (<see cref="EGraphContext.AddValuesAtRoot"/>).
+    /// buffers (<see cref="EGraphContext.AddValuesAtRoot"/>). Each row also remembers whether it is replayed subsumed:
+    /// a host subsumption is a subsumed copy of the row, which the function's merge makes sticky (egglog's
+    /// <c>subsume</c>).
     /// </para>
     /// <para>
-    /// Storage: one arena of cells and three parallel arrays per row, grown geometrically. Kept across flushes while small
-    /// (up to <see cref="RetainedCells"/> cells and <see cref="RetainedRows"/> rows), so a warm context stages its usual
-    /// batches without allocating; released by the flush after a larger batch, so a context that lives long (the root)
-    /// keeps nothing proportional to its largest batch. Not thread-safe: the owning context's domain thread only.
+    /// Storage: one arena of cells and four parallel arrays per row, grown geometrically. Kept across flushes while
+    /// small (up to <see cref="RetainedCells"/> cells and <see cref="RetainedRows"/> rows), so a warm context stages
+    /// its usual batches without allocating; released by the flush after a larger batch, so a context that lives long
+    /// (the root) keeps nothing proportional to its largest batch. Not thread-safe: the owning context's domain thread
+    /// only.
     /// </para>
     /// </remarks>
     internal sealed class HostWrites
@@ -57,6 +60,7 @@ namespace Eggnog.Relations
         FunctionId[] functions = Array.Empty<FunctionId>();
         int[] offsets = Array.Empty<int>();
         bool[] canonicalize = Array.Empty<bool>();
+        bool[] subsumed = Array.Empty<bool>();
         int rowCount;
         uint[] unions = Array.Empty<uint>();
         int unionCount;
@@ -84,7 +88,9 @@ namespace Eggnog.Relations
         /// <param name="row">The keys and output; copied.</param>
         /// <param name="canonicalizeIds">Whether the row's id cells are canonicalized when it is replayed (the context
         /// API); otherwise it is replayed as given.</param>
-        public void AddRow(FunctionId function, ReadOnlySpan<uint> row, bool canonicalizeIds)
+        /// <param name="subsume">Whether the row is replayed subsumed; only for a function that can subsume, which the
+        /// caller has checked.</param>
+        public void AddRow(FunctionId function, ReadOnlySpan<uint> row, bool canonicalizeIds, bool subsume = false)
         {
             if (rowCount == functions.Length)
             {
@@ -92,6 +98,7 @@ namespace Eggnog.Relations
                 Array.Resize(ref functions, size);
                 Array.Resize(ref offsets, size);
                 Array.Resize(ref canonicalize, size);
+                Array.Resize(ref subsumed, size);
             }
 
             if (cellCount + row.Length > cells.Length)
@@ -101,6 +108,7 @@ namespace Eggnog.Relations
             functions[rowCount] = function;
             offsets[rowCount] = cellCount;
             canonicalize[rowCount] = canonicalizeIds;
+            subsumed[rowCount] = subsume;
             rowCount++;
             cellCount += row.Length;
         }
@@ -122,7 +130,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Stages every row and union into <paramref name="state"/>, in staging order, stamped with
-        /// <paramref name="timestamp"/> and not subsumed: rows through their function's table, unions through the
+        /// <paramref name="timestamp"/> and subsumed as staged: rows through their function's table, unions through the
         /// union-find. The id cells of rows staged through the context API are canonicalized with
         /// <paramref name="finder"/>, which is current once the context prepared for the write. Does not clear.
         /// </summary>
@@ -153,7 +161,7 @@ namespace Eggnog.Relations
                             full[c] = finder.Find(full[c]);
                 }
 
-                math.WriteTail(full, timestamp);
+                math.WriteTail(full, timestamp, subsumed[i] ? SchemaMath.Subsumed : SchemaMath.NotSubsumed);
                 state.StageInsert(info.Table, full);
             }
 
@@ -211,6 +219,7 @@ namespace Eggnog.Relations
                     Array.Copy(cells, start, cells, keptCells, end - start);
                     functions[kept] = functions[i];
                     canonicalize[kept] = canonicalize[i];
+                    subsumed[kept] = subsumed[i];
                 }
 
                 offsets[kept] = keptCells;
@@ -241,6 +250,7 @@ namespace Eggnog.Relations
                 functions = Array.Empty<FunctionId>();
                 offsets = Array.Empty<int>();
                 canonicalize = Array.Empty<bool>();
+                subsumed = Array.Empty<bool>();
             }
 
             if (unions.Length > 2 * RetainedUnions)
@@ -257,6 +267,7 @@ namespace Eggnog.Relations
             functions = Array.Empty<FunctionId>();
             offsets = Array.Empty<int>();
             canonicalize = Array.Empty<bool>();
+            subsumed = Array.Empty<bool>();
             unions = Array.Empty<uint>();
         }
 

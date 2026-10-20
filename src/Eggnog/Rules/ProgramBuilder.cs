@@ -508,10 +508,90 @@ namespace Eggnog
                     made[item.Variable!] = operand.Index;
                     break;
                 }
+                case HeadItemKind.Subsume:
+                    AddSubsume(item);
+                    break;
                 default:
                     AddHeadFact(new EqualityFact(item.Variable!, item.Right!));
                     break;
             }
+        }
+
+        /// <summary>
+        /// Turns a subsumption into a <see cref="HeadOpKind.Subsume"/> of the key of a subsumable relation row or
+        /// constructor application. The key's terms are evaluated as head terms (egglog lowers <c>(subsume (f
+        /// args...))</c> with the arguments evaluated as actions too), except for a rewrite's left side, whose
+        /// arguments are the operands the body bound when it matched it: so the row the body matched is the one
+        /// subsumed, and a left side that reads a function, which a head may not, is subsumed too (egglog's action
+        /// would look the function up).
+        /// </summary>
+        void AddSubsume(HeadItem item)
+        {
+            TableHandle table;
+            Term[] arguments;
+            if (item.Fact is { } fact)
+            {
+                if (fact is ScopedFact scoped)
+                    throw Error($"head facts are writes; Fact.In('{scoped.Scope.Name}') is read-only");
+
+                if (fact is not RelationFact relation)
+                    throw Error($"Subsume takes relation rows and constructor terms; {fact} is not a relation row");
+
+                table = relation.Table;
+                arguments = relation.Arguments;
+            }
+            else
+            {
+                var shape = item.Left!.Shape;
+                if (shape.Kind != TermShapeKind.Application)
+                {
+                    // egglog: "Subsumed rewrite must have a function call on the lhs" (src/ast/desugar.rs:320-333).
+                    throw Error(item.Variable is null
+                        ? $"Subsume takes relation rows and constructor terms; {item.Left} is not an application"
+                        : $"a subsuming rewrite's left side must be a constructor application, not {item.Left}");
+                }
+
+                table = shape.Table!;
+                arguments = shape.Arguments;
+            }
+
+            CheckTable(table);
+            CheckWritable(table);
+            if (table.Subsumable == false)
+                throw Error($"'{table.Name}' is not subsumable; define it with TableOptions.Subsumable to subsume its rows");
+
+            Operand[] inputs;
+            if (item.Fact is null && item.Variable is not null)
+            {
+                inputs = BodyOperands(arguments);
+            }
+            else
+            {
+                inputs = new Operand[arguments.Length];
+                for (var i = 0; i < inputs.Length; i++)
+                    inputs[i] = EvalHead(arguments[i]);
+            }
+
+            head.Add(new HeadOp(HeadOpKind.Subsume, table, inputs, -1, null));
+        }
+
+        /// <summary>
+        /// Gets the operands the body bound for terms it flattened, such as the arguments of a rewrite's left side.
+        /// Flattening them again finds each in the body's memo, so it creates no atom and no step.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A term was not flattened by the body.</exception>
+        Operand[] BodyOperands(Term[] terms)
+        {
+            var atomCount = rawAtoms.Count;
+            var stepCount = rawSteps.Count;
+            var operands = new Operand[terms.Length];
+            for (var i = 0; i < operands.Length; i++)
+                operands[i] = Resolve(FlattenBody(terms[i], null));
+
+            if (rawAtoms.Count != atomCount || rawSteps.Count != stepCount)
+                throw new InvalidOperationException($"Rule '{ruleName}': a term of the head was not flattened by the body.");
+
+            return operands;
         }
 
         /// <summary>
@@ -660,7 +740,7 @@ namespace Eggnog
             TableHandle? written = null;
             foreach (var op in head)
             {
-                if (op.Kind is HeadOpKind.Insert or HeadOpKind.Write && op.Table!.Role == TableRole.Analysis)
+                if (op.Kind is HeadOpKind.Insert or HeadOpKind.Write or HeadOpKind.Subsume && op.Table!.Role == TableRole.Analysis)
                 {
                     written = op.Table;
                     break;
