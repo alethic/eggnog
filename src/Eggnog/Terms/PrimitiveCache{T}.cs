@@ -50,7 +50,7 @@ namespace Eggnog
         /// <summary>
         /// <c>set-contains</c>.
         /// </summary>
-        public static readonly Primitive<ValueSet<T>, T, bool> Contains = new("set-contains", static (s, v) => s.Contains(v), false)
+        public static readonly Primitive<ValueSet<T>, T, bool> Contains = new("bool-set-contains", static (s, v) => s.Contains(v), false)
         {
             FilterName = "set-contains",
         };
@@ -58,7 +58,7 @@ namespace Eggnog
         /// <summary>
         /// <c>set-not-contains</c>.
         /// </summary>
-        public static readonly Primitive<ValueSet<T>, T, bool> NotContains = new("set-not-contains", static (s, v) => s.Contains(v) == false, false)
+        public static readonly Primitive<ValueSet<T>, T, bool> NotContains = new("bool-set-not-contains", static (s, v) => s.Contains(v) == false, false)
         {
             FilterName = "set-not-contains",
         };

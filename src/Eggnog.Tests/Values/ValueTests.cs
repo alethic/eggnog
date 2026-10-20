@@ -75,7 +75,7 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void NegativeZeroIsNormalizedAndNaNIsAValue()
+        public void BothZerosAreOneValueAndNaNIsAValue()
         {
             var graph = new EGraph();
             var type = graph.Values.TypeOf<double>();

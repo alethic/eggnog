@@ -1,5 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog
 {
@@ -28,13 +30,27 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result)
-        {
-            var values = new T[arguments.Length];
-            for (var i = 0; i < values.Length; i++)
-                values[i] = ((ColumnType<T>)parameters[i]).Decode(arguments[i], null);
+        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
+            ((ColumnType<TResult>)result).Encode(Call(arguments, parameters));
 
-            return ((ColumnType<TResult>)result).Encode(function(values));
+        /// <summary>
+        /// Decodes the arguments into a pooled array and calls the function over them, which must not keep the list: it
+        /// is valid only during the call.
+        /// </summary>
+        TResult Call(ReadOnlySpan<uint> arguments, ColumnType[] parameters)
+        {
+            var values = ArrayPool<T>.Shared.Rent(arguments.Length);
+            try
+            {
+                for (var i = 0; i < arguments.Length; i++)
+                    values[i] = ((ColumnType<T>)parameters[i]).Decode(arguments[i], null);
+
+                return function(new ArraySegment<T>(values, 0, arguments.Length));
+            }
+            finally
+            {
+                ArrayPool<T>.Shared.Return(values, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            }
         }
 
         /// <inheritdoc />

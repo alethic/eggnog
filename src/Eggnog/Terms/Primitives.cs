@@ -73,14 +73,17 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>() where T : notnull => PrimitiveCache<T>.Remove;
 
         /// <summary>
-        /// <c>set-contains</c>: egglog's filter, and a <c>bool</c> as a value, an addition.
+        /// <c>set-contains</c>: egglog's filter, which renders so; as a <c>bool</c> value, an addition, it renders as
+        /// <c>bool-set-contains</c>, a name egglog does not have, since egglog's <c>set-contains</c> is the unit value or
+        /// nothing.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
         public static Primitive<ValueSet<T>, T, bool> Contains<T>() where T : notnull => PrimitiveCache<T>.Contains;
 
         /// <summary>
-        /// <c>set-not-contains</c>: egglog's filter, and a <c>bool</c> as a value, an addition.
+        /// <c>set-not-contains</c>: egglog's filter, which renders so; as a <c>bool</c> value, an addition, it renders as
+        /// <c>bool-set-not-contains</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>

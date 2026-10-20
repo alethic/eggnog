@@ -35,7 +35,8 @@ namespace Eggnog
         public string Name { get; }
 
         /// <summary>
-        /// Gets the function over all the arguments.
+        /// Gets the function over all the arguments. A rule calls it with a list valid only during the call, which it must
+        /// not keep.
         /// </summary>
         public Func<IReadOnlyList<T>, TResult> Function { get; }
 

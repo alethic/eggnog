@@ -25,12 +25,28 @@ namespace Eggnog.Tests.Values
             Assert.Equal(1, graph.Root.CountRows(f));
         }
 
+        /// <summary>
+        /// Both zeros are one value, which reads back as the one interned first, as in egglog: in a graph whose first zero
+        /// is -0.0, a later 0.0 reads back as -0.0.
+        /// </summary>
+        [Fact]
+        public void TheZeroInternedFirstIsTheOneReadBack()
+        {
+            var graph = new EGraph();
+            var f = graph.DefineFunction<long, double>("f");
+            graph.Root.Assume(f.Of(1L).Is(-0.0));
+            graph.Root.Assume(f.Of(2L).Is(0.0));
+
+            Assert.True(double.IsNegativeInfinity(1 / graph.Root.Get(f.Of(2L))));
+            Assert.True(graph.Root.Check(f.Of(1L).Is(0.0)));
+        }
+
         [Fact]
         public void NaNSortsAboveEveryValue()
         {
             var graph = new EGraph();
             var r = graph.DefineRelation<double>("r");
-            graph.Root.Assume(r.Of(double.NaN), r.Of(double.PositiveInfinity), r.Of(-1.0), r.Of(-0.0), r.Of(0.0));
+            graph.Root.Assume(r.Of(double.NaN), r.Of(double.PositiveInfinity), r.Of(-1.0), r.Of(0.0), r.Of(-0.0));
 
             var rows = graph.Root.Rows(r).Select(row => (double)row.Keys[0]).ToArray();
 

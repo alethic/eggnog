@@ -6,9 +6,11 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A pure, deterministic, thread-safe function over values (never over classes). An exception thrown by it fails
-    /// the rule with a <see cref="RuleEvaluationException"/>; a call into any graph from it throws an
-    /// <see cref="InvalidOperationException"/>. Named primitives render by name; lambdas (<see cref="Compute"/>,
+    /// A pure, deterministic, thread-safe function over values (never over classes), or for <c>ordering-min</c> and
+    /// <c>ordering-max</c> over their cells. An exception thrown by it fails the rule with a
+    /// <see cref="RuleEvaluationException"/>; a call into any graph from it throws an
+    /// <see cref="InvalidOperationException"/>. Named primitives render by name, and a filter over one as egglog writes
+    /// it, its fallible form (<c>&lt;</c> for <c>bool-&lt;</c>) or <c>(guard …)</c>; lambdas (<see cref="Compute"/>,
     /// <see cref="RuleBuilder.Where{T1}(Term{T1}, Func{T1, bool})"/>) render as <c>&lt;lambda&gt;</c>.
     /// </summary>
     /// <remarks>
@@ -139,7 +141,8 @@ namespace Eggnog
         /// <typeparam name="T">The arguments' type.</typeparam>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="name">The name it renders as.</param>
-        /// <param name="function">The function over all the arguments: pure, deterministic and thread-safe.</param>
+        /// <param name="function">The function over all the arguments: pure, deterministic and thread-safe; it must not
+        /// keep the list, which is valid only during the call.</param>
         /// <returns>The primitive.</returns>
         public static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(string name, Func<IReadOnlyList<T>, TResult> function)
         {
