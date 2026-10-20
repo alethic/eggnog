@@ -481,8 +481,9 @@ Extractors over a frozen scope may run concurrently, one per thread.
 ### 2.13 Differences from egglog
 
 The library offers egglog's core (tables with functional dependencies and merges, union-find with congruence closure,
-semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. It also
-departs from egglog on purpose:
+semi-naive Datalog rules, schedules, primitives, lattices and extraction) and adds scopes and case splits. Fidelity with
+egglog comes first, so each departure below is to be removed, or confined to the additions, as the roadmap's "Fidelity
+with egglog" lists:
 
 1. No deletion in the API. The engine has it, but inheritance of semi-naive progress, the soundness of lift and the
    exactness of mirrors all rest on contents that only grow. Subsumption is in the API (section 2.5), because it keeps
