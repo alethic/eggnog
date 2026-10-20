@@ -303,6 +303,102 @@ namespace Eggnog.Tests.Diagnostics
             Assert.Equal(expected, Encoding.UTF8.GetString(stream.ToArray()));
         }
 
+        /// <summary>
+        /// A set's elements come in cell order, as an egglog set's do; an element never interned on its own comes after
+        /// them, and prints as its codec would print its cell: Rust's <c>Debug</c>, a string escaped.
+        /// </summary>
+        [Fact]
+        public void ASetsElementsComeInCellOrderAndPrintAsEgglogs()
+        {
+            var graph = new EGraph();
+            var text = graph.DefineRelation<string>("text");
+            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(text.Of("b"));
+            graph.Root.Assume(text.Of("a"));
+            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b", "q\"x")));
+
+            var serialized = graph.Root.Serialize();
+
+            var set = serialized.Nodes.Single(n => n.Op == "set-of");
+            var elements = set.Children.Select(id => serialized.Nodes.Single(n => n.Id == id)).ToArray();
+            Assert.Equal(new[] { "\"b\"", "\"a\"", "\"q\\\"x\"" }, elements.Select(e => e.Op));
+            Assert.StartsWith("String-~", elements[2].Class);
+        }
+
+        /// <summary>
+        /// Elements with no cell are told apart by value, not by their text: two values that print alike are two classes.
+        /// </summary>
+        [Fact]
+        public void ElementsWithNoCellAreToldApartByValue()
+        {
+            var graph = new EGraph();
+            graph.Values.Register<Ranked>("Ranked", format: _ => "p");
+            graph.Values.RegisterSet<Ranked>();
+            var f = graph.DefineFunction<long, ValueSet<Ranked>>("f");
+            graph.Root.Assume(f.Of(1L).Is(ValueSet.Of(new Ranked(1), new Ranked(2))));
+
+            var serialized = graph.Root.Serialize();
+
+            var set = serialized.Nodes.Single(n => n.Op == "set-of");
+            Assert.Equal(new[] { "primitive-Ranked-~0", "primitive-Ranked-~1" }, set.Children);
+        }
+
+        /// <summary>
+        /// egglog reserves <c>@</c>, so its relation sorts never meet a user's sort; here a sort may be named
+        /// <c>@abSort</c>, and the relation <c>ab</c>'s sort takes the next name.
+        /// </summary>
+        [Fact]
+        public void ARelationsSortSkipsAUsersSortName()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("@abSort");
+            var leaf = graph.DefineConstructor<long, Node>("Leaf");
+            var ab = graph.DefineRelation<long>("ab");
+            graph.Root.Make(leaf.Of(100L));
+            graph.Root.Assume(ab.Of(1L));
+
+            var serialized = graph.Root.Serialize();
+
+            Assert.True(serialized.TryGetNode("function-0-ab", out var row));
+            Assert.Equal("@abSort1-0", row.Class);
+            Assert.True(serialized.TryGetNode("function-0-Leaf", out var leafRow));
+            Assert.NotEqual(row.Class, leafRow.Class);
+        }
+
+        /// <summary>
+        /// egglog has no contradiction relation, so the built-in one is left out, rows and all, and counts toward no limit.
+        /// </summary>
+        [Fact]
+        public void TheContradictionRelationIsLeftOut()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            graph.Root.Assume(graph.Contradiction.Of(), r.Of(1L));
+
+            var serialized = graph.Root.Serialize(new SerializeOptions { MaxTables = 1 });
+
+            Assert.True(serialized.IsComplete);
+            Assert.DoesNotContain(serialized.Nodes, n => n.Op == "contradiction");
+            Assert.Contains(serialized.Nodes, n => n.Op == "R");
+        }
+
+        /// <summary>
+        /// The JSON escapes what serde_json escapes and nothing more: the quote, the backslash and the control characters
+        /// below U+0020, in lowercase hex where they have no short form; an emoji stays as it is.
+        /// </summary>
+        [Fact]
+        public void TheJsonEscapesAsSerdeDoes()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<string>("a\tb\u001b\u007f");
+            graph.Root.Assume(r.Of("\U0001F600"));
+
+            var json = graph.Root.Serialize().ToJson();
+
+            Assert.Contains("\"function-0-a\\tb\\u001b\u007f\": {", json);
+            Assert.Contains("\"op\": \"\\\"\U0001F600\\\"\"", json);
+        }
+
         [Fact]
         public void TheOptionsAreChecked()
         {

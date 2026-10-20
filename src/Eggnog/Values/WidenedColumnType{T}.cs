@@ -64,6 +64,9 @@ namespace Eggnog
         internal override string FormatValue(T value) => format(value);
 
         /// <inheritdoc />
+        internal override string DebugValue(T value) => Relations.Int64Codec.Format(widen(value));
+
+        /// <inheritdoc />
         internal override int CompareValues(T x, T y) => widen(x).CompareTo(widen(y));
 
     }

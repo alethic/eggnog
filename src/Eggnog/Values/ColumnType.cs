@@ -116,6 +116,16 @@ namespace Eggnog
         internal abstract string FormatObject(object value);
 
         /// <summary>
+        /// Formats a value already known to be of <see cref="ClrType"/> as its engine codec formats its cell
+        /// (<c>BaseValues.Format</c>, egglog's <c>BaseValuePrinter</c>), which needs no cell: Rust's <c>Debug</c> for
+        /// the types with a Rust counterpart, an enum or an <c>int</c> as the <c>long</c> it is stored as.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="InvalidOperationException">The type is a sort, which has no codec.</exception>
+        internal abstract string FormatDebug(object value);
+
+        /// <summary>
         /// Formats a cell: its decoded value's literal, or <c>#17</c> for a class.
         /// </summary>
         /// <param name="cell">The cell.</param>

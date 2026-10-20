@@ -339,6 +339,7 @@ namespace Eggnog
         /// <param name="options">What to include; <c>null</c> for everything.</param>
         /// <returns>The serialized graph.</returns>
         /// <exception cref="ArgumentOutOfRangeException">A limit is negative.</exception>
+        /// <exception cref="ArgumentNullException">The options' <see cref="SerializeOptions.Roots"/> is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">A root is a class this scope cannot use, or no row holds it.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another

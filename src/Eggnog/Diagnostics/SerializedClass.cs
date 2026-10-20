@@ -21,7 +21,9 @@ namespace Eggnog
         /// <summary>
         /// Gets the class's id, as egglog makes it: <c>{type}-{cell}</c>, the name of the sort or value type and the
         /// canonical class's or the value's cell in the scope. A relation's row is a class of its own, of the type
-        /// <c>@{relation}Sort</c>, as egglog makes a relation a constructor over a sort of that name.
+        /// <c>@{relation}Sort</c>, as egglog makes a relation a constructor over a sort of that name. A set's element that
+        /// was never interned on its own has no cell, and is a class <c>{type}-~{n}</c>, numbered per type; once another
+        /// write interns the element, a later serialization names it by its cell.
         /// </summary>
         public string Id { get; }
 

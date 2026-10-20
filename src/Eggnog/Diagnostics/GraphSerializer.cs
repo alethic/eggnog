@@ -7,18 +7,18 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <see cref="Scope.Serialize"/>: a port of egglog's <c>EGraph::serialize</c> (<c>src/serialize.rs</c>) over a
-    /// scope's view. Every table but the mirrors, in definition order, gives a node per row, in content order; each
-    /// argument is an edge to one node of its class, the class's nodes taken in turn, as egglog spreads its edges; a
-    /// value is a node of its own class; and a class whose every node was left out gets a placeholder. Called under the
-    /// scope's guard; never interns.
+    /// <see cref="Scope.Serialize"/>: a port of egglog's <c>EGraph::serialize</c> (<c>src/serialize.rs</c>, as at 3.0.0,
+    /// whose class ids allow a dash in a sort's name) over a scope's view. Every table but the mirrors and the built-in
+    /// contradiction relation, in definition order, gives a node per row, in content order; each argument is an edge to
+    /// one node of its class, the class's nodes taken in turn, as egglog spreads its edges; a value is a node of its own
+    /// class; and a class whose every node was left out gets a placeholder. Called under the scope's guard; never interns.
     /// </summary>
     /// <remarks>
     /// egglog makes a relation a constructor over a sort of its own that cannot be unioned (<c>desugar_relation</c>,
     /// <c>src/ast/desugar.rs</c>), named <c>@{relation}Sort</c> by its symbol generator; a relation's row here is
-    /// likewise a class of its own, of that type, numbered by its row. A set's elements are its node's children, as an
-    /// egglog container's inner values are; an element that was never interned on its own has no cell, so its class is
-    /// named after its literal.
+    /// likewise a class of its own, of that type, numbered by its row. A set's elements are its node's children in cell
+    /// order, as an egglog set's are (a <c>BTreeSet</c> of values); an element that was never interned on its own has no
+    /// cell, so it comes after those that have one, in a class of its own numbered per type.
     /// </remarks>
     internal sealed class GraphSerializer
     {
@@ -33,6 +33,8 @@ namespace Eggnog
         readonly Dictionary<TableHandle, string> relationSorts = new();
         readonly Dictionary<string, int> sortHints = new(StringComparer.Ordinal);
         readonly Dictionary<uint, string> classSorts = new();
+        readonly Dictionary<(ColumnType Type, object Value), string> literalClasses = new();
+        readonly Dictionary<ColumnType, int> literalCounts = new();
 
         /// <summary>
         /// Initializes a serialization of a scope.
@@ -67,7 +69,8 @@ namespace Eggnog
             var kept = 0;
             foreach (var table in scope.Graph.Tables)
             {
-                if (table.IsMirror)
+                // The mirrors are hidden, and egglog has no contradiction relation.
+                if (table.IsMirror || ReferenceEquals(table, scope.Graph.Contradiction))
                     continue;
 
                 // egglog's symbol generator names the relations' sorts in definition order.
@@ -159,12 +162,24 @@ namespace Eggnog
             var nodeId = "primitive-" + classId;
             if (ValueStore.IsSet(type.ClrType))
             {
+                // egglog's set is a BTreeSet of values, so its elements come in cell order; an element with no cell of
+                // its own comes after those that have one, in the set's order.
                 var element = scope.Graph.Values.TypeOf(type.ClrType.GetGenericArguments()[0]);
-                var children = new List<string>();
+                var interned = new List<uint>();
+                var literals = new List<object>();
                 foreach (var member in (IEnumerable)type.DecodeObject(cell, scope))
-                    children.Add(element.TryEncodeExistingObject(member!, out var memberCell)
-                        ? SerializeValue(element, memberCell, ClassOf(element, memberCell))
-                        : SerializeLiteral(element, member!));
+                    if (element.TryEncodeExistingObject(member!, out var memberCell))
+                        interned.Add(memberCell);
+                    else
+                        literals.Add(member!);
+
+                interned.Sort();
+                var children = new List<string>(interned.Count + literals.Count);
+                foreach (var memberCell in interned)
+                    children.Add(SerializeValue(element, memberCell, ClassOf(element, memberCell)));
+
+                foreach (var member in literals)
+                    children.Add(SerializeLiteral(element, member));
 
                 AddNode(new SerializedNode(nodeId, "set-of", classId, 1, children.AsReadOnly(), false));
             }
@@ -179,14 +194,22 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Serializes a set's element that has no cell: a node and a class named after its literal.
+        /// Serializes a set's element that has no cell: a node of a class of its own, <c>{type}-~{n}</c>, numbered per
+        /// type in the order the elements are first met, one per distinct value; its operator is the text its codec would
+        /// print for its cell (<see cref="ColumnType.FormatDebug"/>), as for any other value.
         /// </summary>
         string SerializeLiteral(ColumnType type, object value)
         {
-            var literal = type.FormatObject(value);
-            var classId = type.Name + "-~" + literal;
+            if (literalClasses.TryGetValue((type, value), out var classId) == false)
+            {
+                literalCounts.TryGetValue(type, out var count);
+                literalCounts[type] = count + 1;
+                classId = type.Name + "-~" + count.ToString(CultureInfo.InvariantCulture);
+                literalClasses.Add((type, value), classId);
+            }
+
             var nodeId = "primitive-" + classId;
-            AddNode(new SerializedNode(nodeId, literal, classId, 1, Array.Empty<string>(), false));
+            AddNode(new SerializedNode(nodeId, type.FormatDebug(value), classId, 1, Array.Empty<string>(), false));
             AddClass(classId, type.Name);
             return nodeId;
         }
@@ -243,14 +266,20 @@ namespace Eggnog
 
         /// <summary>
         /// Names a relation's sort as egglog's symbol generator does: <c>@</c>, the name without dashes, then
-        /// <c>Sort</c>, with a count from the second use of the same hint on.
+        /// <c>Sort</c>, with a count from the second use of the same hint on. egglog reserves <c>@</c>, so its names never
+        /// meet a user's; a sort or value type here may hold one, and its name is skipped as a used one.
         /// </summary>
         string RelationSort(string relation)
         {
             var hint = relation.Replace("-", "", StringComparison.Ordinal) + "Sort";
-            sortHints.TryGetValue(hint, out var before);
-            sortHints[hint] = before + 1;
-            return "@" + hint + (before == 0 ? "" : before.ToString(CultureInfo.InvariantCulture));
+            while (true)
+            {
+                sortHints.TryGetValue(hint, out var before);
+                sortHints[hint] = before + 1;
+                var name = "@" + hint + (before == 0 ? "" : before.ToString(CultureInfo.InvariantCulture));
+                if (scope.Graph.Values.IsNameTaken(name) == false)
+                    return name;
+            }
         }
 
         /// <summary>

@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 
 namespace Eggnog
 {
@@ -55,7 +54,8 @@ namespace Eggnog
         public IReadOnlyList<SerializedClass> Classes { get; }
 
         /// <summary>
-        /// Gets the ids of the root classes (<see cref="SerializeOptions.Roots"/>), in order.
+        /// Gets the ids of the root classes (<see cref="SerializeOptions.Roots"/>), in order. As in egglog, a root whose
+        /// every row was left out names a class that is not among <see cref="Classes"/>.
         /// </summary>
         public IReadOnlyList<string> RootClasses { get; }
 
@@ -113,13 +113,63 @@ namespace Eggnog
             classesById.TryGetValue(id, out @class);
 
         /// <summary>
-        /// Gets the graph as the egraph-serialize crate's JSON, indented as its <c>to_json_file</c> writes it:
-        /// <c>nodes</c> (each with <c>op</c>, <c>children</c>, <c>eclass</c>, <c>cost</c> and <c>subsumed</c>),
-        /// <c>root_eclasses</c> and <c>class_data</c> (each with <c>type</c>). An infinite cost is <c>null</c>, as serde
-        /// writes it.
+        /// Gets the graph as the egraph-serialize crate's JSON, byte for byte as its <c>to_json_file</c> writes it with
+        /// serde_json's pretty printer: <c>nodes</c> (each with <c>op</c>, <c>children</c>, <c>eclass</c>, <c>cost</c> and
+        /// <c>subsumed</c>), <c>root_eclasses</c> and <c>class_data</c> (each with <c>type</c>), indented by two spaces,
+        /// lines ended by a line feed. An infinite cost is <c>null</c>. Strings escape only what serde_json escapes: the
+        /// quote, the backslash and the control characters below U+0020.
         /// </summary>
         /// <returns>The JSON.</returns>
-        public string ToJson() => Encoding.UTF8.GetString(Json());
+        public string ToJson()
+        {
+            var json = new StringBuilder();
+            json.Append("{\n  \"nodes\": ");
+            if (Nodes.Count == 0)
+                json.Append("{}");
+            else
+            {
+                json.Append("{\n");
+                for (var i = 0; i < Nodes.Count; i++)
+                {
+                    var node = Nodes[i];
+                    json.Append("    ");
+                    Quote(json, node.Id);
+                    json.Append(": {\n      \"op\": ");
+                    Quote(json, node.Op);
+                    json.Append(",\n      \"children\": ");
+                    Strings(json, node.Children, "      ");
+                    json.Append(",\n      \"eclass\": ");
+                    Quote(json, node.Class);
+                    json.Append(",\n      \"cost\": ").Append(double.IsFinite(node.Cost) ? Relations.RustFloatDebug.Format(node.Cost) : "null");
+                    json.Append(",\n      \"subsumed\": ").Append(node.Subsumed ? "true" : "false");
+                    json.Append(i + 1 < Nodes.Count ? "\n    },\n" : "\n    }\n");
+                }
+
+                json.Append("  }");
+            }
+
+            json.Append(",\n  \"root_eclasses\": ");
+            Strings(json, RootClasses, "  ");
+            json.Append(",\n  \"class_data\": ");
+            if (Classes.Count == 0)
+                json.Append("{}");
+            else
+            {
+                json.Append("{\n");
+                for (var i = 0; i < Classes.Count; i++)
+                {
+                    json.Append("    ");
+                    Quote(json, Classes[i].Id);
+                    json.Append(": {\n      \"type\": ");
+                    Quote(json, Classes[i].Type);
+                    json.Append(i + 1 < Classes.Count ? "\n    },\n" : "\n    }\n");
+                }
+
+                json.Append("  }");
+            }
+
+            return json.Append("\n}").ToString();
+        }
 
         /// <summary>
         /// Writes <see cref="ToJson"/>'s JSON to a stream, as UTF-8.
@@ -128,75 +178,77 @@ namespace Eggnog
         public void WriteJson(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            stream.Write(Json());
+            stream.Write(Encoding.UTF8.GetBytes(ToJson()));
         }
 
         /// <summary>
-        /// Writes the JSON as UTF-8, with <c>\n</c> line ends, as serde writes them, whatever the platform's: the writer
-        /// ends lines with the platform's, and a string in JSON holds no raw carriage return, so every one is a line end's.
+        /// Writes an array of strings as serde_json's pretty printer does: <c>[]</c> when empty, else one element a line,
+        /// two spaces deeper than <paramref name="indent"/>.
         /// </summary>
-        byte[] Json()
+        static void Strings(StringBuilder json, IReadOnlyList<string> values, string indent)
         {
-            using var buffer = new MemoryStream();
-            using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-                Write(json);
+            if (values.Count == 0)
+            {
+                json.Append("[]");
+                return;
+            }
 
-            var bytes = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
-            const byte carriageReturn = 0x0D;
-            var result = new byte[bytes.Length - bytes.Count(carriageReturn)];
-            var at = 0;
-            foreach (var b in bytes)
-                if (b != carriageReturn)
-                    result[at++] = b;
+            json.Append("[\n");
+            for (var i = 0; i < values.Count; i++)
+            {
+                json.Append(indent).Append("  ");
+                Quote(json, values[i]);
+                json.Append(i + 1 < values.Count ? ",\n" : "\n");
+            }
 
-            return result;
+            json.Append(indent).Append(']');
         }
 
         /// <summary>
-        /// Writes the graph's JSON.
+        /// Writes a string as serde_json's <c>format_escaped_str</c> does: the quote and the backslash escaped, the
+        /// control characters below U+0020 as <c>\b</c>, <c>\t</c>, <c>\n</c>, <c>\f</c>, <c>\r</c> or a lowercase
+        /// <c>\u00xx</c>, and every other character as it is.
         /// </summary>
-        void Write(Utf8JsonWriter json)
+        static void Quote(StringBuilder json, string value)
         {
-            json.WriteStartObject();
-            json.WriteStartObject("nodes");
-            foreach (var node in Nodes)
+            json.Append('"');
+            foreach (var c in value)
             {
-                json.WriteStartObject(node.Id);
-                json.WriteString("op", node.Op);
-                json.WriteStartArray("children");
-                foreach (var child in node.Children)
-                    json.WriteStringValue(child);
+                switch (c)
+                {
+                    case '"':
+                        json.Append("\\\"");
+                        break;
+                    case '\\':
+                        json.Append("\\\\");
+                        break;
+                    case '\b':
+                        json.Append("\\b");
+                        break;
+                    case '\t':
+                        json.Append("\\t");
+                        break;
+                    case '\n':
+                        json.Append("\\n");
+                        break;
+                    case '\f':
+                        json.Append("\\f");
+                        break;
+                    case '\r':
+                        json.Append("\\r");
+                        break;
+                    default:
+                        if (c < ' ')
+                            json.Append("\\u00").Append(((int)c).ToString("x2", CultureInfo.InvariantCulture));
+                        else
+                            json.Append(c);
 
-                json.WriteEndArray();
-                json.WriteString("eclass", node.Class);
-                json.WritePropertyName("cost");
-                if (double.IsFinite(node.Cost))
-                    json.WriteRawValue(Relations.RustFloatDebug.Format(node.Cost));
-                else
-                    json.WriteNullValue();
-
-                json.WriteBoolean("subsumed", node.Subsumed);
-                json.WriteEndObject();
+                        break;
+                }
             }
 
-            json.WriteEndObject();
-            json.WriteStartArray("root_eclasses");
-            foreach (var root in RootClasses)
-                json.WriteStringValue(root);
-
-            json.WriteEndArray();
-            json.WriteStartObject("class_data");
-            foreach (var @class in Classes)
-            {
-                json.WriteStartObject(@class.Id);
-                json.WriteString("type", @class.Type);
-                json.WriteEndObject();
-            }
-
-            json.WriteEndObject();
-            json.WriteEndObject();
+            json.Append('"');
         }
-
     }
 
 }
