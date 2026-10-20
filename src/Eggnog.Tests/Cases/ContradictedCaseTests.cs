@@ -76,8 +76,10 @@ namespace Eggnog.Tests.Cases
             Refused(() => @case.CountRows(t.Tag));
             Refused(() => @case.Rows(t.Tag));
             Refused(() => @case.Extract(a));
+            Refused(() => @case.ExtractVariants(a, 2));
             Refused(() => @case.CreateExtractor());
             Refused(() => extractor.Extract(mine));
+            Refused(() => extractor.ExtractVariants(mine, 2));
             Refused(() => extractor.TryGetCost(mine, out _));
             Refused(() => @case.Make(t.B.Of()));
             Refused(() => @case.Write(w => w.Assume(t.Tag.Of(b))));
@@ -250,6 +252,7 @@ namespace Eggnog.Tests.Cases
                     Assert.Equal(scope.Path, refused.ScopePath);
                     Assert.Throws<ScopeContradictedException>(() => extractor.TryGetCost(a, out _));
                     Assert.Throws<ScopeContradictedException>(() => extractor.TryExtract(a, out _));
+                    Assert.Throws<ScopeContradictedException>(() => extractor.ExtractVariants(a, 2));
                 }
 
                 Assert.True(@case.IsContradictory);
@@ -370,6 +373,7 @@ namespace Eggnog.Tests.Cases
             var refused = Assert.Throws<ScopeContradictedException>(() => extractor.Extract(a));
             Assert.Equal(child.Path, refused.ScopePath);
             Assert.Throws<ScopeContradictedException>(() => extractor.TryGetCost(a, out _));
+            Assert.Throws<ScopeContradictedException>(() => extractor.ExtractVariants(a, 2));
         }
 
         /// <summary>

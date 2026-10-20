@@ -81,7 +81,7 @@ namespace Eggnog.Relations
                         for (var i = 0; i < children; i++)
                             arguments.Add(memo[Key(columnSorts[i], rowCells[row + i])]);
 
-                        memo.Add(key, builder.Node(frame.Sort, frame.Value, node, CollectionsMarshal.AsSpan(arguments)));
+                        memo.Add(key, builder.Node(frame.Sort, frame.Value, node, classCost[owner], CollectionsMarshal.AsSpan(arguments)));
                         break;
                     }
                     default:

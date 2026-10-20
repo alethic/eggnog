@@ -115,6 +115,7 @@ sealed class Eggnog.Extractor
     Boolean TryGetCost<TSort : struct, ISort<TSort>>(TSort root, out Int64 cost)
     CostModel Costs { get }
     ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root)
+    IReadOnlyList<ExtractedTerm> ExtractVariants<TSort : struct, ISort<TSort>>(TSort root, Int32 count)
     Scope Scope { get }
 abstract class Eggnog.Fact
     override String ToString()
@@ -397,6 +398,7 @@ sealed class Eggnog.Scope : IDisposable
     Exception Failure { get }
     ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root, CostModel costs = null)
     Extractor CreateExtractor(CostModel costs = null)
+    IReadOnlyList<ExtractedTerm> ExtractVariants<TSort : struct, ISort<TSort>>(TSort root, Int32 count, CostModel costs = null)
     IReadOnlyList<Rule> LocalRules { get }
     IReadOnlyList<Scope> Children { get }
     IReadOnlyList<TableRow> Rows(TableHandle table)

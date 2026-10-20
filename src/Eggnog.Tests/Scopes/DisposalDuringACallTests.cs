@@ -86,6 +86,7 @@ namespace Eggnog.Tests.Scopes
             Assert.True(child.Engine.IsDisposed);
             Assert.Empty(parent.Children);
             Assert.Throws<ObjectDisposedException>(() => extractor.Extract(node));
+            Assert.Throws<ObjectDisposedException>(() => extractor.ExtractVariants(node, 2));
             Assert.Contains("which is disposed", Assert.Throws<ArgumentException>(() => parent.CreateChild().Find(node)).Message);
         }
 
