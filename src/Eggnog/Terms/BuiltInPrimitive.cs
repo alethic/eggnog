@@ -48,6 +48,18 @@ namespace Eggnog
             new(name, function, false);
 
         /// <summary>
+        /// A comparison: a <c>bool</c> primitive of two parameters named as egglog's value form (<c>bool-&lt;</c>), whose
+        /// filter renders as egglog's fallible form (<c>&lt;</c>).
+        /// </summary>
+        /// <typeparam name="T">The parameter type.</typeparam>
+        /// <param name="filterName">egglog's fallible form, which a filter renders with.</param>
+        /// <param name="valueName">egglog's value form, which a value renders with.</param>
+        /// <param name="function">The function.</param>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, T, bool> Comparison<T>(string filterName, string valueName, Func<T, T, bool> function) =>
+            new(valueName, function, false) { FilterName = filterName };
+
+        /// <summary>
         /// A partial primitive of one parameter.
         /// </summary>
         /// <typeparam name="T1">The parameter type.</typeparam>

@@ -2,9 +2,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// egglog's <c>bool</c> primitives, with egglog's names. egglog's <c>or</c> takes any number of arguments; here
-    /// <see cref="Or"/> takes two, and more nest. egglog's <c>guard</c> is a filter
-    /// (<see cref="RuleBuilder.Where(Term{bool})"/>).
+    /// egglog's <c>bool</c> primitives, with egglog's names. <see cref="Or"/> takes any number of arguments, as egglog's
+    /// does. egglog's <c>guard</c> is a filter (<see cref="RuleBuilder.Where(Term{bool})"/>), which renders as it.
     /// </summary>
     public static class BooleanPrimitives
     {
@@ -20,9 +19,16 @@ namespace Eggnog
         public static Primitive<bool, bool, bool> And { get; } = BuiltInPrimitive.Total<bool, bool, bool>("and", static (a, b) => a && b);
 
         /// <summary>
-        /// Gets <c>or</c> of two.
+        /// Gets <c>or</c> of any number of arguments; of none, <c>false</c>.
         /// </summary>
-        public static Primitive<bool, bool, bool> Or { get; } = BuiltInPrimitive.Total<bool, bool, bool>("or", static (a, b) => a || b);
+        public static VariadicPrimitive<bool, bool> Or { get; } = new("or", static xs =>
+        {
+            foreach (var x in xs)
+                if (x)
+                    return true;
+
+            return false;
+        });
 
         /// <summary>
         /// Gets <c>xor</c>.

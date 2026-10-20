@@ -18,7 +18,7 @@ namespace Eggnog
     /// operation throws: <see cref="OverflowException"/> for an overflow, <see cref="DivideByZeroException"/> for a zero
     /// divisor, and <see cref="InvalidOperationException"/> for a shift count or a <see cref="Log2"/> out of range. The
     /// comparisons return a <c>bool</c>, which is egglog's <c>bool-&lt;</c> family as a value and its <c>&lt;</c> family
-    /// as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>); they render with the filter's name.
+    /// as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>), and render as each.
     /// </remarks>
     public static class Primitives
     {
@@ -29,6 +29,13 @@ namespace Eggnog
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
         public static Primitive<T, ValueSet<T>> Singleton<T>() where T : notnull => PrimitiveCache<T>.Singleton;
+
+        /// <summary>
+        /// <c>set-of</c> of any number of elements, as egglog's; of none, the empty set, egglog's <c>set-empty</c>.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static VariadicPrimitive<T, ValueSet<T>> SetOf<T>() where T : notnull => PrimitiveCache<T>.SetOf;
 
         /// <summary>
         /// <c>set-union</c>.
@@ -66,11 +73,18 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>() where T : notnull => PrimitiveCache<T>.Remove;
 
         /// <summary>
-        /// <c>set-contains</c>.
+        /// <c>set-contains</c>: egglog's filter, and a <c>bool</c> as a value, an addition.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
         public static Primitive<ValueSet<T>, T, bool> Contains<T>() where T : notnull => PrimitiveCache<T>.Contains;
+
+        /// <summary>
+        /// <c>set-not-contains</c>: egglog's filter, and a <c>bool</c> as a value, an addition.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<ValueSet<T>, T, bool> NotContains<T>() where T : notnull => PrimitiveCache<T>.NotContains;
 
         /// <summary>
         /// <c>set-subset</c>: whether the first set is a subset of the second.
@@ -80,7 +94,8 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, ValueSet<T>, bool> IsSubsetOf<T>() where T : notnull => PrimitiveCache<T>.IsSubsetOf;
 
         /// <summary>
-        /// <c>set-empty</c>: whether the set is empty.
+        /// <c>set-is-empty</c>: whether the set is empty, an addition: egglog writes <c>(= (set-length s) 0)</c>, and its
+        /// <c>set-empty</c> is the empty set, <see cref="ValueSet{T}.Empty"/>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
@@ -94,13 +109,30 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, long> Count<T>() where T : notnull => PrimitiveCache<T>.Count;
 
         /// <summary>
-        /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>. egglog's is generic over every sort; this one is
+        /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>; as a filter, egglog's <c>!=</c>. egglog's is generic over every sort; this one is
         /// generic over the value types, since primitives never take classes (classes are told apart with
         /// <see cref="Term{T}.IsNot(Term{T})"/>).
         /// </summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <returns>The primitive.</returns>
         public static Primitive<T, T, bool> NotEqual<T>() where T : notnull => PrimitiveCache<T>.NotEqual;
+
+        /// <summary>
+        /// <c>ordering-min</c>: of two values, the one whose cell is the smaller, as egglog's compares the values'
+        /// representations. A cell is a small integer itself, or an intern index, as egglog's representation is, so the
+        /// order is that of interning, not of the values. It runs only in a rule: its <c>Function</c> throws
+        /// <see cref="InvalidOperationException"/>, since the cells are the graph's.
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, T, T> OrderingMin<T>() where T : notnull => PrimitiveCache<T>.OrderingMin;
+
+        /// <summary>
+        /// <c>ordering-max</c>: of two values, the one whose cell is the larger (<see cref="OrderingMin{T}"/>).
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, T, T> OrderingMax<T>() where T : notnull => PrimitiveCache<T>.OrderingMax;
 
         /// <summary>
         /// Gets <c>+</c> over <c>i64</c>: partial, like egglog's (<c>checked_add</c>). An overflow has no result: in a
@@ -196,24 +228,24 @@ namespace Eggnog
         public static Primitive<long, long, bool> Equal { get; } = BuiltInPrimitive.Total<long, long, bool>("bool-=", static (a, b) => a == b);
 
         /// <summary>
-        /// Gets <c>&lt;</c> over <c>i64</c>.
+        /// Gets <c>bool-&lt;</c> over <c>i64</c>, whose filter is egglog's <c>&lt;</c>.
         /// </summary>
-        public static Primitive<long, long, bool> Less { get; } = new("<", static (a, b) => a < b, false);
+        public static Primitive<long, long, bool> Less { get; } = BuiltInPrimitive.Comparison<long>("<", "bool-<", static (a, b) => a < b);
 
         /// <summary>
-        /// Gets <c>&lt;=</c> over <c>i64</c>.
+        /// Gets <c>bool-&lt;=</c> over <c>i64</c>, whose filter is egglog's <c>&lt;=</c>.
         /// </summary>
-        public static Primitive<long, long, bool> LessOrEqual { get; } = new("<=", static (a, b) => a <= b, false);
+        public static Primitive<long, long, bool> LessOrEqual { get; } = BuiltInPrimitive.Comparison<long>("<=", "bool-<=", static (a, b) => a <= b);
 
         /// <summary>
-        /// Gets <c>&gt;</c> over <c>i64</c>.
+        /// Gets <c>bool-&gt;</c> over <c>i64</c>, whose filter is egglog's <c>&gt;</c>.
         /// </summary>
-        public static Primitive<long, long, bool> Greater { get; } = new(">", static (a, b) => a > b, false);
+        public static Primitive<long, long, bool> Greater { get; } = BuiltInPrimitive.Comparison<long>(">", "bool->", static (a, b) => a > b);
 
         /// <summary>
-        /// Gets <c>&gt;=</c> over <c>i64</c>.
+        /// Gets <c>bool-&gt;=</c> over <c>i64</c>, whose filter is egglog's <c>&gt;=</c>.
         /// </summary>
-        public static Primitive<long, long, bool> GreaterOrEqual { get; } = new(">=", static (a, b) => a >= b, false);
+        public static Primitive<long, long, bool> GreaterOrEqual { get; } = BuiltInPrimitive.Comparison<long>(">=", "bool->=", static (a, b) => a >= b);
 
         /// <summary>
         /// Gets <c>to-f64</c>: the nearest <c>double</c>, as Rust's <c>as f64</c>.

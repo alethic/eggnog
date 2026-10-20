@@ -134,6 +134,21 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Creates a named primitive of any number of arguments of one type, as egglog's <c>or</c> and <c>set-of</c> are.
+        /// </summary>
+        /// <typeparam name="T">The arguments' type.</typeparam>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="function">The function over all the arguments: pure, deterministic and thread-safe.</param>
+        /// <returns>The primitive.</returns>
+        public static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(string name, Func<IReadOnlyList<T>, TResult> function)
+        {
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(function);
+            return new VariadicPrimitive<T, TResult>(name, function);
+        }
+
+        /// <summary>
         /// Creates a named partial primitive of one parameter, as egglog's <c>-?&gt;</c> primitives are: where
         /// <paramref name="function"/> returns <c>false</c> the call has no result (<see cref="Primitive"/>).
         /// </summary>
@@ -218,6 +233,14 @@ namespace Eggnog
         /// Gets whether the primitive is an anonymous lambda, rendered as <c>&lt;lambda&gt;</c>.
         /// </summary>
         internal bool IsLambda { get; }
+
+        /// <summary>
+        /// Gets the name a filter over the primitive renders with (<see cref="RuleBuilder.Where(Term{bool})"/>): egglog's
+        /// fallible form of a <c>bool</c> primitive, such as <c>&lt;</c> for <c>bool-&lt;</c> or <c>set-contains</c>,
+        /// which matches where the primitive is true; <c>null</c> when egglog has none, and the filter renders as
+        /// <c>(guard …)</c>.
+        /// </summary>
+        internal string? FilterName { get; init; }
 
         /// <summary>
         /// Decodes each argument cell with its parameter's column type, calls the function and encodes the result

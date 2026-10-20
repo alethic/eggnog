@@ -118,11 +118,10 @@ namespace Eggnog.Tests.Rules
         }
 
         /// <summary>
-        /// A <c>double</c> result that would be NaN has no result, since no column holds NaN; egglog's <c>f64</c> would
-        /// hold it.
+        /// A <c>double</c> result that is NaN is a value, as in egglog's <c>f64</c>: one NaN, equal to itself.
         /// </summary>
         [Fact]
-        public void ANaNResultInABodyDropsTheMatch()
+        public void ANaNResultInABodyIsAValue()
         {
             var graph = new EGraph();
             var pair = graph.DefineRelation<double, double>("pair");
@@ -139,8 +138,9 @@ namespace Eggnog.Tests.Rules
             graph.Root.Run(Schedule.Saturate(rules));
 
             Assert.False(graph.Root.IsFaulted);
-            Assert.Equal(1, graph.Root.CountRows(difference));
+            Assert.Equal(2, graph.Root.CountRows(difference));
             Assert.True(graph.Root.Check(difference.Of(2.5)));
+            Assert.True(graph.Root.Check(difference.Of(double.NaN)));
         }
 
         [Fact]

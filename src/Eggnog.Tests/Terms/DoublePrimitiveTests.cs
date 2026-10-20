@@ -7,20 +7,21 @@ namespace Eggnog.Tests.Terms
 
     /// <summary>
     /// egglog's <c>f64</c> primitives in <see cref="DoublePrimitives"/>: their egglog names, which are partial, and their
-    /// values (<c>src/sort/f64.rs</c> at egglog 3.0.0). Division, remainder, <c>log</c> and <c>sqrt</c> have no result
-    /// where egglog's have none, and every result that would be NaN, which no column holds, has none either.
+    /// values (<c>src/sort/f64.rs</c> at egglog 3.0.0) with <c>OrderedFloat</c>'s semantics: NaN is a value, equal to
+    /// itself and above every other. Division, remainder, <c>log</c> and <c>sqrt</c> have no result where egglog's have
+    /// none.
     /// </summary>
     public sealed class DoublePrimitiveTests
     {
 
         public static TheoryData<Primitive, string, bool> Names => new()
         {
-            { DoublePrimitives.Add, "+", true },
-            { DoublePrimitives.Subtract, "-", true },
-            { DoublePrimitives.Multiply, "*", true },
+            { DoublePrimitives.Add, "+", false },
+            { DoublePrimitives.Subtract, "-", false },
+            { DoublePrimitives.Multiply, "*", false },
             { DoublePrimitives.Divide, "/", true },
             { DoublePrimitives.Remainder, "%", true },
-            { DoublePrimitives.Power, "^", true },
+            { DoublePrimitives.Power, "^", false },
             { DoublePrimitives.Negate, "neg", false },
             { DoublePrimitives.Abs, "abs", false },
             { DoublePrimitives.Min, "min", false },
@@ -28,10 +29,10 @@ namespace Eggnog.Tests.Terms
             { DoublePrimitives.Exp, "exp", false },
             { DoublePrimitives.Log, "log", true },
             { DoublePrimitives.Sqrt, "sqrt", true },
-            { DoublePrimitives.Less, "<", false },
-            { DoublePrimitives.LessOrEqual, "<=", false },
-            { DoublePrimitives.Greater, ">", false },
-            { DoublePrimitives.GreaterOrEqual, ">=", false },
+            { DoublePrimitives.Less, "bool-<", false },
+            { DoublePrimitives.LessOrEqual, "bool-<=", false },
+            { DoublePrimitives.Greater, "bool->", false },
+            { DoublePrimitives.GreaterOrEqual, "bool->=", false },
             { DoublePrimitives.ToInt64, "to-i64", false },
             { DoublePrimitives.Format, "to-string", false },
         };
@@ -73,15 +74,41 @@ namespace Eggnog.Tests.Terms
             Assert.False(DoublePrimitives.Remainder.TryInvoke(a, -b, out _));
         }
 
+        /// <summary>
+        /// A NaN result is a result, as in egglog's <c>f64</c>.
+        /// </summary>
         [Fact]
-        public void AResultThatWouldBeNaNHasNoResult()
+        public void ANaNResultIsAResult()
         {
-            Assert.False(DoublePrimitives.Add.TryInvoke(double.PositiveInfinity, double.NegativeInfinity, out _));
-            Assert.False(DoublePrimitives.Subtract.TryInvoke(double.PositiveInfinity, double.PositiveInfinity, out _));
-            Assert.False(DoublePrimitives.Multiply.TryInvoke(0.0, double.PositiveInfinity, out _));
-            Assert.False(DoublePrimitives.Divide.TryInvoke(double.PositiveInfinity, double.PositiveInfinity, out _));
-            Assert.False(DoublePrimitives.Remainder.TryInvoke(double.PositiveInfinity, 2.0, out _));
-            Assert.False(DoublePrimitives.Power.TryInvoke(-8.0, 1.0 / 3.0, out _));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Add, double.PositiveInfinity, double.NegativeInfinity)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Subtract, double.PositiveInfinity, double.PositiveInfinity)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Multiply, 0.0, double.PositiveInfinity)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Divide, double.PositiveInfinity, double.PositiveInfinity)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Remainder, double.PositiveInfinity, 2.0)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Power, -8.0, 1.0 / 3.0)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Divide, 1.0, double.NaN)));
+        }
+
+        /// <summary>
+        /// In <c>OrderedFloat</c>'s order NaN equals NaN and is above everything, infinity included, so it is the
+        /// maximum, and <c>log</c> and <c>sqrt</c> of NaN, which is above 0, are NaN.
+        /// </summary>
+        [Fact]
+        public void NaNIsAboveEveryValue()
+        {
+            Assert.True(DoublePrimitives.Less.Function(double.PositiveInfinity, double.NaN));
+            Assert.False(DoublePrimitives.Less.Function(double.NaN, double.NaN));
+            Assert.True(DoublePrimitives.LessOrEqual.Function(double.NaN, double.NaN));
+            Assert.True(DoublePrimitives.Greater.Function(double.NaN, 1.0));
+            Assert.True(DoublePrimitives.GreaterOrEqual.Function(double.NaN, double.NaN));
+            Assert.True(double.IsNaN(DoublePrimitives.Max.Function(1.0, double.NaN)));
+            Assert.True(double.IsNaN(DoublePrimitives.Max.Function(double.NaN, 1.0)));
+            Assert.Equal(1.0, DoublePrimitives.Min.Function(1.0, double.NaN));
+            Assert.Equal(1.0, DoublePrimitives.Min.Function(double.NaN, 1.0));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Log, double.NaN)));
+            Assert.True(double.IsNaN(Some(DoublePrimitives.Sqrt, double.NaN)));
+            Assert.Equal(0, DoublePrimitives.ToInt64.Function(double.NaN));
+            Assert.Equal("NaN", DoublePrimitives.Format.Function(double.NaN));
         }
 
         [Fact]

@@ -5,9 +5,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>. Encoding maps −0.0 to +0.0 and rejects NaN, because
-    /// equal values must have equal cells: <c>DoubleCodec</c> treats −0.0 and +0.0 as one value and decodes whichever
-    /// was interned first, and NaN equals nothing.
+    /// <c>double</c> over <c>DoubleCodec</c>, named <c>f64</c>, with egglog's <c>OrderedFloat</c> semantics
+    /// (<see cref="OrderedDouble"/>): NaN is a value, equal to itself and greater than every other value, and −0.0
+    /// equals +0.0. Encoding maps −0.0 to +0.0 and every NaN to <see cref="double.NaN"/>, because equal values must have
+    /// equal cells: <c>DoubleCodec</c> treats −0.0 and +0.0 as one value and decodes whichever was interned first.
     /// </summary>
     internal sealed class DoubleColumnType : ColumnType<double>
     {
@@ -40,13 +41,7 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryEncodeExisting(double value, out uint cell)
         {
-            if (double.IsNaN(value))
-            {
-                cell = 0;
-                return false;
-            }
-
-            var found = values.TryGetExisting<Relations.DoubleCodec, double>(value == 0 ? 0.0 : value, out var boxed);
+            var found = values.TryGetExisting<Relations.DoubleCodec, double>(Normalize(value), out var boxed);
             cell = boxed.Rep;
             return found;
         }
@@ -58,19 +53,12 @@ namespace Eggnog
         internal override string FormatValue(double value) => Relations.LiteralText.Float(value);
 
         /// <inheritdoc />
-        internal override int CompareValues(double x, double y) => x.CompareTo(y);
+        internal override int CompareValues(double x, double y) => OrderedDouble.CompareValues(x, y);
 
         /// <summary>
-        /// Maps −0.0 to +0.0 and rejects NaN.
+        /// Maps −0.0 to +0.0 and every NaN to <see cref="double.NaN"/>: <c>OrderedFloat</c>'s one zero and one NaN.
         /// </summary>
-        /// <exception cref="ArgumentException"><paramref name="value"/> is NaN.</exception>
-        static double Normalize(double value)
-        {
-            if (double.IsNaN(value))
-                throw new ArgumentException("NaN is not a value: it equals nothing, so no column can hold it.", nameof(value));
-
-            return value == 0 ? 0.0 : value;
-        }
+        static double Normalize(double value) => double.IsNaN(value) ? double.NaN : value == 0 ? 0.0 : value;
 
     }
 

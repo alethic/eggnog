@@ -101,8 +101,8 @@ A column holds either a class or a value.
   descendants and in its calls already in progress, which keep it from being released. Only the library makes
   `ClassId`s; `default(ClassId)` names no class. Two `ClassId`s of one class may differ (`Find` returns the canonical
   one), so classes are compared with `Scope.AreEqual`.
-- **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (with -0.0 normalized and NaN
-  refused), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
+- **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (egglog's `f64`, with its
+  `OrderedFloat` semantics: -0.0 is 0.0, and NaN is one value, equal to itself and above every other), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
   `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>` and
   `RegisterSet<T>`.
@@ -173,9 +173,10 @@ application (`f.Of(a, b)` for a function or constructor), a primitive applicatio
 user primitive made with `Primitive.Create` or `Primitive.CreatePartial`), or a computation over a lambda
 (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
 value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). Their comparisons return a `bool`: as a
-filter they are egglog's `<` family, and as a value its `bool-<` family where egglog has one. egglog's variadic `or` and
-string `+` take two arguments here; the departures are decision 22 of [`engine/decisions.md`](engine/decisions.md).
+(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A comparison returns a `bool`: as a value it
+is egglog's `bool-<`, and as a filter egglog's fallible `<`, and it renders so; any other filter renders as egglog's
+`(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
+`Primitive.CreateVariadic`). What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
 (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule
@@ -216,8 +217,7 @@ rules.DefineRule("a singleton domain makes a path present", r =>
 - A primitive or lambda that throws fails the rule: the run throws `RuleEvaluationException` naming the rule and the
   bindings, and the scope is faulted (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
   (`Primitive.IsPartial`): it has no result for some arguments. The built-ins are partial where egglog's are (checked
-  `i64` arithmetic, division by zero, `log`, `sqrt`, `from-string`), and so is every `f64` primitive whose result can be
-  NaN, which no column holds; `Primitive.CreatePartial` makes a user's. No result drops the match in a body let, a
+  `i64` arithmetic, division by zero, `log`, `sqrt`, `from-string`); `Primitive.CreatePartial` makes a user's. No result drops the match in a body let, a
   filter and a query; in a head and in a split's case assumptions the primitive's function throws, which fails the
   rule, where egglog panics.
 

@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Rendering
                 r.Where(x, y, (a, b) => a < b);
                 r.Then(t.Num.Of(Compute.Of(x, y, (a, b) => a + b)));
             });
-            Assert.Equal("(rule ((num x) (num y) (<lambda> x y)) ((num (<lambda> x y))) :ruleset rules)", rule.ToString());
+            Assert.Equal("(rule ((num x) (num y) (guard (<lambda> x y))) ((num (<lambda> x y))) :ruleset rules)", rule.ToString());
         }
 
         [Fact]
@@ -187,7 +187,7 @@ namespace Eggnog.Tests.Rendering
             var tautology = c.Rewrite.Rules[4];
             Assert.Equal("declared tautology", tautology.Name);
             Assert.Equal(
-                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (set-subset d s)) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
+                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (guard (set-subset d s))) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
                 tautology.ToString());
 
             var lower = c.Rewrite.Rules[0];

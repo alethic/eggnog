@@ -15,10 +15,8 @@ namespace Eggnog.Tests.Terms
         {
             { BooleanPrimitives.Not, "not" },
             { BooleanPrimitives.And, "and" },
-            { BooleanPrimitives.Or, "or" },
             { BooleanPrimitives.Xor, "xor" },
             { BooleanPrimitives.Implies, "=>" },
-            { StringPrimitives.Concat, "+" },
             { StringPrimitives.Replace, "replace" },
             { StringPrimitives.CountMatches, "count-matches" },
         };
@@ -31,6 +29,21 @@ namespace Eggnog.Tests.Terms
             Assert.False(primitive.IsPartial);
         }
 
+        /// <summary>
+        /// egglog's <c>or</c> and string <c>+</c> take any number of arguments, none included.
+        /// </summary>
+        [Fact]
+        public void OrAndConcatTakeAnyNumberOfArguments()
+        {
+            Assert.Equal("or", BooleanPrimitives.Or.Name);
+            Assert.Equal("+", StringPrimitives.Concat.Name);
+            Assert.False(BooleanPrimitives.Or.Function(System.Array.Empty<bool>()));
+            Assert.True(BooleanPrimitives.Or.Function(new[] { false, false, true }));
+            Assert.False(BooleanPrimitives.Or.Function(new[] { false, false, false }));
+            Assert.Equal("", StringPrimitives.Concat.Function(System.Array.Empty<string>()));
+            Assert.Equal("abc", StringPrimitives.Concat.Function(new[] { "a", "b", "c" }));
+        }
+
         [Theory]
         [InlineData(false, false)]
         [InlineData(false, true)]
@@ -40,7 +53,7 @@ namespace Eggnog.Tests.Terms
         {
             Assert.Equal(!a, BooleanPrimitives.Not.Function(a));
             Assert.Equal(a && b, BooleanPrimitives.And.Function(a, b));
-            Assert.Equal(a || b, BooleanPrimitives.Or.Function(a, b));
+            Assert.Equal(a || b, BooleanPrimitives.Or.Function(new[] { a, b }));
             Assert.Equal(a != b, BooleanPrimitives.Xor.Function(a, b));
             Assert.Equal(!a || b, BooleanPrimitives.Implies.Function(a, b));
         }
@@ -48,8 +61,8 @@ namespace Eggnog.Tests.Terms
         [Fact]
         public void ConcatJoinsTwoStrings()
         {
-            Assert.Equal("ab", StringPrimitives.Concat.Function("a", "b"));
-            Assert.Equal("a", StringPrimitives.Concat.Function("a", ""));
+            Assert.Equal("ab", StringPrimitives.Concat.Function(new[] { "a", "b" }));
+            Assert.Equal("a", StringPrimitives.Concat.Function(new[] { "a", "" }));
         }
 
         [Theory]

@@ -14,6 +14,7 @@ namespace Eggnog
     {
 
         readonly PartialFunc<T1, T2, TResult>? partial;
+        readonly Func<uint, uint, uint>? cells;
 
         /// <summary>
         /// Initializes a new instance of a total primitive.
@@ -38,6 +39,20 @@ namespace Eggnog
         {
             Function = function;
             this.partial = partial;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of a primitive over its arguments' cells, which returns one of them: egglog's
+        /// <c>ordering-min</c> and <c>ordering-max</c>, which compare values' representations.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="function">The function over values, which throws: it needs the cells.</param>
+        /// <param name="cells">The function over the cells.</param>
+        internal Primitive(string name, Func<T1, T2, TResult> function, Func<uint, uint, uint> cells)
+            : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, false)
+        {
+            Function = function;
+            this.cells = cells;
         }
 
         /// <summary>
@@ -80,11 +95,19 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
-            ((ColumnType<TResult>)result).Encode(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], null), ((ColumnType<T2>)parameters[1]).Decode(arguments[1], null)));
+            cells is not null
+                ? cells(arguments[0], arguments[1])
+                : ((ColumnType<TResult>)result).Encode(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], null), ((ColumnType<T2>)parameters[1]).Decode(arguments[1], null)));
 
         /// <inheritdoc />
         internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell)
         {
+            if (cells is not null)
+            {
+                cell = cells(arguments[0], arguments[1]);
+                return true;
+            }
+
             var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], null);
             var b = ((ColumnType<T2>)parameters[1]).Decode(arguments[1], null);
             if (TryInvoke(a, b, out var value))

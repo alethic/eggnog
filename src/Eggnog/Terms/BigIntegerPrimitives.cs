@@ -16,8 +16,8 @@ namespace Eggnog
     /// <see cref="DivideByZeroException"/> for a zero divisor, as <see cref="BigInteger"/>'s own division does, and
     /// <see cref="InvalidOperationException"/> otherwise. Division truncates toward zero, the remainder takes the dividend's
     /// sign, and the bitwise operators and shifts act on the two's complement, as in egglog (num-bigint). The comparisons
-    /// return a <c>bool</c>; as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>) they are egglog's <c>&lt;</c>
-    /// family.
+    /// return a <c>bool</c>, egglog's <c>bool-&lt;</c> family as a value and its <c>&lt;</c> family as a filter
+    /// (<see cref="RuleBuilder.Where(Term{bool})"/>), and render as each.
     /// </remarks>
     public static class BigIntegerPrimitives
     {
@@ -123,28 +123,28 @@ namespace Eggnog
             BuiltInPrimitive.Total<BigInteger, BigInteger, bool>("bool-=", static (a, b) => a == b);
 
         /// <summary>
-        /// Gets <c>&lt;</c> over <c>BigInt</c>.
+        /// Gets <c>bool-&lt;</c> over <c>BigInt</c>, whose filter is egglog's <c>&lt;</c>.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, bool> Less { get; } =
-            BuiltInPrimitive.Total<BigInteger, BigInteger, bool>("<", static (a, b) => a < b);
+            BuiltInPrimitive.Comparison<BigInteger>("<", "bool-<", static (a, b) => a < b);
 
         /// <summary>
-        /// Gets <c>&lt;=</c> over <c>BigInt</c>.
+        /// Gets <c>bool-&lt;=</c> over <c>BigInt</c>, whose filter is egglog's <c>&lt;=</c>.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, bool> LessOrEqual { get; } =
-            BuiltInPrimitive.Total<BigInteger, BigInteger, bool>("<=", static (a, b) => a <= b);
+            BuiltInPrimitive.Comparison<BigInteger>("<=", "bool-<=", static (a, b) => a <= b);
 
         /// <summary>
-        /// Gets <c>&gt;</c> over <c>BigInt</c>.
+        /// Gets <c>bool-&gt;</c> over <c>BigInt</c>, whose filter is egglog's <c>&gt;</c>.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, bool> Greater { get; } =
-            BuiltInPrimitive.Total<BigInteger, BigInteger, bool>(">", static (a, b) => a > b);
+            BuiltInPrimitive.Comparison<BigInteger>(">", "bool->", static (a, b) => a > b);
 
         /// <summary>
-        /// Gets <c>&gt;=</c> over <c>BigInt</c>.
+        /// Gets <c>bool-&gt;=</c> over <c>BigInt</c>, whose filter is egglog's <c>&gt;=</c>.
         /// </summary>
         public static Primitive<BigInteger, BigInteger, bool> GreaterOrEqual { get; } =
-            BuiltInPrimitive.Total<BigInteger, BigInteger, bool>(">=", static (a, b) => a >= b);
+            BuiltInPrimitive.Comparison<BigInteger>(">=", "bool->=", static (a, b) => a >= b);
 
         /// <summary>
         /// Gets <c>to-string</c> over <c>BigInt</c>: the decimal digits, with a leading <c>-</c> when negative.

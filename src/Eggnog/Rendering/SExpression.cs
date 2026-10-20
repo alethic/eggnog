@@ -252,18 +252,24 @@ namespace Eggnog
                     break;
                 }
                 default:
-                {
-                    builder.Append('(').Append(shape.Primitive!.Name);
-                    foreach (var argument in shape.Arguments)
-                    {
-                        builder.Append(' ');
-                        Append(builder, argument, null, enclosing);
-                    }
-
-                    builder.Append(')');
+                    AppendComputation(builder, shape, shape.Primitive!.Name, enclosing);
                     break;
-                }
             }
+        }
+
+        /// <summary>
+        /// Appends a primitive's application under a name: its own, or the name of its filter form.
+        /// </summary>
+        static void AppendComputation(StringBuilder builder, TermShape shape, string name, ScopeTag? enclosing)
+        {
+            builder.Append('(').Append(name);
+            foreach (var argument in shape.Arguments)
+            {
+                builder.Append(' ');
+                Append(builder, argument, null, enclosing);
+            }
+
+            builder.Append(')');
         }
 
         /// <summary>
@@ -294,7 +300,19 @@ namespace Eggnog
                     Append(builder, exists.Application, null, enclosing);
                     break;
                 case FilterFact filter:
-                    Append(builder, filter.Condition, null, enclosing);
+                    // egglog filters with a fallible primitive, which matches where it has a result: a bool primitive's
+                    // filter form (bool-< filters as <), or guard of any other condition.
+                    if (filter.Condition.Shape is { Kind: TermShapeKind.Computation, Primitive.FilterName: { } filterName } condition)
+                    {
+                        AppendComputation(builder, condition, filterName, enclosing);
+                    }
+                    else
+                    {
+                        builder.Append("(guard ");
+                        Append(builder, filter.Condition, null, enclosing);
+                        builder.Append(')');
+                    }
+
                     break;
                 case ScopedFact scoped:
                     // Fact.In renders as its facts, each application read in the tagged scope: (present@schema p).

@@ -6,16 +6,15 @@ namespace Eggnog
 
     /// <summary>
     /// egglog's <c>String</c> primitives, with egglog's names and Rust's <c>str</c> semantics. Matching is ordinal, by
-    /// code unit. egglog's <c>+</c> takes any number of arguments; here <see cref="Concat"/> takes two, and more nest.
+    /// code unit. <see cref="Concat"/> takes any number of arguments, as egglog's <c>+</c> does.
     /// </summary>
     public static class StringPrimitives
     {
 
         /// <summary>
-        /// Gets <c>+</c> over <c>String</c>: the concatenation of two.
+        /// Gets <c>+</c> over <c>String</c>: the concatenation of any number of strings; of none, the empty string.
         /// </summary>
-        public static Primitive<string, string, string> Concat { get; } =
-            BuiltInPrimitive.Total<string, string, string>("+", static (a, b) => string.Concat(a, b));
+        public static VariadicPrimitive<string, string> Concat { get; } = new("+", static xs => string.Concat(xs));
 
         /// <summary>
         /// Gets <c>replace</c>: the first string with every match of the second, left to right and not overlapping,
