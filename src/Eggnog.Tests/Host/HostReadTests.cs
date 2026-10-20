@@ -315,7 +315,7 @@ namespace Eggnog.Tests.Host
             Assert.Equal(0, t.Root.CountRows(t.Graph.Contradiction));
             t.Root.Assume(t.Graph.Contradiction.Of());
             Assert.Equal(1, t.Root.CountRows(t.Graph.Contradiction));
-            Assert.Equal("(contradiction)", t.Root.Rows(t.Graph.Contradiction)[0].ToString());
+            Assert.Equal("($contradiction)", t.Root.Rows(t.Graph.Contradiction)[0].ToString());
         }
 
     }
