@@ -784,9 +784,10 @@ The gate each result decides is in the [roadmap](../../docs/roadmap.md).
 - The two campaign candidates against `main` on the root set: `campaign/basicmath-port`, as a three-build run with
   `3a6e0b7`, which also times `BridgeMathBenchmarks`, `BridgeAcBenchmarks`, `ManyChildrenBenchmarks`,
   `PerChildCostBenchmarks` and the transient children of `QueryScopeBenchmarks`, because every multi-layer child atom
-  takes the port's layered paths; and `campaign/write-alloc`, under both collectors. Each is rebased onto `main` and its
-  full suite rerun on both frameworks before it lands. The idle-rule allocation commit's `BridgeMathBenchmarks` is
-  rechecked against its parent.
+  takes the port's layered paths; and `campaign/write-alloc`, under both collectors, which GitHub runners have timed
+  too ([The write-allocation comparison](#the-write-allocation-comparison)). Each is rebased onto `main` and its full
+  suite rerun on both frameworks before it lands. The idle-rule allocation commit's `BridgeMathBenchmarks` is rechecked
+  against its parent.
 - The context classes and `BusyParentCatchUpBenchmarks`, for the time per child and per examined row.
 - The library classes (`QueryScopeBenchmarks`, `LibraryRunOverheadBenchmarks`, `MathMicrobenchmarkBenchmarks`) on the
   launch matrix.
@@ -843,3 +844,26 @@ foreach ($round in 1, 2) {
 }
 src\Eggnog.Benchmarks\bin\Release\net10.0\Eggnog.Benchmarks.exe --compare idle --baseline main --min-time 0us
 ```
+
+### The write-allocation comparison
+
+The write-allocation commits (roadmap, "Write allocation" and "The write-allocation gate") were timed against `main` on
+GitHub runners ([Comparing on a CI runner](#comparing-on-a-ci-runner); 4 vCPUs, AMD EPYC 7763): the root set, two
+rounds, once under each collector, with `--min-time 0us`. The benchmark logs confirm each run's collector. The runners'
+same-build spread of 2-15% left almost every case inconclusive under the 1% rule, so these figures are read with
+`--spread 0.05`:
+
+- Server collector: `WritesBenchmarks` about 12% faster (cases 0.77-0.93; at 8 threads `ParallelInsert` 0.84-0.86 and
+  `ParallelInsertMerge2` 0.89-0.91), and the rest of the set flat within the runner's noise.
+- Workstation collector: `WritesBenchmarks` about 15% faster (at 8 threads 0.88-0.93), and the rest flat except
+  `ActionLookupBenchmarks.Run(Mode=Parallel, Rows=200000)`, 10-11% slower in both rounds, and
+  `ConstrainedScanBenchmarks.RefineLive` at 200,000 rows with tombstones, 3-4% slower.
+
+The `ActionLookupBenchmarks` case was then timed alone under the workstation collector, four to six rounds a runner. It
+ran 4-10% slower than `main`, depending on the runner. Comparisons on one runner with one commit reverted put about 4% on
+"Return the storage staging buffers grow out of to the pool", about 3.5% on "Reserve each shard's key index for the keys
+a merge may add", and nothing on "Grow staging buffers to the size of the table's last flush". The cost is not more
+collection work: in that case the branch allocates about 88 MB a run against `main`'s 97 MB, with fewer gen0
+collections and the same pause time. The reserve adds about 1,000-1,500 page faults a run (measured on Windows with
+`DOTNET_PROCESSOR_COUNT=4`; `DOTNET_GCRetainVM=1` does not change it), and returning only grown-out arrays of at most
+16,384 cells to the pool did not help. The mechanism is not settled.
