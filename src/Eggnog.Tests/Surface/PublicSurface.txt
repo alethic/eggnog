@@ -568,8 +568,8 @@ enum Eggnog.TableKind
     Constructor
 sealed class Eggnog.TableOptions
     Boolean Extractable { get; init }
-    Boolean Subsumable { get; init }
     Boolean? Lift { get; init }
+    Boolean? Subsumable { get; init }
     TableRole Role { get; init }
     ctor()
 enum Eggnog.TableRole

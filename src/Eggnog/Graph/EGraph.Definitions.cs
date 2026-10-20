@@ -399,7 +399,7 @@ namespace Eggnog
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));
 
                     // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
-                    if (kind == TableKind.Function && options.Subsumable)
+                    if (kind == TableKind.Function && options.Subsumable == true)
                         throw new ArgumentException($"Function '{name}' cannot be subsumable; only relations and constructors can be subsumed.", nameof(options));
 
                     break;
@@ -420,7 +420,9 @@ namespace Eggnog
                 var columns = new ColumnType[keys.Length + 1];
                 keys.CopyTo(columns, 0);
                 columns[^1] = output ?? Unit;
-                var function = AddEngineTable(name, kind, columns, lattice, output, options.Subsumable);
+                // As egglog, every relation and constructor is subsumable unless the options opt it out.
+                var subsumable = options.Subsumable ?? kind != TableKind.Function;
+                var function = AddEngineTable(name, kind, columns, lattice, output, subsumable);
                 var handle = create();
                 handle.Graph = this;
                 handle.Name = name;
@@ -430,7 +432,7 @@ namespace Eggnog
                 handle.KeyArray = keys;
                 handle.Output = output;
                 handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
-                handle.Subsumable = options.Subsumable;
+                handle.Subsumable = subsumable;
                 handle.Function = function;
                 handle.Columns = columns;
                 if (handle is FunctionHandle functionHandle)

@@ -101,7 +101,7 @@ namespace Eggnog.Tests.Subsumption
         public void ARejectedSubsumptionRejectsItsBatch()
         {
             var t = new MathTheory();
-            var plain = t.Graph.DefineConstructor<long, Node>("Plain");
+            var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
             var version = t.Root.Version;
 
             t.Root.Write(w =>

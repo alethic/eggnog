@@ -205,14 +205,15 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   shorthand for "where `t = left`, make `t = right`". `Ruleset.DefineBiRewrite` (and `Scope.DefineBiRewrite` for local
   rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
-  (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a table defined
-  `Subsumable` as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
+  (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
+  constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
   lookups, `Check`, `Get` and `Rows` (whose `TableRow.Subsumed` says so) still find it, and a head that makes the term
   gets its class. But no rule body, query or split rule matches it any more (from the next iteration, when a rule
   subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
   rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
-  nothing undoes it. What earlier matches derived from the row stays. Only relations and constructors can opt in, as
-  egglog's language subsumes only those; a table that does not opt in stores no subsumption cell (section 2.13).
+  nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
+  subsumable and no function is; `TableOptions.Subsumable = false` opts a table out, an addition that stores no
+  subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
 - **Heads never read tables.** A function value used in a head must be matched in the body. This keeps every match a
   function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
@@ -490,10 +491,10 @@ with egglog" lists:
    exactness of mirrors all rest on contents that only grow. Subsumption is in the API (section 2.5), because it keeps
    all three: a subsumed row stays and what was derived from it stays, so inherited progress misses nothing, and a rule
    that subsumes never inherits (section 3.8); a lift writes rows, not their subsumption; and mirrors copy subsumptions
-   too, a later subsumption reaching the mirror because the merge restamps the row. A table opts in with `Subsumable`,
-   where egglog makes every constructor and relation subsumable, so that a table that is never subsumed pays no cell per
-   row and no filter per atom. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees
-   them; the other departures are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
+   too, a later subsumption reaching the mirror because the merge restamps the row. Every relation and constructor is
+   subsumable, as in egglog, unless the user opts it out. Queries and split rules skip subsumed rows as rule bodies do,
+   where egglog's `check` sees them; the other departures are listed in decision 20 of
+   [`engine/decisions.md`](engine/decisions.md).
 2. Merges are lattices or assert-equal; there is no `:merge old` or `new`.
 3. Sets hold values only, and are values themselves, not containers of classes.
 4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
