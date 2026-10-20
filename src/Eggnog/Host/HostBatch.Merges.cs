@@ -26,6 +26,7 @@ namespace Eggnog
         Dictionary<uint, List<int>>? uses;
         Queue<(uint A, uint B)>? merges;
         bool mergeCheckDecided;
+        bool mergedClasses;
 
         /// <summary>
         /// Records that the batch merges two classes (canonical or fresh cells), starting the congruence check at the
@@ -35,6 +36,7 @@ namespace Eggnog
         /// key.</exception>
         void NoteMerge(uint a, uint b)
         {
+            mergedClasses = true;
             if (StartMergeCheck() == false)
                 return;
 

@@ -64,6 +64,34 @@ namespace Eggnog.Tests.Host
             Assert.Equal(5L, t.Root.Get(copy.Of(1L)));
         }
 
+        /// <summary>
+        /// A batch stages its merges of classes after its writes, so after a merge it cannot read a function of classes
+        /// as egglog's next command would, with the rows the merge makes equal merged: the read is refused, and the batch
+        /// writes nothing. A function of values may still be read, and two calls give egglog's answer.
+        /// </summary>
+        [Fact]
+        public void AReadOfAFunctionOfClassesAfterAMergeInTheBatchIsRefused()
+        {
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<Node, long>("f");
+            var g = t.Graph.DefineFunction<long, long>("g");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            t.Root.Assume(f.Of(b).Is(7L), g.Of(1L).Is(1L));
+
+            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Assume(t.A.Of().Is(t.B.Of()), g.Of(2L).Is(f.Of(a))));
+
+            Assert.Contains("read it in a later call", e.Message);
+            Assert.False(t.Root.AreEqual(a, t.B.Of()));
+            Assert.False(t.Root.IsFaulted);
+
+            t.Root.Assume(t.A.Of().Is(t.Lit.Of(1L)), g.Of(3L).Is(Primitives.Add.Of(g.Of(1L), 1L)));
+            Assert.Equal(2L, t.Root.Get(g.Of(3L)));
+            t.Root.Assume(t.A.Of().Is(t.B.Of()));
+            t.Root.Assume(g.Of(2L).Is(f.Of(a)));
+            Assert.Equal(7L, t.Root.Get(g.Of(2L)));
+        }
+
         [Fact]
         public void AMissingValueRefusesTheWholeBatch()
         {

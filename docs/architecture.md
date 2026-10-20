@@ -297,13 +297,14 @@ A scope is written through `Assume(facts)`, `Make(term)` (returns the term's cla
 and `Subsume(rows)` (section 2.5). Each call is one atomic batch; `Write(w => ...)` makes several calls one batch
 through a `ScopeWriter`. A batch is planned first, reading only: it validates the facts, checks class origins, interns
 constants, evaluates primitives and reads function values as egglog's top-level actions do (a read sees the batch's
-earlier writes, merged by the function's lattice, as egglog's next command sees the last), resolves existing terms, mints
-ids for new ones, keeps only the rows, subsumptions and unions that do not already hold, and checks every conflict a
-function without a lattice would see, including conflicts a union in the batch would cause through congruence. An
-exception discards the whole batch: a function read with no value, or a primitive with no result or that throws, refuses
-it without faulting the scope. The batch is then staged and flushed: merged,
-rebuilt, and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the
-scope's `Version` nor any extractor.
+earlier writes, merged by the function's lattice, as egglog's next command sees the last; the batch stages its unions
+after its writes, so after a union it refuses a read of a function whose keys are classes, which a later call can make),
+resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not already hold,
+and checks every conflict a function without a lattice would see, including conflicts a union in the batch would cause
+through congruence. An exception discards the whole batch: a function read with no value, or a primitive with no result
+or that throws, refuses it without faulting the scope. The batch is then staged and flushed: merged, rebuilt, and
+visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
+`Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do, and

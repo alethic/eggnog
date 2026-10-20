@@ -223,7 +223,7 @@ namespace Eggnog
         /// <summary>
         /// Checks, without reading the scope's contents, that <see cref="Check"/> can test <paramref name="fact"/>: what it
         /// would refuse whatever the scope holds. With no scope, only the fact's shape: a relation row, an equality or an
-        /// existence, whose terms are constants and table applications (no variable, no computation). With a scope, also
+        /// existence, whose terms are constants, computations and table applications (no variable). With a scope, also
         /// every table and column type is of its graph and every class constant may be used in it. Used for
         /// <c>Until</c> conditions, which <see cref="Check"/> reads only when their node executes.
         /// </summary>

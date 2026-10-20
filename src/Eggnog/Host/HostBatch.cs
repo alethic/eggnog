@@ -15,11 +15,12 @@ namespace Eggnog
     /// <para>
     /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), evaluates primitives and
     /// reads function values, as egglog's top-level actions do (a read sees the batch's earlier writes, merged, as
-    /// egglog's next command would), resolves existing terms by lookup, mints a fresh id per new term, records only the
-    /// rows, subsumptions and unions that do not hold already, and
-    /// checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
-    /// <c>HostBatch.Merges.cs</c>). An exception discards the batch: nothing is staged and <see cref="Origin"/> never
-    /// commits. A <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
+    /// egglog's next command would; after the batch merges classes, a read of a function with a sort key is refused,
+    /// since the merges are staged after the writes), resolves existing terms by lookup, mints a fresh id per new term,
+    /// records only the rows, subsumptions and unions that do not hold already, and checks conflicts of functions
+    /// without a lattice, including those a merge of the batch would cause (see <c>HostBatch.Merges.cs</c>). An
+    /// exception discards the batch: nothing is staged and <see cref="Origin"/> never commits. A
+    /// <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
     /// <see cref="Scope.Write"/> then commits nothing, even when its callback caught the exception.
     /// </para>
     /// <para>
@@ -138,9 +139,16 @@ namespace Eggnog
         /// Reads a function's value for planned keys, as egglog's top-level lookup does: the value the batch's earlier
         /// writes left, merged as the engine will merge them, else the stored one.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The function has no value for the keys.</exception>
+        /// <exception cref="InvalidOperationException">The function has no value for the keys; or it has a sort key, and
+        /// the batch merged classes before the read.</exception>
         uint ReadFunction(TableHandle table, uint[] keys, bool existing)
         {
+            // egglog's next command would read the function after the merge's rebuild, which merges its rows whose keys
+            // become equal; the batch stages its merges after its writes, so it cannot read the function that way.
+            if (mergedClasses && HasSortKey(table))
+                throw new InvalidOperationException(
+                    $"'{table.Name}' is read after this batch merged classes, and its keys are classes; read it in a later call, which sees the merge as egglog's next command does.");
+
             if (currentValues.TryGetValue(Key(table, keys), out var current))
                 return current;
 
