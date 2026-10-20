@@ -158,7 +158,10 @@ namespace Eggnog.Tests.Definitions
             Assert.Equal(Relations.DefaultValKind.Const, relation.Default.Kind);
             Assert.Equal(graph.Unit.Unit, relation.Default.Constant.Rep);
             Assert.Equal(Relations.MergeFnKind.AssertEq, relation.Merge.Kind);
-            Assert.False(relation.CanSubsume);
+            Assert.True(relation.CanSubsume);
+
+            Assert.False(graph.Engine.GetFunctionInfo(plain.Function).CanSubsume);
+            Assert.True(graph.Engine.GetFunctionInfo(c.Function).CanSubsume);
 
             var withLattice = graph.Engine.GetFunctionInfo(latticed.Function);
             Assert.Equal(new[] { text, number }, withLattice.Schema.ToArray());
