@@ -39,6 +39,14 @@ namespace Eggnog
             IdConstantOrigins = idConstantOrigins;
             NamedRegisters = namedRegisters;
             WritesAnalysis = writesAnalysis;
+            foreach (var op in head)
+            {
+                if (op.Kind == HeadOpKind.Write && op.Table is FunctionHandle { Merge: not null } function)
+                {
+                    RootOnlyWrite = function;
+                    break;
+                }
+            }
         }
 
         /// <summary>
@@ -87,6 +95,12 @@ namespace Eggnog
         /// program runs and that must resolve from the running scope.
         /// </summary>
         public ScopeTag[] ReadScopes { get; }
+
+        /// <summary>
+        /// Gets the first function the head writes whose merge is not a lattice (<see cref="FunctionMerge"/>), which only
+        /// the root may write, so that the program runs only there; <c>null</c> when there is none.
+        /// </summary>
+        public FunctionHandle? RootOnlyWrite { get; }
 
         /// <summary>
         /// Gets whether the head writes an analysis table; such a program reads no fact table and no scoped atom, so

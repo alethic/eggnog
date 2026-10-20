@@ -200,7 +200,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a table is this graph's and is not a read-only scoped view: writes never target a scoped handle.
+        /// Checks that a table is this graph's and is not a read-only scoped view: writes never target a scoped handle. Nor
+        /// a function whose merge is not a lattice: a case is a child, and only the root writes one.
         /// </summary>
         void CheckTable(TableHandle table)
         {
@@ -209,6 +210,9 @@ namespace Eggnog
 
             if (table.ReadScope is { } tag)
                 throw Error($"'{table.Name}@{tag.Name}' is read-only");
+
+            if (table is FunctionHandle { Merge: { } merge })
+                throw Error($"'{table.Name}' has the merge '{merge.Name}', which is not a lattice, so only the root may write it, and a case is a child");
         }
 
         /// <summary>

@@ -19,9 +19,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error.
+        /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error, or
+        /// the function has a merge that is not a lattice.
         /// </summary>
         public ValueLattice? Lattice { get; internal set; }
+
+        /// <summary>
+        /// Gets the function's merge that is not a lattice (<see cref="FunctionMerge{T}"/>), which only the root writes;
+        /// <c>null</c> for a function with a lattice or none.
+        /// </summary>
+        internal FunctionMergeDefinition? Merge { get; set; }
 
         /// <summary>
         /// Gets the case join a lift uses for the function's values, over cells: its lattice's

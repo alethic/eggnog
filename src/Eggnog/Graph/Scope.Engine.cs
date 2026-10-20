@@ -33,9 +33,10 @@ namespace Eggnog
         /// <exception cref="ArgumentOutOfRangeException">The iteration, time or row limit is negative, or the case or split
         /// depth limit is less than 1.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen or faulted; a rule or split rule the schedule
-        /// reaches reads a tag no ancestor-or-self of the scope carries (before any work); or the call comes from another
-        /// thread while the scope is in use, from a primitive, lattice, filter or cost function, or from a run
-        /// observer.</exception>
+        /// reaches reads a tag no ancestor-or-self of the scope carries, or a rule that would run below the root, here or
+        /// in a split's cases, writes a function whose merge is not a lattice (both before any work); or the call comes
+        /// from another thread while the scope is in use, from a primitive, lattice, filter or cost function, or from a
+        /// run observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
         /// <exception cref="RuleEvaluationException">An evaluation failure, in this scope or in a case of the run (a split's
         /// assumption that gives a function without a lattice a second value included, and a lattice merge that threw
@@ -77,7 +78,8 @@ namespace Eggnog
                 var rulesets = new HashSet<Ruleset>(ReferenceEqualityComparer.Instance);
                 var conditions = new List<Fact>();
                 var splits = new HashSet<SplitRule>(ReferenceEqualityComparer.Instance);
-                schedule.Collect(rulesets, conditions, splits);
+                var inCases = new HashSet<Ruleset>(ReferenceEqualityComparer.Instance);
+                schedule.Collect(rulesets, conditions, splits, inCases, false);
                 foreach (var ruleset in rulesets)
                     if (ReferenceEquals(ruleset.Graph, Graph) == false)
                         throw new ArgumentException($"Ruleset '{ruleset.Name}' belongs to another graph.", nameof(schedule));
@@ -99,6 +101,15 @@ namespace Eggnog
                 foreach (var split in splits)
                     foreach (var tag in split.Program.Matcher.ReadScopes)
                         ScopeResolver.Resolve(this, tag, $"Split rule '{split.Name}'");
+
+                // Only the root writes a function whose merge is not a lattice, so no rule that writes one runs below it:
+                // in this scope when it is a child, or in the cases of a split, which are children.
+                var below = IsRoot ? inCases : rulesets;
+                if (below.Count > 0)
+                    foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(below), this))
+                        if (rule.Program.RootOnlyWrite is { } function)
+                            throw new InvalidOperationException(
+                                $"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {(IsRoot ? "the cases of a split are children" : $"'{Path}' is not the root")}.");
 
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
                 RunStopReason reason;

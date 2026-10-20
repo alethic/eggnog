@@ -47,6 +47,10 @@ namespace Eggnog
                 if (table.Lift == false || ReferenceEquals(table, graph.Contradiction))
                     continue;
 
+                // Only the root writes a function whose merge is not a lattice, so no case holds a row of one to lift.
+                if (table is FunctionHandle { Merge: not null })
+                    continue;
+
                 switch (table)
                 {
                     case ConstructorHandle:

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Eggnog
@@ -18,6 +19,14 @@ namespace Eggnog
         // a sort; otherwise no merge can conflict, and none of this state exists. It then reads every row of the tables
         // whose keys a merge can change (those functions, and the constructors whose outputs can reach their keys): an
         // O(rows of those tables) scan, once per batch that merges.
+        //
+        // A function with a merge that is not a lattice (FunctionMerge) counts here as one with a lattice at the root: the
+        // rebuild merges its two rows with the merge, as egglog's does, so they never conflict. Below the root, where only
+        // the root may write such a function, the rebuild could not rewrite a row of it, so its rows join the check there.
+        // The engine keeps the smaller id of two merged classes and rewrites the rows that mention the larger, so a merge
+        // in which a class keying such a row is the larger is an InvalidOperationException, before anything is staged.
+        // The overlay therefore tracks each class's smallest cell; a class keying such a row is always its class's
+        // smallest, since a merge that made it larger was refused.
 
         List<(TableHandle Table, uint[] Key, uint Output, bool Stored)>? mergeRows;
         HashSet<TableHandle>? congruent;
@@ -25,6 +34,8 @@ namespace Eggnog
         Dictionary<uint, uint>? overlay;
         Dictionary<uint, List<int>>? uses;
         Queue<(uint A, uint B)>? merges;
+        Dictionary<uint, TableHandle>? rootOnlyKeys;
+        Dictionary<uint, uint>? smallest;
         bool mergeCheckDecided;
         bool mergedClasses;
 
@@ -34,6 +45,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="FactConflictException">The merge would give a function without a lattice two values for one
         /// key.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and the merge would rewrite a row of a
+        /// function whose merge is not a lattice.</exception>
         void NoteMerge(uint a, uint b)
         {
             mergedClasses = true;
@@ -138,7 +151,7 @@ namespace Eggnog
             var sorts = new HashSet<ColumnType>(ReferenceEqualityComparer.Instance);
             foreach (var table in tables)
             {
-                if (table is FunctionHandle { Lattice: null } && HasSortKey(table))
+                if (table is FunctionHandle { Lattice: null } function && (function.Merge is null || scope.IsRoot == false) && HasSortKey(table))
                 {
                     result.Add(table);
                     AddSortKeys(table, sorts);
@@ -198,8 +211,14 @@ namespace Eggnog
             mergeRows.Add((table, key, output, stored));
             var columns = table.KeyArray;
             for (var i = 0; i < key.Length; i++)
-                if (columns[i].Kind == ColumnKind.Sort)
-                    UsesOf(Representative(key[i])).Add(index);
+            {
+                if (columns[i].Kind != ColumnKind.Sort)
+                    continue;
+
+                UsesOf(Representative(key[i])).Add(index);
+                if (table is FunctionHandle { Merge: not null })
+                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(key[i], table);
+            }
 
             Place(index);
         }
@@ -261,6 +280,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="FactConflictException">A merge would give a function without a lattice two values for one
         /// key.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and a merge would rewrite a row of a
+        /// function whose merge is not a lattice.</exception>
         void Close()
         {
             while (merges!.Count > 0)
@@ -279,6 +300,23 @@ namespace Eggnog
                     (fromX, fromY) = (fromY, fromX);
                 }
 
+                // Set only below the root, from the stored rows indexed before the first merge.
+                if (rootOnlyKeys is not null)
+                {
+                    var low = Smallest(x);
+                    var high = Smallest(y);
+                    if (low > high)
+                        (low, high) = (high, low);
+
+                    if (rootOnlyKeys.TryGetValue(high, out var keyed))
+                        throw new InvalidOperationException(
+                            $"'{keyed.Name}' has the merge '{((FunctionHandle)keyed).Merge!.Name}', which is not a lattice, so only the root may write it, and this merge of classes in '{scope.Path}' would rewrite one of its rows.");
+
+                    smallest ??= new Dictionary<uint, uint>();
+                    smallest.Remove(x);
+                    smallest[y] = low;
+                }
+
                 overlay![x] = y;
                 uses!.Remove(x);
                 fromY.AddRange(fromX);
@@ -286,6 +324,12 @@ namespace Eggnog
                     Place(index);
             }
         }
+
+        /// <summary>
+        /// Gets the smallest cell of a representative's class: the cell the engine keeps when the class merges.
+        /// </summary>
+        uint Smallest(uint representative) =>
+            smallest is not null && smallest.TryGetValue(representative, out var cell) ? cell : representative;
 
         /// <summary>
         /// Gets a cell's class in the overlay, compressing the path.

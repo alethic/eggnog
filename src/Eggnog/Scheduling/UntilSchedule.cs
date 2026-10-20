@@ -49,12 +49,13 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits)
+        internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
+            bool inCase)
         {
             foreach (var fact in Condition)
                 conditions.Add(fact);
 
-            Body.Collect(rulesets, conditions, splits);
+            Body.Collect(rulesets, conditions, splits, inCases, inCase);
         }
 
     }

@@ -5,7 +5,7 @@ Equality saturation for .NET, with egglog's capabilities and a typed C# API.
 An e-graph stores many equivalent terms at once, grouped into classes of terms proven equal. Equality saturation
 applies rewrite rules to it until nothing new can be derived, then extracts the cheapest equivalent term.
 Eggnog offers the model of [egglog](https://github.com/egraphs-good/egglog), which combines this with Datalog: typed
-relations, functions with lattice merges, constructors, rules, schedules, queries and extraction. It adds scopes
+relations, functions with merges, constructors, rules, schedules, queries and extraction. It adds scopes
 (child contexts that inherit their parent's contents, frozen bases shared across threads, per-query layers) and case
 splits with lift. Its engine is a C# reimplementation of egglog's Rust engine.
 
@@ -75,7 +75,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `EGraph` | A theory and its database: column types, tables, rulesets, queries, split rules, scope tags, and the root scope. |
 | `ISort<TSort>`, `ClassId` | A sort is a record struct over a `ClassId`, the type of a class of equivalent terms. |
 | `Relation<...>` | A set of tuples (`DefineRelation`). |
-| `Function<..., TOut>`, `ValueLattice<T>` | One value per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own). |
+| `Function<..., TOut>`, `ValueLattice<T>`, `FunctionMerge<T>` | One value per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own), or by egglog's `:merge new`, `old` or `(f old new)` (`FunctionMerge.New`, `Old`, `Of`), which only the root writes. |
 | `Constructor<..., TSort>` | Terms: one class per key (`DefineConstructor`), with a cost for extraction. |
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
 | `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`). |

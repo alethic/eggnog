@@ -397,14 +397,20 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans <c>F.Of(k).Is(v)</c> for a function F and a constant v. A second value for a key of a function without
-        /// a lattice, stored or planned in the batch, is a conflict; a value the stored one absorbs under the lattice
-        /// plans nothing.
+        /// Plans <c>F.Of(k).Is(v)</c> for a function F and a constant v. A second value for a key of a function with
+        /// neither a lattice nor a merge, stored or planned in the batch, is a conflict; a value the stored one absorbs
+        /// under the lattice plans nothing. A function with a merge folds each write into the value before it.
         /// </summary>
         void PlanFunctionWrite(TermShape application, Term value)
         {
             var table = (FunctionHandle)application.Table!;
             CheckTable(table);
+            if (table.Merge is not null)
+            {
+                PlanMergeWrite(table, application, value);
+                return;
+            }
+
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTerm(value);
             var key = Key(table, keys);
@@ -446,7 +452,53 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Merges two values of a function with a lattice, on the calling thread under <see cref="EngineCallMarker"/>.
+        /// Plans <c>F.Of(k).Is(v)</c> for a function F with a merge that is not a lattice (<see cref="FunctionMerge"/>),
+        /// as egglog's <c>set</c> does: every write is staged, in order, even one of the value already there, since the
+        /// engine folds the merge over the stored value and the writes (<c>(+ old new)</c> of 2 and 2 is 4). A write the
+        /// merge leaves unchanged plans nothing.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The scope is not the root: only the root writes a function whose
+        /// merge is not a lattice. Or the function has a sort key, and the batch merged classes before the
+        /// write.</exception>
+        /// <exception cref="RuleEvaluationException">The merge threw; nothing is written and the scope is not
+        /// faulted.</exception>
+        void PlanMergeWrite(FunctionHandle table, TermShape application, Term value)
+        {
+            if (scope.IsRoot == false)
+                throw new InvalidOperationException(
+                    $"'{table.Name}' has the merge '{table.Merge!.Name}', which is not a lattice, so only the root may write it.");
+
+            // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
+            // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
+            if (mergedClasses && HasSortKey(table))
+                throw new InvalidOperationException(
+                    $"'{table.Name}' is written after this batch merged classes, its keys are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
+
+            var keys = PlanKeys(table, application.Arguments, out var existing);
+            var cell = PlanTerm(value);
+            var key = Key(table, keys);
+            if (currentValues.TryGetValue(key, out var before) || (existing && engine.TryLookup(table.Function, keys, out before)))
+            {
+                var merged = MergeCells(table, before, cell);
+                if (merged == before)
+                    return;
+
+                currentValues[key] = merged;
+            }
+            else
+            {
+                currentValues[key] = cell;
+            }
+
+            var row = new uint[keys.Length + 1];
+            keys.CopyTo(row, 0);
+            row[^1] = cell;
+            rows.Add((table, row));
+        }
+
+        /// <summary>
+        /// Merges two values of a function with a lattice or a merge, on the calling thread under
+        /// <see cref="EngineCallMarker"/>.
         /// </summary>
         /// <exception cref="RuleEvaluationException">The merge threw; nothing is written and the scope is not
         /// faulted.</exception>
@@ -455,12 +507,15 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                return table.Lattice!.MergeCells(table.Output!, stored, incoming);
+                return table.Merge is { } merge
+                    ? merge.MergeCells(table.Output!, stored, incoming)
+                    : table.Lattice!.MergeCells(table.Output!, stored, incoming);
             }
             catch (Exception exception) when (exception is not RuleEvaluationException)
             {
+                var what = table.Merge is { } merge ? $"merge '{merge.Name}'" : $"lattice '{table.Lattice!.Name}'";
                 throw new RuleEvaluationException(null, null,
-                    $"lattice '{table.Lattice!.Name}' of '{table.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
+                    $"{what} of '{table.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
             }
             finally
             {

@@ -21,9 +21,9 @@ gates").
 - **Every constructor and relation subsumable.** egglog lets any constructor or relation be subsumed; here a table opts
   in (`TableOptions.Subsumable`, decisions row 20a). If the subsumption cell costs more than the root gate allows, it is
   added to a table on its first subsumption instead.
-- **Merges that are not lattices.** egglog's `:merge` is any expression over `old` and `new` (`(+ old new)`, `new`);
-  here only lattices and assert-equal. They are allowed at the root; a child's write to such a table is refused
-  (decisions row 2).
+- **Merges that call tables.** egglog's `:merge` is any expression over `old` and `new`, calls of functions and
+  constructors included (`MergeFn::Function`); here a merge that is not a lattice is a C# function of the two values
+  (`FunctionMerge`, architecture 2.13, item 2). Only the root writes such a table (decisions row 2).
 - **`delete`.** egglog's `delete` action and command; here not in the API (architecture 2.13, item 1). Allowed where no
   descendant is live, and in a child for its own rows (decisions row 1); the mirrors of scoped reads delete with it.
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
