@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Eggnog.Relations
 {
@@ -31,7 +32,9 @@ namespace Eggnog.Relations
     /// <para>
     /// Ownership is explicit: an array handed to <see cref="Release{T}"/> must not be used again by anyone. Growth
     /// (<see cref="Grow{T}"/>) never releases the array it replaces; the caller drops that array to the garbage
-    /// collector, as Rust's <c>Vec</c> growth hands the old allocation back to the allocator rather than to a pool.
+    /// collector, as Rust's <c>Vec</c> growth hands the old allocation back to the allocator rather than to a pool. A
+    /// staging buffer (<see cref="RowBuffer.ForStaging(int)"/>), which nobody reads while it grows, releases it
+    /// instead.
     /// </para>
     /// </remarks>
     internal static class PooledArray
@@ -88,7 +91,9 @@ namespace Eggnog.Relations
         /// Gives up an array obtained from <see cref="Allocate{T}"/> or <see cref="Grow{T}"/>. An array the shared pool
         /// can hold and that egglog would keep (longer than <see cref="MaxUnpooledLength"/>, a power-of-two length, at
         /// most <see cref="MaxPooledBytes"/>) goes back to the pool; any other is dropped. Arrays of reference-bearing
-        /// types are cleared first so the pool does not keep their contents alive. O(1) for unmanaged types.
+        /// types are cleared first so the pool does not keep their contents alive. O(1) for unmanaged types, except in
+        /// Debug builds, where an unmanaged array going back to the pool is first filled with <see cref="PoisonByte"/>
+        /// so that a read after release shows.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <param name="array">The array; nobody may use it again.</param>
@@ -96,7 +101,34 @@ namespace Eggnog.Relations
         public static void Release<T>(T[] array)
         {
             if (IsPoolableLength<T>((uint)array.Length))
+            {
+                Poison(array);
                 ArrayPool<T>.Shared.Return(array, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            }
+        }
+
+        /// <summary>
+        /// The byte a Debug build fills released unmanaged arrays with. A cell of a released row then reads as
+        /// 0xDDDDDDDD: not <see cref="Value.StaleRep"/>, so the row is not skipped as a tombstone, and far past any id
+        /// a test allocates.
+        /// </summary>
+        internal const byte PoisonByte = 0xDD;
+
+        /// <summary>
+        /// In Debug builds, fills an unmanaged array about to go back to the pool with <see cref="PoisonByte"/>, so that
+        /// code still reading it after <see cref="Release{T}"/> reads poison instead of the contents it expects.
+        /// Pooled arrays are at most <see cref="MaxPooledBytes"/> bytes. Compiled out of Release builds.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="array">The array being released.</param>
+        [Conditional("DEBUG")]
+        static void Poison<T>(T[] array)
+        {
+            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+                return;
+
+            ref var first = ref Unsafe.As<T, byte>(ref MemoryMarshal.GetArrayDataReference(array));
+            Unsafe.InitBlockUnaligned(ref first, PoisonByte, (uint)(array.Length * Unsafe.SizeOf<T>()));
         }
 
         /// <summary>
@@ -108,7 +140,9 @@ namespace Eggnog.Relations
         /// The old array is not released, and callers growing a buffer do not release it either: they drop it to the
         /// garbage collector. Whoever still holds it (an enumerator, a <c>Data</c> reference, or the row being appended
         /// when it lives in the buffer itself) keeps reading the old contents, and never an array the pool has handed
-        /// to someone else. Only disposing a buffer returns its storage to the pool.
+        /// to someone else. Only disposing a buffer returns its storage to the pool, except for a staging buffer
+        /// (<see cref="RowBuffer.ForStaging(int)"/>), which nobody reads while it grows and which returns the old
+        /// array once it has copied the rows over.
         /// </remarks>
         /// <typeparam name="T">The element type.</typeparam>
         /// <param name="array">The current array.</param>

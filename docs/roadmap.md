@@ -53,7 +53,9 @@ each with what would reopen it.
   row 19).
 - **The write-allocation gate.** The `campaign/write-alloc` fixes land if 8 threads run at least 3% faster under either
   collector, by more than twice the A/A spread, with no configuration more than 2% slower. If the time is flat, only the
-  parts that cost no time land, as an allocation win.
+  parts that cost no time land, as an allocation win. On GitHub runners ([The write-allocation
+  comparison](../src/Eggnog.Benchmarks/README.md#the-write-allocation-comparison)) the writes ran 12-15% faster under
+  both collectors, and `ActionLookupBenchmarks` in parallel at 200,000 rows 4-10% slower under the workstation one.
 - **Staging buffers.** The clone counters show no buffer-map growth on `BasicMath`, and 782 serial clones at 128 B do
   not explain the 13% `ExecutionState` share of its sampled bytes (about 100 KB, not 2.4 MB). The item closes if a
   re-taken EventPipe profile shows nothing else under `ExecutionState.CreateBuffer`.

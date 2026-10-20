@@ -38,6 +38,11 @@ namespace Eggnog.Relations
     /// to the writer by then.
     /// </para>
     /// <para>
+    /// A staging buffer (<see cref="ForStaging(int)"/>) instead returns the storage it grows out of to the pool at
+    /// once. It is for buffers that nobody reads while they grow, such as a <see cref="MutationBuffer"/>'s private
+    /// shards: there, a span, enumerator or <see cref="Data"/> reference taken before a growth is invalid after it.
+    /// </para>
+    /// <para>
     /// Not thread-safe for writers. Concurrent readers are fine, and concurrent <see cref="SetStaleShared"/> calls on
     /// distinct rows are fine (see there).
     /// </para>
@@ -46,8 +51,15 @@ namespace Eggnog.Relations
     {
 
         readonly int arity;
+        readonly bool releasesGrownStorage;
         uint[] data;
         int count;
+
+        /// <summary>
+        /// The cells a staging buffer's first growth past its first array makes room for, or zero once spent; see
+        /// <see cref="ForStaging(int, int)"/>.
+        /// </summary>
+        int growthStartCells;
 
         /// <summary>
         /// Initializes an empty buffer for rows of <paramref name="arity"/> cells. Allocates nothing until the first
@@ -55,11 +67,24 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="arity">The number of cells per row; at least one.</param>
         public RowBuffer(int arity)
+            : this(arity, releasesGrownStorage: false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes an empty buffer for rows of <paramref name="arity"/> cells that allocates nothing until the first
+        /// row, and that returns the storage it grows out of to the pool when <paramref name="releasesGrownStorage"/>.
+        /// </summary>
+        /// <param name="arity">The number of cells per row; at least one.</param>
+        /// <param name="releasesGrownStorage">Whether growth returns the old storage to the pool.</param>
+        RowBuffer(int arity, bool releasesGrownStorage)
         {
             if (arity < 1)
                 throw new ArgumentOutOfRangeException(nameof(arity), arity, "A row buffer needs at least one column; use ArbitraryRowBuffer for arity zero.");
 
             this.arity = arity;
+            this.releasesGrownStorage = releasesGrownStorage;
             data = Array.Empty<uint>();
         }
 
@@ -94,6 +119,44 @@ namespace Eggnog.Relations
             this.data = data;
             this.count = count;
         }
+
+        /// <summary>
+        /// Creates an empty staging buffer for rows of <paramref name="arity"/> cells: a buffer whose growth returns the
+        /// storage it replaces to the pool at once rather than leaving it to the garbage collector. Only for a buffer
+        /// that nobody reads while it grows; a span, enumerator or <see cref="Data"/> reference taken before a growth
+        /// must not be used after it. Allocates nothing until the first row.
+        /// </summary>
+        /// <param name="arity">The number of cells per row; at least one.</param>
+        /// <returns>The buffer.</returns>
+        internal static RowBuffer ForStaging(int arity) => new(arity, releasesGrownStorage: true);
+
+        /// <summary>
+        /// Creates an empty staging buffer for rows of <paramref name="arity"/> cells, as <see cref="ForStaging(int)"/>
+        /// does, whose first growth past its first array makes room for <paramref name="growthRows"/> rows.
+        /// </summary>
+        /// <remarks>
+        /// The buffer allocates nothing until its first row and then grows as any buffer does, except that its first
+        /// growth past that first small array makes room for at least <paramref name="growthRows"/> rows at once. A
+        /// buffer that stays within its first array never takes the larger one.
+        /// </remarks>
+        /// <param name="arity">The number of cells per row; at least one.</param>
+        /// <param name="growthRows">The rows the first growth past the first array makes room for; zero for ordinary
+        /// growth.</param>
+        /// <returns>The buffer.</returns>
+        internal static RowBuffer ForStaging(int arity, int growthRows)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(growthRows);
+
+            var buffer = ForStaging(arity);
+            buffer.growthStartCells = (int)Math.Min((long)growthRows * arity, Array.MaxLength);
+            return buffer;
+        }
+
+        /// <summary>
+        /// Gets whether growth returns the storage it replaces to the pool: a staging buffer
+        /// (<see cref="ForStaging(int)"/>).
+        /// </summary>
+        internal bool ReleasesGrownStorage => releasesGrownStorage;
 
         /// <summary>
         /// Gets the number of cells per row.
@@ -434,28 +497,45 @@ namespace Eggnog.Relations
         int AddRowGrowing(ReadOnlySpan<uint> row)
         {
             // The row may live in the old storage; that storage is left to the garbage collector rather than returned
-            // to the pool (see PooledArray.Grow), so it stays intact for the copy and for anyone still reading it.
+            // to the pool (see PooledArray.Grow), so it stays intact for the copy and for anyone still reading it. A
+            // staging buffer returns it only after the copy.
             var start = count * arity;
+            var old = data;
             var next = GrownCopy((long)start + arity);
             RowCells.Copy(ref MemoryMarshal.GetReference(row), ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(next), start), arity);
             data = next;
+            if (releasesGrownStorage)
+                PooledArray.Release(old);
+
             return count++;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         void Grow(long requiredCells)
         {
+            var old = data;
             data = GrownCopy(requiredCells);
+            if (releasesGrownStorage)
+                PooledArray.Release(old);
         }
 
         /// <summary>
-        /// Allocates larger storage holding the current rows. The old array is not released: growth drops it to the
-        /// garbage collector, as <c>Vec</c> growth frees it to the allocator rather than to egglog's pool.
+        /// Allocates larger storage holding the current rows: at least <paramref name="requiredCells"/>, and on a
+        /// staging buffer's first growth past its first array at least the cells <see cref="ForStaging(int, int)"/>
+        /// asked for. The old array is not released here: an ordinary buffer drops it to the garbage collector, as
+        /// <c>Vec</c> growth frees it to the allocator rather than to egglog's pool, and a staging buffer releases it
+        /// once the growth is done.
         /// </summary>
         uint[] GrownCopy(long requiredCells)
         {
             if (requiredCells > Array.MaxLength)
                 throw new InvalidOperationException($"A row buffer of arity {arity} cannot hold more than {Array.MaxLength / arity} rows.");
+
+            if (growthStartCells > 0 && data.Length > 0)
+            {
+                requiredCells = Math.Max(requiredCells, growthStartCells);
+                growthStartCells = 0;
+            }
 
             return PooledArray.Grow(data, count * arity, requiredCells);
         }

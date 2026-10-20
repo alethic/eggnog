@@ -200,6 +200,12 @@ namespace Eggnog.Relations
         public RowBuffer Rows => data;
 
         /// <summary>
+        /// Gets the key index: one hash table per shard, mapping each live key to its row. For tests and diagnostics; the
+        /// index is replaced by cloning and changed by every merge.
+        /// </summary>
+        internal ShardedHashTable<TableEntry> Index => hash;
+
+        /// <summary>
         /// Gets the number of tombstones in <see cref="Rows"/>; zero means scans need no liveness check.
         /// </summary>
         public int StaleCount => staleRows;

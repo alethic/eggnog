@@ -12,7 +12,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Applies every staged insert: egglog's <c>do_insert</c> (core-relations/src/table/mod.rs:678-697). Reserves
         /// room for every staged row, then runs the serial insert, or the parallel one above
-        /// <see cref="ParallelHeuristics.TableOpThreshold"/> rows.
+        /// <see cref="ParallelHeuristics.TableOpThreshold"/> rows. Both also reserve each shard's index for the keys the
+        /// merge may add (<see cref="ReserveIndex"/>), which egglog does not.
         /// </summary>
         /// <remarks>
         /// If a sort check fails or a merge function throws, both inserts leave the table consistent, and this drops
@@ -29,7 +30,7 @@ namespace Eggnog.Relations
                 if (total > 0)
                     data.Reserve((int)Math.Min(total, int.MaxValue / Arity));
 
-                return parallelism.ParallelizeTableOp(total) ? ParallelInsert(state, total) : SerialInsert(state);
+                return parallelism.ParallelizeTableOp(total) ? ParallelInsert(state, total) : SerialInsert(state, total);
             }
             catch
             {
@@ -39,22 +40,57 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// The staged rows a shard inserts before a merge reserves its index for the rest (<see cref="SerialInsert"/>,
+        /// <see cref="WriteShard"/>): enough rows for their share of new keys to stand for the rest, few enough that the
+        /// index grows through them cheaply.
+        /// </summary>
+        internal const int IndexSampleRows = 1024;
+
+        /// <summary>
         /// Inserts the staged rows one at a time, shard by shard, in queue order and then staging order: egglog's
         /// <c>serial_insert</c> (core-relations/src/table/mod.rs:699-815). For each key the result is the left fold of
         /// the merge function over the table's row and the incoming rows.
         /// </summary>
+        /// <remarks>
+        /// Each shard reserves its index once for the keys the rest of the merge may add, which egglog does not. The
+        /// staged rows cannot be counted by distinct key before the merge, and most may match keys the shard already
+        /// holds, so the shard first inserts <see cref="IndexSampleRows"/> rows with ordinary growth, then reserves for
+        /// the rest of its share of the staged rows at the rate those rows added keys (<see cref="EstimatedNewKeys"/>).
+        /// The share is an even split of the total, since rows are spread by key hash. Rows that match existing keys or
+        /// collide on a few new ones reserve almost nothing; a share of new distinct keys reserves its final index at
+        /// once. A shard with fewer staged rows than the sample only grows.
+        /// </remarks>
         /// <param name="state">The state merge functions run in.</param>
+        /// <param name="total">The number of staged rows.</param>
         /// <returns>Whether a key was added or a merge changed a row.</returns>
-        bool SerialInsert(ExecutionState state)
+        bool SerialInsert(ExecutionState state, long total)
         {
             var changed = false;
+            var share = (total + hash.ShardCount - 1) / hash.ShardCount;
             for (var shardIndex = 0; shardIndex < hash.ShardCount; shardIndex++)
             {
                 var queue = pending.RowQueue(shardIndex);
                 var shard = hash.GetShard(shardIndex);
+                var keysBefore = shard.Count;
+
+                // The rows inserted while the shard samples, or -1 once it has reserved.
+                var sampled = 0;
                 while (queue.TryDequeue(out var buffer))
                 {
-                    changed |= InsertSerial(state, shard, shardIndex, buffer);
+                    var from = 0;
+                    if (sampled >= 0)
+                    {
+                        from = Math.Min(buffer.Count, IndexSampleRows - sampled);
+                        changed |= InsertSerial(state, shard, shardIndex, buffer, 0, from);
+                        sampled += from;
+                        if (sampled == IndexSampleRows)
+                        {
+                            ReserveIndex(shard, EstimatedNewKeys(shard.Count - keysBefore, sampled, share - sampled));
+                            sampled = -1;
+                        }
+                    }
+
+                    changed |= InsertSerial(state, shard, shardIndex, buffer, from, buffer.Count);
                     buffer.Dispose();
                 }
             }
@@ -63,16 +99,61 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Inserts the live rows of one staged buffer, all of which belong to <paramref name="shardIndex"/>.
+        /// Gets the keys <paramref name="remaining"/> more rows are expected to add to a shard whose last
+        /// <paramref name="sampled"/> rows added <paramref name="added"/> keys: the remaining rows at the same rate,
+        /// rounded up.
         /// </summary>
-        bool InsertSerial(ExecutionState state, RawHashTable<TableEntry> shard, int shardIndex, RowBuffer incoming)
+        /// <param name="added">The keys the sampled rows added.</param>
+        /// <param name="sampled">The rows inserted so far; above zero.</param>
+        /// <param name="remaining">The rows still to insert; nothing is reserved when it is not above zero.</param>
+        /// <returns>The entries to reserve.</returns>
+        internal static long EstimatedNewKeys(int added, long sampled, long remaining)
         {
+            Debug.Assert(sampled > 0, "The estimate needs sampled rows.");
+            return remaining <= 0 ? 0 : (remaining * added + sampled - 1) / sampled;
+        }
+
+        /// <summary>
+        /// Gets the entries an index of <paramref name="count"/> entries can still reserve of
+        /// <paramref name="additional"/>: at most the room left below the most entries an index holds
+        /// (<see cref="RawHashTable{TEntry}.MaxCapacity"/>), and never below zero.
+        /// </summary>
+        /// <param name="count">The index's entries.</param>
+        /// <param name="additional">The keys to make room for.</param>
+        /// <returns>The entries to reserve.</returns>
+        internal static int IndexReserveRoom(int count, long additional)
+        {
+            return (int)Math.Max(0, Math.Min(additional, (long)RawHashTable<TableEntry>.MaxCapacity - count));
+        }
+
+        /// <summary>
+        /// Reserves <paramref name="shard"/>'s index for <paramref name="additional"/> more keys, within
+        /// <see cref="IndexReserveRoom"/>, so that it grows at most once instead of doubling its way up through
+        /// intermediate tables. egglog reserves the rows only (core-relations/src/table/mod.rs:678-680); this reserve only
+        /// removes allocation.
+        /// </summary>
+        /// <param name="shard">The shard's index.</param>
+        /// <param name="additional">The keys to make room for.</param>
+        static void ReserveIndex(RawHashTable<TableEntry> shard, long additional)
+        {
+            var room = IndexReserveRoom(shard.Count, additional);
+            if (room > 0)
+                shard.Reserve(room, default(TableEntryHasher));
+        }
+
+        /// <summary>
+        /// Inserts the live rows <paramref name="from"/> to <paramref name="to"/> (exclusive) of one staged buffer, all
+        /// of which belong to <paramref name="shardIndex"/>.
+        /// </summary>
+        bool InsertSerial(ExecutionState state, RawHashTable<TableEntry> shard, int shardIndex, RowBuffer incoming, int from, int to)
+        {
+            Debug.Assert(0 <= from && from <= to && to <= incoming.Count, "The rows lie outside the buffer.");
+
             var arity = Arity;
             var source = incoming.Data;
-            var count = incoming.Count;
             var output = mergeOutput;
             var changed = false;
-            for (var r = 0; r < count; r++)
+            for (var r = from; r < to; r++)
             {
                 var offset = r * arity;
                 if (source[offset] == Value.StaleRep)
@@ -351,9 +432,18 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Phases 2 and 3 of a parallel insert for one shard: writes its batches in order, releasing each once written,
+        /// Phases 2 and 3 of a parallel insert for one shard: writes the batches in order, releasing each once written,
         /// then flushes the task's execution state.
         /// </summary>
+        /// <remarks>
+        /// The shard reserves its index for the keys the batches may add, which egglog does not. A batch is folded by
+        /// key, so its live rows are its distinct keys, but a key may repeat across batches or match one the shard
+        /// holds. Into an empty shard every key of the first batch is new, and the shard reserves for all of them. The
+        /// first batch that may repeat keys (the first into a shard with entries, the second into an empty one) merges
+        /// <see cref="IndexSampleRows"/> rows with ordinary growth, and the shard then reserves once for the live rows
+        /// of that batch and every later one at the rate those rows added keys (<see cref="EstimatedNewKeys"/>). Keys
+        /// past the estimate take ordinary growth.
+        /// </remarks>
         /// <param name="work">The shard's state.</param>
         /// <param name="writer">The table's row writer.</param>
         void WriteShard(ParallelInsertShard work, ParallelRowBufferWriter writer)
@@ -364,10 +454,25 @@ namespace Eggnog.Relations
 
             var shard = hash.GetShard(work.ShardIndex);
             var output = new uint[Arity];
+
+            // The live rows of the batches not yet written, and the batch that samples.
+            long remaining = 0;
+            for (var b = 0; b < batches.Count; b++)
+                remaining += batches[b].LiveCount;
+
+            var sampleBatch = 0;
+            if (shard.Count == 0)
+            {
+                ReserveIndex(shard, batches[0].LiveCount);
+                sampleBatch = 1;
+            }
+
             for (var b = 0; b < batches.Count; b++)
             {
-                FlushStaged(shard, work, writer, batches[b], output);
-                batches[b].Dispose();
+                var staged = batches[b];
+                FlushStaged(shard, work, writer, staged, output, b == sampleBatch ? IndexSampleRows : 0, remaining);
+                remaining -= staged.LiveCount;
+                staged.Dispose();
             }
 
             var local = work.Local!;
@@ -379,9 +484,18 @@ namespace Eggnog.Relations
         /// Phases 2 and 3 for one batch: appends its rows to the table in one block, then merges each live one into the
         /// table's row with the same key (<see cref="MergeAppendedRows"/>). If the merge function throws, the rows of the
         /// block that are live but not indexed (the one being merged and those after it) are tombstoned before the
-        /// exception propagates, so that the table holds no live row its index does not know.
+        /// exception propagates, so that the table holds no live row its index does not know. With
+        /// <paramref name="sampleRows"/> above zero, merges that many rows first and then reserves the shard's index for
+        /// the other live rows of this batch and the later ones at the rate the sampled rows added keys.
         /// </summary>
-        void FlushStaged(RawHashTable<TableEntry> shard, ParallelInsertShard work, ParallelRowBufferWriter writer, StagedOutputs staged, uint[] output)
+        /// <param name="shard">The shard's index.</param>
+        /// <param name="work">The shard's state.</param>
+        /// <param name="writer">The table's row writer.</param>
+        /// <param name="staged">The batch.</param>
+        /// <param name="output">Scratch space for the merge function's output.</param>
+        /// <param name="sampleRows">The rows to merge before the reserve, or zero for no reserve.</param>
+        /// <param name="remaining">The live rows of this batch and the later ones.</param>
+        void FlushStaged(RawHashTable<TableEntry> shard, ParallelInsertShard work, ParallelRowBufferWriter writer, StagedOutputs staged, uint[] output, int sampleRows, long remaining)
         {
             var rows = staged.Rows;
             if (rows.Count == 0)
@@ -396,7 +510,17 @@ namespace Eggnog.Relations
             var handle = writer.ReadHandle();
             try
             {
-                MergeAppendedRows(shard, work, handle, rows, start, output);
+                var from = 0;
+                if (sampleRows > 0 && rows.Count > sampleRows)
+                {
+                    from = sampleRows;
+                    var keysBefore = shard.Count;
+                    var sampled = MergeAppendedRows(shard, work, handle, rows, start, output, 0, from);
+                    if (sampled > 0)
+                        ReserveIndex(shard, EstimatedNewKeys(shard.Count - keysBefore, sampled, remaining - sampled));
+                }
+
+                MergeAppendedRows(shard, work, handle, rows, start, output, from, rows.Count);
             }
             catch
             {
@@ -410,23 +534,28 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Phase 3 for one appended block: indexes each live row whose key is new, and merges each other one into the
-        /// table's row with the same key, storing the merge output in the appended row. The counters of
-        /// <paramref name="work"/> are exact after every row.
+        /// Phase 3 for rows <paramref name="from"/> to <paramref name="to"/> (exclusive) of one appended block: indexes
+        /// each live row whose key is new, and merges each other one into the table's row with the same key, storing
+        /// the merge output in the appended row. The counters of <paramref name="work"/> are exact after every row.
         /// </summary>
-        void MergeAppendedRows(RawHashTable<TableEntry> shard, ParallelInsertShard work, ParallelRowBufferReadHandle handle, RowBuffer rows, int start, uint[] output)
+        /// <returns>The live rows merged.</returns>
+        int MergeAppendedRows(RawHashTable<TableEntry> shard, ParallelInsertShard work, ParallelRowBufferReadHandle handle, RowBuffer rows, int start, uint[] output, int from, int to)
         {
+            Debug.Assert(0 <= from && from <= to && to <= rows.Count, "The rows lie outside the block.");
+
             var arity = Arity;
             var source = rows.Data;
-            var count = rows.Count;
             var table = handle.Data;
             var local = work.Local!;
-            var current = start;
-            for (var i = 0; i < count; i++, current++)
+            var current = start + from;
+            var merged = 0;
+            for (var i = from; i < to; i++, current++)
             {
                 var offset = i * arity;
                 if (source[offset] == Value.StaleRep)
                     continue;
+
+                merged++;
 
                 var row = new ReadOnlySpan<uint>(source, offset, arity);
                 var keyHash = TableKeyHash.Hash(source, offset, keyCount);
@@ -462,6 +591,8 @@ namespace Eggnog.Relations
 
                 work.MarkedStale++;
             }
+
+            return merged;
         }
 
         /// <summary>
