@@ -65,7 +65,7 @@ namespace Eggnog.Tests.Rules
                 r.When(n.Is(term.Of("a")), t.Graph.Contradiction.Of());
                 r.Then(n.Is(term.Of("false")));
             }));
-            Assert.Contains("rule reads fact table 'contradiction' outside scope 'outer'", e.Message);
+            Assert.Contains("rule reads fact table '$contradiction' outside scope 'outer'", e.Message);
         }
 
         [Fact]
