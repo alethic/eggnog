@@ -12,7 +12,8 @@ namespace Eggnog.Relations
     /// the port of egglog's <c>Boxed&lt;T&gt;</c> newtype and of the trait's default methods
     /// (core-relations/src/base_values/mod.rs:29-46, 190-216), which make any hashable type a base value. The egglog
     /// frontend uses it for big integers (<c>Z = Boxed&lt;BigInt&gt;</c>, here
-    /// <c>InternedCodec&lt;System.Numerics.BigInteger&gt;</c>) and big rationals.
+    /// <c>InternedCodec&lt;System.Numerics.BigInteger&gt;</c>) and big rationals (<c>Q = Boxed&lt;BigRational&gt;</c>,
+    /// here the library's <c>BigRationalCodec</c>, which formats as num-rational's <c>Debug</c>).
     /// </summary>
     /// <remarks>
     /// Equality is <see cref="IEquatable{T}"/> and the hash is <see cref="object.GetHashCode"/> (see

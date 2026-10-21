@@ -22,7 +22,8 @@ namespace Eggnog.Relations.Tests
     /// Not translated. <c>lambda.egg</c>, <c>typeinfer.egg</c> and <c>fusion.egg</c> hold <c>Set</c> containers of
     /// e-classes inside a push: they wait on eq-sort containers in children, which children refuse, and would be
     /// translated with <see cref="SetContainer"/> once children have them. The rest are out of scope. <c>herbie.egg</c>
-    /// and <c>herbie-tutorial.egg</c> need <c>BigRat</c> values and primitives, which the bridge has no codec for;
+    /// and <c>herbie-tutorial.egg</c> need <c>BigRat</c> primitives, which the bridge has none of (its values would use the
+    /// library's <c>BigRationalCodec</c>);
     /// <c>herbie.egg</c> is 196 rules to translate by hand, and the tutorial's oracle is three <c>check</c> commands.
     /// <c>multiset.egg</c> needs <c>MultiSet</c> and <c>UnstableFn</c> function values, which the library does not
     /// offer. <c>math.egg</c> needs only <c>f64</c> (<see cref="DoubleCodec"/>) and strings, but nothing runs at its

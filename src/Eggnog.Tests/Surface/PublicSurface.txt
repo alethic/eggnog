@@ -28,6 +28,56 @@ static class Eggnog.BigIntegerPrimitives
     static Primitive<BigInteger, String> Format { get }
     static Primitive<Int64, BigInteger> FromInt64 { get }
     static Primitive<String, BigInteger> Parse { get }
+struct Eggnog.BigRational : IEquatable<BigRational>
+    BigInteger Denominator { get }
+    BigInteger Numerator { get }
+    Boolean Equals(BigRational other)
+    Boolean IsInteger { get }
+    Int32 CompareTo(BigRational other)
+    Int32 Sign { get }
+    ctor(BigInteger numerator, BigInteger denominator)
+    ctor(BigInteger value)
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static BigRational op_Addition(BigRational left, BigRational right)
+    static BigRational op_Division(BigRational left, BigRational right)
+    static BigRational op_Implicit(BigInteger value)
+    static BigRational op_Implicit(Int64 value)
+    static BigRational op_Multiply(BigRational left, BigRational right)
+    static BigRational op_Subtraction(BigRational left, BigRational right)
+    static BigRational op_UnaryNegation(BigRational value)
+    static Boolean op_Equality(BigRational left, BigRational right)
+    static Boolean op_GreaterThan(BigRational left, BigRational right)
+    static Boolean op_GreaterThanOrEqual(BigRational left, BigRational right)
+    static Boolean op_Inequality(BigRational left, BigRational right)
+    static Boolean op_LessThan(BigRational left, BigRational right)
+    static Boolean op_LessThanOrEqual(BigRational left, BigRational right)
+static class Eggnog.BigRationalPrimitives
+    static Primitive<BigInteger, BigInteger, BigRational> FromBigIntegers { get }
+    static Primitive<BigRational, BigInteger> Denominator { get }
+    static Primitive<BigRational, BigInteger> Numerator { get }
+    static Primitive<BigRational, BigRational, BigRational> Add { get }
+    static Primitive<BigRational, BigRational, BigRational> Divide { get }
+    static Primitive<BigRational, BigRational, BigRational> Max { get }
+    static Primitive<BigRational, BigRational, BigRational> Min { get }
+    static Primitive<BigRational, BigRational, BigRational> Multiply { get }
+    static Primitive<BigRational, BigRational, BigRational> Power { get }
+    static Primitive<BigRational, BigRational, BigRational> Subtract { get }
+    static Primitive<BigRational, BigRational, Boolean> Greater { get }
+    static Primitive<BigRational, BigRational, Boolean> GreaterOrEqual { get }
+    static Primitive<BigRational, BigRational, Boolean> Less { get }
+    static Primitive<BigRational, BigRational, Boolean> LessOrEqual { get }
+    static Primitive<BigRational, BigRational> Abs { get }
+    static Primitive<BigRational, BigRational> Cbrt { get }
+    static Primitive<BigRational, BigRational> Ceiling { get }
+    static Primitive<BigRational, BigRational> Floor { get }
+    static Primitive<BigRational, BigRational> Log { get }
+    static Primitive<BigRational, BigRational> Negate { get }
+    static Primitive<BigRational, BigRational> Round { get }
+    static Primitive<BigRational, BigRational> Sqrt { get }
+    static Primitive<BigRational, Double> ToDouble { get }
+    static Primitive<BigRational, Int64> ToInt64 { get }
 static class Eggnog.BooleanPrimitives
     static Primitive<Boolean, Boolean, Boolean> And { get }
     static Primitive<Boolean, Boolean, Boolean> Implies { get }

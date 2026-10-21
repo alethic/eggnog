@@ -5,10 +5,10 @@ namespace Eggnog
 
     /// <summary>
     /// Makes the built-in primitives of <see cref="Primitives"/>, <see cref="DoublePrimitives"/>,
-    /// <see cref="BigIntegerPrimitives"/>, <see cref="BooleanPrimitives"/> and <see cref="StringPrimitives"/>: total ones
-    /// over a function, and partial ones (egglog's <c>-?&gt;</c>) over a partial function, whose <c>Function</c> throws
-    /// where there is no result: the given function, which throws what .NET's own operation throws, or else
-    /// <see cref="InvalidOperationException"/>.
+    /// <see cref="BigIntegerPrimitives"/>, <see cref="BigRationalPrimitives"/>, <see cref="BooleanPrimitives"/> and
+    /// <see cref="StringPrimitives"/>: total ones over a function, and partial ones (egglog's <c>-?&gt;</c>) over a
+    /// partial function, whose <c>Function</c> throws where there is no result: the given function, which throws what
+    /// .NET's own operation throws, or else <see cref="InvalidOperationException"/>.
     /// </summary>
     internal static class BuiltInPrimitive
     {
