@@ -501,6 +501,8 @@ namespace Eggnog
                     return Relations.LiteralText.Float(number);
                 case BigInteger big:
                     return ValueStore.FormatBigInteger(big);
+                case BigRational rational:
+                    return ValueStore.FormatBigRational(rational);
                 case ClassId id:
                     return id.ToString();
                 case Enum member:
