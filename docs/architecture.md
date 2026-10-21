@@ -103,8 +103,9 @@ A column holds either a class or a value.
   one), so classes are compared with `Scope.AreEqual`.
 - **Value types** are plain .NET values. Built in: `long`, `int`, `bool`, `double` (egglog's `f64`, with its
   `OrderedFloat` semantics: both zeros are one value, and so are all NaNs, which equal each other and sort above every
-  other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
-  `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
+  other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`),
+  `BigRational` (egglog's `BigRat`, in lowest terms, rendered as egglog renders it,
+  `(bigrat (from-string "3") (from-string "4"))`), and `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
   `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>` and `RegisterMultiSet<T>`.
 - **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
@@ -154,7 +155,7 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in term order, and then each new result of a computation it writes |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, `BigRat`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in term order, and then each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
@@ -255,9 +256,9 @@ user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up 
 take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
 call: `PrimitiveN<TResult>`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
 value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A comparison returns a `bool`: as a filter it
-is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<` for `i64` and `BigInt`, and an addition for
-`f64`, which egglog compares only as a filter; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
+(`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
+comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`
+for `i64` and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
 `Primitive.CreateVariadic`). What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
