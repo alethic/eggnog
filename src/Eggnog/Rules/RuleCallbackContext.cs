@@ -100,7 +100,7 @@ namespace Eggnog
         /// <param name="relation">The relation, of the rule's graph.</param>
         /// <param name="keys">One value per column.</param>
         /// <exception cref="ArgumentException">The relation, or a value, is not one this rule may write.</exception>
-        public void Insert(RelationHandle relation, params object[] keys)
+        public void Insert(RelationHandle relation, params ReadOnlySpan<object> keys)
         {
             var row = Row(relation, keys, 1, writes: true);
             row[^1] = Scope.Graph.Unit.Unit;
@@ -115,7 +115,7 @@ namespace Eggnog
         /// <param name="keys">One value per key column.</param>
         /// <param name="value">The value, of the output's type.</param>
         /// <exception cref="ArgumentException">The function, or a value, is not one this rule may write.</exception>
-        public void Set(FunctionHandle function, object[] keys, object value)
+        public void Set(FunctionHandle function, ReadOnlySpan<object> keys, object value)
         {
             if (value is null)
                 throw Refuse(new ArgumentNullException(nameof(value)));
@@ -134,7 +134,7 @@ namespace Eggnog
         /// <param name="keys">One value per child.</param>
         /// <returns>The term's class.</returns>
         /// <exception cref="ArgumentException">The constructor, or a value, is not one this rule may write.</exception>
-        public TSort Make<TSort>(ConstructorHandle constructor, params object[] keys) where TSort : struct, ISort<TSort>
+        public TSort Make<TSort>(ConstructorHandle constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>
         {
             var key = Row(constructor, keys, 0, writes: true);
             if (constructor.Output!.ClrType != typeof(TSort))
@@ -165,7 +165,7 @@ namespace Eggnog
         /// <param name="keys">One value per key column.</param>
         /// <exception cref="ArgumentException">The table, or a value, is not one this rule may write.</exception>
         /// <exception cref="InvalidOperationException">The scope may not delete.</exception>
-        public void Remove(TableHandle table, params object[] keys)
+        public void Remove(TableHandle table, params ReadOnlySpan<object> keys)
         {
             var key = Row(table, keys, 0, writes: true);
             if (Scope.Engine.RetractionRefusal is { } why)
@@ -184,7 +184,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The table, or a value, is not one this rule may write, or the table is not
         /// subsumable.</exception>
         /// <exception cref="InvalidOperationException">The table holds no row for the key.</exception>
-        public void Subsume(TableHandle table, params object[] keys)
+        public void Subsume(TableHandle table, params ReadOnlySpan<object> keys)
         {
             var key = Row(table, keys, 0, writes: true);
             if (table.Subsumable == false)
@@ -220,9 +220,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="ArgumentException">The table belongs to another graph, is a scoped view, or may not be written
         /// here, or a value is not of its column's type or not usable here.</exception>
-        internal uint[] Row(TableHandle table, object[] keys, int extra, bool writes)
+        internal uint[] Row(TableHandle table, ReadOnlySpan<object> keys, int extra, bool writes)
         {
-            ArgumentNullException.ThrowIfNull(keys);
             CheckTable(table, writes);
             var columns = table.KeyArray;
             if (keys.Length != columns.Length)
