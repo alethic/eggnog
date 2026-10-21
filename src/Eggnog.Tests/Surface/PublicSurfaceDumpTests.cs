@@ -116,12 +116,20 @@ namespace Eggnog.Tests.Surface
         }
 
         /// <summary>
+        /// Gets whether a parameter is <c>params</c>: an array's <see cref="ParamArrayAttribute"/>, or the
+        /// <c>ParamCollectionAttribute</c> of a span or other collection, which the compiler embeds where the runtime lacks
+        /// it, so it is matched by name.
+        /// </summary>
+        static bool IsParams(ParameterInfo parameter) => parameter.CustomAttributes.Any(a =>
+            a.AttributeType.FullName is "System.ParamArrayAttribute" or "System.Runtime.CompilerServices.ParamCollectionAttribute");
+
+        /// <summary>
         /// Renders a parameter list.
         /// </summary>
         /// <param name="ps">The parameters.</param>
         /// <returns>The rendering.</returns>
         static string Params(ParameterInfo[] ps) => string.Join(", ", ps.Select(p =>
-            (p.IsOut ? "out " : p.ParameterType.IsByRef ? "ref " : "") + (p.GetCustomAttribute<ParamArrayAttribute>() is not null ? "params " : "")
+            (p.IsOut ? "out " : p.ParameterType.IsByRef ? "ref " : "") + (IsParams(p) ? "params " : "")
             + Name(p.ParameterType.IsByRef ? p.ParameterType.GetElementType()! : p.ParameterType) + " " + p.Name + (p.HasDefaultValue ? " = " + (p.DefaultValue ?? "null") : "")));
 
         /// <summary>
