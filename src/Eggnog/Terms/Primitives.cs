@@ -8,7 +8,8 @@ namespace Eggnog
     /// <summary>
     /// Named built-in primitives, with egglog's names: egglog's <c>i64</c> primitives, over <c>long</c>, and the set
     /// primitives, made once per element type. The other value types' primitives are in <see cref="DoublePrimitives"/>,
-    /// <see cref="BigIntegerPrimitives"/>, <see cref="BooleanPrimitives"/> and <see cref="StringPrimitives"/>.
+    /// <see cref="BigIntegerPrimitives"/>, <see cref="BigRationalPrimitives"/>, <see cref="BooleanPrimitives"/> and
+    /// <see cref="StringPrimitives"/>.
     /// </summary>
     /// <remarks>
     /// The <c>i64</c> primitives are partial where egglog's are (<see cref="Primitive.IsPartial"/>): checked arithmetic

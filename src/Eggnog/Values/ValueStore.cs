@@ -13,8 +13,8 @@ namespace Eggnog
 
     /// <summary>
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
-    /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>Set&lt;string&gt;</c>
-    /// "Set&lt;String&gt;", <c>Set&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>Set&lt;int&gt;</c>
+    /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <see cref="BigRational"/> "BigRat",
+    /// <c>Set&lt;string&gt;</c> "Set&lt;String&gt;", <c>Set&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>Set&lt;int&gt;</c>
     /// "Set&lt;i32&gt;". Sorts join through
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and containers (sets, pairs, vectors, maps, multisets) through
     /// the <c>Register*</c> methods. Thread-safe; the first container type of each kind registered is an engine
@@ -59,6 +59,7 @@ namespace Eggnog
         /// </summary>
         internal void RegisterBuiltInSets()
         {
+            Add(new BaseColumnType<BigRationalCodec, BigRational>("BigRat", values, FormatBigRational, Comparer<BigRational>.Default));
             RegisterSet<string>();
             RegisterSet<long>();
             RegisterSet<int>();
@@ -70,7 +71,7 @@ namespace Eggnog
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
         /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and <c>long</c>s outside
-        /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge,
+        /// <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new result of a primitive or a lattice merge,
         /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
         /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
         /// intern. A container (a set, pair, vector, map or multiset) also takes an id from the graph's id counter, as egglog's
@@ -622,6 +623,13 @@ namespace Eggnog
         /// that call (<c>src/sort/bigint.rs</c>, <c>reconstruct_termdag</c>).
         /// </summary>
         internal static string FormatBigInteger(BigInteger value) => "(from-string \"" + value.ToString(CultureInfo.InvariantCulture) + "\")";
+
+        /// <summary>
+        /// Formats a <c>BigRat</c> as egglog renders one, <c>(bigrat (from-string "3") (from-string "4"))</c>: its sort
+        /// reconstructs a value as that call (<c>src/sort/bigrat.rs</c>, <c>reconstruct_termdag</c>).
+        /// </summary>
+        internal static string FormatBigRational(BigRational value) =>
+            "(bigrat " + FormatBigInteger(value.Numerator) + " " + FormatBigInteger(value.Denominator) + ")";
 
         /// <summary>
         /// Widens an enum value to the <c>long</c> it is stored as: sign-extended for signed underlying types,
