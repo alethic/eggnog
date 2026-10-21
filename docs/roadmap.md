@@ -23,10 +23,10 @@ gates").
   inherits no progress in a child.
 - **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
   engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
-  order, pairs, vectors and maps of values are egglog's containers, and there are no containers of classes (decisions
-  row 9 refuses them in children, which then need their rebuild in layers). This brings `set-get`, egglog's element
-  order and the zero and NaN a set interns (decisions row 22), the set elements the serializer names by literal (row
-  23b), and then function values (`unstable-fn`).
+  order, pairs, vectors, maps and multisets of values are egglog's containers, and there are no containers of classes
+  (decisions row 9 refuses them in children, which then need their rebuild in layers). This brings `set-get`, egglog's
+  element order and the zero and NaN a set interns (decisions row 22), the set elements the serializer names by literal
+  (row 23b), and then function values (`unstable-fn`).
 - **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`, so a cost
   egglog keeps exact saturates here, and a tie among saturated classes can fall otherwise (architecture 2.10).
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of

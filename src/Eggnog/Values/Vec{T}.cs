@@ -14,7 +14,7 @@ namespace Eggnog
     /// vector, or this one when nothing changes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
-    public sealed class Vec<T> : IReadOnlyList<T>, IEquatable<Vec<T>> where T : notnull
+    public sealed class Vec<T> : IReadOnlyList<T>, IEquatable<Vec<T>>, IComparable<Vec<T>> where T : notnull
     {
 
         readonly T[] items;
@@ -143,6 +143,30 @@ namespace Eggnog
 
         /// <inheritdoc />
         public override bool Equals(object? obj) => obj is Vec<T> other && Equals(other);
+
+        /// <summary>
+        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), a shorter prefix first; <c>null</c> first. Lets
+        /// containers be the elements of sets, multisets and map keys.
+        /// </summary>
+        /// <param name="other">The other vector.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        /// <exception cref="ArgumentException">An element type is not comparable.</exception>
+        public int CompareTo(Vec<T>? other)
+        {
+            if (other is null)
+                return 1;
+
+            var order = ValueSetOrder<T>.Comparer;
+            for (var i = 0; i < items.Length && i < other.items.Length; i++)
+            {
+                var c = order.Compare(items[i], other.items[i]);
+                if (c != 0)
+                    return c;
+            }
+
+            return items.Length.CompareTo(other.items.Length);
+        }
 
         /// <inheritdoc />
         public override int GetHashCode()

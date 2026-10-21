@@ -18,7 +18,8 @@ namespace Eggnog
     /// </summary>
     /// <typeparam name="TKey">The key type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
-    public sealed class Map<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>, IEquatable<Map<TKey, TValue>>, IMap
+    public sealed class Map<TKey, TValue>
+        : IReadOnlyDictionary<TKey, TValue>, IEquatable<Map<TKey, TValue>>, IComparable<Map<TKey, TValue>>, IMap
         where TKey : notnull
         where TValue : notnull
     {
@@ -178,6 +179,33 @@ namespace Eggnog
 
         /// <inheritdoc />
         public override bool Equals(object? obj) => obj is Map<TKey, TValue> other && Equals(other);
+
+        /// <summary>
+        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), its entries in key order, each by key then value,
+        /// a shorter prefix first; <c>null</c> first. Lets containers be the elements of sets, multisets and map keys.
+        /// </summary>
+        /// <param name="other">The other map.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        /// <exception cref="ArgumentException">An element type is not comparable.</exception>
+        public int CompareTo(Map<TKey, TValue>? other)
+        {
+            if (other is null)
+                return 1;
+
+            var valueOrder = ValueSetOrder<TValue>.Comparer;
+            for (var i = 0; i < keys.Length && i < other.keys.Length; i++)
+            {
+                var c = Order.Compare(keys[i], other.keys[i]);
+                if (c == 0)
+                    c = valueOrder.Compare(values[i], other.values[i]);
+
+                if (c != 0)
+                    return c;
+            }
+
+            return keys.Length.CompareTo(other.keys.Length);
+        }
 
         /// <inheritdoc />
         public override int GetHashCode()

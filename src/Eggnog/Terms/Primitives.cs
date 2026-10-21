@@ -307,6 +307,156 @@ namespace Eggnog
             where TValue : notnull => MapPrimitiveCache<TKey, TValue>.NotContains;
 
         /// <summary>
+        /// <c>multiset-of</c>: the multiset of any number of elements, repeats counted (src/sort/multiset.rs:131-134). Its
+        /// type is registered with <see cref="ValueStore.RegisterMultiSet{T}"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static VariadicPrimitive<T, MultiSet<T>> MultiSetOf<T>() where T : notnull => MultiSetPrimitiveCache<T>.Of;
+
+        /// <summary>
+        /// <c>multiset-single</c>: an element repeated a number of times; no result for a negative count
+        /// (multiset.rs:136-142).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, long, MultiSet<T>> MultiSetSingle<T>() where T : notnull => MultiSetPrimitiveCache<T>.Single;
+
+        /// <summary>
+        /// <c>multiset-pick</c>: the element of least cell, as egglog's picks its <c>BTreeMap</c>'s first key; no result
+        /// for an empty multiset, as egglog 3.0.0's, where the pin panics (multiset.rs:143).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T> MultiSetPick<T>() where T : notnull => MultiSetPrimitiveCache<T>.Pick;
+
+        /// <summary>
+        /// <c>multiset-insert</c>: one more of an element (multiset.rs:144).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T, MultiSet<T>> MultiSetInsert<T>() where T : notnull => MultiSetPrimitiveCache<T>.Insert;
+
+        /// <summary>
+        /// <c>multiset-remove</c>: one fewer of an element; no result when it does not occur (multiset.rs:145).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T, MultiSet<T>> MultiSetRemove<T>() where T : notnull => MultiSetPrimitiveCache<T>.Remove;
+
+        /// <summary>
+        /// <c>multiset-remove-swapped</c>: <c>multiset-remove</c> with its arguments swapped (multiset.rs:146).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, MultiSet<T>, MultiSet<T>> MultiSetRemoveSwapped<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.RemoveSwapped;
+
+        /// <summary>
+        /// <c>multiset-subtract</c>: the first minus the second; no result when an element of the second occurs fewer
+        /// times in the first (multiset.rs:147).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, MultiSet<T>, MultiSet<T>> MultiSetSubtract<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.Subtract;
+
+        /// <summary>
+        /// <c>multiset-subtract-swapped</c>: the second minus the first (multiset.rs:148).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, MultiSet<T>, MultiSet<T>> MultiSetSubtractSwapped<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.SubtractSwapped;
+
+        /// <summary>
+        /// <c>multiset-length</c>: the count of elements with their repeats (multiset.rs:149).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, long> MultiSetLength<T>() where T : notnull => MultiSetPrimitiveCache<T>.Length;
+
+        /// <summary>
+        /// <c>multiset-contains</c>: whether an element occurs, as a <c>bool</c>; as a filter, egglog's
+        /// <c>multiset-contains</c> (multiset.rs:150), and as a value <c>bool-multiset-contains</c>, a name egglog has not.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T, bool> MultiSetContains<T>() where T : notnull => MultiSetPrimitiveCache<T>.Contains;
+
+        /// <summary>
+        /// <c>multiset-not-contains</c>: whether an element does not occur, as a <c>bool</c>; as a filter, egglog's
+        /// <c>multiset-not-contains</c> (multiset.rs:151).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T, bool> MultiSetNotContains<T>() where T : notnull => MultiSetPrimitiveCache<T>.NotContains;
+
+        /// <summary>
+        /// <c>multiset-contains-swapped</c>: <c>multiset-contains</c> with its arguments swapped (multiset.rs:152).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, MultiSet<T>, bool> MultiSetContainsSwapped<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.ContainsSwapped;
+
+        /// <summary>
+        /// <c>multiset-not-contains-swapped</c>: <c>multiset-not-contains</c> with its arguments swapped
+        /// (multiset.rs:153).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T, MultiSet<T>, bool> MultiSetNotContainsSwapped<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.NotContainsSwapped;
+
+        /// <summary>
+        /// <c>multiset-intersection</c>: each element's lesser count (multiset.rs:154).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, MultiSet<T>, MultiSet<T>> MultiSetIntersection<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.Intersection;
+
+        /// <summary>
+        /// <c>multiset-sum</c>: each element's counts added (multiset.rs:155).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, MultiSet<T>, MultiSet<T>> MultiSetSum<T>() where T : notnull => MultiSetPrimitiveCache<T>.Sum;
+
+        /// <summary>
+        /// <c>multiset-reset-counts</c>: every count one (multiset.rs:157-163).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, MultiSet<T>> MultiSetResetCounts<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.ResetCounts;
+
+        /// <summary>
+        /// <c>multiset-pick-max</c>: an element of greatest count, of those the one of greatest cell, as Rust's
+        /// <c>max_by_key</c> keeps the last maximum; no result for an empty multiset (multiset.rs:164-166).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T> MultiSetPickMax<T>() where T : notnull => MultiSetPrimitiveCache<T>.PickMax;
+
+        /// <summary>
+        /// <c>multiset-count</c>: an element's count, 0 when it does not occur (multiset.rs:167-169).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<T>, T, long> MultiSetCount<T>() where T : notnull => MultiSetPrimitiveCache<T>.Count;
+
+        /// <summary>
+        /// <c>multiset-sum-multisets</c>: the sum of a multiset of multisets, each counted as often as it occurs, which
+        /// egglog registers for multisets of multisets (multiset.rs:171-185, 665-719).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<MultiSet<T>>, MultiSet<T>> MultiSetSumMultiSets<T>()
+            where T : notnull => MultiSetPrimitiveCache<T>.SumMultiSets;
+
+        /// <summary>
         /// <c>vec-range</c>: the vector <c>0, 1, …, end - 1</c>, empty for a negative end (vec.rs:151-161), which egglog
         /// registers for vectors of <c>i64</c> only.
         /// </summary>

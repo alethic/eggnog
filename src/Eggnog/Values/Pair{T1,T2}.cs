@@ -13,7 +13,7 @@ namespace Eggnog
     /// </summary>
     /// <typeparam name="T1">The type of the first element.</typeparam>
     /// <typeparam name="T2">The type of the second element.</typeparam>
-    public readonly struct Pair<T1, T2> : IEquatable<Pair<T1, T2>>, IPair
+    public readonly struct Pair<T1, T2> : IEquatable<Pair<T1, T2>>, IComparable<Pair<T1, T2>>, IPair
         where T1 : notnull
         where T2 : notnull
     {
@@ -69,6 +69,20 @@ namespace Eggnog
 
         /// <inheritdoc />
         public override bool Equals(object? obj) => obj is Pair<T1, T2> other && Equals(other);
+
+        /// <summary>
+        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), the first element then the second. Lets containers
+        /// be the elements of sets, multisets and map keys.
+        /// </summary>
+        /// <param name="other">The other pair.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        /// <exception cref="ArgumentException">An element type is not comparable.</exception>
+        public int CompareTo(Pair<T1, T2> other)
+        {
+            var order = ValueSetOrder<T1>.Comparer.Compare(First, other.First);
+            return order != 0 ? order : ValueSetOrder<T2>.Comparer.Compare(Second, other.Second);
+        }
 
         /// <inheritdoc />
         public override int GetHashCode() => HashCode.Combine(First, Second);

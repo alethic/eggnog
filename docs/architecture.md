@@ -106,7 +106,7 @@ A column holds either a class or a value.
   other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
   `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
-  `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>` and `RegisterMap<TKey, TValue>`.
+  `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>` and `RegisterMultiSet<T>`.
 - **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
   classes: there are no sets of classes.
 - **`Pair<T1, T2>`** is egglog's `Pair` container over value types (`ValueStore.RegisterPair<T1, T2>`, named
@@ -123,9 +123,16 @@ A column holds either a class or a value.
   `MapContains` and `MapNotContains`). It enumerates in key order, as a `ValueSet` does, so its keys are comparable; its
   container keeps the entries in key-cell order, as egglog's `BTreeMap`, which is the order its term,
   `(map-insert (map-insert (map-empty) k0 v0) k1 v1)`, and its serialized node list them.
+- **`MultiSet<T>`** is egglog's `MultiSet` container over a value type, in the same way (`ValueStore.RegisterMultiSet`,
+  with egglog's first-order `multiset-*` primitives as `Primitives.MultiSet*`). It enumerates in element order, and its
+  container keeps the elements in cell order, the order of its term, `(multiset-of a a b)`. `MultiSetPick` and
+  `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would
+  intern in its own order, gives no result where the order decides. Containers compare element by element, so they can
+  be the elements of sets and multisets and the keys of maps.
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
-inline; a pair, a vector or a map is a container id; every other value is interned and stored as its intern index. Interning pools are
+inline; a container (a pair, a vector, a map, a multiset) is a container id; every other value is interned and stored
+as its intern index. Interning pools are
 permanent for the life of the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived
 host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a
 value no write interned, a constant or a computation's result, equals only itself and reads back as itself, and as a
@@ -143,7 +150,7 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, pairs, vectors, maps, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |

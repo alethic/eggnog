@@ -14,10 +14,11 @@ namespace Eggnog
     /// <summary>
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>ValueSet&lt;string&gt;</c>
-    /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c> "Set&lt;i32&gt;". Sorts join through
-    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types, pairs, vectors and maps through the <c>Register*</c>
-    /// methods. Thread-safe; the first pair, vector and map types registered are engine definitions, which while the root
-    /// is writable enter its domain.
+    /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c>
+    /// "Set&lt;i32&gt;". Sorts join through
+    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and containers (pairs, vectors, maps, multisets) through
+    /// the <c>Register*</c> methods. Thread-safe; the first container type of each kind registered is an engine
+    /// definition, which while the root is writable enters its domain.
     /// </summary>
     /// <remarks>
     /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
@@ -85,8 +86,8 @@ namespace Eggnog
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
         /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterPair{T1, T2}"/>,
-        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterMap{TKey, TValue}"/>, <see cref="RegisterEnum{TEnum}"/> or
-        /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
+        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterMap{TKey, TValue}"/>, <see cref="RegisterMultiSet{T}"/>,
+        /// <see cref="RegisterEnum{TEnum}"/> or <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
         /// <summary>
@@ -147,6 +148,9 @@ namespace Eggnog
             if (IsMap(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a map: register it with ValueStore.RegisterMap.");
 
+            if (IsMultiSet(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a multiset: register it with ValueStore.RegisterMultiSet.");
+
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
             lock (sync)
@@ -182,8 +186,8 @@ namespace Eggnog
                 if (element.Kind == ColumnKind.Sort)
                     throw new ArgumentException($"Sets hold values only, never classes; {element.Name} is a sort.");
 
-                if (typeof(T) != typeof(string) && typeof(IComparable<T>).IsAssignableFrom(typeof(T)) == false && typeof(IComparable).IsAssignableFrom(typeof(T)) == false)
-                    throw new ArgumentException($"Sets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable.");
+                if (element.IsOrdered == false)
+                    throw new ArgumentException($"Sets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
 
                 var name = $"Set<{element.Name}>";
                 CheckFree(typeof(ValueSet<T>), name);
@@ -328,11 +332,8 @@ namespace Eggnog
                 if (part.Kind == ColumnKind.Sort)
                     throw new ArgumentException($"Maps hold values only so far; {part.Name} is a sort, and maps of classes are egglog's eq-sort containers, which are not supported yet.");
 
-            var comparable = typeof(TKey) == typeof(string)
-                || typeof(IComparable<TKey>).IsAssignableFrom(typeof(TKey))
-                || typeof(IComparable).IsAssignableFrom(typeof(TKey));
-            if (comparable == false)
-                throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable.");
+            if (key.IsOrdered == false)
+                throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable, or holds an element that does not.");
 
             var env = graph.ValueContainers<Relations.MapContainer>();
             lock (sync)
@@ -343,6 +344,51 @@ namespace Eggnog
                 var name = $"Map<{key.Name}, {value.Name}>";
                 CheckFree(typeof(Map<TKey, TValue>), name);
                 var type = new MapColumnType<TKey, TValue>(name, key, value, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Registers the multiset type of <typeparamref name="T"/>, egglog's <c>(sort … (MultiSet T))</c>, named
+        /// <c>MultiSet&lt;{element name}&gt;</c>, or gets it when it is registered already. A multiset is egglog's
+        /// <c>MultiSet</c> container: its cell is a container id from the graph's id counter, equal multisets have one
+        /// cell, and its primitives are <see cref="Primitives"/>' <c>MultiSet*</c> methods. It extracts as
+        /// <c>(multiset-of a a b)</c>, its elements in cell order as egglog's, and costs what its elements cost. The
+        /// elements are value types, containers included, and <c>string</c> or comparable, as a
+        /// <see cref="MultiSet{T}"/> enumerates in element order; multisets of classes, egglog's eq-sort containers, are
+        /// not supported yet. The first multiset type registered is an engine definition: while the root is writable,
+        /// that call enters the root's domain.
+        /// </summary>
+        /// <typeparam name="T">The element type; registered, comparable, and not a sort.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">The element type is unknown, a sort or not comparable, or the name is
+        /// taken.</exception>
+        /// <exception cref="InvalidOperationException">The first multiset type is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<MultiSet<T>> RegisterMultiSet<T>() where T : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<MultiSet<T>>(out var existing))
+                return existing;
+
+            var element = TypeOf<T>();
+            if (element.Kind == ColumnKind.Sort)
+                throw new ArgumentException($"Multisets hold values only so far; {element.Name} is a sort, and multisets of classes are egglog's eq-sort containers, which are not supported yet.");
+
+            if (element.IsOrdered == false)
+                throw new ArgumentException($"Multisets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
+
+            var env = graph.ValueContainers<Relations.MultiSetContainer>();
+            lock (sync)
+            {
+                if (TryGetType<MultiSet<T>>(out existing))
+                    return existing;
+
+                var name = $"MultiSet<{element.Name}>";
+                CheckFree(typeof(MultiSet<T>), name);
+                var type = new MultiSetColumnType<T>(name, element, env, graph.Engine.Counters);
                 Add(type);
                 AddContainers(env);
                 return type;
@@ -440,7 +486,7 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
         /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterVec</c>, <c>ValueStore.RegisterMap</c>,
-        /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        /// <c>ValueStore.RegisterMultiSet</c>, <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
         [UnconditionalSuppressMessage("Trimming", "IL2067",
             Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
                 + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
@@ -458,6 +504,9 @@ namespace Eggnog
 
             if (IsMap(clrType))
                 return "ValueStore.RegisterMap";
+
+            if (IsMultiSet(clrType))
+                return "ValueStore.RegisterMultiSet";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
@@ -509,6 +558,13 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a map type.</returns>
         internal static bool IsMap(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Map<,>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a multiset type, a <see cref="MultiSet{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a multiset type.</returns>
+        internal static bool IsMultiSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(MultiSet<>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

@@ -565,6 +565,15 @@ namespace Eggnog
                 return builder.Append(')').ToString();
             }
 
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(MultiSet<>))
+            {
+                var builder = new StringBuilder("(multiset-of");
+                foreach (var element in (IEnumerable)value)
+                    builder.Append(' ').Append(DefaultLiteral(element!));
+
+                return builder.Append(')').ToString();
+            }
+
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Vec<>))
             {
                 var builder = new StringBuilder("(vec-of");

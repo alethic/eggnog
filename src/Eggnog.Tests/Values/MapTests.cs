@@ -41,9 +41,13 @@ namespace Eggnog.Tests.Values
             Assert.Equal("Map<String, i64>", t.Graph.Values.RegisterMap<string, long>().Name);
             var sort = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<long, Node>());
             Assert.Contains("Node is a sort", sort.Message, StringComparison.Ordinal);
-            t.Graph.Values.RegisterPair<long, long>();
-            var key = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<Pair<long, long>, long>());
+            t.Graph.Values.Register<NumericBound>("NumericBound");
+            t.Graph.Values.RegisterPair<NumericBound, long>();
+            var key = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<NumericBound, long>());
             Assert.Contains("IComparable", key.Message, StringComparison.Ordinal);
+            Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<Pair<NumericBound, long>, long>());
+            t.Graph.Values.RegisterPair<long, long>();
+            Assert.Equal("Map<Pair<i64, i64>, i64>", t.Graph.Values.RegisterMap<Pair<long, long>, long>().Name);
             var register = Assert.Throws<ArgumentException>(() => t.Graph.Values.Register<Map<long, long>>("M"));
             Assert.Contains("ValueStore.RegisterMap", register.Message, StringComparison.Ordinal);
         }
