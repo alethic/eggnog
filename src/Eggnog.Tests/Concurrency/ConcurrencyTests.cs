@@ -361,7 +361,7 @@ namespace Eggnog.Tests.Concurrency
             var schema = graph.Root.CreateChild(c.Schema);
             schema.Assume(
                 c.Present.Of("kind"),
-                c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice", "note")),
+                c.Dom.Of("kind").Is(Set.Of("order", "invoice", "note")),
                 c.Discriminator.Of("kind"));
             c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(schema, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));

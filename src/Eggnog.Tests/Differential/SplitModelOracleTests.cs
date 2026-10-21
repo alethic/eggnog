@@ -88,13 +88,13 @@ namespace Eggnog.Tests.Differential
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
             foreach (var (path, values) in program.Discriminators)
-                schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(ValueSet.Of(values)), c.Discriminator.Of(path));
+                schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.Of(values)), c.Discriminator.Of(path));
 
             foreach (var branch in program.Branches)
             {
                 var consequences = branch.Present.Select(p => c.Present.Of(p))
                     .Concat(branch.Forms.Select(f => c.Form.Of(f.Path, f.Form)))
-                    .Concat(branch.Domains.Select(d => c.Dom.Of(d.Path).Is(ValueSet.Of(d.Values))))
+                    .Concat(branch.Domains.Select(d => c.Dom.Of(d.Path).Is(Set.Of(d.Values))))
                     .ToArray();
                 if (consequences.Length > 0)
                     c.DeclareBranch(schema, branch.Discriminator, branch.Value, consequences);

@@ -2,7 +2,7 @@ namespace Eggnog.Tests.Differential
 {
 
     /// <summary>
-    /// The column types of a random program: the CLR types <c>long</c>, <c>string</c>, <c>ValueSet&lt;int&gt;</c>, the
+    /// The column types of a random program: the CLR types <c>long</c>, <c>string</c>, <c>Set&lt;int&gt;</c>, the
     /// sort <see cref="Support.Node"/>, and <c>bool</c> for filter results.
     /// </summary>
     internal enum DiffType
@@ -19,7 +19,7 @@ namespace Eggnog.Tests.Differential
         Str,
 
         /// <summary>
-        /// <c>ValueSet&lt;int&gt;</c>, merged by <c>ValueLattice.Intersect&lt;int&gt;()</c>.
+        /// <c>Set&lt;int&gt;</c>, merged by <c>ValueLattice.Intersect&lt;int&gt;()</c>.
         /// </summary>
         IntSet,
 

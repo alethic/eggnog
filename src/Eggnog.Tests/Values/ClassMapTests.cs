@@ -316,7 +316,6 @@ namespace Eggnog.Tests.Values
             var one = root.Find(root.Make(num.Of(1L)));
             Assert.Equal(MultiSet.Of(Vec.Of(one), Vec.Of(one)), root.Get(s.Of()));
             Assert.Equal(Map.Of((7L, one)), root.Get(m.Of()));
-            Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Node>());
         }
 
     }

@@ -121,7 +121,7 @@ namespace Eggnog.Tests.Definitions
             graph.DefineSort<Node>("Node");
             var present = graph.DefineRelation<string>("present");
             var analysis = graph.DefineRelation<Node>("analysis", new TableOptions { Role = TableRole.Analysis });
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
             var unlifted = graph.DefineRelation<string>("unlifted", new TableOptions { Lift = false });
 
@@ -136,7 +136,7 @@ namespace Eggnog.Tests.Definitions
             Assert.False(analysis.Lift);
             Assert.False(analysis.IsValueOnly);
             Assert.Equal(TableKind.Function, dom.Kind);
-            Assert.Same(graph.Values.TypeOf<ValueSet<string>>(), dom.Output);
+            Assert.Same(graph.Values.TypeOf<Set<string>>(), dom.Output);
             Assert.Equal("intersect", dom.Lattice!.Name);
             Assert.True(dom.IsValueOnly);
             Assert.Equal(TableKind.Constructor, lit.Kind);

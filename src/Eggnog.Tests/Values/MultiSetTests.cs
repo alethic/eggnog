@@ -188,15 +188,19 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void SetsHoldNoContainersAndOrderedLatticesNeedComparableElements()
+        public void SetsHoldContainersAndOrderedLatticesNeedComparableElements()
         {
             var graph = new EGraph();
             graph.Values.RegisterPair<long, long>();
-            var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<long, long>>());
-            Assert.Contains("is a container", set.Message, StringComparison.Ordinal);
+            graph.Values.RegisterSet<Pair<long, long>>();
+            var pairs = graph.DefineFunction<long, Set<Pair<long, long>>>("pairs");
+            graph.Root.Assume(pairs.Of(1L).Is(Set.Of(new Pair<long, long>(2L, 0L), new Pair<long, long>(1L, 9L))));
+            Assert.Equal(Set.Of(new Pair<long, long>(1L, 9L), new Pair<long, long>(2L, 0L)), graph.Root.Get(pairs.Of(1L)));
 
             graph.Values.Register<NumericBound>("NumericBound");
             graph.Values.RegisterPair<NumericBound, long>();
+            var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<NumericBound, long>>());
+            Assert.Contains("implements neither", set.Message, StringComparison.Ordinal);
             var unlifted = new TableOptions { Lift = false };
             var lattice = Assert.Throws<ArgumentException>(() =>
                 graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>(), unlifted));

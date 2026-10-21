@@ -14,7 +14,7 @@ namespace Eggnog.Tests.Differential
     /// and a rebuild restores congruence. Schedules, limits and run reports follow the rule layer's semantics.
     /// </summary>
     /// <remarks>
-    /// Values are <c>long</c>, <c>string</c> and <c>ValueSet&lt;int&gt;</c>; a class is a <c>long</c> id. Rows of a
+    /// Values are <c>long</c>, <c>string</c> and <c>Set&lt;int&gt;</c>; a class is a <c>long</c> id. Rows of a
     /// function or constructor map a key to an output; a relation is a set of keys. Every cell is canonical between
     /// commands. Observations are rendered with <see cref="TermNamer"/> names, as the Eggnog side renders its own.
     /// </remarks>
@@ -407,7 +407,7 @@ namespace Eggnog.Tests.Differential
         static object Merge(DiffTable table, object old, object value) => table.Lattice switch
         {
             DiffLattice.Max => Math.Max((long)old, (long)value),
-            DiffLattice.Intersect => ((ValueSet<int>)old).Intersect((ValueSet<int>)value),
+            DiffLattice.Intersect => ((Set<int>)old).Intersect((Set<int>)value),
             _ => Equals(old, value) ? old : throw new InvalidOperationException($"Reference: a conflicting write to '{table.Name}'."),
         };
 

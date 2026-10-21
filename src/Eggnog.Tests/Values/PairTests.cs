@@ -263,15 +263,15 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void ALatticeWithACaseJoinOverAPairIsRefused()
+        public void ALatticeOverAPairMayHaveACaseJoin()
         {
+            // A pair of values is a value to a lift, as a set of values is: equal pairs have one cell in every scope, so
+            // the case join combines the cases' pairs.
             var graph = new EGraph();
             graph.Values.RegisterPair<long, long>();
             var lattice = new ValueLattice<Pair<long, long>>("pick", static (a, _) => a, static (_, b) => b);
-            var refused = Assert.Throws<ArgumentException>(() => graph.DefineFunction<Pair<long, long>>("m", lattice));
-            Assert.Contains("case join", refused.Message, StringComparison.Ordinal);
-
-            graph.DefineFunction<Pair<long, long>>("kept", new ValueLattice<Pair<long, long>>("first", static (a, _) => a));
+            var m = graph.DefineFunction<Pair<long, long>>("m", lattice);
+            Assert.NotNull(m.CaseJoin);
         }
 
     }

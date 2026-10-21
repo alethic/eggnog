@@ -5,13 +5,13 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Makes <see cref="ValueSet{T}"/>s.
+    /// Makes <see cref="Set{T}"/>s.
     /// </summary>
-    public static class ValueSet
+    public static class Set
     {
 
         /// <summary>
-        /// Makes the set of the given elements: <c>ValueSet.Of("abc")</c> is <c>{"abc"}</c>. There is deliberately no
+        /// Makes the set of the given elements: <c>Set.Of("abc")</c> is <c>{"abc"}</c>. There is deliberately no
         /// <see cref="IEnumerable{T}"/> overload named <c>Of</c>, so a string is never taken as its characters; use
         /// <see cref="From{T}"/> for a sequence.
         /// </summary>
@@ -19,10 +19,10 @@ namespace Eggnog
         /// <param name="items">The elements; duplicates are dropped.</param>
         /// <returns>The set.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="items"/> or an element is <c>null</c>.</exception>
-        public static ValueSet<T> Of<T>(params T[] items) where T : notnull
+        public static Set<T> Of<T>(params T[] items) where T : notnull
         {
             ArgumentNullException.ThrowIfNull(items);
-            return ValueSet<T>.Create(items);
+            return Set<T>.Create(items);
         }
 
         /// <summary>
@@ -32,10 +32,10 @@ namespace Eggnog
         /// <param name="items">The elements; duplicates are dropped.</param>
         /// <returns>The set.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="items"/> or an element is <c>null</c>.</exception>
-        public static ValueSet<T> From<T>(IEnumerable<T> items) where T : notnull
+        public static Set<T> From<T>(IEnumerable<T> items) where T : notnull
         {
             ArgumentNullException.ThrowIfNull(items);
-            return ValueSet<T>.Create(items);
+            return Set<T>.Create(items);
         }
 
     }

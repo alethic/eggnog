@@ -12,7 +12,7 @@ namespace Eggnog
     /// An immutable map of values or classes, equal by content: egglog's <c>Map</c> container (src/sort/map.rs), whose
     /// column type <see cref="ValueStore.RegisterMap{TKey, TValue}"/> registers and whose primitives are
     /// <see cref="Primitives"/>' <c>Map*</c> methods. A map is interned as a container, so equal maps have equal cells. It
-    /// enumerates in ascending key order, as <see cref="ValueSet{T}"/> orders its elements (by code point for strings, as
+    /// enumerates in ascending key order, as <see cref="Set{T}"/> orders its elements (by code point for strings, as
     /// egglog's <c>OrderedFloat</c> for doubles, NaN last, by cell for a sort's classes, <c>Comparer&lt;T&gt;.Default</c>
     /// otherwise), so the key type must be <c>string</c>, comparable or a sort, and its order must agree with its
     /// equality; egglog orders a map by its keys' cells, which is the order its terms, serialized nodes and cells' text
@@ -26,7 +26,7 @@ namespace Eggnog
         where TValue : notnull
     {
 
-        static IComparer<TKey> Order => ValueSetOrder<TKey>.Comparer;
+        static IComparer<TKey> Order => ElementOrder<TKey>.Comparer;
 
         readonly TKey[] keys;
         readonly TValue[] values;
@@ -183,7 +183,7 @@ namespace Eggnog
         public override bool Equals(object? obj) => obj is Map<TKey, TValue> other && Equals(other);
 
         /// <summary>
-        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// Compares in content order, element by element as <see cref="Set{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), its entries in key order, each by key then value,
         /// a shorter prefix first; <c>null</c> first. Lets containers be the elements of multisets and the keys of maps.
         /// </summary>
@@ -195,7 +195,7 @@ namespace Eggnog
             if (other is null)
                 return 1;
 
-            var valueOrder = ValueSetOrder<TValue>.Comparer;
+            var valueOrder = ElementOrder<TValue>.Comparer;
             for (var i = 0; i < keys.Length && i < other.keys.Length; i++)
             {
                 var c = Order.Compare(keys[i], other.keys[i]);

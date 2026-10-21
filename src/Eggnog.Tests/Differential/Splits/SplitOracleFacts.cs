@@ -30,7 +30,7 @@ namespace Eggnog.Tests.Differential.Splits
         /// <summary>
         /// Gets the domains found, by path.
         /// </summary>
-        public SortedDictionary<string, ValueSet<string>> Domains { get; } = new(System.StringComparer.Ordinal);
+        public SortedDictionary<string, Set<string>> Domains { get; } = new(System.StringComparer.Ordinal);
 
         /// <summary>
         /// Renders the facts.

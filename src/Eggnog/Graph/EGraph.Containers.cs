@@ -18,8 +18,9 @@ namespace Eggnog
         /// is using the writable root. Called when a container column type is registered, which keeps the environment.
         /// </summary>
         /// <remarks>
-        /// Registered on first use, not with the graph, because a database with no container type skips the container
-        /// rebuild of every pass. Once the root is frozen, children may run on other threads while this registers; they
+        /// Registered on first use, not with the graph, so that a graph holds the environments of the container types
+        /// it uses only (the built-in sets' it registers with itself); the container rebuild of each pass walks only the
+        /// types that hold ids. Once the root is frozen, children may run on other threads while this registers; they
         /// read the container set only to look for containers that hold ids, which this is not. A container type that
         /// holds ids must not register so: children of a frozen root read such types while they rebuild.
         /// </remarks>

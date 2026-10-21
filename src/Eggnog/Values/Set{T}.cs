@@ -8,20 +8,23 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An immutable set of values in ascending element order (by code point for strings, <c>Comparer&lt;T&gt;.Default</c>
-    /// otherwise), equal by content. Operations return this instance when nothing changes.
+    /// An immutable set of values or classes, equal by content: egglog's <c>Set</c> container (src/sort/set.rs), whose
+    /// column type <see cref="ValueStore.RegisterSet{T}"/> registers and whose primitives are <see cref="Primitives"/>'
+    /// <c>Set*</c> methods. A set is interned as a container, so equal sets have equal cells. It keeps its elements in
+    /// ascending element order: by code point for strings, a sort's classes by cell, <c>Comparer&lt;T&gt;.Default</c>
+    /// otherwise, so the element type must be <c>string</c>, comparable or a sort; egglog orders a set by its elements'
+    /// cells, which is the order its terms and serialized nodes list. Operations return this instance when nothing
+    /// changes.
     /// </summary>
     /// <remarks>
-    /// A set is an interned base value, not a container: its cells are never canonicalized or rewritten, and sets hold
-    /// values only, never classes. Equality is element-wise; the hash combines the element hashes in order; because
-    /// elements are kept sorted, equal sets have one interned cell. Lookups are binary searches; set operations are
-    /// linear merges.
+    /// Equality is element-wise; the hash combines the element hashes in order. Lookups are binary searches; set
+    /// operations are linear merges.
     /// </remarks>
     /// <typeparam name="T">The element type.</typeparam>
-    public sealed class ValueSet<T> : IReadOnlyList<T>, IEquatable<ValueSet<T>> where T : notnull
+    public sealed class Set<T> : IReadOnlyList<T>, IEquatable<Set<T>>, IComparable<Set<T>> where T : notnull
     {
 
-        static IComparer<T> Order => ValueSetOrder<T>.Comparer;
+        static IComparer<T> Order => ElementOrder<T>.Comparer;
 
         readonly T[] items;
         int hash;
@@ -29,7 +32,7 @@ namespace Eggnog
         /// <summary>
         /// Initializes a set over <paramref name="sorted"/>, which is sorted and free of duplicates; not copied.
         /// </summary>
-        ValueSet(T[] sorted)
+        Set(T[] sorted)
         {
             items = sorted;
         }
@@ -37,7 +40,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the empty set.
         /// </summary>
-        public static ValueSet<T> Empty { get; } = new(Array.Empty<T>());
+        public static Set<T> Empty { get; } = new(Array.Empty<T>());
 
         /// <summary>
         /// Gets the number of elements.
@@ -72,7 +75,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>Whether this set is a subset of it.</returns>
-        public bool IsSubsetOf(ValueSet<T> other)
+        public bool IsSubsetOf(Set<T> other)
         {
             ArgumentNullException.ThrowIfNull(other);
             if (items.Length > other.items.Length)
@@ -98,7 +101,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>Whether they overlap.</returns>
-        public bool Overlaps(ValueSet<T> other)
+        public bool Overlaps(Set<T> other)
         {
             ArgumentNullException.ThrowIfNull(other);
             int i = 0, j = 0;
@@ -122,7 +125,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="item">The value.</param>
         /// <returns>The set; this instance when <paramref name="item"/> is an element already.</returns>
-        public ValueSet<T> Add(T item)
+        public Set<T> Add(T item)
         {
             ArgumentNullException.ThrowIfNull(item);
             var index = Array.BinarySearch(items, item, Order);
@@ -134,7 +137,7 @@ namespace Eggnog
             Array.Copy(items, result, index);
             result[index] = item;
             Array.Copy(items, index, result, index + 1, items.Length - index);
-            return new ValueSet<T>(result);
+            return new Set<T>(result);
         }
 
         /// <summary>
@@ -142,7 +145,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="item">The value.</param>
         /// <returns>The set; this instance when <paramref name="item"/> is not an element.</returns>
-        public ValueSet<T> Remove(T item)
+        public Set<T> Remove(T item)
         {
             ArgumentNullException.ThrowIfNull(item);
             var index = Array.BinarySearch(items, item, Order);
@@ -155,7 +158,7 @@ namespace Eggnog
             var result = new T[items.Length - 1];
             Array.Copy(items, result, index);
             Array.Copy(items, index + 1, result, index, items.Length - index - 1);
-            return new ValueSet<T>(result);
+            return new Set<T>(result);
         }
 
         /// <summary>
@@ -163,7 +166,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>The union; this instance when <paramref name="other"/> adds nothing.</returns>
-        public ValueSet<T> Union(ValueSet<T> other)
+        public Set<T> Union(Set<T> other)
         {
             ArgumentNullException.ThrowIfNull(other);
             if (other.IsSubsetOf(this))
@@ -191,7 +194,7 @@ namespace Eggnog
                 }
             }
 
-            return new ValueSet<T>(result.ToArray());
+            return new Set<T>(result.ToArray());
         }
 
         /// <summary>
@@ -199,7 +202,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>The intersection; this instance when every element is in <paramref name="other"/>.</returns>
-        public ValueSet<T> Intersect(ValueSet<T> other)
+        public Set<T> Intersect(Set<T> other)
         {
             ArgumentNullException.ThrowIfNull(other);
             if (IsSubsetOf(other))
@@ -226,7 +229,7 @@ namespace Eggnog
                 }
             }
 
-            return result.Count == 0 ? Empty : new ValueSet<T>(result.ToArray());
+            return result.Count == 0 ? Empty : new Set<T>(result.ToArray());
         }
 
         /// <summary>
@@ -234,7 +237,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>The difference; this instance when the sets do not overlap.</returns>
-        public ValueSet<T> Except(ValueSet<T> other)
+        public Set<T> Except(Set<T> other)
         {
             ArgumentNullException.ThrowIfNull(other);
             if (Overlaps(other) == false)
@@ -251,7 +254,7 @@ namespace Eggnog
                     result.Add(item);
             }
 
-            return result.Count == 0 ? Empty : new ValueSet<T>(result.ToArray());
+            return result.Count == 0 ? Empty : new Set<T>(result.ToArray());
         }
 
         /// <summary>
@@ -259,7 +262,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="predicate">The test.</param>
         /// <returns>The filtered set; this instance when every element passes.</returns>
-        public ValueSet<T> Where(Func<T, bool> predicate)
+        public Set<T> Where(Func<T, bool> predicate)
         {
             ArgumentNullException.ThrowIfNull(predicate);
             List<T>? result = null;
@@ -280,7 +283,7 @@ namespace Eggnog
             if (result is null)
                 return this;
 
-            return result.Count == 0 ? Empty : new ValueSet<T>(result.ToArray());
+            return result.Count == 0 ? Empty : new Set<T>(result.ToArray());
         }
 
         /// <summary>
@@ -288,7 +291,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="other">The other set.</param>
         /// <returns>Whether the sets are equal.</returns>
-        public bool Equals(ValueSet<T>? other)
+        public bool Equals(Set<T>? other)
         {
             if (other is null)
                 return false;
@@ -308,7 +311,29 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public override bool Equals(object? obj) => obj is ValueSet<T> other && Equals(other);
+        public override bool Equals(object? obj) => obj is Set<T> other && Equals(other);
+
+        /// <summary>
+        /// Compares in content order: element by element in element order, a shorter prefix first; <c>null</c> first.
+        /// Lets sets be the elements of sets and multisets and the keys of maps.
+        /// </summary>
+        /// <param name="other">The other set.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        /// <exception cref="ArgumentException">The element type is not comparable.</exception>
+        public int CompareTo(Set<T>? other)
+        {
+            if (other is null)
+                return 1;
+
+            for (var i = 0; i < items.Length && i < other.items.Length; i++)
+            {
+                var c = Order.Compare(items[i], other.items[i]);
+                if (c != 0)
+                    return c;
+            }
+
+            return items.Length.CompareTo(other.items.Length);
+        }
 
         /// <inheritdoc />
         public override int GetHashCode()
@@ -363,7 +388,7 @@ namespace Eggnog
         /// <param name="source">The elements.</param>
         /// <returns>The set.</returns>
         /// <exception cref="ArgumentNullException">An element is <c>null</c>.</exception>
-        internal static ValueSet<T> Create(IEnumerable<T> source)
+        internal static Set<T> Create(IEnumerable<T> source)
         {
             var list = new List<T>(source);
             if (list.Count == 0)
@@ -381,7 +406,7 @@ namespace Eggnog
 
             var result = new T[distinct];
             list.CopyTo(0, result, 0, distinct);
-            return new ValueSet<T>(result);
+            return new Set<T>(result);
         }
 
     }

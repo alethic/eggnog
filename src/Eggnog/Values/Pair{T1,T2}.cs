@@ -71,7 +71,7 @@ namespace Eggnog
         public override bool Equals(object? obj) => obj is Pair<T1, T2> other && Equals(other);
 
         /// <summary>
-        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// Compares in content order, element by element as <see cref="Set{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), the first element then the second. Lets containers
         /// be the elements of multisets and the keys of maps.
         /// </summary>
@@ -80,8 +80,8 @@ namespace Eggnog
         /// <exception cref="ArgumentException">An element type is not comparable.</exception>
         public int CompareTo(Pair<T1, T2> other)
         {
-            var order = ValueSetOrder<T1>.Comparer.Compare(First, other.First);
-            return order != 0 ? order : ValueSetOrder<T2>.Comparer.Compare(Second, other.Second);
+            var order = ElementOrder<T1>.Comparer.Compare(First, other.First);
+            return order != 0 ? order : ElementOrder<T2>.Comparer.Compare(Second, other.Second);
         }
 
         /// <inheritdoc />

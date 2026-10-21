@@ -22,7 +22,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <exception cref="ArgumentException">A function is not declared; a constructor's output is not an id; a relation's
         /// output is an id (it would be written as the seed case's id, which can be local to it); or a case join is
-        /// given for an id output or for a kind other than <see cref="LiftTableKind.Function"/>.</exception>
+        /// given for an id output other than a container of values, or for a kind other than
+        /// <see cref="LiftTableKind.Function"/>.</exception>
         void Resolve(EGraphContext parent, LiftSpec spec)
         {
             tables.Clear();
@@ -43,8 +44,8 @@ namespace Eggnog.Relations
                 if (table.CaseJoin is not null && table.Kind != LiftTableKind.Function)
                     throw new ArgumentException($"{info.Name} is lifted as a {table.Kind}; a case join applies to functions only.", nameof(spec));
 
-                if (table.CaseJoin is not null && info.OutputType.IsId)
-                    throw new ArgumentException($"{info.Name} has an id output; a case join combines base values only.", nameof(spec));
+                if (table.CaseJoin is not null && info.OutputType.IsId && table.ValueOutput == false)
+                    throw new ArgumentException($"{info.Name} has an id output; a case join combines base values and containers of them only.", nameof(spec));
 
                 if (parent.IsRoot == false && graph.Store.Schema[info.Table] is { IsLattice: false, IsContextPrivate: false })
                     continue;
@@ -247,11 +248,7 @@ namespace Eggnog.Relations
                             return;
 
                         writes.AddRow(function, key, output);
-                        if (table.Table.ValueOutput)
-                            report.Values++;
-                        else
-                            report.Rows++;
-
+                        report.Rows++;
                         return;
                     }
 

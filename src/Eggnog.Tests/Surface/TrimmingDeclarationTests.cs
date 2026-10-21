@@ -64,18 +64,18 @@ namespace Eggnog.Tests.Surface
         }
 
         /// <summary>
-        /// A sort implements <see cref="ISort{TSort}"/>; a set is a <see cref="ValueSet{T}"/>; nothing else is either.
+        /// A sort implements <see cref="ISort{TSort}"/>; a set is a <see cref="Set{T}"/>; nothing else is either.
         /// </summary>
         [Fact]
         public void IsSortAndIsSetTellTypesApart()
         {
             Assert.True(ValueStore.IsSort(typeof(Node)));
             Assert.False(ValueStore.IsSort(typeof(long)));
-            Assert.False(ValueStore.IsSort(typeof(ValueSet<long>)));
+            Assert.False(ValueStore.IsSort(typeof(Set<long>)));
             Assert.False(ValueStore.IsSort(typeof(ClassId)));
 
-            Assert.True(ValueStore.IsSet(typeof(ValueSet<long>)));
-            Assert.True(ValueStore.IsSet(typeof(ValueSet<string>)));
+            Assert.True(ValueStore.IsSet(typeof(Set<long>)));
+            Assert.True(ValueStore.IsSet(typeof(Set<string>)));
             Assert.False(ValueStore.IsSet(typeof(long)));
             Assert.False(ValueStore.IsSet(typeof(Node)));
         }
@@ -87,7 +87,7 @@ namespace Eggnog.Tests.Surface
         public void RegisterMethodNamesTheMethodForEachKindOfType()
         {
             Assert.Equal("EGraph.DefineSort", ValueStore.RegisterMethod(typeof(Node)));
-            Assert.Equal("ValueStore.RegisterSet", ValueStore.RegisterMethod(typeof(ValueSet<long>)));
+            Assert.Equal("ValueStore.RegisterSet", ValueStore.RegisterMethod(typeof(Set<long>)));
             Assert.Equal("ValueStore.RegisterEnum", ValueStore.RegisterMethod(typeof(DayOfWeek)));
             Assert.Equal("ValueStore.Register", ValueStore.RegisterMethod(typeof(Guid)));
         }

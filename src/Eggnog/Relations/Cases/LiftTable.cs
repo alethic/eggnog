@@ -16,8 +16,9 @@ namespace Eggnog.Relations
     /// <param name="Function">The function.</param>
     /// <param name="Kind">How it is lifted.</param>
     /// <param name="CaseJoin">The case join for a base output; <c>null</c> requires the cases to agree.</param>
-    /// <param name="ValueOutput">Whether an id output is a container of values, a value to the library, so that a lifted
-    /// row of it counts as a value (<see cref="LiftReport.Values"/>) rather than a row.</param>
+    /// <param name="ValueOutput">Whether an id output is a container of values: an id no find moves, equal containers
+    /// having one id in every context, so the lift treats it as a base value, which the case join may combine, and counts
+    /// a lifted row of it as a value (<see cref="LiftReport.Values"/>).</param>
     internal readonly record struct LiftTable(
         FunctionId Function,
         LiftTableKind Kind,

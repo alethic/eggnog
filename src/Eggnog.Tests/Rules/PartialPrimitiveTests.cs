@@ -161,7 +161,7 @@ namespace Eggnog.Tests.Rules
         public void ACaseAssumptionWithNoResultFailsTheRun()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var chosen = graph.DefineRelation<string, string>("chosen");
             var rules = graph.DefineRuleset("rules");
             var never = Primitive.CreatePartial("never", static (string s, out string result) =>
@@ -171,14 +171,14 @@ namespace Eggnog.Tests.Rules
             });
             var split = graph.DefineSplit("choose", s =>
             {
-                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Assume(chosen.Of(p, never.Of(v)));
             });
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")));
+            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")));
 
             var e = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(split, rules)));
 
@@ -259,7 +259,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("(rule ((mark v) (!= v (from-string \"7\")) (< v (from-string \"100\"))) ((mark (+ v (from-string \"5\")))) :ruleset rules)",
                 rule.ToString());
             Assert.Equal("(from-string \"5\")", ((Term<BigInteger>)new BigInteger(5)).ToString());
-            Assert.Equal("(set-of (from-string \"1\"))", ((Term<ValueSet<BigInteger>>)ValueSet.Of(BigInteger.One)).ToString());
+            Assert.Equal("(set-of (from-string \"1\"))", ((Term<Set<BigInteger>>)Set.Of(BigInteger.One)).ToString());
         }
 
         /// <summary>

@@ -167,7 +167,7 @@ namespace Eggnog.Tests.Scopes
         {
             graph.Root.Freeze();
             var schema = graph.Root.CreateChild(c.Schema);
-            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("order", "invoice")));
             c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
             schema.Run(Schedule.Saturate(c.Horn, c.Lattice));
             schema.Freeze();

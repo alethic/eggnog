@@ -17,13 +17,13 @@ namespace Eggnog.Tests.Values
     public sealed class LatticeTests
     {
 
-        static readonly ValueSet<string>[] Sets =
+        static readonly Set<string>[] Sets =
         {
-            ValueSet<string>.Empty,
-            ValueSet.Of("a"),
-            ValueSet.Of("b"),
-            ValueSet.Of("a", "b"),
-            ValueSet.Of("a", "b", "c"),
+            Set<string>.Empty,
+            Set.Of("a"),
+            Set.Of("b"),
+            Set.Of("a", "b"),
+            Set.Of("a", "b", "c"),
         };
 
         static readonly long[] Numbers = { -3, 0, 1, 7, long.MaxValue };
@@ -36,14 +36,14 @@ namespace Eggnog.Tests.Values
             ValueLattice.Max<long>().Verify(Numbers);
             ValueLattice.Min<long>().Verify(Numbers);
             Assert.Equal("intersect", ValueLattice.Intersect<string>().Name);
-            Assert.Equal(typeof(ValueSet<string>), ValueLattice.Union<string>().ValueType);
+            Assert.Equal(typeof(Set<string>), ValueLattice.Union<string>().ValueType);
             Assert.NotNull(ValueLattice.Max<long>().CaseJoin);
         }
 
         [Fact]
         public void VerifyRejectsAMismatchedCaseJoin()
         {
-            var wrong = new ValueLattice<ValueSet<string>>("wrong", (a, b) => a.Intersect(b), (a, b) => a.Intersect(b));
+            var wrong = new ValueLattice<Set<string>>("wrong", (a, b) => a.Intersect(b), (a, b) => a.Intersect(b));
             var e = Assert.Throws<InvalidOperationException>(() => wrong.Verify(Sets));
             Assert.Contains("absorption", e.Message);
             Assert.Contains("wrong", e.Message);
@@ -69,12 +69,12 @@ namespace Eggnog.Tests.Values
             var graph = new EGraph();
             var lo = graph.DefineFunction<string, long>("lo", ValueLattice.Max<long>());
             var hi = graph.DefineFunction<string, long>("hi", ValueLattice.Min<long>());
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(lo.Of("n").Is(5L), hi.Of("n").Is(5L), dom.Of("k").Is(ValueSet.Of("a", "b")));
-            graph.Root.Assume(lo.Of("n").Is(3L), lo.Of("n").Is(9L), hi.Of("n").Is(3L), dom.Of("k").Is(ValueSet.Of("b", "c")));
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(lo.Of("n").Is(5L), hi.Of("n").Is(5L), dom.Of("k").Is(Set.Of("a", "b")));
+            graph.Root.Assume(lo.Of("n").Is(3L), lo.Of("n").Is(9L), hi.Of("n").Is(3L), dom.Of("k").Is(Set.Of("b", "c")));
             Assert.Equal(9L, graph.Root.Get(lo.Of("n")));
             Assert.Equal(3L, graph.Root.Get(hi.Of("n")));
-            Assert.Equal(ValueSet.Of("b"), graph.Root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of("b"), graph.Root.Get(dom.Of("k")));
             Assert.Same(lo.Lattice, ((FunctionHandle)lo).Lattice);
         }
 
@@ -322,14 +322,14 @@ namespace Eggnog.Tests.Values
 
             // A split on kind: each case proves its own bounds of y from comparisons, and the lift keeps the looser.
             var s = new NumericBoundTheory();
-            var dom = s.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = s.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var discriminator = s.Graph.DefineRelation<string>("discriminator");
             var split = s.Graph.DefineDomainSplit("kind", dom, [discriminator]);
             var branches = s.Graph.DefineRuleset("branches");
-            branches.DefineRule("kind a", r => { r.When(dom.Of("kind").Is(ValueSet.Of("a"))); r.Then(s.Ge.Of("y", 1m), s.Lt.Of("y", 5m)); });
-            branches.DefineRule("kind b", r => { r.When(dom.Of("kind").Is(ValueSet.Of("b"))); r.Then(s.Gt.Of("y", 1m), s.Le.Of("y", 8m)); });
+            branches.DefineRule("kind a", r => { r.When(dom.Of("kind").Is(Set.Of("a"))); r.Then(s.Ge.Of("y", 1m), s.Lt.Of("y", 5m)); });
+            branches.DefineRule("kind b", r => { r.When(dom.Of("kind").Is(Set.Of("b"))); r.Then(s.Gt.Of("y", 1m), s.Le.Of("y", 8m)); });
             var scope = s.Graph.Root;
-            scope.Assume(discriminator.Of("kind"), dom.Of("kind").Is(ValueSet.Of("a", "b")));
+            scope.Assume(discriminator.Of("kind"), dom.Of("kind").Is(Set.Of("a", "b")));
 
             var report = scope.Run(Schedule.Split(split, Schedule.Saturate(branches, s.Bounds)));
 

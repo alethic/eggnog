@@ -41,7 +41,7 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void ASetOrdersItsStringsByCodePoint()
         {
-            var set = ValueSet.Of("\U00010000", "�", "a");
+            var set = Set.Of("\U00010000", "�", "a");
 
             Assert.Equal(new[] { "a", "�", "\U00010000" }, set.ToArray());
         }

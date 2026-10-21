@@ -111,7 +111,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The split rule is not valid (a type is not registered).</exception>
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or a first
         /// scoped read of a guard creates a mirror while another thread is using the writable root.</exception>
-        public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, ValueSet<TElement>> domain,
+        public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, Set<TElement>> domain,
             IReadOnlyList<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull
         {
             ArgumentNullException.ThrowIfNull(domain);
@@ -138,7 +138,7 @@ namespace Eggnog
 
             return DefineSplit(name, split =>
             {
-                var (k, d) = split.Vars<TKey, ValueSet<TElement>>("k", "d");
+                var (k, d) = split.Vars<TKey, Set<TElement>>("k", "d");
                 foreach (var guard in guards)
                     split.When(guard.Of(k));
 

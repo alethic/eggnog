@@ -140,12 +140,12 @@ namespace Eggnog.Tests.Scopes
 
             // Orders carry a UUID ref in schema one; invoices do in schema two.
             var one = graph.Root.CreateChild(c.Schema);
-            one.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
+            one.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("order", "invoice")));
             c.DeclareBranch(one, "kind", "order", c.Form.Of("ref", "uuid-lower"));
             one.Run(Schedule.Saturate(c.Horn, c.Lattice));
             one.Freeze();
             var two = graph.Root.CreateChild(c.Schema);
-            two.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
+            two.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("order", "invoice")));
             c.DeclareBranch(two, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));
             two.Run(Schedule.Saturate(c.Horn, c.Lattice));
             two.Freeze();

@@ -16,6 +16,7 @@ namespace Eggnog
         readonly PartialFunc<T1, T2, TResult>? partial;
         readonly Func<uint, uint, uint>? cells;
         readonly Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)>? containerCells;
+        readonly Func<ColumnType, T1, T2, (bool Found, TResult Value)>? values;
         readonly Func<uint, uint, bool>? cellPredicate;
         readonly Func<ColumnType, uint, uint, Action<uint, uint>, (bool Found, uint Cell)>? write;
 
@@ -67,6 +68,28 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Initializes a new instance of a partial primitive over its arguments' cells, whose result is a cell the first
+        /// argument holds: egglog's primitives that read a container's order of cells, such as <c>set-get</c>. Its
+        /// function throws: it needs the graph's cells.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types:
+        /// whether there is a result, and its cell.</param>
+        /// <param name="values">The function over values a read calls, given the first parameter's column type, which
+        /// may find no result where the values' cells would decide it.</param>
+        internal Primitive(
+            string name,
+            Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)> containerCells,
+            Func<ColumnType, T1, T2, (bool Found, TResult Value)> values)
+            : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, true)
+        {
+            Function = (_, _) => throw new InvalidOperationException(
+                $"Primitive '{name}' reads the graph's cells; it has no function of values alone.");
+            this.containerCells = containerCells;
+            this.values = values;
+        }
+
+        /// <summary>
         /// Initializes a new instance of a primitive over its arguments' cells, which returns one of them: egglog's
         /// <c>ordering-min</c> and <c>ordering-max</c>, which compare values' representations.
         /// </summary>
@@ -115,7 +138,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
-        /// result, and for one that writes the graph it always throws <see cref="InvalidOperationException"/>.
+        /// result, and for one over the graph's cells, such as <see cref="Primitives.Get{T}"/>, or one that writes the
+        /// graph, it always throws <see cref="InvalidOperationException"/>.
         /// </summary>
         public Func<T1, T2, TResult> Function { get; }
 
@@ -154,11 +178,15 @@ namespace Eggnog
         /// <param name="b">The second argument.</param>
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
-        /// <exception cref="InvalidOperationException">The primitive writes the graph (<see cref="Function"/>).</exception>
+        /// <exception cref="InvalidOperationException">The primitive writes the graph, or reads its cells, as
+        /// <see cref="Primitives.Get{T}"/> does (<see cref="Function"/>).</exception>
         public bool TryInvoke(T1 a, T2 b, [MaybeNullWhen(false)] out TResult result)
         {
             if (write is not null)
                 throw Writes(Name);
+
+            if (values is not null)
+                throw new InvalidOperationException($"Primitive '{Name}' reads the graph's cells; it has no function of values alone.");
 
             if (partial is null)
             {
@@ -255,6 +283,13 @@ namespace Eggnog
 
                 value = null;
                 return false;
+            }
+
+            if (values is not null)
+            {
+                var (found, picked) = values(parameters[0], (T1)arguments[0], (T2)arguments[1]);
+                value = found ? picked : null;
+                return found;
             }
 
             // Two values never interned are compared as values; a class always has its cell.

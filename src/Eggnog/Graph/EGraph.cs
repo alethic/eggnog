@@ -75,6 +75,7 @@ namespace Eggnog
             scopeTagsByName.Add(RootTagName, RootTag);
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
+            Values.RegisterBuiltInSets();
             Contradiction = DefineContradiction();
             Engine.DesignateContradiction(Contradiction.Function);
         }

@@ -320,12 +320,12 @@ namespace Eggnog.Tests.Values
         public void ASplitCannotAssumeAFunctionWithAMerge()
         {
             var graph = new EGraph();
-            var choice = graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var sum = graph.DefineFunction<string, long>("sum", Sum);
 
             var e = Assert.Throws<RuleDefinitionException>(() => graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 var v = s.Cases("v", d);
                 s.Assume(sum.Of(k).Is(v));
@@ -342,11 +342,11 @@ namespace Eggnog.Tests.Values
         public void ARootRunCannotRunARuleThatWritesAFunctionWithAMergeInASplitsCases()
         {
             var graph = new EGraph();
-            var choice = graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var sum = graph.DefineFunction<string, long>("sum", Sum);
             var split = graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
@@ -355,7 +355,7 @@ namespace Eggnog.Tests.Values
             var adds = graph.DefineRuleset("adds");
             adds.DefineRule("add one", r => r.Then(sum.Of("k").Is(1L)));
             var none = graph.DefineRuleset("none");
-            graph.Root.Assume(choice.Of("k").Is(ValueSet.Of(1L, 2L)));
+            graph.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
 
             var e = Assert.Throws<InvalidOperationException>(() => graph.Root.Run(Schedule.Split(split, Schedule.Run(adds))));
 
@@ -375,11 +375,11 @@ namespace Eggnog.Tests.Values
         public void AUnionInACaseThatWouldRewriteARowOfAFunctionWithAMergeFailsTheRun()
         {
             var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var sum = t.Graph.DefineFunction<Node, long>("sum", Sum);
             var split = t.Graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
@@ -387,10 +387,10 @@ namespace Eggnog.Tests.Values
             });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
-            t.Root.Assume(sum.Of(a).Is(1L), sum.Of(b).Is(2L), choice.Of("k").Is(ValueSet.Of(1L, 2L)));
+            t.Root.Assume(sum.Of(a).Is(1L), sum.Of(b).Is(2L), choice.Of("k").Is(Set.Of(1L, 2L)));
             t.Rules.DefineRule("join", r =>
             {
-                r.When(choice.Of("k").Is(ValueSet.Of(1L)));
+                r.When(choice.Of("k").Is(Set.Of(1L)));
                 r.Then(t.A.Of().Is(t.B.Of()));
             });
 

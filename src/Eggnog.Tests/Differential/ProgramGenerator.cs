@@ -286,14 +286,14 @@ namespace Eggnog.Tests.Differential
         /// <summary>
         /// A subset of {0, …, 4} with at most three elements.
         /// </summary>
-        ValueSet<int> RandomSet()
+        Set<int> RandomSet()
         {
             var size = random.Next(0, 4);
             var elements = new List<int>();
             for (var i = 0; i < size; i++)
                 elements.Add(random.Next(0, 5));
 
-            return ValueSet.From(elements);
+            return Set.From(elements);
         }
 
         /// <summary>

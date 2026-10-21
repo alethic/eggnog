@@ -61,7 +61,7 @@ namespace Eggnog.Tests.Readme
         {
             var graph = new EGraph();
             var signal = graph.DefineRelation<string>("signal");
-            var color = graph.DefineFunction<string, ValueSet<string>>("color", ValueLattice.Intersect<string>());
+            var color = graph.DefineFunction<string, Set<string>>("color", ValueLattice.Intersect<string>());
             var stop = graph.DefineRelation<string>("stop");
 
             var rules = graph.DefineRuleset("traffic");
@@ -70,7 +70,7 @@ namespace Eggnog.Tests.Readme
                 rules.DefineRule($"{c} means stop", r =>
                 {
                     var s = r.Var<string>("s");
-                    r.When(signal.Of(s), color.Of(s).Is(ValueSet.Of(c)));
+                    r.When(signal.Of(s), color.Of(s).Is(Set.Of(c)));
                     r.Then(stop.Of(s));
                 });
             }
@@ -83,12 +83,12 @@ namespace Eggnog.Tests.Readme
             graph.Root.Freeze();                       // a shared base: read-only, children on any thread
 
             using var q1 = graph.Root.CreateChild();
-            q1.Assume(color.Of("north").Is(ValueSet.Of("red", "amber")));
+            q1.Assume(color.Of("north").Is(Set.Of("red", "amber")));
             q1.Run(schedule);
             bool mustStop = q1.Check(stop.Of("north"));            // true: both cases prove it
 
             using var q2 = graph.Root.CreateChild();
-            q2.Assume(color.Of("north").Is(ValueSet.Of("red", "green")));
+            q2.Assume(color.Of("north").Is(Set.Of("red", "green")));
             q2.Run(schedule);
             bool mayGo = q2.Check(stop.Of("north")) == false;      // true: the green case does not prove it
 

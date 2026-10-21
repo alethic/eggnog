@@ -71,7 +71,7 @@ namespace Eggnog.Tests.Differential
             var root = p.Graph.Root;
             foreach (var (path, values) in program.Discriminators)
             {
-                root.Assume(p.Present.Of(p.Schema.Of(), path), p.Dom.Of(p.Schema.Of(), path).Is(ValueSet.Of(values)));
+                root.Assume(p.Present.Of(p.Schema.Of(), path), p.Dom.Of(p.Schema.Of(), path).Is(Set.Of(values)));
                 foreach (var value in values)
                     root.Assume(p.Discriminator.Of(path, value));
             }
@@ -84,10 +84,10 @@ namespace Eggnog.Tests.Differential
                 p.Horn.DefineRule($"{branch.Discriminator} = {branch.Value}", r =>
                 {
                     var x = r.Var<Ctx>("c");
-                    r.When(p.Present.Of(x, branch.Discriminator), p.Dom.Of(x, branch.Discriminator).Is(ValueSet.Of(branch.Value)));
+                    r.When(p.Present.Of(x, branch.Discriminator), p.Dom.Of(x, branch.Discriminator).Is(Set.Of(branch.Value)));
                     r.Then(branch.Present.Select(g => p.Present.Of(x, g))
                         .Concat(branch.Forms.Select(f => p.Form.Of(x, f.Path, f.Form)))
-                        .Concat(branch.Domains.Select(d => p.Dom.Of(x, d.Path).Is(ValueSet.Of(d.Values))))
+                        .Concat(branch.Domains.Select(d => p.Dom.Of(x, d.Path).Is(Set.Of(d.Values))))
                         .ToArray());
                 });
             }

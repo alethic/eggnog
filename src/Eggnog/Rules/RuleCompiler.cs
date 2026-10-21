@@ -158,6 +158,10 @@ namespace Eggnog
                 throw Error($"type {ValueStore.DisplayName(builder.ElementType!)} is not registered; call {ValueStore.RegisterMethod(builder.ElementType!)}", exception);
             }
 
+            // A case's element is a value its assumptions are written with; a class would be decoded outside any scope.
+            if (elementType.InvolvesClasses)
+                throw Error($"the set of Cases, '{set.Shape.Name}', holds {elementType.Name}, which holds classes; a split's cases are values");
+
             // The key: what a split step compares to skip a request that a live split from the same source already covers
             // in the scope or an ancestor. Declared variables of this split rule, never the case variable.
             var key = new List<Term>();

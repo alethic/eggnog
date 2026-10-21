@@ -6,14 +6,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The element order of <see cref="ValueSet{T}"/>: by code point for strings, as Rust's
+    /// The element order of <see cref="Set{T}"/>: by code point for strings, as Rust's
     /// (<see cref="Relations.CodePointComparer"/>), egglog's <c>OrderedFloat</c> for doubles (<see cref="OrderedDouble"/>,
     /// NaN last), by cell for the classes of a sort (<see cref="ClassOrder{TSort}"/>, set when the sort is defined),
     /// <c>Comparer&lt;T&gt;.Default</c> otherwise. Culture-invariant for the built-in types, so equal sets have one
     /// sorted form and one interned cell. Maps, multisets and the <c>Max</c> and <c>Min</c> lattices order by it too.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
-    internal static class ValueSetOrder<T>
+    internal static class ElementOrder<T>
     {
 
         static IComparer<T> comparer = typeof(T) == typeof(string)

@@ -556,7 +556,7 @@ namespace Eggnog
             }
 
             var type = value.GetType();
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Set<>))
             {
                 var builder = new StringBuilder("(set-of");
                 foreach (var element in (IEnumerable)value)

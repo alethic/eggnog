@@ -222,7 +222,7 @@ namespace Eggnog.Tests.Extraction
             graph.DefineSort<Node>("Node");
             var values = graph.DefineConstructor<long, int, bool, double, Node>("V");
             var text = graph.DefineConstructor<string, Node>("T");
-            var sets = graph.DefineConstructor<ValueSet<string>, ValueSet<long>, ValueSet<int>, Node>("S");
+            var sets = graph.DefineConstructor<Set<string>, Set<long>, Set<int>, Node>("S");
             var root = graph.Root;
 
             // As printed by the egglog CLI built from ext/egglog at 5e655cae: (FL -42), (FB true), (FD 1.5), (FD 2.0),
@@ -231,7 +231,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Equal("(V 42 -1 false 2.0)", root.Extract(root.Make(values.Of(42L, -1, false, 2.0))).ToString());
             Assert.Equal("(T \"kind\")", root.Extract(root.Make(text.Of("kind"))).ToString());
             Assert.Equal("(S (set-of \"a\" \"b\") (set-of 1 3) (set-of))",
-                root.Extract(root.Make(sets.Of(ValueSet.Of("b", "a"), ValueSet.Of(3L, 1L), ValueSet<int>.Empty))).ToString());
+                root.Extract(root.Make(sets.Of(Set.Of("b", "a"), Set.Of(3L, 1L), Set<int>.Empty))).ToString());
         }
 
         /// <summary>

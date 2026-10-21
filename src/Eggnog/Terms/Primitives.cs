@@ -28,49 +28,49 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<T, ValueSet<T>> Singleton<T>() where T : notnull => PrimitiveCache<T>.Singleton;
+        public static Primitive<T, Set<T>> Singleton<T>() where T : notnull => PrimitiveCache<T>.Singleton;
 
         /// <summary>
         /// <c>set-of</c> of any number of elements, as egglog's; of none, the empty set, egglog's <c>set-empty</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static VariadicPrimitive<T, ValueSet<T>> SetOf<T>() where T : notnull => PrimitiveCache<T>.SetOf;
+        public static VariadicPrimitive<T, Set<T>> SetOf<T>() where T : notnull => PrimitiveCache<T>.SetOf;
 
         /// <summary>
         /// <c>set-union</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Union<T>() where T : notnull => PrimitiveCache<T>.Union;
+        public static Primitive<Set<T>, Set<T>, Set<T>> Union<T>() where T : notnull => PrimitiveCache<T>.Union;
 
         /// <summary>
         /// <c>set-intersect</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Intersect<T>() where T : notnull => PrimitiveCache<T>.Intersect;
+        public static Primitive<Set<T>, Set<T>, Set<T>> Intersect<T>() where T : notnull => PrimitiveCache<T>.Intersect;
 
         /// <summary>
         /// <c>set-diff</c>: the elements of the first set not in the second.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Except<T>() where T : notnull => PrimitiveCache<T>.Except;
+        public static Primitive<Set<T>, Set<T>, Set<T>> Except<T>() where T : notnull => PrimitiveCache<T>.Except;
 
         /// <summary>
         /// <c>set-insert</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, T, ValueSet<T>> Insert<T>() where T : notnull => PrimitiveCache<T>.Insert;
+        public static Primitive<Set<T>, T, Set<T>> Insert<T>() where T : notnull => PrimitiveCache<T>.Insert;
 
         /// <summary>
         /// <c>set-remove</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>() where T : notnull => PrimitiveCache<T>.Remove;
+        public static Primitive<Set<T>, T, Set<T>> Remove<T>() where T : notnull => PrimitiveCache<T>.Remove;
 
         /// <summary>
         /// <c>set-contains</c>: egglog's filter, which renders so; as a <c>bool</c> value, an addition, it renders as
@@ -79,7 +79,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, T, bool> Contains<T>() where T : notnull => PrimitiveCache<T>.Contains;
+        public static Primitive<Set<T>, T, bool> Contains<T>() where T : notnull => PrimitiveCache<T>.Contains;
 
         /// <summary>
         /// <c>set-not-contains</c>: egglog's filter, which renders so; as a <c>bool</c> value, an addition, it renders as
@@ -87,29 +87,40 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, T, bool> NotContains<T>() where T : notnull => PrimitiveCache<T>.NotContains;
+        public static Primitive<Set<T>, T, bool> NotContains<T>() where T : notnull => PrimitiveCache<T>.NotContains;
 
         /// <summary>
         /// <c>set-subset</c>: whether the first set is a subset of the second.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, ValueSet<T>, bool> IsSubsetOf<T>() where T : notnull => PrimitiveCache<T>.IsSubsetOf;
+        public static Primitive<Set<T>, Set<T>, bool> IsSubsetOf<T>() where T : notnull => PrimitiveCache<T>.IsSubsetOf;
 
         /// <summary>
         /// <c>set-is-empty</c>: whether the set is empty, an addition: egglog writes <c>(= (set-length s) 0)</c>, and its
-        /// <c>set-empty</c> is the empty set, <see cref="ValueSet{T}.Empty"/>.
+        /// <c>set-empty</c> is the empty set, <see cref="Set{T}.Empty"/>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, bool> IsEmpty<T>() where T : notnull => PrimitiveCache<T>.IsEmpty;
+        public static Primitive<Set<T>, bool> IsEmpty<T>() where T : notnull => PrimitiveCache<T>.IsEmpty;
 
         /// <summary>
         /// <c>set-length</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
-        public static Primitive<ValueSet<T>, long> Count<T>() where T : notnull => PrimitiveCache<T>.Count;
+        public static Primitive<Set<T>, long> Count<T>() where T : notnull => PrimitiveCache<T>.Count;
+
+        /// <summary>
+        /// <c>set-get</c>: the element at an index of the set in cell order, egglog's order of a set (set.rs:122), and no
+        /// result for an index out of range. It reads the set's cells: in a run or a write, its container's; in a read,
+        /// over a set that may not be interned, an element no write interned comes after every one that has, as egglog's
+        /// <c>check</c> would intern it after them, so where two such elements decide the element at the index there is
+        /// no result. Its function over values alone throws.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Set<T>, long, T> Get<T>() where T : notnull => PrimitiveCache<T>.Get;
 
         /// <summary>
         /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>; as a filter, egglog's <c>!=</c>. Generic over

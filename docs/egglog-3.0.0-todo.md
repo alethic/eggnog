@@ -26,7 +26,7 @@ Several 3.0.0 changelog entries were already in `5e655cae`, in its "Unreleased" 
 nothing new to evaluate:
 
 - relations as non-unionable constructors (#770); Eggnog keeps them as unit-valued functions
-  ([`architecture.md`](architecture.md), section 2.13, item 6);
+  ([`architecture.md`](architecture.md), section 2.13, item 5);
 - the capability-specific primitive traits (#856; decisions row 12) and the `:naive` rule option;
 - typed extension state (#884), the body-defined primitive APIs (#881, #889), f64 `exp`, `log` and `sqrt` and BigRat
   to i64 (#890, #891), `RunReport::can_stop` (#882), full source paths (#886), the nested-container semi-naive fix
@@ -86,8 +86,8 @@ are fixed as above, and #885 does not fix row 9.
   `map-insert`. `TermDag::ast_cmp` gives the structural order. Upstream: `src/termdag.rs:26-62`, `165-222`;
   `src/sort/set.rs:43-49`, `247-258`; `src/sort/map.rs:76-79`, `243-279`. Eggnog:
   `Relations/Extraction/ContainerSort.cs` (its comments name nested `map-insert`) and
-  `src/Eggnog.Tests/Relations/Extraction/TestMapSort.cs`; the library renders a `ValueSet` in its element order
-  (`ValueSetOrder`, used by `src/Eggnog/Rendering/SExpression.cs`).
+  `src/Eggnog.Tests/Relations/Extraction/TestMapSort.cs`; the library renders a `Set` in its element order
+  (`ElementOrder`, used by `src/Eggnog/Rendering/SExpression.cs`).
 - [ ] **Escaped string literals** (#920, *behaviour*). Printed strings escape `"` and `\`, so they parse back.
   Upstream: `egglog-ast/src/generic_ast_helpers.rs:758-772`. Eggnog: `Relations/Extraction/LiteralText.cs` prints
   them unescaped, as the pin did, and `src/Eggnog/Rendering/SExpression.cs` uses it.
@@ -205,7 +205,7 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   `:naive`. Function lookups in rule heads, refused for every rule at the pin, are now allowed in `:naive` and
   `:unsafe-seminaive` rules. Upstream: `egglog-ast/src/generic_ast.rs:83-121`, `src/typechecking.rs:889-950`. Eggnog:
   rule heads never read tables but in a full callback (`ThenCallFull`, egglog's `rust_rule_full`, at the pin already)
-  ([`architecture.md`](architecture.md), section 2.13, item 3), and `RuleBuilder.Naive()`
+  ([`architecture.md`](architecture.md), section 2.13, item 2), and `RuleBuilder.Naive()`
   (`src/Eggnog/Rules/RuleBuilder.cs`).
 
 ## Nothing to evaluate

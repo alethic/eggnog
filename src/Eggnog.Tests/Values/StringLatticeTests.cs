@@ -10,7 +10,7 @@ namespace Eggnog.Tests.Values
 
     /// <summary>
     /// The built-in <see cref="ValueLattice.Max{T}"/> and <see cref="ValueLattice.Min{T}"/> over strings: they order
-    /// ordinally, as <see cref="ValueSet{T}"/> does, so merges and case joins give the same result under every current
+    /// ordinally, as <see cref="Set{T}"/> does, so merges and case joins give the same result under every current
     /// culture and obey the lattice laws on strings that a culture collates as equal.
     /// </summary>
     public sealed class StringLatticeTests
@@ -131,7 +131,7 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// The maximum of random strings is the last element of their <see cref="ValueSet{T}"/>, and the minimum the
+        /// The maximum of random strings is the last element of their <see cref="Set{T}"/>, and the minimum the
         /// first: the lattices and sets share one order.
         /// </summary>
         [Theory]
@@ -155,7 +155,7 @@ namespace Eggnog.Tests.Values
                         samples[i] = text.ToString();
                     }
 
-                    var set = ValueSet.Of(samples);
+                    var set = Set.Of(samples);
                     Assert.Equal(set[set.Count - 1], samples.Aggregate(max.Merge));
                     Assert.Equal(set[0], samples.Aggregate(min.Merge));
                     Assert.Equal(set[0], samples.Aggregate(max.CaseJoin!));

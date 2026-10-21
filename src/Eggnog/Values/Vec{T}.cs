@@ -146,7 +146,7 @@ namespace Eggnog
         public override bool Equals(object? obj) => obj is Vec<T> other && Equals(other);
 
         /// <summary>
-        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// Compares in content order, element by element as <see cref="Set{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), a shorter prefix first; <c>null</c> first. Lets
         /// containers be the elements of multisets and the keys of maps.
         /// </summary>
@@ -158,7 +158,7 @@ namespace Eggnog
             if (other is null)
                 return 1;
 
-            var order = ValueSetOrder<T>.Comparer;
+            var order = ElementOrder<T>.Comparer;
             for (var i = 0; i < items.Length && i < other.items.Length; i++)
             {
                 var c = order.Compare(items[i], other.items[i]);

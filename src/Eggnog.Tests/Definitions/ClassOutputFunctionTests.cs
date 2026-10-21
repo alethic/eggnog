@@ -300,18 +300,18 @@ namespace Eggnog.Tests.Definitions
         public void ASplitAssumesAClassOfAFunctionAndTheLiftKeepsIt()
         {
             var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var picked = t.Graph.DefineFunction<string, Node>("picked");
             var split = t.Graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
                 s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), t.B.Of().Is(t.Lit.Of(v)), picked.Of(k).Is(t.A.Of()));
             });
             var a = t.Root.Make(t.A.Of());
-            t.Root.Assume(choice.Of("k").Is(ValueSet.Of(1L, 2L)));
+            t.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
 
             var report = t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules)));
 
@@ -329,11 +329,11 @@ namespace Eggnog.Tests.Definitions
         public void ACaseWhoseAssumptionMakesClassesMeetFailsTheRun()
         {
             var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var f = t.Graph.DefineFunction<Node, Node>("f");
             var split = t.Graph.DefineSplit("join", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
@@ -341,7 +341,7 @@ namespace Eggnog.Tests.Definitions
             });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
-            t.Root.Assume(f.Of(a).Is(t.Lit.Of(1L)), f.Of(b).Is(t.Lit.Of(2L)), choice.Of("k").Is(ValueSet.Of(1L, 2L)));
+            t.Root.Assume(f.Of(a).Is(t.Lit.Of(1L)), f.Of(b).Is(t.Lit.Of(2L)), choice.Of("k").Is(Set.Of(1L, 2L)));
 
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(Schedule.Split(split, Schedule.Run(t.Rules))));
 

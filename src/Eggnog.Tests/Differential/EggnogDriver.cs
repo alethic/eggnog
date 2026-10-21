@@ -40,7 +40,7 @@ namespace Eggnog.Tests.Differential
             graph.DefineSort<Node>("Node");
             types[DiffType.I64] = graph.Values.TypeOf<long>();
             types[DiffType.Str] = graph.Values.TypeOf<string>();
-            types[DiffType.IntSet] = graph.Values.TypeOf<ValueSet<int>>();
+            types[DiffType.IntSet] = graph.Values.TypeOf<Set<int>>();
             types[DiffType.Node] = graph.Values.TypeOf<Node>();
             foreach (var table in program.Tables)
             {

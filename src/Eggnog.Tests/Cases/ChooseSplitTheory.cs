@@ -17,12 +17,12 @@ namespace Eggnog.Tests.Cases
             Graph = new EGraph();
             Schema = Graph.DefineScopeTag("schema");
             Present = Graph.DefineRelation<string>("present");
-            Dom = Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            Dom = Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             Chosen = Graph.DefineRelation<string, string>("chosen");
             Rules = Graph.DefineRuleset("rules");
             Split = Graph.DefineSplit("choose", s =>
             {
-                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 if (scoped)
                     s.When(Present.In(Schema).Of(p));
 
@@ -42,7 +42,7 @@ namespace Eggnog.Tests.Cases
         public Relation<string> Present { get; }
 
         /// <summary>Gets a path's possible values, merged by intersection.</summary>
-        public Function<string, ValueSet<string>> Dom { get; }
+        public Function<string, Set<string>> Dom { get; }
 
         /// <summary>Gets the value a case chose for a path.</summary>
         public Relation<string, string> Chosen { get; }

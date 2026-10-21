@@ -149,7 +149,7 @@ sealed class Eggnog.EGraph
     Scope Root { get }
     ScopeTag DefineScopeTag(String name)
     ScopeTag RootTag { get }
-    SplitRule DefineDomainSplit<TKey, TElement>(String name, Function<TKey, ValueSet<TElement>> domain, IReadOnlyList<Relation<TKey>> guards, ScopeTag caseTag = null)
+    SplitRule DefineDomainSplit<TKey, TElement>(String name, Function<TKey, Set<TElement>> domain, IReadOnlyList<Relation<TKey>> guards, ScopeTag caseTag = null)
     SplitRule DefineSplit(String name, Action<SplitBuilder> define, ScopeTag caseTag = null)
     ValueStore Values { get }
     ctor(EGraphOptions options = null)
@@ -428,25 +428,26 @@ static class Eggnog.Primitives
     static Primitive<MultiSet<TSort>, TSort> MultiSetUnionValues<TSort : struct, ISort<TSort>>()
     static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
     static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
+    static Primitive<Set<T>, Boolean> IsEmpty<T>()
+    static Primitive<Set<T>, Int64, T> Get<T>()
+    static Primitive<Set<T>, Int64> Count<T>()
+    static Primitive<Set<T>, Set<T>, Boolean> IsSubsetOf<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> Except<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> Intersect<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> Union<T>()
+    static Primitive<Set<T>, T, Boolean> Contains<T>()
+    static Primitive<Set<T>, T, Boolean> NotContains<T>()
+    static Primitive<Set<T>, T, Set<T>> Insert<T>()
+    static Primitive<Set<T>, T, Set<T>> Remove<T>()
     static Primitive<T, Int64, MultiSet<T>> MultiSetSingle<T>()
     static Primitive<T, MultiSet<T>, Boolean> MultiSetContainsSwapped<T>()
     static Primitive<T, MultiSet<T>, Boolean> MultiSetNotContainsSwapped<T>()
     static Primitive<T, MultiSet<T>, MultiSet<T>> MultiSetRemoveSwapped<T>()
+    static Primitive<T, Set<T>> Singleton<T>()
     static Primitive<T, T, Boolean> NotEqual<T>()
     static Primitive<T, T, T> OrderingMax<T>()
     static Primitive<T, T, T> OrderingMin<T>()
-    static Primitive<T, ValueSet<T>> Singleton<T>()
     static Primitive<T1, T2, Pair<T1, T2>> PairOf<T1, T2>()
-    static Primitive<ValueSet<T>, Boolean> IsEmpty<T>()
-    static Primitive<ValueSet<T>, Int64> Count<T>()
-    static Primitive<ValueSet<T>, T, Boolean> Contains<T>()
-    static Primitive<ValueSet<T>, T, Boolean> NotContains<T>()
-    static Primitive<ValueSet<T>, T, ValueSet<T>> Insert<T>()
-    static Primitive<ValueSet<T>, T, ValueSet<T>> Remove<T>()
-    static Primitive<ValueSet<T>, ValueSet<T>, Boolean> IsSubsetOf<T>()
-    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Except<T>()
-    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Intersect<T>()
-    static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Union<T>()
     static Primitive<Vec<T>, Int64, T, Vec<T>> VecSet<T>()
     static Primitive<Vec<T>, Int64, T> VecGet<T>()
     static Primitive<Vec<T>, Int64, Vec<T>> VecRemove<T>()
@@ -459,7 +460,7 @@ static class Eggnog.Primitives
     static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
     static PrimitiveN<Vec<T>> VecEmpty<T>()
     static VariadicPrimitive<T, MultiSet<T>> MultiSetOf<T>()
-    static VariadicPrimitive<T, ValueSet<T>> SetOf<T>()
+    static VariadicPrimitive<T, Set<T>> SetOf<T>()
     static VariadicPrimitive<T, Vec<T>> VecOf<T>()
     static VariadicPrimitive<Vec<T>, Vec<T>> VecAppend<T>()
 sealed class Eggnog.Query : IDisposable
@@ -738,10 +739,33 @@ sealed class Eggnog.SerializedNode
     String Id { get }
     String Op { get }
     override String ToString()
+static class Eggnog.Set
+    static Set<T> From<T>(IEnumerable<T> items)
+    static Set<T> Of<T>(params T[] items)
+sealed class Eggnog.Set<T> : IComparable<Set<T>>, IEnumerable, IEnumerable<T>, IEquatable<Set<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
+    Boolean Contains(T item)
+    Boolean Equals(Set<T> other)
+    Boolean IsEmpty { get }
+    Boolean IsSubsetOf(Set<T> other)
+    Boolean Overlaps(Set<T> other)
+    IEnumerator<T> GetEnumerator()
+    Int32 CompareTo(Set<T> other)
+    Int32 Count { get }
+    Set<T> Add(T item)
+    Set<T> Except(Set<T> other)
+    Set<T> Intersect(Set<T> other)
+    Set<T> Remove(T item)
+    Set<T> Union(Set<T> other)
+    Set<T> Where(Func<T, Boolean> predicate)
+    T this[Int32 index] { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Set<T> Empty { get }
 sealed class Eggnog.SplitBuilder
     ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
-    Var<T> Cases<T>(String name, Var<ValueSet<T>> set)
+    Var<T> Cases<T>(String name, Var<Set<T>> set)
     Var<T> Var<T>(String name)
     Void Assume(params Fact[] facts)
     Void Key(params Term[] variables)
@@ -803,46 +827,24 @@ abstract class Eggnog.ValueLattice
     String Name { get }
     Type ValueType { get }
     override String ToString()
+    static ValueLattice<Set<T>> Intersect<T>()
+    static ValueLattice<Set<T>> Union<T>()
     static ValueLattice<T> Max<T : IComparable<T>>()
     static ValueLattice<T> Min<T : IComparable<T>>()
-    static ValueLattice<ValueSet<T>> Intersect<T>()
-    static ValueLattice<ValueSet<T>> Union<T>()
 sealed class Eggnog.ValueLattice<T> : ValueLattice
     Func<T, T, T> CaseJoin { get }
     Func<T, T, T> Merge { get }
     Void Verify(IEnumerable<T> samples)
     ctor(String name, Func<T, T, T> merge, Func<T, T, T> caseJoin = null)
-static class Eggnog.ValueSet
-    static ValueSet<T> From<T>(IEnumerable<T> items)
-    static ValueSet<T> Of<T>(params T[] items)
-sealed class Eggnog.ValueSet<T> : IEnumerable, IEnumerable<T>, IEquatable<ValueSet<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
-    Boolean Contains(T item)
-    Boolean Equals(ValueSet<T> other)
-    Boolean IsEmpty { get }
-    Boolean IsSubsetOf(ValueSet<T> other)
-    Boolean Overlaps(ValueSet<T> other)
-    IEnumerator<T> GetEnumerator()
-    Int32 Count { get }
-    T this[Int32 index] { get }
-    ValueSet<T> Add(T item)
-    ValueSet<T> Except(ValueSet<T> other)
-    ValueSet<T> Intersect(ValueSet<T> other)
-    ValueSet<T> Remove(T item)
-    ValueSet<T> Union(ValueSet<T> other)
-    ValueSet<T> Where(Func<T, Boolean> predicate)
-    override Boolean Equals(Object obj)
-    override Int32 GetHashCode()
-    override String ToString()
-    static ValueSet<T> Empty { get }
 sealed class Eggnog.ValueStore
     Boolean TryGetType<T>(out ColumnType<T> type)
     ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
     ColumnType<MultiSet<T>> RegisterMultiSet<T>()
     ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
+    ColumnType<Set<T>> RegisterSet<T>()
     ColumnType<T> Register<T : IEquatable<T>>(String name, IComparer<T> order = null, Func<T, String> format = null)
     ColumnType<T> TypeOf<T>()
     ColumnType<TEnum> RegisterEnum<TEnum : struct, Enum>()
-    ColumnType<ValueSet<T>> RegisterSet<T>()
     ColumnType<Vec<T>> RegisterVec<T>()
     Int64 InternedCount { get }
 sealed class Eggnog.Var<T> : Term<T>

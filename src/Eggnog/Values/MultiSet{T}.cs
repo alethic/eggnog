@@ -12,7 +12,7 @@ namespace Eggnog
     /// (src/sort/multiset.rs), whose column type <see cref="ValueStore.RegisterMultiSet{T}"/> registers and whose
     /// primitives are <see cref="Primitives"/>' <c>MultiSet*</c> methods. A multiset is interned as a container, so equal
     /// multisets have equal cells. It enumerates its elements with their repeats in ascending element order, as
-    /// <see cref="ValueSet{T}"/> orders its elements, a sort's classes by cell, so the element type must be
+    /// <see cref="Set{T}"/> orders its elements, a sort's classes by cell, so the element type must be
     /// <c>string</c>, comparable or a sort; egglog orders
     /// a multiset by its elements' cells, which is the order its terms and serialized nodes list. Its counts are
     /// <c>long</c>s, as egglog's are <c>usize</c>s; as an <see cref="IReadOnlyCollection{T}"/> it counts to
@@ -23,7 +23,7 @@ namespace Eggnog
         where T : notnull
     {
 
-        static IComparer<T> Order => ValueSetOrder<T>.Comparer;
+        static IComparer<T> Order => ElementOrder<T>.Comparer;
 
         readonly T[] elements;
         readonly long[] counts;
@@ -220,7 +220,7 @@ namespace Eggnog
         public override bool Equals(object? obj) => obj is MultiSet<T> other && Equals(other);
 
         /// <summary>
-        /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
+        /// Compares in content order, element by element as <see cref="Set{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), its elements with their repeats in element order,
         /// a shorter prefix first; <c>null</c> first. Lets containers be the elements of multisets and the keys of maps.
         /// </summary>

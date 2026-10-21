@@ -168,14 +168,14 @@ namespace Eggnog
 
         /// <summary>
         /// Renders one argument for <see cref="RuleEvaluationException.Bindings"/>: a set as <c>{a, b}</c>
-        /// (<see cref="ValueSet{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>).
+        /// (<see cref="Set{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>).
         /// </summary>
         /// <param name="type">The argument's column type.</param>
         /// <param name="cell">The argument's cell.</param>
         /// <returns>The rendering.</returns>
         static string Binding(ColumnType type, uint cell)
         {
-            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(Set<>))
                 return type.DecodeObject(cell, null).ToString() ?? string.Empty;
 
             return type.FormatCell(cell);

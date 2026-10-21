@@ -190,7 +190,7 @@ namespace Eggnog.Tests.Terms
             Assert.True(Primitives.NotEqual<long>().Function(1, 2));
             Assert.False(Primitives.NotEqual<string>().Function("a", "a"));
             Assert.False(Primitives.NotEqual<double>().Function(0.0, -0.0));
-            Assert.False(Primitives.NotEqual<ValueSet<long>>().Function(ValueSet.Of(1L, 2L), ValueSet.Of(2L, 1L)));
+            Assert.False(Primitives.NotEqual<Set<long>>().Function(Set.Of(1L, 2L), Set.Of(2L, 1L)));
         }
 
         [Fact]

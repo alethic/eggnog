@@ -58,7 +58,8 @@ namespace Eggnog
                         break;
                     case FunctionHandle function:
                         lifted.Add(new Relations.LiftTable(
-                            table.Function, Relations.LiftTableKind.Function, function.CaseJoin, function.Output is IContainerColumnType));
+                            table.Function, Relations.LiftTableKind.Function, function.CaseJoin,
+                            function.Output is IContainerColumnType && function.Output.InvolvesClasses == false));
                         break;
                     default:
                         lifted.Add(new Relations.LiftTable(table.Function, Relations.LiftTableKind.Relation));

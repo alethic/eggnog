@@ -612,11 +612,6 @@ namespace Eggnog
                     if (lattice is { Ordered: true } && output!.IsOrdered == false)
                         throw new ArgumentException($"Lattice '{lattice.Name}' orders the values of {output!.Name}, which holds an element that is not comparable.", nameof(lattice));
 
-                    // A case join combines a lifted function's base values; a container's cell is an id.
-                    if (lattice is not null && output is IContainerColumnType && (options.Lift ?? role == TableRole.Fact)
-                        && lattice.CreateCaseJoin(output, name) is not null)
-                        throw new ArgumentException($"Function '{name}' outputs the container {output.Name}, which a lift cannot join across cases; define lattice '{lattice.Name}' without a case join, or the function with Lift = false.", nameof(lattice));
-
                     // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
                     if (kind == TableKind.Function && options.Subsumable == true)
                         throw new ArgumentException($"Function '{name}' cannot be subsumable; only relations and constructors can be subsumed.", nameof(options));

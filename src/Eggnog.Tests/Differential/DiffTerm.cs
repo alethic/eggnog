@@ -33,7 +33,7 @@ namespace Eggnog.Tests.Differential
         /// <summary>Gets a variable's name.</summary>
         public string? Name { get; }
 
-        /// <summary>Gets a constant's value: a <c>long</c>, <c>string</c> or <c>ValueSet&lt;int&gt;</c>, or for the
+        /// <summary>Gets a constant's value: a <c>long</c>, <c>string</c> or <c>Set&lt;int&gt;</c>, or for the
         /// sort the handle (an <c>int</c>) of a host-made term.</summary>
         public object? Value { get; }
 
