@@ -126,10 +126,11 @@ namespace Eggnog.Tests.Scopes
         /// Later passes of one hundred sibling frozen scopes with one hundred local rules each, over the same constants,
         /// retain no more than earlier ones. Two warm-up passes fill the caches and pools the first use of every path
         /// fills; then the heap is read after each of <see cref="SiblingPasses"/> passes. The heap moves from pass to
-        /// pass with nothing retained, up and down, so the comparison takes the smallest heap of the last
-        /// <see cref="SiblingWindow"/> readings against the smallest of the first as many: a leak of anything a pass
-        /// creates grows every reading and so the smallest too, by the leak times the passes between the windows,
-        /// while the noise moves the two minimums much less than one reading. The passes intern nothing new.
+        /// pass with nothing retained, up and down, so the comparison takes the median heap of the last
+        /// <see cref="SiblingWindow"/> readings against the median of the first as many: a leak of anything a pass
+        /// creates grows every reading and so the median too, by the leak times the passes between the windows, while
+        /// one reading the noise moves far, as a collection that compacts more than the rest does, moves neither
+        /// median. The passes intern nothing new.
         /// </summary>
         [Fact]
         public void LaterPassesOfHundredSiblingScopesRetainNoMoreThanEarlierOnes()
@@ -146,8 +147,8 @@ namespace Eggnog.Tests.Scopes
             }
 
             Assert.Equal(0, churn.Graph.Values.InternedCount - interned);
-            var early = readings.AsSpan(0, SiblingWindow).ToArray().Min();
-            var late = readings.AsSpan(SiblingPasses - SiblingWindow).ToArray().Min();
+            var early = Median(readings.AsSpan(0, SiblingWindow));
+            var late = Median(readings.AsSpan(SiblingPasses - SiblingWindow));
             Assert.True(late - early <= SiblingSlack,
                 $"{late - early} B retained between the windows; heap after each pass: {string.Join(", ", readings.Select(r => r.ToString(CultureInfo.InvariantCulture)))}");
         }
@@ -176,17 +177,28 @@ namespace Eggnog.Tests.Scopes
         const int SiblingPasses = 6;
 
         /// <summary>
-        /// The readings at each end of the sibling comparison whose smallest is compared.
+        /// The readings at each end of the sibling comparison whose median is compared; odd, so that the median is one
+        /// of them.
         /// </summary>
         const int SiblingWindow = 3;
 
         /// <summary>
         /// The slack of the sibling comparison: the heap after a pass moves by up to about 500 KB from the pass before,
-        /// up and down, with nothing retained, and the smallest of three readings by much less. A leak of every pass's
-        /// scopes, rules or variants grows the smallest reading by far more than this between the windows; the slack
+        /// up and down, with nothing retained, and the median of three readings by much less. A leak of every pass's
+        /// scopes, rules or variants grows the median by far more than this between the windows; the slack
         /// is about 17 bytes per local rule of the three passes between them.
         /// </summary>
         const long SiblingSlack = 512 * 1024;
+
+        /// <summary>
+        /// Gets the median of an odd number of readings.
+        /// </summary>
+        static long Median(ReadOnlySpan<long> readings)
+        {
+            var sorted = readings.ToArray();
+            Array.Sort(sorted);
+            return sorted[sorted.Length / 2];
+        }
 
         /// <summary>
         /// The longest run of collections a reading makes after its first three (<see cref="RetainedBytes"/>) while
