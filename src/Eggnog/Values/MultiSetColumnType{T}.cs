@@ -347,6 +347,13 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
+        {
+            foreach (var item in (MultiSet<T>)value)
+                destination.Add((element, item));
+        }
+
+        /// <inheritdoc />
         public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
         {
             foreach (var element in Read(cell).Elements)

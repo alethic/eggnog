@@ -175,8 +175,19 @@ key or an output it is in no row, as egglog's newly interned one is in none. A c
 an id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
 by them, can differ from egglog's. So can the ids after a map constant: it interns one container, its keys in key order,
 where its egglog form, a chain of `map-insert`s, also interns the empty map and each map between; written as that chain
-(`Primitives.MapInsert`), it interns what egglog's does. A host write interns its literals first, in term order, and then
-its computations' results, as egglog lowers a command before it evaluates a primitive.
+(`Primitives.MapInsert`), it interns what egglog's does. A host write interns its literals first, and then its
+computations' results, as egglog lowers a command before it evaluates a primitive; and in egglog's order, as its
+lowering compiles them (`LiteralOrder`, after `src/core.rs`): a call's literals after those of the calls among its
+arguments, and a fact's own literals, its keys' then its value's, after every call in it, so `(F "a" (G "b") "c")`
+interns `"b"` first. A container or `BigInt` constant counts as the call egglog writes it as, `(set-of "a" "b")` or
+`(from-string "123")`: its parts intern with the calls, and the container or number when the write makes it. A
+deletion and a subsumption intern their keys, as egglog's do, whether or not a row is there. A rule or a query interns
+its constants when it is defined, in egglog's order of its query and then its head: a variable equated with a literal
+takes the literal where the variable is used, as egglog's `canonicalize` substitutes it, and the literals equated with
+variables that no atom uses intern at the head's start, the last equality's first; an equality of two equal literals
+interns neither. A definition refused interns none: it is checked first by a lowering that interns nothing, as egglog
+typechecks a rule before it lowers it. A `birewrite` interns its left side before its conditions, and its forward rule's
+constants before its backward rule's, as egglog's desugaring orders them.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
 child databases share their root's base-value registry and container environments by reference, and
@@ -188,12 +199,12 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in term order, and then each new result of a computation it writes |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in egglog's order, and then each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
 | A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
-| `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined |
+| `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined; none when the definition is refused |
 
 Reads, checks and `Until` conditions never intern (`TryEncodeExisting`); a query interns its constants when it is
 defined and, when it runs, the new results of the computations in its body, as a rule does. A host that serves requests

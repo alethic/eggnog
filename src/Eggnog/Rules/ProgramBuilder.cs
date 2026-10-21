@@ -28,6 +28,17 @@ namespace Eggnog
         readonly bool query;
         readonly ScopeTag? licence;
         readonly Term? caseVariable;
+
+        /// <summary>
+        /// Whether the lowering interns its constants: <c>false</c> in a twin that only checks the draft, and in
+        /// <see cref="Check"/>, which give a new constant a placeholder cell (<see cref="Placeholder"/>).
+        /// </summary>
+        bool interns = true;
+
+        /// <summary>
+        /// The placeholder cells of the new constants of a builder that interns nothing.
+        /// </summary>
+        Dictionary<(ColumnType, object), uint>? placeholders;
         readonly List<ScopeTag> readScopes = new();
 
         readonly List<ColumnType> rawTypes = new();
@@ -86,6 +97,7 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
         public RuleProgram Build()
         {
+            InternLiterals(static builder => builder.CheckRule());
             var writesAnalysis = CheckRule();
             ReadMirrors();
             var named = new List<int>();
@@ -104,12 +116,17 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks the draft as <see cref="Build"/> does, short of creating the mirrors of its scoped reads: what a
-        /// definition of several rules runs on a rule before it creates any mirror, so that a refused definition
-        /// registers none. The builder is spent afterwards.
+        /// Checks the draft as <see cref="Build"/> does, short of creating the mirrors of its scoped reads and of
+        /// interning its constants: what a definition of several rules runs on a rule before it creates any mirror or
+        /// interns any constant, so that a refused definition registers and interns none. The builder is spent
+        /// afterwards.
         /// </summary>
         /// <exception cref="RuleDefinitionException">The draft is not a valid rule.</exception>
-        public void Check() => CheckRule();
+        public void Check()
+        {
+            interns = false;
+            CheckRule();
+        }
 
         /// <summary>
         /// Every check of <see cref="Build"/> before the mirrors: variables, body normalization with scoped reads, range
@@ -139,16 +156,8 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The draft is not a valid query.</exception>
         public RuleProgram BuildQuery()
         {
-            DeclareVariables();
-            foreach (var fact in draft.Body)
-                AddBodyFact(fact, null);
-
-            ResolveBody();
-            var columns = new Operand[draft.Variables.Count];
-            for (var i = 0; i < columns.Length; i++)
-                columns[i] = EvalHead(draft.Variables[i].Variable);
-
-            head.Add(new HeadOp(HeadOpKind.Collect, null, columns, -1, null));
+            InternLiterals(static builder => builder.LowerQuery());
+            var columns = LowerQuery();
             ReadMirrors();
             var named = new int[columns.Length];
             for (var i = 0; i < named.Length; i++)
@@ -169,6 +178,38 @@ namespace Eggnog
         /// <exception cref="RuleDefinitionException">The draft is not a valid split body.</exception>
         public RuleProgram BuildSplit(IReadOnlyList<Term> columns)
         {
+            InternLiterals(builder => builder.LowerCollect(columns));
+            var operands = LowerCollect(columns);
+            ReadMirrors();
+            var named = new int[operands.Length];
+            for (var i = 0; i < named.Length; i++)
+                named[i] = operands[i].IsRegister ? operands[i].Index : -1;
+
+            return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
+                named, false, readScopes.ToArray());
+        }
+
+        /// <summary>
+        /// Lowers a query's draft short of its mirrors: the body checked and normalized as a rule's, and the head's
+        /// collector of the declared variables.
+        /// </summary>
+        /// <returns>The collected operands.</returns>
+        Operand[] LowerQuery()
+        {
+            var columns = new Term[draft.Variables.Count];
+            for (var i = 0; i < columns.Length; i++)
+                columns[i] = draft.Variables[i].Variable;
+
+            return LowerCollect(columns);
+        }
+
+        /// <summary>
+        /// Lowers a draft whose head collects <paramref name="columns"/>, short of its mirrors: a query's or a split
+        /// rule's matcher.
+        /// </summary>
+        /// <returns>The collected operands.</returns>
+        Operand[] LowerCollect(IReadOnlyList<Term> columns)
+        {
             DeclareVariables();
             foreach (var fact in draft.Body)
                 AddBodyFact(fact, null);
@@ -179,13 +220,82 @@ namespace Eggnog
                 operands[i] = EvalHead(columns[i]);
 
             head.Add(new HeadOp(HeadOpKind.Collect, null, operands, -1, null));
-            ReadMirrors();
-            var named = new int[operands.Length];
-            for (var i = 0; i < named.Length; i++)
-                named[i] = operands[i].IsRegister ? operands[i].Index : -1;
+            return operands;
+        }
 
-            return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named, false, readScopes.ToArray());
+        /// <summary>
+        /// Interns the draft's value constants before it is lowered, in the order egglog interns a rule's
+        /// (<see cref="LiteralOrder"/>): the body's atoms as egglog canonicalizes them, the literals its equalities bind
+        /// at the start of the head, then the head's items; the lowering then finds them interned, where it would intern
+        /// them in the order it meets them. First <paramref name="lower"/> checks the draft in a twin builder that interns
+        /// nothing, as egglog typechecks a rule before it lowers it: a refused draft interns no constant.
+        /// </summary>
+        /// <param name="lower">The lowering this builder is about to run, short of its mirrors.</param>
+        /// <exception cref="RuleDefinitionException">The draft is not valid.</exception>
+        void InternLiterals(Action<ProgramBuilder> lower)
+        {
+            lower(new ProgramBuilder(graph, draft, owner, query, licence, caseVariable) { interns = false });
+            var order = new LiteralOrder(InternConstant, Parts);
+            foreach (var bound in order.Query(draft.Body))
+                InternConstant(bound);
+
+            foreach (var item in draft.Head)
+            {
+                switch (item.Kind)
+                {
+                    case HeadItemKind.Then:
+                        order.Write(item.Fact!);
+                        break;
+                    case HeadItemKind.Make:
+                        order.Call(item.Left!.Shape);
+                        break;
+                    case HeadItemKind.Rewrite:
+                        order.Call(item.Right!.Shape);
+                        break;
+                    case HeadItemKind.Subsume or HeadItemKind.Delete when item.Fact is RelationFact row:
+                        order.Action(row.Arguments, null);
+                        break;
+                    case HeadItemKind.Subsume or HeadItemKind.Delete when item.Left?.Shape is { Kind: TermShapeKind.Application } term:
+                        order.Action(term.Arguments, null);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the parts of a constant egglog writes as a call (<see cref="LiteralOrder.Parts"/>); <c>null</c> for a
+        /// plain one, or one of a type the lowering refuses.
+        /// </summary>
+        TermShape[]? Parts(TermShape shape) =>
+            ConstantTypeOf(shape) is { } type ? LiteralOrder.Parts(type, shape.Constant!, graph.Values) : null;
+
+        /// <summary>
+        /// Gets a constant's column type, or <c>null</c> when it is not registered or belongs to another graph, which the
+        /// lowering refuses.
+        /// </summary>
+        ColumnType? ConstantTypeOf(TermShape shape)
+        {
+            var type = shape.ConstantType ?? (graph.Values.TryGetType(shape.ClrType, out var known) ? known : null);
+            return type is null || (type.Store is not null && ReferenceEquals(type.Store, graph.Values) == false) ? null : type;
+        }
+
+        /// <summary>
+        /// Interns a constant's value ahead of the lowering. A constant the lowering refuses, of a type that is not
+        /// registered or belongs to another graph, or that holds classes, is left to it, as is one its type refuses.
+        /// </summary>
+        void InternConstant(TermShape shape)
+        {
+            if (ConstantTypeOf(shape) is not { InvolvesClasses: false } type)
+                return;
+
+            try
+            {
+                type.EncodeObject(shape.Constant!);
+            }
+            catch (ArgumentException)
+            {
+                // ConstantOperand refuses it, with the rule's name.
+            }
         }
 
         /// <summary>
@@ -237,6 +347,9 @@ namespace Eggnog
                     rawAtoms.Add((table, scope, columns));
                     break;
                 }
+                case EqualityFact equality when IsSameValueConstant(equality.Left.Shape, equality.Right.Shape):
+                    // egglog's canonicalize drops an equality of two equal literals before it interns either.
+                    break;
                 case EqualityFact equality:
                     Equate(FlattenBody(equality.Left, enclosing), FlattenBody(equality.Right, enclosing));
                     break;
@@ -1022,12 +1135,37 @@ namespace Eggnog
 
             try
             {
-                return Operand.Constant(type, type.EncodeObject(shape.Constant!));
+                return Operand.Constant(type, interns ? type.EncodeObject(shape.Constant!) : Placeholder(type, shape.Constant!));
             }
             catch (ArgumentException exception)
             {
                 throw Error(exception.Message, exception);
             }
+        }
+
+        /// <summary>
+        /// Gets whether two terms are one value constant, of a type this graph knows and that holds no classes: an
+        /// equality of them holds whatever the match, and egglog drops it.
+        /// </summary>
+        bool IsSameValueConstant(TermShape left, TermShape right) =>
+            left.Kind == TermShapeKind.Constant && right.Kind == TermShapeKind.Constant && left.ClrType == right.ClrType
+                && ConstantTypeOf(left) is { InvolvesClasses: false } && Equals(left.Constant, right.Constant);
+
+        /// <summary>
+        /// Gets the cell a value constant has in a builder that interns nothing: its cell when it is interned already,
+        /// else one of its own above every cell a pool hands out, the same for equal constants, so that the checks that
+        /// compare constants' cells answer as they will for the interned ones.
+        /// </summary>
+        uint Placeholder(ColumnType type, object value)
+        {
+            if (type.TryEncodeExistingObject(value, out var cell))
+                return cell;
+
+            placeholders ??= new Dictionary<(ColumnType, object), uint>();
+            if (placeholders.TryGetValue((type, value), out cell) == false)
+                placeholders.Add((type, value), cell = uint.MaxValue - (uint)placeholders.Count);
+
+            return cell;
         }
 
         /// <summary>

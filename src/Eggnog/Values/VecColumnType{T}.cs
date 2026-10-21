@@ -290,6 +290,13 @@ namespace Eggnog
         public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
 
         /// <inheritdoc />
+        public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
+        {
+            foreach (var item in (Vec<T>)value)
+                destination.Add((element, item));
+        }
+
+        /// <inheritdoc />
         public bool RebuildsInOrder => element is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />

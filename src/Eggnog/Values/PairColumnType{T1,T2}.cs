@@ -248,6 +248,14 @@ namespace Eggnog
         public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
 
         /// <inheritdoc />
+        public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
+        {
+            var pair = (Pair<T1, T2>)value;
+            destination.Add((first, pair.First));
+            destination.Add((second, pair.Second));
+        }
+
+        /// <inheritdoc />
         public bool RebuildsInOrder =>
             first is IContainerColumnType { RebuildsInOrder: true } || second is IContainerColumnType { RebuildsInOrder: true };
 
