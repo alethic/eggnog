@@ -182,7 +182,7 @@ namespace Eggnog.Relations
             var rightSlot = nodeSlot[right.Node];
             if (leftSlot != rightSlot)
             {
-                var names = CompareByCodePoint(slots[leftSlot].Name, slots[rightSlot].Name);
+                var names = CodePointComparer.Instance.Compare(slots[leftSlot].Name, slots[rightSlot].Name);
                 if (names != 0)
                     return names;
             }
@@ -190,32 +190,6 @@ namespace Eggnog.Relations
             var leftCells = rowCells.AsSpan(nodeRow[left.Node], slotColumnSorts[leftSlot].Length);
             var rightCells = rowCells.AsSpan(nodeRow[right.Node], slotColumnSorts[rightSlot].Length);
             return leftCells.SequenceCompareTo(rightCells);
-        }
-
-        /// <summary>
-        /// Compares two strings by code point, as Rust's <c>Ord</c> for <c>str</c> does (bytewise over UTF-8): ordinal
-        /// UTF-16 order, except that a surrogate pair, a code point above U+FFFF, comes after every unit of the Basic
-        /// Multilingual Plane, including U+E000-U+FFFF.
-        /// </summary>
-        /// <returns>The sign of the comparison.</returns>
-        static int CompareByCodePoint(string left, string right)
-        {
-            var length = Math.Min(left.Length, right.Length);
-            for (var i = 0; i < length; i++)
-            {
-                var a = left[i];
-                var b = right[i];
-                if (a == b)
-                    continue;
-
-                // Surrogates (U+D800-U+DFFF) stand for code points above every unit from U+E000 up.
-                if (char.IsSurrogate(a) != char.IsSurrogate(b))
-                    return char.IsSurrogate(a) ? 1 : -1;
-
-                return a.CompareTo(b);
-            }
-
-            return left.Length.CompareTo(right.Length);
         }
 
     }
