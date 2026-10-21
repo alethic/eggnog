@@ -123,7 +123,7 @@ namespace Eggnog.Tests.Concurrency
             t.Root.Run(t.Rules);
 
             Assert.Equal(4, refusals.Count);
-            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", e.Message));
+            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", e.Message));
             Assert.True(t.Root.Check(t.Num.Of(2L)));
             Assert.False(t.Root.Check(t.Num.Of(9L)));
         }
@@ -149,7 +149,7 @@ namespace Eggnog.Tests.Concurrency
             t.Root.Run(t.Rules);
 
             Assert.NotEmpty(refusals);
-            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", e.Message));
+            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", e.Message));
             Assert.Equal(5L, t.Root.Get(best.Of("k")));
         }
 
@@ -168,7 +168,7 @@ namespace Eggnog.Tests.Concurrency
             Assert.Equal("(Lit 1)", t.Root.Extract(lit, costs).ToString());
 
             Assert.NotEmpty(refusals);
-            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", e.Message));
+            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", e.Message));
         }
 
         [Fact]
@@ -204,7 +204,7 @@ namespace Eggnog.Tests.Concurrency
             t.Root.Run(t.Rules);
 
             Assert.Equal(8, refusals.Count);
-            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", e.Message));
+            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", e.Message));
             Assert.Contains(threads, entry => entry.Key != caller && entry.Value);
             Assert.True(t.Root.Check(tagged.Of(1L)));
         }
@@ -252,7 +252,7 @@ namespace Eggnog.Tests.Concurrency
             t.Root.Run(t.Rules);
 
             Assert.NotEmpty(refusals);
-            Assert.All(refusals.Values, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", Assert.IsType<InvalidOperationException>(e).Message));
+            Assert.All(refusals.Values, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", Assert.IsType<InvalidOperationException>(e).Message));
             Assert.Contains(poolThreads, entry => entry.Key != caller && entry.Value);
             Assert.Equal(count - 1L, t.Root.Get(best.Of(count - 1L)));
             Assert.False(t.Root.IsFaulted);
@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Concurrency
             Assert.Equal("(Lit 1)", text);
             Assert.NotEmpty(refusals);
             Assert.All(onPool, Assert.True);
-            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", Assert.IsType<InvalidOperationException>(e).Message));
+            Assert.All(refusals, e => Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", Assert.IsType<InvalidOperationException>(e).Message));
         }
 
     }

@@ -4,7 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Up to <see cref="Times"/> passes of the steps in sequence; stops after a pass with no change.
+    /// Up to <see cref="Times"/> passes of the steps in sequence; stops after a pass with no change in which no scheduler
+    /// step held work back (egglog's <c>can_stop</c>: <see cref="Schedule.RunWith"/>).
     /// </summary>
     internal sealed class RepeatSchedule : Schedule
     {
@@ -34,15 +35,33 @@ namespace Eggnog
         internal override bool Execute(ScheduleExecutor executor, Scope scope, int depth, bool inCase, bool splitsEnabled)
         {
             var changed = false;
-            for (var pass = 0; pass < Times; pass++)
+            var outer = executor.HeldBack;
+            try
             {
-                if (SequenceSchedule.ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled) == false)
-                    break;
+                for (var pass = 0; pass < Times; pass++)
+                {
+                    executor.HeldBack = false;
+                    if (SequenceSchedule.ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled))
+                        changed = true;
+                    else if (executor.HeldBack == false)
+                        break;
 
-                changed = true;
+                    outer |= executor.HeldBack;
+                }
+            }
+            finally
+            {
+                executor.HeldBack = outer;
             }
 
             return changed;
+        }
+
+        /// <inheritdoc />
+        internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps)
+        {
+            foreach (var step in Steps)
+                step.CollectSchedulerSteps(steps);
         }
 
         /// <inheritdoc />

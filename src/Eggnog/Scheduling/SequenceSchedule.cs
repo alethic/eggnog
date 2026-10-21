@@ -28,6 +28,13 @@ namespace Eggnog
             ExecuteAll(Steps, executor, scope, depth, inCase, splitsEnabled);
 
         /// <inheritdoc />
+        internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps)
+        {
+            foreach (var step in Steps)
+                step.CollectSchedulerSteps(steps);
+        }
+
+        /// <inheritdoc />
         internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
             bool inCase)
         {

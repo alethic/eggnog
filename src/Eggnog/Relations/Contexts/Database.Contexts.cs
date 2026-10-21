@@ -119,6 +119,15 @@ namespace Eggnog.Relations
         internal Context? Owner => owner;
 
         /// <summary>
+        /// Gets whether <paramref name="table"/> is private to each context (<see cref="LayeredSchema.Register"/>): its rows
+        /// are the context's bookkeeping, which no descendant reads, so a change to them does not move
+        /// <see cref="ChangeStamp"/>, which says what readers see.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        /// <returns>Whether the table is context-private; <c>false</c> in a bare database.</returns>
+        internal bool IsContextPrivate(TableId table) => owner is not null && owner.Store.Schema[table] is { IsContextPrivate: true };
+
+        /// <summary>
         /// Gets whether this is a child context's database, whose schema questions are answered from the store's
         /// <see cref="LayeredSchema"/> and whose definitions and rebuilds go through the store and the context.
         /// </summary>

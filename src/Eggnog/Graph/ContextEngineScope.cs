@@ -134,6 +134,15 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public override bool TryGetProgress(Relations.EGraphRuleId rule, out Relations.RuleProgress progress) =>
+            Context.TryOwn(rule, graph.Engine.GetRuleInfo(rule).Generation, out progress);
+
+
+        /// <inheritdoc />
+        public override void SetProgress(Relations.EGraphRuleId rule, Relations.RuleProgress progress) =>
+            Context.SetProgress(rule, progress.AsInherited());
+
+        /// <inheritdoc />
         public override uint FreshId() => Context.FreshId().Rep;
 
         /// <inheritdoc />

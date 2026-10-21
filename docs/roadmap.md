@@ -31,8 +31,6 @@ gates").
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
-- **Schedulers.** egglog's `Scheduler` (`add_scheduler`, `step_rules_with_scheduler`), and the back-off scheduler of
-  egglog-experimental; here none. Matches a scheduler holds back stay pending in a child that inherits progress.
 - **Rule callbacks.** egglog's rules that call host code (`rust_rule`); here a host loop instead (architecture 2.13,
   item 5).
 - **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child

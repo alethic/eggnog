@@ -46,8 +46,9 @@ namespace Eggnog
                 if (op.Kind is HeadOpKind.Write or HeadOpKind.Delete && op.Table is FunctionHandle { Merge: not null } function)
                     RootOnlyWrite ??= function;
 
-                if (op.Kind == HeadOpKind.Delete && (deletes ??= new()).Contains(op.Table!) == false)
-                    deletes.Add(op.Table!);
+                // A scheduler's action rule deletes its worklist row, which is context-private bookkeeping.
+                if (op.Kind == HeadOpKind.Delete && op.Table!.IsWorklist == false && (deletes ??= new()).Contains(op.Table) == false)
+                    deletes.Add(op.Table);
             }
 
             Deletes = deletes?.ToArray() ?? Array.Empty<TableHandle>();
@@ -118,6 +119,13 @@ namespace Eggnog
         /// analyses depend only on terms.
         /// </summary>
         public bool WritesAnalysis { get; }
+
+        /// <summary>
+        /// Gets whether the atoms match subsumed rows too: a scheduler's query, as egglog at 5e655cae builds it
+        /// (<c>src/scheduler.rs</c>, <c>query(&amp;rule.body, true)</c>); every other program matches only rows that are not
+        /// subsumed, or a mirror copy rule's only subsumed ones.
+        /// </summary>
+        public bool IncludeSubsumed { get; init; }
 
         /// <summary>
         /// Gets the number of body registers: the head registers follow them.

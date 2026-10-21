@@ -130,6 +130,11 @@ namespace Eggnog
                     foreach (var tag in split.Program.Matcher.ReadScopes)
                         ScopeResolver.Resolve(this, tag, $"Split rule '{split.Name}'");
 
+                var steps = new List<RunWithSchedule>();
+                schedule.CollectSchedulerSteps(steps);
+                foreach (var step in steps)
+                    step.Check(this);
+
                 // The cases of a split are children, at the root too.
                 if (IsRoot && inCases.Count > 0)
                     foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(inCases), this))

@@ -104,15 +104,19 @@ are fixed as above, and #885 does not fix row 9.
 
 ## Scheduling
 
-Eggnog has no custom schedulers ([`architecture.md`](architecture.md), section 2.6), so these matter only if it
-gains them.
+Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`architecture.md`](architecture.md), section
+2.6), except that the matches it offers hold canonical classes (defect 9) and each scope holds its own state
+(defect 10).
 
 - [ ] **Scheduler queries skip subsumed rows** (#885). A custom scheduler's query no longer offers subsumed rows as
-  fresh matches. Upstream: `src/scheduler.rs:398-400`. The scheduler's non-canonical residual ids (defect 9) stay.
+  fresh matches; at 5e655cae it does, and so does Eggnog's (`RuleProgram.IncludeSubsumed`). Upstream:
+  `src/scheduler.rs:398-400`. The scheduler's non-canonical residual ids (defect 9) stay; Eggnog canonicalizes them.
 - [ ] **Variable-free scheduled rules** (#920). A scheduled rule whose head has no free variables now fires; before,
-  its match size divided by zero. Upstream: `src/scheduler.rs:40-161`, `402-411`.
+  its match size divided by zero. Upstream: `src/scheduler.rs:40-161`, `402-411`. Eggnog refuses such a rule before a
+  run (`ScheduledRule.NoFreeVariables`).
 - [ ] **Scheduler state after an error** (#920). `step_rules_with_scheduler` restores its rulesets and schedulers on
-  every error path, and an unknown ruleset is an error. Upstream: `src/scheduler.rs:196-315`.
+  every error path, and an unknown ruleset is an error. Upstream: `src/scheduler.rs:196-315`. Eggnog faults the scope
+  whose step fails, as for any evaluation failure.
 
 ## Proofs
 

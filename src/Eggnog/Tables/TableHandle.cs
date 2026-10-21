@@ -115,6 +115,13 @@ namespace Eggnog
         internal bool IsMirror => MirrorTag is not null;
 
         /// <summary>
+        /// Gets whether this is a scheduler's worklist (<see cref="ScheduledRule"/>): a context-private relation of the
+        /// matches chosen for one step, which its action rule deletes as it fires them. Never listed in
+        /// <see cref="EGraph.Tables"/>; its deletions are bookkeeping, not a rule's deletion.
+        /// </summary>
+        internal bool IsWorklist { get; set; }
+
+        /// <summary>
         /// Gets the table this handle names: itself, or the table a scoped view views.
         /// </summary>
         internal TableHandle Table => ReadScope is null ? this : Source!;

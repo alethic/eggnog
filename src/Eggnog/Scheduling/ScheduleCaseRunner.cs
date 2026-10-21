@@ -48,12 +48,15 @@ namespace Eggnog
             if (scope.Engine.TryTakeRecordedFailure(out var message))
                 throw scope.FaultWith(new Relations.PanicException(message));
 
+            // A scheduler step a case holds back keeps that case's own repeats going, not the steps around the split.
+            var heldBack = executor.HeldBack;
             try
             {
                 return inCase.Execute(executor, scope, depth, true, allowSplits);
             }
             finally
             {
+                executor.HeldBack = heldBack;
                 executor.CaseRunEnded();
             }
         }

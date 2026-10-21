@@ -14,7 +14,7 @@ namespace Eggnog
     /// accumulates the report. It also keeps one split driver per split node, the run's live cases, and the stack of split
     /// steps in progress, whose lifts it records as steps.
     /// </summary>
-    internal sealed class ScheduleExecutor
+    internal sealed partial class ScheduleExecutor
     {
 
         readonly CancellationToken cancellationToken;
@@ -207,7 +207,22 @@ namespace Eggnog
                 throw scope.FaultWith(panic);
             }
 
-            var elapsed = Stopwatch.GetElapsedTime(started);
+            return Account(scope, rules, lowered, iteration, Stopwatch.GetElapsedTime(started));
+        }
+
+        /// <summary>
+        /// Accounts for one iteration of <paramref name="rules"/> in <paramref name="scope"/>: counts it, adds each
+        /// variant's matches and time to its rule's statistics (a variant of no rule adds only time), reconciles the
+        /// scope's mirrors after a rule that deletes matched, sums the engine times, and records the step.
+        /// </summary>
+        /// <param name="scope">The scope the iteration ran in.</param>
+        /// <param name="rules">The iteration's rules, whose deletions the mirrors are reconciled for.</param>
+        /// <param name="lowered">The variants the iteration ran.</param>
+        /// <param name="iteration">What the engine did.</param>
+        /// <param name="elapsed">The iteration's wall time.</param>
+        /// <returns>Whether the iteration changed the scope (its rules' writes or the rebuild).</returns>
+        bool Account(Scope scope, IReadOnlyList<CompiledRule> rules, LoweredRule[] lowered, EngineIteration iteration, TimeSpan elapsed)
+        {
             Statistics.Iterations++;
             var report = iteration.Report;
             List<RuleStatistics>? matched = wantsSteps ? new List<RuleStatistics>() : null;
@@ -617,7 +632,7 @@ namespace Eggnog
             IReadOnlyList<RunStep> steps = Statistics.Steps is { } recorded ? recorded.AsReadOnly() : Array.Empty<RunStep>();
             return new RunReport(Statistics.Iterations, Statistics.TopChanged, saturated, reason, clock.Elapsed,
                 new ReadOnlyDictionary<Rule, RuleStatistics>(rules), Statistics.SearchTime, Statistics.MergeTime, Statistics.RebuildTime, steps,
-                Statistics.CasesOpened, Statistics.SplitsSkipped, Statistics.Lifts, Statistics.LiftRowsSkipped);
+                Statistics.CasesOpened, Statistics.SplitsSkipped, Statistics.Lifts, Statistics.LiftRowsSkipped, Statistics.HeldBack);
         }
 
         /// <summary>

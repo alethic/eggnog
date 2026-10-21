@@ -91,7 +91,8 @@ namespace Eggnog.Relations
                     if (p.LastRunAt > floor)
                         Context.Report(violations, $"rule progress: rule {id} ran at {p.LastRunAt}, above the context's semi-naive floor {floor}");
 
-                    if (parent is not null && p.LastRunAt < context.CreatedAt)
+                    // A scheduler's query rule may hold its parent's run as its own (RuleProgress.Inherited).
+                    if (parent is not null && p.LastRunAt < context.CreatedAt && p.Inherited == false)
                         Context.Report(violations, $"rule progress: rule {id} ran at {p.LastRunAt}, before the context was created at {context.CreatedAt}");
 
                     if (info.CachedPlan is { } planned)
