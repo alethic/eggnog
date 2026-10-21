@@ -25,8 +25,6 @@ gates").
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
   rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
   22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
-- **Any arity.** egglog's tables and primitives take any number of columns and arguments; the typed API stops at four
-  key columns and four parameters. An untyped definition API serves the rest.
 - **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort
   by function name and row values; here ties go by content (architecture 2.10, decisions row 21b).
 - **Strings by code point.** Rust compares strings by code point; here extraction and set order compare UTF-16 code

@@ -187,6 +187,23 @@ namespace Eggnog
         internal ColumnType[] Columns { get; set; } = Array.Empty<ColumnType>();
 
         /// <summary>
+        /// Converts the arguments of an any-arity application (<see cref="RelationN.Of"/> and its kin): a term as it is,
+        /// any other value a constant of its key column's type.
+        /// </summary>
+        /// <param name="keys">The arguments, one per key column.</param>
+        /// <returns>The terms, a new array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="keys"/> or a key is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The number or a type does not match.</exception>
+        internal Term[] ToArguments(object[] keys)
+        {
+            var types = new Type[this.keys.Length];
+            for (var i = 0; i < types.Length; i++)
+                types[i] = this.keys[i].ClrType;
+
+            return BoxedConstantTerm.Convert(keys, types, Name);
+        }
+
+        /// <summary>
         /// Checks that an untyped application passes one term per key, each of the key's CLR type.
         /// </summary>
         /// <param name="arguments">The arguments.</param>
