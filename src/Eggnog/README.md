@@ -81,7 +81,8 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
 | `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`). |
 | `TableOptions` | A table's role, lift policy and extractability, and whether its rows may be subsumed (`Subsumable`): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
-| `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, `Split`. |
+| `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, `Split`, and `RunWith`, a step under a scheduler. |
+| `IRuleScheduler`, `RuleScheduler`, `BackOffScheduler` | egglog's schedulers: which of a rule's matches fire in a step (`EGraph.AddScheduler`, `Schedule.RunWith`); egglog-experimental's back-off. |
 | `Scope` | Where facts are written, rules run and reads answered: the root or a child (`CreateChild`), writable or frozen (`Freeze`). |
 | `ScopeTag` | A label on scopes, through which rules read another scope's facts (`In(tag)`) and rulesets restrict what their rules may judge on. |
 | `Query` | A reusable conjunctive query (`DefineQuery`), run with `Any`, `Count` or `ForEachMatch`. |

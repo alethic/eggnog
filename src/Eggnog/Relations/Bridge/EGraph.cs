@@ -307,7 +307,8 @@ namespace Eggnog.Relations
 
                 var merge = new FunctionTableMerge(math, Resolve(config.Merge, config.Name), config.Merge.IsLattice);
                 var table = new SortedWritesTable(math.KeyCount, math.TableColumns, new ColumnId(math.TimestampColumn), CollectionsMarshal.AsSpan(toRebuild), merge, db.Parallelism);
-                var tableId = store.AddTable(table, CollectionsMarshal.AsSpan(readDeps), CollectionsMarshal.AsSpan(writeDeps), config.Name);
+                var tableId = store.AddTable(table, CollectionsMarshal.AsSpan(readDeps), CollectionsMarshal.AsSpan(writeDeps), config.Name,
+                    config.ContextPrivate);
 
                 var current = functions;
                 var id = new FunctionId(current.Length);

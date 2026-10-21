@@ -27,6 +27,12 @@ namespace Eggnog
         public bool LastTopStepChanged;
 
         /// <summary>
+        /// Whether a scheduler step in the top-level scope held work back: it changed nothing, and its scheduler could not
+        /// stop (<see cref="IRuleScheduler.CanStop"/>).
+        /// </summary>
+        public bool HeldBack;
+
+        /// <summary>
         /// The stop reason a run step recorded: <see cref="RunStopReason.Completed"/> unless a run step met a
         /// contradiction.
         /// </summary>

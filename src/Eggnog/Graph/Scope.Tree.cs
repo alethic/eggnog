@@ -552,6 +552,8 @@ namespace Eggnog
                 foreach (var rule in LocalCompiled)
                     rule.Variants.Free(Graph);
 
+                Graph.ForgetScheduledRules(LocalCompiled);
+
                 try
                 {
                     Engine.Dispose();
@@ -679,6 +681,9 @@ namespace Eggnog
             for (var scope = this; scope is not null; scope = scope.Parent)
                 foreach (var rule in scope.LocalCompiled)
                     Add(rule.Variants.Default);
+
+            // Schedulers' query and action rules, so that siblings stepping them share one plan.
+            Graph.AddScheduledPlanRules(Add);
 
             foreach (var query in Graph.Queries)
             {

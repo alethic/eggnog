@@ -64,9 +64,9 @@ namespace Eggnog
                     if (atom.Table.IsRelation)
                         columns[^1] = unit;
 
-                    // Rows that are not subsumed, as egglog's rules match (src/lib.rs:2525-2537); a table without a
-                    // subsumption column ignores the flag.
-                    builder.QueryTable(atom.Table.Function, columns, atom.SubsumedOnly);
+                    // Rows that are not subsumed, as egglog's rules match (src/lib.rs:2525-2537), or every row for a
+                    // scheduler's query; a table without a subsumption column ignores the flag.
+                    builder.QueryTable(atom.Table.Function, columns, program.IncludeSubsumed ? null : atom.SubsumedOnly);
                 }
 
                 foreach (var step in program.Steps)
@@ -145,8 +145,9 @@ namespace Eggnog
                             break;
                         case HeadOpKind.Collect:
                         {
-                            // The collector never fails, so its panic message is never built; the call stages nothing.
-                            collector = new MatchCollector(graph, inputs.Length, graph.Unit.Unit);
+                            // The collector never fails, so its panic message is never built; the call stages nothing. A
+                            // scheduler's query collects into its rule's slot (the op's target), a query or matcher into -1.
+                            collector = new MatchCollector(graph, inputs.Length, graph.Unit.Unit, op.Target);
                             var function = engine.RegisterExternalFunction(collector);
                             owned.Add(function);
                             var name = program.Name;

@@ -304,15 +304,39 @@ a ruleset without a licence.
 | Schedule | Meaning |
 |---|---|
 | `Run(rulesets)` | one iteration over the union of the rulesets' rules active in the scope; a `Ruleset` converts to it |
+| `RunWith(scheduler, ruleset)` | one step of the ruleset under a scheduler: egglog's `step_rules_with_scheduler`, egglog-experimental's `run-with` |
 | `Sequence(steps)` | the steps in order, once each |
-| `Repeat(n, steps)` | up to `n` passes of the steps, stopping after a pass with no change |
-| `Saturate(steps)` | passes of the steps until one changes nothing |
+| `Repeat(n, steps)` | up to `n` passes of the steps, stopping after a pass with no change in which no scheduler held work back (egglog's `can_stop`) |
+| `Saturate(steps)` | passes of the steps until one changes nothing and no scheduler held work back |
 | `Until(body, facts)` | the body, unless every ground fact already holds (egglog's `:until`) |
 | `Split(rule, inCase)` | a case split step (section 2.9) |
 
 One iteration runs every active rule against the same snapshot of the scope, then merges what they staged and rebuilds
 (Jacobi-style, as egglog does). A rule is active in a scope when it belongs to a scheduled ruleset and is either
 global or local to the scope or one of its ancestors (section 2.8).
+
+A scheduler (`IRuleScheduler`, added with `EGraph.AddScheduler`) is egglog's `Scheduler` (`src/scheduler.rs`). It
+chooses which of a rule's matches fire in a step of `RunWith` (`FilterMatches`); the others wait for the next step, and
+whether the rule's query runs again is its answer. As egglog does, each rule is split in two over a worklist: a
+semi-naive query rule over the rule's body that collects the values of the variables the head uses, and a naive action
+rule over the worklist that runs the head and deletes the row it fired. The two run in two engine iterations, which the
+report counts as one. A step changes the scope when a head does; one that changes nothing ends a `Saturate` only when
+the scheduler can stop (`CanStop`; `RunReport.CanStop`), as egglog-experimental's `saturate`, the only saturation over
+scheduler steps, stops on `can_stop`, and so do the passes of a `Repeat`, as core egglog's `Repeat` stops on `can_stop`.
+Upstream never combines the two: egglog-experimental's `repeat` always runs its passes, and core egglog's schedules have
+no scheduler steps; a `Repeat` of `RunWith` steps is this library's. `BackOffScheduler` is egglog-experimental's
+back-off scheduler (release 1.0.0, for egglog 3.0.0), without the node limit of its later versions. Each scope steps its
+own clone of the scheduler, with its own matches left and its own worklists, which are context-private tables
+(`FunctionConfig.ContextPrivate`): bookkeeping that descendants never read, that moves no `Version`, and that a scope
+may delete from where a rule may not. A child starts from what its parent held when the child was made, as egglog's
+`push` clones the e-graph with its schedulers: the matches its parent left wait in the child, whose queries continue
+from its parent's progress (the query rules never seed a watermark from an ancestor's; the step sets the child's own).
+This is where egglog's defect 10 goes ([`history/egglog-engine-map.md`](history/egglog-engine-map.md)): egglog's clone
+and original share part of the buffers. Its defect 9 goes too: the matches offered hold classes as the scope's canonical
+members, where egglog's left matches keep the ids they were found with. As at 5e655cae, the query matches subsumed rows
+too, and a rule whose head uses no variable of its body cannot be scheduled (egglog panics; 3.0.0 fires it). A scheduler
+runs on the scope's thread under the engine-call marker, so it cannot call into a graph; one that throws faults the
+scope.
 
 `RunOptions` bounds a run: `IterationLimit` (default 10,000 engine iterations, counted in every scope of the run,
 cases included), `TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases), and for splits

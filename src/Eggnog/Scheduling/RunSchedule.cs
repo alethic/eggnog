@@ -46,7 +46,7 @@ namespace Eggnog
         /// <summary>
         /// Gets whether a scope is contradictory once brought up to date (a no-op when it is current or stopped).
         /// </summary>
-        static bool IsContradictory(EngineScope engine)
+        internal static bool IsContradictory(EngineScope engine)
         {
             engine.EnsureClean();
             return engine.IsStopped || engine.IsContradictory;

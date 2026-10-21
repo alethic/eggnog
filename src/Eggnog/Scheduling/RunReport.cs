@@ -28,10 +28,13 @@ namespace Eggnog
         /// <param name="splitsSkipped">The split requests not taken.</param>
         /// <param name="lifts">The lifts split steps ran.</param>
         /// <param name="liftRowsSkipped">The candidate rows those lifts skipped.</param>
+        /// <param name="heldBack">Whether a scheduler step held work back.</param>
         internal RunReport(int iterations, bool changed, bool saturated, RunStopReason stopReason, TimeSpan elapsed,
             IReadOnlyDictionary<Rule, RuleStatistics> rules, TimeSpan searchTime, TimeSpan mergeTime, TimeSpan rebuildTime,
-            IReadOnlyList<RunStep> steps, int casesOpened = 0, int splitsSkipped = 0, int lifts = 0, long liftRowsSkipped = 0)
+            IReadOnlyList<RunStep> steps, int casesOpened = 0, int splitsSkipped = 0, int lifts = 0, long liftRowsSkipped = 0,
+            bool heldBack = false)
         {
+            CanStop = changed == false && heldBack == false && stopReason is RunStopReason.Completed or RunStopReason.Contradiction;
             Steps = steps;
             CasesOpened = casesOpened;
             SplitsSkipped = splitsSkipped;
@@ -66,6 +69,14 @@ namespace Eggnog
         /// changed nothing, or the split step opened no case and its lifts changed nothing.
         /// </summary>
         public bool Saturated { get; }
+
+        /// <summary>
+        /// Gets whether another run of the same schedule would have nothing to do: egglog's <c>can_stop</c>. The run ended
+        /// on its own (<see cref="RunStopReason.Completed"/>, or a contradiction), changed nothing, and no scheduler step of
+        /// it held work back (<see cref="Schedule.RunWith"/>, <see cref="IRuleScheduler.CanStop"/>); a host that steps a
+        /// scheduler run by run stops on it, as egglog's <c>Repeat</c> does. A run a limit stopped cannot tell.
+        /// </summary>
+        public bool CanStop { get; }
 
         /// <summary>
         /// Gets why the run ended.

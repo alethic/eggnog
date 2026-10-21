@@ -177,7 +177,7 @@ namespace Eggnog.Relations
                 var change = info.Table.Merge(state);
                 state.Flush();
                 RecordFailure(state);
-                if (change.Added || change.Removed)
+                if ((change.Added || change.Removed) && IsContextPrivate(table) == false)
                     BumpChangeStamp();
 
                 return change.Added;
@@ -256,11 +256,11 @@ namespace Eggnog.Relations
                     infos[i] = TakeOut(TableOf(roundOrder[start + i]));
 
                 if (parallel && length > 1)
-                    return MergeParallel(infos, length, timestamp);
+                    return MergeParallel(infos, start, length, timestamp);
 
                 var changed = false;
                 for (var i = 0; i < length; i++)
-                    changed |= MergeOne(infos[i]!, timestamp);
+                    changed |= MergeOne(infos[i]!, TableOf(roundOrder[start + i]), timestamp);
 
                 return changed;
             }
@@ -284,14 +284,14 @@ namespace Eggnog.Relations
         /// serial path.
         /// </summary>
         /// <returns>Whether any merge added rows or staged writes.</returns>
-        bool MergeParallel(TableInfo?[] infos, int length, uint timestamp)
+        bool MergeParallel(TableInfo?[] infos, int start, int length, uint timestamp)
         {
             var changed = 0;
             try
             {
                 Parallel.For(0, length, parallelism.Options, i =>
                 {
-                    if (MergeOne(infos[i]!, timestamp))
+                    if (MergeOne(infos[i]!, TableOf(roundOrder[start + i]), timestamp))
                         Interlocked.Exchange(ref changed, 1);
                 });
             }
@@ -307,16 +307,17 @@ namespace Eggnog.Relations
         /// <summary>
         /// Merges one table in a fresh execution state carrying <paramref name="timestamp"/> and flushes the state: the
         /// body of egglog's merge closures (mod.rs:554-555, 563-564, 598-599). Thread-safe across distinct tables.
-        /// A merge that added or removed rows moves <see cref="ChangeStamp"/>: one test per table merge.
+        /// A merge that added or removed rows of a table that is not context-private moves <see cref="ChangeStamp"/>: one
+        /// test per table merge.
         /// </summary>
         /// <returns>Whether the merge added rows or its merge function staged writes.</returns>
-        bool MergeOne(TableInfo info, uint timestamp)
+        bool MergeOne(TableInfo info, TableId table, uint timestamp)
         {
             var state = new ExecutionState(view, timestamp);
             var change = info.Table.Merge(state);
             state.Flush();
             RecordFailure(state);
-            if (change.Added || change.Removed)
+            if ((change.Added || change.Removed) && IsContextPrivate(table) == false)
                 BumpChangeStamp();
 
             return change.Added || state.Changed;

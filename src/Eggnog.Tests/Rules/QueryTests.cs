@@ -684,7 +684,7 @@ namespace Eggnog.Tests.Rules
             t.Root.Run(t.Rules);
 
             Assert.IsType<InvalidOperationException>(fromPrimitive);
-            Assert.Equal("Not allowed from a primitive, lattice, filter or cost function", fromPrimitive!.Message);
+            Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", fromPrimitive!.Message);
             Assert.DoesNotContain(t.Graph.Queries, q => q.Name == "from a filter");
         }
 

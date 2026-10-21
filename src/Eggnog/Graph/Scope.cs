@@ -92,6 +92,9 @@ namespace Eggnog
             Engine = engine;
             Runtime = engine.Runtime;
             Runtime.Owner = this;
+
+            // A child starts from its parent's schedulers as they are now, as egglog's push clones them.
+            schedulerSnapshot = parent.CaptureSchedulerStates();
         }
 
         /// <summary>

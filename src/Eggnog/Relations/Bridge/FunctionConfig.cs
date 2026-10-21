@@ -41,6 +41,13 @@ namespace Eggnog.Relations
         /// </summary>
         public bool CanSubsume { get; init; }
 
+        /// <summary>
+        /// Gets whether the table is private to each context: descendants never read it, so it is not layered, never
+        /// gated and may be retracted freely (<see cref="Store.AddTable"/>). egglog's design keeps scheduler bookkeeping
+        /// so; egglog itself has no contexts.
+        /// </summary>
+        public bool ContextPrivate { get; init; }
+
     }
 
 }

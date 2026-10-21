@@ -80,6 +80,12 @@ namespace Eggnog
         /// </summary>
         public bool StopAtFirstQueryMatch { get; set; }
 
+        /// <summary>
+        /// Gets or sets the buffers schedulers' queries fill during one engine call, by rule slot
+        /// (<see cref="ScheduledRule.Slot"/>); read-only while the call runs, so rule tasks may look them up concurrently.
+        /// </summary>
+        public System.Collections.Generic.Dictionary<int, SchedulerMatchBuffer>? SchedulerMatches { get; set; }
+
     }
 
 }

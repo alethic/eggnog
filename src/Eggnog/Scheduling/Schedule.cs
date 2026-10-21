@@ -82,6 +82,44 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// One step of <paramref name="ruleset"/> under <paramref name="scheduler"/>: egglog's
+        /// <c>step_rules_with_scheduler</c>, and egglog-experimental's <c>run-with</c>. Each rule's query finds its new
+        /// matches (semi-naive), the scheduler chooses which of them and of those it left before fire
+        /// (<see cref="IRuleScheduler.FilterMatches"/>), and the chosen ones fire; the rest wait for the next step. The
+        /// step changes the scope when a head does; one that changes nothing ends a <see cref="Repeat"/> or a
+        /// <see cref="Saturate"/> only when the scheduler says it can stop (<see cref="IRuleScheduler.CanStop"/>,
+        /// <see cref="RunReport.CanStop"/>): egglog's <c>can_stop</c>, on which egglog-experimental's <c>saturate</c> stops.
+        /// <see cref="BackOffScheduler"/> is egglog-experimental's back-off scheduler.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each scope that steps the scheduler holds its own clone of it and its own matches left. A child starts from
+        /// what its parent held when the child was made, as egglog's <c>push</c> clones the e-graph: the matches its parent
+        /// left wait in the child too, and the child's queries continue from its parent's. A child made before its parent
+        /// stepped starts afresh.
+        /// </para>
+        /// <para>
+        /// As egglog at 5e655cae, a rule's query matches subsumed rows too, and a rule whose head uses no variable of its
+        /// body cannot be scheduled. The matches offered hold classes as their canonical members in the scope, where
+        /// egglog's left matches keep the ids they were found with.
+        /// </para>
+        /// </remarks>
+        /// <param name="scheduler">The scheduler, of the ruleset's graph.</param>
+        /// <param name="ruleset">The ruleset.</param>
+        /// <returns>The schedule.</returns>
+        /// <exception cref="ArgumentException">The scheduler and the ruleset belong to different graphs.</exception>
+        public static Schedule RunWith(RuleScheduler scheduler, Ruleset ruleset)
+        {
+            ArgumentNullException.ThrowIfNull(scheduler);
+            ArgumentNullException.ThrowIfNull(ruleset);
+            if (ReferenceEquals(scheduler.Graph, ruleset.Graph) == false)
+                throw new ArgumentException(
+                    $"Scheduler {scheduler.Name} and ruleset '{ruleset.Name}' belong to different graphs.", nameof(ruleset));
+
+            return new RunWithSchedule(scheduler, ruleset);
+        }
+
+        /// <summary>
         /// A split step: where the split rule's body matches in the scope, it opens one case per element of the matched set
         /// (each assuming its element), runs <paramref name="inCase"/> in each case, and lifts into the scope what every
         /// live case proves; a case found contradictory has no model and is dropped. The cases live until the top-level run
@@ -180,6 +218,16 @@ namespace Eggnog
         /// <param name="inCase">Whether this schedule runs in the cases of a split.</param>
         internal abstract void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
             bool inCase);
+
+        /// <summary>
+        /// Collects the scheduler steps the schedule reaches (<see cref="RunWith"/>), whose rules <c>Scope.Run</c> checks
+        /// before any work, besides what <see cref="Collect"/> checks.
+        /// </summary>
+        /// <param name="steps">The list to add the steps to.</param>
+        internal virtual void CollectSchedulerSteps(ICollection<RunWithSchedule> steps)
+        {
+
+        }
 
         /// <summary>
         /// Copies an array of non-null items.

@@ -49,6 +49,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        internal override void CollectSchedulerSteps(ICollection<RunWithSchedule> steps) => Body.CollectSchedulerSteps(steps);
+
+        /// <inheritdoc />
         internal override void Collect(ISet<Ruleset> rulesets, ICollection<Fact> conditions, ISet<SplitRule> splits, ISet<Ruleset> inCases,
             bool inCase)
         {
