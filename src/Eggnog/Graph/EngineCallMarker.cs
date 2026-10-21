@@ -18,7 +18,7 @@ namespace Eggnog
         /// <summary>
         /// The message of the exception a marked thread gets from a graph or scope entry point.
         /// </summary>
-        internal const string Message = "Not allowed from a primitive, lattice, filter or cost function";
+        internal const string Message = "Not allowed from a primitive, lattice, filter, cost function or scheduler";
 
         [ThreadStatic]
         static int depth;

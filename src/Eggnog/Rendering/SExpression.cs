@@ -400,6 +400,10 @@ namespace Eggnog
 
                     builder.Append(')');
                     break;
+                case RunWithSchedule runWith:
+                    // egglog-experimental's (run-with scheduler ruleset).
+                    builder.Append("(run-with ").Append(runWith.Scheduler.Name).Append(' ').Append(runWith.Ruleset.Name).Append(')');
+                    break;
                 case RepeatSchedule repeat:
                     builder.Append("(repeat ").Append(repeat.Times.ToString(CultureInfo.InvariantCulture));
                     AppendSteps(builder, repeat.Steps);

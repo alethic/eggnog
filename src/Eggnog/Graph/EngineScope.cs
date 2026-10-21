@@ -105,6 +105,22 @@ namespace Eggnog
         public abstract EngineIteration RunRules(ReadOnlySpan<Relations.EGraphRuleId> rules);
 
         /// <summary>
+        /// Gets the scope's own progress for a rule: its last committed run here, never an ancestor's.
+        /// </summary>
+        /// <param name="rule">The rule.</param>
+        /// <param name="progress">The progress, when the result is <c>true</c>.</param>
+        /// <returns>Whether the rule has run here.</returns>
+        public abstract bool TryGetProgress(Relations.EGraphRuleId rule, out Relations.RuleProgress progress);
+
+        /// <summary>
+        /// Sets the scope's own progress for a rule, as if it had run here: a scheduler's query rule in a child, which
+        /// continues from its parent's run (<see cref="Schedule.RunWith"/>).
+        /// </summary>
+        /// <param name="rule">The rule.</param>
+        /// <param name="progress">The progress, read from an ancestor by <see cref="TryGetProgress"/>.</param>
+        public abstract void SetProgress(Relations.EGraphRuleId rule, Relations.RuleProgress progress);
+
+        /// <summary>
         /// Mints a class id for a new term of a host batch.
         /// </summary>
         /// <returns>The id.</returns>

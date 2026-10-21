@@ -478,8 +478,8 @@ namespace Eggnog.Relations
             info.ResetIndexes();
             totalSizeEstimate -= previous;
 
-            // An effective clear (one that removed rows) changes what every reader sees.
-            if (previous > 0)
+            // An effective clear (one that removed rows) changes what every reader sees, unless the table is bookkeeping.
+            if (previous > 0 && IsContextPrivate(table) == false)
                 BumpChangeStamp();
         }
 

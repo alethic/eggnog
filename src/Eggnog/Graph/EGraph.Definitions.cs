@@ -678,7 +678,7 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="InvalidOperationException">Another thread is using the writable root.</exception>
         Relations.FunctionId AddEngineTable(string name, TableKind kind, ColumnType[] columns, ValueLattice? lattice, ColumnType? output,
-            bool subsumable, FunctionMergeDefinition? functionMerge = null)
+            bool subsumable, FunctionMergeDefinition? functionMerge = null, bool contextPrivate = false)
         {
             var guarded = Root.IsFrozen == false;
             if (guarded)
@@ -733,6 +733,7 @@ namespace Eggnog
                         Merge = mergeFn,
                         Name = name,
                         CanSubsume = subsumable,
+                        ContextPrivate = contextPrivate,
                     });
                 }
                 catch

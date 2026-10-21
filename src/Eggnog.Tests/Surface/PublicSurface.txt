@@ -1,3 +1,10 @@
+sealed class Eggnog.BackOffScheduler : IRuleScheduler
+    Boolean CanStop(IReadOnlyList<String> rules, String ruleset)
+    Boolean FilterMatches(String rule, String ruleset, RuleMatches matches)
+    IRuleScheduler Clone()
+    Int64 BanLength { get }
+    Int64 MatchLimit { get }
+    ctor(Int64 matchLimit = 1000, Int64 banLength = 5)
 static class Eggnog.BigIntegerPrimitives
     static Primitive<BigInteger, BigInteger, BigInteger> Add { get }
     static Primitive<BigInteger, BigInteger, BigInteger> BitwiseAnd { get }
@@ -153,6 +160,7 @@ static class Eggnog.DoublePrimitives
     static Primitive<Double, Int64> ToInt64 { get }
     static Primitive<Double, String> Format { get }
 sealed class Eggnog.EGraph
+    Boolean RemoveScheduler(RuleScheduler scheduler)
     ColumnType<TSort> DefineSort<TSort : struct, ISort<TSort>>(String name)
     Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
     Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
@@ -185,6 +193,7 @@ sealed class Eggnog.EGraph
     Relation<T1, T2> DefineRelation<T1, T2>(String name, TableOptions options = null)
     Relation<T1> DefineRelation<T1>(String name, TableOptions options = null)
     RelationN DefineRelationN(String name, IReadOnlyList<Type> keys, TableOptions options = null)
+    RuleScheduler AddScheduler(IRuleScheduler scheduler)
     Ruleset DefineRuleset(String name)
     Ruleset DefineRuleset(String name, RulesetOptions options)
     Scope Root { get }
@@ -289,6 +298,10 @@ struct Eggnog.GraphUsage : IEquatable<GraphUsage>
     override String ToString()
     static Boolean op_Equality(GraphUsage left, GraphUsage right)
     static Boolean op_Inequality(GraphUsage left, GraphUsage right)
+interface Eggnog.IRuleScheduler
+    abstract Boolean FilterMatches(String rule, String ruleset, RuleMatches matches)
+    abstract IRuleScheduler Clone()
+    virtual Boolean CanStop(IReadOnlyList<String> rules, String ruleset)
 interface Eggnog.ISort<TSort>
     ClassId Id { get }
     static abstract TSort FromId(ClassId id)
@@ -478,6 +491,23 @@ sealed class Eggnog.RuleEvaluationException : Exception
     String Bindings { get }
     String RuleName { get }
     ctor(String ruleName, String bindings, String message, Exception inner)
+struct Eggnog.RuleMatch
+    Int32 Index { get }
+    Object Get(String variable)
+    T Get<T>(String variable)
+sealed class Eggnog.RuleMatches
+    IReadOnlyList<String> Variables { get }
+    Int32 Count { get }
+    Int32 TupleLength { get }
+    RuleMatch this[Int32 index] { get }
+    Void Choose(Int32 index)
+    Void ChooseAll()
+sealed class Eggnog.RuleScheduler
+    Boolean IsRemoved { get }
+    EGraph Graph { get }
+    IRuleScheduler Prototype { get }
+    String Name { get }
+    override String ToString()
 sealed class Eggnog.RuleStatistics
     Int32 IterationsWithMatches { get }
     Int64 Matches { get }
@@ -510,6 +540,7 @@ sealed class Eggnog.RunOptions
     ctor()
     static RunOptions Default { get }
 sealed class Eggnog.RunReport
+    Boolean CanStop { get }
     Boolean Changed { get }
     Boolean Saturated { get }
     IReadOnlyDictionary<Rule, RuleStatistics> Rules { get }
@@ -550,6 +581,7 @@ abstract class Eggnog.Schedule
     override String ToString()
     static Schedule Repeat(Int32 times, params Schedule[] steps)
     static Schedule Run(params Ruleset[] rulesets)
+    static Schedule RunWith(RuleScheduler scheduler, Ruleset ruleset)
     static Schedule Saturate(params Schedule[] steps)
     static Schedule Sequence(params Schedule[] steps)
     static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase)

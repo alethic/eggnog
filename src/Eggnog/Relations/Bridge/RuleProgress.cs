@@ -11,7 +11,7 @@ namespace Eggnog.Relations
     /// A semi-naive watermark: rows stamped at or after <see cref="LastRunAt"/> are new to the rule in that context,
     /// and the watermark applies only while the rule's current constants equal <see cref="Constants"/> (a constant that
     /// lost a union forces a full run). <c>default</c> holds generation 0, which no rule has (generations start at 1,
-    /// <see cref="RuleTable"/>), so an unused slot never matches. A 16-byte value; immutable.
+    /// <see cref="RuleTable"/>), so an unused slot never matches. Immutable.
     /// </remarks>
     internal readonly struct RuleProgress
     {
@@ -24,10 +24,20 @@ namespace Eggnog.Relations
         /// written.</param>
         /// <param name="generation">The rule's generation.</param>
         public RuleProgress(uint lastRunAt, uint[]? constants, int generation)
+            : this(lastRunAt, constants, generation, false)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance, saying whether it is an ancestor's.
+        /// </summary>
+        RuleProgress(uint lastRunAt, uint[]? constants, int generation, bool inherited)
         {
             LastRunAt = lastRunAt;
             Constants = constants;
             Generation = generation;
+            Inherited = inherited;
         }
 
         /// <summary>
@@ -44,6 +54,19 @@ namespace Eggnog.Relations
         /// Gets the generation of the rule the progress belongs to; 0 for an unused slot.
         /// </summary>
         public int Generation { get; }
+
+        /// <summary>
+        /// Gets whether the progress is an ancestor's, set as a context's own (<see cref="AsInherited"/>): a scheduler's
+        /// query rule in a child continues from the run its parent's scheduler state recorded, which may predate the
+        /// child. Every other own progress is a run in the context, at or after its creation.
+        /// </summary>
+        public bool Inherited { get; }
+
+        /// <summary>
+        /// Gets this progress as an ancestor's, for a context to take as its own.
+        /// </summary>
+        /// <returns>The progress, marked <see cref="Inherited"/>.</returns>
+        public RuleProgress AsInherited() => new(LastRunAt, Constants, Generation, true);
 
         /// <summary>
         /// Gets whether two executed-constant vectors are equal: both absent, the same array, or equal element by element.
