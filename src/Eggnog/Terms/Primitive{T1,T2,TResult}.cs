@@ -17,6 +17,7 @@ namespace Eggnog
         readonly Func<uint, uint, uint>? cells;
         readonly Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)>? containerCells;
         readonly Func<uint, uint, bool>? cellPredicate;
+        readonly Func<ColumnType, uint, uint, Action<uint, uint>, (bool Found, uint Cell)>? write;
 
         /// <summary>
         /// Initializes a new instance of a total primitive.
@@ -98,10 +99,39 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Initializes a new instance of a write primitive over its arguments' cells (<see cref="Primitive.IsWrite"/>),
+        /// partial as egglog's write primitive is: egglog's <c>vec-union</c>. Its function over values throws: it writes
+        /// the graph.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="write">The function over the cells, given the first parameter's column type and the union:
+        /// whether there is a result, and its cell.</param>
+        internal Primitive(string name, Func<ColumnType, uint, uint, Action<uint, uint>, (bool Found, uint Cell)> write)
+            : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, true)
+        {
+            Function = (_, _) => throw Writes(name);
+            this.write = write;
+        }
+
+        /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
-        /// result.
+        /// result, and for one that writes the graph it always throws <see cref="InvalidOperationException"/>.
         /// </summary>
         public Func<T1, T2, TResult> Function { get; }
+
+        /// <inheritdoc />
+        internal override bool IsWrite => write is not null;
+
+        /// <inheritdoc />
+        internal override bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union, out uint cell)
+        {
+            if (write is null)
+                return base.TryInvokeWrite(arguments, parameters, result, union, out cell);
+
+            bool found;
+            (found, cell) = write(parameters[0], arguments[0], arguments[1], union);
+            return found;
+        }
 
         /// <summary>
         /// The primitive applied to terms: a computed value in a body (a let or a check) or a head.
@@ -124,8 +154,12 @@ namespace Eggnog
         /// <param name="b">The second argument.</param>
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
+        /// <exception cref="InvalidOperationException">The primitive writes the graph (<see cref="Function"/>).</exception>
         public bool TryInvoke(T1 a, T2 b, [MaybeNullWhen(false)] out TResult result)
         {
+            if (write is not null)
+                throw Writes(Name);
+
             if (partial is null)
             {
                 result = Function(a, b);
@@ -138,6 +172,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope)
         {
+            if (write is not null)
+                throw Writes(Name);
+
             if (cells is not null)
                 return cells(arguments[0], arguments[1]);
 
@@ -162,6 +199,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope, out uint cell)
         {
+            if (write is not null)
+                throw Writes(Name);
+
             if (cells is not null)
             {
                 cell = cells(arguments[0], arguments[1]);
@@ -196,6 +236,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
         {
+            if (write is not null)
+                throw Writes(Name);
+
             if (cells is not null)
             {
                 // The result is one of the arguments, chosen by cell: the argument itself, a class with its origin. A

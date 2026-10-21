@@ -205,7 +205,10 @@ namespace Eggnog
             var canonicalizer = result.HoldsClasses ? ClassCanonicalizer.Enter(canonical ??= Canonical) : null;
             try
             {
-                found = primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
+                // A write primitive's unions are the batch's, as egglog's global action makes them.
+                found = primitive.IsWrite
+                    ? primitive.TryInvokeWrite(arguments, parameters, result, PlanUnion, out cell)
+                    : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
             }
             catch (Exception exception) when (exception is not OverflowException || graph.IdsExhausted == false)
             {

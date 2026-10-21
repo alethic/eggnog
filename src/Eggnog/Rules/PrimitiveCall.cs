@@ -29,6 +29,7 @@ namespace Eggnog
         readonly bool inBody;
         readonly bool joins;
         readonly bool overClasses;
+        readonly Relations.UnionAction unionAction;
 
         /// <summary>
         /// Initializes a new instance.
@@ -56,6 +57,8 @@ namespace Eggnog
             this.inBody = inBody;
             this.joins = joins;
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
+            if (primitive.IsWrite)
+                unionAction = new Relations.UnionAction(graph.Engine);
         }
 
         /// <inheritdoc />
@@ -69,6 +72,13 @@ namespace Eggnog
                 {
                     if (primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result) == false)
                         return false;
+                }
+                else if (primitive.IsWrite)
+                {
+                    // egglog's write primitive in an action: its unions staged through the run's state, as a head's.
+                    var action = unionAction;
+                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), out result) == false)
+                        throw Primitive.NoResult(primitive.Name);
                 }
                 else
                 {

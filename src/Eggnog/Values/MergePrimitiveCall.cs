@@ -23,6 +23,7 @@ namespace Eggnog
         readonly ColumnType[] parameters;
         readonly ColumnType result;
         readonly bool overClasses;
+        readonly Relations.UnionAction unionAction;
 
         /// <summary>
         /// Initializes a new instance.
@@ -42,6 +43,8 @@ namespace Eggnog
             this.parameters = parameters;
             this.result = result;
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
+            if (primitive.IsWrite)
+                unionAction = new Relations.UnionAction(graph.Engine);
         }
 
         /// <inheritdoc />
@@ -51,6 +54,17 @@ namespace Eggnog
             var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
+                if (primitive.IsWrite)
+                {
+                    // A write primitive in a merge, as egglog's (vec-union old new): its unions staged through the
+                    // merge's state, which the rebuild applies.
+                    var action = unionAction;
+                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), out result) == false)
+                        throw Primitive.NoResult(primitive.Name);
+
+                    return true;
+                }
+
                 result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.Of(graph, state).Owner : null);
                 return true;
             }

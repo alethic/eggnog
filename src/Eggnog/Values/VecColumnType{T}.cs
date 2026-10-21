@@ -291,6 +291,14 @@ namespace Eggnog
         public string SerializedName(uint cell) => "vec-of";
 
         /// <summary>
+        /// Gets the cells of a vector's elements, in order, without decoding them.
+        /// </summary>
+        /// <param name="cell">The vector's cell.</param>
+        /// <returns>The cells.</returns>
+        /// <exception cref="InvalidOperationException">No vector has the cell.</exception>
+        internal uint[] ElementCells(uint cell) => Read(cell).Values.ToArray();
+
+        /// <summary>
         /// Reads the container of a cell.
         /// </summary>
         /// <exception cref="InvalidOperationException">No vector has the cell.</exception>

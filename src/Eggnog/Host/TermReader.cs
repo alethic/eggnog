@@ -190,11 +190,15 @@ namespace Eggnog
         /// <summary>
         /// Evaluates a primitive's term to its CLR value, on the calling thread under <see cref="EngineCallMarker"/>.
         /// </summary>
+        /// <exception cref="ArgumentException">The primitive writes the graph.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
         static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
         {
             value = null;
             var primitive = shape.Primitive!;
+            if (primitive.IsWrite)
+                throw new ArgumentException($"primitive '{primitive.Name}' writes the graph, and a read writes nothing", "term");
+
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
                 parameters[i] = scope.Graph.Values.TypeOf(primitive.ParameterTypes[i]);
@@ -449,6 +453,9 @@ namespace Eggnog
                     return $"host reads are ground; '{shape.Name}' is a variable";
                 default:
                 {
+                    if (shape.Primitive!.IsWrite)
+                        return $"primitive '{shape.Primitive.Name}' writes the graph, and a read writes nothing";
+
                     foreach (var argument in shape.Arguments)
                         if (ValidateTerm(scope, argument, enclosing) is { } error)
                             return error;

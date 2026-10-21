@@ -211,6 +211,18 @@ namespace Eggnog
         public static Primitive<Vec<T>, T, bool> VecNotContains<T>() where T : notnull => VecPrimitiveCache<T>.NotContains;
 
         /// <summary>
+        /// <c>vec-union</c>: unions the classes of two vectors of one length, element by element, and returns the first;
+        /// no result for two lengths (vec.rs:139-147, 287-338). A write primitive, as egglog's: it runs as a value a
+        /// rule's head or a host write writes, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a
+        /// rule's body, a query or a read. Its <c>Function</c> and <c>TryInvoke</c> throw
+        /// <see cref="InvalidOperationException"/>.
+        /// </summary>
+        /// <typeparam name="TSort">The sort of the elements.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<TSort>, Vec<TSort>, Vec<TSort>> VecUnion<TSort>()
+            where TSort : struct, ISort<TSort> => VecUnionCache<TSort>.Union;
+
+        /// <summary>
         /// <c>vec-get</c>: the element at an index; no result out of range (vec.rs:137).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>

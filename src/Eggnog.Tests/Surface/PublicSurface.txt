@@ -454,6 +454,7 @@ static class Eggnog.Primitives
     static Primitive<Vec<T>, T, Boolean> VecNotContains<T>()
     static Primitive<Vec<T>, T, Vec<T>> VecPush<T>()
     static Primitive<Vec<T>, Vec<T>> VecPop<T>()
+    static Primitive<Vec<TSort>, Vec<TSort>, Vec<TSort>> VecUnion<TSort : struct, ISort<TSort>>()
     static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
     static PrimitiveN<Vec<T>> VecEmpty<T>()
     static VariadicPrimitive<T, MultiSet<T>> MultiSetOf<T>()

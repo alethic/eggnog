@@ -18,6 +18,7 @@ namespace Eggnog
         readonly Var<T> @new;
         readonly Term<T> body;
         readonly TableHandle[] tables;
+        readonly bool writes;
 
         /// <summary>
         /// Initializes a new instance: builds the expression over the two variables once.
@@ -38,6 +39,23 @@ namespace Eggnog
             var found = new List<TableHandle>();
             CollectTables(body, found);
             tables = found.ToArray();
+            writes = Writes(body);
+        }
+
+        /// <summary>
+        /// Gets whether an expression calls a write primitive, whose unions only the engine's merge makes.
+        /// </summary>
+        static bool Writes(Term term)
+        {
+            var shape = term.Shape;
+            if (shape.Kind == TermShapeKind.Computation && shape.Primitive!.IsWrite)
+                return true;
+
+            foreach (var argument in shape.Arguments)
+                if (Writes(argument))
+                    return true;
+
+            return false;
         }
 
         /// <summary>
@@ -69,7 +87,7 @@ namespace Eggnog
         public override bool ComparesValues => true;
 
         /// <inheritdoc />
-        public override bool CanSimulate => tables.Length == 0;
+        public override bool CanSimulate => tables.Length == 0 && writes == false;
 
         /// <inheritdoc />
         public override IReadOnlyCollection<TableHandle> Tables => tables;
