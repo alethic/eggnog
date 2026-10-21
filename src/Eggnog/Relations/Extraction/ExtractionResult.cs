@@ -6,6 +6,6 @@ namespace Eggnog.Relations
     /// </summary>
     /// <param name="Cost">The term's cost under the extractor's <see cref="CostModel"/>.</param>
     /// <param name="Term">The term, in the <see cref="TermDag"/> it was extracted into.</param>
-    internal readonly record struct ExtractionResult(long Cost, TermId Term);
+    internal readonly record struct ExtractionResult(ulong Cost, TermId Term);
 
 }

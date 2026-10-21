@@ -116,7 +116,7 @@ namespace Eggnog.Tests.Values
             var x = t.Root.Make(leaf.Of(s.Of()));
 
             Assert.Equal("(Leaf (map-insert (map-insert (map-empty) \"b\" 1) \"a\" 2))", t.Root.Extract(x).ToString());
-            Assert.Equal(1 + 4, t.Root.Extract(x).Cost);
+            Assert.Equal<ulong>(1 + 4, t.Root.Extract(x).Cost);
             Assert.Equal(Map.Of(("a", 2L), ("b", 1L)), t.Root.Get(s.Of()));
 
             var serialized = t.Root.Serialize();

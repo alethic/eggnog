@@ -282,7 +282,7 @@ namespace Eggnog
             extractor.ExtractVariantTerms(sort, new Relations.Value(id), count);
 
         /// <inheritdoc />
-        public override bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out long cost) =>
+        public override bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out ulong cost) =>
             extractor.TryGetCost(sort, new Relations.Value(id), out cost);
 
         /// <inheritdoc />

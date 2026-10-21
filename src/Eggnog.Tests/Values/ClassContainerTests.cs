@@ -198,7 +198,7 @@ namespace Eggnog.Tests.Values
             var x = root.Make(l.Of(Primitives.VecOf<Node>().Of(num.Of(1L), add.Of(num.Of(2L), num.Of(3L)))));
             var term = root.Extract(x);
             Assert.Equal("(L (vec-of (Num 1) (Add (Num 2) (Num 3))))", term.ToString());
-            Assert.Equal(1 + 2 + 5, term.Cost);
+            Assert.Equal<ulong>(1 + 2 + 5, term.Cost);
 
             // The argument is the vector of the classes; each extracts as its own term.
             var elements = term.Value<Vec<Node>>(0);

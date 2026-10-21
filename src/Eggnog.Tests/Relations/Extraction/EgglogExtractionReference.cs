@@ -10,7 +10,7 @@ namespace Eggnog.Relations.Tests
     /// passes of <c>bellman_ford</c> over the rows in egglog's order, stamping every update with the next rank until a
     /// pass changes nothing, then each class's parent edge, the first row in the same order that costs the class's cost
     /// and whose class's rank exceeds every child's (src/extract.rs:407-499); and the variants of a class sorted by cost,
-    /// function name and raw row values (src/extract.rs:651-703). Where a cost saturated at <see cref="long.MaxValue"/>
+    /// function name and raw row values (src/extract.rs:651-703). Where a cost saturated at <see cref="ulong.MaxValue"/>
     /// leaves a class no parent edge, on which egglog's reconstruction panics, it takes eggnog's fallback: the first row
     /// whose children all had their first updates before the class had its own.
     /// </summary>
@@ -41,7 +41,7 @@ namespace Eggnog.Relations.Tests
                 });
             }
 
-            Costs = new Dictionary<uint, long>();
+            Costs = new Dictionary<uint, ulong>();
             long rank = 0;
             for (var changed = true; changed;)
             {
@@ -108,7 +108,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the cost of every class with a term.
         /// </summary>
-        public Dictionary<uint, long> Costs { get; }
+        public Dictionary<uint, ulong> Costs { get; }
 
         /// <summary>
         /// Gets each class's parent edge, or its fallback.
@@ -124,9 +124,9 @@ namespace Eggnog.Relations.Tests
         /// Gets up to <paramref name="count"/> variants of <paramref name="owner"/>: its rows with a cost, sorted by cost,
         /// then function name, then raw row values.
         /// </summary>
-        public List<(long Cost, int Function, Value[] Row)> Variants(uint owner, int count)
+        public List<(ulong Cost, int Function, Value[] Row)> Variants(uint owner, int count)
         {
-            var variants = new List<(long Cost, int Function, Value[] Row)>();
+            var variants = new List<(ulong Cost, int Function, Value[] Row)>();
             foreach (var (function, row) in Rows)
                 if (row[^1].Rep == owner && graph.NodeCost(function, row, Costs) is { } cost)
                     variants.Add((cost, function, row));

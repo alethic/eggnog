@@ -98,7 +98,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the declared head cost, or <c>null</c> for the default of 1.
         /// </summary>
-        public long? Cost { get; }
+        public ulong? Cost { get; }
 
         /// <summary>
         /// Gets whether the function is marked unextractable.

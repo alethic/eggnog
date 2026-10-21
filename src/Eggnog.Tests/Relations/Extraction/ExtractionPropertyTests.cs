@@ -97,7 +97,7 @@ namespace Eggnog.Relations.Tests
                 // evaluates back to the class.
                 var term = all.ExtractTerm(graph.E, value);
                 Assert.Equal(cost, term.Cost);
-                Assert.Equal(cost, TreeCost(graph, term, new Dictionary<ExtractedTerm, long>(ReferenceEqualityComparer.Instance)));
+                Assert.Equal(cost, TreeCost(graph, term, new Dictionary<ExtractedTerm, ulong>(ReferenceEqualityComparer.Instance)));
                 Assert.Equal(owner, Evaluate(graph, term, new Dictionary<ExtractedTerm, uint>(ReferenceEqualityComparer.Instance)));
                 Assert.Equal(term.ToString(), onDemand.ExtractTerm(graph.E, value).ToString());
 
@@ -113,7 +113,7 @@ namespace Eggnog.Relations.Tests
                 if (Depth(term, new Dictionary<ExtractedTerm, int>(ReferenceEqualityComparer.Instance)) <= EnumerationDepth)
                 {
                     Assert.NotEmpty(enumerated);
-                    Assert.Equal(cost, enumerated[0].Cost);
+                    Assert.Equal<ulong>(cost, enumerated[0].Cost);
                     coverage[2]++;
                 }
 
@@ -131,7 +131,7 @@ namespace Eggnog.Relations.Tests
                 var nodeCosts = graph.Nodes
                     .Where(n => n.Row[^1].Rep == owner)
                     .Select(n => graph.NodeCost(n.Function, n.Row, graph.ReferenceCosts))
-                    .OfType<long>()
+                    .OfType<ulong>()
                     .Order()
                     .Take(10)
                     .ToArray();
@@ -147,10 +147,10 @@ namespace Eggnog.Relations.Tests
                     Assert.Equal(owner, variantTerm.Value.Rep);
                     var headAndChildren = graph.Costs[Array.IndexOf(graph.Functions, variantTerm.Function)];
                     foreach (var child in variantTerm.Children)
-                        headAndChildren = RandomExtractionGraph.Add(headAndChildren, TreeCost(graph, child, new Dictionary<ExtractedTerm, long>(ReferenceEqualityComparer.Instance)));
+                        headAndChildren = RandomExtractionGraph.Add(headAndChildren, TreeCost(graph, child, new Dictionary<ExtractedTerm, ulong>(ReferenceEqualityComparer.Instance)));
 
                     Assert.Equal(variant.Cost, variantTerm.Cost);
-                    Assert.Equal(headAndChildren, variantTerm.Cost);
+                    Assert.Equal<ulong>(headAndChildren, variantTerm.Cost);
                 }
 
             }
@@ -159,12 +159,12 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Recomputes a term's cost over its tree, checking each subterm's reported cost and each node's optimality.
         /// </summary>
-        static long TreeCost(RandomExtractionGraph graph, ExtractedTerm term, Dictionary<ExtractedTerm, long> memo)
+        static ulong TreeCost(RandomExtractionGraph graph, ExtractedTerm term, Dictionary<ExtractedTerm, ulong> memo)
         {
             if (memo.TryGetValue(term, out var known))
                 return known;
 
-            long cost = 0;
+            ulong cost = 0;
             switch (term.Kind)
             {
                 case ExtractedTermKind.Base:
@@ -184,7 +184,7 @@ namespace Eggnog.Relations.Tests
                     break;
             }
 
-            Assert.Equal(cost, term.Cost);
+            Assert.Equal<ulong>(cost, term.Cost);
             memo[term] = cost;
             return cost;
         }
@@ -263,7 +263,7 @@ namespace Eggnog.Relations.Tests
             // Mostly zero head costs (mode 0) or costs that saturate (mode 1): a node can cost what its child costs, so
             // when a class reached its cost in egglog's passes decides ties. Every class's choice, asked in random orders
             // of a warmed on-demand extractor, is the root-sort extractor's and egglog's.
-            var choices = mode == 0 ? new long[] { 0, 0, 0, 1 } : new long[] { 0, 1, long.MaxValue / 2, long.MaxValue };
+            var choices = mode == 0 ? new ulong[] { 0, 0, 0, 1 } : new ulong[] { 0, 1, ulong.MaxValue / 2, ulong.MaxValue };
             var compared = 0;
             var fallbacks = 0;
             for (var seed = batch * 100; seed < (batch + 1) * 100; seed++)
@@ -309,7 +309,7 @@ namespace Eggnog.Relations.Tests
                 var random = new Random(seed);
                 var fx = new ExtractionFixture();
                 var e = new EqSort("E");
-                var costs = new long[] { random.Next(0, 3), random.Next(0, 3), random.Next(0, 3), random.Next(0, 3) };
+                var costs = new ulong[] { (ulong)random.Next(0, 3), (ulong)random.Next(0, 3), (ulong)random.Next(0, 3), (ulong)random.Next(0, 3) };
                 var leaf = fx.Constructor("leaf", e, costs[0], fx.I64);
                 var un = fx.Constructor("un", e, costs[1], e);
                 var bin = fx.Constructor("bin", e, costs[2], e, e);
@@ -329,7 +329,7 @@ namespace Eggnog.Relations.Tests
                         fx.Union(Pick(), Pick());
                 }
 
-                var reference = new Dictionary<uint, long>();
+                var reference = new Dictionary<uint, ulong>();
                 var nodes = new[] { leaf, un, bin, tri }
                     .SelectMany((f, index) => BridgeTestUtil.Rows(fx.EGraph, f).Select(r => (Index: index, r.Values)))
                     .ToList();
@@ -365,7 +365,7 @@ namespace Eggnog.Relations.Tests
                 {
                     var owner = values[^1];
                     Assert.True(all.TryGetCost(e, owner, out var cost));
-                    Assert.Equal(reference[owner.Rep], cost);
+                    Assert.Equal<ulong>(reference[owner.Rep], cost);
                     Assert.True(onDemand.TryGetCost(e, owner, out var lazy));
                     Assert.Equal(cost, lazy);
                 }

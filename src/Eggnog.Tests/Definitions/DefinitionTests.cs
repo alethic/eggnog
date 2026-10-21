@@ -105,13 +105,12 @@ namespace Eggnog.Tests.Definitions
         }
 
         [Fact]
-        public void ConstructorCostsMustNotBeNegative()
+        public void AConstructorMayCostNothing()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
-            Assert.Throws<ArgumentOutOfRangeException>(() => graph.DefineConstructor<Node>("c", cost: -1));
             var free = graph.DefineConstructor<Node>("free", cost: 0, options: new TableOptions { Extractable = false });
-            Assert.Equal(0, free.Cost);
+            Assert.Equal<ulong>(0, free.Cost);
             Assert.False(free.Extractable);
         }
 
@@ -144,7 +143,7 @@ namespace Eggnog.Tests.Definitions
             Assert.Equal(TableRole.Term, lit.Role);
             Assert.True(lit.Lift);
             Assert.True(lit.Extractable);
-            Assert.Equal(3, lit.Cost);
+            Assert.Equal<ulong>(3, lit.Cost);
             Assert.False(lit.IsValueOnly);
             Assert.False(unlifted.Lift);
         }

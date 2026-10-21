@@ -59,7 +59,7 @@ namespace Eggnog.Tests.Values
             var leaf = t.Graph.DefineConstructor<MultiSet<string>, Node>("Leaf");
             var x = t.Root.Make(leaf.Of(m.Of()));
             Assert.Equal("(Leaf (multiset-of \"b\" \"a\" \"a\"))", t.Root.Extract(x).ToString());
-            Assert.Equal(1 + 3, t.Root.Extract(x).Cost);
+            Assert.Equal<ulong>(1 + 3, t.Root.Extract(x).Cost);
 
             // (sort IM (MultiSet i64)) (sort MM (MultiSet IM)) and multiset-sum-multisets, multiset-reset-counts.
             t.Graph.Values.RegisterMultiSet<long>();

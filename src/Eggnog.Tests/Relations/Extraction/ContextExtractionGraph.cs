@@ -102,7 +102,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the cost of the cheapest term of a class, which must have one.
         /// </summary>
-        public long Cost(Extractor extractor, Value value) => extractor.TryGetCost(E, value, out var cost) ? cost : throw new System.InvalidOperationException($"No term for {value}.");
+        public ulong Cost(Extractor extractor, Value value) => extractor.TryGetCost(E, value, out var cost) ? cost : throw new System.InvalidOperationException($"No term for {value}.");
 
     }
 

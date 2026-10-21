@@ -20,27 +20,27 @@ namespace Eggnog.Relations.Tests
         /// </summary>
         const int Keep = 64;
 
-        readonly Dictionary<(uint Class, int Depth), List<(long Cost, string Text)>> enumerated = new();
+        readonly Dictionary<(uint Class, int Depth), List<(ulong Cost, string Text)>> enumerated = new();
 
         /// <summary>
         /// Builds the graph of <paramref name="seed"/>.
         /// </summary>
         /// <param name="seed">The seed.</param>
         /// <param name="positiveCosts">Whether head costs are drawn from 1 to 4 rather than 0 to 3 (some seeds also use
-        /// a third of <see cref="long.MaxValue"/>).</param>
+        /// a third of <see cref="ulong.MaxValue"/>).</param>
         /// <param name="costChoices">When given, the head costs to draw from instead, uniformly; the functions are then
         /// also declared in a random order, so that the extractor's tie-break by function does not always put leaves
         /// first.</param>
-        public RandomExtractionGraph(int seed, bool positiveCosts, long[]? costChoices = null)
+        public RandomExtractionGraph(int seed, bool positiveCosts, ulong[]? costChoices = null)
         {
             var random = new Random(seed);
             Fx = new ExtractionFixture();
             E = new EqSort("E");
             Vec = new TestVecSort("VecE", E);
 
-            long Cost() => costChoices is not null
+            ulong Cost() => costChoices is not null
                 ? costChoices[random.Next(costChoices.Length)]
-                : seed % 7 == 3 && random.Next(4) == 0 ? long.MaxValue / 3 : positiveCosts ? random.Next(1, 5) : random.Next(0, 4);
+                : seed % 7 == 3 && random.Next(4) == 0 ? ulong.MaxValue / 3 : positiveCosts ? (ulong)random.Next(1, 5) : (ulong)random.Next(0, 4);
 
             var names = new[] { "L0", "L1", "Num", "U", "W", "B", "V" };
             Costs = names.Select(_ => Cost()).ToArray();
@@ -146,7 +146,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the head cost of each kind's function.
         /// </summary>
-        public long[] Costs { get; }
+        public ulong[] Costs { get; }
 
         /// <summary>
         /// Gets the nodes: every row that is not subsumed, by function kind, with canonical cells (the <c>Num</c>
@@ -162,7 +162,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the reference cost of every class that has a finite term, from the Bellman-Ford fixpoint.
         /// </summary>
-        public Dictionary<uint, long> ReferenceCosts { get; }
+        public Dictionary<uint, ulong> ReferenceCosts { get; }
 
         /// <summary>
         /// Gets the elements of a vector, canonicalized.
@@ -201,7 +201,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets a node's cost from given class costs, or <c>null</c> if a class it depends on has none.
         /// </summary>
-        public long? NodeCost(int function, Value[] row, IReadOnlyDictionary<uint, long> classCosts)
+        public ulong? NodeCost(int function, Value[] row, IReadOnlyDictionary<uint, ulong> classCosts)
         {
             var cost = Costs[function];
             if (function == 2)
@@ -221,9 +221,9 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Computes every class's cheapest cost by relaxing every node until nothing changes.
         /// </summary>
-        Dictionary<uint, long> BellmanFord()
+        Dictionary<uint, ulong> BellmanFord()
         {
-            var costs = new Dictionary<uint, long>();
+            var costs = new Dictionary<uint, ulong>();
             for (var changed = true; changed;)
             {
                 changed = false;
@@ -249,7 +249,7 @@ namespace Eggnog.Relations.Tests
         /// node counts one level; base values and the vector around elements count none), keeping the
         /// <see cref="Keep"/> cheapest, which is exact for the minimum since costs only add.
         /// </summary>
-        public List<(long Cost, string Text)> Enumerate(uint owner, int depth)
+        public List<(ulong Cost, string Text)> Enumerate(uint owner, int depth)
         {
             if (depth == 0)
                 return [];
@@ -257,21 +257,21 @@ namespace Eggnog.Relations.Tests
             if (enumerated.TryGetValue((owner, depth), out var known))
                 return known;
 
-            var terms = new List<(long Cost, string Text)>();
+            var terms = new List<(ulong Cost, string Text)>();
             foreach (var (function, row) in Nodes)
             {
                 if (row[^1].Rep != owner)
                     continue;
 
                 // Each child column's options, then their product, pruned to the cheapest at each step.
-                var partial = new List<(long Cost, List<string> Parts)> { (Costs[function], new List<string>()) };
+                var partial = new List<(ulong Cost, List<string> Parts)> { (Costs[function], new List<string>()) };
                 var columns = function switch
                 {
                     2 => new[] { Literal(row[0]) },
                     3 or 4 => [Enumerate(row[0].Rep, depth - 1)],
                     5 => [Enumerate(row[0].Rep, depth - 1), Enumerate(row[1].Rep, depth - 1)],
                     6 => [Vector(Elements(row[0].Rep), depth - 1)],
-                    _ => Array.Empty<List<(long Cost, string Text)>>(),
+                    _ => Array.Empty<List<(ulong Cost, string Text)>>(),
                 };
 
                 foreach (var options in columns)
@@ -292,14 +292,14 @@ namespace Eggnog.Relations.Tests
             return result;
         }
 
-        List<(long Cost, string Text)> Literal(Value value)
+        List<(ulong Cost, string Text)> Literal(Value value)
         {
             return [(1, Fx.EGraph.BaseValues.Unwrap<Int64Codec, long>(value).ToString(CultureInfo.InvariantCulture))];
         }
 
-        List<(long Cost, string Text)> Vector(uint[] elements, int depth)
+        List<(ulong Cost, string Text)> Vector(uint[] elements, int depth)
         {
-            var partial = new List<(long Cost, List<string> Parts)> { (0, new List<string>()) };
+            var partial = new List<(ulong Cost, List<string> Parts)> { (0, new List<string>()) };
             foreach (var element in elements)
             {
                 var options = Enumerate(element, depth);
@@ -316,7 +316,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Adds two non-negative costs, saturating.
         /// </summary>
-        public static long Add(long left, long right) => left > long.MaxValue - right ? long.MaxValue : left + right;
+        public static ulong Add(ulong left, ulong right) => left > ulong.MaxValue - right ? ulong.MaxValue : left + right;
 
     }
 

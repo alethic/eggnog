@@ -20,7 +20,7 @@ namespace Eggnog.Relations
     /// <para>
     /// Knuth's generalization of Dijkstra's algorithm (Knuth 1977) computes every class's cheapest cost in
     /// O(occurrences + nodes log nodes): a node enters a priority queue once all the classes it depends on are final, with
-    /// its exact cost, and the first node of a class to leave the queue makes the class final. Sums of non-negative costs
+    /// its exact cost, and the first node of a class to leave the queue makes the class final. Sums of costs
     /// are superior functions, for which this is optimal, and the costs are the fixpoint egglog's Bellman-Ford reaches.
     /// </para>
     /// <para>
@@ -89,7 +89,7 @@ namespace Eggnog.Relations
 
         readonly ExtractionFunction[] slots;
         readonly int[][] slotColumnSorts;
-        readonly long[] slotHeadCost;
+        readonly ulong[] slotHeadCost;
         readonly NodeCostFunction?[] slotHeadCostFunction;
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace Eggnog.Relations
         readonly Dictionary<Sort, int> sortIndex;
         readonly Dictionary<string, Sort> sortNames;
         readonly List<SortKind> sortKinds;
-        readonly List<long> sortCost;
+        readonly List<ulong> sortCost;
         readonly List<BaseValueCostFunction?> sortBaseCostFunction;
         readonly List<ContainerCostFunction?> sortContainerCostFunction;
         readonly List<List<int>> sortProducers;
@@ -145,7 +145,7 @@ namespace Eggnog.Relations
             sortIndex = new Dictionary<Sort, int>(ReferenceEqualityComparer.Instance);
             sortNames = new Dictionary<string, Sort>(StringComparer.Ordinal);
             sortKinds = new List<SortKind>();
-            sortCost = new List<long>();
+            sortCost = new List<ulong>();
             sortBaseCostFunction = new List<BaseValueCostFunction?>();
             sortContainerCostFunction = new List<ContainerCostFunction?>();
             sortProducers = new List<List<int>>();
@@ -157,7 +157,7 @@ namespace Eggnog.Relations
 
             slots = functions.ToArray();
             slotColumnSorts = new int[slots.Length][];
-            slotHeadCost = new long[slots.Length];
+            slotHeadCost = new ulong[slots.Length];
             slotHeadCostFunction = new NodeCostFunction?[slots.Length];
             var slotTables = new TableId[slots.Length];
             for (var slot = 0; slot < slots.Length; slot++)
@@ -198,7 +198,6 @@ namespace Eggnog.Relations
         /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
         /// <param name="options">Which functions to use; <c>null</c> for <see cref="ExtractionOptions.Default"/>.</param>
         /// <returns>The extractor.</returns>
-        /// <exception cref="InvalidOperationException">The cost model gave a negative cost.</exception>
         public static Extractor ComputeCostsFromRootSorts(
             ExtractionSchema schema,
             IReadOnlyList<Sort>? rootSorts = null,
@@ -402,9 +401,9 @@ namespace Eggnog.Relations
         /// <param name="cost">The cost, when a finite term exists.</param>
         /// <returns>Whether the value has a finite term the extractor may use.</returns>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
-        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
-        public bool TryGetCost(Sort sort, Value value, out long cost)
+        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, or an earlier
+        /// query failed.</exception>
+        public bool TryGetCost(Sort sort, Value value, out ulong cost)
         {
             ArgumentNullException.ThrowIfNull(sort);
             using var scope = Enter(sort);
@@ -423,8 +422,8 @@ namespace Eggnog.Relations
         /// <param name="result">The term and its cost, when a finite term exists.</param>
         /// <returns>Whether the value has a finite term the extractor may use.</returns>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
-        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
+        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, or an earlier
+        /// query failed.</exception>
         public bool TryExtractBest(Sort sort, Value value, TermDag dag, out ExtractionResult result)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -444,7 +443,7 @@ namespace Eggnog.Relations
         /// <param name="result">The term and its cost, when a finite term exists.</param>
         /// <returns>Whether the value has a finite term the extractor may use.</returns>
         /// <exception cref="InvalidOperationException">The extractor does not have exactly one root sort, the e-graph
-        /// changed since it was created, the cost model gave a negative cost, or an earlier query failed.</exception>
+        /// changed since it was created, or an earlier query failed.</exception>
         public bool TryExtractBest(Value value, TermDag dag, out ExtractionResult result)
         {
             return TryExtractBest(SingleRootSort(), value, dag, out result);
@@ -459,8 +458,8 @@ namespace Eggnog.Relations
         /// <param name="term">The term, when a finite term exists.</param>
         /// <returns>Whether the value has a finite term the extractor may use.</returns>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
-        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
+        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, or an earlier
+        /// query failed.</exception>
         public bool TryExtractTerm(Sort sort, Value value, [NotNullWhen(true)] out ExtractedTerm? term)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -487,8 +486,7 @@ namespace Eggnog.Relations
         /// <param name="value">The value; canonicalized for e-class and container sorts.</param>
         /// <returns>The term.</returns>
         /// <exception cref="InvalidOperationException">The value has no finite term the extractor may use, the e-graph
-        /// changed since the extractor was created, the cost model gave a negative cost, or an earlier query
-        /// failed.</exception>
+        /// changed since the extractor was created, or an earlier query failed.</exception>
         public ExtractedTerm ExtractTerm(Sort sort, Value value)
         {
             if (TryExtractTerm(sort, value, out var term))
@@ -547,14 +545,13 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the cost of the base value <paramref name="value"/> of the base sort at <paramref name="sort"/>.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The cost model gave a negative cost.</exception>
-        internal long BaseCost(int sort, uint value)
+        internal ulong BaseCost(int sort, uint value)
         {
             var function = sortBaseCostFunction[sort];
             if (function is null)
                 return sortCost[sort];
 
-            return CostMath.Check(function(sorts[sort], new Value(value)), "a value of", sorts[sort].Name);
+            return function(sorts[sort], new Value(value));
         }
 
         /// <summary>
@@ -580,7 +577,7 @@ namespace Eggnog.Relations
         /// model's override, else for a view its term constructor's cost, else the declared cost, else 1. egglog's
         /// <c>extraction_head_cost</c> (src/extract.rs:759-772).
         /// </summary>
-        long HeadCost(ExtractionFunction function)
+        ulong HeadCost(ExtractionFunction function)
         {
             if (costs.TryGetFunctionCost(function.Id, out var cost))
                 return cost;
@@ -667,7 +664,7 @@ namespace Eggnog.Relations
         /// <param name="canonical">The canonical value.</param>
         /// <param name="cost">The cost, when a finite term exists.</param>
         /// <returns>Whether a finite term exists.</returns>
-        bool TryResolve(Sort sort, Value value, out int index, out uint canonical, out long cost)
+        bool TryResolve(Sort sort, Value value, out int index, out uint canonical, out ulong cost)
         {
             index = SortIndexOf(sort);
             canonical = sort.Kind == SortKind.Base ? value.Rep : Canonical(value.Rep);
@@ -682,7 +679,7 @@ namespace Eggnog.Relations
                     if (onDemand)
                         Settle();
 
-                    if (found >= 0 && classCost[found] >= 0)
+                    if (found >= 0 && classKnown[found])
                     {
                         cost = classCost[found];
                         return true;

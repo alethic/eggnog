@@ -33,7 +33,7 @@ namespace Eggnog.Relations.Tests
             Assert.Same(child, extractor.Context);
             Assert.True(extractor.IsOnDemand);
             Assert.Equal("(pair (leaf 1) (leaf 2))", g.Text(extractor, p));
-            Assert.Equal(5, g.Cost(extractor, p));
+            Assert.Equal<ulong>(5, g.Cost(extractor, p));
             Assert.Equal(3, extractor.ClassCount);
 
             // The grandchild reads through two levels it never wrote.
@@ -77,7 +77,7 @@ namespace Eggnog.Relations.Tests
 
             var inChild = Extractor.CreateOnDemand(g.Schema, child);
             Assert.Equal("(pair (leaf 1) (leaf 7))", g.Text(inChild, q));
-            Assert.Equal(5, g.Cost(inChild, q));
+            Assert.Equal<ulong>(5, g.Cost(inChild, q));
 
             // The root never sees the child's rows; its own classes are unaffected.
             var atRoot = Extractor.CreateOnDemand(g.Schema, g.Root);
@@ -122,7 +122,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal("(leaf 9)", g.Text(inChild, deep));
             Assert.Equal("(leaf 9)", g.Text(inChild, cheap));
             Assert.Equal("(pair (leaf 9) (leaf 1))", g.Text(inChild, top));
-            Assert.Equal(5, g.Cost(inChild, top));
+            Assert.Equal<ulong>(5, g.Cost(inChild, top));
             Assert.Equal(2, inChild.ExtractVariants(g.E, deep, 5, new TermDag()).Count);
 
             // The parent still extracts its own terms, with the extractor made before the child's union.
@@ -164,7 +164,7 @@ namespace Eggnog.Relations.Tests
 
             var inChild = Extractor.CreateOnDemand(g.Schema, child);
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(inChild, x));
-            Assert.Equal(5, g.Cost(inChild, x));
+            Assert.Equal<ulong>(5, g.Cost(inChild, x));
             Assert.Single(inChild.ExtractVariants(g.E, x, 5, new TermDag()));
             Assert.Equal("(wrap (leaf 1))", g.Text(Extractor.CreateOnDemand(g.Schema, g.Root), x));
         }
@@ -220,7 +220,7 @@ namespace Eggnog.Relations.Tests
             g.Root.AddValues([(g.Weight, [p, g.Int(5)]), (g.Mark, [a, g.Int(6)])]);
             Assert.False(child.IsClean);
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(inChild, p));
-            Assert.Equal(5, g.Cost(inChild, p));
+            Assert.Equal<ulong>(5, g.Cost(inChild, p));
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(atRoot, p));
             Assert.Equal("(pair (leaf 1) (leaf 1))", g.Text(legacy, p));
             child.EnsureClean();
@@ -387,12 +387,12 @@ namespace Eggnog.Relations.Tests
             Assert.False(child.Context.Domain.IsHeld);
 
             // The refused query broke nothing: it failed before it started.
-            Assert.Equal(2, g.Cost(extractor, a));
+            Assert.Equal<ulong>(2, g.Cost(extractor, a));
 
             // A cost function may read the context it costs, but not write it; a query that throws leaves no hold.
-            var reads = Extractor.CreateOnDemand(g.Schema, child, CostModel.Default.WithNodeCost(g.Leaf, (_, row) => child.Find(row.Values[1]).Rep >= 0 ? 2 : 0));
-            Assert.Equal(3, g.Cost(reads, a));
-            var writes = Extractor.CreateOnDemand(g.Schema, child, CostModel.Default.WithNodeCost(g.Leaf, (_, _) => child.FlushUpdates() ? 1 : 1));
+            var reads = Extractor.CreateOnDemand(g.Schema, child, CostModel.Default.WithNodeCost(g.Leaf, (_, row) => child.Find(row.Values[1]).Rep >= 0 ? 2UL : 0UL));
+            Assert.Equal<ulong>(3, g.Cost(reads, a));
+            var writes = Extractor.CreateOnDemand(g.Schema, child, CostModel.Default.WithNodeCost(g.Leaf, (_, _) => child.FlushUpdates() ? 1UL : 1UL));
             Assert.Throws<InvalidOperationException>(() => writes.TryGetCost(g.E, a, out _));
             Assert.False(child.Context.Domain.IsHeld);
             Assert.Equal("(leaf 1)", g.Text(Extractor.CreateOnDemand(g.Schema, child), a));

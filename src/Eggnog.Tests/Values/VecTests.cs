@@ -117,9 +117,9 @@ namespace Eggnog.Tests.Values
 
             Assert.Equal("(rule ((= n (Leaf v)) (vec-contains v 2)) ((tag n)) :ruleset rules)", rule.ToString());
             Assert.Equal("(Leaf (vec-of 1 2))", t.Root.Extract(x).ToString());
-            Assert.Equal(3, t.Root.Extract(x).Cost);
+            Assert.Equal<ulong>(3, t.Root.Extract(x).Cost);
             Assert.Equal("(Leaf (vec-empty))", t.Root.Extract(empty).ToString());
-            Assert.Equal(1, t.Root.Extract(empty).Cost);
+            Assert.Equal<ulong>(1, t.Root.Extract(empty).Cost);
 
             var serialized = t.Root.Serialize();
             var nodes = serialized.Nodes.Where(n => n.Op == "vec-of").ToArray();

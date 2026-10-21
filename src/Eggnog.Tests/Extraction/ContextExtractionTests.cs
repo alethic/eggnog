@@ -31,7 +31,7 @@ namespace Eggnog.Tests.Extraction
             child.Assume(t.Add.Of(t.Lit.Of(1L), t.Lit.Of(2L)).Is(t.A.Of()));
             Assert.Equal("(Wrap (A))", child.Extract(wrapped).ToString());
             Assert.Equal("(A)", child.Extract(a).ToString());
-            Assert.Equal(2, child.Extract(wrapped).Cost);
+            Assert.Equal<ulong>(2, child.Extract(wrapped).Cost);
 
             // The root, and a sibling, still see the root's term only.
             Assert.Equal("(Wrap (Add (Lit 1) (Lit 2)))", t.Root.Extract(wrapped).ToString());

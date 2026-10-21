@@ -164,11 +164,11 @@ namespace Eggnog.Tests.Values
 
             var term = t.Root.Extract(x);
             Assert.Equal("(Leaf (pair 1 2))", term.ToString());
-            Assert.Equal(3, term.Cost);
+            Assert.Equal<ulong>(3, term.Cost);
             Assert.Equal(new Pair<long, long>(1, 2), term.Value<Pair<long, long>>(0));
 
             var costs = CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<long>(), 5);
-            Assert.Equal(11, t.Root.Extract(x, costs).Cost);
+            Assert.Equal<ulong>(11, t.Root.Extract(x, costs).Cost);
             Assert.Throws<ArgumentException>(() => CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<Pair<long, long>>(), 5));
         }
 

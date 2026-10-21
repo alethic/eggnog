@@ -13,7 +13,7 @@ namespace Eggnog.Relations
         // The extraction graph, in flat arrays that only grow.
         //
         // A class is an (eq sort, canonical id) pair, with its cheapest cost once Knuth's algorithm has made it final
-        // (-1 until then). A node is a row of a function in an extractor slot; it belongs to the class in its output
+        // (unknown until then, classKnown). A node is a row of a function in an extractor slot; it belongs to the class in its output
         // column and depends on its child occurrences: each e-class among its child columns, and each e-class among the
         // elements of its container children (recursively), with multiplicity. Base values and containers' own costs,
         // and its head's cost, fold into the node's constant cost. Its position is where the row is stored: its row id,
@@ -26,7 +26,8 @@ namespace Eggnog.Relations
         int[] classFirstNode = null!;
         int[] classLastNode = null!;
         int[] classFirstParent = null!;
-        long[] classCost = null!;
+        ulong[] classCost = null!;
+        bool[] classKnown = null!;
         Dictionary<ulong, int> classIndex = null!;
         Queue<int> undiscovered = null!;
 
@@ -35,8 +36,8 @@ namespace Eggnog.Relations
         int[] nodeClass = null!;
         int[] nodeRow = null!;
         long[] nodePosition = null!;
-        long[] nodeConst = null!;
-        long[] nodeCost = null!;
+        ulong[] nodeConst = null!;
+        ulong[] nodeCost = null!;
         int[] nodeChildStart = null!;
         int[] nodeChildCount = null!;
         int[] nodePending = null!;
@@ -55,7 +56,7 @@ namespace Eggnog.Relations
         // inside them (recursively, with multiplicity), and their elements (sort index and value) for reconstruction.
 
         int containerCount;
-        long[] containerConst = null!;
+        ulong[] containerConst = null!;
         int[] containerClassStart = null!;
         int[] containerClassCount = null!;
         int[] containerElemStart = null!;
@@ -79,7 +80,8 @@ namespace Eggnog.Relations
             classFirstNode = new int[Initial];
             classLastNode = new int[Initial];
             classFirstParent = new int[Initial];
-            classCost = new long[Initial];
+            classCost = new ulong[Initial];
+            classKnown = new bool[Initial];
             classIndex = new Dictionary<ulong, int>();
             undiscovered = new Queue<int>();
 
@@ -87,8 +89,8 @@ namespace Eggnog.Relations
             nodeClass = new int[Initial];
             nodeRow = new int[Initial];
             nodePosition = new long[Initial];
-            nodeConst = new long[Initial];
-            nodeCost = new long[Initial];
+            nodeConst = new ulong[Initial];
+            nodeCost = new ulong[Initial];
             nodeChildStart = new int[Initial];
             nodeChildCount = new int[Initial];
             nodePending = new int[Initial];
@@ -98,7 +100,7 @@ namespace Eggnog.Relations
             occNode = new int[Initial * 2];
             occNext = new int[Initial * 2];
 
-            containerConst = new long[Initial];
+            containerConst = new ulong[Initial];
             containerClassStart = new int[Initial];
             containerClassCount = new int[Initial];
             containerElemStart = new int[Initial];
@@ -144,6 +146,7 @@ namespace Eggnog.Relations
                 Array.Resize(ref classLastNode, size);
                 Array.Resize(ref classFirstParent, size);
                 Array.Resize(ref classCost, size);
+                Array.Resize(ref classKnown, size);
             }
 
             classSort[added] = sort;
@@ -151,7 +154,8 @@ namespace Eggnog.Relations
             classFirstNode[added] = -1;
             classLastNode[added] = -1;
             classFirstParent[added] = -1;
-            classCost[added] = -1;
+            classCost[added] = 0;
+            classKnown[added] = false;
             classCount = added + 1;
             slot = added;
             if (onDemand)
@@ -170,7 +174,6 @@ namespace Eggnog.Relations
         /// <param name="position">Where the row is stored, which orders the rows of one function as egglog's scans meet
         /// them.</param>
         /// <param name="cells">The row's schema columns, keys then output; copied.</param>
-        /// <exception cref="InvalidOperationException">The cost model gave a negative cost.</exception>
         internal void AddNode(int slot, long position, ReadOnlySpan<uint> cells)
         {
             var function = slots[slot];
@@ -203,7 +206,7 @@ namespace Eggnog.Relations
             if (head is not null)
             {
                 var row = new FunctionRow(MemoryMarshal.Cast<uint, Value>(cells), false);
-                cost = CostMath.Check(head(function.Id, row), "a row of", function.Name);
+                cost = head(function.Id, row);
             }
 
             nodeChildStart[node] = childLength;
@@ -238,7 +241,7 @@ namespace Eggnog.Relations
 
             // Waiting on nothing: a leaf, or (on demand) a node whose children all became final in earlier queries. Its
             // cost is known now.
-            if (pending == 0 && classCost[owner] < 0)
+            if (pending == 0 && classKnown[owner] == false)
                 Push(node, ComputeNodeCost(node));
         }
 
@@ -267,7 +270,7 @@ namespace Eggnog.Relations
             for (var k = start; k < end; k++)
             {
                 var dependency = childClasses[k];
-                if (classCost[dependency] >= 0)
+                if (classKnown[dependency])
                 {
                     Debug.Assert(onDemand, "no class is final while scanning for the root sorts");
                     continue;
@@ -304,14 +307,14 @@ namespace Eggnog.Relations
         /// Computes a node's cost from its constant and its children's final costs. Every class it depends on must be
         /// final. O(occurrences of the node).
         /// </summary>
-        long ComputeNodeCost(int node)
+        ulong ComputeNodeCost(int node)
         {
             var cost = nodeConst[node];
             var start = nodeChildStart[node];
             var end = start + nodeChildCount[node];
             for (var k = start; k < end; k++)
             {
-                Debug.Assert(classCost[childClasses[k]] >= 0, "a node is costed once its children are final");
+                Debug.Assert(classKnown[childClasses[k]], "a node is costed once its children are final");
                 cost = CostMath.Add(cost, classCost[childClasses[k]]);
             }
 
@@ -326,7 +329,7 @@ namespace Eggnog.Relations
             var start = nodeChildStart[node];
             var end = start + nodeChildCount[node];
             for (var k = start; k < end; k++)
-                if (classCost[childClasses[k]] < 0)
+                if (classKnown[childClasses[k]] == false)
                     return false;
 
             return true;
@@ -339,8 +342,8 @@ namespace Eggnog.Relations
         /// (src/extract.rs:322-332), memoized per container.
         /// </summary>
         /// <returns>The container's index.</returns>
-        /// <exception cref="InvalidOperationException">The cost model gave a negative cost, the container is not in the
-        /// e-graph, or it contains itself.</exception>
+        /// <exception cref="InvalidOperationException">The container is not in the e-graph, or it contains
+        /// itself.</exception>
         internal int GetContainer(int sort, uint value)
         {
             var key = Key(sort, value);
@@ -374,7 +377,7 @@ namespace Eggnog.Relations
             var function = sortContainerCostFunction[sort];
             var cost = sortCost[sort];
             if (function is not null)
-                cost = CostMath.Check(function(containerSort, new Value(value)), "a container of", containerSort.Name);
+                cost = function(containerSort, new Value(value));
 
             // First pass: costs, resolving nested containers so that the second pass can append this container's classes
             // contiguously.
@@ -438,7 +441,7 @@ namespace Eggnog.Relations
         /// Gets a container's cost: its constant plus the costs of the classes inside it, if they are all final.
         /// </summary>
         /// <returns>Whether every class inside is final.</returns>
-        internal bool TryGetContainerCost(int container, out long cost)
+        internal bool TryGetContainerCost(int container, out ulong cost)
         {
             cost = containerConst[container];
             var start = containerClassStart[container];
@@ -446,7 +449,7 @@ namespace Eggnog.Relations
             for (var k = start; k < end; k++)
             {
                 var dependency = containerClasses[k];
-                if (classCost[dependency] < 0)
+                if (classKnown[dependency] == false)
                 {
                     cost = 0;
                     return false;

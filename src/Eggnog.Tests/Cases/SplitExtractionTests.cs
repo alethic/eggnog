@@ -67,7 +67,7 @@ namespace Eggnog.Tests.Cases
                 Assert.False(schema.Check(c.Form.Of("body.key", "uuid-lower")));
                 var best = query.Extract(q);
                 Assert.Equal($"(And (StrEq \"kind\" \"b\") (StrEq \"body.key\" \"{DiscriminatedSchema.Key}\"))", best.ToString());
-                Assert.Equal(7, best.Cost);
+                Assert.Equal<ulong>(7, best.Cost);
             }
         }
 
@@ -86,7 +86,7 @@ namespace Eggnog.Tests.Cases
                 Assert.True(query.AreEqual(q, c.StrEq.Of("type", "Record")));
                 var best = query.Extract(q);
                 Assert.Equal("(StrEq \"type\" \"Record\")", best.ToString());
-                Assert.Equal(3, best.Cost);
+                Assert.Equal<ulong>(3, best.Cost);
             }
         }
 
@@ -106,7 +106,7 @@ namespace Eggnog.Tests.Cases
                 var best = query.Extract(q);
                 Assert.True(best.Mentions(c.UuidEq));
                 Assert.Equal($"(And (Not (StrEq \"kind\" \"b\")) (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))", best.ToString());
-                Assert.Equal(1007, best.Cost);
+                Assert.Equal<ulong>(1007, best.Cost);
             }
         }
 
@@ -132,7 +132,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))",
                     best.ToString());
-                Assert.Equal(11, best.Cost);
+                Assert.Equal<ulong>(11, best.Cost);
             }
         }
 
@@ -163,7 +163,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(Or (And (StrEq \"kind\" \"a\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (StrEq \"kind\" \"b\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")))",
                     best.ToString());
-                Assert.Equal(15, best.Cost);
+                Assert.Equal<ulong>(15, best.Cost);
             }
         }
 
@@ -189,7 +189,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(And (And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (BoolTrue \"flag\") (StrGt \"meta.updated\" \"{DiscriminatedSchema.Since}\")))",
                     best.ToString());
-                Assert.Equal(18, best.Cost);
+                Assert.Equal<ulong>(18, best.Cost);
             }
         }
 
@@ -228,7 +228,7 @@ namespace Eggnog.Tests.Cases
                 Assert.True(query.AreEqual(q, c.PFalse.Of()));
                 var best = query.Extract(q);
                 Assert.Equal("(PFalse)", best.ToString());
-                Assert.Equal(0, best.Cost);
+                Assert.Equal<ulong>(0, best.Cost);
             }
         }
 

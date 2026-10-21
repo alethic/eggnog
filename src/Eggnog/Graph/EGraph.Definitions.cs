@@ -339,9 +339,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<TSort> DefineConstructor<TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<TSort> DefineConstructor<TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<TSort>(), name, TableKind.Constructor, Array.Empty<ColumnType>(), Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -355,9 +354,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, TSort>(), name, TableKind.Constructor, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -372,9 +370,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -391,9 +388,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -411,9 +407,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, T4, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -520,9 +515,8 @@ namespace Eggnog
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -560,7 +554,7 @@ namespace Eggnog
         /// <param name="cost">The cost of a node with this head, at least 0.</param>
         /// <param name="options">Whether extraction may use it and the lift policy.</param>
         /// <returns>The constructor.</returns>
-        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, long cost = 1, TableOptions? options = null) =>
+        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, TableOptions? options = null) =>
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
@@ -576,7 +570,7 @@ namespace Eggnog
         /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
-        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost,
+        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, ulong cost,
             bool builtIn = false, FunctionMergeDefinition? merge = null)
             where T : TableHandle
         {
@@ -629,7 +623,6 @@ namespace Eggnog
 
                     break;
                 default:
-                    ArgumentOutOfRangeException.ThrowIfNegative(cost);
                     if (output!.Kind != ColumnKind.Sort)
                         throw new ArgumentException($"Constructor '{name}' outputs {output.Name}, which is not a sort defined with DefineSort.", nameof(name));
 

@@ -27,8 +27,6 @@ gates").
   classes (decisions row 9 refuses new containers of classes in children, which would need their rebuild in layers). This brings `set-get`, egglog's
   element order and the zero and NaN a set interns (decisions row 22), the set elements the serializer names by literal
   (row 23b), and then function values (`unstable-fn`).
-- **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`, so a cost
-  egglog keeps exact saturates here, and a tie among saturated classes can fall otherwise (architecture 2.10).
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

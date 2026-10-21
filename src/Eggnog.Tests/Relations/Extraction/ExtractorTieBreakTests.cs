@@ -27,7 +27,7 @@ namespace Eggnog.Relations.Tests
                 var ant = fx.Constructor("Ant", e, 1);
                 var (first, second) = antFirst ? (fx.Make(ant), fx.Make(bee)) : (fx.Make(bee), fx.Make(ant));
                 fx.Union(second, first);
-                Assert.Equal(("(Bee)", 1L), fx.Extract(e, first));
+                Assert.Equal(("(Bee)", 1UL), fx.Extract(e, first));
                 Assert.Equal(["(Ant)", "(Bee)"], Variants(fx, e, first, 5));
             }
         }
@@ -48,7 +48,7 @@ namespace Eggnog.Relations.Tests
                 fx.Union(ids[0], ids[1]);
                 fx.Union(ids[1], ids[2]);
                 Assert.True(fx.Int(-5).Rep > fx.Int(3).Rep);
-                Assert.Equal((reversed ? "(Num 3)" : "(Num -5)", 2L), fx.Extract(e, ids[0]));
+                Assert.Equal((reversed ? "(Num 3)" : "(Num -5)", 2UL), fx.Extract(e, ids[0]));
                 Assert.Equal(["(Num 3)", "(Num 9)", "(Num -5)"], Variants(fx, e, ids[0], 5));
             }
         }
@@ -84,7 +84,7 @@ namespace Eggnog.Relations.Tests
             var wx = fx.Make(wrap, x);
             fx.Union(wy, wx);
             Assert.True(x.Rep < y.Rep);
-            Assert.Equal(("(W (Y))", 2L), fx.Extract(e, wy));
+            Assert.Equal(("(W (Y))", 2UL), fx.Extract(e, wy));
             Assert.Equal(["(W (X))", "(W (Y))"], Variants(fx, e, wy, 5));
         }
 
@@ -104,8 +104,8 @@ namespace Eggnog.Relations.Tests
             var kId = fx.Make(k);
             fx.Union(kId, fx.Make(f, fx.Make(m)));
             fx.Union(fx.Make(g, kId), fx.Make(m));
-            Assert.Equal(("(K)", 2L), fx.Extract(e, kId));
-            Assert.Equal(("(G (K))", 2L), fx.Extract(e, fx.Make(m)));
+            Assert.Equal(("(K)", 2UL), fx.Extract(e, kId));
+            Assert.Equal(("(G (K))", 2UL), fx.Extract(e, fx.Make(m)));
             Assert.Equal(["(F (G (K)))", "(K)"], Variants(fx, e, kId, 5));
         }
 
@@ -129,8 +129,8 @@ namespace Eggnog.Relations.Tests
             c = fx.Canon(c);
             var x = fx.Make(w, c);
 
-            Assert.Equal(("(G)", 1L), fx.Extract(a, c));
-            Assert.Equal(("(W (F (L)))", 1L), fx.Extract(b, x));
+            Assert.Equal(("(G)", 1UL), fx.Extract(a, c));
+            Assert.Equal(("(W (F (L)))", 1UL), fx.Extract(b, x));
             var onDemand = Extractor.CreateOnDemand(fx.Schema);
             Assert.Equal("(W (F (L)))", onDemand.ExtractTerm(b, x).ToString());
             Assert.Equal("(G)", onDemand.ExtractTerm(a, c).ToString());
@@ -142,23 +142,27 @@ namespace Eggnog.Relations.Tests
         {
             // (datatype E (F E :cost 9223372036854775807) (H E :cost 1) (K :cost 100) (N E :cost 1) (Q :cost 1))
             // (let k (K)) (let c (F k)) (let q (Q)) (let m (N q)) (union k (H m)) (extract c) prints
-            // (F (H (N (Q)))). egglog's u64 costs keep c's cost exact, so its last update follows k's; here it saturates
-            // at long.MaxValue on its first update, before k's last, and takes the fallback: the first row whose child
-            // had its first update before c had its own.
-            var fx = new ExtractionFixture();
-            var e = new EqSort("E");
-            var f = fx.Constructor("F", e, long.MaxValue, e);
-            var h = fx.Constructor("H", e, 1, e);
-            var kHead = fx.Constructor("K", e, 100);
-            var n = fx.Constructor("N", e, 1, e);
-            var q = fx.Constructor("Q", e, 1);
-            var k = fx.Make(kHead);
-            var c = fx.Make(f, k);
-            var m = fx.Make(n, fx.Make(q));
-            fx.Union(k, fx.Make(h, m));
+            // (F (H (N (Q)))): u64 costs keep c's cost exact, so its last update follows k's. With F at u64::MAX, which
+            // egglog's parser refuses as a literal and the library takes, c saturates on its first update, before k's
+            // last, and takes the fallback: the first row whose child had its first update before c had its own.
+            foreach (var fCost in new[] { (ulong)long.MaxValue, ulong.MaxValue })
+            {
+                var fx = new ExtractionFixture();
+                var e = new EqSort("E");
+                var f = fx.Constructor("F", e, fCost, e);
+                var h = fx.Constructor("H", e, 1, e);
+                var kHead = fx.Constructor("K", e, 100);
+                var n = fx.Constructor("N", e, 1, e);
+                var q = fx.Constructor("Q", e, 1);
+                var k = fx.Make(kHead);
+                var c = fx.Make(f, k);
+                var m = fx.Make(n, fx.Make(q));
+                fx.Union(k, fx.Make(h, m));
 
-            Assert.Equal(("(F (H (N (Q))))", long.MaxValue), fx.Extract(e, c));
-            Assert.Equal("(F (H (N (Q))))", Extractor.CreateOnDemand(fx.Schema).ExtractTerm(e, c).ToString());
+                var cost = fCost == ulong.MaxValue ? ulong.MaxValue : fCost + 3;
+                Assert.Equal(("(F (H (N (Q))))", cost), fx.Extract(e, c));
+                Assert.Equal("(F (H (N (Q))))", Extractor.CreateOnDemand(fx.Schema).ExtractTerm(e, c).ToString());
+            }
         }
 
         [Fact]
@@ -169,7 +173,7 @@ namespace Eggnog.Relations.Tests
             var a = fx.Constructor("A", e, 5);
             var b = fx.Constructor("B", e, 4);
             fx.Union(fx.Make(a), fx.Make(b));
-            Assert.Equal(("(B)", 4L), fx.Extract(e, fx.Get(a)));
+            Assert.Equal(("(B)", 4UL), fx.Extract(e, fx.Get(a)));
         }
 
         [Fact]
@@ -191,7 +195,7 @@ namespace Eggnog.Relations.Tests
             var p = fx.Make(pair, l, l);
             fx.Union(p, l);
 
-            Assert.Equal(("(Leaf)", 0L), fx.Extract(e, l));
+            Assert.Equal(("(Leaf)", 0UL), fx.Extract(e, l));
             Assert.Equal(["(Leaf)", "(Pair (Leaf) (Leaf))", "(Wrap (Leaf))"], Variants(fx, e, l, 5));
 
             var seed = fx.EGraph.FreshId();

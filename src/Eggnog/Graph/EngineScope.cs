@@ -275,7 +275,7 @@ namespace Eggnog
         /// <param name="cost">The cost, when the result is <c>true</c>.</param>
         /// <returns>Whether a finite term exists.</returns>
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
-        public abstract bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out long cost);
+        public abstract bool TryGetCost(Relations.Extractor extractor, Relations.Sort sort, uint id, out ulong cost);
 
         /// <summary>
         /// Creates a child context: thread-safe on a frozen scope; on a writable one, the scope is

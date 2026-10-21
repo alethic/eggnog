@@ -67,7 +67,7 @@ static class Eggnog.Compute
     static Term<TResult> Of<T1, TResult>(Term<T1> a, Func<T1, TResult> function)
 abstract class Eggnog.ConstructorHandle : TableHandle
     Boolean Extractable { get }
-    Int64 Cost { get }
+    UInt64 Cost { get }
 sealed class Eggnog.ConstructorN<TSort> : ConstructorHandle
     ConstructorTerm<TSort> Of(params Object[] keys)
 sealed class Eggnog.ConstructorTerm<TSort> : Term<TSort>
@@ -84,10 +84,10 @@ sealed class Eggnog.Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle
     ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 sealed class Eggnog.CostModel
     CostModel Unextractable(ConstructorHandle head)
-    CostModel With(ConstructorHandle head, Int64 cost)
     CostModel With(ConstructorHandle head, NodeCostFunction cost)
-    CostModel WithValueCost(ColumnType type, Int64 cost)
-    CostModel WithValueCost<T>(ColumnType<T> type, Func<T, Int64> cost)
+    CostModel With(ConstructorHandle head, UInt64 cost)
+    CostModel WithValueCost(ColumnType type, UInt64 cost)
+    CostModel WithValueCost<T>(ColumnType<T> type, Func<T, UInt64> cost)
     static CostModel Default { get }
 static class Eggnog.DoublePrimitives
     static Primitive<Double, Double, Boolean> Greater { get }
@@ -112,12 +112,12 @@ static class Eggnog.DoublePrimitives
 sealed class Eggnog.EGraph
     Boolean RemoveScheduler(RuleScheduler scheduler)
     ColumnType<TSort> DefineSort<TSort : struct, ISort<TSort>>(String name)
-    Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
-    Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
-    Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
-    Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
-    Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, Int64 cost = 1, TableOptions options = null)
-    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, IReadOnlyList<Type> keys, Int64 cost = 1, TableOptions options = null)
+    Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
+    Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
+    Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
+    Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
+    Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
+    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, IReadOnlyList<Type> keys, UInt64 cost = 1, TableOptions options = null)
     Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
@@ -175,13 +175,13 @@ sealed class Eggnog.ExtractedTerm
     ConstructorHandle Head { get }
     ExtractedTerm Child(Int32 index)
     Int32 Arity { get }
-    Int64 Cost { get }
     Object Argument(Int32 index)
     T Value<T>(Int32 index)
+    UInt64 Cost { get }
     override String ToString()
 sealed class Eggnog.Extractor
     Boolean TryExtract<TSort : struct, ISort<TSort>>(TSort root, out ExtractedTerm term)
-    Boolean TryGetCost<TSort : struct, ISort<TSort>>(TSort root, out Int64 cost)
+    Boolean TryGetCost<TSort : struct, ISort<TSort>>(TSort root, out UInt64 cost)
     CostModel Costs { get }
     ExtractedTerm Extract<TSort : struct, ISort<TSort>>(TSort root)
     IReadOnlyList<ExtractedTerm> ExtractVariants<TSort : struct, ISort<TSort>>(TSort root, Int32 count)
@@ -316,7 +316,7 @@ sealed class Eggnog.MultiSet<T> : IComparable<MultiSet<T>>, IEnumerable, IEnumer
     override String ToString()
     static MultiSet<T> Empty { get }
 delegate Eggnog.NodeCostFunction
-    Int64 Invoke(NodeView node)
+    UInt64 Invoke(NodeView node)
 ref struct Eggnog.NodeView
     ConstructorHandle Head { get }
     Int32 Arity { get }

@@ -34,8 +34,8 @@ namespace Eggnog.Relations
         /// <returns>The variants, cheapest first.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
-        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
+        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, or an earlier
+        /// query failed.</exception>
         public IReadOnlyList<ExtractionResult> ExtractVariants(Sort sort, Value value, int count, TermDag dag)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -62,7 +62,7 @@ namespace Eggnog.Relations
         /// <param name="dag">The DAG to extract into.</param>
         /// <returns>The variants, cheapest first.</returns>
         /// <exception cref="InvalidOperationException">The extractor does not have exactly one root sort, the e-graph
-        /// changed since it was created, the cost model gave a negative cost, or an earlier query failed.</exception>
+        /// changed since it was created, or an earlier query failed.</exception>
         public IReadOnlyList<ExtractionResult> ExtractVariants(Value value, int count, TermDag dag)
         {
             return ExtractVariants(SingleRootSort(), value, count, dag);
@@ -81,8 +81,8 @@ namespace Eggnog.Relations
         /// <returns>The variants, cheapest first.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
-        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
+        /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, or an earlier
+        /// query failed.</exception>
         public IReadOnlyList<ExtractedTerm> ExtractVariantTerms(Sort sort, Value value, int count)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -112,10 +112,10 @@ namespace Eggnog.Relations
         /// <param name="count">The number of variants wanted; at least 0.</param>
         /// <param name="builder">Builds each term.</param>
         /// <returns>Each variant's cost and term, cheapest first.</returns>
-        List<(long Cost, TResult Term)> ExtractVariantsCore<TBuilder, TResult>(Sort sort, Value value, int count, ref TBuilder builder)
+        List<(ulong Cost, TResult Term)> ExtractVariantsCore<TBuilder, TResult>(Sort sort, Value value, int count, ref TBuilder builder)
             where TBuilder : struct, IExtractionBuilder<TResult>
         {
-            var results = new List<(long Cost, TResult Term)>();
+            var results = new List<(ulong Cost, TResult Term)>();
             var memo = new Dictionary<ulong, TResult>();
             if (sort.Kind != SortKind.Eq)
             {
@@ -138,7 +138,7 @@ namespace Eggnog.Relations
             if (owner < 0)
                 return results;
 
-            var candidates = new List<(long Cost, int Node)>();
+            var candidates = new List<(ulong Cost, int Node)>();
             for (var node = classFirstNode[owner]; node >= 0; node = nodeNext[node])
                 if (IsCostable(node))
                     candidates.Add((ComputeNodeCost(node), node));
@@ -172,7 +172,7 @@ namespace Eggnog.Relations
         /// differ in a key.
         /// </summary>
         /// <returns>The sign of the comparison.</returns>
-        int CompareVariants((long Cost, int Node) left, (long Cost, int Node) right)
+        int CompareVariants((ulong Cost, int Node) left, (ulong Cost, int Node) right)
         {
             if (left.Cost != right.Cost)
                 return left.Cost.CompareTo(right.Cost);

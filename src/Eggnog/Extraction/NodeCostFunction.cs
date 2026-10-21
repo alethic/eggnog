@@ -7,6 +7,6 @@ namespace Eggnog
     /// </summary>
     /// <param name="node">The row.</param>
     /// <returns>The cost, at least 0.</returns>
-    public delegate long NodeCostFunction(NodeView node);
+    public delegate ulong NodeCostFunction(NodeView node);
 
 }
