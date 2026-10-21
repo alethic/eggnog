@@ -545,6 +545,14 @@ namespace Eggnog
                     return formattable.ToString(null, CultureInfo.InvariantCulture);
                 case IPair pair:
                     return "(pair " + DefaultLiteral(pair.FirstValue) + " " + DefaultLiteral(pair.SecondValue) + ")";
+                case IMap map:
+                {
+                    var text = "(map-empty)";
+                    foreach (var (key, entry) in map.Entries)
+                        text = "(map-insert " + text + " " + DefaultLiteral(key) + " " + DefaultLiteral(entry) + ")";
+
+                    return text;
+                }
             }
 
             var type = value.GetType();

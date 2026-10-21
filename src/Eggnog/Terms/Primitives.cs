@@ -234,6 +234,79 @@ namespace Eggnog
         public static Primitive<Vec<T>, long, Vec<T>> VecRemove<T>() where T : notnull => VecPrimitiveCache<T>.Remove;
 
         /// <summary>
+        /// <c>map-empty</c>: the empty map, egglog's (src/sort/map.rs:142-146). Its type is registered with
+        /// <see cref="ValueStore.RegisterMap{TKey, TValue}"/>.
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Empty;
+
+        /// <summary>
+        /// <c>map-insert</c>: the map with a key mapped to a value, replacing any value it had (map.rs:149).
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, TKey, TValue, Map<TKey, TValue>> MapInsert<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Insert;
+
+        /// <summary>
+        /// <c>map-get</c>: a key's value; no result for a missing key (map.rs:148).
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, TKey, TValue> MapGet<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Get;
+
+        /// <summary>
+        /// <c>map-remove</c>: the map without a key (map.rs:150).
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, TKey, Map<TKey, TValue>> MapRemove<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Remove;
+
+        /// <summary>
+        /// <c>map-length</c> (map.rs:152).
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, long> MapLength<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Length;
+
+        /// <summary>
+        /// <c>map-contains</c>: whether the map has a key, as a <c>bool</c>; as a filter, egglog's <c>map-contains</c>
+        /// (map.rs:153), and as a value <c>bool-map-contains</c>, a name egglog has not.
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, TKey, bool> MapContains<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.Contains;
+
+        /// <summary>
+        /// <c>map-not-contains</c>: whether the map lacks a key, as a <c>bool</c>; as a filter, egglog's
+        /// <c>map-not-contains</c> (map.rs:154), and as a value <c>bool-map-not-contains</c>.
+        /// </summary>
+        /// <typeparam name="TKey">The key type.</typeparam>
+        /// <typeparam name="TValue">The value type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Map<TKey, TValue>, TKey, bool> MapNotContains<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull => MapPrimitiveCache<TKey, TValue>.NotContains;
+
+        /// <summary>
         /// <c>vec-range</c>: the vector <c>0, 1, …, end - 1</c>, empty for a negative end (vec.rs:151-161), which egglog
         /// registers for vectors of <c>i64</c> only.
         /// </summary>

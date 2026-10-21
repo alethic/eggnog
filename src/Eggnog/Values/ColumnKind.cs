@@ -14,7 +14,7 @@ namespace Eggnog
 
         /// <summary>
         /// The cells are values: base values (numbers, strings, sets, registered types) or containers of values (pairs,
-        /// vectors);
+        /// vectors, maps);
         /// equal values have equal cells.
         /// </summary>
         Value,

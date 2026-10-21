@@ -15,8 +15,8 @@ namespace Eggnog
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>ValueSet&lt;string&gt;</c>
     /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c> "Set&lt;i32&gt;". Sorts join through
-    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types, pairs and vectors through the <c>Register*</c> methods.
-    /// Thread-safe; the first pair type and the first vector type registered are engine definitions, which while the root
+    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types, pairs, vectors and maps through the <c>Register*</c>
+    /// methods. Thread-safe; the first pair, vector and map types registered are engine definitions, which while the root
     /// is writable enter its domain.
     /// </summary>
     /// <remarks>
@@ -85,7 +85,7 @@ namespace Eggnog
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
         /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterPair{T1, T2}"/>,
-        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
+        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterMap{TKey, TValue}"/>, <see cref="RegisterEnum{TEnum}"/> or
         /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
@@ -143,6 +143,9 @@ namespace Eggnog
 
             if (IsVec(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a vector: register it with ValueStore.RegisterVec.");
+
+            if (IsMap(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a map: register it with ValueStore.RegisterMap.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
@@ -294,6 +297,59 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Registers the map type from <typeparamref name="TKey"/> to <typeparamref name="TValue"/>, egglog's
+        /// <c>(sort … (Map K V))</c>, named <c>Map&lt;{key name}, {value name}&gt;</c>, or gets it when it is registered
+        /// already. A map is egglog's <c>Map</c> container: its cell is a container id from the graph's id counter, equal
+        /// maps have one cell, and its primitives are <see cref="Primitives"/>' <c>Map*</c> methods. It extracts as a
+        /// chain of <c>map-insert</c>s over <c>(map-empty)</c>, its entries in key-cell order as egglog's, and costs what
+        /// its keys and values cost. Keys and values are value types, containers included, and the keys are
+        /// <c>string</c> or comparable, as a <see cref="Map{TKey, TValue}"/> enumerates in key order; maps of classes,
+        /// egglog's eq-sort containers, are not supported yet. The first map type registered is an engine definition:
+        /// while the root is writable, that call enters the root's domain.
+        /// </summary>
+        /// <typeparam name="TKey">The key type; registered, comparable, and not a sort.</typeparam>
+        /// <typeparam name="TValue">The value type; registered, and not a sort.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">A type is unknown or a sort, the key type is not comparable, or the name
+        /// is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first map type is registered while another thread is using
+        /// the writable root.</exception>
+        public ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Map<TKey, TValue>>(out var existing))
+                return existing;
+
+            var key = TypeOf<TKey>();
+            var value = TypeOf<TValue>();
+            foreach (var part in new ColumnType[] { key, value })
+                if (part.Kind == ColumnKind.Sort)
+                    throw new ArgumentException($"Maps hold values only so far; {part.Name} is a sort, and maps of classes are egglog's eq-sort containers, which are not supported yet.");
+
+            var comparable = typeof(TKey) == typeof(string)
+                || typeof(IComparable<TKey>).IsAssignableFrom(typeof(TKey))
+                || typeof(IComparable).IsAssignableFrom(typeof(TKey));
+            if (comparable == false)
+                throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable.");
+
+            var env = graph.ValueContainers<Relations.MapContainer>();
+            lock (sync)
+            {
+                if (TryGetType<Map<TKey, TValue>>(out existing))
+                    return existing;
+
+                var name = $"Map<{key.Name}, {value.Name}>";
+                CheckFree(typeof(Map<TKey, TValue>), name);
+                var type = new MapColumnType<TKey, TValue>(name, key, value, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
         /// Counts a container environment in <see cref="InternedCount"/>, once. Called under the lock.
         /// </summary>
         void AddContainers(Relations.ContainerEnvBase env)
@@ -383,8 +439,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
-        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterVec</c>, <c>ValueStore.RegisterEnum</c> or
-        /// <c>EGraph.DefineSort</c>.</returns>
+        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterVec</c>, <c>ValueStore.RegisterMap</c>,
+        /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
         [UnconditionalSuppressMessage("Trimming", "IL2067",
             Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
                 + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
@@ -399,6 +455,9 @@ namespace Eggnog
 
             if (IsVec(clrType))
                 return "ValueStore.RegisterVec";
+
+            if (IsMap(clrType))
+                return "ValueStore.RegisterMap";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
@@ -443,6 +502,13 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a vector type.</returns>
         internal static bool IsVec(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Vec<>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a map type, a <see cref="Map{TKey, TValue}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a map type.</returns>
+        internal static bool IsMap(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Map<,>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

@@ -275,6 +275,24 @@ sealed class Eggnog.LiftReport
     Int64 Unions { get }
     Int64 Values { get }
     override String ToString()
+static class Eggnog.Map
+    static Map<TKey, TValue> From<TKey, TValue>(IEnumerable<KeyValuePair<TKey, TValue>> entries)
+    static Map<TKey, TValue> Of<TKey, TValue>(params ValueTuple<TKey, TValue>[] entries)
+sealed class Eggnog.Map<TKey, TValue> : IEnumerable, IEnumerable<KeyValuePair<TKey, TValue>>, IEquatable<Map<TKey, TValue>>, IReadOnlyCollection<KeyValuePair<TKey, TValue>>
+    Boolean ContainsKey(TKey key)
+    Boolean Equals(Map<TKey, TValue> other)
+    Boolean TryGetValue(TKey key, out TValue value)
+    IEnumerable<TKey> Keys { get }
+    IEnumerable<TValue> Values { get }
+    IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
+    Int32 Count { get }
+    Map<TKey, TValue> Remove(TKey key)
+    Map<TKey, TValue> SetItem(TKey key, TValue value)
+    TValue this[TKey key] { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Map<TKey, TValue> Empty { get }
 delegate Eggnog.NodeCostFunction
     Int64 Invoke(NodeView node)
 ref struct Eggnog.NodeView
@@ -364,6 +382,12 @@ static class Eggnog.Primitives
     static Primitive<Int64, Int64> Log2 { get }
     static Primitive<Int64, String> Format { get }
     static Primitive<Int64, Vec<Int64>> VecRange { get }
+    static Primitive<Map<TKey, TValue>, Int64> MapLength<TKey, TValue>()
+    static Primitive<Map<TKey, TValue>, TKey, Boolean> MapContains<TKey, TValue>()
+    static Primitive<Map<TKey, TValue>, TKey, Boolean> MapNotContains<TKey, TValue>()
+    static Primitive<Map<TKey, TValue>, TKey, Map<TKey, TValue>> MapRemove<TKey, TValue>()
+    static Primitive<Map<TKey, TValue>, TKey, TValue, Map<TKey, TValue>> MapInsert<TKey, TValue>()
+    static Primitive<Map<TKey, TValue>, TKey, TValue> MapGet<TKey, TValue>()
     static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
     static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
     static Primitive<T, T, Boolean> NotEqual<T>()
@@ -389,6 +413,7 @@ static class Eggnog.Primitives
     static Primitive<Vec<T>, T, Boolean> VecNotContains<T>()
     static Primitive<Vec<T>, T, Vec<T>> VecPush<T>()
     static Primitive<Vec<T>, Vec<T>> VecPop<T>()
+    static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
     static PrimitiveN<Vec<T>> VecEmpty<T>()
     static VariadicPrimitive<T, ValueSet<T>> SetOf<T>()
     static VariadicPrimitive<T, Vec<T>> VecOf<T>()
@@ -767,6 +792,7 @@ sealed class Eggnog.ValueSet<T> : IEnumerable, IEnumerable<T>, IEquatable<ValueS
     static ValueSet<T> Empty { get }
 sealed class Eggnog.ValueStore
     Boolean TryGetType<T>(out ColumnType<T> type)
+    ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
     ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
     ColumnType<T> Register<T : IEquatable<T>>(String name, IComparer<T> order = null, Func<T, String> format = null)
     ColumnType<T> TypeOf<T>()
