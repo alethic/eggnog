@@ -31,6 +31,13 @@ namespace Eggnog
         public abstract bool DecodesValues { get; }
 
         /// <summary>
+        /// Gets whether the merge looks at the old and the new value (<see cref="FunctionMerge.Of{T}"/> and an expression),
+        /// so that classes it is given before a union are not those egglog's next command would give it; <c>false</c>
+        /// for <c>new</c> and <c>old</c>, which only pick one.
+        /// </summary>
+        public virtual bool ComparesValues => DecodesValues;
+
+        /// <summary>
         /// Gets whether a host batch can work out the merged value itself (<see cref="MergeCells"/>); <c>false</c> for an
         /// expression that calls tables, so that only the engine evaluates it.
         /// </summary>
@@ -56,12 +63,12 @@ namespace Eggnog
         /// <summary>
         /// Merges two cells of the function's output, as the engine's merge will, interning a new value.
         /// </summary>
-        /// <param name="graph">The graph.</param>
+        /// <param name="scope">The scope the batch writes.</param>
         /// <param name="type">The function's output type.</param>
         /// <param name="stored">The old cell.</param>
         /// <param name="incoming">The new cell.</param>
         /// <returns>The merged cell.</returns>
-        public abstract uint MergeCells(EGraph graph, ColumnType type, uint stored, uint incoming);
+        public abstract uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming);
 
     }
 

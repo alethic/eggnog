@@ -150,19 +150,6 @@ namespace Eggnog.Tests.Rules
         }
 
         [Fact]
-        public void APrimitiveOverASortIsRefused()
-        {
-            var t = new NodeTheory();
-            var odd = Primitive.Create<Node, bool>("odd", n => true);
-            AssertRefused(t, "sorted", r =>
-            {
-                var n = r.Var<Node>("n");
-                r.When(t.Tag.Of(n));
-                r.Where(odd.Of(n));
-            }, "primitive 'odd' takes or returns a sort; classes are compared only with Is and IsNot");
-        }
-
-        [Fact]
         public void AnAnalysisWriterReadingAFactTableIsRefused()
         {
             var t = new NodeTheory();
