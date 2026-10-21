@@ -214,7 +214,7 @@ namespace Eggnog.Tests.Concurrency
 
             t.Root.Freeze();
             var serial = t.Root.CreateExtractor();
-            var expected = new long[terms.Length];
+            var expected = new ulong[terms.Length];
             for (var i = 0; i < terms.Length; i++)
                 Assert.True(serial.TryGetCost(terms[i], out expected[i]));
 
