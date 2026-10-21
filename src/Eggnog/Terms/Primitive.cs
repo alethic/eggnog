@@ -151,7 +151,7 @@ namespace Eggnog
         /// <summary>
         /// Creates a named primitive of any number of parameters, each of its own type, as egglog's primitives take,
         /// where the typed <c>Create</c> overloads stop at four: <paramref name="function"/> gets the arguments as
-        /// objects, one per parameter, in a new list on each call, which it may keep.
+        /// objects, one per parameter, in a span valid only during the call.
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="name">The name it renders as.</param>
@@ -159,7 +159,7 @@ namespace Eggnog
         /// <param name="function">The function: pure, deterministic and thread-safe.</param>
         /// <returns>The primitive.</returns>
         /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
-        public static PrimitiveN<TResult> Create<TResult>(string name, IReadOnlyList<Type> parameters, Func<IReadOnlyList<object>, TResult> function)
+        public static PrimitiveN<TResult> Create<TResult>(string name, IReadOnlyList<Type> parameters, FuncN<TResult> function)
         {
             NameRules.ValidateName(name, nameof(name));
             ArgumentNullException.ThrowIfNull(function);
