@@ -139,7 +139,8 @@ interned interns nothing, and one that names a new string interns the string and
 
 ### 2.3 Tables
 
-There are three kinds of table, each typed by up to four key columns (`TableHandle` is the untyped base):
+There are three kinds of table, each typed by up to four key columns, or of any number (`TableHandle` is the untyped
+base):
 
 | Kind | Defined by | Rows | In the engine |
 |---|---|---|---|
@@ -147,9 +148,12 @@ There are three kinds of table, each typed by up to four key columns (`TableHand
 | Function | `DefineFunction<T1, ..., TOut>(name, lattice)` or `(name, merge)` | one output per key (a functional dependency) | a function with a value or class output; merge: the lattice's or the `FunctionMerge`'s, or assert equal without either |
 | Constructor | `DefineConstructor<T1, ..., TSort>(name, cost)` | terms: one class per key | a function whose output is a class; default: a fresh id; merge: union the classes |
 
-A key of more than four columns is written as one column of a registered value type (`ValueStore.Register<T>`, a struct
-of the key's fields), each distinct value of which is interned for the graph's life, or the table is split in two,
-joined on a value key.
+A table of more than four key columns, as egglog's take, is defined by its key types (`DefineRelationN(name, keys)`,
+`DefineFunctionN<TOut>(name, keys, ...)`, `DefineConstructorN<TSort>(name, keys, cost)`), and its `RelationN`,
+`FunctionN<TOut>` and `ConstructorN<TSort>` apply to one argument per column, a `params ReadOnlySpan<object>`
+(`r.Of(x, 2L, 3L, 4L, "s")`): a term, or a value, which becomes a constant and must be an instance of its column's type.
+The count and the types are checked at the call. Otherwise such a table is as a typed one: its output is typed, and its views (`In(tag)`), merges, writes and
+reads are the same.
 
 A function with a lattice (`ValueLattice<T>`) merges two outputs for one key with the lattice's `Merge`, which must be
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
@@ -217,8 +221,9 @@ stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run ask
 
 `Term<T>` is an expression of type `T`: a constant (any `T` converts implicitly), a variable (`Var<T>`), a table
 application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
-user primitive made with `Primitive.Create` or `Primitive.CreatePartial`), or a computation over a lambda
-(`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
+user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
+take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
+call: `PrimitiveN<TResult>`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
 value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
 (`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
 comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`

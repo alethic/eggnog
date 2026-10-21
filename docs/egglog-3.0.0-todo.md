@@ -185,7 +185,7 @@ gains them.
 - [ ] **Row conversions and `ApiError`** (#901, #986). `IntoValue` and `FromValue` convert rows, for tuples up to
   arity 8, and a wrong name, arity or table kind returns `Error::ApiError`; column sorts are not checked. Upstream:
   `src/api/mod.rs:38-182`. Eggnog checks the arity and each column's type and throws `ArgumentException`
-  (`TableHandle.CheckArguments`, `src/Eggnog/Tables/TableHandle.cs`).
+  (`TableHandle.CheckArguments` and `ToArguments`, `src/Eggnog/Tables/TableHandle.cs`).
 - [ ] **Signatures for primitives** (#986). A function's signature is stored once (`Function::func_type`, `FuncType`),
   and primitives can read it (`Read::constructor_schema`, `function_schema`, `table_subtype`), walk a class's nodes
   through an index (`Read::enodes_for_eclass`) and remap a container (`Core::map_container`). Upstream:
