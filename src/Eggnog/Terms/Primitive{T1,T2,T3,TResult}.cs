@@ -83,18 +83,18 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
-            ((ColumnType<TResult>)result).Encode(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], null), ((ColumnType<T2>)parameters[1]).Decode(arguments[1], null), ((ColumnType<T3>)parameters[2]).Decode(arguments[2], null)));
+        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope) =>
+            ((ColumnType<TResult>)result).EncodeIn(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], scope), ((ColumnType<T2>)parameters[1]).Decode(arguments[1], scope), ((ColumnType<T3>)parameters[2]).Decode(arguments[2], scope)), scope);
 
         /// <inheritdoc />
-        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell)
+        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope, out uint cell)
         {
-            var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], null);
-            var b = ((ColumnType<T2>)parameters[1]).Decode(arguments[1], null);
-            var c = ((ColumnType<T3>)parameters[2]).Decode(arguments[2], null);
+            var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], scope);
+            var b = ((ColumnType<T2>)parameters[1]).Decode(arguments[1], scope);
+            var c = ((ColumnType<T3>)parameters[2]).Decode(arguments[2], scope);
             if (TryInvoke(a, b, c, out var value))
             {
-                cell = ((ColumnType<TResult>)result).Encode(value);
+                cell = ((ColumnType<TResult>)result).EncodeIn(value, scope);
                 return true;
             }
 

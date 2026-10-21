@@ -75,16 +75,16 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
-            ((ColumnType<TResult>)result).Encode(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], null)));
+        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope) =>
+            ((ColumnType<TResult>)result).EncodeIn(Function(((ColumnType<T1>)parameters[0]).Decode(arguments[0], scope)), scope);
 
         /// <inheritdoc />
-        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell)
+        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope, out uint cell)
         {
-            var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], null);
+            var a = ((ColumnType<T1>)parameters[0]).Decode(arguments[0], scope);
             if (TryInvoke(a, out var value))
             {
-                cell = ((ColumnType<TResult>)result).Encode(value);
+                cell = ((ColumnType<TResult>)result).EncodeIn(value, scope);
                 return true;
             }
 

@@ -160,9 +160,11 @@ namespace Eggnog
                     for (var i = 0; i < types.Length; i++)
                         types[i] = TypeOf(primitive.ParameterTypes[i]);
 
+                    // A case's assumptions are computed before the case's unions are planned, so a computation over
+                    // classes there would not see them; splits are an addition, and compute over values only.
                     var result = TypeOf(primitive.ResultType);
                     if (result.Kind == ColumnKind.Sort || Array.Exists(types, p => p.Kind == ColumnKind.Sort))
-                        throw Error($"primitive '{primitive.Name}' takes or returns a sort; classes are compared only with Is and IsNot");
+                        throw Error($"primitive '{primitive.Name}' takes or returns a sort; a split's assumptions compute over values, so compare classes in When");
 
                     for (var i = 0; i < shape.Arguments.Length; i++)
                         CheckTerm(shape.Arguments[i], types[i]);

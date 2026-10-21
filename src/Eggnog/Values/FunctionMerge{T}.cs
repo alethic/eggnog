@@ -17,19 +17,20 @@ namespace Eggnog
     public readonly struct FunctionMerge<T>
     {
 
-        readonly FunctionMergeDefinition<T>? definition;
+        readonly FunctionMergeDefinition? definition;
 
         /// <summary>
         /// Initializes a new instance.
         /// </summary>
-        /// <param name="definition">The merge.</param>
-        internal FunctionMerge(FunctionMergeDefinition<T> definition)
+        /// <param name="definition">The merge, of values of <typeparamref name="T"/>.</param>
+        internal FunctionMerge(FunctionMergeDefinition definition)
         {
             this.definition = definition;
         }
 
         /// <summary>
-        /// Gets the merge's name: <c>new</c>, <c>old</c>, or the name given to <see cref="FunctionMerge.Of{T}"/>.
+        /// Gets the merge's name: <c>new</c>, <c>old</c>, the name given to <see cref="FunctionMerge.Of{T}"/>, or the
+        /// rendering of an expression (<see cref="FunctionMerge.Expression{T}"/>), such as <c>(Join old new)</c>.
         /// </summary>
         public string Name => definition?.Name ?? string.Empty;
 
@@ -38,8 +39,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="ArgumentException">The merge is the default value, which <see cref="FunctionMerge"/> never
         /// makes.</exception>
-        internal FunctionMergeDefinition<T> Definition =>
-            definition ?? throw new ArgumentException("A default FunctionMerge merges nothing; make one with FunctionMerge.New, Old or Of.");
+        internal FunctionMergeDefinition Definition =>
+            definition ?? throw new ArgumentException("A default FunctionMerge merges nothing; make one with FunctionMerge.New, Old, Of or Expression.");
 
         /// <summary>
         /// Gets the name.

@@ -235,6 +235,7 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
 static class Eggnog.FunctionMerge
+    static FunctionMerge<T> Expression<T>(Func<Term<T>, Term<T>, Term<T>> merge)
     static FunctionMerge<T> New<T>()
     static FunctionMerge<T> Of<T>(String name, Func<T, T, T> merge)
     static FunctionMerge<T> Old<T>()

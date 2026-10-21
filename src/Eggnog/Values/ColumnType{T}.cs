@@ -36,7 +36,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two values in content order: strings ordinal, numbers numeric, <c>false &lt; true</c>, sets
+        /// Compares two values in content order: strings by code point, numbers numeric, <c>false &lt; true</c>, sets
         /// lexicographic over their sorted elements, registered types by their comparer (else
         /// <c>Comparer&lt;T&gt;.Default</c> when comparable, else their cells), classes by id. Extraction breaks ties
         /// by this order. Comparing is a read: it never interns. Ordered by cell, a value that was never interned comes
@@ -65,6 +65,16 @@ namespace Eggnog
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentException">The value is not representable (a default class).</exception>
         internal abstract uint Encode(T value);
+
+        /// <summary>
+        /// Encodes a value a primitive returned in <paramref name="scope"/>: as <see cref="Encode"/>, except that a class
+        /// must be usable there (<see cref="SortColumnType{TSort}"/>).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="scope">The scope the call runs in; <c>null</c> for no check.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="InvalidOperationException">The value is a class this scope cannot use.</exception>
+        internal virtual uint EncodeIn(T value, Scope? scope) => Encode(value);
 
         /// <summary>
         /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the

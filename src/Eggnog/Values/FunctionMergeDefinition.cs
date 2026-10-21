@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace Eggnog
 {
 
@@ -22,10 +25,28 @@ namespace Eggnog
         public string Name { get; }
 
         /// <summary>
-        /// Gets whether the merge calls a function of the old and the new value (<see cref="FunctionMerge.Of{T}"/>), which
-        /// decodes values; <c>false</c> for <c>new</c> and <c>old</c>, which merge classes too.
+        /// Gets whether the merge decodes the old and the new value (<see cref="FunctionMerge.Of{T}"/>), which a class
+        /// cannot be; <c>false</c> for <c>new</c>, <c>old</c> and an expression, which merge classes too.
         /// </summary>
-        public abstract bool CallsFunction { get; }
+        public abstract bool DecodesValues { get; }
+
+        /// <summary>
+        /// Gets whether the merge looks at the old and the new value (<see cref="FunctionMerge.Of{T}"/> and an expression),
+        /// so that classes it is given before a union are not those egglog's next command would give it; <c>false</c>
+        /// for <c>new</c> and <c>old</c>, which only pick one.
+        /// </summary>
+        public virtual bool ComparesValues => DecodesValues;
+
+        /// <summary>
+        /// Gets whether a host batch can work out the merged value itself (<see cref="MergeCells"/>); <c>false</c> for an
+        /// expression that calls tables, so that only the engine evaluates it.
+        /// </summary>
+        public virtual bool CanSimulate => true;
+
+        /// <summary>
+        /// Gets the tables the merge calls: those of an expression's applications; none for the others.
+        /// </summary>
+        public virtual IReadOnlyCollection<TableHandle> Tables => Array.Empty<TableHandle>();
 
         /// <summary>
         /// Creates the engine merge of a function with this merge, registering its external function if it has one: not a
@@ -34,17 +55,20 @@ namespace Eggnog
         /// <param name="graph">The graph.</param>
         /// <param name="functionName">The function's name, for messages.</param>
         /// <param name="type">The function's output type.</param>
+        /// <param name="registered">Gets the external functions registered for the merge, which the caller frees when
+        /// the definition fails.</param>
         /// <returns>The engine merge.</returns>
-        public abstract Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type);
+        public abstract Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type, List<Relations.ExternalFunctionId> registered);
 
         /// <summary>
         /// Merges two cells of the function's output, as the engine's merge will, interning a new value.
         /// </summary>
+        /// <param name="scope">The scope the batch writes.</param>
         /// <param name="type">The function's output type.</param>
         /// <param name="stored">The old cell.</param>
         /// <param name="incoming">The new cell.</param>
         /// <returns>The merged cell.</returns>
-        public abstract uint MergeCells(ColumnType type, uint stored, uint incoming);
+        public abstract uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming);
 
     }
 

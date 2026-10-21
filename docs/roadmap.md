@@ -18,24 +18,17 @@ child scopes and splits, where soundness needs them. Each item lands when egglog
 the C# API, pass; an item that touches the engine's root paths also passes the root gate ("Benchmarks and timed
 gates").
 
-- **Merges that call tables.** egglog's `:merge` is any expression over `old` and `new`, calls of functions and
-  constructors included (`MergeFn::Function`); here a merge that is not a lattice is a C# function of the two values
-  (`FunctionMerge`, architecture 2.13, item 2). Only the root writes such a table (decisions row 2).
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
-  heads never read (architecture 2.13, item 4). Such a rule inherits no progress in a child.
+  heads never read (architecture 2.13, item 3). Such a rule inherits no progress in a child.
 - **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
   engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
   rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
   22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
-- **Primitives over classes.** egglog's `bool-!=`, `ordering-min`, `ordering-max`, `value-eq` and user primitives take
-  e-class sorts; here primitives take values only (decisions row 22).
 - **Any arity.** egglog's tables and primitives take any number of columns and arguments; the typed API stops at four
   key columns and four parameters. An untyped definition API serves the rest.
 - **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort
   by function name and row values; here ties go by content (architecture 2.10, decisions row 21b).
-- **Strings by code point.** Rust compares strings by code point; here extraction and set order compare UTF-16 code
-  units, which differ only when a supplementary character meets U+E000-U+FFFF.
 - **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
@@ -43,7 +36,7 @@ gates").
 - **Schedulers.** egglog's `Scheduler` (`add_scheduler`, `step_rules_with_scheduler`), and the back-off scheduler of
   egglog-experimental; here none. Matches a scheduler holds back stay pending in a child that inherits progress.
 - **Rule callbacks.** egglog's rules that call host code (`rust_rule`); here a host loop instead (architecture 2.13,
-  item 6).
+  item 5).
 - **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child
   scopes with their definitions scoped too. It runs egglog's own test files, the fidelity suite for every item above,
   and the benchmark programs that need it (herbie, eggcc, `math.egg`, the transformer programs).

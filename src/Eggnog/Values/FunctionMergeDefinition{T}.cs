@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -39,10 +40,10 @@ namespace Eggnog
         public Func<T, T, T>? Function { get; }
 
         /// <inheritdoc />
-        public override bool CallsFunction => Function is not null;
+        public override bool DecodesValues => Function is not null;
 
         /// <inheritdoc />
-        public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type)
+        public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type, List<Relations.ExternalFunctionId> registered)
         {
             if (ReferenceEquals(this, NewMerge))
                 return Relations.MergeFn.New;
@@ -51,11 +52,12 @@ namespace Eggnog
                 return Relations.MergeFn.Old;
 
             var merge = graph.Engine.RegisterExternalFunction(new FunctionMergeCall<T>(graph, functionName, this, (ColumnType<T>)type));
+            registered.Add(merge);
             return Relations.MergeFn.Primitive(merge, Relations.MergeFn.Old, Relations.MergeFn.New);
         }
 
         /// <inheritdoc />
-        public override uint MergeCells(ColumnType type, uint stored, uint incoming)
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming)
         {
             if (ReferenceEquals(this, NewMerge))
                 return incoming;
@@ -64,7 +66,7 @@ namespace Eggnog
                 return stored;
 
             var typed = (ColumnType<T>)type;
-            return typed.Encode(Function!(typed.Decode(stored, null), typed.Decode(incoming, null)));
+            return typed.Encode(Function!(typed.Decode(stored, scope), typed.Decode(incoming, scope)));
         }
 
     }

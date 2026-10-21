@@ -84,18 +84,27 @@ namespace Eggnog
         /// constant as it is, so that a constant no write interned still computes; then the result's cell, which a value
         /// never interned has not, and then the term is absent, as it is when the primitive has no result.
         /// </summary>
-        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
+        /// <exception cref="ArgumentException">A class argument or result is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
         static bool TryCompute(Scope scope, TermShape shape, ScopeTag? enclosing, out uint cell)
         {
             cell = 0;
-            return TryEvaluate(scope, shape, enclosing, out var value, out var result) && result.TryEncodeExistingObject(value!, out cell);
+            if (TryEvaluate(scope, shape, enclosing, out var value, out var result) == false)
+                return false;
+
+            // A class the primitive returns is read as the scope sees it: usable there, and canonical.
+            if (result.Kind == ColumnKind.Sort)
+            {
+                cell = scope.Engine.Find(ClassChecks.Require(scope, result.ClassOf(value!), "term"));
+                return true;
+            }
+
+            return result.TryEncodeExistingObject(value!, out cell);
         }
 
         /// <summary>
         /// Evaluates a primitive's term to its CLR value, on the calling thread under <see cref="EngineCallMarker"/>.
         /// </summary>
-        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
         static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
         {
@@ -103,9 +112,9 @@ namespace Eggnog
             var primitive = shape.Primitive!;
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
-                parameters[i] = ValueTypeOf(scope, primitive.ParameterTypes[i], primitive);
+                parameters[i] = scope.Graph.Values.TypeOf(primitive.ParameterTypes[i]);
 
-            result = ValueTypeOf(scope, primitive.ResultType, primitive);
+            result = scope.Graph.Values.TypeOf(primitive.ResultType);
             var arguments = new object[parameters.Length];
             for (var i = 0; i < arguments.Length; i++)
             {
@@ -128,6 +137,10 @@ namespace Eggnog
 
                     arguments[i] = parameters[i].DecodeObject(argumentCell, scope);
                 }
+
+                // A class argument must be usable here, and is seen as its canonical id, as a rule sees it.
+                if (parameters[i].Kind == ColumnKind.Sort)
+                    arguments[i] = parameters[i].DecodeObject(scope.Engine.Find(ClassChecks.Require(scope, parameters[i].ClassOf(arguments[i]), "term")), scope);
             }
 
             bool found;
@@ -147,19 +160,6 @@ namespace Eggnog
             }
 
             return found;
-        }
-
-        /// <summary>
-        /// Gets the value type of a primitive's parameter or result.
-        /// </summary>
-        /// <exception cref="ArgumentException">The type is a sort: primitives never take or return classes.</exception>
-        static ColumnType ValueTypeOf(Scope scope, Type clrType, Primitive primitive)
-        {
-            var type = scope.Graph.Values.TypeOf(clrType);
-            if (type.Kind == ColumnKind.Sort)
-                throw new ArgumentException($"primitive '{primitive.Name}' takes or returns the sort {type.Name}; primitives are over values only");
-
-            return type;
         }
 
         /// <summary>

@@ -78,7 +78,7 @@ namespace Eggnog.Tests.Definitions
             var lattice = Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Node>("g", new ValueLattice<Node>("first", (a, b) => a)));
             var merge = Assert.Throws<ArgumentException>(() => graph.DefineFunction<string, Node>("h", FunctionMerge.Of<Node>("first", (a, b) => a)));
             Assert.Contains("merges values, not classes", lattice.Message, StringComparison.Ordinal);
-            Assert.Contains("only FunctionMerge.New and Old merge classes", merge.Message, StringComparison.Ordinal);
+            Assert.Contains("only FunctionMerge.New, Old and Expression merge classes", merge.Message, StringComparison.Ordinal);
         }
 
         [Fact]

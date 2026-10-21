@@ -75,7 +75,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `EGraph` | A theory and its database: column types, tables, rulesets, queries, split rules, scope tags, and the root scope. |
 | `ISort<TSort>`, `ClassId` | A sort is a record struct over a `ClassId`, the type of a class of equivalent terms. |
 | `Relation<...>` | A set of tuples (`DefineRelation`). |
-| `Function<..., TOut>`, `ValueLattice<T>`, `FunctionMerge<T>` | One value, or one class of a sort, per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own), or by egglog's `:merge new`, `old` or `(f old new)` (`FunctionMerge.New`, `Old`, `Of`), which only the root writes. |
+| `Function<..., TOut>`, `ValueLattice<T>`, `FunctionMerge<T>` | One value, or one class of a sort, per key (`DefineFunction`); two values for one key merge by the lattice (`Max`, `Min`, `Intersect`, `Union`, or your own), or by egglog's `:merge new`, `old`, `(f old new)` or any expression over `old` and `new` (`FunctionMerge.New`, `Old`, `Of`, `Expression`), which only the root writes. |
 | `Constructor<..., TSort>` | Terms: one class per key (`DefineConstructor`), with a cost for extraction. |
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
 | `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`). |

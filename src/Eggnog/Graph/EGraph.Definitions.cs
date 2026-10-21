@@ -211,7 +211,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a nullary function whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
-        /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
+        /// <c>:merge (f old new)</c>, or any expression over <c>old</c> and <c>new</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
@@ -223,8 +223,8 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
         /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
-        /// classes).</exception>
+        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
+        /// an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, null, 0,
@@ -232,7 +232,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a function of one key whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
-        /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
+        /// <c>:merge (f old new)</c>, or any expression over <c>old</c> and <c>new</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
@@ -245,8 +245,8 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
         /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
-        /// classes).</exception>
+        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
+        /// an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, null, 0,
@@ -254,7 +254,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a function of two keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
-        /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
+        /// <c>:merge (f old new)</c>, or any expression over <c>old</c> and <c>new</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
@@ -268,8 +268,8 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
         /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
-        /// classes).</exception>
+        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
+        /// an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, null, 0,
@@ -277,7 +277,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a function of three keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
-        /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
+        /// <c>:merge (f old new)</c>, or any expression over <c>old</c> and <c>new</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
@@ -292,8 +292,8 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
         /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
-        /// classes).</exception>
+        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
+        /// an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, null, 0,
@@ -301,7 +301,7 @@ namespace Eggnog
 
         /// <summary>
         /// Defines a function of four keys whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
-        /// <c>:merge (f old new)</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
+        /// <c>:merge (f old new)</c>, or any expression over <c>old</c> and <c>new</c> (<see cref="FunctionMerge"/>): a second value for a key is merged with the first, in
         /// the order the writes come. Only the root writes it: a write from a child scope is refused.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
@@ -317,8 +317,8 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
         /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function (<see cref="FunctionMerge.Of{T}"/>; only <c>New</c> and <c>Old</c> merge
-        /// classes).</exception>
+        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
+        /// an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), options, null, 0,
@@ -519,8 +519,8 @@ namespace Eggnog
                         if (lattice is not null)
                             throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
 
-                        if (merge is { CallsFunction: true })
-                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New and Old merge classes.", nameof(merge));
+                        if (merge is { DecodesValues: true })
+                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New, Old and Expression merge classes.", nameof(merge));
                     }
 
                     if (lattice is not null && lattice.ValueType != output!.ClrType)
@@ -610,41 +610,42 @@ namespace Eggnog
                 for (var i = 0; i < columns.Length; i++)
                     schema[i] = columns[i].EngineType;
 
-                Relations.ExternalFunctionId? merge = null;
-                Relations.DefaultVal defaultValue;
-                Relations.MergeFn mergeFn;
-                switch (kind)
-                {
-                    case TableKind.Relation:
-                        defaultValue = Relations.DefaultVal.Const(new Relations.Value(Unit.Unit));
-                        mergeFn = Relations.MergeFn.AssertEq;
-                        break;
-                    case TableKind.Function:
-                        defaultValue = Relations.DefaultVal.Fail;
-                        if (lattice is not null)
-                        {
-                            merge = Engine.RegisterExternalFunction(lattice.CreateMerge(this, name, output!));
-                            mergeFn = Relations.MergeFn.Primitive(merge.Value, Relations.MergeFn.Old, Relations.MergeFn.New).AsLattice();
-                        }
-                        else if (functionMerge is not null)
-                        {
-                            // Not a lattice merge: the engine refuses a write of the function from a child (decisions row 2).
-                            mergeFn = functionMerge.CreateMergeFn(this, name, output!);
-                        }
-                        else
-                        {
-                            mergeFn = Relations.MergeFn.AssertEq;
-                        }
-
-                        break;
-                    default:
-                        defaultValue = Relations.DefaultVal.FreshId;
-                        mergeFn = Relations.MergeFn.UnionId;
-                        break;
-                }
-
+                var registered = new List<Relations.ExternalFunctionId>();
                 try
                 {
+                    Relations.DefaultVal defaultValue;
+                    Relations.MergeFn mergeFn;
+                    switch (kind)
+                    {
+                        case TableKind.Relation:
+                            defaultValue = Relations.DefaultVal.Const(new Relations.Value(Unit.Unit));
+                            mergeFn = Relations.MergeFn.AssertEq;
+                            break;
+                        case TableKind.Function:
+                            defaultValue = Relations.DefaultVal.Fail;
+                            if (lattice is not null)
+                            {
+                                var merge = Engine.RegisterExternalFunction(lattice.CreateMerge(this, name, output!));
+                                registered.Add(merge);
+                                mergeFn = Relations.MergeFn.Primitive(merge, Relations.MergeFn.Old, Relations.MergeFn.New).AsLattice();
+                            }
+                            else if (functionMerge is not null)
+                            {
+                                // Not a lattice merge: the engine refuses a write of the function from a child (decisions row 2).
+                                mergeFn = functionMerge.CreateMergeFn(this, name, output!, registered);
+                            }
+                            else
+                            {
+                                mergeFn = Relations.MergeFn.AssertEq;
+                            }
+
+                            break;
+                        default:
+                            defaultValue = Relations.DefaultVal.FreshId;
+                            mergeFn = Relations.MergeFn.UnionId;
+                            break;
+                    }
+
                     return Engine.AddTable(new Relations.FunctionConfig
                     {
                         Schema = schema,
@@ -656,8 +657,9 @@ namespace Eggnog
                 }
                 catch
                 {
-                    if (merge is { } registered)
-                        Engine.FreeExternalFunction(registered);
+                    // A refused definition leaves nothing behind: the external functions its merge registered go too.
+                    foreach (var id in registered)
+                        Engine.FreeExternalFunction(id);
 
                     throw;
                 }

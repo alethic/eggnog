@@ -161,29 +161,37 @@ host write throws `FactConflictException` and writes nothing; a rule that derive
 
 A function may output a class, as egglog's `function` of an e-class sort does (`DefineFunction<T1, ..., TSort>`): it
 holds the class written for a key without making a term or a union, the rebuild keeps the output canonical, and
-extraction leaves it out, as egglog's does. Its merge asserts the classes equal, or is `FunctionMerge.New` or `Old`; a
-lattice or `FunctionMerge.Of` decodes values, and is refused. A host write's value may then be a constructor term too,
-made if absent, as egglog's `set` evaluates it, and the class written again after a union that made it equal holds. Two
-rows that a union makes meet must hold one class by then: the rebuild compares them in the pass that makes them meet,
-under the merges of the passes before it, and its assert-equal merge panics on two classes that only that pass's
-congruences would make one, as egglog's does. A host batch replays those passes when it commits and refuses that before
-anything is written; a rule's run fails with `RuleEvaluationException`. A batch that merged classes refuses a later
-write of such a function without a merge, which a later call can make; a split's case writes its functions before its
-unions. A rewrite's right side may not be a function application, which egglog would look up in the head. Below the root
-a function with `New` or `Old` is root-only like any other, and a union in which a class one of its rows outputs would
-lose is refused as for its keys.
+extraction leaves it out, as egglog's does. Its merge asserts the classes equal, or is `FunctionMerge.New` or `Old`, or
+an expression (`FunctionMerge.Expression`); a lattice or `FunctionMerge.Of` decodes values, and is refused. A host
+write's value may then be a constructor term too, made if absent, as egglog's `set` evaluates it, and the class written
+again after a union that made it equal holds. Two rows that a union makes meet must hold one class by then: the rebuild
+compares them in the pass that makes them meet, under the merges of the passes before it, and its assert-equal merge
+panics on two classes that only that pass's congruences would make one, as egglog's does. A host batch replays those
+passes when it commits and refuses that before anything is written; a rule's run fails with `RuleEvaluationException`. A
+batch that merged classes refuses a later write of such a function without a merge, which a later call can make; a
+split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
+egglog would look up in the head. Below the root a function with `New`, `Old` or an expression is root-only like any
+other, and a union in which a class one of its rows outputs would lose is refused as for its keys.
 
 A function with a merge that is not a lattice (`FunctionMerge<T>`) merges as egglog's `:merge new`, `:merge old` and
 `:merge (f old new)` do: `FunctionMerge.New`, `Old` and `Of(name, f)`, where `f` need be neither associative,
-commutative nor idempotent. Each write folds into the value before it, in the order the writes come, so a host write of
-the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys equal merges the
-row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild does. A batch stages
-its unions after its writes, so after it merges classes it refuses a write of such a function whose keys are classes; a
-later call gives egglog's result. A rule's matches reach the merge in the engine's match order, which is not egglog's
-(the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so a rule that writes one key more
-than once in an iteration may leave another value than egglog's. A parallel insert (a flush of many rows with
-`DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the stored row, as egglog's does,
-so its order is not the serial one, which a batch's own reads assume.
+commutative nor idempotent, and `Expression((old, new) => term)`, egglog's merge of any expression: primitives,
+constants, and applications of functions and constructors, which the merge looks up or makes (`MergeFn::Function`), so
+that a merge of classes may make terms, as `(Join old new)` does. An expression is checked and lowered when its function
+is defined, and named by its rendering; a lookup with no row, or a primitive that throws or has no result, fails the
+merge as egglog's merge panics, which fails a rule's run or a host write's flush and faults the scope. A host batch
+works out an expression of primitives and constants itself, so its failure writes nothing and faults nothing; one that
+calls tables only the engine evaluates, after every write of the batch, so the batch stages each write as it comes and
+refuses a later read of the key, a later write of a table the expression reads, and the write itself after a merge of
+classes, each of which a later call can make. Each write folds into the value before it, in the order the writes come,
+so a host write of the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys
+equal merges the row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild
+does. A batch stages its unions after its writes, so after it merges classes it refuses a write of such a function whose
+keys are classes; a later call gives egglog's result. A rule's matches reach the merge in the engine's match order,
+which is not egglog's (the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so a rule that
+writes one key more than once in an iteration may leave another value than egglog's. A parallel insert (a flush of many
+rows with `DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the stored row, as
+egglog's does, so its order is not the serial one, which a batch's own reads assume.
 
 Only the root writes such a function (decision 2 of [`engine/decisions.md`](engine/decisions.md)). Below it the library
 refuses, before anything is written: a host write of one; a host merge of classes in which a class that keys one of its
@@ -548,16 +556,13 @@ with egglog" lists:
 
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
-2. A merge that is not a lattice is a C# function of the old and the new value (`FunctionMerge.Of`): egglog's merges
-   that call a table (`MergeFn::Function`) are not offered, and a function whose output is a class merges only as
-   `New`, `Old` or assert-equal (section 2.3).
-3. Sets hold values only, and are values themselves, not containers of classes.
-4. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
-5. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-6. No proofs or explanations, and no rule callbacks. Host code that must react to matches runs a host loop instead: it
+2. Sets hold values only, and are values themselves, not containers of classes.
+3. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
+4. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
+5. No proofs or explanations, and no rule callbacks. Host code that must react to matches runs a host loop instead: it
    runs a schedule, reads the matches with a query's `ForEachMatch`, writes through `Scope.Write`, and repeats until the
    scope's `Version` stops changing. Queries match naively, so each pass matches in full.
-7. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
+6. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
 ---
 

@@ -26,7 +26,7 @@ Several 3.0.0 changelog entries were already in `5e655cae`, in its "Unreleased" 
 nothing new to evaluate:
 
 - relations as non-unionable constructors (#770); Eggnog keeps them as unit-valued functions
-  ([`architecture.md`](architecture.md), section 2.13, item 7);
+  ([`architecture.md`](architecture.md), section 2.13, item 6);
 - the capability-specific primitive traits (#856; decisions row 12) and the `:naive` rule option;
 - typed extension state (#884), the body-defined primitive APIs (#881, #889), f64 `exp`, `log` and `sqrt` and BigRat
   to i64 (#890, #891), `RunReport::can_stop` (#882), full source paths (#886), the nested-container semi-naive fix
@@ -197,7 +197,7 @@ gains them.
   the database, like `:naive`; it can depend on evaluation order, the term encoding rejects it, and it excludes
   `:naive`. Function lookups in rule heads, refused for every rule at the pin, are now allowed in `:naive` and
   `:unsafe-seminaive` rules. Upstream: `egglog-ast/src/generic_ast.rs:83-121`, `src/typechecking.rs:889-950`. Eggnog:
-  rule heads never read tables ([`architecture.md`](architecture.md), section 2.13, item 4), and `RuleBuilder.Naive()`
+  rule heads never read tables ([`architecture.md`](architecture.md), section 2.13, item 3), and `RuleBuilder.Naive()`
   (`src/Eggnog/Rules/RuleBuilder.cs`).
 
 ## Nothing to evaluate

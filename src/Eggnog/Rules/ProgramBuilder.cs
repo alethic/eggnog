@@ -999,7 +999,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the column types of a primitive's parameters and result; none may be a sort.
+        /// Gets the column types of a primitive's parameters and result, values or sorts.
         /// </summary>
         (ColumnType[] Parameters, ColumnType Result) CheckPrimitive(Primitive primitive)
         {
@@ -1007,10 +1007,8 @@ namespace Eggnog
             for (var i = 0; i < parameters.Length; i++)
                 parameters[i] = ResolveType(primitive.ParameterTypes[i]);
 
+            // A primitive may take and return classes, as egglog's take any sort: it sees them as their canonical ids.
             var result = ResolveType(primitive.ResultType);
-            if (result.Kind == ColumnKind.Sort || parameters.Any(p => p.Kind == ColumnKind.Sort))
-                throw Error($"primitive '{primitive.Name}' takes or returns a sort; classes are compared only with Is and IsNot");
-
             return (parameters, result);
         }
 

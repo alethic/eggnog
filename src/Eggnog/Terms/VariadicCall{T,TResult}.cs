@@ -30,20 +30,20 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result) =>
-            ((ColumnType<TResult>)result).Encode(Call(arguments, parameters));
+        internal override uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope) =>
+            ((ColumnType<TResult>)result).EncodeIn(Call(arguments, parameters, scope), scope);
 
         /// <summary>
         /// Decodes the arguments into a pooled array and calls the function over them, which must not keep the list: it
         /// is valid only during the call.
         /// </summary>
-        TResult Call(ReadOnlySpan<uint> arguments, ColumnType[] parameters)
+        TResult Call(ReadOnlySpan<uint> arguments, ColumnType[] parameters, Scope? scope)
         {
             var values = ArrayPool<T>.Shared.Rent(arguments.Length);
             try
             {
                 for (var i = 0; i < arguments.Length; i++)
-                    values[i] = ((ColumnType<T>)parameters[i]).Decode(arguments[i], null);
+                    values[i] = ((ColumnType<T>)parameters[i]).Decode(arguments[i], scope);
 
                 return function(new ArraySegment<T>(values, 0, arguments.Length));
             }
@@ -54,9 +54,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell)
+        internal override bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope, out uint cell)
         {
-            cell = InvokeCore(arguments, parameters, result);
+            cell = InvokeCore(arguments, parameters, result, scope);
             return true;
         }
 
