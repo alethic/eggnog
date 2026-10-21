@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Eggnog.Tests.Support;
@@ -83,6 +84,127 @@ namespace Eggnog.Tests.Values
             var f = graph.DefineFunction<string>("f");
             graph.Root.Assume(f.Of().Is("known"));
             Assert.Equal("known", graph.Root.Get(pick.Of(of.Of("fresh", "known"))));
+
+            // The cells are a graph's: without one, the picks have no function.
+            Assert.Throws<InvalidOperationException>(() => pick.TryInvoke(MultiSet.Of("x"), out _));
+            Assert.Throws<InvalidOperationException>(() => Primitives.MultiSetPickMax<string>().TryInvoke(MultiSet.Of("x"), out _));
+        }
+
+        [Fact]
+        public void RulesReadContainsAndCountByCell()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<long, MultiSet<string>>("m");
+            var has = graph.DefineFunction<long, bool>("has");
+            var count = graph.DefineFunction<long, long>("count");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("read", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<string>>("k", "x");
+                r.When(x.Is(m.Of(k)));
+                r.Where(Primitives.MultiSetContains<string>().Of(x, "a"));
+                r.Where(Primitives.MultiSetNotContainsSwapped<string>().Of("z", x));
+                r.Then(
+                    has.Of(k).Is(Primitives.MultiSetContainsSwapped<string>().Of("b", x)),
+                    count.Of(k).Is(Primitives.MultiSetCount<string>().Of(x, "a")));
+            });
+            var of = Primitives.MultiSetOf<string>();
+            graph.Root.Assume(
+                m.Of(1L).Is(of.Of("a", "a", "b")),
+                m.Of(2L).Is(of.Of("a")),
+                m.Of(3L).Is(of.Of("b")),
+                m.Of(4L).Is(of.Of("a", "z")));
+
+            graph.Root.Run(Schedule.Run(rules));
+
+            Assert.True(graph.Root.Get(has.Of(1L)));
+            Assert.Equal(2L, graph.Root.Get(count.Of(1L)));
+            Assert.False(graph.Root.Get(has.Of(2L)));
+            Assert.Equal(1L, graph.Root.Get(count.Of(2L)));
+            Assert.False(graph.Root.TryGet(has.Of(3L), out _));
+            Assert.False(graph.Root.TryGet(has.Of(4L), out _));
+        }
+
+        [Fact]
+        public void CountsAreLongsAsEgglogsAreUsizes()
+        {
+            // (multiset-single "x" 2147483648), then multiset-sum doubles it: egglog's counts are usizes.
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<MultiSet<string>>("m");
+            var big = 1L << 31;
+            graph.Root.Assume(m.Of().Is(Primitives.MultiSetSingle<string>().Of("x", big)));
+            var multiset = graph.Root.Get(m.Of());
+            Assert.Equal(big, multiset.Count);
+            Assert.Equal(big, multiset.CountOf("x"));
+            Assert.Throws<OverflowException>(() => ((IReadOnlyCollection<string>)multiset).Count);
+            Assert.True(graph.Root.Check(Primitives.MultiSetLength<string>().Of(m.Of()).Is(big)));
+
+            var count = graph.DefineFunction<long>("count");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("count", r =>
+            {
+                var x = r.Var<MultiSet<string>>("x");
+                r.When(x.Is(m.Of()));
+                r.Then(count.Of().Is(Primitives.MultiSetCount<string>().Of(Primitives.MultiSetSum<string>().Of(x, x), "x")));
+            });
+            graph.Root.Run(Schedule.Run(rules));
+            Assert.Equal(2 * big, graph.Root.Get(count.Of()));
+        }
+
+        [Fact]
+        public void ElementsTheirOrderKeepsApartButTheirTypeStoresAsOneAreRefused()
+        {
+            var graph = new EGraph();
+            graph.Values.Register<CaseKey>("CaseKey");
+            graph.Values.RegisterMultiSet<CaseKey>();
+            var f = graph.DefineFunction<long, MultiSet<CaseKey>>("f");
+            var multiset = MultiSet.Of(new CaseKey("A"), new CaseKey("a"));
+            Assert.Equal(2, multiset.Count);
+            Assert.Throws<ArgumentException>(() => graph.Root.Assume(f.Of(1L).Is(multiset)));
+            Assert.Equal(0, graph.Root.CountRows(f));
+        }
+
+        [Fact]
+        public void AFailedRuleRendersAMultiSetInCellOrder()
+        {
+            // "b" interns before "a", so the multiset's cell lists "b" first, as its extracted term and egglog do.
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<long, MultiSet<string>>("m");
+            var removed = graph.DefineFunction<long, MultiSet<string>>("removed");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("remove", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<string>>("k", "x");
+                r.When(x.Is(m.Of(k)));
+                r.Then(removed.Of(k).Is(Primitives.MultiSetRemove<string>().Of(x, "q")));
+            });
+            graph.Root.Assume(m.Of(1L).Is(Primitives.MultiSetOf<string>().Of("b", "a")));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(rules)));
+            Assert.Contains("x=(multiset-of \"b\" \"a\")", e.Bindings, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void SetsHoldNoContainersAndOrderedLatticesNeedComparableElements()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterPair<long, long>();
+            var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<long, long>>());
+            Assert.Contains("is a container", set.Message, StringComparison.Ordinal);
+
+            graph.Values.Register<NumericBound>("NumericBound");
+            graph.Values.RegisterPair<NumericBound, long>();
+            var unlifted = new TableOptions { Lift = false };
+            var lattice = Assert.Throws<ArgumentException>(() =>
+                graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>(), unlifted));
+            Assert.Contains("not comparable", lattice.Message, StringComparison.Ordinal);
+
+            var max = graph.DefineFunction<long, Pair<long, long>>("max", ValueLattice.Max<Pair<long, long>>(), unlifted);
+            graph.Root.Assume(max.Of(1L).Is(new Pair<long, long>(1L, 9L)), max.Of(1L).Is(new Pair<long, long>(2L, 0L)));
+            Assert.Equal(new Pair<long, long>(2L, 0L), graph.Root.Get(max.Of(1L)));
         }
 
         [Fact]

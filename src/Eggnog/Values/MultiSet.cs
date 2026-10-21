@@ -19,6 +19,8 @@ namespace Eggnog
         /// <param name="items">The elements.</param>
         /// <returns>The multiset.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="items"/> or an element is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">Two elements cannot be compared: an element type, or a type an
+        /// element holds, is not comparable.</exception>
         public static MultiSet<T> Of<T>(params T[] items) where T : notnull
         {
             ArgumentNullException.ThrowIfNull(items);
@@ -32,6 +34,8 @@ namespace Eggnog
         /// <param name="items">The elements.</param>
         /// <returns>The multiset.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="items"/> or an element is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">Two elements cannot be compared: an element type, or a type an
+        /// element holds, is not comparable.</exception>
         public static MultiSet<T> From<T>(IEnumerable<T> items) where T : notnull
         {
             ArgumentNullException.ThrowIfNull(items);

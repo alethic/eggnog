@@ -14,7 +14,7 @@ namespace Eggnog.Relations
     {
 
         readonly uint[]? elements;
-        readonly int[]? counts;
+        readonly long[]? counts;
 
         /// <summary>
         /// Initializes a new instance over distinct elements in ascending order, each with a positive count, which it
@@ -25,7 +25,7 @@ namespace Eggnog.Relations
         /// <param name="counts">Each element's count, positive.</param>
         /// <exception cref="ArgumentException">The elements are not ascending and distinct, a count is not positive, or
         /// the lengths differ.</exception>
-        public MultiSetContainer(bool rebuild, ReadOnlySpan<uint> elements, ReadOnlySpan<int> counts)
+        public MultiSetContainer(bool rebuild, ReadOnlySpan<uint> elements, ReadOnlySpan<long> counts)
         {
             if (elements.Length != counts.Length)
                 throw new ArgumentException("A multiset has one count per element.", nameof(counts));
@@ -39,13 +39,13 @@ namespace Eggnog.Relations
                 if (counts[i] <= 0)
                     throw new ArgumentException("A multiset's counts are positive.", nameof(counts));
 
-                total += counts[i];
+                total = checked(total + counts[i]);
             }
 
             Rebuild = rebuild;
             this.elements = elements.ToArray();
             this.counts = counts.ToArray();
-            Length = checked((int)total);
+            Length = total;
         }
 
         /// <summary>
@@ -59,14 +59,14 @@ namespace Eggnog.Relations
         public ReadOnlySpan<uint> Elements => elements;
 
         /// <summary>
-        /// Gets each distinct element's count.
+        /// Gets each distinct element's count, egglog's <c>usize</c>.
         /// </summary>
-        public ReadOnlySpan<int> Counts => counts;
+        public ReadOnlySpan<long> Counts => counts;
 
         /// <summary>
         /// Gets the number of elements, counted with multiplicity: egglog's <c>len</c>.
         /// </summary>
-        public int Length { get; }
+        public long Length { get; }
 
         /// <summary>
         /// Makes a multiset of elements in any order, repeats counted: egglog's <c>FromIterator</c>.
@@ -79,7 +79,7 @@ namespace Eggnog.Relations
             var sorted = all.ToArray();
             Array.Sort(sorted);
             var distinct = new List<uint>(sorted.Length);
-            var counts = new List<int>(sorted.Length);
+            var counts = new List<long>(sorted.Length);
             foreach (var element in sorted)
             {
                 if (distinct.Count > 0 && distinct[^1] == element)
@@ -102,7 +102,7 @@ namespace Eggnog.Relations
         /// <param name="cells">The elements' cells.</param>
         /// <param name="counts">Each element's count, positive.</param>
         /// <returns>The multiset.</returns>
-        public static MultiSetContainer FromCounts(bool rebuild, uint[] cells, int[] counts)
+        public static MultiSetContainer FromCounts(bool rebuild, uint[] cells, long[] counts)
         {
             var order = new int[cells.Length];
             for (var i = 0; i < order.Length; i++)
@@ -110,7 +110,7 @@ namespace Eggnog.Relations
 
             Array.Sort(order, (a, b) => cells[a].CompareTo(cells[b]));
             var distinct = new List<uint>(cells.Length);
-            var merged = new List<int>(cells.Length);
+            var merged = new List<long>(cells.Length);
             foreach (var at in order)
             {
                 if (distinct.Count > 0 && distinct[^1] == cells[at])
@@ -144,7 +144,8 @@ namespace Eggnog.Relations
         /// <inheritdoc />
         /// <remarks>
         /// egglog's <c>rebuild_contents</c> (multiset.rs:12-24): every element, with its repeats, canonicalized and the
-        /// multiset collected again, so elements that became equal add their counts.
+        /// multiset collected again, so elements that became equal add their counts; here each distinct element once,
+        /// with its count.
         /// </remarks>
         public bool TryRebuild(Rebuilder rebuilder, out MultiSetContainer rebuilt)
         {
@@ -161,13 +162,7 @@ namespace Eggnog.Relations
                 return false;
             }
 
-            var all = new uint[Length];
-            var at = 0;
-            for (var i = 0; i < distinct.Length; i++)
-                for (var k = 0; k < Counts[i]; k++)
-                    all[at++] = distinct[i];
-
-            rebuilt = Collect(Rebuild, all);
+            rebuilt = FromCounts(Rebuild, distinct, Counts.ToArray());
             return true;
         }
 

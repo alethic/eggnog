@@ -95,11 +95,8 @@ namespace Eggnog
         /// <returns>The value.</returns>
         internal abstract T Decode(uint cell, Scope? scope);
 
-        /// <summary>
-        /// Gets whether values of the type can be kept in <see cref="ValueSetOrder{T}"/> order, as the elements of a set,
-        /// a multiset or a map's keys are: a string or a comparable type, or a container whose elements are.
-        /// </summary>
-        internal virtual bool IsOrdered =>
+        /// <inheritdoc />
+        internal override bool IsOrdered =>
             typeof(T) == typeof(string)
                 || typeof(IComparable<T>).IsAssignableFrom(typeof(T))
                 || typeof(IComparable).IsAssignableFrom(typeof(T));

@@ -324,7 +324,9 @@ namespace Eggnog
 
         /// <summary>
         /// <c>multiset-pick</c>: the element of least cell, as egglog's picks its <c>BTreeMap</c>'s first key; no result
-        /// for an empty multiset, as egglog 3.0.0's, where the pin panics (multiset.rs:143).
+        /// for an empty multiset, as egglog 3.0.0's, where the pin panics (multiset.rs:143). The cells are the graph's,
+        /// so it runs only in a graph: its <c>Function</c> and <c>TryInvoke</c> throw
+        /// <see cref="InvalidOperationException"/>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>
@@ -434,7 +436,8 @@ namespace Eggnog
 
         /// <summary>
         /// <c>multiset-pick-max</c>: an element of greatest count, of those the one of greatest cell, as Rust's
-        /// <c>max_by_key</c> keeps the last maximum; no result for an empty multiset (multiset.rs:164-166).
+        /// <c>max_by_key</c> keeps the last maximum; no result for an empty multiset (multiset.rs:164-166). It runs
+        /// only in a graph, as <see cref="MultiSetPick{T}"/> does.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The primitive.</returns>

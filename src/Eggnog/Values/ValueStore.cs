@@ -186,6 +186,11 @@ namespace Eggnog
                 if (element.Kind == ColumnKind.Sort)
                     throw new ArgumentException($"Sets hold values only, never classes; {element.Name} is a sort.");
 
+                // A set is one interned base value, whose elements are not cells; egglog's set of containers holds their
+                // ids, which waits for sets as egglog's containers.
+                if (element is IContainerColumnType)
+                    throw new ArgumentException($"Sets hold base values only so far; {element.Name} is a container, and sets of containers are egglog's set containers, which are not supported yet.");
+
                 if (element.IsOrdered == false)
                     throw new ArgumentException($"Sets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
 

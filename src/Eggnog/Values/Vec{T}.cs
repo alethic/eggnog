@@ -147,7 +147,7 @@ namespace Eggnog
         /// <summary>
         /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), a shorter prefix first; <c>null</c> first. Lets
-        /// containers be the elements of sets, multisets and map keys.
+        /// containers be the elements of multisets and the keys of maps.
         /// </summary>
         /// <param name="other">The other vector.</param>
         /// <returns>Negative, zero or positive.</returns>

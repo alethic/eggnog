@@ -13,8 +13,9 @@ namespace Eggnog
     /// <see cref="Primitives"/>' <c>MultiSet*</c> methods. A multiset is interned as a container, so equal multisets have
     /// equal cells. It enumerates its elements with their repeats in ascending element order, as
     /// <see cref="ValueSet{T}"/> orders its elements, so the element type must be <c>string</c> or comparable; egglog orders
-    /// a multiset by its elements' cells, which is the order its terms and serialized nodes list. Operations return a new
-    /// multiset, or this one when nothing changes.
+    /// a multiset by its elements' cells, which is the order its terms and serialized nodes list. Its counts are
+    /// <c>long</c>s, as egglog's are <c>usize</c>s; as an <see cref="IReadOnlyCollection{T}"/> it counts to
+    /// <see cref="int.MaxValue"/>. Operations return a new multiset, or this one when nothing changes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     public sealed class MultiSet<T> : IReadOnlyCollection<T>, IEquatable<MultiSet<T>>, IComparable<MultiSet<T>>
@@ -24,13 +25,13 @@ namespace Eggnog
         static readonly IComparer<T> Order = ValueSetOrder<T>.Comparer;
 
         readonly T[] elements;
-        readonly int[] counts;
+        readonly long[] counts;
         int hash;
 
         /// <summary>
         /// Initializes a multiset over distinct elements in ascending order with positive counts; not copied.
         /// </summary>
-        MultiSet(T[] elements, int[] counts, int count)
+        MultiSet(T[] elements, long[] counts, long count)
         {
             this.elements = elements;
             this.counts = counts;
@@ -40,22 +41,29 @@ namespace Eggnog
         /// <summary>
         /// Gets the empty multiset.
         /// </summary>
-        public static MultiSet<T> Empty { get; } = new(Array.Empty<T>(), Array.Empty<int>(), 0);
+        public static MultiSet<T> Empty { get; } = new(Array.Empty<T>(), Array.Empty<long>(), 0);
 
         /// <summary>
         /// Gets the number of elements, counted with their repeats: egglog's <c>multiset-length</c>.
         /// </summary>
-        public int Count { get; }
+        public long Count { get; }
+
+        /// <summary>
+        /// Gets the number of elements, counted with their repeats.
+        /// </summary>
+        /// <exception cref="OverflowException">The multiset has more than <see cref="int.MaxValue"/>
+        /// elements.</exception>
+        int IReadOnlyCollection<T>.Count => checked((int)Count);
 
         /// <summary>
         /// Gets the distinct elements, ascending, each with its count.
         /// </summary>
-        public IEnumerable<KeyValuePair<T, int>> Counts
+        public IEnumerable<KeyValuePair<T, long>> Counts
         {
             get
             {
                 for (var i = 0; i < elements.Length; i++)
-                    yield return new KeyValuePair<T, int>(elements[i], counts[i]);
+                    yield return new KeyValuePair<T, long>(elements[i], counts[i]);
             }
         }
 
@@ -64,7 +72,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="item">The element.</param>
         /// <returns>Its count; 0 when it does not occur.</returns>
-        public int CountOf(T item)
+        public long CountOf(T item)
         {
             var at = IndexOf(item);
             return at >= 0 ? counts[at] : 0;
@@ -99,7 +107,7 @@ namespace Eggnog
 
             if (counts[at] > 1)
             {
-                var fewer = (int[])counts.Clone();
+                var fewer = (long[])counts.Clone();
                 fewer[at]--;
                 return new(elements, fewer, Count - 1);
             }
@@ -117,7 +125,7 @@ namespace Eggnog
         public bool TrySubtract(MultiSet<T> other, out MultiSet<T> result)
         {
             ArgumentNullException.ThrowIfNull(other);
-            var left = new Dictionary<int, int>();
+            var left = new Dictionary<int, long>();
             for (var i = 0; i < other.elements.Length; i++)
             {
                 var at = IndexOf(other.elements[i]);
@@ -131,7 +139,7 @@ namespace Eggnog
             }
 
             var newElements = new List<T>(elements.Length);
-            var newCounts = new List<int>(elements.Length);
+            var newCounts = new List<long>(elements.Length);
             for (var i = 0; i < elements.Length; i++)
             {
                 var count = left.TryGetValue(i, out var reduced) ? reduced : counts[i];
@@ -184,7 +192,7 @@ namespace Eggnog
             if (Count == elements.Length)
                 return this;
 
-            var ones = new int[elements.Length];
+            var ones = new long[elements.Length];
             Array.Fill(ones, 1);
             return new(elements, ones, elements.Length);
         }
@@ -213,7 +221,7 @@ namespace Eggnog
         /// <summary>
         /// Compares in content order, element by element as <see cref="ValueSet{T}"/> orders its elements (by code point
         /// for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise), its elements with their repeats in element order,
-        /// a shorter prefix first; <c>null</c> first. Lets containers be the elements of sets, multisets and map keys.
+        /// a shorter prefix first; <c>null</c> first. Lets containers be the elements of multisets and the keys of maps.
         /// </summary>
         /// <param name="other">The other multiset.</param>
         /// <returns>Negative, zero or positive.</returns>
@@ -269,7 +277,7 @@ namespace Eggnog
         public IEnumerator<T> GetEnumerator()
         {
             for (var i = 0; i < elements.Length; i++)
-                for (var k = 0; k < counts[i]; k++)
+                for (var k = 0L; k < counts[i]; k++)
                     yield return elements[i];
         }
 
@@ -294,7 +302,7 @@ namespace Eggnog
 
             Array.Sort(sorted, Order);
             var distinct = new List<T>(sorted.Length);
-            var counts = new List<int>(sorted.Length);
+            var counts = new List<long>(sorted.Length);
             foreach (var item in sorted)
             {
                 if (distinct.Count > 0 && Order.Compare(distinct[^1], item) == 0)
@@ -315,13 +323,13 @@ namespace Eggnog
         /// </summary>
         /// <param name="entries">The elements and their counts.</param>
         /// <returns>The multiset.</returns>
-        internal static MultiSet<T> FromCounts(IReadOnlyList<KeyValuePair<T, int>> entries)
+        internal static MultiSet<T> FromCounts(IReadOnlyList<KeyValuePair<T, long>> entries)
         {
             if (entries.Count == 0)
                 return Empty;
 
             var sorted = entries.OrderBy(e => e.Key, Order).ToArray();
-            var total = 0;
+            var total = 0L;
             foreach (var entry in sorted)
                 total = checked(total + entry.Value);
 
@@ -331,7 +339,7 @@ namespace Eggnog
         /// <summary>
         /// Adds <paramref name="count"/> occurrences of <paramref name="item"/>.
         /// </summary>
-        MultiSet<T> Add(T item, int count)
+        MultiSet<T> Add(T item, long count)
         {
             if (item is null)
                 throw new ArgumentNullException(nameof(item));
@@ -339,7 +347,7 @@ namespace Eggnog
             var at = IndexOf(item);
             if (at >= 0)
             {
-                var more = (int[])counts.Clone();
+                var more = (long[])counts.Clone();
                 more[at] = checked(more[at] + count);
                 return new(elements, more, checked(Count + count));
             }
@@ -355,10 +363,10 @@ namespace Eggnog
         /// Merges two multisets element by element: <paramref name="combine"/> over the counts of an element in both, and
         /// an element in one only kept when <paramref name="keepMissing"/>.
         /// </summary>
-        MultiSet<T> Merge(MultiSet<T> other, Func<int, int, int> combine, bool keepMissing)
+        MultiSet<T> Merge(MultiSet<T> other, Func<long, long, long> combine, bool keepMissing)
         {
             var newElements = new List<T>(elements.Length + other.elements.Length);
-            var newCounts = new List<int>(elements.Length + other.elements.Length);
+            var newCounts = new List<long>(elements.Length + other.elements.Length);
             int i = 0, j = 0;
             while (i < elements.Length || j < other.elements.Length)
             {
@@ -399,7 +407,7 @@ namespace Eggnog
                 }
             }
 
-            var total = 0;
+            var total = 0L;
             foreach (var count in newCounts)
                 total = checked(total + count);
 

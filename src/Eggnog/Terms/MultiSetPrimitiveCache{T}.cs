@@ -8,7 +8,8 @@ namespace Eggnog
     /// The multiset primitives of <see cref="Primitives"/> for one element type, made once per <typeparamref name="T"/>:
     /// egglog's first-order <c>multiset-*</c> primitives over values (src/sort/multiset.rs:128-209). <c>multiset-pick</c>
     /// and <c>multiset-pick-max</c> read the elements' cells, as egglog's do; <c>multiset-pick</c> has no result for an
-    /// empty multiset, as egglog 3.0.0's, where the pin panics (decisions row 22).
+    /// empty multiset, as egglog 3.0.0's, where the pin panics (decisions row 22). In a run or a write, the
+    /// <c>contains</c> primitives and <c>multiset-count</c> look the element's cell up in the multiset's container.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal static class MultiSetPrimitiveCache<T> where T : notnull
@@ -70,8 +71,11 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-contains</c>.
         /// </summary>
-        public static readonly Primitive<MultiSet<T>, T, bool> Contains =
-            new("bool-multiset-contains", static (m, x) => m.Contains(x), false)
+        public static readonly Primitive<MultiSet<T>, T, bool> Contains = new(
+            "bool-multiset-contains",
+            static (m, x) => m.Contains(x),
+            null,
+            static (multiset, _, result, multisetCell, itemCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell))))
         {
             FilterName = "multiset-contains",
         };
@@ -79,8 +83,11 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-not-contains</c>.
         /// </summary>
-        public static readonly Primitive<MultiSet<T>, T, bool> NotContains =
-            new("bool-multiset-not-contains", static (m, x) => m.Contains(x) == false, false)
+        public static readonly Primitive<MultiSet<T>, T, bool> NotContains = new(
+            "bool-multiset-not-contains",
+            static (m, x) => m.Contains(x) == false,
+            null,
+            static (multiset, _, result, multisetCell, itemCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell) == false)))
         {
             FilterName = "multiset-not-contains",
         };
@@ -88,8 +95,11 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-contains-swapped</c>.
         /// </summary>
-        public static readonly Primitive<T, MultiSet<T>, bool> ContainsSwapped =
-            new("bool-multiset-contains-swapped", static (x, m) => m.Contains(x), false)
+        public static readonly Primitive<T, MultiSet<T>, bool> ContainsSwapped = new(
+            "bool-multiset-contains-swapped",
+            static (x, m) => m.Contains(x),
+            null,
+            static (_, multiset, result, itemCell, multisetCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell))))
         {
             FilterName = "multiset-contains-swapped",
         };
@@ -97,8 +107,11 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-not-contains-swapped</c>.
         /// </summary>
-        public static readonly Primitive<T, MultiSet<T>, bool> NotContainsSwapped =
-            new("bool-multiset-not-contains-swapped", static (x, m) => m.Contains(x) == false, false)
+        public static readonly Primitive<T, MultiSet<T>, bool> NotContainsSwapped = new(
+            "bool-multiset-not-contains-swapped",
+            static (x, m) => m.Contains(x) == false,
+            null,
+            static (_, multiset, result, itemCell, multisetCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell) == false)))
         {
             FilterName = "multiset-not-contains-swapped",
         };
@@ -133,14 +146,19 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-count</c>: an element's count, 0 when it does not occur.
         /// </summary>
-        public static readonly Primitive<MultiSet<T>, T, long> Count = new("multiset-count", static (m, x) => m.CountOf(x), false);
+        public static readonly Primitive<MultiSet<T>, T, long> Count = new(
+            "multiset-count",
+            static (m, x) => m.CountOf(x),
+            null,
+            static (multiset, _, result, multisetCell, itemCell) =>
+                (true, ((ColumnType<long>)result).Encode(((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell))));
 
         /// <summary>
         /// <c>multiset-sum-multisets</c>: the sum of a multiset of multisets, each counted as often as it occurs.
         /// </summary>
         public static readonly Primitive<MultiSet<MultiSet<T>>, MultiSet<T>> SumMultiSets = new("multiset-sum-multisets", static outer =>
         {
-            var counts = new Dictionary<T, int>();
+            var counts = new Dictionary<T, long>();
             foreach (var (inner, times) in outer.Counts)
                 foreach (var (item, count) in inner.Counts)
                     counts[item] = checked(counts.GetValueOrDefault(item) + count * times);
@@ -156,9 +174,14 @@ namespace Eggnog
                 return false;
             }
 
-            result = count == 0 ? MultiSet<T>.Empty : MultiSet<T>.FromCounts([new KeyValuePair<T, int>(item, checked((int)count))]);
+            result = count == 0 ? MultiSet<T>.Empty : MultiSet<T>.FromCounts([new KeyValuePair<T, long>(item, count)]);
             return true;
         }
+
+        static bool Occurs(ColumnType multiset, uint multisetCell, uint itemCell) =>
+            ((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell) > 0;
+
+        static uint Encode(ColumnType result, bool value) => ((ColumnType<bool>)result).Encode(value);
 
         static bool TryRemove(MultiSet<T> multiset, T item, out MultiSet<T> result)
         {

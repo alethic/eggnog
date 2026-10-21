@@ -127,8 +127,9 @@ A column holds either a class or a value.
   with egglog's first-order `multiset-*` primitives as `Primitives.MultiSet*`). It enumerates in element order, and its
   container keeps the elements in cell order, the order of its term, `(multiset-of a a b)`. `MultiSetPick` and
   `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would
-  intern in its own order, gives no result where the order decides. Containers compare element by element, so they can
-  be the elements of sets and multisets and the keys of maps.
+  intern in its own order, gives no result where the order decides. Its counts are `long`s, as egglog's are `usize`s.
+  Containers compare element by element, so they can be the elements of multisets and the keys of maps; a set, a base
+  value, holds no containers until sets are egglog's containers.
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
 inline; a container (a pair, a vector, a map, a multiset) is a container id; every other value is interned and stored

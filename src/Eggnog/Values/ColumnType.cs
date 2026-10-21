@@ -154,6 +154,13 @@ namespace Eggnog
         internal abstract int CompareCells(uint x, uint y);
 
         /// <summary>
+        /// Gets whether values of the type can be kept in <see cref="ValueSetOrder{T}"/> order, as the elements of a
+        /// set, a multiset or a map's keys are, and as <see cref="ValueLattice.Max{T}"/> orders them: a string or a
+        /// comparable type, or a container whose elements are.
+        /// </summary>
+        internal abstract bool IsOrdered { get; }
+
+        /// <summary>
         /// Gets the class a value of a sort wraps.
         /// </summary>
         /// <param name="value">The value, of <see cref="ClrType"/>.</param>

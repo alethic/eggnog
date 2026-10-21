@@ -32,6 +32,13 @@ namespace Eggnog
         public Type ValueType { get; }
 
         /// <summary>
+        /// Gets whether the lattice orders its values, as <see cref="Max{T}"/> and <see cref="Min{T}"/> do, so that a
+        /// function's output type must hold only comparable values: a container of a type that is not comparable is
+        /// <see cref="IComparable{T}"/> but cannot compare.
+        /// </summary>
+        internal bool Ordered { get; init; }
+
+        /// <summary>
         /// The intersection lattice: merge ∩, case join ∪ (a domain: the values something can hold).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
@@ -64,7 +71,10 @@ namespace Eggnog
         public static ValueLattice<T> Max<T>() where T : IComparable<T> =>
             new("max",
                 static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b,
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b);
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b)
+            {
+                Ordered = true,
+            };
 
         /// <summary>
         /// The minimum lattice: merge min, case join max (an upper bound).
@@ -79,7 +89,10 @@ namespace Eggnog
         public static ValueLattice<T> Min<T>() where T : IComparable<T> =>
             new("min",
                 static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b,
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b);
+                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b)
+            {
+                Ordered = true,
+            };
 
         /// <summary>
         /// Gets the lattice's name.

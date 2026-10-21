@@ -20,6 +20,8 @@ namespace Eggnog
         /// <param name="entries">The entries.</param>
         /// <returns>The map.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/>, a key or a value is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">Two keys cannot be compared: the key type, or a type a key holds,
+        /// is not comparable.</exception>
         public static Map<TKey, TValue> Of<TKey, TValue>(params (TKey Key, TValue Value)[] entries)
             where TKey : notnull
             where TValue : notnull
@@ -36,6 +38,8 @@ namespace Eggnog
         /// <param name="entries">The entries.</param>
         /// <returns>The map.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/>, a key or a value is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">Two keys cannot be compared: the key type, or a type a key holds,
+        /// is not comparable.</exception>
         public static Map<TKey, TValue> From<TKey, TValue>(IEnumerable<KeyValuePair<TKey, TValue>> entries)
             where TKey : notnull
             where TValue : notnull

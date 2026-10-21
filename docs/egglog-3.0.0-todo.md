@@ -139,7 +139,9 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   `src/sort/bigrat.rs:35`, `src/sort/i64.rs:42`. Settled in [decisions](engine/decisions.md) row 22: the library's
   `log2` and `BigInt` shifts follow 3.0.0 (`Primitives.Log2`, `BigIntegerPrimitives`), and so do `vec-set` and
   `vec-remove` (`Primitives.VecSet`, `VecRemove`) and `multiset-pick` (`Primitives.MultiSetPick`); it has no `BigRat`
-  primitives.
+  primitives. 3.0.0 also gives `multiset-sum-multisets` no result where a count overflows (`src/sort/multiset.rs:767`,
+  `checked_mul`), where the pin multiplies; the library's counts are `long`s, and its `MultiSetSumMultiSets` throws
+  `OverflowException` there, not followed yet.
 - [ ] **Panics made errors** (#920). New error variants include `RuleAlreadyExists`, `DesugarError`,
   `UnsupportedInputType`, `ExtractError` for a negative count or a deleted or subsumed value, `BadPresortArguments`,
   `AmbiguousPrimitive` and `UnresolvedPrimitive`. Most are frontend errors. Upstream: `src/lib.rs:2887-2950`,

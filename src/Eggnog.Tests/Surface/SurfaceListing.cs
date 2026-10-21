@@ -21,7 +21,7 @@ namespace Eggnog.Tests.Surface
         /// </summary>
         static readonly HashSet<string> ListedInterfaces = new(StringComparer.Ordinal)
         {
-            "IDisposable", "IEquatable`1", "IReadOnlyList`1", "IReadOnlyCollection`1", "IEnumerable`1", "IEnumerable",
+            "IComparable`1", "IDisposable", "IEquatable`1", "IReadOnlyList`1", "IReadOnlyCollection`1", "IEnumerable`1", "IEnumerable",
         };
 
         /// <summary>

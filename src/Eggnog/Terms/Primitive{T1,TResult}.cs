@@ -65,7 +65,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
-        /// result, and for one over cells it always throws.
+        /// result, and for one over the graph's cells, such as <see cref="Primitives.MultiSetPick{T}"/>, it always
+        /// throws <see cref="InvalidOperationException"/>.
         /// </summary>
         public Func<T1, TResult> Function { get; }
 
@@ -87,8 +88,13 @@ namespace Eggnog
         /// <param name="a">The first argument.</param>
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
+        /// <exception cref="InvalidOperationException">The primitive reads the graph's cells, as
+        /// <see cref="Primitives.MultiSetPick{T}"/> does; it runs only in a graph.</exception>
         public bool TryInvoke(T1 a, [MaybeNullWhen(false)] out TResult result)
         {
+            if (cells is not null)
+                throw new InvalidOperationException($"Primitive '{Name}' reads the graph's cells; it has no function of values alone.");
+
             if (partial is null)
             {
                 result = Function(a);

@@ -612,6 +612,9 @@ namespace Eggnog
                     if (lattice is not null && lattice.ValueType != output!.ClrType)
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));
 
+                    if (lattice is { Ordered: true } && output!.IsOrdered == false)
+                        throw new ArgumentException($"Lattice '{lattice.Name}' orders the values of {output!.Name}, which holds an element that is not comparable.", nameof(lattice));
+
                     // A case join combines a lifted function's base values; a container's cell is an id.
                     if (lattice is not null && output is IContainerColumnType && (options.Lift ?? role == TableRole.Fact)
                         && lattice.CreateCaseJoin(output, name) is not null)

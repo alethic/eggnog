@@ -61,6 +61,8 @@ namespace Eggnog
         /// <param name="value">The multiset.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentNullException">The multiset is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">Two elements the multiset keeps apart are one value to the element
+        /// type.</exception>
         /// <exception cref="OverflowException">The graph has no ids left.</exception>
         internal override uint Encode(MultiSet<T> value)
         {
@@ -70,7 +72,11 @@ namespace Eggnog
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = element.Encode(items[i]);
 
-            return env.GetOrInsertShared(Relations.MultiSetContainer.FromCounts(false, cells, counts), counters);
+            var container = Relations.MultiSetContainer.FromCounts(false, cells, counts);
+            if (container.Elements.Length != items.Length)
+                throw Merged(value);
+
+            return env.GetOrInsertShared(container, counters);
         }
 
         /// <inheritdoc />
@@ -84,7 +90,11 @@ namespace Eggnog
                 if (element.TryEncodeExisting(items[i], out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(Relations.MultiSetContainer.FromCounts(false, cells, counts), out cell);
+            var container = Relations.MultiSetContainer.FromCounts(false, cells, counts);
+            if (container.Elements.Length != items.Length)
+                throw Merged(value);
+
+            return env.TryGetId(container, out cell);
         }
 
         /// <summary>
@@ -97,7 +107,7 @@ namespace Eggnog
         internal override MultiSet<T> Decode(uint cell, Scope? scope)
         {
             var multiset = Read(cell);
-            var entries = new KeyValuePair<T, int>[multiset.Elements.Length];
+            var entries = new KeyValuePair<T, long>[multiset.Elements.Length];
             for (var i = 0; i < entries.Length; i++)
                 entries[i] = new(element.Decode(multiset.Elements[i], scope), multiset.Counts[i]);
 
@@ -112,7 +122,7 @@ namespace Eggnog
         /// <returns>The literal.</returns>
         internal override string FormatValue(MultiSet<T> value)
         {
-            var parts = new List<string>(value.Count);
+            var parts = new List<string>();
             foreach (var item in value)
                 parts.Add(element.FormatValue(item));
 
@@ -121,6 +131,26 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override string DebugValue(MultiSet<T> value) => FormatValue(value);
+
+        /// <summary>
+        /// Formats a multiset's cell as egglog prints it, its elements in cell order, the order its extracted term
+        /// lists.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>The literal.</returns>
+        internal override string FormatCell(uint cell)
+        {
+            var multiset = Read(cell);
+            var parts = new List<string>();
+            for (var i = 0; i < multiset.Elements.Length; i++)
+            {
+                var part = element.FormatCell(multiset.Elements[i]);
+                for (var k = 0L; k < multiset.Counts[i]; k++)
+                    parts.Add(part);
+            }
+
+            return parts.Count == 0 ? "(multiset-of)" : "(multiset-of " + string.Join(" ", parts) + ")";
+        }
 
         /// <summary>
         /// Compares two multisets lexicographically over their elements with their repeats in element order, a shorter
@@ -173,13 +203,27 @@ namespace Eggnog
         {
             var multiset = Read(cell);
             for (var i = 0; i < multiset.Elements.Length; i++)
-                for (var k = 0; k < multiset.Counts[i]; k++)
+                for (var k = 0L; k < multiset.Counts[i]; k++)
                     destination.Add((element, multiset.Elements[i]));
         }
 
         /// <inheritdoc />
         /// <remarks><c>multiset-of</c>, as egglog's <c>serialized_name</c> (multiset.rs:221-223).</remarks>
         public string SerializedName(uint cell) => "multiset-of";
+
+        /// <summary>
+        /// Gets how many times an element occurs in a multiset's cell, by the element's cell, without decoding the
+        /// multiset: <c>multiset-count</c> over cells.
+        /// </summary>
+        /// <param name="cell">The multiset's cell.</param>
+        /// <param name="elementCell">The element's cell.</param>
+        /// <returns>Its count; 0 when it does not occur.</returns>
+        internal long CountOfCell(uint cell, uint elementCell)
+        {
+            var multiset = Read(cell);
+            var at = multiset.Elements.BinarySearch(elementCell);
+            return at >= 0 ? multiset.Counts[at] : 0;
+        }
 
         /// <summary>
         /// Picks the element of least cell: egglog's <c>multiset-pick</c>, the first key of its <c>BTreeMap</c>
@@ -249,7 +293,7 @@ namespace Eggnog
         /// <returns>Whether the element is determined.</returns>
         internal bool TryPickMaxValue(MultiSet<T> value, out T picked)
         {
-            var max = 0;
+            var max = 0L;
             foreach (var (_, count) in value.Counts)
                 max = Math.Max(max, count);
 
@@ -271,7 +315,7 @@ namespace Eggnog
         /// Splits a multiset's distinct elements, of the counts <paramref name="keep"/> accepts, into those with a cell,
         /// in cell order, and those without.
         /// </summary>
-        (List<(uint Cell, T Item)> Interned, List<T> Fresh) Classify(MultiSet<T> value, Func<int, bool> keep)
+        (List<(uint Cell, T Item)> Interned, List<T> Fresh) Classify(MultiSet<T> value, Func<long, bool> keep)
         {
             var interned = new List<(uint Cell, T Item)>();
             var fresh = new List<T>();
@@ -302,10 +346,10 @@ namespace Eggnog
         /// <summary>
         /// Gets a multiset's distinct elements and their counts, in element order.
         /// </summary>
-        static (T[] Items, int[] Counts) Split(MultiSet<T> value)
+        static (T[] Items, long[] Counts) Split(MultiSet<T> value)
         {
             var items = new List<T>();
-            var counts = new List<int>();
+            var counts = new List<long>();
             foreach (var (item, count) in value.Counts)
             {
                 items.Add(item);
@@ -314,6 +358,13 @@ namespace Eggnog
 
             return (items.ToArray(), counts.ToArray());
         }
+
+        /// <summary>
+        /// Makes the error for a multiset whose order keeps two elements apart that the element type's codec stores as
+        /// one.
+        /// </summary>
+        ArgumentException Merged(MultiSet<T> multiset) =>
+            new($"Two elements of the multiset {multiset} are distinct in their order but one value to {element.Name}, which stores them in one cell: the type's comparer must agree with its equality.", nameof(multiset));
 
         /// <summary>
         /// Reads the container of a cell.

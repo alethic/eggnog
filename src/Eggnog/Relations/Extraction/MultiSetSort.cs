@@ -44,7 +44,7 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException($"No multiset of sort {Name} has id {value}.");
 
             for (var i = 0; i < multiset.Elements.Length; i++)
-                for (var k = 0; k < multiset.Counts[i]; k++)
+                for (var k = 0L; k < multiset.Counts[i]; k++)
                     destination.Add(new SortedValue(Element, new Value(multiset.Elements[i])));
         }
 
