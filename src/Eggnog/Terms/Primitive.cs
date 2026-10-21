@@ -6,8 +6,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A pure, deterministic, thread-safe function over values (never over classes), or for <c>ordering-min</c> and
-    /// <c>ordering-max</c> over their cells. An exception thrown by it fails the rule with a
+    /// A pure, deterministic, thread-safe function over values and classes, as egglog's primitives take any sort, or
+    /// for <c>ordering-min</c> and <c>ordering-max</c> over their cells. An exception thrown by it fails the rule with a
     /// <see cref="RuleEvaluationException"/>; a call into any graph from it throws an
     /// <see cref="InvalidOperationException"/>. Named primitives render by name, and a filter over one as egglog writes
     /// it, its fallible form (<c>&lt;</c> for <c>bool-&lt;</c>) or <c>(guard …)</c>; lambdas (<see cref="Compute"/>,
@@ -136,6 +136,55 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Creates a named primitive of any number of parameters, each of its own type, as egglog's primitives take,
+        /// where the typed <c>Create</c> overloads stop at four: <paramref name="function"/> gets the arguments as
+        /// objects, one per parameter, in a new list on each call, which it may keep.
+        /// </summary>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: value types or sorts.</param>
+        /// <param name="function">The function: pure, deterministic and thread-safe.</param>
+        /// <returns>The primitive.</returns>
+        /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
+        public static PrimitiveN<TResult> Create<TResult>(string name, IReadOnlyList<Type> parameters, Func<IReadOnlyList<object>, TResult> function)
+        {
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(function);
+            return new PrimitiveN<TResult>(name, ParameterArray(parameters), function, null);
+        }
+
+        /// <summary>
+        /// Creates a named partial primitive of any number of parameters, as egglog's <c>-?&gt;</c> primitives are: where
+        /// <paramref name="function"/> returns <c>false</c> the call has no result (<see cref="Primitive"/>).
+        /// </summary>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: value types or sorts.</param>
+        /// <param name="function">The function: pure, deterministic and thread-safe.</param>
+        /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws
+        /// <see cref="InvalidOperationException"/> where there is no result.</returns>
+        /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
+        public static PrimitiveN<TResult> CreatePartial<TResult>(string name, IReadOnlyList<Type> parameters, PartialFuncN<TResult> function)
+        {
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(function);
+            return new PrimitiveN<TResult>(name, ParameterArray(parameters), arguments => function(arguments, out var result) ? result : throw NoResult(name), function);
+        }
+
+        /// <summary>
+        /// Copies parameter types, refusing a missing one.
+        /// </summary>
+        static Type[] ParameterArray(IReadOnlyList<Type> parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters);
+            var types = new Type[parameters.Count];
+            for (var i = 0; i < types.Length; i++)
+                types[i] = parameters[i] ?? throw new ArgumentException($"Parameter type {i} is null.", nameof(parameters));
+
+            return types;
+        }
+
+        /// <summary>
         /// Creates a named primitive of any number of arguments of one type, as egglog's <c>or</c> and <c>set-of</c> are.
         /// </summary>
         /// <typeparam name="T">The arguments' type.</typeparam>
@@ -248,7 +297,8 @@ namespace Eggnog
         /// <summary>
         /// Decodes each argument cell with its parameter's column type, calls the function and encodes the result
         /// (interning a new value): what a head and a case assumption do, where a partial primitive's call with no result
-        /// throws, as its function does. Allocates nothing beyond what the function allocates and what interning costs.
+        /// throws, as its function does. Allocates nothing beyond what the function allocates and what interning costs,
+        /// except a <see cref="PrimitiveN{TResult}"/>'s argument list.
         /// </summary>
         /// <param name="arguments">The argument cells.</param>
         /// <param name="parameters">The parameters' column types.</param>

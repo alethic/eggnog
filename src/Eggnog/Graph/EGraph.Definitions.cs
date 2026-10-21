@@ -454,6 +454,86 @@ namespace Eggnog
             DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, options, null, 0);
 
         /// <summary>
+        /// Defines a relation over any number of key columns, as egglog's relations take, where the typed
+        /// <c>DefineRelation</c> overloads stop at four: its facts are <see cref="RelationN.Of"/> of one argument per
+        /// column.
+        /// </summary>
+        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
+        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <returns>The relation.</returns>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
+        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
+        public RelationN DefineRelationN(string name, IReadOnlyList<Type> keys, TableOptions? options = null) =>
+            DefineTable(static () => new RelationN(), name, TableKind.Relation, TypesOf(keys), null, options, null, 0);
+
+        /// <summary>
+        /// Defines a function over any number of key columns, as egglog's functions take, where the typed
+        /// <c>DefineFunction</c> overloads stop at four: its terms are <see cref="FunctionN{TOut}.Of"/> of one argument per
+        /// key. Otherwise as those overloads, with or without a lattice.
+        /// </summary>
+        /// <typeparam name="TOut">The output type: a value type, or a sort.</typeparam>
+        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
+        /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <returns>The function.</returns>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
+        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
+            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, lattice, 0);
+
+        /// <summary>
+        /// Defines a function over any number of key columns whose merge is not a lattice (<see cref="FunctionMerge"/>),
+        /// as the typed overloads with a merge do; only the root writes it.
+        /// </summary>
+        /// <typeparam name="TOut">The output type: a value type, or a sort.</typeparam>
+        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
+        /// <param name="merge">The merge of the old and the new value.</param>
+        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <returns>The function.</returns>
+        /// <exception cref="ArgumentException">As the typed overloads with a merge.</exception>
+        /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, FunctionMerge<TOut> merge, TableOptions? options = null) =>
+            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, null, 0,
+                merge: merge.Definition);
+
+        /// <summary>
+        /// Defines a constructor over any number of key columns, as egglog's constructors take, where the typed
+        /// <c>DefineConstructor</c> overloads stop at four: its terms are <see cref="ConstructorN{TSort}.Of"/> of one
+        /// argument per key.
+        /// </summary>
+        /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
+        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
+        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
+        /// is always a term.</param>
+        /// <returns>The constructor.</returns>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
+        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+            DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), options, null, cost);
+
+        /// <summary>
+        /// Gets the column types of key types, each registered with this graph.
+        /// </summary>
+        /// <exception cref="ArgumentException">A type is unknown.</exception>
+        ColumnType[] TypesOf(IReadOnlyList<Type> keys)
+        {
+            ArgumentNullException.ThrowIfNull(keys);
+            var types = new ColumnType[keys.Count];
+            for (var i = 0; i < types.Length; i++)
+                types[i] = Values.TypeOf(keys[i] ?? throw new ArgumentNullException(nameof(keys), $"Key {i} is null."));
+
+            return types;
+        }
+
+        /// <summary>
         /// The untyped function definition: any number of keys, where the typed overloads stop at four.
         /// </summary>
         /// <param name="name">The name.</param>
