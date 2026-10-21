@@ -13,10 +13,10 @@ namespace Eggnog.Relations
         // The extraction graph, in flat arrays that only grow.
         //
         // A class is an (eq sort, canonical id) pair, with its cheapest cost once Knuth's algorithm has made it final
-        // (unknown until then, classKnown). A node is a row of a function in an extractor slot; it belongs to the class in its output
-        // column and depends on its child occurrences: each e-class among its child columns, and each e-class among the
-        // elements of its container children (recursively), with multiplicity. Base values and containers' own costs,
-        // and its head's cost, fold into the node's constant cost. Its position is where the row is stored: its row id,
+        // (unknown until then, classKnown). A node is a row of a function in an extractor slot; it belongs to the class
+        // in its output column and depends on its child occurrences: each e-class among its child columns, and each
+        // e-class among the elements of its container children (recursively), with multiplicity. Base values and
+        // containers' own costs, and its head's cost, fold into the node's constant cost. Its position is where the row is stored: its row id,
         // above the index of its layer in a child context's view, or its place in a scan. A class's parent occurrences,
         // linked through occNext, are the (node, occurrence) pairs that wait for it to become final.
 

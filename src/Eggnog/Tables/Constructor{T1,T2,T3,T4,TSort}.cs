@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// A term constructor over 4 key columns, defined with
-    /// <see cref="EGraph.DefineConstructor{T1, T2, T3, T4, TSort}(string, long, TableOptions)"/>.
+    /// <see cref="EGraph.DefineConstructor{T1, T2, T3, T4, TSort}(string, ulong, TableOptions)"/>.
     /// </summary>
     /// <typeparam name="T1">The type of key 1.</typeparam>
     /// <typeparam name="T2">The type of key 2.</typeparam>

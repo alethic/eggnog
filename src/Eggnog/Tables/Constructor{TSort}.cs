@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// A term constructor over 0 key columns, defined with
-    /// <see cref="EGraph.DefineConstructor{TSort}(string, long, TableOptions)"/>.
+    /// <see cref="EGraph.DefineConstructor{TSort}(string, ulong, TableOptions)"/>.
     /// </summary>
     /// <typeparam name="TSort">The sort of the terms.</typeparam>
     public sealed class Constructor<TSort> : ConstructorHandle where TSort : struct, ISort<TSort>

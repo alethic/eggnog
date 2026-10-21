@@ -85,11 +85,10 @@ namespace Eggnog.Relations
         /// children), replacing any cost given for the function before.
         /// </summary>
         /// <param name="function">The function.</param>
-        /// <param name="cost">The head cost; at least 0.</param>
+        /// <param name="cost">The head cost.</param>
         /// <returns>The new model.</returns>
         public CostModel WithFunctionCost(FunctionId function, ulong cost)
         {
-
             var model = new CostModel(this);
             model.nodeCosts.Remove(function);
             model.functionCosts[function] = cost;
@@ -118,7 +117,7 @@ namespace Eggnog.Relations
         /// Returns a model in which every value of the base sort <paramref name="sort"/> costs <paramref name="cost"/>.
         /// </summary>
         /// <param name="sort">A base sort.</param>
-        /// <param name="cost">The cost; at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
         /// <exception cref="ArgumentException"><paramref name="sort"/> is not a base sort.</exception>
         public CostModel WithBaseValueCost(Sort sort, ulong cost)
@@ -153,11 +152,10 @@ namespace Eggnog.Relations
         /// <summary>
         /// Returns a model in which values of base sorts without an override cost <paramref name="cost"/>.
         /// </summary>
-        /// <param name="cost">The cost; at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
         public CostModel WithDefaultBaseValueCost(ulong cost)
         {
-
             var model = new CostModel(this);
             model.DefaultBaseValueCost = cost;
             return model;
@@ -168,7 +166,7 @@ namespace Eggnog.Relations
         /// <paramref name="cost"/> plus its elements' costs.
         /// </summary>
         /// <param name="sort">A container sort.</param>
-        /// <param name="cost">The container's own cost; at least 0.</param>
+        /// <param name="cost">The container's own cost.</param>
         /// <returns>The new model.</returns>
         /// <exception cref="ArgumentException"><paramref name="sort"/> is not a container sort.</exception>
         public CostModel WithContainerCost(Sort sort, ulong cost)
