@@ -182,6 +182,37 @@ namespace Eggnog.Relations
             if (state.InChildContext && HoldsIds)
                 ThrowInternedInChild();
 
+            return GetOrInsertCore(container, state, null);
+        }
+
+        /// <summary>
+        /// Returns the id of <paramref name="container"/>, a container that holds no e-class ids, interning it with a
+        /// fresh id from <see cref="Counter"/> in <paramref name="counters"/> if it is new, without an execution state:
+        /// what <see cref="GetOrInsert"/> does for such a container, whose id is global and whose contents never change,
+        /// in any context and on any thread. The library interns its containers of values so, as it interns base
+        /// values. Thread-safe: equal containers interned concurrently get one id.
+        /// </summary>
+        /// <param name="container">The container; it must not change afterwards.</param>
+        /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>
+        /// <returns>The container's id.</returns>
+        /// <exception cref="InvalidOperationException">The containers hold e-class ids, whose interning needs an
+        /// execution state.</exception>
+        /// <exception cref="OverflowException">The counter has no ids left.</exception>
+        public uint GetOrInsertShared(in TContainer container, CounterSet counters)
+        {
+            ArgumentNullException.ThrowIfNull(counters);
+            if (HoldsIds)
+                throw new InvalidOperationException($"A container of {typeof(TContainer).Name} holds e-class ids, so it is interned through an execution state.");
+
+            return GetOrInsertCore(container, null, counters);
+        }
+
+        /// <summary>
+        /// Looks <paramref name="container"/> up, interning it if it is new with an id minted through
+        /// <paramref name="state"/>, or when that is <c>null</c> from <paramref name="counters"/>.
+        /// </summary>
+        uint GetOrInsertCore(in TContainer container, ExecutionState? state, CounterSet? counters)
+        {
             var hash = container.ComputeHash();
             var shard = toId[shardData.ShardOf(hash)];
             uint id;
@@ -195,9 +226,9 @@ namespace Eggnog.Relations
                 // A new eq-sort container may name an id some child displaced; the children re-run their eq-container
                 // guard before they are read again. A frozen database interns none: its descendants could not be told.
                 if (HoldsIds)
-                    NoteNewEqContainer(state);
+                    NoteNewEqContainer(state!);
 
-                id = MintId(state);
+                id = state is not null ? MintId(state) : Store.CheckId(counters!.Increment(counter));
                 var entry = new ContainerEntry<TContainer>(container, hash, id);
                 AddById(entry);
                 shard.InsertInSlot(hash, ~slot, entry);

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -14,7 +15,8 @@ namespace Eggnog
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>ValueSet&lt;string&gt;</c>
     /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c> "Set&lt;i32&gt;". Sorts join through
-    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types through the <c>Register*</c> methods. Thread-safe.
+    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and pairs through the <c>Register*</c> methods.
+    /// Thread-safe.
     /// </summary>
     /// <remarks>
     /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
@@ -25,19 +27,22 @@ namespace Eggnog
     public sealed class ValueStore
     {
 
+        readonly EGraph graph;
         readonly Relations.BaseValues values;
         readonly object sync = new();
+        Relations.ContainerEnv<Relations.PairContainer>? pairs;
         readonly ConcurrentDictionary<Type, ColumnType> byType = new();
         readonly Dictionary<string, ColumnType> byName = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Initializes the store of a graph with the built-in types, registering their codecs with
-        /// <paramref name="values"/>.
+        /// Initializes the store of a graph with the built-in types, registering their codecs with the graph's base value
+        /// registry.
         /// </summary>
-        /// <param name="values">The graph's base value registry.</param>
-        internal ValueStore(Relations.BaseValues values)
+        /// <param name="graph">The graph, whose <see cref="EGraph.BaseValues"/> is set.</param>
+        internal ValueStore(EGraph graph)
         {
-            this.values = values;
+            this.graph = graph;
+            values = graph.BaseValues;
             Add(new BaseColumnType<Relations.Int64Codec, long>("i64", values, static v => v.ToString(CultureInfo.InvariantCulture), Comparer<long>.Default));
             Add(new WidenedColumnType<int>("i32", values, static v => v, static v => checked((int)v), static v => v.ToString(CultureInfo.InvariantCulture)));
             Add(new BaseColumnType<Relations.BooleanCodec, bool>("bool", values, static v => v ? "true" : "false", Comparer<bool>.Default));
@@ -54,12 +59,13 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
-        /// constant that is not stored inline (strings, doubles, sets, registered values, and <c>long</c>s outside
-        /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge, a split each new value its
-        /// cases assume, a lift each new case join; and a rule or query interns its constants when it is defined. Reads,
-        /// checks and query matches never intern.
+        /// constant that is not stored inline (strings, doubles, sets, pairs, registered values, and <c>long</c>s outside
+        /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge,
+        /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
+        /// when it is defined. Reads, checks and query matches never intern. A pair also takes an id from the graph's id
+        /// counter, as egglog's containers do.
         /// </remarks>
-        public long InternedCount => values.InternedCount;
+        public long InternedCount => values.InternedCount + (Volatile.Read(ref pairs)?.Count ?? 0);
 
         /// <summary>
         /// Gets the column type of <typeparamref name="T"/>.
@@ -67,8 +73,8 @@ namespace Eggnog
         /// <typeparam name="T">The CLR type.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
-        /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
-        /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
+        /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterPair{T1, T2}"/>,
+        /// <see cref="RegisterEnum{TEnum}"/> or <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
         /// <summary>
@@ -119,6 +125,9 @@ namespace Eggnog
 
             if (IsSet(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a set: register it with ValueStore.RegisterSet.");
+
+            if (IsPair(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a pair: register it with ValueStore.RegisterPair.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
@@ -179,6 +188,53 @@ namespace Eggnog
                     set => set.Count == 0 ? "(set-of)" : "(set-of " + string.Join(" ", set.Select(element.FormatValue)) + ")",
                     order);
                 Add(type);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Registers the pair type of <typeparamref name="T1"/> and <typeparamref name="T2"/>, egglog's
+        /// <c>(sort … (Pair T1 T2))</c>, named <c>Pair&lt;{first name}, {second name}&gt;</c>, or gets it when it is
+        /// registered already. A pair is egglog's <c>Pair</c> container: its cell is a container id from the graph's id
+        /// counter, equal pairs have one cell, and its primitives are <see cref="Primitives.PairOf{T1, T2}"/>,
+        /// <see cref="Primitives.PairFirst{T1, T2}"/> and <see cref="Primitives.PairSecond{T1, T2}"/>. It extracts as
+        /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. The elements are value types,
+        /// pairs included; pairs of classes, egglog's eq-sort containers, are not supported yet. The first pair type
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain.
+        /// </summary>
+        /// <typeparam name="T1">The type of the first element; registered, and not a sort.</typeparam>
+        /// <typeparam name="T2">The type of the second element; registered, and not a sort.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An element type is unknown or a sort, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first pair type is registered while another thread is using
+        /// the writable root.</exception>
+        public ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
+            where T1 : notnull
+            where T2 : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Pair<T1, T2>>(out var existing))
+                return existing;
+
+            var first = TypeOf<T1>();
+            var second = TypeOf<T2>();
+            foreach (var element in new ColumnType[] { first, second })
+                if (element.Kind == ColumnKind.Sort)
+                    throw new ArgumentException($"Pairs hold values only so far; {element.Name} is a sort, and pairs of classes are egglog's eq-sort containers, which are not supported yet.");
+
+            // Outside the store's lock: the environment's registration takes the graph's definition lock, which
+            // DefineSort takes before this lock.
+            var env = graph.PairContainers();
+            lock (sync)
+            {
+                if (TryGetType<Pair<T1, T2>>(out existing))
+                    return existing;
+
+                var name = $"Pair<{first.Name}, {second.Name}>";
+                CheckFree(typeof(Pair<T1, T2>), name);
+                var type = new PairColumnType<T1, T2>(name, first, second, env, graph.Engine.Counters);
+                Add(type);
+                Volatile.Write(ref pairs, env);
                 return type;
             }
         }
@@ -264,7 +320,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
-        /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
         [UnconditionalSuppressMessage("Trimming", "IL2067",
             Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
                 + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
@@ -273,6 +329,9 @@ namespace Eggnog
         {
             if (IsSet(clrType))
                 return "ValueStore.RegisterSet";
+
+            if (IsPair(clrType))
+                return "ValueStore.RegisterPair";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
@@ -303,6 +362,13 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a set type.</returns>
         internal static bool IsSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a pair type, a <see cref="Pair{T1, T2}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a pair type.</returns>
+        internal static bool IsPair(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Pair<,>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

@@ -282,6 +282,17 @@ ref struct Eggnog.NodeView
     Int32 Arity { get }
     Object Get(Int32 column)
     T Get<T>(Int32 column)
+struct Eggnog.Pair<T1, T2> : IEquatable<Pair<T1, T2>>
+    Boolean Equals(Pair<T1, T2> other)
+    T1 First { get }
+    T2 Second { get }
+    Void Deconstruct(out T1 first, out T2 second)
+    ctor(T1 first, T2 second)
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(Pair<T1, T2> left, Pair<T1, T2> right)
+    static Boolean op_Inequality(Pair<T1, T2> left, Pair<T1, T2> right)
 delegate Eggnog.PartialFuncN<TResult>
     Boolean Invoke(IReadOnlyList<Object> arguments, out TResult result)
 delegate Eggnog.PartialFunc<T1, TResult>
@@ -352,10 +363,13 @@ static class Eggnog.Primitives
     static Primitive<Int64, Int64> BitwiseNot { get }
     static Primitive<Int64, Int64> Log2 { get }
     static Primitive<Int64, String> Format { get }
+    static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
+    static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
     static Primitive<T, T, Boolean> NotEqual<T>()
     static Primitive<T, T, T> OrderingMax<T>()
     static Primitive<T, T, T> OrderingMin<T>()
     static Primitive<T, ValueSet<T>> Singleton<T>()
+    static Primitive<T1, T2, Pair<T1, T2>> PairOf<T1, T2>()
     static Primitive<ValueSet<T>, Boolean> IsEmpty<T>()
     static Primitive<ValueSet<T>, Int64> Count<T>()
     static Primitive<ValueSet<T>, T, Boolean> Contains<T>()
@@ -741,6 +755,7 @@ sealed class Eggnog.ValueSet<T> : IEnumerable, IEnumerable<T>, IEquatable<ValueS
     static ValueSet<T> Empty { get }
 sealed class Eggnog.ValueStore
     Boolean TryGetType<T>(out ColumnType<T> type)
+    ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
     ColumnType<T> Register<T : IEquatable<T>>(String name, IComparer<T> order = null, Func<T, String> format = null)
     ColumnType<T> TypeOf<T>()
     ColumnType<TEnum> RegisterEnum<TEnum : struct, Enum>()

@@ -543,6 +543,8 @@ namespace Eggnog
                     return member.ToString();
                 case IFormattable formattable:
                     return formattable.ToString(null, CultureInfo.InvariantCulture);
+                case IPair pair:
+                    return "(pair " + DefaultLiteral(pair.FirstValue) + " " + DefaultLiteral(pair.SecondValue) + ")";
             }
 
             var type = value.GetType();

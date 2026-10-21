@@ -112,13 +112,44 @@ namespace Eggnog
         public static Primitive<ValueSet<T>, long> Count<T>() where T : notnull => PrimitiveCache<T>.Count;
 
         /// <summary>
-        /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>; as a filter, egglog's <c>!=</c>. egglog's is generic over every sort; this one is
-        /// generic over the value types, since primitives never take classes (classes are told apart with
-        /// <see cref="Term{T}.IsNot(Term{T})"/>).
+        /// <c>bool-!=</c>: whether two values differ, as a <c>bool</c>; as a filter, egglog's <c>!=</c>. Generic over
+        /// every type, as egglog's is over every sort: two classes compare by their canonical ids, as egglog compares
+        /// representations (classes are also told apart with <see cref="Term{T}.IsNot(Term{T})"/>).
         /// </summary>
-        /// <typeparam name="T">The value type.</typeparam>
+        /// <typeparam name="T">The value type or sort.</typeparam>
         /// <returns>The primitive.</returns>
         public static Primitive<T, T, bool> NotEqual<T>() where T : notnull => PrimitiveCache<T>.NotEqual;
+
+        /// <summary>
+        /// <c>pair</c>: the pair of two values, egglog's (src/sort/pair.rs:122-129). Its type is registered with
+        /// <see cref="ValueStore.RegisterPair{T1, T2}"/>.
+        /// </summary>
+        /// <typeparam name="T1">The type of the first element.</typeparam>
+        /// <typeparam name="T2">The type of the second element.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<T1, T2, Pair<T1, T2>> PairOf<T1, T2>()
+            where T1 : notnull
+            where T2 : notnull => PairPrimitiveCache<T1, T2>.Make;
+
+        /// <summary>
+        /// <c>pair-first</c>: a pair's first element (pair.rs:131).
+        /// </summary>
+        /// <typeparam name="T1">The type of the first element.</typeparam>
+        /// <typeparam name="T2">The type of the second element.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
+            where T1 : notnull
+            where T2 : notnull => PairPrimitiveCache<T1, T2>.First;
+
+        /// <summary>
+        /// <c>pair-second</c>: a pair's second element (pair.rs:132).
+        /// </summary>
+        /// <typeparam name="T1">The type of the first element.</typeparam>
+        /// <typeparam name="T2">The type of the second element.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
+            where T1 : notnull
+            where T2 : notnull => PairPrimitiveCache<T1, T2>.Second;
 
         /// <summary>
         /// <c>ordering-min</c>: of two values, the one whose cell is the smaller, as egglog's compares the values'

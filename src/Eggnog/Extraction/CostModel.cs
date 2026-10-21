@@ -171,6 +171,11 @@ namespace Eggnog
             ArgumentNullException.ThrowIfNull(type);
             if (type.Kind == ColumnKind.Sort)
                 throw new ArgumentException($"{type.Name} is a sort; only values have value costs.", nameof(type));
+
+            if (type is IContainerColumnType)
+                throw new ArgumentException(
+                    $"{type.Name} is a container, which costs the sum of its elements' costs, as egglog's containers do; give its element types value costs.",
+                    nameof(type));
         }
 
     }

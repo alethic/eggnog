@@ -41,6 +41,35 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Registers the container type <typeparamref name="TContainer"/> as one that holds no e-class ids, or gets it,
+        /// and returns its environment, whose <see cref="ContainerEnv{TContainer}.GetOrInsertShared"/> interns without
+        /// an execution state from <see cref="Counters"/>. Registration changes the database's container set, so the
+        /// caller holds the e-graph's definition lock and the root's domain while it is writable.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <returns>The environment.</returns>
+        /// <exception cref="InvalidOperationException">The type is registered already as one holding ids.</exception>
+        internal ContainerEnv<TContainer> RegisterBaseContainerType<TContainer>()
+            where TContainer : struct, IContainerValue<TContainer>
+        {
+            if (db.Containers.TryGetEnvironment<TContainer>(out var existing))
+            {
+                if (existing.HoldsIds)
+                    throw new InvalidOperationException($"Container type {typeof(TContainer).Name} is registered already as one holding e-class ids.");
+
+                return existing;
+            }
+
+            RegisterContainerType<TContainer>(holdsIds: false);
+            return db.Containers.GetEnvironment<TContainer>();
+        }
+
+        /// <summary>
+        /// Gets the store's counters, which every execution state of the store mints ids from.
+        /// </summary>
+        internal CounterSet Counters => db.Counters;
+
+        /// <summary>
         /// Interns <paramref name="container"/> at the root, registering its type first if needed (as one holding ids), and
         /// returns its id: a fresh id the first time its contents are seen. egglog's <c>get_container_value</c>
         /// (lib.rs:231-236). Interning is immediate and global; a child interns through

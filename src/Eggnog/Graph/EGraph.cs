@@ -53,7 +53,7 @@ namespace Eggnog
                 Engine.ReportLevel = Relations.ReportLevel.WithPlan;
 
             BaseValues = Engine.BaseValues;
-            Values = new ValueStore(BaseValues);
+            Values = new ValueStore(this);
             Unit = new UnitColumnType(BaseValues) { Store = Values };
             NotEqual = Engine.RegisterExternalFunction(new NotEqualFunction(Unit.Unit));
             Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));

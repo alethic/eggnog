@@ -160,7 +160,19 @@ namespace Eggnog
                 return SerializeClass(classId, type.Name);
 
             var nodeId = "primitive-" + classId;
-            if (ValueStore.IsSet(type.ClrType))
+            if (type is IContainerColumnType container)
+            {
+                // egglog's container: its elements, serialized in turn, are its children, and its operator is its
+                // serialized name (src/serialize.rs:342-371). The stored cells are read; nothing is interned.
+                var elements = new List<(ColumnType Type, uint Cell)>();
+                container.AppendElements(cell, elements);
+                var children = new List<string>(elements.Count);
+                foreach (var (elementType, elementCell) in elements)
+                    children.Add(SerializeValue(elementType, elementCell, ClassOf(elementType, elementCell)));
+
+                AddNode(new SerializedNode(nodeId, container.SerializedName(cell), classId, 1, children.AsReadOnly(), false));
+            }
+            else if (ValueStore.IsSet(type.ClrType))
             {
                 // egglog's set is a BTreeSet of values, so its elements come in cell order; an element with no cell of
                 // its own comes after those that have one, in the set's order.
