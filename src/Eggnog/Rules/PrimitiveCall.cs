@@ -167,15 +167,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Renders one argument for <see cref="RuleEvaluationException.Bindings"/>: a set as <c>{a, b}</c>
-        /// (<see cref="Set{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>).
+        /// Renders one argument for <see cref="RuleEvaluationException.Bindings"/>: a set of values as <c>{a, b}</c>
+        /// (<see cref="Set{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>, a set of classes
+        /// <c>(set-of #1 #2)</c>), which needs no scope.
         /// </summary>
         /// <param name="type">The argument's column type.</param>
         /// <param name="cell">The argument's cell.</param>
         /// <returns>The rendering.</returns>
         static string Binding(ColumnType type, uint cell)
         {
-            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(Set<>))
+            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(Set<>) && type.InvolvesClasses == false)
                 return type.DecodeObject(cell, null).ToString() ?? string.Empty;
 
             return type.FormatCell(cell);

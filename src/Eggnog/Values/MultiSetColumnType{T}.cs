@@ -248,32 +248,19 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two multisets lexicographically over their elements with their repeats in element order, a shorter
-        /// prefix first. Never interns.
+        /// Compares two multisets in element order, as <see cref="MultiSet{T}.CompareTo"/> does: their elements with
+        /// their repeats, a shorter prefix first. An order given to <see cref="ValueStore.Register{T}"/> is not the
+        /// element order, so it orders neither the elements nor the multisets. Never interns.
         /// </summary>
         /// <param name="x">One multiset.</param>
         /// <param name="y">The other multiset.</param>
         /// <returns>The order.</returns>
-        internal override int CompareValues(MultiSet<T> x, MultiSet<T> y)
-        {
-            using var left = x.GetEnumerator();
-            using var right = y.GetEnumerator();
-            while (true)
-            {
-                var hasLeft = left.MoveNext();
-                var hasRight = right.MoveNext();
-                if (hasLeft == false || hasRight == false)
-                    return hasLeft.CompareTo(hasRight);
-
-                var order = element.CompareValues(left.Current, right.Current);
-                if (order != 0)
-                    return order;
-            }
-        }
+        internal override int CompareValues(MultiSet<T> x, MultiSet<T> y) => x.CompareTo(y);
 
         /// <summary>
-        /// Compares two multisets' cells as <see cref="CompareValues"/> compares the multisets: their elements with their
-        /// repeats in element order, through their cells, so that a multiset of classes compares without a scope.
+        /// Compares two multisets' cells as <see cref="CompareValues"/> compares the multisets: a multiset of values by
+        /// its values, decoded; a multiset of classes through its elements' cells, which order as its classes do, so
+        /// that it compares without a scope.
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
@@ -282,6 +269,9 @@ namespace Eggnog
         {
             if (x == y)
                 return 0;
+
+            if (rebuild == false)
+                return CompareValues(Decode(x, null), Decode(y, null));
 
             var left = Ordered(x);
             var right = Ordered(y);

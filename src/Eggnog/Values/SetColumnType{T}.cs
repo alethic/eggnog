@@ -240,27 +240,19 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two sets lexicographically over their elements in element order, a shorter prefix first. Never
-        /// interns.
+        /// Compares two sets in element order, as <see cref="Set{T}.CompareTo"/> does: element by element, a shorter
+        /// prefix first. An order given to <see cref="ValueStore.Register{T}"/> is not the element order, so it orders
+        /// neither the elements nor the sets. Never interns.
         /// </summary>
         /// <param name="x">One set.</param>
         /// <param name="y">The other set.</param>
         /// <returns>The order.</returns>
-        internal override int CompareValues(Set<T> x, Set<T> y)
-        {
-            for (var i = 0; i < x.Count && i < y.Count; i++)
-            {
-                var order = element.CompareValues(x[i], y[i]);
-                if (order != 0)
-                    return order;
-            }
-
-            return x.Count.CompareTo(y.Count);
-        }
+        internal override int CompareValues(Set<T> x, Set<T> y) => x.CompareTo(y);
 
         /// <summary>
-        /// Compares two sets' cells as <see cref="CompareValues"/> compares the sets, through their elements' cells, so
-        /// that a set of classes compares without a scope.
+        /// Compares two sets' cells as <see cref="CompareValues"/> compares the sets: a set of values by its values,
+        /// decoded; a set of classes through its elements' cells, which order as its classes do, so that it compares
+        /// without a scope.
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
@@ -269,6 +261,9 @@ namespace Eggnog
         {
             if (x == y)
                 return 0;
+
+            if (rebuild == false)
+                return CompareValues(Decode(x, null), Decode(y, null));
 
             var left = Ordered(x);
             var right = Ordered(y);

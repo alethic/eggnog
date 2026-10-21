@@ -27,9 +27,10 @@ namespace Eggnog
         /// <summary>
         /// Gets a key of the container in <paramref name="cell"/> as its rebuild would make it, each element given by
         /// <paramref name="part"/>: two containers of the type have one key exactly when, their elements so, they are
-        /// one container. A vector and a pair list their elements in order; a map collapses keys whose parts are one, the
-        /// later in key-cell order kept, as egglog's rebuild of a <c>BTreeMap</c>, and a multiset adds their counts; both
-        /// list their entries in the parts' order.
+        /// one container. A vector and a pair list their elements in order; a set keeps one of elements whose parts are
+        /// one, as egglog's rebuild of a <c>BTreeSet</c>, a map collapses such keys, the later in key-cell order kept, as
+        /// its rebuild of a <c>BTreeMap</c>, and a multiset adds their counts; the three list their entries in the parts'
+        /// order.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
         /// <param name="part">An element's part of the key, given its column type and its cell.</param>
@@ -53,8 +54,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the content of the container in <paramref name="cell"/> as its stored layout: a vector's or a pair's
-        /// elements in order, a map's keys and values in key-cell order, key before value, a multiset's elements and
-        /// counts in cell order, element before count.
+        /// elements in order, a set's elements in cell order, a map's keys and values in key-cell order, key before value,
+        /// a multiset's elements and counts in cell order, element before count.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
         /// <returns>The content.</returns>
@@ -62,8 +63,8 @@ namespace Eggnog
 
         /// <summary>
         /// Rebuilds a content as the container's rebuild would, each element that names classes mapped through
-        /// <paramref name="find"/>: a map's keys that become one collapse, the later kept, and a multiset's elements add
-        /// their counts, both then in cell order.
+        /// <paramref name="find"/>: a set's elements that become one become one element, a map's keys that become one
+        /// collapse, the later kept, and a multiset's elements add their counts, all then in cell order.
         /// </summary>
         /// <param name="content">The content, in <see cref="Content"/>'s layout.</param>
         /// <param name="find">The cell an element's cell is now.</param>

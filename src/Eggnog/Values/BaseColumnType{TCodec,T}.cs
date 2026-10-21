@@ -7,9 +7,8 @@ namespace Eggnog
     /// <summary>
     /// A value type over an engine codec: encoding is <c>BaseValues.Get</c>, decoding <c>Unwrap</c>, and
     /// <see cref="TryEncodeExisting"/> <c>BaseValues.TryGetExisting</c>, which never interns; the extraction sort is a
-    /// <c>BaseSort</c> that formats like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>,
-    /// <see cref="Set{T}"/> (over <c>InternedCodec&lt;Set&lt;T&gt;&gt;</c>) and registered types
-    /// (<c>InternedCodec&lt;T&gt;</c>).
+    /// <c>BaseSort</c> that formats like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>, <c>BigInt</c> and
+    /// registered types (<c>InternedCodec&lt;T&gt;</c>).
     /// </summary>
     /// <typeparam name="TCodec">The engine codec.</typeparam>
     /// <typeparam name="T">The CLR type of the values.</typeparam>

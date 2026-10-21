@@ -299,8 +299,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two maps' cells as <see cref="CompareValues"/> compares the maps: their entries in key order, each by
-        /// key then value, through their cells, so that a map of classes compares without a scope.
+        /// Compares two maps' cells as <see cref="CompareValues"/> compares the maps: a map of values by its entries,
+        /// decoded; a map of classes through its keys' and values' cells, which order as its classes do, so that it
+        /// compares without a scope.
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
@@ -309,6 +310,9 @@ namespace Eggnog
         {
             if (x == y)
                 return 0;
+
+            if (rebuildKeys == false && rebuildValues == false)
+                return CompareValues(Decode(x, null), Decode(y, null));
 
             var left = Entries(x);
             var right = Entries(y);
@@ -424,31 +428,14 @@ namespace Eggnog
             new($"Two keys of the map {map} are distinct in their order but one value to {key.Name}, which stores them in one cell: the type's comparer must agree with its equality.", nameof(map));
 
         /// <summary>
-        /// Compares two maps lexicographically over their entries in key order, each by key then value, a shorter prefix
-        /// first. Never interns.
+        /// Compares two maps in element order, as <see cref="Map{TKey, TValue}.CompareTo"/> does: their entries in key
+        /// order, each by key then value, a shorter prefix first. An order given to <see cref="ValueStore.Register{T}"/>
+        /// is not the element order, so it orders neither the keys nor the maps. Never interns.
         /// </summary>
         /// <param name="x">One map.</param>
         /// <param name="y">The other map.</param>
         /// <returns>The order.</returns>
-        internal override int CompareValues(Map<TKey, TValue> x, Map<TKey, TValue> y)
-        {
-            using var left = x.GetEnumerator();
-            using var right = y.GetEnumerator();
-            while (true)
-            {
-                var hasLeft = left.MoveNext();
-                var hasRight = right.MoveNext();
-                if (hasLeft == false || hasRight == false)
-                    return hasLeft.CompareTo(hasRight);
-
-                var order = key.CompareValues(left.Current.Key, right.Current.Key);
-                if (order == 0)
-                    order = value.CompareValues(left.Current.Value, right.Current.Value);
-
-                if (order != 0)
-                    return order;
-            }
-        }
+        internal override int CompareValues(Map<TKey, TValue> x, Map<TKey, TValue> y) => x.CompareTo(y);
 
         /// <inheritdoc />
         internal override bool ValuesEqual(Map<TKey, TValue> x, Map<TKey, TValue> y)

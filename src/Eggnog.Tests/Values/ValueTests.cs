@@ -325,7 +325,7 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// <c>default(ClassId)</c> names no class and every scope rejects it, and class values never enter value cells:
-        /// there are no sets of classes, and classes compare only with <c>Is</c> and <c>IsNot</c>.
+        /// classes compare only with <c>Is</c> and <c>IsNot</c>.
         /// <c>ValueStore.Register</c> refuses <see cref="ClassId"/>, and a sort, as a value type.
         /// </summary>
         [Fact]

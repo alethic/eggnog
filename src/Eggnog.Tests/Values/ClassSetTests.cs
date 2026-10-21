@@ -143,6 +143,23 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
+        public void AFailingRuleRendersASetOfClassesByItsCells()
+        {
+            var t = new Theory();
+            var rules = t.Graph.DefineRuleset("r");
+            rules.DefineRule("throwing filter", r =>
+            {
+                var xs = r.Var<Set<Node>>("xs");
+                r.When(xs.Is(t.Sets.Of()));
+                r.Where(xs, _ => throw new InvalidOperationException("boom"));
+            });
+            t.Root.Assume(t.Sets.Of().Is(t.Of(3L, 2L)));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(rules));
+            Assert.Equal("xs=(set-of #0 #1)", e.Bindings);
+        }
+
+        [Fact]
         public void ASplitOverASetOfClassesIsRefused()
         {
             var t = new Theory();
