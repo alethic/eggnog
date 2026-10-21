@@ -35,7 +35,7 @@ namespace Eggnog
         /// <returns>Whether the key has a row.</returns>
         /// <exception cref="ArgumentException">The table is a relation or not of the rule's graph, or a value is not of its
         /// column's type.</exception>
-        public bool TryLookup<T>(TableHandle table, object[] keys, out T value)
+        public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
         {
             value = default!;
             var found = TryRow(table, keys, 0, writes: false, out var key);
@@ -63,7 +63,7 @@ namespace Eggnog
         /// <returns>Whether the row is there.</returns>
         /// <exception cref="ArgumentException">The relation is not of the rule's graph, or a value is not of its column's
         /// type.</exception>
-        public bool Contains(RelationHandle relation, params object[] keys) =>
+        public bool Contains(RelationHandle relation, params ReadOnlySpan<object> keys) =>
             TryRow(relation, keys, 0, writes: false, out var row) && Call.Action(relation).TryLookup(State, row, out _);
 
         /// <summary>

@@ -42,12 +42,11 @@ namespace Eggnog
         /// <param name="types">The parameters' types.</param>
         /// <param name="name">The table's or primitive's name, for messages.</param>
         /// <returns>The terms, a new array.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arguments"/> or an argument is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">The number of arguments is not the parameters', or an argument's type is
         /// not its parameter's.</exception>
-        public static Term[] Convert(object[] arguments, IReadOnlyList<Type> types, string name)
+        public static Term[] Convert(ReadOnlySpan<object> arguments, IReadOnlyList<Type> types, string name)
         {
-            ArgumentNullException.ThrowIfNull(arguments);
             if (arguments.Length != types.Count)
                 throw new ArgumentException($"'{name}' takes {types.Count} arguments, not {arguments.Length}.", nameof(arguments));
 
