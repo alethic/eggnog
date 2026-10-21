@@ -42,7 +42,7 @@ namespace Eggnog
             Add(new WidenedColumnType<int>("i32", values, static v => v, static v => checked((int)v), static v => v.ToString(CultureInfo.InvariantCulture)));
             Add(new BaseColumnType<Relations.BooleanCodec, bool>("bool", values, static v => v ? "true" : "false", Comparer<bool>.Default));
             Add(new DoubleColumnType(values));
-            Add(new BaseColumnType<Relations.StringCodec, string>("String", values, Relations.LiteralText.String, StringComparer.Ordinal));
+            Add(new BaseColumnType<Relations.StringCodec, string>("String", values, Relations.LiteralText.String, Relations.CodePointComparer.Instance));
             Add(new BaseColumnType<Relations.InternedCodec<BigInteger>, BigInteger>("BigInt", values, FormatBigInteger, Comparer<BigInteger>.Default));
             RegisterSet<string>();
             RegisterSet<long>();
@@ -133,8 +133,8 @@ namespace Eggnog
 
         /// <summary>
         /// Registers the set type of <typeparamref name="T"/>, named <c>Set&lt;{element name}&gt;</c>, or gets it when
-        /// it is registered already. Sets are interned base values, kept in ascending element order: ordinal for
-        /// strings, <c>Comparer&lt;T&gt;.Default</c> otherwise, so the element type must be <c>string</c> or comparable
+        /// it is registered already. Sets are interned base values, kept in ascending element order: by code
+        /// point for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise, so the element type must be <c>string</c> or comparable
         /// (<see cref="IComparable{T}"/> or <see cref="IComparable"/>); an order given to <see cref="Register{T}"/> is
         /// not the sets' element order.
         /// </summary>

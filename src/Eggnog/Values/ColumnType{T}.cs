@@ -37,7 +37,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two values in content order: strings ordinal, numbers numeric, <c>false &lt; true</c>, sets
+        /// Compares two values in content order: strings by code point, numbers numeric, <c>false &lt; true</c>, sets
         /// lexicographic over their sorted elements, registered types by their comparer (else
         /// <c>Comparer&lt;T&gt;.Default</c> when comparable, else their cells), classes by id. Extraction breaks ties
         /// by this order. Comparing is a read: it never interns. Ordered by cell, a value that was never interned comes
