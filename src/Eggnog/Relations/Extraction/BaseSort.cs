@@ -18,7 +18,7 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Extraction's tie-break orders base values by content, which must not depend on the machine or the thread, so
-    /// that extraction is deterministic: by the comparer given here; else ordinally for <see cref="string"/> (never by
+    /// that extraction is deterministic: by the comparer given here; else by code point for <see cref="string"/> (never by
     /// the current culture's collation); else by <see cref="Comparer{T}.Default"/> when <typeparamref name="T"/>
     /// implements <see cref="IComparable{T}"/>, which for the built-in numeric, boolean and character types is
     /// culture-invariant. A type whose own order depends on the culture should be given a comparer. The boxed
@@ -105,7 +105,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>
-        /// Culture-invariant: strings compare ordinally (<see cref="string.CompareOrdinal(string, string)"/>), because
+        /// Culture-invariant: strings compare by code point (<see cref="CodePointComparer"/>), as Rust's do, because
         /// <see cref="Comparer{T}.Default"/> would use the current culture's collation and make the extracted term depend
         /// on the machine and the thread.
         /// </remarks>
@@ -120,7 +120,7 @@ namespace Eggnog.Relations
             {
                 var leftText = (string)(object)baseValues.Unwrap<TCodec, T>(left);
                 var rightText = (string)(object)baseValues.Unwrap<TCodec, T>(right);
-                order = string.CompareOrdinal(leftText, rightText);
+                order = CodePointComparer.Instance.Compare(leftText, rightText);
             }
             else if (Comparable)
             {
