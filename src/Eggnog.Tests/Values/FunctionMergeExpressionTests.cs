@@ -196,7 +196,7 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// The expression is checked when its function is defined: it may hold only its own old and new values, no class
-        /// constant, no primitive over a sort, no table of another graph and no scoped view; and it is a term, not
+        /// constant, no table of another graph and no scoped view; and it is a term, not
         /// <c>null</c>. A refused definition leaves no table behind.
         /// </summary>
         [Fact]
@@ -216,14 +216,12 @@ namespace Eggnog.Tests.Values
 
             var foreign = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, long>("f", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, leaked))));
             var constant = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => t.Add.Of(old, a))));
-            var sort = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("h", FunctionMerge.Expression<Node>((old, @new) => Primitives.OrderingMin<Node>().Of(old, @new))));
             var graph = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("i", FunctionMerge.Expression<Node>((old, @new) => other.Add.Of(old, @new))));
             var scoped = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, long>("j", FunctionMerge.Expression<long>((old, @new) => values.In(t.Graph.RootTag).Of(@new))));
             Assert.Throws<ArgumentException>(() => FunctionMerge.Expression<long>((old, @new) => null!));
 
             Assert.Contains("is not its old or new value", foreign.Message, StringComparison.Ordinal);
             Assert.Contains("apply a nullary constructor or function instead", constant.Message, StringComparison.Ordinal);
-            Assert.Contains("over a sort", sort.Message, StringComparison.Ordinal);
             Assert.Contains("a table of another graph", graph.Message, StringComparison.Ordinal);
             Assert.Contains("a merge reads its own scope", scoped.Message, StringComparison.Ordinal);
             Assert.Equal(tables, t.Graph.Tables.Count);

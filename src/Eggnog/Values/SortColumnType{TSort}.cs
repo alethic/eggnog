@@ -42,6 +42,15 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        internal override uint EncodeIn(TSort value, Scope? scope)
+        {
+            if (scope is not null && ClassChecks.Check(scope.Origin, value.Id, null) is { } error)
+                throw new InvalidOperationException($"A primitive returned a class this scope cannot use: {error}.");
+
+            return Encode(value);
+        }
+
+        /// <inheritdoc />
         internal override bool TryEncodeExisting(TSort value, out uint cell)
         {
             var id = value.Id;

@@ -66,6 +66,9 @@ namespace Eggnog
         public override bool DecodesValues => false;
 
         /// <inheritdoc />
+        public override bool ComparesValues => true;
+
+        /// <inheritdoc />
         public override bool CanSimulate => tables.Length == 0;
 
         /// <inheritdoc />
@@ -73,7 +76,7 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <exception cref="ArgumentException">The expression holds a variable other than the old and the new value, a
-        /// class constant, a table of another graph, or a primitive over a sort.</exception>
+        /// class constant, a table of another graph, or a scoped view.</exception>
         public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type, List<Relations.ExternalFunctionId> registered) =>
             Lower(graph, functionName, body, registered);
 
@@ -83,14 +86,15 @@ namespace Eggnog
         /// throws.
         /// </summary>
         /// <exception cref="InvalidOperationException">The expression calls tables (<see cref="CanSimulate"/>).</exception>
-        public override uint MergeCells(EGraph graph, ColumnType type, uint stored, uint incoming) =>
-            CanSimulate ? Evaluate(graph, body, stored, incoming) : throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming) =>
+            CanSimulate ? Evaluate(scope, body, stored, incoming) : throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
 
         /// <summary>
         /// Evaluates one term of an expression without applications.
         /// </summary>
-        uint Evaluate(EGraph graph, Term term, uint stored, uint incoming)
+        uint Evaluate(Scope scope, Term term, uint stored, uint incoming)
         {
+            var graph = scope.Graph;
             var shape = term.Shape;
             switch (shape.Kind)
             {
@@ -104,11 +108,11 @@ namespace Eggnog
                     var parameters = new ColumnType[arguments.Length];
                     for (var i = 0; i < arguments.Length; i++)
                     {
-                        arguments[i] = Evaluate(graph, shape.Arguments[i], stored, incoming);
+                        arguments[i] = Evaluate(scope, shape.Arguments[i], stored, incoming);
                         parameters[i] = TypeOf(graph, shape.Arguments[i].Shape.ConstantType, shape.Arguments[i].ClrType);
                     }
 
-                    return shape.Primitive!.InvokeCore(arguments, parameters, TypeOf(graph, null, term.ClrType));
+                    return shape.Primitive!.InvokeCore(arguments, parameters, TypeOf(graph, null, term.ClrType), scope);
                 }
             }
         }
@@ -159,8 +163,6 @@ namespace Eggnog
                     }
 
                     var result = TypeOf(graph, null, term.ClrType);
-                    if (result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort))
-                        throw new ArgumentException($"The merge {Name} of '{functionName}' calls '{primitive.Name}' over a sort; primitives take values.", "merge");
 
                     var arguments = LowerAll(graph, functionName, shape.Arguments, registered);
                     var call = graph.Engine.RegisterExternalFunction(new MergePrimitiveCall(graph, functionName, Name, primitive, parameters, result));

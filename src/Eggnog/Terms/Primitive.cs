@@ -253,8 +253,10 @@ namespace Eggnog
         /// <param name="arguments">The argument cells.</param>
         /// <param name="parameters">The parameters' column types.</param>
         /// <param name="result">The result's column type.</param>
+        /// <param name="scope">The scope the call runs in, whose origin a class argument carries and in which a class
+        /// result must be usable; <c>null</c> where no argument or result is a class.</param>
         /// <returns>The result's cell.</returns>
-        internal abstract uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result);
+        internal abstract uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope);
 
         /// <summary>
         /// As <see cref="InvokeCore"/>, but a partial primitive's call with no result returns <c>false</c> instead of
@@ -263,9 +265,10 @@ namespace Eggnog
         /// <param name="arguments">The argument cells.</param>
         /// <param name="parameters">The parameters' column types.</param>
         /// <param name="result">The result's column type.</param>
+        /// <param name="scope">The scope the call runs in (see <see cref="InvokeCore"/>).</param>
         /// <param name="cell">The result's cell, when there is a result.</param>
         /// <returns>Whether there is a result: <c>false</c> only for a partial primitive.</returns>
-        internal abstract bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, out uint cell);
+        internal abstract bool TryInvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope, out uint cell);
 
         /// <summary>
         /// Calls the primitive on CLR values, the arguments neither encoded nor the result: what a host read does, which

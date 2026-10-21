@@ -27,6 +27,7 @@ namespace Eggnog
         readonly ColumnType result;
         readonly string[] argumentNames;
         readonly bool inBody;
+        readonly bool overClasses;
 
         /// <summary>
         /// Initializes a new instance.
@@ -49,6 +50,7 @@ namespace Eggnog
             this.result = result;
             this.argumentNames = argumentNames;
             this.inBody = inBody;
+            overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
         }
 
         /// <inheritdoc />
@@ -58,9 +60,9 @@ namespace Eggnog
             try
             {
                 if (inBody)
-                    return primitive.TryInvokeCore(args, parameters, this.result, out result);
+                    return primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result);
 
-                result = primitive.InvokeCore(args, parameters, this.result);
+                result = primitive.InvokeCore(args, parameters, this.result, ScopeOf(state));
                 return true;
             }
             catch (Exception exception)
@@ -74,6 +76,12 @@ namespace Eggnog
                 EngineCallMarker.Exit();
             }
         }
+
+        /// <summary>
+        /// Gets the scope a call runs in, which decodes and checks classes; only when a class crosses the call, so that a
+        /// call over values pays nothing for it.
+        /// </summary>
+        Scope? ScopeOf(Relations.ExecutionState state) => overClasses ? ScopeRuntime.Of(graph, state).Owner : null;
 
         /// <summary>
         /// Records a primitive's failure in the scope's runtime and reports it to the engine, which stops the engine call
