@@ -129,9 +129,13 @@ A column holds either a class or a value.
   - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge
     the child's rebuild derives faults the child, as the engine's eq-container guard refuses it (decisions row 9).
   - egglog's `vec-union` is `Primitives.VecUnion`, a write primitive as egglog's: it unions two vectors' classes
-    element by element and returns the first, with no result for two lengths. It runs as a value a head or a host write
-    writes, and in a merge such as `(vec-union old new)`; a rule's body, a query and a read refuse it, as egglog's query
-    does.
+    element by element and returns the first, with no result for two lengths.
+    - It runs as a value a head or a host write writes, and in a merge such as `(vec-union old new)`, which a host
+      batch simulates with its own unions. A rule's body, a query and a read refuse it, as egglog's query does.
+    - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
+    - Only the root runs it, since the classes it unions are held by the vectors.
+    - egglog's bare action, `(vec-union a b)` on its own, waits for host and head actions that compute only for
+      their effect; here the union is the value of a write.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
     constant, its classes made canonical first.
   - As a constructor's argument it extracts as its value, the vector of its classes, and each class extracts as its own

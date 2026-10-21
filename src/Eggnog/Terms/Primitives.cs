@@ -212,10 +212,11 @@ namespace Eggnog
 
         /// <summary>
         /// <c>vec-union</c>: unions the classes of two vectors of one length, element by element, and returns the first;
-        /// no result for two lengths (vec.rs:139-147, 287-338). A write primitive, as egglog's: it runs as a value a
+        /// no result for two lengths (vec.rs:140-148, 285-340). A write primitive, as egglog's: it runs as a value a
         /// rule's head or a host write writes, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a
-        /// rule's body, a query or a read. Its <c>Function</c> and <c>TryInvoke</c> throw
-        /// <see cref="InvalidOperationException"/>.
+        /// rule's body, a query or a read. Its unions take effect after the fact or the rule's iteration, as egglog's after
+        /// the command. It runs only at the root: the classes it unions are held by vectors, which only the root rebuilds
+        /// (decisions row 9). Its <c>Function</c> and <c>TryInvoke</c> throw <see cref="InvalidOperationException"/>.
         /// </summary>
         /// <typeparam name="TSort">The sort of the elements.</typeparam>
         /// <returns>The primitive.</returns>

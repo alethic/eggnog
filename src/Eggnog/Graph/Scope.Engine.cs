@@ -15,6 +15,9 @@ namespace Eggnog
         static InvalidOperationException RootOnly(CompiledRule rule, FunctionHandle function, string why) =>
             new($"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {why}.");
 
+        static InvalidOperationException RootOnly(CompiledRule rule, Primitive primitive, string why) =>
+            new($"Rule '{rule.Rule.Name}' computes '{primitive.Name}', which unions classes that containers hold, and only the root rebuilds containers (decisions row 9), so only the root may run it, and {why}.");
+
         /// <summary>
         /// Runs a schedule in this scope.
         /// </summary>
@@ -115,6 +118,9 @@ namespace Eggnog
                     if (IsRoot == false && rule.Program.RootOnlyWrite is { } function)
                         throw RootOnly(rule, function, $"'{Path}' is not the root");
 
+                    if (IsRoot == false && rule.Program.WritePrimitive is { } primitive)
+                        throw RootOnly(rule, primitive, $"'{Path}' is not the root");
+
                     if (rule.Program.Deletes is [var deleted, ..])
                     {
                         if (splits.Count > 0)
@@ -138,8 +144,13 @@ namespace Eggnog
                 // The cases of a split are children, at the root too.
                 if (IsRoot && inCases.Count > 0)
                     foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(inCases), this))
+                    {
                         if (rule.Program.RootOnlyWrite is { } function)
                             throw RootOnly(rule, function, "the cases of a split are children");
+
+                        if (rule.Program.WritePrimitive is { } primitive)
+                            throw RootOnly(rule, primitive, "the cases of a split are children");
+                    }
 
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
                 RunStopReason reason;

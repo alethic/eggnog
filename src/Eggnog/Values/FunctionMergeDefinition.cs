@@ -67,8 +67,10 @@ namespace Eggnog
         /// <param name="type">The function's output type.</param>
         /// <param name="stored">The old cell.</param>
         /// <param name="incoming">The new cell.</param>
+        /// <param name="union">Unions two class cells as the batch does, for a write primitive the merge calls, such as
+        /// <c>(vec-union old new)</c>.</param>
         /// <returns>The merged cell.</returns>
-        public abstract uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming);
+        public abstract uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming, Action<uint, uint> union);
 
     }
 

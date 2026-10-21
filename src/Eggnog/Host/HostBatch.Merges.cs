@@ -35,6 +35,8 @@ namespace Eggnog
         Dictionary<uint, uint>? direct;
         Dictionary<string, uint>? contents;
         Dictionary<uint, uint>? childMerges;
+        List<(uint A, uint B)>? factUnions;
+        Action<uint, uint>? collectUnion;
         Func<uint, uint>? canonical;
         bool mergeCheckDecided;
         bool mergedClasses;

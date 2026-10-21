@@ -18,7 +18,6 @@ namespace Eggnog
         readonly Var<T> @new;
         readonly Term<T> body;
         readonly TableHandle[] tables;
-        readonly bool writes;
 
         /// <summary>
         /// Initializes a new instance: builds the expression over the two variables once.
@@ -39,23 +38,6 @@ namespace Eggnog
             var found = new List<TableHandle>();
             CollectTables(body, found);
             tables = found.ToArray();
-            writes = Writes(body);
-        }
-
-        /// <summary>
-        /// Gets whether an expression calls a write primitive, whose unions only the engine's merge makes.
-        /// </summary>
-        static bool Writes(Term term)
-        {
-            var shape = term.Shape;
-            if (shape.Kind == TermShapeKind.Computation && shape.Primitive!.IsWrite)
-                return true;
-
-            foreach (var argument in shape.Arguments)
-                if (Writes(argument))
-                    return true;
-
-            return false;
         }
 
         /// <summary>
@@ -87,7 +69,7 @@ namespace Eggnog
         public override bool ComparesValues => true;
 
         /// <inheritdoc />
-        public override bool CanSimulate => tables.Length == 0 && writes == false;
+        public override bool CanSimulate => tables.Length == 0;
 
         /// <inheritdoc />
         public override IReadOnlyCollection<TableHandle> Tables => tables;
@@ -101,16 +83,16 @@ namespace Eggnog
         /// <summary>
         /// Evaluates an expression of primitives and constants over the two cells, as the engine's merge will, on the
         /// calling thread (the host batch holds <see cref="EngineCallMarker"/>); a primitive that throws or has no result
-        /// throws.
+        /// throws, and a write primitive's unions go to <paramref name="union"/>.
         /// </summary>
         /// <exception cref="InvalidOperationException">The expression calls tables (<see cref="CanSimulate"/>).</exception>
-        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming) =>
-            CanSimulate ? Evaluate(scope, body, stored, incoming) : throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming, Action<uint, uint> union) =>
+            CanSimulate ? Evaluate(scope, body, stored, incoming, union) : throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
 
         /// <summary>
         /// Evaluates one term of an expression without applications.
         /// </summary>
-        uint Evaluate(Scope scope, Term term, uint stored, uint incoming)
+        uint Evaluate(Scope scope, Term term, uint stored, uint incoming, Action<uint, uint> union)
         {
             var graph = scope.Graph;
             var shape = term.Shape;
@@ -126,11 +108,17 @@ namespace Eggnog
                     var parameters = new ColumnType[arguments.Length];
                     for (var i = 0; i < arguments.Length; i++)
                     {
-                        arguments[i] = Evaluate(scope, shape.Arguments[i], stored, incoming);
+                        arguments[i] = Evaluate(scope, shape.Arguments[i], stored, incoming, union);
                         parameters[i] = TypeOf(graph, shape.Arguments[i].Shape.ConstantType, shape.Arguments[i].ClrType);
                     }
 
-                    return shape.Primitive!.InvokeCore(arguments, parameters, TypeOf(graph, null, term.ClrType), scope);
+                    var result = TypeOf(graph, null, term.ClrType);
+                    if (shape.Primitive!.IsWrite)
+                        return shape.Primitive.TryInvokeWrite(arguments, parameters, result, union, out var written)
+                            ? written
+                            : throw Primitive.NoResult(shape.Primitive.Name);
+
+                    return shape.Primitive.InvokeCore(arguments, parameters, result, scope);
                 }
             }
         }

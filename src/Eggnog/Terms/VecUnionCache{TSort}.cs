@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// egglog's <c>vec-union</c> for one sort, made once per <typeparamref name="TSort"/>: the write primitive of a vector
-    /// of an eq sort (src/sort/vec.rs:139-147, 287-338).
+    /// of an eq sort (src/sort/vec.rs:140-148, 285-340).
     /// </summary>
     /// <typeparam name="TSort">The sort.</typeparam>
     internal static class VecUnionCache<TSort> where TSort : struct, ISort<TSort>

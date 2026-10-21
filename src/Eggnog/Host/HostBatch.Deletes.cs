@@ -31,6 +31,7 @@ namespace Eggnog
         public void PlanDelete(Term term)
         {
             ArgumentNullException.ThrowIfNull(term);
+            PlanFactUnions();
             var shape = term.Shape;
             if (shape.Kind != TermShapeKind.Application)
                 throw new ArgumentException($"Delete takes a function or constructor application; {term} is not one", nameof(term));
@@ -50,6 +51,7 @@ namespace Eggnog
         public void PlanDelete(Fact fact)
         {
             ArgumentNullException.ThrowIfNull(fact);
+            PlanFactUnions();
             if (fact is not RelationFact relation)
             {
                 throw fact is ScopedFact scoped

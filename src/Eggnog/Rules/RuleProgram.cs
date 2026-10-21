@@ -46,6 +46,9 @@ namespace Eggnog
                 if (op.Kind is HeadOpKind.Write or HeadOpKind.Delete && op.Table is FunctionHandle { Merge: not null } function)
                     RootOnlyWrite ??= function;
 
+                if (op.Kind == HeadOpKind.Compute && op.Primitive is { IsWrite: true } primitive)
+                    WritePrimitive ??= primitive;
+
                 // A scheduler's action rule deletes its worklist row, which is context-private bookkeeping.
                 if (op.Kind == HeadOpKind.Delete && op.Table!.IsWorklist == false && (deletes ??= new()).Contains(op.Table) == false)
                     deletes.Add(op.Table);
@@ -107,6 +110,13 @@ namespace Eggnog
         /// when there is none.
         /// </summary>
         public FunctionHandle? RootOnlyWrite { get; }
+
+        /// <summary>
+        /// Gets the first write primitive the head computes (<see cref="Primitive.IsWrite"/>), egglog's
+        /// <c>vec-union</c>, which unions classes that containers hold, which only the root rebuilds, so that the program
+        /// runs only there; <c>null</c> when there is none.
+        /// </summary>
+        public Primitive? WritePrimitive { get; }
 
         /// <summary>
         /// Gets the distinct tables the head deletes rows of, in first-use order: the program runs only where the scope
