@@ -117,7 +117,9 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The function, or a value, is not one this rule may write.</exception>
         public void Set(FunctionHandle function, object[] keys, object value)
         {
-            ArgumentNullException.ThrowIfNull(value);
+            if (value is null)
+                throw Refuse(new ArgumentNullException(nameof(value)));
+
             var row = Row(function, keys, 1, writes: true);
             row[^1] = Encode(function.Columns[^1], value, nameof(value));
             Call.Action(function).Insert(State, row);

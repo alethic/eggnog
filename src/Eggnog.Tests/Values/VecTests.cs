@@ -129,6 +129,60 @@ namespace Eggnog.Tests.Values
             Assert.Contains(nodes, n => n.Children.Count == 0);
         }
 
+        [Fact]
+        public void OnlyTheFirstContainerTypeOfAKindIsAnEngineDefinition()
+        {
+            // Registering the first pair or vector type registers its container environment, which enters the writable
+            // root's domain; later element types reuse it, so they register while another thread uses the root.
+            using var run = new BlockingRun();
+            run.Graph.Values.RegisterPair<long, long>();
+            run.Graph.Values.RegisterVec<long>();
+            run.Start();
+
+            Assert.Equal("Pair<i64, String>", run.Graph.Values.RegisterPair<long, string>().Name);
+            Assert.Equal("Vec<String>", run.Graph.Values.RegisterVec<string>().Name);
+            Assert.Equal("Vec<Vec<i64>>", run.Graph.Values.RegisterVec<Vec<long>>().Name);
+            run.Finish();
+        }
+
+        [Fact]
+        public void VecAppendConcatenatesInOrder()
+        {
+            var append = Primitives.VecAppend<long>().Function;
+            Assert.Equal(Vec<long>.Empty, append([]));
+            Assert.Equal(Vec.Of(1L, 2L, 3L, 4L, 5L), append([Vec.Of(1L, 2L), Vec<long>.Empty, Vec.Of(3L), Vec.Of(4L, 5L)]));
+            var many = Enumerable.Range(0, 2000).Select(i => Vec.Of((long)i, (long)i)).ToArray();
+            Assert.Equal(4000, append(many).Count);
+        }
+
+        [Fact]
+        public void ACallbacksNullValueFailsTheRuleEvenWhenCaught()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterVec<string>();
+            var num = graph.DefineRelation<long>("num");
+            var f = graph.DefineFunction<long, Vec<string>>("f");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("null", r =>
+            {
+                var k = r.Var<long>("k");
+                r.When(num.Of(k));
+                r.ThenCall(ctx =>
+                {
+                    try
+                    {
+                        ctx.Set(f, [ctx.Get(k)], null!);
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                });
+            });
+            graph.Root.Assume(num.Of(1L));
+
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(rules)));
+        }
+
         static ColumnType<Vec<Pair<long, long>>> RegisterNested(EGraph graph)
         {
             graph.Values.RegisterPair<long, long>();

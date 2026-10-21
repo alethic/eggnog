@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace Eggnog
 {
@@ -26,7 +25,7 @@ namespace Eggnog
         /// </summary>
         internal const string LambdaName = "<lambda>";
 
-        readonly ReadOnlyCollection<Type> parameterTypes;
+        readonly IReadOnlyList<Type> parameterTypes;
 
         /// <summary>
         /// Initializes a new instance.
@@ -37,9 +36,23 @@ namespace Eggnog
         /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
         /// <param name="isPartial">Whether the primitive is partial.</param>
         private protected Primitive(string name, Type[] parameterTypes, Type resultType, bool isLambda, bool isPartial)
+            : this(name, (IReadOnlyList<Type>)Array.AsReadOnly(parameterTypes), resultType, isLambda, isPartial)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance over a read-only list of parameter types, kept as given.
+        /// </summary>
+        /// <param name="name">The name.</param>
+        /// <param name="parameterTypes">The CLR types of the parameters; read-only.</param>
+        /// <param name="resultType">The CLR type of the result.</param>
+        /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
+        /// <param name="isPartial">Whether the primitive is partial.</param>
+        private protected Primitive(string name, IReadOnlyList<Type> parameterTypes, Type resultType, bool isLambda, bool isPartial)
         {
             Name = name;
-            this.parameterTypes = Array.AsReadOnly(parameterTypes);
+            this.parameterTypes = parameterTypes;
             ResultType = resultType;
             IsLambda = isLambda;
             IsPartial = isPartial;

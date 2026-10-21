@@ -79,7 +79,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a vector's cell. Takes one lock of the container environment.
+        /// Decodes a vector's cell. Takes one lock of the container environment, and more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>

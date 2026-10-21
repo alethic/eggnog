@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Eggnog
 {
 
@@ -5,10 +7,15 @@ namespace Eggnog
     {
 
         /// <summary>
+        /// The environments of the container types of values registered so far, by container type.
+        /// </summary>
+        readonly ConcurrentDictionary<System.Type, Relations.ContainerEnvBase> valueContainers = new();
+
+        /// <summary>
         /// Gets the graph's environment of the container type <typeparamref name="TContainer"/>, registering it on first
-        /// use as one that holds no e-class ids: an engine definition, so the call takes the definition lock and, while
-        /// the root is writable, the root's domain, and throws when another thread is using the writable root. Called
-        /// when a container column type is registered, which keeps the environment.
+        /// use as one that holds no e-class ids. Lock-free once registered. The first call is an engine definition: it
+        /// takes the definition lock and, while the root is writable, the root's domain, and throws when another thread
+        /// is using the writable root. Called when a container column type is registered, which keeps the environment.
         /// </summary>
         /// <remarks>
         /// Registered on first use, not with the graph, because a database with no container type skips the container
@@ -18,19 +25,28 @@ namespace Eggnog
         /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <returns>The environment.</returns>
-        /// <exception cref="System.InvalidOperationException">Another thread is using the writable root.</exception>
+        /// <exception cref="System.InvalidOperationException">The type's first registration runs while another thread is
+        /// using the writable root.</exception>
         internal Relations.ContainerEnv<TContainer> ValueContainers<TContainer>()
             where TContainer : struct, Relations.IContainerValue<TContainer>
         {
+            if (valueContainers.TryGetValue(typeof(TContainer), out var known))
+                return (Relations.ContainerEnv<TContainer>)known;
+
             lock (DefinitionLock)
             {
+                if (valueContainers.TryGetValue(typeof(TContainer), out known))
+                    return (Relations.ContainerEnv<TContainer>)known;
+
                 var guarded = Root.IsFrozen == false;
                 if (guarded)
                     Root.Guard.Enter(Root);
 
                 try
                 {
-                    return Engine.RegisterBaseContainerType<TContainer>();
+                    var env = Engine.RegisterBaseContainerType<TContainer>();
+                    valueContainers[typeof(TContainer)] = env;
+                    return env;
                 }
                 finally
                 {

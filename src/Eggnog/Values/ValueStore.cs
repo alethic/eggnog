@@ -15,8 +15,9 @@ namespace Eggnog
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>ValueSet&lt;string&gt;</c>
     /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c> "Set&lt;i32&gt;". Sorts join through
-    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and pairs through the <c>Register*</c> methods.
-    /// Thread-safe.
+    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types, pairs and vectors through the <c>Register*</c> methods.
+    /// Thread-safe; the first pair type and the first vector type registered are engine definitions, which while the root
+    /// is writable enter its domain.
     /// </summary>
     /// <remarks>
     /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
@@ -259,11 +260,14 @@ namespace Eggnog
         /// container: its cell is a container id from the graph's id counter, equal vectors have one cell, and its
         /// primitives are <see cref="Primitives"/>' <c>Vec*</c> methods. It extracts as <c>(vec-of a b)</c>, or
         /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements are value types,
-        /// containers included; vectors of classes, egglog's eq-sort containers, are not supported yet.
+        /// containers included; vectors of classes, egglog's eq-sort containers, are not supported yet. The first vector
+        /// type registered is an engine definition: while the root is writable, that call enters the root's domain.
         /// </summary>
         /// <typeparam name="T">The element type; registered, and not a sort.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">The element type is unknown or a sort, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first vector type is registered while another thread is using
+        /// the writable root.</exception>
         public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();

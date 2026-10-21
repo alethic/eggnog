@@ -28,11 +28,22 @@ namespace Eggnog
         /// </summary>
         public static readonly VariadicPrimitive<Vec<T>, Vec<T>> Append = new("vec-append", static xs =>
         {
-            var result = Vec<T>.Empty;
+            // One pass, as egglog's flat_map (vec.rs:125-128).
+            var length = 0;
             foreach (var x in xs)
-                result = result.Append(x);
+                length = checked(length + x.Count);
 
-            return result;
+            var items = new T[length];
+            var at = 0;
+            foreach (var x in xs)
+            {
+                for (var i = 0; i < x.Count; i++)
+                    items[at + i] = x[i];
+
+                at += x.Count;
+            }
+
+            return Vec<T>.Own(items);
         });
 
         /// <summary>
