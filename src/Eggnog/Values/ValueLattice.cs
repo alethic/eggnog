@@ -51,7 +51,7 @@ namespace Eggnog
         /// The maximum lattice: merge max, case join min (a lower bound).
         /// </summary>
         /// <remarks>
-        /// Values are ordered as <see cref="ValueSet{T}"/> orders its elements: strings ordinally, by UTF-16 code unit,
+        /// Values are ordered as <see cref="ValueSet{T}"/> orders its elements: strings by code point, as Rust's are,
         /// never by the current culture, so the result does not depend on the machine or the thread; doubles as egglog's
         /// <c>OrderedFloat</c>, NaN the greatest, so that <c>max</c> keeps NaN as egglog's <c>(max old new)</c> does; every
         /// other type by <see cref="Comparer{T}.Default"/>, which calls <see cref="IComparable{T}.CompareTo"/>. A type's
@@ -70,7 +70,7 @@ namespace Eggnog
         /// The minimum lattice: merge min, case join max (an upper bound).
         /// </summary>
         /// <remarks>
-        /// Values are ordered as for <see cref="Max{T}"/>: strings ordinally, as <see cref="ValueSet{T}"/> orders them,
+        /// Values are ordered as for <see cref="Max{T}"/>: strings by code point, as <see cref="ValueSet{T}"/> orders them,
         /// doubles as <c>OrderedFloat</c>, and every other type by its <see cref="IComparable{T}.CompareTo"/>, which must be a total order consistent
         /// with <see cref="IEquatable{T}.Equals(T)"/>; <see cref="ValueLattice{T}.Verify"/> checks this on samples.
         /// </remarks>
