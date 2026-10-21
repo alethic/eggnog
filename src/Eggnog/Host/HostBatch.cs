@@ -44,6 +44,8 @@ namespace Eggnog
         readonly HashSet<string> rowKeys = new(StringComparer.Ordinal);
         readonly Dictionary<string, uint> functionValues = new(StringComparer.Ordinal);
         readonly Dictionary<string, uint> currentValues = new(StringComparer.Ordinal);
+        HashSet<string>? unknownValues;
+        Dictionary<TableHandle, FunctionHandle>? expressionReads;
         readonly List<(TableHandle Table, uint[] Row)> subsumes = new();
         readonly HashSet<string> subsumeKeys = new(StringComparer.Ordinal);
         readonly HashSet<string> subsumedTerms = new(StringComparer.Ordinal);
@@ -150,7 +152,12 @@ namespace Eggnog
                 throw new InvalidOperationException(
                     $"'{table.Name}' is read after this batch merged classes, and its keys are classes; read it in a later call, which sees the merge as egglog's next command does.");
 
-            if (currentValues.TryGetValue(Key(table, keys), out var current))
+            var key = Key(table, keys);
+            if (unknownValues is not null && unknownValues.Contains(key))
+                throw new InvalidOperationException(
+                    $"'{table.Name}' is read after this batch wrote its key, and its merge, {((FunctionHandle)table).Merge!.Name}, is an expression only the engine evaluates; read it in a later call.");
+
+            if (currentValues.TryGetValue(key, out var current))
                 return current;
 
             if (existing && engine.TryLookup(table.Function, keys, out var stored))
@@ -492,6 +499,25 @@ namespace Eggnog
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTerm(value);
             var key = Key(table, keys);
+            if (table.Merge!.CanSimulate == false)
+            {
+                // An expression that calls tables only the engine evaluates, and it reads them as the flush leaves them,
+                // after every write of the batch: egglog's next command would see neither a merge of classes nor a later
+                // write of a table it reads before this one, so the batch refuses both orders, which separate calls give.
+                if (mergedClasses)
+                    throw new InvalidOperationException(
+                        $"'{table.Name}' is written after this batch merged classes, and its merge {table.Merge.Name} calls tables; write it in a later call, which sees the merge as egglog's next command does.");
+
+                CheckNotReadByExpression(table);
+                currentValues.Remove(key);
+                (unknownValues ??= new HashSet<string>(StringComparer.Ordinal)).Add(key);
+                foreach (var read in table.Merge.Tables)
+                    (expressionReads ??= new Dictionary<TableHandle, FunctionHandle>(ReferenceEqualityComparer.Instance)).TryAdd(read, table);
+
+                rows.Add((table, Row(keys, cell)));
+                return;
+            }
+
             if (currentValues.TryGetValue(key, out var before) || (existing && engine.TryLookup(table.Function, keys, out before)))
             {
                 var merged = MergeCells(table, before, cell);
@@ -505,10 +531,24 @@ namespace Eggnog
                 currentValues[key] = cell;
             }
 
+            CheckNotReadByExpression(table);
             var row = new uint[keys.Length + 1];
             keys.CopyTo(row, 0);
             row[^1] = cell;
             rows.Add((table, row));
+        }
+
+        /// <summary>
+        /// Refuses a write of a table that an earlier write of the batch merges with an expression that reads it: the
+        /// flush would merge the table first, so the expression would read the later write, which egglog's commands, one
+        /// after the other, do not.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">An earlier write's merge expression reads the table.</exception>
+        void CheckNotReadByExpression(TableHandle table)
+        {
+            if (expressionReads is not null && expressionReads.TryGetValue(table, out var reader))
+                throw new InvalidOperationException(
+                    $"'{table.Name}' is written after this batch wrote '{reader.Name}', whose merge {reader.Merge!.Name} reads it; write it in a later call.");
         }
 
         /// <summary>
@@ -523,7 +563,7 @@ namespace Eggnog
             try
             {
                 return table.Merge is { } merge
-                    ? merge.MergeCells(table.Output!, stored, incoming)
+                    ? merge.MergeCells(graph, table.Output!, stored, incoming)
                     : table.Lattice!.MergeCells(table.Output!, stored, incoming);
             }
             catch (Exception exception) when (exception is not RuleEvaluationException)
@@ -568,6 +608,7 @@ namespace Eggnog
                 return;
             }
 
+            CheckNotReadByExpression(table);
             var term = new PendingTerm(table, keys, cell);
             pending.Add(term);
             pendingByKey.Add(key, term);
@@ -584,6 +625,7 @@ namespace Eggnog
             if (pendingByKey.TryGetValue(key, out var planned))
                 return planned.Id;
 
+            CheckNotReadByExpression(table);
             var id = engine.FreshId();
             fresh.Add(id);
             var term = new PendingTerm(table, keys, id);
@@ -648,6 +690,7 @@ namespace Eggnog
         /// </summary>
         void AddRow(TableHandle table, uint[] row)
         {
+            CheckNotReadByExpression(table);
             if (rowKeys.Add(Key(table, row)))
             {
                 rows.Add((table, row));
