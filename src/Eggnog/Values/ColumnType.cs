@@ -4,7 +4,8 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The type of a column: a sort (its cells are classes) or a value type (its cells are base values). Within one
+    /// The type of a column: a sort (its cells are classes) or a value type (its cells are base values or containers of
+    /// values). Within one
     /// graph, equal values have equal cells in every scope, and distinct values distinct cells, so value joins,
     /// constants and disequalities compare cells.
     /// </summary>
@@ -72,13 +73,15 @@ namespace Eggnog
         internal ValueStore? Store { get; set; }
 
         /// <summary>
-        /// Gets the engine column type: <c>ColumnTy.Id</c> for a sort, <c>ColumnTy.Base</c> of the codec otherwise.
+        /// Gets the engine column type: <c>ColumnTy.Id</c> for a sort or a container, <c>ColumnTy.Base</c> of the codec
+        /// otherwise.
         /// </summary>
         internal abstract Relations.ColumnTy EngineType { get; }
 
         /// <summary>
-        /// Gets the type's extraction sort: an <c>EqSort</c> for a sort, a <c>BaseSort</c> that formats like
-        /// <see cref="Format"/> for a value type. One instance per column type.
+        /// Gets the type's extraction sort: an <c>EqSort</c> for a sort, a <c>ContainerSort</c> for a container, a
+        /// <c>BaseSort</c> that formats like <see cref="Format"/> for any other value type. One instance per column
+        /// type.
         /// </summary>
         /// <exception cref="InvalidOperationException">The type is the internal unit type, which extraction never
         /// sees.</exception>
@@ -127,7 +130,8 @@ namespace Eggnog
         /// <summary>
         /// Formats a value already known to be of <see cref="ClrType"/> as its engine codec formats its cell
         /// (<c>BaseValues.Format</c>, egglog's <c>BaseValuePrinter</c>), which needs no cell: Rust's <c>Debug</c> for
-        /// the types with a Rust counterpart, an enum or an <c>int</c> as the <c>long</c> it is stored as.
+        /// the types with a Rust counterpart, an enum or an <c>int</c> as the <c>long</c> it is stored as, and a
+        /// container as its literal.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns>The text.</returns>

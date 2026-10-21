@@ -247,7 +247,11 @@ namespace Eggnog.Relations
                             return;
 
                         writes.AddRow(function, key, output);
-                        report.Rows++;
+                        if (table.Table.ValueOutput)
+                            report.Values++;
+                        else
+                            report.Rows++;
+
                         return;
                     }
 

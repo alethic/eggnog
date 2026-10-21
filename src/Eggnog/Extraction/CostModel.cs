@@ -87,7 +87,8 @@ namespace Eggnog
         /// <param name="type">A value type.</param>
         /// <param name="cost">The cost, at least 0.</param>
         /// <returns>The new model.</returns>
-        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort.</exception>
+        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort, or a container, which costs its
+        /// elements' costs.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         public CostModel WithValueCost(ColumnType type, long cost)
         {
@@ -107,7 +108,8 @@ namespace Eggnog
         /// <param name="type">A value type.</param>
         /// <param name="cost">The per-value cost: pure; it must not call into any graph.</param>
         /// <returns>The new model.</returns>
-        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort.</exception>
+        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort, or a container, which costs its
+        /// elements' costs.</exception>
         public CostModel WithValueCost<T>(ColumnType<T> type, Func<T, long> cost)
         {
             CheckValueType(type);

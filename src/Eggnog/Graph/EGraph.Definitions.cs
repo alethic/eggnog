@@ -119,7 +119,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
@@ -138,7 +139,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
@@ -158,7 +160,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function,
@@ -180,7 +183,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function,
@@ -203,7 +207,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function,
@@ -480,7 +485,8 @@ namespace Eggnog
         /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, lattice, 0);

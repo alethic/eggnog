@@ -13,7 +13,8 @@ namespace Eggnog
         Sort,
 
         /// <summary>
-        /// The cells are base values (numbers, strings, sets, registered types); equal values have equal cells.
+        /// The cells are values: base values (numbers, strings, sets, registered types) or containers of values (pairs);
+        /// equal values have equal cells.
         /// </summary>
         Value,
 

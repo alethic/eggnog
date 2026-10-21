@@ -174,6 +174,96 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
+        public void RunningOutOfIdsForAPairFaultsNothing()
+        {
+            // A pair takes an id, so running out of ids while a rule or a write interns one is the store's limit, as for a
+            // term: OverflowException, the run's writes discarded, the scope unfaulted (architecture, section 2.12).
+            var graph = new EGraph();
+            graph.Values.RegisterPair<long, long>();
+            var pair = Primitives.PairOf<long, long>();
+            var num = graph.DefineRelation<long>("num");
+            var p = graph.DefineFunction<long, Pair<long, long>>("p");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("pair", r =>
+            {
+                var k = r.Var<long>("k");
+                r.When(num.Of(k));
+                r.Then(p.Of(k).Is(pair.Of(k, k)));
+            });
+            graph.Root.Assume(num.Of(1L));
+            var child = graph.Root.CreateChild();
+            child.Assume(num.Of(2L));
+            LeaveIds(graph, 0);
+
+            Assert.Throws<OverflowException>(() => child.Run(Schedule.Run(rules)));
+            Assert.False(child.IsFaulted);
+            Assert.Equal(0, child.CountRows(p));
+            Assert.Throws<OverflowException>(() => graph.Root.Run(Schedule.Run(rules)));
+            Assert.False(graph.Root.IsFaulted);
+            Assert.Throws<OverflowException>(() => graph.Root.Assume(p.Of(3L).Is(pair.Of(3L, 4L))));
+            Assert.False(graph.Root.IsFaulted);
+            Assert.Equal(0, graph.Root.CountRows(p));
+        }
+
+        [Fact]
+        public void ACallbacksDefaultPairFailsTheRuleEvenWhenCaught()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterPair<string, long>();
+            var num = graph.DefineRelation<long>("num");
+            var p = graph.DefineFunction<long, Pair<string, long>>("p");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("default", r =>
+            {
+                var k = r.Var<long>("k");
+                r.When(num.Of(k));
+                r.ThenCall(ctx =>
+                {
+                    try
+                    {
+                        ctx.Set(p, [ctx.Get(k)], default(Pair<string, long>));
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                });
+            });
+            graph.Root.Assume(num.Of(1L));
+
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(rules)));
+        }
+
+        [Fact]
+        public void ALiftedPairCountsAsAValue()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterPair<long, long>();
+            var pair = Primitives.PairOf<long, long>();
+            var p = graph.DefineFunction<long, Pair<long, long>>("p");
+            var keyed = graph.DefineRelation<Pair<long, long>>("keyed");
+            using var cases = graph.Root.OpenCases();
+            foreach (var @case in new[] { cases.Add(), cases.Add() })
+                @case.Assume(p.Of(1L).Is(pair.Of(1L, 2L)), keyed.Of(pair.Of(8L, 8L)));
+
+            var report = cases.Lift();
+
+            Assert.Equal(1, report.Values);
+            Assert.Equal(1, report.Rows);
+            Assert.Equal(new Pair<long, long>(1, 2), graph.Root.Get(p.Of(1L)));
+            Assert.True(graph.Root.Check(keyed.Of(pair.Of(8L, 8L))));
+        }
+
+        /// <summary>
+        /// Moves the store's id counter so that <paramref name="left"/> ids remain.
+        /// </summary>
+        static void LeaveIds(EGraph graph, long left)
+        {
+            var store = graph.Engine.Store;
+            store.Counters.IncrementBy(store.IdCounter, graph.Usage.IdLimit - left - store.Counters.Read(store.IdCounter));
+            Assert.Equal(graph.Usage.IdLimit - left, graph.Usage.IdsReserved);
+        }
+
+        [Fact]
         public void ALatticeWithACaseJoinOverAPairIsRefused()
         {
             var graph = new EGraph();

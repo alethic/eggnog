@@ -201,7 +201,7 @@ namespace Eggnog
             {
                 found = primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not OverflowException || graph.IdsExhausted == false)
             {
                 throw new RuleEvaluationException(null, null,
                     $"primitive '{primitive.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
@@ -559,7 +559,8 @@ namespace Eggnog
                     ? merge.MergeCells(scope, table.Output!, stored, incoming)
                     : table.Lattice!.MergeCells(table.Output!, stored, incoming);
             }
-            catch (Exception exception) when (exception is not RuleEvaluationException)
+            catch (Exception exception) when (exception is not RuleEvaluationException
+                && (exception is not OverflowException || graph.IdsExhausted == false))
             {
                 var what = table.Merge is { } merge ? $"merge '{merge.Name}'" : $"lattice '{table.Lattice!.Name}'";
                 throw new RuleEvaluationException(null, null,

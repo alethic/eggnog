@@ -62,8 +62,8 @@ namespace Eggnog
         /// constant that is not stored inline (strings, doubles, sets, pairs, registered values, and <c>long</c>s outside
         /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge,
         /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
-        /// when it is defined. Reads, checks and query matches never intern. A pair also takes an id from the graph's id
-        /// counter, as egglog's containers do.
+        /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
+        /// intern. A pair also takes an id from the graph's id counter, as egglog's containers do.
         /// </remarks>
         public long InternedCount => values.InternedCount + (Volatile.Read(ref pairs)?.Count ?? 0);
 

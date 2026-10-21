@@ -91,6 +91,11 @@ namespace Eggnog
 
                 return true;
             }
+            catch (OverflowException) when (graph.IdsExhausted)
+            {
+                // The store's limit, met interning a value the callback wrote: as for a term that needs an id.
+                throw;
+            }
             catch (Exception exception)
             {
                 return Fail(runtime, state, args, context?.Refusal ?? exception);

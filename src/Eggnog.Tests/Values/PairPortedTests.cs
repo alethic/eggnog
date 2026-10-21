@@ -4,14 +4,14 @@ namespace Eggnog.Tests.Values
 {
 
     /// <summary>
-    /// Pairs of values, ported from egglog's <c>tests/pair.egg</c> (lines 1-19 at 5e655cae); its last part, a pair of an
-    /// e-class and a value, waits for pairs of classes.
+    /// Pairs of values, ported from egglog's <c>tests/pair.egg</c> (lines 1-17 at 5e655cae); its last part (lines 19-29),
+    /// a pair of an e-class and a value, waits for pairs of classes.
     /// </summary>
     public sealed class PairPortedTests
     {
 
         /// <summary>
-        /// tests/pair.egg, lines 1-19: <c>pair</c>, <c>pair-first</c> and <c>pair-second</c> over <c>(Pair i64 i64)</c>
+        /// tests/pair.egg, lines 1-17: <c>pair</c>, <c>pair-first</c> and <c>pair-second</c> over <c>(Pair i64 i64)</c>
         /// and <c>(Pair i64 String)</c>, and pairs compared by equality.
         /// </summary>
         [Fact]

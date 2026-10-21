@@ -118,9 +118,11 @@ A column holds either a class or a value.
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
 inline; a pair is a container id; every other value is interned and stored as its intern index. Interning pools are
 permanent for the life of the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived
-host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a value no write
-interned, a constant or a computation's result, equals only itself and reads back as itself, and as a key or an output
-it is in no row, as egglog's newly interned one is in none.
+host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a
+value no write interned, a constant or a computation's result, equals only itself and reads back as itself, and as a
+key or an output it is in no row, as egglog's newly interned one is in none. A pair egglog's `check` interns takes an
+id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
+by them, can differ from egglog's.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
 child databases share their root's base-value registry and container environments by reference, and
@@ -131,14 +133,15 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, `BigInt`s, sets, pairs, registered values, and `long`s outside `[0, 2^31)` |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, pairs, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
 | A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
 | `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined |
 
-Reads, checks, query matches and `Until` conditions never intern (`TryEncodeExisting`). A host that serves requests
+Reads, checks and `Until` conditions never intern (`TryEncodeExisting`); a query interns its constants when it is
+defined and, when it runs, the new results of the computations in its body, as a rule does. A host that serves requests
 from long-lived scopes keeps the pools flat by reusing its literals: a query scope that names only values already
 interned interns nothing, and one that names a new string interns the string and whatever the rules compute from it.
 `EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.12).

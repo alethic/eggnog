@@ -292,7 +292,14 @@ namespace Eggnog
                 return State.Canonicalize(cell);
             }
 
-            return type.EncodeObject(value);
+            try
+            {
+                return type.EncodeObject(value);
+            }
+            catch (ArgumentException refused)
+            {
+                throw Refuse(refused);
+            }
         }
 
     }
