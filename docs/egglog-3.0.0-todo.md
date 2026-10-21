@@ -137,8 +137,8 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   `multiset-pick` on an empty multiset, BigInt shifts, a zero BigRat denominator and i64 `log2` now give no result
   instead of panicking. Upstream: `src/sort/vec.rs:196-197`, `src/sort/multiset.rs:190`, `src/sort/bigint.rs:26-27`,
   `src/sort/bigrat.rs:35`, `src/sort/i64.rs:42`. Settled in [decisions](engine/decisions.md) row 22: the library's
-  `log2` and `BigInt` shifts follow 3.0.0 (`Primitives.Log2`, `BigIntegerPrimitives`), and it has no `Vec`, `MultiSet`
-  or `BigRat` primitives.
+  `log2`, `BigInt` shifts and `bigrat` follow 3.0.0 (`Primitives.Log2`, `BigIntegerPrimitives`,
+  `BigRationalPrimitives.FromBigIntegers`), and it has no `Vec` or `MultiSet` primitives.
 - [ ] **Panics made errors** (#920). New error variants include `RuleAlreadyExists`, `DesugarError`,
   `UnsupportedInputType`, `ExtractError` for a negative count or a deleted or subsumed value, `BadPresortArguments`,
   `AmbiguousPrimitive` and `UnresolvedPrimitive`. Most are frontend errors. Upstream: `src/lib.rs:2887-2950`,
