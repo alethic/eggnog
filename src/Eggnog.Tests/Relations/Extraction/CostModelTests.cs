@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// Tests for <see cref="CostModel"/>: egglog's <c>TreeAdditiveCostModel</c> defaults, the <c>enode_cost</c>,
-    /// <c>base_value_cost</c> and <c>container_cost</c> hooks as overrides, saturating long addition and the rejection
-    /// of negative costs.
+    /// <c>base_value_cost</c> and <c>container_cost</c> hooks as overrides, addition saturating at
+    /// <see cref="ulong.MaxValue"/> as egglog's <c>u64</c> costs do, and cost functions that throw.
     /// </summary>
     public class CostModelTests
     {
@@ -137,20 +137,19 @@ namespace Eggnog.Relations.Tests
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var num = fx.Constructor("Num", e, 1, fx.I64);
-            var vec = new TestVecSort("VecI", fx.I64);
 
             Assert.Throws<ArgumentException>(() => CostModel.Default.WithBaseValueCost(e, 1));
             Assert.Throws<ArgumentException>(() => CostModel.Default.WithContainerCost(fx.I64, 1));
 
             // A cost function that throws fails the extraction that calls it.
             fx.Make(num, fx.Int(5));
-            var negativeRow = CostModel.Default.WithNodeCost(num, (_, _) => throw new InvalidOperationException("no cost"));
-            Assert.Throws<InvalidOperationException>(() => Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], negativeRow));
-            var negativeValue = CostModel.Default.WithBaseValueCost(fx.I64, (_, _) => throw new InvalidOperationException("no cost"));
-            Assert.Throws<InvalidOperationException>(() => Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], negativeValue));
+            var failingRow = CostModel.Default.WithNodeCost(num, (_, _) => throw new InvalidOperationException("no cost"));
+            Assert.Throws<InvalidOperationException>(() => Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], failingRow));
+            var failingValue = CostModel.Default.WithBaseValueCost(fx.I64, (_, _) => throw new InvalidOperationException("no cost"));
+            Assert.Throws<InvalidOperationException>(() => Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], failingValue));
 
             // On demand, the failure surfaces at the query, and leaves the extractor unusable.
-            var onDemand = Extractor.CreateOnDemand(fx.Schema, negativeRow);
+            var onDemand = Extractor.CreateOnDemand(fx.Schema, failingRow);
             Assert.Throws<InvalidOperationException>(() => onDemand.TryGetCost(e, fx.Get(num, fx.Int(5)), out _));
             var error = Assert.Throws<InvalidOperationException>(() => onDemand.TryGetCost(fx.I64, fx.Int(1), out _));
             Assert.Contains("failed midway", error.Message);

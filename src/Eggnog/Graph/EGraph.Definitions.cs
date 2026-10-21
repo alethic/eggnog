@@ -334,7 +334,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -349,7 +349,7 @@ namespace Eggnog
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -365,7 +365,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -383,7 +383,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -402,7 +402,7 @@ namespace Eggnog
         /// <typeparam name="T4">The fourth key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -510,7 +510,7 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
@@ -551,7 +551,7 @@ namespace Eggnog
         /// <param name="name">The name.</param>
         /// <param name="keys">The key types, of this graph.</param>
         /// <param name="sort">The sort of its terms, of this graph.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it and the lift policy.</param>
         /// <returns>The constructor.</returns>
         internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, TableOptions? options = null) =>

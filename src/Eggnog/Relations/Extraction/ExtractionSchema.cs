@@ -78,7 +78,6 @@ namespace Eggnog.Relations
                     $"{info.Name} takes {math.KeyCount} keys, not {signature.Inputs.Count} input sorts.",
                     nameof(signature));
 
-
             // Validate everything before registering anything, so that a bad declaration leaves the schema unchanged.
             var columns = new Sort[math.FunctionColumns];
             for (var i = 0; i < columns.Length; i++)

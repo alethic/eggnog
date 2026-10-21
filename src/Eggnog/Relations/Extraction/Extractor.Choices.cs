@@ -523,9 +523,8 @@ namespace Eggnog.Relations
         /// Chooses the node the class at <paramref name="local"/> extracts as: egglog's parent edge, the first of its tight
         /// nodes, in the order, whose class's last update comes after the last update of every class among its children
         /// (src/extract.rs:461-499). Where none qualifies, which needs a cost saturated at <see cref="ulong.MaxValue"/>,
-        /// egglog's reconstruction panics; here the class
-        /// takes the first of its nodes whose children all had their first updates before the class had its own, so a
-        /// term is still built. The choices stay acyclic: below a saturated class, first updates strictly decrease until
+        /// egglog's reconstruction panics; here the class takes the first of its nodes whose children all had their first
+        /// updates before the class had its own, so a term is still built. The choices stay acyclic: below a saturated class, first updates strictly decrease until
         /// a class whose cost does not saturate, and below that last updates do.
         /// </summary>
         /// <returns>The node.</returns>

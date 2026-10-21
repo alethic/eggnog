@@ -7,7 +7,8 @@ namespace Eggnog
     /// <summary>
     /// What extraction minimizes: a head cost per constructor (default: its declared cost), optionally a per-row cost
     /// function, and value costs (default 1, egglog's <c>base_value_cost</c>); a term costs its heads' and values' costs
-    /// summed. All costs must be at least 0. Immutable and thread-safe: every <c>With</c> returns a new model.
+    /// summed, saturating at <see cref="ulong.MaxValue"/> as egglog's <c>u64</c> costs do. Immutable and thread-safe:
+    /// every <c>With</c> returns a new model.
     /// </summary>
     public sealed class CostModel
     {
@@ -51,7 +52,7 @@ namespace Eggnog
         /// Gets a model in which a node of <paramref name="head"/> costs <paramref name="cost"/>, without its children.
         /// </summary>
         /// <param name="head">The constructor.</param>
-        /// <param name="cost">The cost, at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
         public CostModel With(ConstructorHandle head, ulong cost)
         {
@@ -83,7 +84,7 @@ namespace Eggnog
         /// Gets a model in which every value of <paramref name="type"/> costs <paramref name="cost"/>.
         /// </summary>
         /// <param name="type">A value type.</param>
-        /// <param name="cost">The cost, at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
         /// <exception cref="ArgumentException"><paramref name="type"/> is a sort, or a container, which costs its
         /// elements' costs.</exception>
