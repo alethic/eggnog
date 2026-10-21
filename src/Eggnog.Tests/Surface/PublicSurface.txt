@@ -198,8 +198,8 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
     TableHandle Table { get }
     ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
 sealed class Eggnog.FullRuleCallbackContext : RuleCallbackContext
-    Boolean Contains(RelationHandle relation, params Object[] keys)
-    Boolean TryLookup<T>(TableHandle table, Object[] keys, out T value)
+    Boolean Contains(RelationHandle relation, params ReadOnlySpan<Object> keys)
+    Boolean TryLookup<T>(TableHandle table, ReadOnlySpan<Object> keys, out T value)
     Int64 TableSize(TableHandle table)
 delegate Eggnog.FuncN<TResult>
     TResult Invoke(ReadOnlySpan<Object> arguments)
@@ -442,11 +442,11 @@ sealed class Eggnog.RuleBuilder
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
 class Eggnog.RuleCallbackContext
     T Get<T>(Var<T> variable)
-    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params Object[] keys)
-    Void Insert(RelationHandle relation, params Object[] keys)
-    Void Remove(TableHandle table, params Object[] keys)
-    Void Set(FunctionHandle function, Object[] keys, Object value)
-    Void Subsume(TableHandle table, params Object[] keys)
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params ReadOnlySpan<Object> keys)
+    Void Insert(RelationHandle relation, params ReadOnlySpan<Object> keys)
+    Void Remove(TableHandle table, params ReadOnlySpan<Object> keys)
+    Void Set(FunctionHandle function, ReadOnlySpan<Object> keys, Object value)
+    Void Subsume(TableHandle table, params ReadOnlySpan<Object> keys)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.RuleDefinitionException : Exception
     String RuleName { get }
