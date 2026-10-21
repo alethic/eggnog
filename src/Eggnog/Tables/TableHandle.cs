@@ -33,7 +33,7 @@ namespace Eggnog
         public string Name { get; internal set; } = null!;
 
         /// <summary>
-        /// Gets the table's position in declaration order, from 0; extraction breaks ties by it.
+        /// Gets the table's position in declaration order, from 0; egglog's extractor lists a sort's constructors in it.
         /// </summary>
         public int Index { get; internal set; }
 
