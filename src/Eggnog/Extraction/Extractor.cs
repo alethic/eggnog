@@ -197,8 +197,10 @@ namespace Eggnog
                 ThrowIfStopped(held);
                 var cell = ClassChecks.Require(Scope, root.Id, nameof(root));
                 lock (sync)
+                {
                     ThrowIfConstructorAdded();
                     return Scope.Engine.TryGetCost(engine, SortOf<TSort>(), cell, out cost);
+                }
             }
             finally
             {
