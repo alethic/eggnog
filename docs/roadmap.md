@@ -47,14 +47,13 @@ gates").
 - **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child
   scopes with their definitions scoped too. It runs egglog's own test files, the fidelity suite for every item above,
   and the benchmark programs that need it (herbie, eggcc, `math.egg`, the transformer programs).
-- **`BigRat`.** egglog's rational sort; .NET has no rational type, so it needs one.
 - **Proofs.** As in Parked, when upstream's proof API settles in a release.
 
 Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
 [`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
 relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
-item 7), observable only in serialization, which emulates egglog's form; and the `BigInt` shift past `int.MaxValue`
-bits, which no .NET `BigInteger` holds.
+item 7), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
+`pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
 
 ## Engine work
 
