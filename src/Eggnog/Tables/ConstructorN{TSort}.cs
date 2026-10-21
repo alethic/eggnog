@@ -30,7 +30,7 @@ namespace Eggnog
         /// <returns>The term.</returns>
         /// <exception cref="ArgumentException">The number of arguments is not the constructor's, or an argument's type
         /// is not its column's.</exception>
-        public ConstructorTerm<TSort> Of(params object[] keys) => new(this, ToArguments(keys));
+        public ConstructorTerm<TSort> Of(params ReadOnlySpan<object> keys) => new(this, ToArguments(keys));
 
     }
 
