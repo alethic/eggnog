@@ -201,6 +201,50 @@ namespace Eggnog.Tests.Concurrency
         }
 
         /// <summary>
+        /// One extractor shared by 8 threads over a frozen scope serializes its cost queries on its lock, as it does its
+        /// extractions: every thread gets each class's cost, and no call fails.
+        /// </summary>
+        [Fact]
+        public void OneExtractorCostsFromEightThreadsOverAFrozenScope()
+        {
+            var t = new NodeTheory();
+            var terms = new Node[400];
+            for (var i = 0; i < terms.Length; i++)
+                terms[i] = t.Root.Make(t.Wrap.Of(t.Add.Of(t.Lit.Of(i), t.Wrap.Of(t.Lit.Of(i + 1L)))));
+
+            t.Root.Freeze();
+            var serial = t.Root.CreateExtractor();
+            var expected = new ulong[terms.Length];
+            for (var i = 0; i < terms.Length; i++)
+                Assert.True(serial.TryGetCost(terms[i], out expected[i]));
+
+            var extractor = t.Root.CreateExtractor();
+            var wrong = 0;
+            var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+            using var start = new System.Threading.ManualResetEventSlim();
+            RunOnThreads(8, k =>
+            {
+                start.Wait(TimeSpan.FromSeconds(30));
+                for (var j = 0; j < terms.Length; j++)
+                {
+                    var i = (j * 7 + k * 53) % terms.Length;
+                    try
+                    {
+                        if (extractor.TryGetCost(terms[i], out var cost) == false || cost != expected[i])
+                            System.Threading.Interlocked.Increment(ref wrong);
+                    }
+                    catch (Exception exception)
+                    {
+                        errors.Add(exception);
+                    }
+                }
+            }, start.Set);
+
+            Assert.True(wrong == 0 && errors.IsEmpty,
+                $"{wrong} wrong costs; {errors.Count} failed calls: {string.Join("; ", System.Linq.Enumerable.Distinct(System.Linq.Enumerable.Select(errors, e => e.GetType().Name + ": " + e.Message)))}");
+        }
+
+        /// <summary>
         /// Reads of a frozen scope take no guard and are thread-safe: <c>Check</c>, <c>Get</c>, <c>Find</c>,
         /// <c>AreEqual</c>, <c>CountRows</c>, <c>Rows</c> and <c>CreateChild</c> from 8 threads give the serial
         /// answers.
