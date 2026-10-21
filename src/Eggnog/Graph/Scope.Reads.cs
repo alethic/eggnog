@@ -41,8 +41,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether every ground fact holds. Never creates terms and never interns: a constant that was never
-        /// interned makes its fact false. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
+        /// Gets whether every ground fact holds. Never creates terms and never interns, and holds where egglog's
+        /// <c>check</c>, which interns, holds: a value no write interned, a constant or a computation's result,
+        /// equals only itself, and as a key is in no row. A scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/> reads the nearest
         /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors). A subsumed row holds, as in
         /// egglog's <c>check</c> (<see cref="TableOptions.Subsumable"/>).
         /// </summary>
@@ -82,7 +83,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the value of a ground term: a function's value, or the class of a constructor term.
+        /// Gets the value of a ground term: a function's value, the class of a constructor term, or the value of a
+        /// constant or a computation, which no write need have interned, as egglog evaluates an expression.
         /// </summary>
         /// <typeparam name="T">The term's type.</typeparam>
         /// <param name="term">The term.</param>
@@ -139,9 +141,9 @@ namespace Eggnog
             try
             {
                 ThrowIfStopped();
-                if (TermReader.TryRead(this, term, out var cell))
+                if (TermReader.TryReadValue(this, term, out var cell, out var unencoded))
                 {
-                    value = Graph.Values.TypeOf<T>().Decode(cell, this);
+                    value = unencoded is null ? Graph.Values.TypeOf<T>().Decode(cell, this) : (T)unencoded;
                     return true;
                 }
 

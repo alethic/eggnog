@@ -101,6 +101,15 @@ namespace Eggnog
         internal abstract bool TryEncodeExistingObject(object value, out uint cell);
 
         /// <summary>
+        /// Gets whether two non-null values of this type are one value as its codec interns them, so that a read can
+        /// compare two values no write interned as egglog, which interns them, compares their cells.
+        /// </summary>
+        /// <param name="x">One value.</param>
+        /// <param name="y">The other value.</param>
+        /// <returns>Whether they would intern as one cell.</returns>
+        internal abstract bool ObjectsEqual(object x, object y);
+
+        /// <summary>
         /// Decodes a cell: a value, or for a sort a class with <paramref name="scope"/>'s origin.
         /// </summary>
         /// <param name="cell">The cell.</param>
