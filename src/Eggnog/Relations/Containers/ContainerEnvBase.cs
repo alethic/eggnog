@@ -116,12 +116,6 @@ namespace Eggnog.Relations
         public abstract void CheckInvariants();
 
         /// <summary>
-        /// Records that the environment gained a container whose content it did not hold before: moves
-        /// <see cref="EqVersionCounter"/>, when set, so every child context re-runs its eq-container guard over its own
-        /// displacements before it is read again. One interlocked increment per new container of a type that holds ids;
-        /// nothing otherwise. Thread-safe.
-        /// </summary>
-        /// <summary>
         /// Makes the environment one that holds e-class ids, counting new contents on <paramref name="version"/>: for a
         /// container type registered over base values first and later over an eq sort, as egglog keeps both in one
         /// environment, telling them apart by <c>do_rebuild</c> (<see cref="IContainerValue{TSelf}.HoldsIds"/>). Its
@@ -134,6 +128,12 @@ namespace Eggnog.Relations
             eqVersion = version;
         }
 
+        /// <summary>
+        /// Records that the environment gained a container whose content it did not hold before: moves
+        /// <see cref="EqVersionCounter"/>, when set, so every child context re-runs its eq-container guard over its own
+        /// displacements before it is read again. One interlocked increment per new container of a type that holds ids;
+        /// nothing otherwise. Thread-safe.
+        /// </summary>
         private protected void NoteNewContent()
         {
             if (eqVersion is { } version)

@@ -124,8 +124,11 @@ A column holds either a class or a value.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
   - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
     that decodes no values.
-  - Only the root makes one. A child uses those the root holds. A merge in a child that displaces a class one of them
-    holds faults the child, as the engine's eq-container guard refuses it (decisions row 9).
+  - Only a writable root makes one. A child, and a read of a frozen root, use those the root holds, and one the root
+    lacks matches nothing there. A write that needs one is refused.
+  - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge
+    the child's rebuild derives faults the child, as the engine's eq-container guard refuses it (decisions row 9).
+  - egglog's `vec-union`, which unions two vectors' classes element by element, is not here yet.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
     constant, its classes made canonical first.
   - As a constructor's argument it extracts as its value, the vector of its classes, and each class extracts as its own

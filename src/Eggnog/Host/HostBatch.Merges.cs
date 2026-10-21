@@ -34,6 +34,7 @@ namespace Eggnog
         List<(int First, int Second)>? classOutputs;
         Dictionary<uint, uint>? direct;
         Dictionary<string, uint>? contents;
+        Dictionary<uint, uint>? childMerges;
         Func<uint, uint>? canonical;
         bool mergeCheckDecided;
         bool mergedClasses;
@@ -49,6 +50,7 @@ namespace Eggnog
         void NoteMerge(uint a, uint b)
         {
             mergedClasses = true;
+            CheckChildMerge(a, b);
             if (StartMergeCheck() == false)
                 return;
 
@@ -59,6 +61,32 @@ namespace Eggnog
 
             merges!.Enqueue((a, b));
             Close();
+        }
+
+        /// <summary>
+        /// Below the root, refuses a merge that would displace a class a container of classes holds: a child never
+        /// rebuilds containers, so the engine's eq-container guard would fault it (decisions row 9). The engine keeps the
+        /// smaller cell of two classes it merges, so the larger is the one displaced. A merge the rebuild derives, such as
+        /// two rows of a constructor meeting, is not foreseen here and still faults the child.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The merge displaces a class a container holds.</exception>
+        void CheckChildMerge(uint a, uint b)
+        {
+            if (scope.IsRoot || graph.Engine.ContainerValues.HasEqContainers == false)
+                return;
+
+            childMerges ??= new Dictionary<uint, uint>();
+            var x = Find(childMerges, a);
+            var y = Find(childMerges, b);
+            if (x == y)
+                return;
+
+            var (kept, displaced) = x < y ? (x, y) : (y, x);
+            if (graph.Engine.ContainerValues.AnyEqContainerMentions(displaced))
+                throw new InvalidOperationException(
+                    $"This merge in '{scope.Path}' displaces class #{displaced}, which a container of classes holds; a child never rebuilds containers, so only the root may merge it (decisions row 9).");
+
+            childMerges[displaced] = kept;
         }
 
         /// <summary>
@@ -408,8 +436,13 @@ namespace Eggnog
                 return;
 
             var finder = new Dictionary<uint, uint>(direct!);
+            var containers = RowContainers();
             while (true)
             {
+                // Each pass rebuilds the containers first, against the union-find as the pass starts, and merges those
+                // that became equal before the tables compare their rows; a container of containers so merges a pass
+                // after the containers it holds, as the engine's and egglog's do.
+                var mergedContainers = MergeContainers(containers, finder);
                 var placed = new Dictionary<string, int>(System.StringComparer.Ordinal);
                 var found = new List<(uint, uint)>();
                 for (var i = 0; i < mergeRows!.Count; i++)
@@ -418,7 +451,7 @@ namespace Eggnog
                     var columns = row.Table.KeyArray;
                     var canonical = new uint[row.Key.Length];
                     for (var c = 0; c < canonical.Length; c++)
-                        canonical[c] = CanonicalCell(columns[c], row.Key[c], cell => Find(finder, cell));
+                        canonical[c] = columns[c].InvolvesClasses ? Find(finder, row.Key[c]) : row.Key[c];
 
                     var signature = Key(row.Table, canonical);
                     if (placed.TryGetValue(signature, out var j) == false)
@@ -433,8 +466,8 @@ namespace Eggnog
                         continue;
 
                     var other = mergeRows[j];
-                    var x = CanonicalCell(row.Table.Output, other.Output, cell => Find(finder, cell));
-                    var y = CanonicalCell(row.Table.Output, row.Output, cell => Find(finder, cell));
+                    var x = Find(finder, other.Output);
+                    var y = Find(finder, row.Output);
                     if (x == y)
                         continue;
 
@@ -449,7 +482,7 @@ namespace Eggnog
                     throw new FactConflictException(held.Table, DecodeKeys(held.Table, held.Key), Decode(output, held.Output), Decode(output, incoming.Output));
                 }
 
-                if (found.Count == 0)
+                if (found.Count == 0 && mergedContainers == false)
                     return;
 
                 foreach (var (a, b) in found)
@@ -460,6 +493,92 @@ namespace Eggnog
                         finder[x] = y;
                 }
             }
+        }
+
+        /// <summary>
+        /// Gets the containers of classes the rows of the check hold, those inside them too, each with its type and its
+        /// elements.
+        /// </summary>
+        List<(ColumnType Type, uint Cell, List<(ColumnType Type, uint Cell)> Elements)> RowContainers()
+        {
+            var result = new List<(ColumnType, uint, List<(ColumnType, uint)>)>();
+            var seen = new HashSet<uint>();
+            var pending = new Stack<(ColumnType Type, uint Cell)>();
+            foreach (var row in mergeRows!)
+            {
+                var columns = row.Table.KeyArray;
+                for (var c = 0; c < columns.Length; c++)
+                    if (columns[c].HoldsClasses)
+                        pending.Push((columns[c], row.Key[c]));
+
+                if (row.Table.Output!.HoldsClasses)
+                    pending.Push((row.Table.Output, row.Output));
+            }
+
+            while (pending.Count > 0)
+            {
+                var (type, cell) = pending.Pop();
+                if (seen.Add(cell) == false)
+                    continue;
+
+                var elements = new List<(ColumnType Type, uint Cell)>();
+                ((IContainerColumnType)type).AppendElements(cell, elements);
+                result.Add((type, cell, elements));
+                foreach (var element in elements)
+                    if (element.Type.HoldsClasses)
+                        pending.Push(element);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Rebuilds the containers against <paramref name="finder"/> as it stands, then merges in it those of one type
+        /// whose elements are now equal, as a pass of the engine's rebuild merges the containers before it rebuilds the
+        /// tables.
+        /// </summary>
+        /// <returns>Whether two containers merged.</returns>
+        static bool MergeContainers(
+            List<(ColumnType Type, uint Cell, List<(ColumnType Type, uint Cell)> Elements)> containers,
+            Dictionary<uint, uint> finder)
+        {
+            if (containers.Count == 0)
+                return false;
+
+            // Every content against the union-find as the pass starts, before any of the pass's merges.
+            var contents = new List<(string Content, uint Cell)>(containers.Count);
+            foreach (var (type, cell, elements) in containers)
+            {
+                var builder = new System.Text.StringBuilder(type.Name);
+                foreach (var (elementType, elementCell) in elements)
+                {
+                    var current = elementType.InvolvesClasses ? Find(finder, elementCell) : elementCell;
+                    builder.Append(' ').Append(current.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+
+                contents.Add((builder.ToString(), cell));
+            }
+
+            var first = new Dictionary<string, uint>(System.StringComparer.Ordinal);
+            var merged = false;
+            foreach (var (content, cell) in contents)
+            {
+                if (first.TryGetValue(content, out var other) == false)
+                {
+                    first.Add(content, cell);
+                    continue;
+                }
+
+                var x = Find(finder, other);
+                var y = Find(finder, cell);
+                if (x == y)
+                    continue;
+
+                finder[Math.Max(x, y)] = Math.Min(x, y);
+                merged = true;
+            }
+
+            return merged;
         }
 
         /// <summary>

@@ -48,6 +48,7 @@ namespace Eggnog
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
                 result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.Of(graph, state).Owner : null);
@@ -63,6 +64,9 @@ namespace Eggnog
             }
             finally
             {
+                if (this.result.HoldsClasses)
+                    ClassCanonicalizer.Exit(canonicalizer);
+
                 EngineCallMarker.Exit();
             }
         }

@@ -47,7 +47,8 @@ namespace Eggnog
             if (scope is not null && ClassChecks.Check(scope.Origin, value.Id, null) is { } error)
                 throw new InvalidOperationException($"A primitive returned a class this scope cannot use: {error}.");
 
-            return Encode(value);
+            // Canonical through the engine call's own find, where one runs, as the call makes a class it returns.
+            return ClassCanonicalizer.Canonical(Encode(value));
         }
 
         /// <inheritdoc />

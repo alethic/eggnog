@@ -27,6 +27,7 @@ namespace Eggnog
         readonly ColumnType result;
         readonly string[] argumentNames;
         readonly bool inBody;
+        readonly bool joins;
         readonly bool overClasses;
 
         /// <summary>
@@ -40,8 +41,11 @@ namespace Eggnog
         /// <param name="argumentNames">The arguments' source names, for failures.</param>
         /// <param name="inBody">Whether the call site is a let of the body (a <c>QueryPrim</c>), where a partial
         /// primitive's no result drops the match; <c>false</c> for a head computation, where it fails the rule.</param>
+        /// <param name="joins">Whether the let's result is compared with a value the body binds otherwise, an atom's
+        /// column or an earlier let's: a container of classes the scope cannot make, and the root does not hold, then
+        /// drops the match, since it equals no cell.</param>
         public PrimitiveCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, ColumnType result, string[] argumentNames,
-            bool inBody)
+            bool inBody, bool joins = false)
         {
             this.graph = graph;
             this.ruleName = ruleName;
@@ -50,6 +54,7 @@ namespace Eggnog
             this.result = result;
             this.argumentNames = argumentNames;
             this.inBody = inBody;
+            this.joins = joins;
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
         }
 
@@ -57,6 +62,7 @@ namespace Eggnog
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
                 if (inBody)
@@ -83,6 +89,13 @@ namespace Eggnog
                 // discarding what it staged, and faults nothing.
                 throw;
             }
+            catch (UninternedContainerException) when (joins)
+            {
+                // A container of classes this scope cannot make and the root does not hold equals no cell it is compared
+                // with, as egglog's newly interned one is in no row.
+                result = 0;
+                return false;
+            }
             catch (Exception exception)
             {
                 Fail(graph, state, ruleName, primitive, parameters, argumentNames, args, exception);
@@ -91,6 +104,9 @@ namespace Eggnog
             }
             finally
             {
+                if (this.result.HoldsClasses)
+                    ClassCanonicalizer.Exit(canonicalizer);
+
                 EngineCallMarker.Exit();
             }
         }

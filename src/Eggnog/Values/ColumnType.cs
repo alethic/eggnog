@@ -128,7 +128,8 @@ namespace Eggnog
         /// none.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
-        /// <exception cref="InvalidOperationException">The value holds classes, and the scope is not the root.</exception>
+        /// <exception cref="InvalidOperationException">The value holds classes, the scope is not a writable root, and the
+        /// root holds no such container (<see cref="UninternedContainerException"/>).</exception>
         internal abstract uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch);
 
         /// <summary>

@@ -358,36 +358,28 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AChildThatMergesTheClassesOfAVectorIsRefused()
+        public void AChildMergesClassesAVectorHoldsWhenTheyStayCanonical()
         {
-            // A child never rebuilds containers, so a merge there of a class a root container holds is refused, as the
-            // engine's eq-container guard refuses it (decisions row 9).
+            // A child never rebuilds containers, so it may merge a class a root container holds only when the class stays
+            // canonical (decisions row 9).
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
             graph.Values.RegisterVec<Node>();
             var f = graph.DefineFunction<Vec<Node>>("f");
             var root = graph.Root;
-            var one = root.Make(num.Of(1L));
+            root.Make(num.Of(1L));
             root.Assume(f.Of().Is(Primitives.VecOf<Node>().Of(num.Of(2L))));
             var two = root.Make(num.Of(2L));
             var three = root.Make(num.Of(3L));
             root.Freeze();
 
-            // A merge that keeps the held class canonical, or touches no held class, needs no rebuild of the vector.
+            // A merge that keeps the held class canonical needs no rebuild of the vector.
             var free = root.CreateChild();
             free.Union(two, three);
             Assert.True(free.AreEqual(two, three));
             Assert.Equal(Vec.Of(two), free.Get(f.Of()));
-
-            // One that displaces the held class, the later one, is refused.
-            var child = root.CreateChild();
-            var refused = Assert.ThrowsAny<Exception>(() =>
-            {
-                child.Union(one, two);
-                child.Get(f.Of());
-            });
-            Assert.Contains("container of e-class ids", refused.ToString(), StringComparison.Ordinal);
+            Assert.False(free.IsFaulted);
         }
 
         [Fact]
@@ -449,6 +441,188 @@ namespace Eggnog.Tests.Values
             Assert.Contains("is a sort", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMultiSet<Node>()).Message, StringComparison.Ordinal);
             Assert.Contains("holds classes", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMultiSet<Vec<Node>>()).Message, StringComparison.Ordinal);
             Assert.Contains("holds classes", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMap<long, Vec<Node>>()).Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void AVectorOfVectorsMergesAPassAfterTheVectorsItHolds()
+        {
+            // (function f (Math) VVM :no-merge) (set (f (Num 1)) (vec-of (vec-of (Num 3)))) (set (f (Num 2)) (vec-of (vec-of (Num 4))))
+            // then one action of (union (Num 3) (Num 4)) (union (Num 1) (Num 2)): egglog's rebuild merges the outer vectors
+            // a pass after the rows meet, and panics; the batch refuses it. Two commands are fine.
+            foreach (var oneBatch in new[] { true, false })
+            {
+                var graph = new EGraph();
+                graph.DefineSort<Node>("Math");
+                var num = graph.DefineConstructor<long, Node>("Num");
+                graph.Values.RegisterVec<Node>();
+                graph.Values.RegisterVec<Vec<Node>>();
+                var f = graph.DefineFunction<Node, Vec<Vec<Node>>>("f");
+                var inner = Primitives.VecOf<Node>();
+                var outer = Primitives.VecOf<Vec<Node>>();
+                var root = graph.Root;
+                root.Assume(f.Of(num.Of(1L)).Is(outer.Of(inner.Of(num.Of(3L)))), f.Of(num.Of(2L)).Is(outer.Of(inner.Of(num.Of(4L)))));
+                var (one, two, three, four) = (root.Make(num.Of(1L)), root.Make(num.Of(2L)), root.Make(num.Of(3L)), root.Make(num.Of(4L)));
+                if (oneBatch)
+                {
+                    Assert.Throws<FactConflictException>(() => root.Write(w =>
+                    {
+                        w.Union(three, four);
+                        w.Union(one, two);
+                    }));
+                    Assert.False(root.IsFaulted);
+                    Assert.False(root.AreEqual(three, four));
+                }
+                else
+                {
+                    root.Union(three, four);
+                    root.Union(one, two);
+                    Assert.True(root.Check(f.Of(num.Of(1L)).Is(f.Of(num.Of(2L)))));
+                }
+            }
+        }
+
+        [Fact]
+        public void KeysOfVectorsOfVectorsMeetAPassLate()
+        {
+            // (function f (VVM) Math :no-merge) (set (f (vec-of (vec-of (Num 1)))) (K (Num 1))) and the same of 2, then
+            // (union (Num 1) (Num 2)): K's rows meet first, so when the keys meet their classes are one. egglog accepts it.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var k = graph.DefineConstructor<Node, Node>("K");
+            graph.Values.RegisterVec<Node>();
+            graph.Values.RegisterVec<Vec<Node>>();
+            var f = graph.DefineFunction<Vec<Vec<Node>>, Node>("f");
+            var inner = Primitives.VecOf<Node>();
+            var outer = Primitives.VecOf<Vec<Node>>();
+            var root = graph.Root;
+            root.Assume(
+                f.Of(outer.Of(inner.Of(num.Of(1L)))).Is(k.Of(num.Of(1L))),
+                f.Of(outer.Of(inner.Of(num.Of(2L)))).Is(k.Of(num.Of(2L))));
+
+            root.Union(root.Make(num.Of(1L)), root.Make(num.Of(2L)));
+
+            Assert.True(root.AreEqual(root.Make(k.Of(num.Of(1L))), root.Make(k.Of(num.Of(2L)))));
+            Assert.Equal(1, root.CountRows(f));
+        }
+
+        [Fact]
+        public void AFrozenRootsQueryInternsNoVector()
+        {
+            // A read of a frozen root, which may run beside its children, interns nothing: a vector it computes that the
+            // root does not hold matches nothing.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("E");
+            graph.Values.RegisterVec<Node>();
+            var b = graph.DefineConstructor<Node>("b");
+            var c = graph.DefineConstructor<Node>("c");
+            var k = graph.DefineConstructor<Node, Node>("k");
+            var l = graph.DefineConstructor<Vec<Node>, Node>("l");
+            var root = graph.Root;
+            root.Make(l.Of(Primitives.VecOf<Node>().Of(k.Of(b.Of()))));
+            var kb = root.Make(k.Of(b.Of()));
+            var kc = root.Make(k.Of(c.Of()));
+            root.Freeze();
+            var child = root.CreateChild();
+            child.Union(kb, kc);
+
+            var query = graph.DefineQuery("open", q =>
+            {
+                var (e, y) = (q.Var<Node>("e"), q.Var<Node>("y"));
+                var v = q.Var<Vec<Node>>("v");
+                q.When(e.Is(l.Of(v)), y.Is(k.Of(q.Var<Node>("x"))), v.Is(Primitives.VecOf<Node>().Of(y)));
+            });
+            var before = graph.Values.InternedCount;
+            Assert.Equal(1, root.Count(query));
+            Assert.Equal(before, graph.Values.InternedCount);
+            Assert.True(child.AreEqual(kb, kc));
+            Assert.False(child.IsFaulted);
+        }
+
+        [Fact]
+        public void AChildMatchesVectorsItCannotMakeAsNothing()
+        {
+            // The container-fail rule in a child: the vector of k(c) is none the root holds, so it matches no row.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("E");
+            graph.Values.RegisterVec<Node>();
+            var b = graph.DefineConstructor<Node>("b");
+            var c = graph.DefineConstructor<Node>("c");
+            var k = graph.DefineConstructor<Node, Node>("k");
+            var l = graph.DefineConstructor<Vec<Node>, Node>("l");
+            var g = graph.DefineFunction<Vec<Node>, long>("g");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("open", r =>
+            {
+                var (e, x, y) = r.Vars<Node, Node, Node>("e", "x", "y");
+                var v = r.Var<Vec<Node>>("v");
+                r.When(e.Is(l.Of(v)), y.Is(k.Of(x)), v.Is(Primitives.VecOf<Node>().Of(y)));
+                r.Then(e.Is(x));
+            });
+            var looked = new List<bool>();
+            var lookup = graph.DefineRuleset("lookup");
+            lookup.DefineRule("look", r =>
+            {
+                var y = r.Var<Node>("y");
+                r.When(y.Is(k.Of(r.Var<Node>("x"))));
+                r.ThenCallFull(ctx => looked.Add(ctx.TryLookup<long>(g, [Vec.Of(ctx.Get(y), ctx.Get(y))], out _)));
+            });
+            var root = graph.Root;
+            var top = root.Make(l.Of(Primitives.VecOf<Node>().Of(k.Of(b.Of()))));
+            root.Make(k.Of(c.Of()));
+            root.Freeze();
+            var child = root.CreateChild();
+
+            child.Run(Schedule.Run(rules));
+            child.Run(Schedule.Run(lookup));
+
+            Assert.False(child.IsFaulted);
+            Assert.True(child.AreEqual(top, child.Make(b.Of())));
+            Assert.Equal(new[] { false, false }, looked);
+        }
+
+        [Fact]
+        public void AChildsMergeOfAClassAVectorHoldsIsRefusedBeforeItIsWritten()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterVec<Node>();
+            var f = graph.DefineFunction<Vec<Node>>("f");
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            root.Assume(f.Of().Is(Primitives.VecOf<Node>().Of(num.Of(2L))));
+            var two = root.Make(num.Of(2L));
+            root.Freeze();
+            var child = root.CreateChild();
+
+            var refused = Assert.Throws<InvalidOperationException>(() => child.Union(one, two));
+            Assert.Contains("container of classes holds", refused.Message, StringComparison.Ordinal);
+            Assert.False(child.IsFaulted);
+            Assert.False(child.AreEqual(one, two));
+            Assert.Equal(Vec.Of(two), child.Get(f.Of()));
+        }
+
+        [Fact]
+        public void AVectorAPrimitiveReturnsHoldsCanonicalClasses()
+        {
+            // A primitive that kept a class the host held, stale since, returns a vector of it canonical, as a class it
+            // returns is.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterVec<Node>();
+            var f = graph.DefineFunction<long, Vec<Node>>("f");
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            root.Assume(f.Of(1L).Is(Vec.Of(one)));
+            root.Union(one, two);
+            var stale = root.Find(one).Equals(one) ? two : one;
+            var kept = Primitive.Create<long, Vec<Node>>("kept", _ => Vec.Of(stale));
+
+            root.Assume(f.Of(1L).Is(kept.Of(0L)));
+            Assert.True(root.Check(f.Of(1L).Is(kept.Of(0L))));
         }
 
         [Fact]

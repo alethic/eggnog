@@ -169,10 +169,10 @@ namespace Eggnog.Relations
         /// <param name="state">The execution state, which mints the id; it must belong to a database.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
-        /// ids; or the containers hold e-class ids and the state belongs to a child context, which may look such a
-        /// container up (<see cref="TryGetId"/>) but not intern one; or the containers hold e-class ids, the container
-        /// is new and the state's database is frozen, whose descendants never re-run their eq-container guard
-        /// (<see cref="EqContainerGuard"/>).</exception>
+        /// ids; or the environment and the container hold e-class ids and the state belongs to a child context, which
+        /// may look such a container up (<see cref="TryGetId"/>) but not intern one; or they hold e-class ids, the
+        /// container is new and the state's database is frozen, whose descendants never re-run their eq-container
+        /// guard (<see cref="EqContainerGuard"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
@@ -211,8 +211,9 @@ namespace Eggnog.Relations
         /// Returns the id of <paramref name="container"/>, which may hold e-class ids, interning it with a fresh id from
         /// <see cref="Counter"/> in <paramref name="counters"/> if it is new, as <see cref="GetOrInsert"/> does from an
         /// execution state of a writable root: the library interns its containers of classes so, from a host write or
-        /// a rule at the root, and the caller makes sure it is one. A new eq-sort container moves the eq-container
-        /// version, as there. Thread-safe.
+        /// a rule at the root, and the caller makes sure the root is writable, never frozen, as the frozen refusal of
+        /// <see cref="GetOrInsert"/> would. A new eq-sort container moves the eq-container version, as there.
+        /// Thread-safe.
         /// </summary>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>

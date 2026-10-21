@@ -202,6 +202,7 @@ namespace Eggnog
             bool found;
             uint cell;
             EngineCallMarker.Enter();
+            var canonicalizer = result.HoldsClasses ? ClassCanonicalizer.Enter(canonical ??= Canonical) : null;
             try
             {
                 found = primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
@@ -213,6 +214,9 @@ namespace Eggnog
             }
             finally
             {
+                if (result.HoldsClasses)
+                    ClassCanonicalizer.Exit(canonicalizer);
+
                 EngineCallMarker.Exit();
             }
 
