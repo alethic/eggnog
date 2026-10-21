@@ -8,7 +8,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An immutable set of values in ascending element order (ordinal for strings, <c>Comparer&lt;T&gt;.Default</c>
+    /// An immutable set of values in ascending element order (by code point for strings, <c>Comparer&lt;T&gt;.Default</c>
     /// otherwise), equal by content. Operations return this instance when nothing changes.
     /// </summary>
     /// <remarks>
