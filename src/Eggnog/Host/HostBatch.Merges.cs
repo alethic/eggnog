@@ -33,6 +33,8 @@ namespace Eggnog
         Dictionary<uint, uint>? smallest;
         List<(int First, int Second)>? classOutputs;
         Dictionary<uint, uint>? direct;
+        Dictionary<string, uint>? contents;
+        Func<uint, uint>? canonical;
         bool mergeCheckDecided;
         bool mergedClasses;
 
@@ -155,15 +157,14 @@ namespace Eggnog
             foreach (var table in tables)
             {
                 if (table is FunctionHandle { Lattice: null } function && (function.Merge is null || scope.IsRoot == false)
-                    && (HasSortKey(table) || (function.Merge is not null && table.Output!.Kind == ColumnKind.Sort)))
+                    && (HasSortKey(table) || (function.Merge is not null && table.Output!.InvolvesClasses)))
                 {
                     result.Add(table);
                     AddSortKeys(table, sorts);
 
                     // Classes a function holds become equal through the constructors that reach their sort, which the
                     // check of meeting rows (CheckClassOutputs) and the refusal below the root follow.
-                    if (table.Output!.Kind == ColumnKind.Sort)
-                        sorts.Add(table.Output);
+                    ContainerClassCells.AddSorts(table.Output!, sorts);
                 }
             }
 
@@ -190,25 +191,50 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether a table has a sort among its key columns.
+        /// Gets whether a table has a key column that names classes: a sort, or a container of classes, whose cells a
+        /// merge changes.
         /// </summary>
         static bool HasSortKey(TableHandle table)
         {
             foreach (var column in table.KeyArray)
-                if (column.Kind == ColumnKind.Sort)
+                if (column.InvolvesClasses)
                     return true;
 
             return false;
         }
 
         /// <summary>
-        /// Adds the sorts of a table's key columns to <paramref name="sorts"/>.
+        /// Adds the sorts of a table's key columns, and the sorts their containers hold, to <paramref name="sorts"/>.
         /// </summary>
         static void AddSortKeys(TableHandle table, HashSet<ColumnType> sorts)
         {
             foreach (var column in table.KeyArray)
-                if (column.Kind == ColumnKind.Sort)
-                    sorts.Add(column);
+                ContainerClassCells.AddSorts(column, sorts);
+        }
+
+        /// <summary>
+        /// Gets a cell of <paramref name="column"/> as the rebuild would compare it under <paramref name="find"/>: a
+        /// class's canonical cell; a container of classes as one stand-in cell per canonical content, since the rebuild
+        /// makes containers of one content one container; any other cell as it is.
+        /// </summary>
+        uint CanonicalCell(ColumnType column, uint cell, Func<uint, uint> find)
+        {
+            if (column.Kind == ColumnKind.Sort)
+                return find(cell);
+
+            if (column.HoldsClasses == false)
+                return cell;
+
+            contents ??= new Dictionary<string, uint>(System.StringComparer.Ordinal);
+            var content = ContainerClassCells.CanonicalContent(column, cell, find);
+            if (contents.TryGetValue(content, out var standIn) == false)
+            {
+                // Stand-ins count down from the top of the id space, which a column of containers holds only so.
+                standIn = uint.MaxValue - (uint)contents.Count;
+                contents.Add(content, standIn);
+            }
+
+            return standIn;
         }
 
         /// <summary>
@@ -219,19 +245,31 @@ namespace Eggnog
             var index = mergeRows!.Count;
             mergeRows.Add((table, key, output, stored));
             var columns = table.KeyArray;
+            var classes = new List<uint>();
             for (var i = 0; i < key.Length; i++)
             {
-                if (columns[i].Kind != ColumnKind.Sort)
+                if (columns[i].InvolvesClasses == false)
                     continue;
 
-                UsesOf(Representative(key[i])).Add(index);
-                if (table is FunctionHandle { Merge: not null })
-                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(key[i], table);
+                // A key that is a container is placed again when a class it holds merges.
+                classes.Clear();
+                ContainerClassCells.AppendClasses(columns[i], key[i], classes);
+                foreach (var cell in classes)
+                {
+                    UsesOf(Representative(cell)).Add(index);
+                    if (table is FunctionHandle { Merge: not null })
+                        (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+                }
             }
 
             // Below the root, a merge of a class a row of such a function outputs would rewrite the row too.
-            if (table is FunctionHandle { Merge: not null } && table.Output!.Kind == ColumnKind.Sort)
-                (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(output, table);
+            if (table is FunctionHandle { Merge: not null } && table.Output!.InvolvesClasses)
+            {
+                classes.Clear();
+                ContainerClassCells.AppendClasses(table.Output, output, classes);
+                foreach (var cell in classes)
+                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+            }
 
             Place(index);
         }
@@ -248,7 +286,7 @@ namespace Eggnog
             var columns = table.KeyArray;
             var canonical = new uint[key.Length];
             for (var i = 0; i < key.Length; i++)
-                canonical[i] = columns[i].Kind == ColumnKind.Sort ? Representative(key[i]) : key[i];
+                canonical[i] = CanonicalCell(columns[i], key[i], Representative);
 
             var signature = Key(table, canonical);
             if (signatures!.TryGetValue(signature, out var other))
@@ -283,8 +321,9 @@ namespace Eggnog
                 return;
 
             // Two classes agree when the rebuild has made them equal by the pass in which the rows meet, which the
-            // check at the end of the planning works out (CheckClassOutputs).
-            if (a.Table.Output!.Kind == ColumnKind.Sort)
+            // check at the end of the planning works out (CheckClassOutputs); so do two containers of classes, which
+            // the rebuild makes one container once their classes are equal.
+            if (a.Table.Output!.InvolvesClasses)
             {
                 (classOutputs ??= new List<(int, int)>()).Add((first, second));
                 return;
@@ -379,7 +418,7 @@ namespace Eggnog
                     var columns = row.Table.KeyArray;
                     var canonical = new uint[row.Key.Length];
                     for (var c = 0; c < canonical.Length; c++)
-                        canonical[c] = columns[c].Kind == ColumnKind.Sort ? Find(finder, row.Key[c]) : row.Key[c];
+                        canonical[c] = CanonicalCell(columns[c], row.Key[c], cell => Find(finder, cell));
 
                     var signature = Key(row.Table, canonical);
                     if (placed.TryGetValue(signature, out var j) == false)
@@ -390,12 +429,12 @@ namespace Eggnog
 
                     // Values never change, so the closure checked them as they met; a function with a merge only the
                     // root writes never meets a row here, since its key's merge is refused below the root.
-                    if (row.Table.Output!.Kind != ColumnKind.Sort || row.Table is FunctionHandle { Merge: not null })
+                    if (row.Table.Output!.InvolvesClasses == false || row.Table is FunctionHandle { Merge: not null })
                         continue;
 
                     var other = mergeRows[j];
-                    var x = Find(finder, other.Output);
-                    var y = Find(finder, row.Output);
+                    var x = CanonicalCell(row.Table.Output, other.Output, cell => Find(finder, cell));
+                    var y = CanonicalCell(row.Table.Output, row.Output, cell => Find(finder, cell));
                     if (x == y)
                         continue;
 

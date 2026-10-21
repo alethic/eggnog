@@ -6,7 +6,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A pair of values: egglog's <c>Pair</c> container (src/sort/pair.rs), whose column type
+    /// A pair of values or classes: egglog's <c>Pair</c> container (src/sort/pair.rs), whose column type
     /// <see cref="ValueStore.RegisterPair{T1, T2}"/> registers and whose primitives are <see cref="Primitives.PairOf{T1, T2}"/>,
     /// <see cref="Primitives.PairFirst{T1, T2}"/> and <see cref="Primitives.PairSecond{T1, T2}"/>. A pair is interned as a container,
     /// so equal pairs have equal cells. Immutable.

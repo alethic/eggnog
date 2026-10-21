@@ -51,6 +51,21 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        internal override uint EncodeCanonical(TSort value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>
+            find(ClassChecks.Require(scope, value.Id, nameof(value), openBatch));
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonical(TSort value, Scope scope, Func<uint, uint> find, out uint cell)
+        {
+            cell = find(ClassChecks.Require(scope, value.Id, nameof(value)));
+            return true;
+        }
+
+        /// <inheritdoc />
+        internal override TSort Canonical(TSort value, Scope scope, Func<uint, uint> find) =>
+            TSort.FromId(new ClassId(find(ClassChecks.Require(scope, value.Id, nameof(value))), scope.Origin));
+
+        /// <inheritdoc />
         internal override bool TryEncodeExisting(TSort value, out uint cell)
         {
             var id = value.Id;

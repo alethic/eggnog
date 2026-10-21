@@ -236,12 +236,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets a looked-up output's cell: a class through <see cref="Find"/>, a value as it is.
+        /// Gets a looked-up output's cell: a class, or a container of classes, through <see cref="Find"/>; a value as it
+        /// is.
         /// </summary>
         uint Canonical(Relations.FunctionId function, Relations.Value value)
         {
             var columns = graph.TableOf(function).Columns;
-            return columns[^1].Kind == ColumnKind.Sort ? Context.Find(value).Rep : value.Rep;
+            return columns[^1].InvolvesClasses ? Context.Find(value).Rep : value.Rep;
         }
 
         /// <inheritdoc />

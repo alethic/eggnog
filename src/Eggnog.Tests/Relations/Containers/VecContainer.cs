@@ -55,6 +55,9 @@ namespace Eggnog.Relations.Tests
         public int Length => values?.Length ?? 0;
 
         /// <inheritdoc />
+        public bool HoldsIds => true;
+
+        /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();

@@ -983,6 +983,11 @@ namespace Eggnog
         {
             var type = shape.ConstantType ?? ResolveType(shape.ClrType);
             CheckStore(type);
+
+            // egglog has no literal for a container of classes; a rule builds one from terms with its primitives.
+            if (type.HoldsClasses)
+                throw Error($"a constant {type.Name} holds classes; build it in the rule with its primitives over terms, such as Primitives.VecOf, as egglog has no literal for one");
+
             if (type.Kind == ColumnKind.Sort)
             {
                 var id = type.ClassOf(shape.Constant!);

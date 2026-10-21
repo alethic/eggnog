@@ -104,6 +104,59 @@ namespace Eggnog
         internal abstract bool TryEncodeExistingObject(object value, out uint cell);
 
         /// <summary>
+        /// Gets whether the type's values hold classes: a container of a sort, or of such containers, egglog's eq-sort
+        /// container (<c>is_eq_container_sort</c>). Its cell is a container id that the union-find rebuilds, as a
+        /// class's; its value is not a class, so it is never unioned and is no constructor's output.
+        /// </summary>
+        internal virtual bool HoldsClasses => false;
+
+        /// <summary>
+        /// Gets whether a cell of the type names classes: a sort's, or a container's that holds classes, whose cell
+        /// changes when classes merge, as egglog's eq sorts and eq-sort containers (<c>do_rebuild</c>).
+        /// </summary>
+        internal bool InvolvesClasses => Kind == ColumnKind.Sort || HoldsClasses;
+
+        /// <summary>
+        /// Encodes a host's value in <paramref name="scope"/>: each class it holds usable there and canonical through
+        /// <paramref name="find"/>, and a container of classes interned at the root; any other value as
+        /// <see cref="EncodeObject"/> does.
+        /// </summary>
+        /// <param name="value">The value, of <see cref="ClrType"/>.</param>
+        /// <param name="scope">The scope written.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <param name="openBatch">The origin of an open Write batch whose classes the scope may use; <c>null</c> for
+        /// none.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
+        /// <exception cref="InvalidOperationException">The value holds classes, and the scope is not the root.</exception>
+        internal abstract uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch);
+
+        /// <summary>
+        /// Gets the cell of a host's value in <paramref name="scope"/> without interning, as
+        /// <see cref="TryEncodeExistingObject"/> does, each class it holds usable there and canonical through
+        /// <paramref name="find"/>, and a container of classes canonical too.
+        /// </summary>
+        /// <param name="value">The value, of <see cref="ClrType"/>.</param>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <param name="cell">The cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether the value has a cell already.</returns>
+        /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
+        internal abstract bool TryEncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, out uint cell);
+
+        /// <summary>
+        /// Gets a host's value as <paramref name="scope"/> sees it: each class it holds usable there and canonical through
+        /// <paramref name="find"/>, so that two values compare as egglog, which interns them, would compare their cells.
+        /// Any other value as it is.
+        /// </summary>
+        /// <param name="value">The value, of <see cref="ClrType"/>.</param>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
+        internal abstract object CanonicalObject(object value, Scope scope, Func<uint, uint> find);
+
+        /// <summary>
         /// Gets whether two non-null values of this type are one value as its codec interns them, so that a read can
         /// compare two values no write interned as egglog, which interns them, compares their cells.
         /// </summary>

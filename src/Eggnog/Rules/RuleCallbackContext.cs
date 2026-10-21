@@ -296,6 +296,11 @@ namespace Eggnog
 
             try
             {
+                // A container of classes: its classes usable and canonical through the state, as a class is, and the
+                // container interned at the root.
+                if (type.HoldsClasses)
+                    return type.EncodeCanonicalObject(value, Scope, State.Canonicalize, null);
+
                 return type.EncodeObject(value);
             }
             catch (ArgumentException refused)

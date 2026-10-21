@@ -45,6 +45,9 @@ namespace Eggnog.Relations
         public uint Second { get; }
 
         /// <inheritdoc />
+        public bool HoldsIds => RebuildFirst || RebuildSecond;
+
+        /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();

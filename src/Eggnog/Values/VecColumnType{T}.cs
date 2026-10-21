@@ -5,17 +5,20 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Vec{T}"/>: egglog's <c>Vec</c> sort (src/sort/vec.rs) over a value element type. A
-    /// vector's cell is the id of its <see cref="Relations.VecContainer"/>, interned in the graph's container environment
-    /// with an id from the graph's id counter, as egglog's are; the engine column is an id column. A vector of values is
-    /// never rebuilt and its id never merges, so equal vectors have equal cells in every scope, and the library treats it
-    /// as a value.
+    /// The column type of <see cref="Vec{T}"/>: egglog's <c>Vec</c> sort (src/sort/vec.rs). A vector's cell is the id of
+    /// its <see cref="Relations.VecContainer"/>, interned in the graph's container environment with an id from the graph's
+    /// id counter, as egglog's are; the engine column is an id column. A vector of values is never rebuilt and its id
+    /// never merges, so equal vectors have equal cells in every scope, and the library treats it as a value. A vector of
+    /// classes, or of containers of them, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt
+    /// against the union-find, its id merged with another's when their elements become equal, and interned only at the
+    /// root (decisions row 9).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal sealed class VecColumnType<T> : ColumnType<Vec<T>>, IContainerColumnType where T : notnull
     {
 
         readonly ColumnType<T> element;
+        readonly bool holdsClasses;
         readonly Relations.ContainerEnv<Relations.VecContainer> env;
         readonly Relations.CounterSet counters;
         readonly Relations.VecSort sort;
@@ -24,8 +27,9 @@ namespace Eggnog
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
-        /// <param name="element">The column type of the elements; a value type.</param>
-        /// <param name="env">The graph's vector environment, registered as holding no e-class ids.</param>
+        /// <param name="element">The column type of the elements.</param>
+        /// <param name="env">The graph's vector environment, registered as holding e-class ids when the elements are
+        /// classes or hold them.</param>
         /// <param name="counters">The graph's counters, from which the environment mints ids.</param>
         public VecColumnType(
             string name,
@@ -35,13 +39,20 @@ namespace Eggnog
             : base(name, ColumnKind.Value)
         {
             this.element = element;
+            holdsClasses = element.InvolvesClasses;
             this.env = env;
             this.counters = counters;
             sort = new Relations.VecSort(name, element.ExtractionSort);
         }
 
         /// <inheritdoc />
+        internal override bool HoldsClasses => holdsClasses;
+
+        /// <inheritdoc />
         internal override Relations.ColumnTy EngineType => Relations.ColumnTy.Id;
+
+        /// <inheritdoc />
+        public IReadOnlyList<ColumnType> ElementTypes => [element];
 
         /// <inheritdoc />
         internal override bool IsOrdered => element.IsOrdered;
@@ -57,15 +68,71 @@ namespace Eggnog
         /// <param name="value">The vector.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentNullException">The vector is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">The vector holds classes, which encode in a scope
+        /// (<see cref="EncodeIn"/>).</exception>
         /// <exception cref="OverflowException">The graph has no ids left.</exception>
         internal override uint Encode(Vec<T> value)
         {
             ArgumentNullException.ThrowIfNull(value);
+            if (holdsClasses)
+                throw ContainerClasses.NeedScope(Name);
+
             Span<uint> cells = value.Count <= 64 ? stackalloc uint[value.Count] : new uint[value.Count];
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = element.Encode(value[i]);
 
             return env.GetOrInsertShared(new Relations.VecContainer(false, cells), counters);
+        }
+
+        /// <summary>
+        /// Encodes a vector a primitive returned in <paramref name="scope"/>: for a vector of classes, its classes
+        /// usable there and the container interned at the root, as egglog's primitive registers its container through the
+        /// execution state, or in a child the one the root holds; else as <see cref="Encode"/>.
+        /// </summary>
+        /// <param name="value">The vector.</param>
+        /// <param name="scope">The scope the call runs in.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="InvalidOperationException">The vector holds classes, and a class is not usable in the scope,
+        /// or the scope is a child and the root holds no such vector.</exception>
+        internal override uint EncodeIn(Vec<T> value, Scope? scope)
+        {
+            if (holdsClasses == false)
+                return Encode(value);
+
+            ArgumentNullException.ThrowIfNull(value);
+            var cells = new uint[value.Count];
+            for (var i = 0; i < cells.Length; i++)
+                cells[i] = element.EncodeIn(value[i], scope);
+
+            return ContainerClasses.Intern(env, new Relations.VecContainer(true, cells), counters, Name, scope);
+        }
+
+        /// <inheritdoc />
+        internal override uint EncodeCanonical(Vec<T> value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch)
+        {
+            if (holdsClasses == false)
+                return Encode(value);
+
+            ArgumentNullException.ThrowIfNull(value);
+            var cells = new uint[value.Count];
+            for (var i = 0; i < cells.Length; i++)
+                cells[i] = element.EncodeCanonical(value[i], scope, find, openBatch);
+
+            return find(ContainerClasses.Intern(env, new Relations.VecContainer(true, cells), counters, Name, scope));
+        }
+
+        /// <inheritdoc />
+        internal override Vec<T> Canonical(Vec<T> value, Scope scope, Func<uint, uint> find)
+        {
+            if (holdsClasses == false)
+                return value;
+
+            ArgumentNullException.ThrowIfNull(value);
+            var items = new T[value.Count];
+            for (var i = 0; i < items.Length; i++)
+                items[i] = element.Canonical(value[i], scope, find);
+
+            return Vec<T>.Own(items);
         }
 
         /// <inheritdoc />
@@ -78,7 +145,27 @@ namespace Eggnog
                 if (element.TryEncodeExisting(value[i], out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(new Relations.VecContainer(false, cells), out cell);
+            return env.TryGetId(new Relations.VecContainer(holdsClasses, cells), out cell);
+        }
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonical(Vec<T> value, Scope scope, Func<uint, uint> find, out uint cell)
+        {
+            if (holdsClasses == false)
+                return TryEncodeExisting(value, out cell);
+
+            ArgumentNullException.ThrowIfNull(value);
+            cell = 0;
+            var cells = new uint[value.Count];
+            for (var i = 0; i < cells.Length; i++)
+                if (element.TryEncodeCanonical(value[i], scope, find, out cells[i]) == false)
+                    return false;
+
+            if (env.TryGetId(new Relations.VecContainer(true, cells), out var id) == false)
+                return false;
+
+            cell = find(id);
+            return true;
         }
 
         /// <summary>
@@ -117,6 +204,25 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override string DebugValue(Vec<T> value) => FormatValue(value);
+
+        /// <summary>
+        /// Formats a vector's cell as <see cref="FormatValue"/> formats the vector, through its elements' cells, so that a
+        /// vector of classes formats without a scope.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>The literal.</returns>
+        internal override string FormatCell(uint cell)
+        {
+            var vec = Read(cell);
+            if (vec.Length == 0)
+                return "(vec-empty)";
+
+            var parts = new string[vec.Length];
+            for (var i = 0; i < parts.Length; i++)
+                parts[i] = element.FormatCell(vec.Values[i]);
+
+            return "(vec-of " + string.Join(" ", parts) + ")";
+        }
 
         /// <summary>
         /// Compares two vectors lexicographically over their elements' content order, a shorter prefix first. Never

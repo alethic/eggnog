@@ -68,17 +68,18 @@ namespace Eggnog
         public bool Subsumable { get; internal set; }
 
         /// <summary>
-        /// Gets whether every key, and the output, is a value type: only such a table may be read scoped.
+        /// Gets whether every key, and the output, is a value type that holds no classes: only such a table may be read
+        /// scoped.
         /// </summary>
         public bool IsValueOnly
         {
             get
             {
                 foreach (var key in keys)
-                    if (key.Kind == ColumnKind.Sort)
+                    if (key.InvolvesClasses)
                         return false;
 
-                return Output is null || Output.Kind == ColumnKind.Value;
+                return Output is null || Output.InvolvesClasses == false;
             }
         }
 

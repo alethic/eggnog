@@ -69,16 +69,26 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void AValueContainerTypeIsRefusedOnceRegisteredAsHoldingIds()
+        public void PairsOfValuesAndOfClassesShareAnEnvironment()
         {
+            // egglog keeps a container type's eq-sort and base containers in one environment, apart by do_rebuild.
             var egraph = BridgeTestUtil.NewEGraph();
-            egraph.RegisterContainerType<PairContainer>();
-            Assert.Throws<InvalidOperationException>(() => egraph.RegisterBaseContainerType<PairContainer>());
+            var held = egraph.RegisterEqContainerType<PairContainer>();
+            Assert.True(held.HoldsIds);
+            Assert.Same(held, egraph.RegisterBaseContainerType<PairContainer>());
 
             var other = BridgeTestUtil.NewEGraph();
             var env = other.RegisterBaseContainerType<PairContainer>();
             Assert.False(env.HoldsIds);
             Assert.Same(env, other.RegisterBaseContainerType<PairContainer>());
+            Assert.Same(env, other.RegisterEqContainerType<PairContainer>());
+            Assert.True(env.HoldsIds);
+
+            // A pair of values still interns without an execution state; one of classes only at the root's.
+            var values = env.GetOrInsertShared(new PairContainer(false, false, 1, 2), other.Counters);
+            Assert.Equal(values, env.GetOrInsertShared(new PairContainer(false, false, 1, 2), other.Counters));
+            Assert.Throws<InvalidOperationException>(() => env.GetOrInsertShared(new PairContainer(true, false, 1, 2), other.Counters));
+            Assert.NotEqual(values, env.GetOrInsertAtRoot(new PairContainer(true, false, 1, 2), other.Counters));
         }
 
     }

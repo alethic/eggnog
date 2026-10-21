@@ -50,7 +50,7 @@ namespace Eggnog
             this.result = result;
             this.argumentNames = argumentNames;
             this.inBody = inBody;
-            overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
         }
 
         /// <inheritdoc />
@@ -70,8 +70,9 @@ namespace Eggnog
                 }
 
                 // A class the primitive returns may be one the host kept, stale since: canonical through the run's own
-                // find, which a parallel run's workers may use, so that it joins as its class before the next rebuild.
-                if (this.result.Kind == ColumnKind.Sort)
+                // find, which a parallel run's workers may use, so that it joins as its class before the next rebuild;
+                // so is a container of classes.
+                if (this.result.InvolvesClasses)
                     result = state.Canonicalize(result);
 
                 return true;

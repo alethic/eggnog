@@ -600,13 +600,16 @@ namespace Eggnog
 
                     // A function may output a class, as egglog's function of an e-class sort: its merge then asserts
                     // the classes equal, or keeps the old or the new one; a lattice and a merge function decode values.
-                    if (kind == TableKind.Function && output!.Kind == ColumnKind.Sort)
+                    // So may it a container of classes, egglog's eq-sort container, which a lattice and a merge function
+                    // would decode outside any scope.
+                    if (kind == TableKind.Function && output!.InvolvesClasses)
                     {
+                        var what = output.Kind == ColumnKind.Sort ? $"the sort {output.Name}" : $"{output.Name}, which holds classes";
                         if (lattice is not null)
-                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
+                            throw new ArgumentException($"Function '{name}' outputs {what}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
 
                         if (merge is { DecodesValues: true })
-                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New, Old and Expression merge classes.", nameof(merge));
+                            throw new ArgumentException($"Function '{name}' outputs {what}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New, Old and Expression merge classes.", nameof(merge));
                     }
 
                     if (lattice is not null && lattice.ValueType != output!.ClrType)

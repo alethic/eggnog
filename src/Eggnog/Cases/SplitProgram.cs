@@ -41,7 +41,7 @@ namespace Eggnog
             Template = assumptions;
             var sorts = new List<int>();
             for (var i = 0; i < columns.Length; i++)
-                if (columns[i].Kind == ColumnKind.Sort)
+                if (columns[i].InvolvesClasses)
                     sorts.Add(i);
 
             SortColumns = sorts.ToArray();

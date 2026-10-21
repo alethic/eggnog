@@ -51,7 +51,7 @@ namespace Eggnog
                 return false;
 
             var output = table.Columns[^1];
-            value = (T)output.DecodeObject(output.Kind == ColumnKind.Sort ? State.Canonicalize(cell) : cell, Scope);
+            value = (T)output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
             return true;
         }
 

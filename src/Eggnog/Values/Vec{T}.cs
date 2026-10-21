@@ -8,10 +8,11 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An immutable vector of values, equal by content: egglog's <c>Vec</c> container (src/sort/vec.rs), whose column type
-    /// <see cref="ValueStore.RegisterVec{T}"/> registers and whose primitives are <see cref="Primitives"/>'
-    /// <c>Vec*</c> methods. A vector is interned as a container, so equal vectors have equal cells. Operations return a new
-    /// vector, or this one when nothing changes.
+    /// An immutable vector of values or classes, equal by content: egglog's <c>Vec</c> container (src/sort/vec.rs),
+    /// whose column type <see cref="ValueStore.RegisterVec{T}"/> registers and whose primitives are
+    /// <see cref="Primitives"/>' <c>Vec*</c> methods. A vector is interned as a container, so equal vectors have equal
+    /// cells, and a vector of classes is rebuilt when they merge. Operations return a new vector, or this one when nothing
+    /// changes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     public sealed class Vec<T> : IReadOnlyList<T>, IEquatable<Vec<T>>, IComparable<Vec<T>> where T : notnull

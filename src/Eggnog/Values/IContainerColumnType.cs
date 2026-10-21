@@ -20,6 +20,11 @@ namespace Eggnog
         void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination);
 
         /// <summary>
+        /// Gets the column types of the container's elements: egglog's <c>inner_sorts</c>.
+        /// </summary>
+        IReadOnlyList<ColumnType> ElementTypes { get; }
+
+        /// <summary>
         /// Gets the name a serialized e-graph gives the container in <paramref name="cell"/>: egglog's
         /// <c>serialized_name</c>.
         /// </summary>

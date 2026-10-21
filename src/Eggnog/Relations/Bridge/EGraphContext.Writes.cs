@@ -379,7 +379,7 @@ namespace Eggnog.Relations
             using var scope = context.Domain.Enter();
             context.ThrowIfNotWritable();
             if (parent is null)
-                owner.RegisterContainerType<TContainer>();
+                owner.EnsureContainerType<TContainer>();
             else if (owner.ContainerValues.TryGetTypeId<TContainer>(out _) == false)
                 throw new InvalidOperationException($"The container type {typeof(TContainer).Name} must be registered with the e-graph before a child interns one.");
 

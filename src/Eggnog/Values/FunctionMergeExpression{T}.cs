@@ -139,6 +139,9 @@ namespace Eggnog
                     if (constantType.Kind == ColumnKind.Sort)
                         throw new ArgumentException($"The merge {Name} of '{functionName}' holds a class constant; apply a nullary constructor or function instead, as egglog lowers a global.", "merge");
 
+                    if (constantType.HoldsClasses)
+                        throw new ArgumentException($"The merge {Name} of '{functionName}' holds a constant {constantType.Name}, which holds classes; build it with its primitives over terms, as egglog has no literal for one.", "merge");
+
                     return Relations.MergeFn.Const(new Relations.Value(constantType.EncodeObject(shape.Constant!)));
                 }
                 case TermShapeKind.Application:

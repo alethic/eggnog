@@ -27,11 +27,10 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void PairsOfClassesAndOtherRegistrationsAreRefused()
+        public void PairsOfClassesRegisterAndOtherRegistrationsAreRefused()
         {
             var t = new NodeTheory();
-            var sort = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterPair<long, Node>());
-            Assert.Contains("Node is a sort", sort.Message, StringComparison.Ordinal);
+            Assert.Equal("Pair<i64, Node>", t.Graph.Values.RegisterPair<long, Node>().Name);
             var register = Assert.Throws<ArgumentException>(() => t.Graph.Values.Register<Pair<long, long>>("P"));
             Assert.Contains("ValueStore.RegisterPair", register.Message, StringComparison.Ordinal);
             var unknown = Assert.Throws<ArgumentException>(() => t.Graph.Values.TypeOf<Pair<long, bool>>());

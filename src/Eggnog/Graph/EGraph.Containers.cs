@@ -56,6 +56,45 @@ namespace Eggnog
             }
         }
 
+        /// <summary>
+        /// Gets the graph's environment of the container type <typeparamref name="TContainer"/> as one that holds e-class
+        /// ids, registering it so, or making the environment of the type's containers of values hold them: egglog keeps a
+        /// container type's eq-sort and base containers in one environment, apart by <c>do_rebuild</c>. An engine
+        /// definition the first time: it takes the definition lock and the writable root's domain.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <returns>The environment.</returns>
+        /// <exception cref="System.InvalidOperationException">The root is frozen, whose children read the container
+        /// types that hold ids while they rebuild; or another thread is using the root.</exception>
+        internal Relations.ContainerEnv<TContainer> ClassContainers<TContainer>()
+            where TContainer : struct, Relations.IContainerValue<TContainer>
+        {
+            if (valueContainers.TryGetValue(typeof(TContainer), out var known) && known.HoldsIds)
+                return (Relations.ContainerEnv<TContainer>)known;
+
+            lock (DefinitionLock)
+            {
+                if (valueContainers.TryGetValue(typeof(TContainer), out known) && known.HoldsIds)
+                    return (Relations.ContainerEnv<TContainer>)known;
+
+                if (Root.IsFrozen)
+                    throw new System.InvalidOperationException(
+                        $"A container type of classes registers while the root is writable; the root is frozen, and its children read such types while they rebuild.");
+
+                Root.Guard.Enter(Root);
+                try
+                {
+                    var env = Engine.RegisterEqContainerType<TContainer>();
+                    valueContainers[typeof(TContainer)] = env;
+                    return env;
+                }
+                finally
+                {
+                    Root.Guard.Exit();
+                }
+            }
+        }
+
     }
 
 }

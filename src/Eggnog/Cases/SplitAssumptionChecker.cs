@@ -163,8 +163,8 @@ namespace Eggnog
                     // A case's assumptions are computed before the case's unions are planned, so a computation over
                     // classes there would not see them; splits are an addition, and compute over values only.
                     var result = TypeOf(primitive.ResultType);
-                    if (result.Kind == ColumnKind.Sort || Array.Exists(types, p => p.Kind == ColumnKind.Sort))
-                        throw Error($"primitive '{primitive.Name}' takes or returns a sort; a split's assumptions compute over values, so compare classes in When");
+                    if (result.InvolvesClasses || Array.Exists(types, p => p.InvolvesClasses))
+                        throw Error($"primitive '{primitive.Name}' takes or returns a sort, or a container of classes; a split's assumptions compute over values, so compare classes in When");
 
                     for (var i = 0; i < shape.Arguments.Length; i++)
                         CheckTerm(shape.Arguments[i], types[i]);
@@ -183,6 +183,10 @@ namespace Eggnog
             var type = shape.ConstantType ?? TypeOf(shape.ClrType);
             if (type.Store is not null && ReferenceEquals(type.Store, graph.Values) == false)
                 throw Error($"column type {type.Name} belongs to another graph");
+
+            // A case interns no container of classes (decisions row 9).
+            if (type.HoldsClasses)
+                throw Error($"a constant {type.Name} holds classes, which a case cannot make; a split's assumptions hold values and classes only");
 
             if (type.Kind != ColumnKind.Sort)
                 return;

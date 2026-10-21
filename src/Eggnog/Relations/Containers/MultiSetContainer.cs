@@ -127,6 +127,9 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
+        public bool HoldsIds => Rebuild;
+
+        /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();

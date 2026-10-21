@@ -225,16 +225,19 @@ namespace Eggnog
         /// registered already. A pair is egglog's <c>Pair</c> container: its cell is a container id from the graph's id
         /// counter, equal pairs have one cell, and its primitives are <see cref="Primitives.PairOf{T1, T2}"/>,
         /// <see cref="Primitives.PairFirst{T1, T2}"/> and <see cref="Primitives.PairSecond{T1, T2}"/>. It extracts as
-        /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. The elements are value types,
-        /// pairs included; pairs of classes, egglog's eq-sort containers, are not supported yet. The first pair type
-        /// registered is an engine definition: while the root is writable, that call enters the root's domain.
+        /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. An element may be a value, a
+        /// class of a sort, or a pair or vector of them. A pair that holds classes is egglog's eq-sort container: rebuilt
+        /// when its classes merge, never unioned, and made only at the root (decisions row 9). The first pair type
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
+        /// first that holds classes registers only while the root is writable.
         /// </summary>
-        /// <typeparam name="T1">The type of the first element; registered, and not a sort.</typeparam>
-        /// <typeparam name="T2">The type of the second element; registered, and not a sort.</typeparam>
+        /// <typeparam name="T1">The type of the first element; registered.</typeparam>
+        /// <typeparam name="T2">The type of the second element; registered.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">An element type is unknown or a sort, or the name is taken.</exception>
+        /// <exception cref="ArgumentException">An element type is unknown, or a map or a multiset of classes, or the name
+        /// is taken.</exception>
         /// <exception cref="InvalidOperationException">The first pair type is registered while another thread is using
-        /// the writable root.</exception>
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
             where T1 : notnull
             where T2 : notnull
@@ -245,13 +248,12 @@ namespace Eggnog
 
             var first = TypeOf<T1>();
             var second = TypeOf<T2>();
-            foreach (var element in new ColumnType[] { first, second })
-                if (element.Kind == ColumnKind.Sort)
-                    throw new ArgumentException($"Pairs hold values only so far; {element.Name} is a sort, and pairs of classes are egglog's eq-sort containers, which are not supported yet.");
 
             // Outside the store's lock: the environment's registration takes the graph's definition lock, which
             // DefineSort takes before this lock.
-            var env = graph.ValueContainers<Relations.PairContainer>();
+            var env = first.InvolvesClasses || second.InvolvesClasses
+                ? graph.ClassContainers<Relations.PairContainer>()
+                : graph.ValueContainers<Relations.PairContainer>();
             lock (sync)
             {
                 if (TryGetType<Pair<T1, T2>>(out existing))
@@ -271,15 +273,18 @@ namespace Eggnog
         /// <c>Vec&lt;{element name}&gt;</c>, or gets it when it is registered already. A vector is egglog's <c>Vec</c>
         /// container: its cell is a container id from the graph's id counter, equal vectors have one cell, and its
         /// primitives are <see cref="Primitives"/>' <c>Vec*</c> methods. It extracts as <c>(vec-of a b)</c>, or
-        /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements are value types,
-        /// containers included; vectors of classes, egglog's eq-sort containers, are not supported yet. The first vector
-        /// type registered is an engine definition: while the root is writable, that call enters the root's domain.
+        /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements may be values,
+        /// containers of values included, classes of a sort, or pairs or vectors of them. A vector that holds classes is
+        /// egglog's eq-sort container: rebuilt when its classes merge, never unioned, and made only at the root (decisions
+        /// row 9). The first vector type registered is an engine definition: while the root is writable, that call enters
+        /// the root's domain, and the first that holds classes registers only while the root is writable.
         /// </summary>
-        /// <typeparam name="T">The element type; registered, and not a sort.</typeparam>
+        /// <typeparam name="T">The element type; registered.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">The element type is unknown or a sort, or the name is taken.</exception>
+        /// <exception cref="ArgumentException">The element type is unknown, or a map or a multiset of classes, or the
+        /// name is taken.</exception>
         /// <exception cref="InvalidOperationException">The first vector type is registered while another thread is using
-        /// the writable root.</exception>
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
@@ -287,10 +292,9 @@ namespace Eggnog
                 return existing;
 
             var element = TypeOf<T>();
-            if (element.Kind == ColumnKind.Sort)
-                throw new ArgumentException($"Vectors hold values only so far; {element.Name} is a sort, and vectors of classes are egglog's eq-sort containers, which are not supported yet.");
-
-            var env = graph.ValueContainers<Relations.VecContainer>();
+            var env = element.InvolvesClasses
+                ? graph.ClassContainers<Relations.VecContainer>()
+                : graph.ValueContainers<Relations.VecContainer>();
             lock (sync)
             {
                 if (TryGetType<Vec<T>>(out existing))
@@ -334,8 +338,8 @@ namespace Eggnog
             var key = TypeOf<TKey>();
             var value = TypeOf<TValue>();
             foreach (var part in new ColumnType[] { key, value })
-                if (part.Kind == ColumnKind.Sort)
-                    throw new ArgumentException($"Maps hold values only so far; {part.Name} is a sort, and maps of classes are egglog's eq-sort containers, which are not supported yet.");
+                if (part.InvolvesClasses)
+                    throw new ArgumentException($"Maps hold values only so far; {part.Name} {(part.Kind == ColumnKind.Sort ? "is a sort" : "holds classes")}, and maps of classes are egglog's eq-sort containers, which are not supported yet.");
 
             if (key.IsOrdered == false)
                 throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable, or holds an element that does not.");
@@ -379,8 +383,8 @@ namespace Eggnog
                 return existing;
 
             var element = TypeOf<T>();
-            if (element.Kind == ColumnKind.Sort)
-                throw new ArgumentException($"Multisets hold values only so far; {element.Name} is a sort, and multisets of classes are egglog's eq-sort containers, which are not supported yet.");
+            if (element.InvolvesClasses)
+                throw new ArgumentException($"Multisets hold values only so far; {element.Name} {(element.Kind == ColumnKind.Sort ? "is a sort" : "holds classes")}, and multisets of classes are egglog's eq-sort containers, which are not supported yet.");
 
             if (element.IsOrdered == false)
                 throw new ArgumentException($"Multisets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");

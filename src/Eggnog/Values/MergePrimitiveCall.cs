@@ -41,7 +41,7 @@ namespace Eggnog
             this.primitive = primitive;
             this.parameters = parameters;
             this.result = result;
-            overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
         }
 
         /// <inheritdoc />

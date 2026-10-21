@@ -39,7 +39,7 @@ namespace Eggnog
             boolean = graph.Values.TypeOf<bool>();
             trueCell = boolean.Encode(true);
             unit = graph.Unit.Unit;
-            overClasses = Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            overClasses = Array.Exists(parameters, p => p.InvolvesClasses);
         }
 
         /// <inheritdoc />

@@ -151,7 +151,8 @@ namespace Eggnog.Relations
         /// <see cref="UnionContainerMerge"/>).</param>
         /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers, the default); containers
         /// over base values pass <c>false</c> and may then be interned in child contexts
-        /// (<see cref="ContainerEnvBase.HoldsIds"/>).</param>
+        /// (<see cref="ContainerEnvBase.HoldsIds"/>). Registering again with <c>true</c> a type registered with
+        /// <c>false</c> makes its environment hold ids.</param>
         /// <returns>The type's id.</returns>
         public ContainerTypeId RegisterType<TContainer>(CounterId idCounter, ContainerMergeFunction merge, bool holdsIds = true)
             where TContainer : struct, IContainerValue<TContainer>
@@ -159,7 +160,16 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(merge);
 
             if (TryGetTypeId<TContainer>(out var existing))
+            {
+                // A type registered over base values and now over an eq sort: one environment, as egglog's.
+                if (holdsIds && envs[existing].HoldsIds == false)
+                {
+                    envs[existing].MarkHoldsIds(eqVersion);
+                    hasEqContainers = true;
+                }
+
                 return existing;
+            }
 
             var id = envs.NextId;
             var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism, holdsIds);

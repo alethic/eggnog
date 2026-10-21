@@ -113,6 +113,11 @@ namespace Eggnog
                         return fresh.Contains(cell) ? cell : engine.Find(cell);
                     }
 
+                    // A container of classes: its classes usable and canonical, as a class constant's, and the container
+                    // interned at the root.
+                    if (type.HoldsClasses)
+                        return type.EncodeCanonicalObject(shape.Constant!, scope, canonical ??= Canonical, Origin);
+
                     return type.EncodeObject(shape.Constant!);
                 }
                 case TermShapeKind.Application:
@@ -186,7 +191,7 @@ namespace Eggnog
                 parameters[i] = TypeOf(primitive.ParameterTypes[i]);
 
             var result = TypeOf(primitive.ResultType);
-            var overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            var overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
             if (mergedClasses && overClasses)
                 throw new InvalidOperationException(
                     $"primitive '{primitive.Name}' computes over classes after this batch merged classes; compute it in a later call, which sees the merge as egglog's next command does.");
@@ -214,8 +219,9 @@ namespace Eggnog
             if (found == false)
                 throw new RuleEvaluationException(null, null, $"primitive '{primitive.Name}' has no result for these arguments", null);
 
-            // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it.
-            return result.Kind == ColumnKind.Sort && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
+            // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it; so is
+            // a container of classes, which the batch never makes fresh.
+            return result.InvolvesClasses && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
         }
 
         /// <summary>
@@ -309,7 +315,7 @@ namespace Eggnog
                 case TermShapeKind.Constant:
                 {
                     var type = TypeOf(shape);
-                    if (type.Kind != ColumnKind.Sort)
+                    if (type.InvolvesClasses == false)
                         type.EncodeObject(shape.Constant!);
 
                     break;
@@ -462,10 +468,11 @@ namespace Eggnog
             CheckTable(table);
 
             // egglog's next command would write a class after the merge's rebuild; the batch stages its merges after its
-            // writes, so a class it compares now may become equal to another only later. New and Old compare nothing.
-            if (mergedClasses && table.Output!.Kind == ColumnKind.Sort && table.Merge is null)
+            // writes, so a class it compares now may become equal to another only later, and so may a container of
+            // classes. New and Old compare nothing.
+            if (mergedClasses && table.Output!.InvolvesClasses && table.Merge is null)
                 throw new InvalidOperationException(
-                    $"'{table.Name}' is written after this batch merged classes, and its output is a class; write it in a later call, which sees the merge as egglog's next command does.");
+                    $"'{table.Name}' is written after this batch merged classes, and its output {(table.Output.Kind == ColumnKind.Sort ? "is a class" : "holds classes")}; write it in a later call, which sees the merge as egglog's next command does.");
 
             if (table.Merge is not null)
             {
@@ -532,7 +539,7 @@ namespace Eggnog
 
             // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
             // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
-            if (mergedClasses && (HasSortKey(table) || (table.Output!.Kind == ColumnKind.Sort && table.Merge!.ComparesValues)))
+            if (mergedClasses && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues)))
                 throw new InvalidOperationException(
                     $"'{table.Name}' is written after this batch merged classes, its keys or output are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
 
@@ -826,6 +833,11 @@ namespace Eggnog
         /// </summary>
         static bool IsWritable(TermShape application, TermShape value) =>
             IsValue(value) || (application.Table!.Output!.Kind == ColumnKind.Sort && IsApplication(value, TableKind.Constructor));
+
+        /// <summary>
+        /// Gets the canonical cell of a class the batch plans: a fresh one as it is.
+        /// </summary>
+        uint Canonical(uint cell) => fresh.Contains(cell) ? cell : engine.Find(cell);
 
         /// <summary>
         /// Decodes key cells for an exception.

@@ -16,15 +16,14 @@ namespace Eggnog.Tests.Values
     {
 
         [Fact]
-        public void RegistrationNamesTheVectorAndRefusesClasses()
+        public void RegistrationNamesTheVector()
         {
             var t = new NodeTheory();
             var type = t.Graph.Values.RegisterVec<string>();
             Assert.Equal("Vec<String>", type.Name);
             Assert.Same(type, t.Graph.Values.RegisterVec<string>());
             Assert.Equal("Vec<Pair<i64, i64>>", RegisterNested(t.Graph).Name);
-            var sort = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterVec<Node>());
-            Assert.Contains("Node is a sort", sort.Message, StringComparison.Ordinal);
+            Assert.Equal("Vec<Node>", t.Graph.Values.RegisterVec<Node>().Name);
             var register = Assert.Throws<ArgumentException>(() => t.Graph.Values.Register<Vec<long>>("V"));
             Assert.Contains("ValueStore.RegisterVec", register.Message, StringComparison.Ordinal);
             var unknown = Assert.Throws<ArgumentException>(() => t.Graph.Values.TypeOf<Vec<bool>>());

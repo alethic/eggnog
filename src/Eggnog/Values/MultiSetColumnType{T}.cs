@@ -49,6 +49,9 @@ namespace Eggnog
         internal override Relations.ColumnTy EngineType => Relations.ColumnTy.Id;
 
         /// <inheritdoc />
+        public IReadOnlyList<ColumnType> ElementTypes => [element];
+
+        /// <inheritdoc />
         internal override bool IsOrdered => element.IsOrdered;
 
         /// <inheritdoc />

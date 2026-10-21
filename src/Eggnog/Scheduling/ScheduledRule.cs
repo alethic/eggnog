@@ -105,7 +105,7 @@ namespace Eggnog
                 names[i] = string.IsNullOrEmpty(register.Name) ? "$" + free[i].ToString(CultureInfo.InvariantCulture) : register.Name;
                 types[i] = register.Type;
                 operands[i] = Operand.Register(free[i], register.Type);
-                if (register.Type.Kind == ColumnKind.Sort)
+                if (register.Type.InvolvesClasses)
                     classColumns.Add(i);
             }
 

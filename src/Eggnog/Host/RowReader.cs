@@ -90,7 +90,7 @@ namespace Eggnog
 
             var sorts = new List<int>();
             for (var column = 0; column < width; column++)
-                if (columns[column].Kind == ColumnKind.Sort)
+                if (columns[column].InvolvesClasses)
                     sorts.Add(column);
 
             if (scope.Engine.CanonicalizeColumns(cells.Cells, cellWidth, sorts.ToArray()))
@@ -160,7 +160,7 @@ namespace Eggnog
 
             var sorts = new List<int>();
             for (var column = 0; column < width; column++)
-                if (columns[column].Kind == ColumnKind.Sort)
+                if (columns[column].InvolvesClasses)
                     sorts.Add(column);
 
             scope.Engine.CanonicalizeColumns(cells.Cells, width, sorts.ToArray());
