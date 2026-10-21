@@ -32,6 +32,11 @@ namespace Eggnog
         internal override Relations.Sort ExtractionSort => sort;
 
         /// <inheritdoc />
+        /// <remarks>By cell (<see cref="ClassOrder{TSort}"/>), as egglog orders a map's keys and a multiset's
+        /// elements.</remarks>
+        internal override bool IsOrdered => true;
+
+        /// <inheritdoc />
         internal override uint Encode(TSort value)
         {
             var id = value.Id;

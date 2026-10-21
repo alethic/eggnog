@@ -118,9 +118,11 @@ A column holds either a class or a value.
   `Vec<i64>` and so on, with `Primitives.VecEmpty`, `VecOf`, `VecAppend`, `VecPush`, `VecPop`, `VecLength`,
   `VecContains`, `VecNotContains`, `VecGet`, `VecSet`, `VecRemove` and, for `Vec<long>`, `VecRange`). It extracts as
   `(vec-of a b)` or `(vec-empty)`.
-- **Pairs and vectors of classes**, such as `Vec<Node>` or `Pair<Node, long>`, and pairs and vectors of them, are
+- **Containers of classes**, such as `Vec<Node>`, `Pair<Node, long>`, `Map<Node, long>` or `MultiSet<Vec<Node>>`, are
   egglog's eq-sort containers. The cell is a container id that the union-find rebuilds as it rebuilds a class's:
-  - Two containers become one when their classes merge, as egglog's rebuild makes them.
+  - Two containers become one when their classes merge, as egglog's rebuild makes them. A map whose keys become one
+    keeps the later key's value in key-cell order, and a multiset adds the counts of elements that become one.
+  - Classes order by cell as a map's keys and a multiset's elements, as egglog's `BTreeMap` orders them.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
   - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
     that decodes no values.
@@ -136,12 +138,13 @@ A column holds either a class or a value.
     - Only the root runs it, since the classes it unions are held by the vectors.
     - egglog's bare action, `(vec-union a b)` on its own, waits for host and head actions that compute only for
       their effect; here the union is the value of a write.
+  - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
+    a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
+    multiset.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
     constant, its classes made canonical first.
-  - As a constructor's argument it extracts as its value, the vector of its classes, and each class extracts as its own
-    term.
-
-  Maps and multisets of classes are not supported yet.
+  - As a constructor's argument it extracts as its value, the container of its classes, and each class extracts as its
+    own term.
 - **`Map<TKey, TValue>`** is egglog's `Map` container over value types, in the same way (`ValueStore.RegisterMap`, named
   `Map<i64, String>` and so on, with `Primitives.MapEmpty`, `MapInsert`, `MapGet`, `MapRemove`, `MapLength`,
   `MapContains` and `MapNotContains`). It enumerates in key order, as a `ValueSet` does, so its keys are comparable; its
@@ -657,7 +660,7 @@ with egglog" lists:
 
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
-2. Sets hold values only, and are values themselves, not containers of classes; maps and multisets hold values only.
+2. Sets hold values only, and are values themselves, not containers of classes.
 3. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
    no defaults: a lookup without a row fails.
 4. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.

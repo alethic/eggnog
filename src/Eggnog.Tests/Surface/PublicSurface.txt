@@ -425,6 +425,7 @@ static class Eggnog.Primitives
     static Primitive<MultiSet<T>, T, MultiSet<T>> MultiSetRemove<T>()
     static Primitive<MultiSet<T>, T> MultiSetPick<T>()
     static Primitive<MultiSet<T>, T> MultiSetPickMax<T>()
+    static Primitive<MultiSet<TSort>, TSort> MultiSetUnionValues<TSort : struct, ISort<TSort>>()
     static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
     static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
     static Primitive<T, Int64, MultiSet<T>> MultiSetSingle<T>()

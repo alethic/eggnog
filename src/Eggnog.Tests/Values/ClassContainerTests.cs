@@ -433,17 +433,6 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void MapsAndMultisetsOfClassesAreNotSupportedYet()
-        {
-            var graph = new EGraph();
-            graph.DefineSort<Node>("Math");
-            graph.Values.RegisterVec<Node>();
-            Assert.Contains("is a sort", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMultiSet<Node>()).Message, StringComparison.Ordinal);
-            Assert.Contains("holds classes", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMultiSet<Vec<Node>>()).Message, StringComparison.Ordinal);
-            Assert.Contains("holds classes", Assert.Throws<ArgumentException>(() => graph.Values.RegisterMap<long, Vec<Node>>()).Message, StringComparison.Ordinal);
-        }
-
-        [Fact]
         public void AVectorOfVectorsMergesAPassAfterTheVectorsItHolds()
         {
             // (function f (Math) VVM :no-merge) (set (f (Num 1)) (vec-of (vec-of (Num 3)))) (set (f (Num 2)) (vec-of (vec-of (Num 4))))

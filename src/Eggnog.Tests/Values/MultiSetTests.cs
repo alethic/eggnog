@@ -246,11 +246,10 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void RegistrationRefusesClassesAndIncomparableElements()
+        public void RegistrationTakesClassesAndRefusesIncomparableElements()
         {
             var t = new NodeTheory();
-            var sort = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMultiSet<Node>());
-            Assert.Contains("Node is a sort", sort.Message, StringComparison.Ordinal);
+            Assert.Equal("MultiSet<Node>", t.Graph.Values.RegisterMultiSet<Node>().Name);
             t.Graph.Values.Register<NumericBound>("NumericBound");
             var element = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMultiSet<NumericBound>());
             Assert.Contains("IComparable", element.Message, StringComparison.Ordinal);

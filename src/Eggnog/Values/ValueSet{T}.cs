@@ -21,7 +21,7 @@ namespace Eggnog
     public sealed class ValueSet<T> : IReadOnlyList<T>, IEquatable<ValueSet<T>> where T : notnull
     {
 
-        static readonly IComparer<T> Order = ValueSetOrder<T>.Comparer;
+        static IComparer<T> Order => ValueSetOrder<T>.Comparer;
 
         readonly T[] items;
         int hash;

@@ -62,43 +62,22 @@ namespace Eggnog
         /// <param name="cell">The container's cell.</param>
         /// <param name="find">The canonical cell of a class.</param>
         /// <returns>The key.</returns>
-        public static string CanonicalContent(ColumnType type, uint cell, Func<uint, uint> find)
-        {
-            var builder = new StringBuilder(type.Name);
-            Append(type, cell, find, builder);
-            return builder.ToString();
-        }
+        public static string CanonicalContent(ColumnType type, uint cell, Func<uint, uint> find) =>
+            type.Name + Part(type, cell, find);
 
         /// <summary>
-        /// Appends a cell's canonical form: a class's canonical cell, a container of classes' elements in brackets, any
-        /// other cell as it is.
+        /// Gets a cell's canonical part of a key: a class's canonical cell, a container of classes' key as its rebuild
+        /// would make it (<see cref="IContainerColumnType.CanonicalKey"/>), any other cell as it is.
         /// </summary>
-        static void Append(ColumnType type, uint cell, Func<uint, uint> find, StringBuilder builder)
+        static string Part(ColumnType type, uint cell, Func<uint, uint> find)
         {
             if (type.Kind == ColumnKind.Sort)
-            {
-                builder.Append('#').Append(find(cell).ToString(CultureInfo.InvariantCulture));
-                return;
-            }
+                return "#" + find(cell).ToString(CultureInfo.InvariantCulture);
 
             if (type.HoldsClasses == false)
-            {
-                builder.Append(cell.ToString(CultureInfo.InvariantCulture));
-                return;
-            }
+                return cell.ToString(CultureInfo.InvariantCulture);
 
-            var elements = new List<(ColumnType Type, uint Cell)>();
-            ((IContainerColumnType)type).AppendElements(cell, elements);
-            builder.Append('[');
-            for (var i = 0; i < elements.Count; i++)
-            {
-                if (i > 0)
-                    builder.Append(' ');
-
-                Append(elements[i].Type, elements[i].Cell, find, builder);
-            }
-
-            builder.Append(']');
+            return ((IContainerColumnType)type).CanonicalKey(cell, (elementType, elementCell) => Part(elementType, elementCell, find));
         }
 
     }

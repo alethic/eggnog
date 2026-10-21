@@ -5,11 +5,13 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Map{TKey, TValue}"/>: egglog's <c>Map</c> sort (src/sort/map.rs) over value key and
-    /// value types. A map's cell is the id of its <see cref="Relations.MapContainer"/>, whose entries are in key-cell
-    /// order as egglog's <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's id
-    /// counter; the engine column is an id column. A map of values is never rebuilt and its id never merges, so equal maps
-    /// have equal cells in every scope, and the library treats it as a value.
+    /// The column type of <see cref="Map{TKey, TValue}"/>: egglog's <c>Map</c> sort (src/sort/map.rs). A map's cell is the
+    /// id of its <see cref="Relations.MapContainer"/>, whose entries are in key-cell order as egglog's <c>BTreeMap</c>,
+    /// interned in the graph's container environment with an id from the graph's id counter; the engine column is an id
+    /// column. A map of values is never rebuilt and its id never merges, so equal maps have equal cells in every scope,
+    /// and the library treats it as a value. A map whose keys or values are classes, or hold them, is egglog's eq-sort
+    /// container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, keys that become equal collapsing, the
+    /// later in key-cell order kept, and interned only at the root (decisions row 9).
     /// </summary>
     /// <typeparam name="TKey">The key type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
@@ -20,6 +22,8 @@ namespace Eggnog
 
         readonly ColumnType<TKey> key;
         readonly ColumnType<TValue> value;
+        readonly bool rebuildKeys;
+        readonly bool rebuildValues;
         readonly Relations.ContainerEnv<Relations.MapContainer> env;
         readonly Relations.CounterSet counters;
         readonly Relations.MapSort sort;
@@ -28,9 +32,10 @@ namespace Eggnog
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
-        /// <param name="key">The column type of the keys; a value type.</param>
-        /// <param name="value">The column type of the values; a value type.</param>
-        /// <param name="env">The graph's map environment, registered as holding no e-class ids.</param>
+        /// <param name="key">The column type of the keys.</param>
+        /// <param name="value">The column type of the values.</param>
+        /// <param name="env">The graph's map environment, registered as holding e-class ids when the keys or the values
+        /// are classes or hold them.</param>
         /// <param name="counters">The graph's counters, from which the environment mints ids.</param>
         public MapColumnType(
             string name,
@@ -42,10 +47,15 @@ namespace Eggnog
         {
             this.key = key;
             this.value = value;
+            rebuildKeys = key.InvolvesClasses;
+            rebuildValues = value.InvolvesClasses;
             this.env = env;
             this.counters = counters;
             sort = new Relations.MapSort(name, key.ExtractionSort, value.ExtractionSort);
         }
+
+        /// <inheritdoc />
+        internal override bool HoldsClasses => rebuildKeys || rebuildValues;
 
         /// <inheritdoc />
         internal override Relations.ColumnTy EngineType => Relations.ColumnTy.Id;
@@ -66,10 +76,15 @@ namespace Eggnog
         /// <param name="map">The map.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentNullException">The map is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">The map holds classes, which encode in a scope
+        /// (<see cref="EncodeIn"/>).</exception>
         /// <exception cref="OverflowException">The graph has no ids left.</exception>
         internal override uint Encode(Map<TKey, TValue> map)
         {
             ArgumentNullException.ThrowIfNull(map);
+            if (HoldsClasses)
+                throw ContainerClasses.NeedScope(Name);
+
             var keys = new uint[map.Count];
             var values = new uint[map.Count];
             var i = 0;
@@ -85,6 +100,57 @@ namespace Eggnog
                 throw Merged(map);
 
             return env.GetOrInsertShared(container, counters);
+        }
+
+        /// <summary>
+        /// Encodes a map a primitive returned in <paramref name="scope"/>: for a map that holds classes, its classes
+        /// usable there and the container interned at the root, or in a child the one the root holds; else as
+        /// <see cref="Encode"/>.
+        /// </summary>
+        /// <param name="map">The map.</param>
+        /// <param name="scope">The scope the call runs in.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="InvalidOperationException">The map holds classes, and a class is not usable in the scope, or
+        /// the scope cannot intern and the root holds no such map.</exception>
+        internal override uint EncodeIn(Map<TKey, TValue> map, Scope? scope)
+        {
+            if (HoldsClasses == false)
+                return Encode(map);
+
+            ArgumentNullException.ThrowIfNull(map);
+            var keys = new uint[map.Count];
+            var values = new uint[map.Count];
+            var i = 0;
+            foreach (var (k, v) in map)
+            {
+                keys[i] = key.EncodeIn(k, scope);
+                values[i] = value.EncodeIn(v, scope);
+                i++;
+            }
+
+            return ContainerClasses.Intern(env, Collect(map, keys, values), counters, Name, scope);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>Keys that are classes, and are one class now, collapse, the later in the map's order kept, as
+        /// egglog's rebuild of a <c>BTreeMap</c> keeps the later in key-cell order.</remarks>
+        internal override uint EncodeCanonical(Map<TKey, TValue> map, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch)
+        {
+            if (HoldsClasses == false)
+                return Encode(map);
+
+            ArgumentNullException.ThrowIfNull(map);
+            var keys = new uint[map.Count];
+            var values = new uint[map.Count];
+            var i = 0;
+            foreach (var (k, v) in map)
+            {
+                keys[i] = key.EncodeCanonical(k, scope, find, openBatch);
+                values[i] = value.EncodeCanonical(v, scope, find, openBatch);
+                i++;
+            }
+
+            return find(ContainerClasses.Intern(env, Collect(map, keys, values), counters, Name, scope));
         }
 
         /// <inheritdoc />
@@ -103,11 +169,62 @@ namespace Eggnog
                 i++;
             }
 
-            var container = Relations.MapContainer.Collect(false, false, keys, values);
-            if (container.Count != map.Count)
+            return env.TryGetId(Collect(map, keys, values), out cell);
+        }
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonical(Map<TKey, TValue> map, Scope scope, Func<uint, uint> find, out uint cell)
+        {
+            if (HoldsClasses == false)
+                return TryEncodeExisting(map, out cell);
+
+            ArgumentNullException.ThrowIfNull(map);
+            cell = 0;
+            var keys = new uint[map.Count];
+            var values = new uint[map.Count];
+            var i = 0;
+            foreach (var (k, v) in map)
+            {
+                if (key.TryEncodeCanonical(k, scope, find, out keys[i]) == false
+                    || value.TryEncodeCanonical(v, scope, find, out values[i]) == false)
+                    return false;
+
+                i++;
+            }
+
+            if (env.TryGetId(Collect(map, keys, values), out var id) == false)
+                return false;
+
+            cell = find(id);
+            return true;
+        }
+
+        /// <inheritdoc />
+        internal override Map<TKey, TValue> Canonical(Map<TKey, TValue> map, Scope scope, Func<uint, uint> find)
+        {
+            if (HoldsClasses == false)
+                return map;
+
+            ArgumentNullException.ThrowIfNull(map);
+            var entries = new List<KeyValuePair<TKey, TValue>>(map.Count);
+            foreach (var (k, v) in map)
+                entries.Add(new(key.Canonical(k, scope, find), value.Canonical(v, scope, find)));
+
+            return Map<TKey, TValue>.Create(entries);
+        }
+
+        /// <summary>
+        /// Makes the container of a map's cells, its entries in key-cell order: keys that are classes may collapse, as
+        /// egglog's rebuild makes them; keys of values the map keeps apart but the key type stores as one are refused.
+        /// </summary>
+        /// <exception cref="ArgumentException">Two keys of values the map keeps apart are one cell.</exception>
+        Relations.MapContainer Collect(Map<TKey, TValue> map, uint[] keys, uint[] values)
+        {
+            var container = Relations.MapContainer.Collect(rebuildKeys, rebuildValues, keys, values);
+            if (rebuildKeys == false && container.Count != map.Count)
                 throw Merged(map);
 
-            return env.TryGetId(container, out cell);
+            return container;
         }
 
         /// <summary>
@@ -165,12 +282,60 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two maps' cells as <see cref="CompareValues"/> compares the maps, decoding each once.
+        /// Compares two maps' cells as <see cref="CompareValues"/> compares the maps: their entries in key order, each by
+        /// key then value, through their cells, so that a map of classes compares without a scope.
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y) => x == y ? 0 : CompareValues(Decode(x, null), Decode(y, null));
+        internal override int CompareCells(uint x, uint y)
+        {
+            if (x == y)
+                return 0;
+
+            var left = Entries(x);
+            var right = Entries(y);
+            for (var i = 0; i < left.Length && i < right.Length; i++)
+            {
+                var order = key.CompareCells(left[i].Key, right[i].Key);
+                if (order == 0)
+                    order = value.CompareCells(left[i].Value, right[i].Value);
+
+                if (order != 0)
+                    return order;
+            }
+
+            return left.Length.CompareTo(right.Length);
+        }
+
+        /// <summary>
+        /// Gets a map's entries' cells in key order, the content order of <see cref="CompareValues"/>.
+        /// </summary>
+        (uint Key, uint Value)[] Entries(uint cell)
+        {
+            var map = Read(cell);
+            var entries = new (uint Key, uint Value)[map.Count];
+            for (var i = 0; i < entries.Length; i++)
+                entries[i] = (map.Keys[i], map.Values[i]);
+
+            Array.Sort(entries, (a, b) => key.CompareCells(a.Key, b.Key));
+            return entries;
+        }
+
+        /// <inheritdoc />
+        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        {
+            var map = Read(cell);
+            var entries = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            for (var i = 0; i < map.Count; i++)
+                entries[part(key, map.Keys[i])] = part(value, map.Values[i]);
+
+            var text = new System.Text.StringBuilder("{");
+            foreach (var (k, v) in entries)
+                text.Append(k).Append(':').Append(v).Append(' ');
+
+            return text.Append('}').ToString();
+        }
 
         /// <summary>
         /// Gets a key's value from a map's cell, by the key's cell, without decoding the map: <c>map-get</c> over cells.

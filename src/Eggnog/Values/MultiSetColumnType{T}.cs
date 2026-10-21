@@ -5,17 +5,20 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="MultiSet{T}"/>: egglog's <c>MultiSet</c> sort (src/sort/multiset.rs) over a value
-    /// element type. A multiset's cell is the id of its <see cref="Relations.MultiSetContainer"/>, whose elements are in
-    /// cell order as egglog's <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's
-    /// id counter; the engine column is an id column. A multiset of values is never rebuilt and its id never merges, so
-    /// equal multisets have equal cells in every scope, and the library treats it as a value.
+    /// The column type of <see cref="MultiSet{T}"/>: egglog's <c>MultiSet</c> sort (src/sort/multiset.rs). A multiset's
+    /// cell is the id of its <see cref="Relations.MultiSetContainer"/>, whose elements are in cell order as egglog's
+    /// <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's id counter; the engine
+    /// column is an id column. A multiset of values is never rebuilt and its id never merges, so equal multisets have equal
+    /// cells in every scope, and the library treats it as a value. A multiset of classes, or of containers of them, is
+    /// egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, elements that become equal
+    /// adding their counts, and interned only at the root (decisions row 9).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal sealed class MultiSetColumnType<T> : ColumnType<MultiSet<T>>, IContainerColumnType where T : notnull
     {
 
         readonly ColumnType<T> element;
+        readonly bool rebuild;
         readonly Relations.ContainerEnv<Relations.MultiSetContainer> env;
         readonly Relations.CounterSet counters;
         readonly Relations.MultiSetSort sort;
@@ -24,8 +27,9 @@ namespace Eggnog
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
-        /// <param name="element">The column type of the elements; a value type.</param>
-        /// <param name="env">The graph's multiset environment, registered as holding no e-class ids.</param>
+        /// <param name="element">The column type of the elements.</param>
+        /// <param name="env">The graph's multiset environment, registered as holding e-class ids when the elements are
+        /// classes or hold them.</param>
         /// <param name="counters">The graph's counters, from which the environment mints ids.</param>
         public MultiSetColumnType(
             string name,
@@ -35,10 +39,14 @@ namespace Eggnog
             : base(name, ColumnKind.Value)
         {
             this.element = element;
+            rebuild = element.InvolvesClasses;
             this.env = env;
             this.counters = counters;
             sort = new Relations.MultiSetSort(name, element.ExtractionSort);
         }
+
+        /// <inheritdoc />
+        internal override bool HoldsClasses => rebuild;
 
         /// <summary>
         /// Gets the column type of the elements.
@@ -70,16 +78,55 @@ namespace Eggnog
         internal override uint Encode(MultiSet<T> value)
         {
             ArgumentNullException.ThrowIfNull(value);
+            if (rebuild)
+                throw ContainerClasses.NeedScope(Name);
+
             var (items, counts) = Split(value);
             var cells = new uint[items.Length];
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = element.Encode(items[i]);
 
-            var container = Relations.MultiSetContainer.FromCounts(false, cells, counts);
-            if (container.Elements.Length != items.Length)
-                throw Merged(value);
+            return env.GetOrInsertShared(Collect(value, cells, counts), counters);
+        }
 
-            return env.GetOrInsertShared(container, counters);
+        /// <summary>
+        /// Encodes a multiset a primitive returned in <paramref name="scope"/>: for a multiset of classes, its classes
+        /// usable there and the container interned at the root, or in a child the one the root holds; else as
+        /// <see cref="Encode"/>.
+        /// </summary>
+        /// <param name="value">The multiset.</param>
+        /// <param name="scope">The scope the call runs in.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="InvalidOperationException">The multiset holds classes, and a class is not usable in the scope,
+        /// or the scope cannot intern and the root holds no such multiset.</exception>
+        internal override uint EncodeIn(MultiSet<T> value, Scope? scope)
+        {
+            if (rebuild == false)
+                return Encode(value);
+
+            ArgumentNullException.ThrowIfNull(value);
+            var (items, counts) = Split(value);
+            var cells = new uint[items.Length];
+            for (var i = 0; i < cells.Length; i++)
+                cells[i] = element.EncodeIn(items[i], scope);
+
+            return ContainerClasses.Intern(env, Collect(value, cells, counts), counters, Name, scope);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>Elements that are one class now add their counts, as egglog's rebuild makes them.</remarks>
+        internal override uint EncodeCanonical(MultiSet<T> value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch)
+        {
+            if (rebuild == false)
+                return Encode(value);
+
+            ArgumentNullException.ThrowIfNull(value);
+            var (items, counts) = Split(value);
+            var cells = new uint[items.Length];
+            for (var i = 0; i < cells.Length; i++)
+                cells[i] = element.EncodeCanonical(items[i], scope, find, openBatch);
+
+            return find(ContainerClasses.Intern(env, Collect(value, cells, counts), counters, Name, scope));
         }
 
         /// <inheritdoc />
@@ -93,11 +140,56 @@ namespace Eggnog
                 if (element.TryEncodeExisting(items[i], out cells[i]) == false)
                     return false;
 
-            var container = Relations.MultiSetContainer.FromCounts(false, cells, counts);
-            if (container.Elements.Length != items.Length)
+            return env.TryGetId(Collect(value, cells, counts), out cell);
+        }
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonical(MultiSet<T> value, Scope scope, Func<uint, uint> find, out uint cell)
+        {
+            if (rebuild == false)
+                return TryEncodeExisting(value, out cell);
+
+            ArgumentNullException.ThrowIfNull(value);
+            cell = 0;
+            var (items, counts) = Split(value);
+            var cells = new uint[items.Length];
+            for (var i = 0; i < cells.Length; i++)
+                if (element.TryEncodeCanonical(items[i], scope, find, out cells[i]) == false)
+                    return false;
+
+            if (env.TryGetId(Collect(value, cells, counts), out var id) == false)
+                return false;
+
+            cell = find(id);
+            return true;
+        }
+
+        /// <inheritdoc />
+        internal override MultiSet<T> Canonical(MultiSet<T> value, Scope scope, Func<uint, uint> find)
+        {
+            if (rebuild == false)
+                return value;
+
+            ArgumentNullException.ThrowIfNull(value);
+            var entries = new List<KeyValuePair<T, long>>();
+            foreach (var (item, count) in value.Counts)
+                entries.Add(new(element.Canonical(item, scope, find), count));
+
+            return MultiSet<T>.AddCounts(entries);
+        }
+
+        /// <summary>
+        /// Makes the container of a multiset's cells: elements that are classes may become one, adding their counts, as
+        /// egglog's rebuild makes them; elements of values the multiset keeps apart but the type stores as one are refused.
+        /// </summary>
+        /// <exception cref="ArgumentException">Two elements of values the multiset keeps apart are one cell.</exception>
+        Relations.MultiSetContainer Collect(MultiSet<T> value, uint[] cells, long[] counts)
+        {
+            var container = Relations.MultiSetContainer.FromCounts(rebuild, cells, counts);
+            if (rebuild == false && container.Elements.Length != cells.Length)
                 throw Merged(value);
 
-            return env.TryGetId(container, out cell);
+            return container;
         }
 
         /// <summary>
@@ -179,6 +271,60 @@ namespace Eggnog
             }
         }
 
+        /// <summary>
+        /// Compares two multisets' cells as <see cref="CompareValues"/> compares the multisets: their elements with their
+        /// repeats in element order, through their cells, so that a multiset of classes compares without a scope.
+        /// </summary>
+        /// <param name="x">One cell.</param>
+        /// <param name="y">The other cell.</param>
+        /// <returns>The order.</returns>
+        internal override int CompareCells(uint x, uint y)
+        {
+            if (x == y)
+                return 0;
+
+            var left = Ordered(x);
+            var right = Ordered(y);
+            int i = 0, j = 0;
+            long a = 0, b = 0;
+            while (i < left.Length && j < right.Length)
+            {
+                var order = element.CompareCells(left[i].Cell, right[j].Cell);
+                if (order != 0)
+                    return order;
+
+                // One more of each; move past an element once its repeats are spent.
+                if (++a == left[i].Count)
+                {
+                    i++;
+                    a = 0;
+                }
+
+                if (++b == right[j].Count)
+                {
+                    j++;
+                    b = 0;
+                }
+            }
+
+            return (i < left.Length).CompareTo(j < right.Length);
+        }
+
+        /// <summary>
+        /// Gets a multiset's elements' cells with their counts in element order, the content order of
+        /// <see cref="CompareValues"/>.
+        /// </summary>
+        (uint Cell, long Count)[] Ordered(uint cell)
+        {
+            var multiset = Read(cell);
+            var entries = new (uint Cell, long Count)[multiset.Elements.Length];
+            for (var i = 0; i < entries.Length; i++)
+                entries[i] = (multiset.Elements[i], multiset.Counts[i]);
+
+            Array.Sort(entries, (p, q) => element.CompareCells(p.Cell, q.Cell));
+            return entries;
+        }
+
         /// <inheritdoc />
         internal override bool ValuesEqual(MultiSet<T> x, MultiSet<T> y)
         {
@@ -208,6 +354,24 @@ namespace Eggnog
             for (var i = 0; i < multiset.Elements.Length; i++)
                 for (var k = 0L; k < multiset.Counts[i]; k++)
                     destination.Add((element, multiset.Elements[i]));
+        }
+
+        /// <inheritdoc />
+        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        {
+            var multiset = Read(cell);
+            var counts = new SortedDictionary<string, long>(StringComparer.Ordinal);
+            for (var i = 0; i < multiset.Elements.Length; i++)
+            {
+                var element = part(this.element, multiset.Elements[i]);
+                counts[element] = counts.GetValueOrDefault(element) + multiset.Counts[i];
+            }
+
+            var text = new System.Text.StringBuilder("{");
+            foreach (var (element, count) in counts)
+                text.Append(element).Append('*').Append(count.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(' ');
+
+            return text.Append('}').ToString();
         }
 
         /// <inheritdoc />
@@ -368,6 +532,14 @@ namespace Eggnog
         /// </summary>
         ArgumentException Merged(MultiSet<T> multiset) =>
             new($"Two elements of the multiset {multiset} are distinct in their order but one value to {element.Name}, which stores them in one cell: the type's comparer must agree with its equality.", nameof(multiset));
+
+        /// <summary>
+        /// Gets the cells of a multiset's distinct elements, in cell order, without decoding them.
+        /// </summary>
+        /// <param name="cell">The multiset's cell.</param>
+        /// <returns>The cells.</returns>
+        /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
+        internal uint[] ElementCells(uint cell) => Read(cell).Elements.ToArray();
 
         /// <summary>
         /// Reads the container of a cell.

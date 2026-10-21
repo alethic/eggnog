@@ -68,12 +68,12 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void RegistrationRefusesClassesAndIncomparableKeys()
+        public void RegistrationTakesClassesAndRefusesIncomparableKeys()
         {
             var t = new NodeTheory();
             Assert.Equal("Map<String, i64>", t.Graph.Values.RegisterMap<string, long>().Name);
-            var sort = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<long, Node>());
-            Assert.Contains("Node is a sort", sort.Message, StringComparison.Ordinal);
+            Assert.Equal("Map<i64, Node>", t.Graph.Values.RegisterMap<long, Node>().Name);
+            Assert.Equal("Map<Node, i64>", t.Graph.Values.RegisterMap<Node, long>().Name);
             t.Graph.Values.Register<NumericBound>("NumericBound");
             t.Graph.Values.RegisterPair<NumericBound, long>();
             var key = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMap<NumericBound, long>());

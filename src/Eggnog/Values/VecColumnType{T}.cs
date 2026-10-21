@@ -287,6 +287,16 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        {
+            var parts = new List<string>();
+            foreach (var element in Read(cell).Values)
+                parts.Add(part(this.element, element));
+
+            return "[" + string.Join(" ", parts) + "]";
+        }
+
+        /// <inheritdoc />
         /// <remarks><c>vec-of</c>, as egglog's <c>serialized_name</c> (vec.rs:189-191).</remarks>
         public string SerializedName(uint cell) => "vec-of";
 

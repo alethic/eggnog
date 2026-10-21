@@ -8,11 +8,12 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// An immutable multiset of values, equal by content: egglog's <c>MultiSet</c> container (src/sort/multiset.rs), whose
-    /// column type <see cref="ValueStore.RegisterMultiSet{T}"/> registers and whose primitives are
-    /// <see cref="Primitives"/>' <c>MultiSet*</c> methods. A multiset is interned as a container, so equal multisets have
-    /// equal cells. It enumerates its elements with their repeats in ascending element order, as
-    /// <see cref="ValueSet{T}"/> orders its elements, so the element type must be <c>string</c> or comparable; egglog orders
+    /// An immutable multiset of values or classes, equal by content: egglog's <c>MultiSet</c> container
+    /// (src/sort/multiset.rs), whose column type <see cref="ValueStore.RegisterMultiSet{T}"/> registers and whose
+    /// primitives are <see cref="Primitives"/>' <c>MultiSet*</c> methods. A multiset is interned as a container, so equal
+    /// multisets have equal cells. It enumerates its elements with their repeats in ascending element order, as
+    /// <see cref="ValueSet{T}"/> orders its elements, a sort's classes by cell, so the element type must be
+    /// <c>string</c>, comparable or a sort; egglog orders
     /// a multiset by its elements' cells, which is the order its terms and serialized nodes list. Its counts are
     /// <c>long</c>s, as egglog's are <c>usize</c>s; as an <see cref="IReadOnlyCollection{T}"/> it counts to
     /// <see cref="int.MaxValue"/>. Operations return a new multiset, or this one when nothing changes.
@@ -22,7 +23,7 @@ namespace Eggnog
         where T : notnull
     {
 
-        static readonly IComparer<T> Order = ValueSetOrder<T>.Comparer;
+        static IComparer<T> Order => ValueSetOrder<T>.Comparer;
 
         readonly T[] elements;
         readonly long[] counts;
@@ -334,6 +335,36 @@ namespace Eggnog
                 total = checked(total + entry.Value);
 
             return new(sorted.Select(e => e.Key).ToArray(), sorted.Select(e => e.Value).ToArray(), total);
+        }
+
+        /// <summary>
+        /// Makes a multiset of elements with positive counts, in any order, the counts of equal elements added.
+        /// </summary>
+        /// <param name="entries">The elements and their counts.</param>
+        /// <returns>The multiset.</returns>
+        internal static MultiSet<T> AddCounts(IReadOnlyList<KeyValuePair<T, long>> entries)
+        {
+            if (entries.Count == 0)
+                return Empty;
+
+            var sorted = entries.OrderBy(e => e.Key, Order).ToArray();
+            var distinct = new List<T>(sorted.Length);
+            var counts = new List<long>(sorted.Length);
+            var total = 0L;
+            foreach (var (item, count) in sorted)
+            {
+                total = checked(total + count);
+                if (distinct.Count > 0 && Order.Compare(distinct[^1], item) == 0)
+                {
+                    counts[^1] = checked(counts[^1] + count);
+                    continue;
+                }
+
+                distinct.Add(item);
+                counts.Add(count);
+            }
+
+            return new(distinct.ToArray(), counts.ToArray(), total);
         }
 
         /// <summary>

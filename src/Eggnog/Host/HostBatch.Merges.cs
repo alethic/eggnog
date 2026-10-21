@@ -547,18 +547,14 @@ namespace Eggnog
             if (containers.Count == 0)
                 return false;
 
-            // Every content against the union-find as the pass starts, before any of the pass's merges.
+            // Every content against the union-find as the pass starts, before any of the pass's merges, as the container's
+            // rebuild makes it: a map collapses its keys, a multiset adds their counts.
             var contents = new List<(string Content, uint Cell)>(containers.Count);
-            foreach (var (type, cell, elements) in containers)
+            foreach (var (type, cell, _) in containers)
             {
-                var builder = new System.Text.StringBuilder(type.Name);
-                foreach (var (elementType, elementCell) in elements)
-                {
-                    var current = elementType.InvolvesClasses ? Find(finder, elementCell) : elementCell;
-                    builder.Append(' ').Append(current.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-
-                contents.Add((builder.ToString(), cell));
+                var content = ((IContainerColumnType)type).CanonicalKey(cell, (elementType, elementCell) =>
+                    (elementType.InvolvesClasses ? Find(finder, elementCell) : elementCell).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                contents.Add((type.Name + content, cell));
             }
 
             var first = new Dictionary<string, uint>(System.StringComparer.Ordinal);

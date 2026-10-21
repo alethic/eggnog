@@ -315,18 +315,21 @@ namespace Eggnog
         /// already. A map is egglog's <c>Map</c> container: its cell is a container id from the graph's id counter, equal
         /// maps have one cell, and its primitives are <see cref="Primitives"/>' <c>Map*</c> methods. It extracts as a
         /// chain of <c>map-insert</c>s over <c>(map-empty)</c>, its entries in key-cell order as egglog's, and costs what
-        /// its keys and values cost. Keys and values are value types, containers included, and the keys are
-        /// <c>string</c> or comparable, as a <see cref="Map{TKey, TValue}"/> enumerates in key order; maps of classes,
-        /// egglog's eq-sort containers, are not supported yet. The first map type registered is an engine definition:
-        /// while the root is writable, that call enters the root's domain.
+        /// its keys and values cost. Keys and values may be values, containers included, classes of a sort, or containers
+        /// of them; the keys are <c>string</c>, comparable, or classes, which order by cell, as a
+        /// <see cref="Map{TKey, TValue}"/> enumerates in key order. A map that holds classes is egglog's eq-sort
+        /// container: rebuilt when its classes merge, keys that become one collapsing as egglog's do, never unioned, and
+        /// made only at the root (decisions row 9). The first map type registered is an engine definition: while the root
+        /// is writable, that call enters the root's domain, and the first that holds classes registers only while the
+        /// root is writable.
         /// </summary>
-        /// <typeparam name="TKey">The key type; registered, comparable, and not a sort.</typeparam>
-        /// <typeparam name="TValue">The value type; registered, and not a sort.</typeparam>
+        /// <typeparam name="TKey">The key type; registered, and comparable.</typeparam>
+        /// <typeparam name="TValue">The value type; registered.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">A type is unknown or a sort, the key type is not comparable, or the name
-        /// is taken.</exception>
+        /// <exception cref="ArgumentException">A type is unknown, the key type is not comparable, or the name is
+        /// taken.</exception>
         /// <exception cref="InvalidOperationException">The first map type is registered while another thread is using
-        /// the writable root.</exception>
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
             where TKey : notnull
             where TValue : notnull
@@ -337,14 +340,12 @@ namespace Eggnog
 
             var key = TypeOf<TKey>();
             var value = TypeOf<TValue>();
-            foreach (var part in new ColumnType[] { key, value })
-                if (part.InvolvesClasses)
-                    throw new ArgumentException($"Maps hold values only so far; {part.Name} {(part.Kind == ColumnKind.Sort ? "is a sort" : "holds classes")}, and maps of classes are egglog's eq-sort containers, which are not supported yet.");
-
             if (key.IsOrdered == false)
                 throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable, or holds an element that does not.");
 
-            var env = graph.ValueContainers<Relations.MapContainer>();
+            var env = key.InvolvesClasses || value.InvolvesClasses
+                ? graph.ClassContainers<Relations.MapContainer>()
+                : graph.ValueContainers<Relations.MapContainer>();
             lock (sync)
             {
                 if (TryGetType<Map<TKey, TValue>>(out existing))
@@ -365,17 +366,19 @@ namespace Eggnog
         /// <c>MultiSet</c> container: its cell is a container id from the graph's id counter, equal multisets have one
         /// cell, and its primitives are <see cref="Primitives"/>' <c>MultiSet*</c> methods. It extracts as
         /// <c>(multiset-of a a b)</c>, its elements in cell order as egglog's, and costs what its elements cost. The
-        /// elements are value types, containers included, and <c>string</c> or comparable, as a
-        /// <see cref="MultiSet{T}"/> enumerates in element order; multisets of classes, egglog's eq-sort containers, are
-        /// not supported yet. The first multiset type registered is an engine definition: while the root is writable,
-        /// that call enters the root's domain.
+        /// elements may be values, containers included, classes of a sort, or containers of them, and are <c>string</c>,
+        /// comparable, or classes, which order by cell, as a <see cref="MultiSet{T}"/> enumerates in element order. A
+        /// multiset of classes is egglog's eq-sort container: rebuilt when its classes merge, elements that become one
+        /// adding their counts, never unioned, and made only at the root (decisions row 9). The first multiset type
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
+        /// first that holds classes registers only while the root is writable.
         /// </summary>
-        /// <typeparam name="T">The element type; registered, comparable, and not a sort.</typeparam>
+        /// <typeparam name="T">The element type; registered, and comparable.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">The element type is unknown, a sort or not comparable, or the name is
+        /// <exception cref="ArgumentException">The element type is unknown or not comparable, or the name is
         /// taken.</exception>
         /// <exception cref="InvalidOperationException">The first multiset type is registered while another thread is
-        /// using the writable root.</exception>
+        /// using the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<MultiSet<T>> RegisterMultiSet<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
@@ -383,13 +386,12 @@ namespace Eggnog
                 return existing;
 
             var element = TypeOf<T>();
-            if (element.InvolvesClasses)
-                throw new ArgumentException($"Multisets hold values only so far; {element.Name} {(element.Kind == ColumnKind.Sort ? "is a sort" : "holds classes")}, and multisets of classes are egglog's eq-sort containers, which are not supported yet.");
-
             if (element.IsOrdered == false)
                 throw new ArgumentException($"Multisets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
 
-            var env = graph.ValueContainers<Relations.MultiSetContainer>();
+            var env = element.InvolvesClasses
+                ? graph.ClassContainers<Relations.MultiSetContainer>()
+                : graph.ValueContainers<Relations.MultiSetContainer>();
             lock (sync)
             {
                 if (TryGetType<MultiSet<T>>(out existing))
@@ -485,6 +487,9 @@ namespace Eggnog
                 CheckFree(typeof(TSort), name);
                 var type = new SortColumnType<TSort>(name);
                 Add(type);
+
+                // A map's keys and a multiset's elements order a sort's classes by cell, as egglog's BTreeMap does.
+                ValueSetOrder<TSort>.Use(ClassOrder<TSort>.Instance);
                 return type;
             }
         }

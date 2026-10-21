@@ -245,6 +245,13 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        {
+            var pair = Read(cell);
+            return "(" + part(first, pair.First) + " " + part(second, pair.Second) + ")";
+        }
+
+        /// <inheritdoc />
         /// <remarks>The pair sort's name, as egglog's <c>serialized_name</c> (pair.rs:146-148).</remarks>
         public string SerializedName(uint cell) => Name;
 

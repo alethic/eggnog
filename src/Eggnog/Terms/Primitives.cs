@@ -448,6 +448,17 @@ namespace Eggnog
             where T : notnull => MultiSetPrimitiveCache<T>.ResetCounts;
 
         /// <summary>
+        /// <c>multiset-union-values</c>: unions every element of a multiset of classes with its first, the element of
+        /// least cell, and returns that; no result for an empty multiset (multiset.rs:198-208, 785-832). A write
+        /// primitive, as <see cref="VecUnion{TSort}"/> is: it runs as a value a rule's head or a host write writes, and in
+        /// a merge expression, only at the root, its unions taking effect after the fact or the rule's iteration.
+        /// </summary>
+        /// <typeparam name="TSort">The sort of the elements.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<MultiSet<TSort>, TSort> MultiSetUnionValues<TSort>()
+            where TSort : struct, ISort<TSort> => MultiSetUnionValuesCache<TSort>.UnionValues;
+
+        /// <summary>
         /// <c>multiset-pick-max</c>: an element of greatest count, of those the one of greatest cell, as Rust's
         /// <c>max_by_key</c> keeps the last maximum; no result for an empty multiset (multiset.rs:164-166). It runs
         /// only in a graph, as <see cref="MultiSetPick{T}"/> does.

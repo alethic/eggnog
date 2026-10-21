@@ -25,6 +25,18 @@ namespace Eggnog
         IReadOnlyList<ColumnType> ElementTypes { get; }
 
         /// <summary>
+        /// Gets a key of the container in <paramref name="cell"/> as its rebuild would make it, each element given by
+        /// <paramref name="part"/>: two containers of the type have one key exactly when, their elements so, they are
+        /// one container. A vector and a pair list their elements in order; a map collapses keys whose parts are one, the
+        /// later in key-cell order kept, as egglog's rebuild of a <c>BTreeMap</c>, and a multiset adds their counts; both
+        /// list their entries in the parts' order.
+        /// </summary>
+        /// <param name="cell">The container's cell.</param>
+        /// <param name="part">An element's part of the key, given its column type and its cell.</param>
+        /// <returns>The key.</returns>
+        string CanonicalKey(uint cell, System.Func<ColumnType, uint, string> part);
+
+        /// <summary>
         /// Gets the name a serialized e-graph gives the container in <paramref name="cell"/>: egglog's
         /// <c>serialized_name</c>.
         /// </summary>
