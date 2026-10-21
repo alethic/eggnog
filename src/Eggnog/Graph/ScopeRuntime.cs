@@ -1,9 +1,14 @@
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Threading;
+
 namespace Eggnog
 {
 
     /// <summary>
-    /// Per-scope buffers that external functions write during engine calls: the tuples of a query or split matcher, and
-    /// the first evaluation failure. Thread-safe, because rule tasks may run in parallel.
+    /// Per-scope buffers that external functions write during engine calls: the tuples of a query or split matcher, those
+    /// of a scheduler's queries, the tables rule callbacks deleted from, and the first evaluation failure. Thread-safe,
+    /// because rule tasks may run in parallel.
     /// </summary>
     /// <remarks>
     /// Every engine context has its own, the value of the graph's context-local slot
@@ -16,6 +21,7 @@ namespace Eggnog
 
         readonly object sync = new();
         EvaluationFailure? failure;
+        ConcurrentDictionary<TableHandle, byte>? callbackDeletions;
 
         /// <summary>
         /// Gets the runtime of the context an engine call runs in:
@@ -84,7 +90,39 @@ namespace Eggnog
         /// Gets or sets the buffers schedulers' queries fill during one engine call, by rule slot
         /// (<see cref="ScheduledRule.Slot"/>); read-only while the call runs, so rule tasks may look them up concurrently.
         /// </summary>
-        public System.Collections.Generic.Dictionary<int, SchedulerMatchBuffer>? SchedulerMatches { get; set; }
+        public Dictionary<int, SchedulerMatchBuffer>? SchedulerMatches { get; set; }
+
+        /// <summary>
+        /// Records that a rule callback deleted rows of <paramref name="table"/> in this engine call, so that the
+        /// iteration reconciles the scope's mirrors of it as for a rule that deletes. Thread-safe.
+        /// </summary>
+        /// <param name="table">The table.</param>
+        public void NoteCallbackDeletion(TableHandle table) => (callbackDeletions ?? InitDeletions()).TryAdd(table, 0);
+
+        /// <summary>
+        /// Takes the tables rule callbacks deleted rows of since the last call; <c>null</c> when there is none.
+        /// </summary>
+        /// <returns>The tables.</returns>
+        public ICollection<TableHandle>? TakeCallbackDeletions()
+        {
+            if (callbackDeletions is not { IsEmpty: false } deletions)
+                return null;
+
+            var taken = new List<TableHandle>(deletions.Keys);
+            deletions.Clear();
+            return taken;
+        }
+
+        /// <summary>
+        /// Makes the set of tables callbacks deleted from, once, on any thread.
+        /// </summary>
+        /// <returns>The set.</returns>
+        ConcurrentDictionary<TableHandle, byte> InitDeletions()
+        {
+            Interlocked.CompareExchange(ref callbackDeletions,
+                new ConcurrentDictionary<TableHandle, byte>(ReferenceEqualityComparer.Instance), null);
+            return callbackDeletions!;
+        }
 
     }
 

@@ -10,6 +10,19 @@ namespace Eggnog
     /// computation's arguments, or the collected columns of a query or split matcher.</param>
     /// <param name="Target">The head register a get-or-add or computation defines; -1 otherwise.</param>
     /// <param name="Primitive">The primitive of a computation.</param>
-    internal sealed record HeadOp(HeadOpKind Kind, TableHandle? Table, Operand[] Inputs, int Target, Primitive? Primitive);
+    internal sealed record HeadOp(HeadOpKind Kind, TableHandle? Table, Operand[] Inputs, int Target, Primitive? Primitive)
+    {
+
+        /// <summary>
+        /// Gets the callback of a <see cref="HeadOpKind.Callback"/>.
+        /// </summary>
+        public RuleCallbackDefinition? Callback { get; init; }
+
+        /// <summary>
+        /// Gets the variables a callback sees, one per input.
+        /// </summary>
+        public Term[]? CallbackVariables { get; init; }
+
+    }
 
 }

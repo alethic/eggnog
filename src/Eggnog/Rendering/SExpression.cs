@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
@@ -60,6 +61,7 @@ namespace Eggnog
             }
 
             builder.Append(") (");
+            var callbacks = 0;
             for (var i = 0; i < draft.Head.Count; i++)
             {
                 if (i > 0)
@@ -83,6 +85,14 @@ namespace Eggnog
                             Append(builder, row);
                         else
                             Append(builder, item.Left!, null);
+
+                        builder.Append(')');
+                        break;
+                    case HeadItemKind.Callback:
+                        // egglog's rust_rule calls a fresh primitive with the variables it sees.
+                        builder.Append("(<callback>");
+                        foreach (var name in CallbackVariables(rule, callbacks++))
+                            builder.Append(' ').Append(name);
 
                         builder.Append(')');
                         break;
@@ -384,6 +394,28 @@ namespace Eggnog
         {
             var shape = term.Shape;
             return shape.Kind == TermShapeKind.Application ? shape.Table!.Output : null;
+        }
+
+        /// <summary>
+        /// Gets the names of the variables the <paramref name="index"/>-th callback of a rule's head sees, as its program
+        /// computed them; none before the rule is compiled.
+        /// </summary>
+        static IEnumerable<string> CallbackVariables(Rule rule, int index)
+        {
+            if (rule.Compiled is not { } compiled)
+                yield break;
+
+            var seen = 0;
+            foreach (var op in compiled.Program.Head)
+            {
+                if (op.Kind != HeadOpKind.Callback || seen++ != index)
+                    continue;
+
+                foreach (var variable in op.CallbackVariables!)
+                    yield return variable.Shape.Name ?? "?";
+
+                yield break;
+            }
         }
 
         /// <summary>

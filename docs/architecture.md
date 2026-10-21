@@ -254,6 +254,19 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   between classes (unions). `Make` binds a head variable to a term made by get-or-add. `Rewrite(left, right)` is
   shorthand for "where `t = left`, make `t = right`". `Ruleset.DefineBiRewrite` (and `Scope.DefineBiRewrite` for local
   rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
+- **Rule callbacks** are egglog's `rust_rule` and `rust_rule_full` (`src/prelude.rs`): `ThenCall(callback)` puts host
+  code in the head, which for each match reads the rule's variables (`RuleCallbackContext.Get`) and writes as a head
+  does (`Insert`, `Set`, `Make`, `Union`, `Remove`, `Subsume`), staged with the iteration's other writes; it reads no
+  table, as egglog's write state reads none, so the rule stays semi-naive. `ThenCallFull` also reads
+  (`FullRuleCallbackContext.TryLookup`, `Contains`, `TableSize`) and makes the rule naive, as egglog marks
+  `rust_rule_full`'s. Since a callback decides what it writes, its writes are checked when made, not before the run: a
+  function whose merge is not a lattice only at the root, a deletion only where the scope may delete (a scope's own
+  mirrors are then reconciled as for a rule that deletes), a subsumption only of a subsumable table, no analysis table
+  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule and faults the
+  scope, as egglog's callback returning `None` panics. A rule with a full callback has no licence unless it calls
+  `ReadsOwnFacts`, since its reads are not atoms the licence sees. Callbacks run on the engine's threads, as primitives
+  do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds every
+  scheduler's query.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
   (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
   constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
@@ -274,8 +287,9 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   that deletes where the scope may not, and in a run that splits, whose cases stay live until it ends; one defined on
   another thread during the run takes part only in the iterations where it may run. `graph.Contradiction` is not
   deleted.
-- **Heads never read tables.** A function value used in a head must be matched in the body. This keeps every match a
-  function of the body alone, which is what lets a child scope inherit its ancestors' progress (section 3.8).
+- **Heads never read tables**, but in a full rule callback (`ThenCallFull`), whose rule is naive. A function value used
+  in a head must be matched in the body. This keeps every match a function of the body alone, which is what lets a
+  child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
 - A primitive or lambda that throws fails the rule: the run throws `RuleEvaluationException` naming the rule and the
   bindings, and the scope is faulted (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
@@ -586,11 +600,10 @@ with egglog" lists:
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. Sets hold values only, and are values themselves, not containers of classes.
-3. Rule heads never read tables, and functions have no defaults: a lookup without a row fails.
+3. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
+   no defaults: a lookup without a row fails.
 4. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-5. No proofs or explanations, and no rule callbacks. Host code that must react to matches runs a host loop instead: it
-   runs a schedule, reads the matches with a query's `ForEachMatch`, writes through `Scope.Write`, and repeats until the
-   scope's `Version` stops changing. Queries match naively, so each pass matches in full.
+5. No proofs or explanations.
 6. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
 ---

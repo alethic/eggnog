@@ -60,9 +60,20 @@ namespace Eggnog
             try
             {
                 if (inBody)
-                    return primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result);
+                {
+                    if (primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result) == false)
+                        return false;
+                }
+                else
+                {
+                    result = primitive.InvokeCore(args, parameters, this.result, ScopeOf(state));
+                }
 
-                result = primitive.InvokeCore(args, parameters, this.result, ScopeOf(state));
+                // A class the primitive returns may be one the host kept, stale since: canonical through the run's own
+                // find, which a parallel run's workers may use, so that it joins as its class before the next rebuild.
+                if (this.result.Kind == ColumnKind.Sort)
+                    result = state.Canonicalize(result);
+
                 return true;
             }
             catch (Exception exception)

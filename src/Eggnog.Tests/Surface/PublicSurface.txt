@@ -197,6 +197,10 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
     Object StoredValue { get }
     TableHandle Table { get }
     ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
+sealed class Eggnog.FullRuleCallbackContext : RuleCallbackContext
+    Boolean Contains(RelationHandle relation, params Object[] keys)
+    Boolean TryLookup<T>(TableHandle table, Object[] keys, out T value)
+    Int64 TableSize(TableHandle table)
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
 static class Eggnog.FunctionMerge
@@ -426,12 +430,22 @@ sealed class Eggnog.RuleBuilder
     Void Subsume(params Fact[] rows)
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Then(params Fact[] facts)
+    Void ThenCall(Action<RuleCallbackContext> callback)
+    Void ThenCallFull(Action<FullRuleCallbackContext> callback)
     Void When(params Fact[] facts)
     Void Where(Term<Boolean> condition)
     Void Where<T1, T2, T3, T4>(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d, Func<T1, T2, T3, T4, Boolean> predicate)
     Void Where<T1, T2, T3>(Term<T1> a, Term<T2> b, Term<T3> c, Func<T1, T2, T3, Boolean> predicate)
     Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
+class Eggnog.RuleCallbackContext
+    T Get<T>(Var<T> variable)
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params Object[] keys)
+    Void Insert(RelationHandle relation, params Object[] keys)
+    Void Remove(TableHandle table, params Object[] keys)
+    Void Set(FunctionHandle function, Object[] keys, Object value)
+    Void Subsume(TableHandle table, params Object[] keys)
+    Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.RuleDefinitionException : Exception
     String RuleName { get }
     ctor(String ruleName, String message, Exception inner = null)

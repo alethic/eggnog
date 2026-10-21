@@ -201,7 +201,8 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   the database, like `:naive`; it can depend on evaluation order, the term encoding rejects it, and it excludes
   `:naive`. Function lookups in rule heads, refused for every rule at the pin, are now allowed in `:naive` and
   `:unsafe-seminaive` rules. Upstream: `egglog-ast/src/generic_ast.rs:83-121`, `src/typechecking.rs:889-950`. Eggnog:
-  rule heads never read tables ([`architecture.md`](architecture.md), section 2.13, item 3), and `RuleBuilder.Naive()`
+  rule heads never read tables but in a full callback (`ThenCallFull`, egglog's `rust_rule_full`, at the pin already)
+  ([`architecture.md`](architecture.md), section 2.13, item 3), and `RuleBuilder.Naive()`
   (`src/Eggnog/Rules/RuleBuilder.cs`).
 
 ## Nothing to evaluate

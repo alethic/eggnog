@@ -532,6 +532,9 @@ namespace Eggnog
                 case HeadItemKind.Delete:
                     AddDelete(item);
                     break;
+                case HeadItemKind.Callback:
+                    AddCallback(item.Callback!);
+                    break;
                 default:
                     // A rewrite's right side is made, and a function application there would be read, which egglog
                     // refuses in an action (LookupInRuleDisallowed, src/typechecking.rs:896-904); here it would be a write.
@@ -541,6 +544,40 @@ namespace Eggnog
                     AddHeadFact(new EqualityFact(item.Variable!, item.Right));
                     break;
             }
+        }
+
+        /// <summary>
+        /// Turns a rule callback into a <see cref="HeadOpKind.Callback"/> over the variables it sees: each declared
+        /// variable the body binds, and each <c>Make</c> variable made before it, in declaration order.
+        /// </summary>
+        void AddCallback(RuleCallbackDefinition callback)
+        {
+            var variables = new List<Term>();
+            var inputs = new List<Operand>();
+            foreach (var (_, _, variable) in draft.Variables)
+            {
+                if (declared.TryGetValue(variable, out var raw) == false)
+                    continue;
+
+                var operand = Resolve(Operand.Register(raw, rawTypes[raw]));
+                if (operand.IsRegister && bound[operand.Index] == false)
+                    continue;
+
+                variables.Add(variable);
+                inputs.Add(operand);
+            }
+
+            foreach (var (variable, register) in made)
+            {
+                variables.Add(variable);
+                inputs.Add(Operand.Register(register, registers[register].Type));
+            }
+
+            head.Add(new HeadOp(HeadOpKind.Callback, null, inputs.ToArray(), -1, null)
+            {
+                Callback = callback,
+                CallbackVariables = variables.ToArray(),
+            });
         }
 
         /// <summary>
@@ -923,6 +960,12 @@ namespace Eggnog
             foreach (var atom in atoms)
                 if (atom.Table.Role == TableRole.Fact && ReferenceEquals(atom.Scope, licence) == false)
                     throw Error($"rule reads fact table '{SourceName(atom)}' outside scope '{licence.Name}'; read it through In({licence.Name}), or call ReadsOwnFacts with the reason that is sound");
+
+            // A full callback reads the running scope's tables, which no licence check sees.
+            foreach (var item in draft.Head)
+                if (item.Callback is { Full: true })
+                    throw Error($"rule reads tables in a full callback, outside scope '{licence.Name}'; "
+                        + "call ReadsOwnFacts with the reason that is sound");
         }
 
         /// <summary>

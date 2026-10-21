@@ -19,7 +19,8 @@ the C# API, pass; an item that touches the engine's root paths also passes the r
 gates").
 
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
-  heads never read (architecture 2.13, item 3). Such a rule inherits no progress in a child.
+  heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 3). Such a rule
+  inherits no progress in a child.
 - **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
   engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
@@ -33,8 +34,6 @@ gates").
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
-- **Rule callbacks.** egglog's rules that call host code (`rust_rule`); here a host loop instead (architecture 2.13,
-  item 5).
 - **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child
   scopes with their definitions scoped too. It runs egglog's own test files, the fidelity suite for every item above,
   and the benchmark programs that need it (herbie, eggcc, `math.egg`, the transformer programs).

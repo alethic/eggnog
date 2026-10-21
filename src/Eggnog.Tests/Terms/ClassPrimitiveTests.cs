@@ -115,6 +115,41 @@ namespace Eggnog.Tests.Terms
         }
 
         /// <summary>
+        /// A class a primitive returns in a rule's head is canonical, though the host kept it from before a union: a later
+        /// rule joins it as its class before any rebuild.
+        /// </summary>
+        [Fact]
+        public void APrimitivesClassResultIsCanonical()
+        {
+            var t = new NodeTheory();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            t.Root.Union(a, b);
+            var stale = t.Root.Find(a).Equals(a) ? b : a;
+            var keep = Primitive.Create<long, Node>("keep", _ => stale);
+            var pick = t.Graph.DefineFunction<string, Node>("pick");
+            var joined = t.Graph.DefineRelation<string>("joined");
+            t.Rules.DefineRule("keep", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(pick.Of("k").Is(keep.Of(x)));
+            });
+            var join = t.Graph.DefineRuleset("join");
+            join.DefineRule("join", r =>
+            {
+                var n = r.Var<Node>("n");
+                r.When(pick.Of("k").Is(n), t.Tag.Of(n));
+                r.Then(joined.Of("k"));
+            });
+            t.Root.Assume(t.Num.Of(1L), t.Tag.Of(a));
+
+            t.Root.Run(Schedule.Sequence(t.Rules, join));
+
+            Assert.True(t.Root.Check(joined.Of("k")));
+        }
+
+        /// <summary>
         /// A primitive may return only a class the scope it runs in can use: one of a child, returned at the root, fails
         /// the rule.
         /// </summary>
