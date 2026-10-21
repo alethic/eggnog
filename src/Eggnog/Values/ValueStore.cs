@@ -13,8 +13,9 @@ namespace Eggnog
 
     /// <summary>
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
-    /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <c>ValueSet&lt;string&gt;</c>
-    /// "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c> "Set&lt;i32&gt;". Sorts join through
+    /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <see cref="BigRational"/> "BigRat",
+    /// <c>ValueSet&lt;string&gt;</c> "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c>
+    /// "Set&lt;i32&gt;". Sorts join through
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types, pairs and vectors through the <c>Register*</c> methods.
     /// Thread-safe; the first pair type and the first vector type registered are engine definitions, which while the root
     /// is writable enter its domain.
@@ -50,6 +51,7 @@ namespace Eggnog
             Add(new DoubleColumnType(values));
             Add(new BaseColumnType<Relations.StringCodec, string>("String", values, Relations.LiteralText.String, Relations.CodePointComparer.Instance));
             Add(new BaseColumnType<Relations.InternedCodec<BigInteger>, BigInteger>("BigInt", values, FormatBigInteger, Comparer<BigInteger>.Default));
+            Add(new BaseColumnType<BigRationalCodec, BigRational>("BigRat", values, FormatBigRational, Comparer<BigRational>.Default));
             RegisterSet<string>();
             RegisterSet<long>();
             RegisterSet<int>();
@@ -61,7 +63,7 @@ namespace Eggnog
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
         /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and <c>long</c>s outside
-        /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge,
+        /// <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new result of a primitive or a lattice merge,
         /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
         /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
         /// intern. A pair or a vector also takes an id from the graph's id counter, as egglog's containers do.
@@ -489,6 +491,13 @@ namespace Eggnog
         /// that call (<c>src/sort/bigint.rs</c>, <c>reconstruct_termdag</c>).
         /// </summary>
         internal static string FormatBigInteger(BigInteger value) => "(from-string \"" + value.ToString(CultureInfo.InvariantCulture) + "\")";
+
+        /// <summary>
+        /// Formats a <c>BigRat</c> as egglog renders one, <c>(bigrat (from-string "3") (from-string "4"))</c>: its sort
+        /// reconstructs a value as that call (<c>src/sort/bigrat.rs</c>, <c>reconstruct_termdag</c>).
+        /// </summary>
+        internal static string FormatBigRational(BigRational value) =>
+            "(bigrat " + FormatBigInteger(value.Numerator) + " " + FormatBigInteger(value.Denominator) + ")";
 
         /// <summary>
         /// Widens an enum value to the <c>long</c> it is stored as: sign-extended for signed underlying types,
