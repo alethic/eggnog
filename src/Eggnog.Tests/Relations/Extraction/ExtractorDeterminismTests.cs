@@ -9,8 +9,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// The extractor's choices are deterministic: the on-demand extractor chooses what the root-sort extractor chooses,
-    /// whatever it was asked before, and ties between base values follow their content in ordinal order, never the
-    /// current culture's collation.
+    /// whatever it was asked before, and ties between base values follow where their rows are stored, never the current
+    /// culture's collation.
     /// </summary>
     [Collection(AllocationProbeCollection.Name)]
     public class ExtractorDeterminismTests
@@ -19,11 +19,9 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void OnDemandChoiceDoesNotDependOnQueryOrder()
         {
-            // Every head costs 0, so X = { G(Y), G(Z) } ties with Y = { M } and Z = { Zf }. Declaration order is G < M
-            // < Zf. Run from scratch, Knuth's algorithm pops M (Y final, G(Y) queued), then G(Y) before Zf, so X is
-            // G(Y). An on-demand extractor that costed Z first would queue G(Z) as soon as X is discovered, and G(Z)
-            // would pop before M, making X G(Z): the choice would depend on which values were asked about earlier. It
-            // is G(Y) either way.
+            // Every head costs 0, so X = { G(Y), G(Z) } ties with Y = { M } and Z = { Zf }. egglog's
+            // (datatype E (G E :cost 0) (M :cost 0) (Zf :cost 0)) with these terms and the union extracts (G (M)): the
+            // second pass meets G(Y) first. An on-demand extractor that costed Z first still answers so.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var g = fx.Constructor("G", e, 0, e);
@@ -51,7 +49,8 @@ namespace Eggnog.Relations.Tests
         public void OnDemandChoiceDoesNotDependOnQueryOrderWithSaturatedCosts()
         {
             // The same shape with positive head costs: M and Zf cost long.MaxValue, so every cost saturates and G's
-            // head cost of 1 does not separate a node from its child. The warmed on-demand extractor still picks G(Y).
+            // head cost of 1 does not separate a node from its child. egglog extracts (G (M)), and so does the warmed
+            // on-demand extractor.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var g = fx.Constructor("G", e, 1, e);
@@ -75,9 +74,9 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void StringTiesDoNotDependOnTheCurrentCulture()
         {
-            // Base values tie by content. BaseSort compares strings ordinally: Comparer<string>.Default is the current
-            // culture's collation, under which (Danish) "aa" sorts after "z", so the extracted term would change with
-            // the thread's culture.
+            // Base values tie by where their rows are stored, as in egglog, not by content: under the current culture's
+            // collation (Danish) "aa" sorts after "z", and the extracted term must not change with the thread's
+            // culture.
             static string Run(CultureInfo culture)
             {
                 var saved = CultureInfo.CurrentCulture;
@@ -100,20 +99,6 @@ namespace Eggnog.Relations.Tests
 
             var invariant = Run(CultureInfo.InvariantCulture);
             Assert.Equal(invariant, Run(new CultureInfo("da-DK")));
-        }
-
-        [Fact]
-        public void StringTiesAreOrdinal()
-        {
-            // ExtractorTieBreakTests.StringsTieByOrdinalContent uses "a" and "b", which every collation orders alike.
-            // Ordinal order puts "B" (0x42) before "a" (0x61); culture collation puts "a" first.
-            var fx = new ExtractionFixture();
-            var e = new EqSort("E");
-            var name = fx.Constructor("Name", e, 1, fx.String);
-            var a = fx.Make(name, fx.Str("a"));
-            var b = fx.Make(name, fx.Str("B"));
-            fx.Union(a, b);
-            Assert.Equal("(Name \"B\")", fx.Extract(e, a)?.Text);
         }
 
     }

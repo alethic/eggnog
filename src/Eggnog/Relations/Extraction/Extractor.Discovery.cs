@@ -5,8 +5,8 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// Reads every row of every function in the extractor's slots, in slot order: the rows egglog's
-        /// <c>bellman_ford</c> relaxes (src/extract.rs:415-458). Subsumed rows are skipped. O(rows).
+        /// Reads every row of every function in the extractor's slots, in slot order and each table's storage order: the
+        /// rows egglog's <c>bellman_ford</c> relaxes (src/extract.rs:407-460). Subsumed rows are skipped. O(rows).
         /// </summary>
         void ScanAll()
         {
@@ -19,16 +19,14 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Discovers every class queued since the last call, and the classes they reach, then runs Knuth's algorithm over
-        /// what was added, replaying the finalizations from earlier queries that decide ties among the new nodes
-        /// (Extractor.Replay.cs), so that the result is a from-scratch run's over everything discovered. Each class's
-        /// nodes are the rows the context sees of the functions producing its sort whose output column holds it
-        /// (<see cref="DiscoverAtRoot"/>, <see cref="DiscoverInLayers"/>), and the classes among their children are
-        /// queued in turn, so the graph stays closed downward. O(rows found + occurrences + index probes + replayed
-        /// choices), plus the first build of each index.
+        /// what was added; the classes discovered before are final, and the new nodes that depend on them take their
+        /// costs. Each class's nodes are the rows the context sees of the functions producing its sort whose output
+        /// column holds it (<see cref="DiscoverAtRoot"/>, <see cref="DiscoverInLayers"/>), and the classes among their
+        /// children are queued in turn, so the graph stays closed downward. O(rows found + occurrences + index probes),
+        /// plus the first build of each index.
         /// </summary>
         void Settle()
         {
-            run++;
             if (layers is null)
                 DiscoverAtRoot();
             else
@@ -39,8 +37,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Discovers the queued classes at the root: each producing function's rows are found through the root database's
-        /// cached index on the function's output column (built on first use, then kept current by the database).
-        /// O(rows found + index probes).
+        /// cached index on the function's output column (built on first use, then kept current by the database), and
+        /// placed by their row ids, the table's storage order. O(rows found + index probes).
         /// </summary>
         void DiscoverAtRoot()
         {
@@ -56,7 +54,7 @@ namespace Eggnog.Relations
                     if (index.Data.TryGetSubset(value, out var rows) == false)
                         continue;
 
-                    var sink = new ExtractionRowSink(this, slot, function.Math);
+                    var sink = new ExtractionRowSink(this, slot, function.Math, 0);
                     info.Table.ScanGeneric(rows, ref sink);
                 }
             }
@@ -68,8 +66,8 @@ namespace Eggnog.Relations
         /// a frozen layer), and the rows found are scanned with the layer's hidden rows skipped, so exactly the rows
         /// the context sees are read: an ancestor's row the context replaced, or that names one of its own losers, is
         /// hidden, and its canonical copy lies in a later layer. The view is never read through
-        /// <see cref="Database.GetTable"/>. O(layers × index probes + rows found), plus the first build of each layer's
-        /// index.
+        /// <see cref="Database.GetTable"/>. A row is placed by its layer, then its row id, as the context's scan meets it.
+        /// O(layers × index probes + rows found), plus the first build of each layer's index.
         /// </summary>
         /// <param name="tables">The context's layers.</param>
         void DiscoverInLayers(ContextTables tables)
@@ -92,7 +90,7 @@ namespace Eggnog.Relations
                         if (index.Data.TryGetSubset(value, out var rows) == false)
                             continue;
 
-                        var sink = new ExtractionRowSink(this, slot, function.Math);
+                        var sink = new ExtractionRowSink(this, slot, function.Math, (long)l << 32);
                         layer.Table.ScanGeneric(rows, layer.Hidden, ref sink);
                     }
                 }

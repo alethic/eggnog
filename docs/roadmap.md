@@ -26,10 +26,8 @@ gates").
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
   rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
   22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
-- **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort
-  by function name and row values; here ties go by content (architecture 2.10, decisions row 21b).
-- **Strings by code point.** Rust compares strings by code point; here extraction and set order compare UTF-16 code
-  units, which differ only when a supplementary character meets U+E000-U+FFFF.
+- **Strings by code point.** Rust compares strings by code point; here set order compares UTF-16 code units, which
+  differ only when a supplementary character meets U+E000-U+FFFF.
 - **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string

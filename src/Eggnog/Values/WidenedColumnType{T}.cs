@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -37,7 +36,7 @@ namespace Eggnog
             this.narrow = narrow;
             this.format = format;
             engineType = Relations.ColumnTy.Base(values.RegisterType<Relations.Int64Codec, long>());
-            sort = new Relations.BaseSort<Relations.Int64Codec, long>(name, stored => format(narrow(stored)), Comparer<long>.Default);
+            sort = new Relations.BaseSort<Relations.Int64Codec, long>(name, stored => format(narrow(stored)));
         }
 
         /// <inheritdoc />

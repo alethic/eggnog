@@ -58,7 +58,7 @@ namespace Eggnog.Relations.Tests
                     Assert.Equal(found, context.TryExtractTerm(graph.E, value, out var actual));
                     Assert.Equal(expected?.ToString(), actual?.ToString());
                     Assert.Equal(expected?.Cost, actual?.Cost);
-                    Assert.Equal(root.TryGetChoice(graph.E, value, out var f1, out var r1, out _), context.TryGetChoice(graph.E, value, out var f2, out var r2, out _));
+                    Assert.Equal(root.TryGetChoice(graph.E, value, out var f1, out var r1), context.TryGetChoice(graph.E, value, out var f2, out var r2));
                     Assert.Equal(f1, f2);
                     Assert.Equal(r1, r2);
                 }

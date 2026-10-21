@@ -10,13 +10,11 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Extracts up to <paramref name="count"/> variants of the class of <paramref name="value"/>: egglog's
-        /// <c>extract_variants_with_sort</c> (src/extract.rs:647-733). The class's nodes are ordered by their cost (the
-        /// node's head plus its children's cheapest terms) and then by content, except that the class's choice comes
-        /// first, and each of the first <paramref name="count"/> is extracted with its children's cheapest terms. So
-        /// the first variant is always the term <c>TryExtractBest</c> gives. The choice is the least of the cheapest
-        /// nodes in content order whenever head costs are positive and nothing saturates; with zero or saturated costs
-        /// Knuth's algorithm may choose another node of the same cost, because a node is queued only once its children
-        /// are final.
+        /// <c>extract_variants_with_sort</c> (src/extract.rs:651-733). The class's nodes are ordered as egglog sorts
+        /// them, by their cost (the node's head plus its children's cheapest terms), then by function name, then by
+        /// their rows' values (<see cref="CompareVariants"/>), and each of the first <paramref name="count"/> is
+        /// extracted with its children's cheapest terms. So the first variant costs what <c>TryExtractBest</c>'s term
+        /// costs, but may be another node of the class when costs tie.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -26,9 +24,7 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// egglog unwraps every root node's cost (src/extract.rs:691) and so panics on a node with a child that has no
-        /// finite term; here such a node, which has no finite term either, is skipped. egglog orders equal-cost
-        /// variants by function name and then raw row values; here they follow the extractor's own content order
-        /// (<see cref="CompareNodes"/>).
+        /// finite term; here such a node, which has no finite term either, is skipped.
         /// </para>
         /// </remarks>
         /// <param name="sort">The value's sort.</param>
@@ -39,7 +35,8 @@ namespace Eggnog.Relations
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
         /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, or an earlier query failed.</exception>
+        /// gave a negative cost, an earlier query failed, or a class with a saturated cost has no row egglog's extractor
+        /// may build it from.</exception>
         public IReadOnlyList<ExtractionResult> ExtractVariants(Sort sort, Value value, int count, TermDag dag)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -105,9 +102,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Extracts the variants of a value with <paramref name="builder"/>, inside a query. A variant's root is built
-        /// with the variant's own cost and kept out of the memo, which holds the terms of classes, so the first variant
-        /// is a separate instance even though it is its class's term; its children are the cheapest terms of their
-        /// values, built through one memo shared by all the variants.
+        /// with the variant's own cost and kept out of the memo, which holds the terms of classes, so a variant is a
+        /// separate instance even when it is its class's term; its children are the cheapest terms of their values, built
+        /// through one memo shared by all the variants, in the order of the value's sort.
         /// </summary>
         /// <typeparam name="TBuilder">The builder; a struct, so the walk is specialized for it.</typeparam>
         /// <typeparam name="TResult">What a built term is.</typeparam>
@@ -124,7 +121,11 @@ namespace Eggnog.Relations
             if (sort.Kind != SortKind.Eq)
             {
                 if (TryResolve(sort, value, out var resolved, out var at, out var best))
-                    results.Add((best, Build<TBuilder, TResult>(resolved, at, ref builder, memo)));
+                {
+                    var single = OrderFor(resolved);
+                    EnsureChoices(single, resolved, at);
+                    results.Add((best, Build<TBuilder, TResult>(single, resolved, at, ref builder, memo)));
+                }
 
                 return results;
             }
@@ -143,22 +144,8 @@ namespace Eggnog.Relations
                 if (IsCostable(node))
                     candidates.Add((ComputeNodeCost(node), node));
 
-            // The choice costs the least of all, so putting it first keeps the order by cost.
-            var chosen = classBest[owner];
-            candidates.Sort((left, right) =>
-            {
-                if (left.Node == right.Node)
-                    return 0;
-
-                if (left.Node == chosen)
-                    return -1;
-
-                if (right.Node == chosen)
-                    return 1;
-
-                return left.Cost != right.Cost ? left.Cost.CompareTo(right.Cost) : CompareNodes(left.Node, right.Node);
-            });
-
+            candidates.Sort(CompareVariants);
+            var order = OrderFor(index);
             var children = new List<TResult>();
             for (var i = 0; i < Math.Min(count, candidates.Count); i++)
             {
@@ -168,12 +155,67 @@ namespace Eggnog.Relations
                 var row = nodeRow[node];
                 children.Clear();
                 for (var column = 0; column < slots[slot].ChildCount; column++)
-                    children.Add(Build<TBuilder, TResult>(columnSorts[column], rowCells[row + column], ref builder, memo));
+                {
+                    EnsureChoices(order, columnSorts[column], rowCells[row + column]);
+                    children.Add(Build<TBuilder, TResult>(order, columnSorts[column], rowCells[row + column], ref builder, memo));
+                }
 
                 results.Add((cost, builder.Node(index, canonical, node, cost, CollectionsMarshal.AsSpan(children))));
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Orders two variants as egglog sorts its <c>(cost, function name, row values)</c> tuples
+        /// (src/extract.rs:702): by cost, then by the name of the node's function, by code point as Rust orders strings,
+        /// then by the row's values, keys then output, as raw values. Total on distinct nodes: two rows of one function
+        /// differ in a key.
+        /// </summary>
+        /// <returns>The sign of the comparison.</returns>
+        int CompareVariants((long Cost, int Node) left, (long Cost, int Node) right)
+        {
+            if (left.Cost != right.Cost)
+                return left.Cost.CompareTo(right.Cost);
+
+            var leftSlot = nodeSlot[left.Node];
+            var rightSlot = nodeSlot[right.Node];
+            if (leftSlot != rightSlot)
+            {
+                var names = CompareByCodePoint(slots[leftSlot].Name, slots[rightSlot].Name);
+                if (names != 0)
+                    return names;
+            }
+
+            var leftCells = rowCells.AsSpan(nodeRow[left.Node], slotColumnSorts[leftSlot].Length);
+            var rightCells = rowCells.AsSpan(nodeRow[right.Node], slotColumnSorts[rightSlot].Length);
+            return leftCells.SequenceCompareTo(rightCells);
+        }
+
+        /// <summary>
+        /// Compares two strings by code point, as Rust's <c>Ord</c> for <c>str</c> does (bytewise over UTF-8): ordinal
+        /// UTF-16 order, except that a surrogate pair, a code point above U+FFFF, comes after every unit of the Basic
+        /// Multilingual Plane, including U+E000-U+FFFF.
+        /// </summary>
+        /// <returns>The sign of the comparison.</returns>
+        static int CompareByCodePoint(string left, string right)
+        {
+            var length = Math.Min(left.Length, right.Length);
+            for (var i = 0; i < length; i++)
+            {
+                var a = left[i];
+                var b = right[i];
+                if (a == b)
+                    continue;
+
+                // Surrogates (U+D800-U+DFFF) stand for code points above every unit from U+E000 up.
+                if (char.IsSurrogate(a) != char.IsSurrogate(b))
+                    return char.IsSurrogate(a) ? 1 : -1;
+
+                return a.CompareTo(b);
+            }
+
+            return left.Length.CompareTo(right.Length);
         }
 
     }

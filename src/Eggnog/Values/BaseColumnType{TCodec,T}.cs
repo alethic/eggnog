@@ -38,7 +38,7 @@ namespace Eggnog
             this.format = format;
             this.order = order;
             engineType = Relations.ColumnTy.Base(values.RegisterType<TCodec, T>());
-            sort = new Relations.BaseSort<TCodec, T>(name, format, order);
+            sort = new Relations.BaseSort<TCodec, T>(name, format);
         }
 
         /// <inheritdoc />

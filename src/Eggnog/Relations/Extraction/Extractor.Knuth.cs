@@ -9,25 +9,22 @@ namespace Eggnog.Relations
     {
 
         /// <summary>
-        /// A binary min-heap of node indices ordered by <see cref="Precedes"/>. Each node enters it at most once per run,
-        /// when the last class it waits on becomes final, with its exact cost, so it never needs a decrease-key; a chosen
-        /// node enters again in a later run only to replay its class's finalization (Extractor.Replay.cs).
+        /// A binary min-heap of node indices ordered by cost. Each node enters it at most once, when the last class it
+        /// waits on becomes final, with its exact cost, so it never needs a decrease-key.
         /// </summary>
         int[] heap = null!;
         int heapCount;
 
         /// <summary>
-        /// Runs Knuth's algorithm until the queue is empty: pops the first queued node; if its class is not final yet,
-        /// makes the node the class's choice and the class final at the node's cost, and queues every node waiting on the
-        /// class whose last pending dependency this was. Replaces egglog's <c>bellman_ford</c> and its parent-edge pass
-        /// (src/extract.rs:397-500). On demand, a popped node that is already its class's choice is the replay of a
-        /// finalization from an earlier query (Extractor.Replay.cs): it releases the nodes waiting on the class without
-        /// finalizing it again.
+        /// Runs Knuth's algorithm until the queue is empty: pops the cheapest queued node; if its class is not final yet,
+        /// makes the class final at the node's cost, and queues every node waiting on the class whose last pending
+        /// dependency this was. Computes the costs egglog's <c>bellman_ford</c> converges to (src/extract.rs:397-466);
+        /// which node a class extracts as is decided afterwards, in egglog's order (Extractor.Choices.cs).
         /// </summary>
         /// <remarks>
         /// O((nodes queued) log (nodes queued) + occurrences released). Optimal because costs are saturating sums of
-        /// non-negative costs, which never decrease along a hyperedge. Acyclic because a node is queued only after all its
-        /// dependencies are final, so the finalization order (<c>classRank</c>) is a topological order of the choices.
+        /// non-negative costs, which never decrease along a hyperedge, so the costs are the least fixpoint Bellman-Ford
+        /// reaches. The order in which equal-cost nodes leave the queue changes no cost, so it is left to the heap.
         /// </remarks>
         void RunKnuth()
         {
@@ -35,33 +32,20 @@ namespace Eggnog.Relations
             {
                 var node = Pop();
                 var owner = nodeClass[node];
-                if (classBest[owner] < 0)
-                {
-                    classBest[owner] = node;
-                    classCost[owner] = nodeCost[node];
-                    classRank[owner] = nextRank++;
-                }
-                else if (classBest[owner] != node)
-                {
-                    // Its class became final first.
-                    continue;
-                }
-                else
-                {
-                    Debug.Assert(onDemand && classReplay[owner] == run, "a choice is queued again only to replay it");
-                }
 
+                // Its class became final first.
+                if (classCost[owner] >= 0)
+                    continue;
+
+                classCost[owner] = nodeCost[node];
                 for (var occurrence = classFirstParent[owner]; occurrence >= 0; occurrence = occNext[occurrence])
                 {
                     var parent = occNode[occurrence];
                     if (--nodePending[parent] > 0)
                         continue;
 
-                    var parentClass = nodeClass[parent];
-                    if (classBest[parentClass] < 0)
+                    if (classCost[nodeClass[parent]] < 0)
                         Push(parent, ComputeNodeCost(parent));
-                    else if (classBest[parentClass] == parent)
-                        Push(parent, nodeCost[parent]);
                 }
 
                 // The waiting list is spent: every occurrence on it has been released.
@@ -83,7 +67,7 @@ namespace Eggnog.Relations
             while (position > 0)
             {
                 var parent = (position - 1) >> 1;
-                if (Precedes(node, heap[parent]) == false)
+                if (nodeCost[node] >= nodeCost[heap[parent]])
                     break;
 
                 heap[position] = heap[parent];
@@ -94,7 +78,7 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Removes and returns the first node of the queue.
+        /// Removes and returns the cheapest node of the queue.
         /// </summary>
         int Pop()
         {
@@ -107,16 +91,17 @@ namespace Eggnog.Relations
 
             // Sift the last node down from the root.
             var position = 0;
+            var cost = nodeCost[last];
             while (true)
             {
                 var child = (position << 1) + 1;
                 if (child >= heapCount)
                     break;
 
-                if (child + 1 < heapCount && Precedes(heap[child + 1], heap[child]))
+                if (child + 1 < heapCount && Cheaper(heap[child + 1], heap[child]))
                     child++;
 
-                if (Precedes(heap[child], last) == false)
+                if (nodeCost[heap[child]] >= cost)
                     break;
 
                 heap[position] = heap[child];
@@ -128,56 +113,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether queued node <paramref name="left"/> comes before <paramref name="right"/>: by cost, then by
-        /// <see cref="CompareNodes"/>.
+        /// Gets whether queued node <paramref name="left"/> costs less than <paramref name="right"/>.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        bool Precedes(int left, int right)
-        {
-            var leftCost = nodeCost[left];
-            var rightCost = nodeCost[right];
-            if (leftCost != rightCost)
-                return leftCost < rightCost;
-
-            return CompareNodes(left, right) < 0;
-        }
-
-        /// <summary>
-        /// Orders two nodes by content, the queue's tie-break after cost: function id (declaration order), then the
-        /// row's columns left to right, e-class and container columns by id and base value columns by content order
-        /// (<see cref="Sort.CompareValues"/>). Total on distinct nodes: two rows of one function differ in a key.
-        /// </summary>
-        /// <returns>The sign of the comparison; 0 only for the same node.</returns>
-        int CompareNodes(int left, int right)
-        {
-            if (left == right)
-                return 0;
-
-            var leftSlot = nodeSlot[left];
-            var rightSlot = nodeSlot[right];
-            if (leftSlot != rightSlot)
-                return slots[leftSlot].Id.Rep.CompareTo(slots[rightSlot].Id.Rep);
-
-            var columnSorts = slotColumnSorts[leftSlot];
-            var leftRow = nodeRow[left];
-            var rightRow = nodeRow[right];
-            for (var column = 0; column < columnSorts.Length; column++)
-            {
-                var leftValue = rowCells[leftRow + column];
-                var rightValue = rowCells[rightRow + column];
-                if (leftValue == rightValue)
-                    continue;
-
-                var sort = columnSorts[column];
-                if (sortKinds[sort] == SortKind.Base)
-                    return sorts[sort].CompareValues(egraph.BaseValues, new Value(leftValue), new Value(rightValue));
-
-                return leftValue.CompareTo(rightValue);
-            }
-
-            Debug.Fail("two distinct nodes hold the same row");
-            return left.CompareTo(right);
-        }
+        bool Cheaper(int left, int right) => nodeCost[left] < nodeCost[right];
 
     }
 

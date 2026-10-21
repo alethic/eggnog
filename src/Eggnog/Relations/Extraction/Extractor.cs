@@ -7,8 +7,8 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// Finds the cheapest term of e-classes of an <see cref="EGraph"/>: the port of egglog's <c>Extractor</c>
-    /// (src/extract.rs:126-757), computing costs with Knuth's algorithm and breaking ties by content instead of
-    /// egglog's Bellman-Ford fixpoint and scan-order ties.
+    /// (src/extract.rs:126-757), computing costs with Knuth's algorithm instead of egglog's Bellman-Ford fixpoint, and
+    /// choosing among nodes of equal cost as egglog's passes do.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -21,17 +21,16 @@ namespace Eggnog.Relations
     /// Knuth's generalization of Dijkstra's algorithm (Knuth 1977) computes every class's cheapest cost in
     /// O(occurrences + nodes log nodes): a node enters a priority queue once all the classes it depends on are final, with
     /// its exact cost, and the first node of a class to leave the queue makes the class final. Sums of non-negative costs
-    /// are superior functions, for which this is optimal. Because a node is queued only after its children are final, the
-    /// chosen nodes form a DAG even when costs are zero: a class's choice never depends on the class itself, so the
-    /// extracted term is always finite (egglog needs a separate topological rank for this, src/extract.rs:397-500).
+    /// are superior functions, for which this is optimal, and the costs are the fixpoint egglog's Bellman-Ford reaches.
     /// </para>
     /// <para>
-    /// Ties are broken by content: the queue orders nodes by cost, then function id (declaration order), then their
-    /// columns left to right, e-class and container columns by id and base value columns by content
-    /// (<see cref="BaseSort{TCodec, T}"/>, culture-invariant). The order is total, so the result depends only on the
-    /// e-graph's contents and ids, never on scan order, discovery order or the order of queries. With positive head
-    /// costs and no saturation a class's choice is the least node, in this order, of those of the cheapest cost; with
-    /// zero or saturated costs it is still deterministic.
+    /// Ties are egglog's. A class extracts as the row egglog's extractor builds it from: the first row, with functions in
+    /// egglog's order and each function's rows in storage order, that costs exactly the class's cost and whose children
+    /// all reached their own costs before the class reached its in egglog's passes, which keeps the term finite when
+    /// costs are zero. When those moments fall follows from the costs, without running the passes, by a second run of
+    /// Knuth's algorithm over the rows that cost exactly their class's cost (Extractor.Choices.cs). The functions are
+    /// ordered breadth-first from the extractor's root sorts, and on demand from the queried value's sort, as egglog's
+    /// extract command roots its extractor at the sort of what it extracts.
     /// </para>
     /// <para>
     /// Two ways to create one. <see cref="ComputeCostsFromRootSorts"/> is egglog's: it reads every row of every
@@ -39,17 +38,17 @@ namespace Eggnog.Relations
     /// <see cref="CreateOnDemand(ExtractionSchema, CostModel?, ExtractionOptions?)"/> reads only the classes reachable
     /// from the values it is asked about (Knuth's algorithm over the classes reachable from them), finding each class's
     /// nodes through the cached index on its constructors' output columns, and extends its graph as later queries reach
-    /// further; classes already costed stay final, because each discovery is closed downward, and the finalizations of
-    /// earlier queries that decide ties among newly discovered nodes are replayed in order (Extractor.Replay.cs), so
-    /// each query's run is a from-scratch run's over everything discovered. Both give the same choice for every class
-    /// they cost, whatever was asked before.
+    /// further; classes already costed stay final, because each discovery is closed downward, and a class's choice
+    /// depends only on the rows below it, so each query is answered as a fresh extractor rooted at its sort answers it,
+    /// whatever was asked before.
     /// </para>
     /// <para>
     /// Contexts. <see cref="CreateOnDemand(ExtractionSchema, EGraphContext, CostModel?, ExtractionOptions?)"/> extracts
     /// in an <see cref="EGraphContext"/>: classes are canonical in the context, and a class's nodes are the rows the
     /// context sees, found through each layer's cached index on the output column with the rows the context hides
-    /// filtered out, never through the root's tables alone. The root forms read the root's tables alone, at no extra
-    /// cost per node.
+    /// filtered out, never through the root's tables alone, and ordered as the context's scan meets them: the root's
+    /// layer, then each ancestor's in depth order, then its own. The root forms read the root's tables alone, at no
+    /// extra cost per node.
     /// </para>
     /// <para>
     /// The extractor reads the e-graph as it was when created, which must be rebuilt (canonical), as it is after every
@@ -469,8 +468,11 @@ namespace Eggnog.Relations
             term = null;
             if (TryResolve(sort, value, out var index, out var canonical, out _))
             {
+                var order = OrderFor(index);
+                EnsureChoices(order, index, canonical);
                 var builder = new ExtractedTermBuilder(this);
-                term = Build<ExtractedTermBuilder, ExtractedTerm>(index, canonical, ref builder, new Dictionary<ulong, ExtractedTerm>());
+                var memo = new Dictionary<ulong, ExtractedTerm>();
+                term = Build<ExtractedTermBuilder, ExtractedTerm>(order, index, canonical, ref builder, memo);
             }
 
             Exit();
@@ -680,7 +682,7 @@ namespace Eggnog.Relations
                     if (onDemand)
                         Settle();
 
-                    if (found >= 0 && classBest[found] >= 0)
+                    if (found >= 0 && classCost[found] >= 0)
                     {
                         cost = classCost[found];
                         return true;
@@ -717,8 +719,10 @@ namespace Eggnog.Relations
                 return false;
             }
 
+            var order = OrderFor(index);
+            EnsureChoices(order, index, canonical);
             var builder = new TermDagBuilder(this, dag);
-            var term = Build<TermDagBuilder, TermId>(index, canonical, ref builder, memo ?? new Dictionary<ulong, TermId>());
+            var term = Build<TermDagBuilder, TermId>(order, index, canonical, ref builder, memo ?? new Dictionary<ulong, TermId>());
             result = new ExtractionResult(cost, term);
             return true;
         }

@@ -66,17 +66,6 @@ namespace Eggnog.Relations
         internal abstract bool FitsColumn(EGraph egraph, ColumnTy type);
 
         /// <summary>
-        /// Compares two distinct values of this sort for extraction's tie-break: content order for base values, which
-        /// <see cref="BaseSort{TCodec, T}"/> overrides, and id order for everything else. Never returns 0 for distinct
-        /// values. Called only when two candidates tie on cost, function and earlier columns.
-        /// </summary>
-        /// <param name="baseValues">The registry the values were boxed in.</param>
-        /// <param name="left">The first value.</param>
-        /// <param name="right">The second value.</param>
-        /// <returns>The sign of the comparison.</returns>
-        internal virtual int CompareValues(BaseValues baseValues, Value left, Value right) => left.Rep.CompareTo(right.Rep);
-
-        /// <summary>
         /// Adds a base value of this sort to <paramref name="dag"/>: egglog's <c>reconstruct_termdag_base</c>.
         /// </summary>
         /// <param name="baseValues">The registry the value was boxed in.</param>

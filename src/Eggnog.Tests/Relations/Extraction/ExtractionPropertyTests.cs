@@ -8,14 +8,14 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Property tests of extraction on small random e-graphs (<see cref="RandomExtractionGraph"/>) against an
-    /// independent reference: every class's cost equals a Bellman-Ford fixpoint over the rows; the extracted term's
-    /// cost, recomputed over its tree, equals the reported cost; the term evaluates back to its class; no term found by
-    /// brute-force enumeration is cheaper; on-demand and root-sort extractors agree, whatever order classes are asked
-    /// in (also with mostly zero and saturated costs, where the on-demand extractor must replay earlier queries'
-    /// finalizations); the first variant is the best term, the variants are the class's ten cheapest nodes with a cost,
-    /// and as object terms they are the same terms with their own costs; and with positive costs each class's choice is the least of
-    /// its cheapest nodes in the extractor's tie-break order (<see cref="D10Order"/>).
+    /// Property tests of extraction on small random e-graphs (<see cref="RandomExtractionGraph"/>) against independent
+    /// references: every class's cost equals a Bellman-Ford fixpoint over the rows; every class's choice is the parent
+    /// edge egglog's extractor, run literally, chooses (<see cref="EgglogExtractionReference"/>), and a class egglog
+    /// cannot build a term for throws; the extracted term's cost, recomputed over its tree, equals the reported cost;
+    /// the term evaluates back to its class; no term found by brute-force enumeration is cheaper; on-demand and
+    /// root-sort extractors agree, whatever order classes are asked in (also with mostly zero and saturated costs); and
+    /// the variants are egglog's, the class's ten first nodes with a cost by cost, function name and raw row values,
+    /// and as object terms they are the same terms with their own costs.
     /// </summary>
     public class ExtractionPropertyTests
     {
@@ -58,6 +58,7 @@ namespace Eggnog.Relations.Tests
             var fx = graph.Fx;
             var all = Extractor.ComputeCostsFromRootSorts(fx.Schema);
             var onDemand = Extractor.CreateOnDemand(fx.Schema);
+            var egglog = new EgglogExtractionReference(graph);
             var dag = new TermDag();
             var order = graph.Classes.OrderBy(c => (c * 2654435761u) ^ (uint)seed).ToArray();
 
@@ -80,7 +81,28 @@ namespace Eggnog.Relations.Tests
 
                 Assert.True(reference == cost, context);
                 Assert.True(reference == lazyCost, context);
+                Assert.True(egglog.Costs[owner] == cost, context);
                 coverage[0]++;
+
+                // The choice is egglog's parent edge.
+                var hasChoice = egglog.Choices.TryGetValue(owner, out var choice);
+                Assert.True(hasChoice == all.TryGetChoice(graph.E, value, out var function, out var row), context);
+                Assert.True(hasChoice == onDemand.TryGetChoice(graph.E, value, out var lazyFunction, out var lazyRow), context);
+                if (hasChoice)
+                {
+                    Assert.Equal(graph.Functions[choice.Function], function);
+                    Assert.Equal(choice.Row, row);
+                    Assert.Equal(function, lazyFunction);
+                    Assert.Equal(row, lazyRow);
+                }
+
+                // Where egglog's reconstruction panics, extraction throws.
+                if (egglog.CanBuild(owner) == false)
+                {
+                    Assert.Throws<InvalidOperationException>(() => all.ExtractTerm(graph.E, value));
+                    Assert.Throws<InvalidOperationException>(() => onDemand.ExtractTerm(graph.E, value));
+                    continue;
+                }
 
                 // The term: its tree cost is its reported cost, every subterm is optimal for its class, and it
                 // evaluates back to the class.
@@ -106,11 +128,22 @@ namespace Eggnog.Relations.Tests
                     coverage[2]++;
                 }
 
-                // The variants start with the best term and are sorted by cost.
-                var variants = all.ExtractVariants(graph.E, value, 10, dag);
-                Assert.Equal(best, variants[0]);
+                // The variants are egglog's, in its order, the first as cheap as the best term; where egglog cannot
+                // build one of them, extraction throws.
+                var expectedVariants = egglog.Variants(owner, 10);
+                if (expectedVariants.Any(v => graph.ChildClasses(v.Function, v.Row).All(egglog.CanBuild) == false))
+                {
+                    Assert.Throws<InvalidOperationException>(() => all.ExtractVariants(graph.E, value, 10, dag));
+                    continue;
+                }
 
+                var variants = all.ExtractVariants(graph.E, value, 10, dag);
+                Assert.Equal(best.Cost, variants[0].Cost);
                 Assert.True(variants.Zip(variants.Skip(1)).All(p => p.First.Cost <= p.Second.Cost), context);
+                Assert.Equal(
+                    expectedVariants.Select(v => (graph.Functions[v.Function], string.Join(" ", v.Row[..^1].Select(c => c.Rep)))),
+                    all.ExtractVariantTerms(graph.E, value, 10)
+                        .Select(t => (t.Function, string.Join(" ", t.Children.ToArray().Select(c => c.Value.Rep)))));
 
                 // They are the class's nodes that are not subsumed and have a cost, the ten cheapest of them.
                 var nodeCosts = graph.Nodes
@@ -138,17 +171,6 @@ namespace Eggnog.Relations.Tests
                     Assert.Equal(headAndChildren, variantTerm.Cost);
                 }
 
-                // With positive costs, the choice is the least node of the cheapest, in the tie-break order.
-                if (positiveCosts)
-                {
-                    var cheapest = graph.Nodes
-                        .Where(n => n.Row[^1].Rep == owner && graph.NodeCost(n.Function, n.Row, graph.ReferenceCosts) == cost)
-                        .OrderBy(n => n, new D10Order(graph))
-                        .First();
-                    Assert.True(all.TryGetChoice(graph.E, value, out var function, out var row, out _), context);
-                    Assert.Equal(graph.Functions[cheapest.Function], function);
-                    Assert.Equal(cheapest.Row, row);
-                }
             }
         }
 
@@ -257,14 +279,15 @@ namespace Eggnog.Relations.Tests
         public void OnDemandChoicesDoNotDependOnQueryOrder(int batch, int mode)
         {
             // Mostly zero head costs (mode 0) or costs that saturate (mode 1): a node can cost what its child costs, so
-            // when a class became final in an earlier query decides ties. Every class's choice, asked in random orders
-            // of a warmed on-demand extractor, is the root-sort extractor's, which is one from-scratch run.
+            // when a class reached its cost in egglog's passes decides ties. Every class's choice, asked in random orders
+            // of a warmed on-demand extractor, is the root-sort extractor's and egglog's.
             var choices = mode == 0 ? new long[] { 0, 0, 0, 1 } : new long[] { 0, 1, long.MaxValue / 2, long.MaxValue };
-            var replays = 0;
             var compared = 0;
+            var unbuildable = 0;
             for (var seed = batch * 100; seed < (batch + 1) * 100; seed++)
             {
                 var graph = new RandomExtractionGraph(seed, false, choices);
+                var egglog = new EgglogExtractionReference(graph);
                 var all = Extractor.ComputeCostsFromRootSorts(graph.Fx.Schema);
                 for (var order = 0; order < 3; order++)
                 {
@@ -274,27 +297,31 @@ namespace Eggnog.Relations.Tests
                     {
                         var context = $"seed {seed}, mode {mode}, order {order}, class {owner}";
                         var value = new Value(owner);
-                        var expected = all.TryGetChoice(graph.E, value, out var function, out var row, out _);
-                        Assert.True(expected == onDemand.TryGetChoice(graph.E, value, out var lazyFunction, out var lazyRow, out _), context);
+                        var expected = egglog.Choices.TryGetValue(owner, out var choice);
+                        Assert.True(expected == all.TryGetChoice(graph.E, value, out var function, out var row), context);
+                        Assert.True(expected == onDemand.TryGetChoice(graph.E, value, out var lazyFunction, out var lazyRow), context);
                         if (expected == false)
                             continue;
 
+                        Assert.True(graph.Functions[choice.Function] == function, context);
+                        Assert.True(choice.Row.SequenceEqual(row), context);
                         Assert.True(function == lazyFunction, context);
                         Assert.True(row.SequenceEqual(lazyRow), context);
-                        Assert.Equal(all.ExtractTerm(graph.E, value).ToString(), onDemand.ExtractTerm(graph.E, value).ToString());
+                        if (egglog.CanBuild(owner) == false)
+                        {
+                            Assert.Throws<InvalidOperationException>(() => onDemand.ExtractTerm(graph.E, value));
+                            unbuildable++;
+                            continue;
+                        }
 
-                        var dag = new TermDag();
-                        Assert.True(onDemand.TryExtractBest(graph.E, value, dag, out var best), context);
-                        Assert.Equal(best, onDemand.ExtractVariants(graph.E, value, 3, dag)[0]);
+                        Assert.Equal(all.ExtractTerm(graph.E, value).ToString(), onDemand.ExtractTerm(graph.E, value).ToString());
                         compared++;
                     }
-
-                    replays += onDemand.ReplayCount;
                 }
             }
 
-            // The batch compared many choices, and the warmed extractors replayed finalizations.
-            Assert.True(compared >= 1000 && replays >= 50, $"compared {compared}, replays {replays}");
+            // The batch compared many choices.
+            Assert.True(compared >= 1000, $"compared {compared}, unbuildable {unbuildable}");
         }
 
         [Fact]
