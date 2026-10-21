@@ -19,6 +19,7 @@ namespace Eggnog
         readonly uint trueCell;
         readonly uint unit;
         readonly string[] argumentNames;
+        readonly bool overClasses;
 
         /// <summary>
         /// Initializes a new instance.
@@ -38,6 +39,7 @@ namespace Eggnog
             boolean = graph.Values.TypeOf<bool>();
             trueCell = boolean.Encode(true);
             unit = graph.Unit.Unit;
+            overClasses = Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
         }
 
         /// <inheritdoc />
@@ -46,7 +48,9 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                if (primitive.TryInvokeCore(args, parameters, boolean, out var cell) && cell == trueCell)
+                // The scope decodes classes; a filter over values pays nothing for it.
+                var scope = overClasses ? ScopeRuntime.Of(graph, state).Owner : null;
+                if (primitive.TryInvokeCore(args, parameters, boolean, scope, out var cell) && cell == trueCell)
                 {
                     result = unit;
                     return true;

@@ -57,7 +57,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public override uint MergeCells(EGraph graph, ColumnType type, uint stored, uint incoming)
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming)
         {
             if (ReferenceEquals(this, NewMerge))
                 return incoming;
@@ -66,7 +66,7 @@ namespace Eggnog
                 return stored;
 
             var typed = (ColumnType<T>)type;
-            return typed.Encode(Function!(typed.Decode(stored, null), typed.Decode(incoming, null)));
+            return typed.Encode(Function!(typed.Decode(stored, scope), typed.Decode(incoming, scope)));
         }
 
     }

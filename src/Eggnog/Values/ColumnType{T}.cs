@@ -67,6 +67,16 @@ namespace Eggnog
         internal abstract uint Encode(T value);
 
         /// <summary>
+        /// Encodes a value a primitive returned in <paramref name="scope"/>: as <see cref="Encode"/>, except that a class
+        /// must be usable there (<see cref="SortColumnType{TSort}"/>).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="scope">The scope the call runs in; <c>null</c> for no check.</param>
+        /// <returns>The cell.</returns>
+        /// <exception cref="InvalidOperationException">The value is a class this scope cannot use.</exception>
+        internal virtual uint EncodeIn(T value, Scope? scope) => Encode(value);
+
+        /// <summary>
         /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
         /// graph's interning pools, which are permanent.
         /// </summary>

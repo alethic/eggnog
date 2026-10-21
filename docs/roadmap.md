@@ -25,8 +25,6 @@ gates").
   order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
   rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
   22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
-- **Primitives over classes.** egglog's `bool-!=`, `ordering-min`, `ordering-max`, `value-eq` and user primitives take
-  e-class sorts; here primitives take values only (decisions row 22).
 - **Any arity.** egglog's tables and primitives take any number of columns and arguments; the typed API stops at four
   key columns and four parameters. An untyped definition API serves the rest.
 - **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort

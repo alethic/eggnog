@@ -93,7 +93,7 @@ namespace Eggnog
         /// <summary>
         /// <c>bool-!=</c>.
         /// </summary>
-        public static readonly Primitive<T, T, bool> NotEqual = new("bool-!=", static (a, b) => EqualityComparer<T>.Default.Equals(a, b) == false, false)
+        public static readonly Primitive<T, T, bool> NotEqual = new("bool-!=", static (a, b) => EqualityComparer<T>.Default.Equals(a, b) == false, static (uint a, uint b) => a != b)
         {
             FilterName = "!=",
         };

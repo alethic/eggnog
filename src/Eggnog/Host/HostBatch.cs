@@ -174,7 +174,8 @@ namespace Eggnog
         /// Evaluates a primitive over its planned arguments, as egglog's top-level actions do, on the calling thread under
         /// <see cref="EngineCallMarker"/>; the result is interned if it is new, as any value a write holds.
         /// </summary>
-        /// <exception cref="ArgumentException">The primitive takes or returns a class.</exception>
+        /// <exception cref="InvalidOperationException">The primitive takes or returns a class, and the batch merged
+        /// classes before it: egglog's next command would see the merge, which the batch stages after its writes.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw, or has no result; nothing is written and the
         /// scope is not faulted.</exception>
         uint Compute(TermShape shape)
@@ -182,9 +183,13 @@ namespace Eggnog
             var primitive = shape.Primitive!;
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
-                parameters[i] = ValueTypeOf(primitive.ParameterTypes[i], primitive);
+                parameters[i] = TypeOf(primitive.ParameterTypes[i]);
 
-            var result = ValueTypeOf(primitive.ResultType, primitive);
+            var result = TypeOf(primitive.ResultType);
+            var overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            if (mergedClasses && overClasses)
+                throw new InvalidOperationException(
+                    $"primitive '{primitive.Name}' computes over classes after this batch merged classes; compute it in a later call, which sees the merge as egglog's next command does.");
             var arguments = new uint[parameters.Length];
             for (var i = 0; i < arguments.Length; i++)
                 arguments[i] = PlanTerm(shape.Arguments[i]);
@@ -194,7 +199,7 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                found = primitive.TryInvokeCore(arguments, parameters, result, out cell);
+                found = primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
             }
             catch (Exception exception)
             {
@@ -209,20 +214,8 @@ namespace Eggnog
             if (found == false)
                 throw new RuleEvaluationException(null, null, $"primitive '{primitive.Name}' has no result for these arguments", null);
 
-            return cell;
-        }
-
-        /// <summary>
-        /// Gets the value type of a primitive's parameter or result.
-        /// </summary>
-        /// <exception cref="ArgumentException">The type is a sort: primitives never take or return classes.</exception>
-        ColumnType ValueTypeOf(Type clrType, Primitive primitive)
-        {
-            var type = graph.Values.TypeOf(clrType);
-            if (type.Kind == ColumnKind.Sort)
-                throw new ArgumentException($"primitive '{primitive.Name}' takes or returns the sort {type.Name}; primitives are over values only");
-
-            return type;
+            // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it.
+            return result.Kind == ColumnKind.Sort && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
         }
 
         /// <summary>
@@ -492,9 +485,9 @@ namespace Eggnog
 
             // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
             // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
-            if (mergedClasses && HasSortKey(table))
+            if (mergedClasses && (HasSortKey(table) || (table.Output!.Kind == ColumnKind.Sort && table.Merge!.ComparesValues)))
                 throw new InvalidOperationException(
-                    $"'{table.Name}' is written after this batch merged classes, its keys are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
+                    $"'{table.Name}' is written after this batch merged classes, its keys or output are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTerm(value);
@@ -563,7 +556,7 @@ namespace Eggnog
             try
             {
                 return table.Merge is { } merge
-                    ? merge.MergeCells(graph, table.Output!, stored, incoming)
+                    ? merge.MergeCells(scope, table.Output!, stored, incoming)
                     : table.Lattice!.MergeCells(table.Output!, stored, incoming);
             }
             catch (Exception exception) when (exception is not RuleEvaluationException)

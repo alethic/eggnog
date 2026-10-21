@@ -22,6 +22,7 @@ namespace Eggnog
         readonly Primitive primitive;
         readonly ColumnType[] parameters;
         readonly ColumnType result;
+        readonly bool overClasses;
 
         /// <summary>
         /// Initializes a new instance.
@@ -40,6 +41,7 @@ namespace Eggnog
             this.primitive = primitive;
             this.parameters = parameters;
             this.result = result;
+            overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
         }
 
         /// <inheritdoc />
@@ -48,7 +50,7 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                result = primitive.InvokeCore(args, parameters, this.result);
+                result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.Of(graph, state).Owner : null);
                 return true;
             }
             catch (Exception exception)

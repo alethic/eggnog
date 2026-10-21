@@ -181,7 +181,7 @@ namespace Eggnog
                     EngineCallMarker.Enter();
                     try
                     {
-                        cell = primitive.InvokeCore(cells, parameters, result);
+                        cell = primitive.InvokeCore(cells, parameters, result, parent);
                     }
                     catch (Exception exception)
                     {
