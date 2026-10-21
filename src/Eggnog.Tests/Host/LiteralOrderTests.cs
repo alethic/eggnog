@@ -233,6 +233,13 @@ namespace Eggnog.Tests.Host
             root.Make(b.Of(new System.Numerics.BigInteger(123), "p", "q"));
 
             AssertCells(graph, "a", "b", "x", "d", "c", "y", "123", "p", "q");
+
+            // (R (bigrat (from-string "3") (from-string "4")) "x"): "3"0 "4"1 x2.
+            var rationals = new EGraph();
+            rationals.DefineSort<Node>("T");
+            var r = rationals.DefineConstructor<BigRational, string, Node>("R");
+            rationals.Root.Make(r.Of(new BigRational(3, 4), "x"));
+            AssertCells(rationals, "3", "4", "x");
         }
 
         /// <summary>

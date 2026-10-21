@@ -13,8 +13,9 @@ namespace Eggnog
     /// literal arguments come after those of the calls among its arguments, a fact's own literals after every call in it,
     /// and a rule's query before its actions: <c>(F "a" (G "b") "c")</c> interns <c>"b"</c>, <c>"a"</c>, <c>"c"</c>,
     /// <c>(set (f "k") (g "v"))</c> interns <c>"v"</c> before <c>"k"</c>, and <c>(= "d" (f "e"))</c> <c>"e"</c> before
-    /// <c>"d"</c>. A constant egglog has no literal for, a container or a <c>BigInt</c>, is the call it renders as,
-    /// <c>(set-of "a" "b")</c> or <c>(from-string "123")</c>: the walks take its parts as that call's literal arguments,
+    /// <c>"d"</c>. A constant egglog has no literal for, a container, a <c>BigInt</c> or a <c>BigRat</c>, is the call it
+    /// renders as, <c>(set-of "a" "b")</c>, <c>(from-string "123")</c> or <c>(bigrat (from-string "3") (from-string
+    /// "4"))</c>: the walks take its parts as that call's literal arguments,
     /// and leave the constant itself to the call's evaluation, as egglog makes the container or the number when it runs
     /// the call. Each walk calls <c>constant</c> on the plain constants in that order, a constant met again included.
     /// </summary>
@@ -38,7 +39,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the parts of a constant egglog writes as a call, the call's arguments in order: a set's, a vector's or a
-        /// multiset's elements, a pair's two, a map's keys and values in key order, a <c>BigInt</c>'s decimal string;
+        /// multiset's elements, a pair's two, a map's keys and values in key order, a <c>BigInt</c>'s decimal string, a
+        /// <c>BigRat</c>'s numerator and denominator, each a <c>BigInt</c>;
         /// <c>null</c> for a plain constant. A map is the one call here, where its egglog form is a chain of
         /// <c>map-insert</c>s, which orders the parts that are calls themselves otherwise.
         /// </summary>
@@ -61,6 +63,13 @@ namespace Eggnog
 
             if (type.ClrType == typeof(BigInteger))
                 return [Constant(values.TypeOf<string>(), ((BigInteger)value).ToString(CultureInfo.InvariantCulture))];
+
+            if (type.ClrType == typeof(BigRational))
+            {
+                var rational = (BigRational)value;
+                var integers = values.TypeOf<BigInteger>();
+                return [Constant(integers, rational.Numerator), Constant(integers, rational.Denominator)];
+            }
 
             return null;
         }
