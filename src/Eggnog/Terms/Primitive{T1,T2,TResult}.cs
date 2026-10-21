@@ -162,10 +162,15 @@ namespace Eggnog
         {
             if (cells is not null)
             {
-                // The result is one of the arguments, chosen by cell: the argument itself, a class with its origin.
-                if (parameters[0].TryEncodeExistingObject(arguments[0], out var a) && parameters[1].TryEncodeExistingObject(arguments[1], out var b))
+                // The result is one of the arguments, chosen by cell: the argument itself, a class with its origin. A
+                // value without a cell would intern after every value there is, above every cell its type has, as egglog's
+                // check interns it; two such values would compare by the order egglog interns them, which is unknown.
+                var hasA = parameters[0].TryEncodeExistingObject(arguments[0], out var a);
+                var hasB = parameters[1].TryEncodeExistingObject(arguments[1], out var b);
+                if (hasA || hasB)
                 {
-                    value = cells(a, b) == a ? arguments[0] : arguments[1];
+                    var chosen = cells(hasA ? a : uint.MaxValue, hasB ? b : uint.MaxValue);
+                    value = hasA ? (chosen == a ? arguments[0] : arguments[1]) : (chosen == b ? arguments[1] : arguments[0]);
                     return true;
                 }
 

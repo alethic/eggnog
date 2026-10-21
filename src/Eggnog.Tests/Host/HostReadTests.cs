@@ -131,6 +131,95 @@ namespace Eggnog.Tests.Host
             Assert.Equal(before, t.Graph.Values.InternedCount);
         }
 
+        /// <summary>
+        /// A value no write interned is a value all the same, as in egglog's <c>check</c>, which interns it: it equals
+        /// itself and what the codec would intern as it (both zeros, every NaN), equals no interned value, and reads back
+        /// as itself; nothing is interned.
+        /// </summary>
+        [Fact]
+        public void AValueNoWriteInternedEqualsOnlyItself()
+        {
+            var graph = new EGraph();
+            var text = graph.DefineRelation<string>("text");
+            graph.Root.Assume(text.Of("seen"));
+            var before = graph.Values.InternedCount;
+
+            Assert.True(graph.Root.Check(((Term<string>)"unseen").Is("unseen")));
+            Assert.False(graph.Root.Check(((Term<string>)"unseen").Is("seen")));
+            Assert.False(graph.Root.Check(((Term<string>)"seen").Is("unseen")));
+            Assert.False(graph.Root.Check(((Term<string>)"unseen").Is("other")));
+            Assert.True(graph.Root.Check(((Term<double>)(-0.0)).Is(0.0)));
+            Assert.True(graph.Root.Check(((Term<double>)double.NaN).Is(-double.NaN)));
+            Assert.False(graph.Root.Check(((Term<double>)1.5).Is(2.5)));
+            Assert.True(graph.Root.Check(((Term<long>)(long.MinValue + 7)).Is(long.MinValue + 7)));
+            Assert.Equal("unseen", graph.Root.Get((Term<string>)"unseen"));
+            Assert.Equal(-7.25, graph.Root.Get(DoublePrimitives.Negate.Of(7.25)));
+            Assert.True(graph.Root.Check(((Term<int>)(-5)).Is(-5)));
+            Assert.Equal(-5, graph.Root.Get((Term<int>)(-5)));
+            Assert.True(graph.Root.Check(Primitives.Singleton<string>().Of("q").Is(ValueSet.Of("q"))));
+            Assert.True(graph.Root.Check(Fact.In(graph.RootTag, StringPrimitives.Concat.Of("x", "y").Is("xy"))));
+
+            Assert.Equal(before, graph.Values.InternedCount);
+        }
+
+        /// <summary>
+        /// A value read through a cell is the value that cell holds: the zero a write interned first, whichever zero
+        /// the read names.
+        /// </summary>
+        [Fact]
+        public void AValueWithACellReadsAsTheInternedOne()
+        {
+            var graph = new EGraph();
+            var f = graph.DefineFunction<long, double>("f");
+            graph.Root.Assume(f.Of(1L).Is(-0.0));
+
+            Assert.True(graph.Root.Check(f.Of(1L).Is(0.0)));
+            Assert.True(double.IsNegative(graph.Root.Get((Term<double>)0.0)));
+        }
+
+        /// <summary>
+        /// <c>ordering-min</c> and <c>ordering-max</c> in a read: a value no write interned compares above every cell,
+        /// as egglog's <c>check</c> interns it after them; two such values have no result, since egglog orders them by
+        /// the order it interns them.
+        /// </summary>
+        [Fact]
+        public void OrderingPutsAValueNoWriteInternedLast()
+        {
+            var graph = new EGraph();
+            var text = graph.DefineRelation<string>("text");
+            graph.Root.Assume(text.Of("seen"));
+            var before = graph.Values.InternedCount;
+
+            Assert.True(graph.Root.Check(Primitives.OrderingMin<string>().Of("seen", "unseen").Is("seen")));
+            Assert.True(graph.Root.Check(Primitives.OrderingMin<string>().Of("unseen", "seen").Is("seen")));
+            Assert.Equal("unseen", graph.Root.Get(Primitives.OrderingMax<string>().Of("seen", "unseen")));
+            Assert.Equal("unseen", graph.Root.Get(Primitives.OrderingMax<string>().Of("unseen", "seen")));
+            Assert.False(graph.Root.TryGet(Primitives.OrderingMin<string>().Of("unseen", "other"), out _));
+            Assert.Equal(before, graph.Values.InternedCount);
+        }
+
+        /// <summary>
+        /// An <c>Until</c> condition is a check: one over a computation no write interned holds as egglog's would.
+        /// </summary>
+        [Fact]
+        public void AnUntilConditionComparesAValueNoWriteInterned()
+        {
+            var graph = new EGraph();
+            var rules = graph.DefineRuleset("rules");
+            var count = graph.DefineFunction<string, long>("count", ValueLattice.Max<long>());
+            rules.DefineRule("count", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(n.Is(count.Of("c")));
+                r.Then(count.Of("c").Is(Primitives.Add.Of(n, 1L)));
+            });
+            graph.Root.Assume(count.Of("c").Is(0L));
+
+            graph.Root.Run(Schedule.Until(Schedule.Run(rules), StringPrimitives.Concat.Of("x", "y").Is("xy")));
+
+            Assert.Equal(0L, graph.Root.Get(count.Of("c")));
+        }
+
         [Fact]
         public void ReadsNeverFailForWantOfARebuild()
         {

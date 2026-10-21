@@ -4,8 +4,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// Host reads: never create terms, never intern. A constant that was never interned makes its fact
-    /// false or its term absent. Called under the scope's guard.
+    /// Host reads: never create terms, never intern, and answer as egglog's <c>check</c> and expression evaluation,
+    /// which intern: a value no write interned, a constant or a computation's result, is a value all the same, which
+    /// equals only itself and reads back as itself, and as a key it is in no row, as egglog's newly interned one is in
+    /// none. Called under the scope's guard.
     /// </summary>
     internal static class TermReader
     {
@@ -18,9 +20,61 @@ namespace Eggnog
         /// <param name="term">The term.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the term has a value in the scope.</returns>
-        /// <exception cref="ArgumentException">The term is not ground, computes, belongs to another graph, or holds a class
-        /// value this scope cannot use.</exception>
+        /// <exception cref="ArgumentException">The term is not ground, belongs to another graph, or holds a class value this
+        /// scope cannot use.</exception>
         public static bool TryRead(Scope scope, Term term, out uint cell) => TryReadIn(scope, term, null, out cell);
+
+        /// <summary>
+        /// Reads a ground term's value: its cell, when it has one, or else, for a value no write interned (a constant or
+        /// a computation's result), the value itself.
+        /// </summary>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="term">The term.</param>
+        /// <param name="cell">The cell, when the result is <c>true</c> and <paramref name="unencoded"/> is <c>null</c>.</param>
+        /// <param name="unencoded">The value, when the result is <c>true</c> and it has no cell; otherwise <c>null</c>.</param>
+        /// <returns>Whether the term has a value in the scope.</returns>
+        /// <exception cref="ArgumentException">The term is not ground, belongs to another graph, or holds a class value this
+        /// scope cannot use.</exception>
+        public static bool TryReadValue(Scope scope, Term term, out uint cell, out object? unencoded) =>
+            TryReadValueIn(scope, term, null, out cell, out unencoded);
+
+        /// <summary>
+        /// <see cref="TryReadValue"/> inside <see cref="Fact.In"/> when <paramref name="enclosing"/> is set.
+        /// </summary>
+        static bool TryReadValueIn(Scope scope, Term term, ScopeTag? enclosing, out uint cell, out object? unencoded)
+        {
+            ArgumentNullException.ThrowIfNull(term);
+            unencoded = null;
+            var shape = term.Shape;
+            if (shape.Kind == TermShapeKind.Constant)
+            {
+                var type = TypeOf(scope, shape);
+                if (type.Kind == ColumnKind.Sort)
+                    return TryReadIn(scope, term, enclosing, out cell);
+
+                if (type.TryEncodeExistingObject(shape.Constant!, out cell) == false)
+                    unencoded = shape.Constant!;
+
+                return true;
+            }
+
+            if (shape.Kind == TermShapeKind.Computation)
+            {
+                cell = 0;
+                if (TryEvaluate(scope, shape, enclosing, out var value, out var result) == false)
+                    return false;
+
+                if (result.Kind == ColumnKind.Sort)
+                    return TryClassCell(scope, result, value!, out cell);
+
+                if (result.TryEncodeExistingObject(value!, out cell) == false)
+                    unencoded = value!;
+
+                return true;
+            }
+
+            return TryReadIn(scope, term, enclosing, out cell);
+        }
 
         /// <summary>
         /// Reads a ground term inside <see cref="Fact.In"/>: its table applications read the scope
@@ -81,8 +135,9 @@ namespace Eggnog
 
         /// <summary>
         /// Evaluates a primitive's term as egglog's <c>check</c> does, without interning: over the arguments' values, a
-        /// constant as it is, so that a constant no write interned still computes; then the result's cell, which a value
-        /// never interned has not, and then the term is absent, as it is when the primitive has no result.
+        /// constant as it is, so that a constant no write interned still computes; then the result's cell. Where the
+        /// cell is wanted, as a key, a value never interned has none, and the term is absent, as it is when the primitive
+        /// has no result: egglog's newly interned value is in no row either.
         /// </summary>
         /// <exception cref="ArgumentException">A class argument or result is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
@@ -92,14 +147,20 @@ namespace Eggnog
             if (TryEvaluate(scope, shape, enclosing, out var value, out var result) == false)
                 return false;
 
-            // A class the primitive returns is read as the scope sees it: usable there, and canonical.
             if (result.Kind == ColumnKind.Sort)
-            {
-                cell = scope.Engine.Find(ClassChecks.Require(scope, result.ClassOf(value!), "term"));
-                return true;
-            }
+                return TryClassCell(scope, result, value!, out cell);
 
             return result.TryEncodeExistingObject(value!, out cell);
+        }
+
+        /// <summary>
+        /// Reads a class a primitive returned as the scope sees it: usable there, and canonical.
+        /// </summary>
+        /// <exception cref="ArgumentException">The class is not usable in this scope.</exception>
+        static bool TryClassCell(Scope scope, ColumnType result, object value, out uint cell)
+        {
+            cell = scope.Engine.Find(ClassChecks.Require(scope, result.ClassOf(value), "term"));
+            return true;
         }
 
         /// <summary>
@@ -193,9 +254,21 @@ namespace Eggnog
                 }
                 case EqualityFact equality:
                 {
-                    var left = TryReadIn(scope, equality.Left, enclosing, out var x);
-                    var right = TryReadIn(scope, equality.Right, enclosing, out var y);
-                    return left && right && x == y;
+                    var left = TryReadValueIn(scope, equality.Left, enclosing, out var x, out var looseX);
+                    var right = TryReadValueIn(scope, equality.Right, enclosing, out var y, out var looseY);
+                    if (left == false || right == false)
+                        return false;
+
+                    if (looseX is null && looseY is null)
+                        return x == y;
+
+                    // A value without a cell compares as the codec would intern it: with another such value, or with the
+                    // value of the other side's cell, since another thread may intern it between the two reads.
+                    if (equality.Left.ClrType != equality.Right.ClrType)
+                        return false;
+
+                    var type = scope.Graph.Values.TypeOf(equality.Left.ClrType);
+                    return type.ObjectsEqual(looseX ?? type.DecodeObject(x, scope), looseY ?? type.DecodeObject(y, scope));
                 }
                 case ExistsFact exists:
                     return TryReadIn(scope, exists.Application, enclosing, out _);

@@ -128,8 +128,9 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// A read computes too, as egglog's <c>check</c> does, but never interns: a result no write interned is no value,
-        /// so the fact is false.
+        /// A read computes too, as egglog's <c>check</c> does, but never interns, and answers as egglog, which interns: a
+        /// result no write interned is a value, which reads back as itself and equals only itself, and is no row's
+        /// output.
         /// </summary>
         [Fact]
         public void AReadComputesWithoutInterning()
@@ -141,7 +142,11 @@ namespace Eggnog.Tests.Host
 
             Assert.True(graph.Root.Check(name.Of(1L).Is(StringPrimitives.Concat.Of("a", "b"))));
             Assert.False(graph.Root.Check(name.Of(1L).Is(StringPrimitives.Concat.Of("x", "y"))));
-            Assert.False(graph.Root.TryGet(StringPrimitives.Concat.Of("x", "y"), out _));
+            Assert.True(graph.Root.TryGet(StringPrimitives.Concat.Of("x", "y"), out var xy));
+            Assert.Equal("xy", xy);
+            Assert.True(graph.Root.Check(StringPrimitives.Concat.Of("x", "y").Is("xy")));
+            Assert.False(graph.Root.Check(StringPrimitives.Concat.Of("x", "y").Is("yx")));
+            Assert.False(graph.Root.Check(StringPrimitives.Concat.Of("x", "y").Is("ab")));
             Assert.Equal("ab", graph.Root.Get(StringPrimitives.Concat.Of("a", "b")));
             Assert.False(graph.Root.Check(name.Of(Primitives.Divide.Of(1L, 0L)).Is("ab")));
             Assert.Equal(interned, graph.Values.InternedCount);

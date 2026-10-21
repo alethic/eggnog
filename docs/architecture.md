@@ -113,8 +113,9 @@ A column holds either a class or a value.
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
 inline; every other value is interned and stored as its intern index. Interning pools are permanent for the life of
 the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived host can retire a graph
-and build a new one. Host reads never intern: a constant that was never interned makes its fact false or its term
-absent.
+and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a value no write
+interned, a constant or a computation's result, equals only itself and reads back as itself, and as a key or an output
+it is in no row, as egglog's newly interned one is in none.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
 child databases share their root's base-value registry by reference, and `ColumnType<T>.Encode` takes no scope. So a
@@ -370,11 +371,11 @@ visible when the call returns. A batch whose facts all hold already stages nothi
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do, and
-compute primitives as `check` does, over values, never interning: a result no write interned is no value, so a fact over
-it is false. `Version` counts the effective changes the scope's own calls made to its own contents. `Serialize(options)`
-is egglog's `EGraph::serialize`: the scope's view as the graph of the egraph-serialize crate (`SerializedGraph`, and its
-JSON from `ToJson`), which egglog's visualizer reads; its departures are decision 23 of
-[`engine/decisions.md`](engine/decisions.md).
+compute primitives as `check` does, over values, never interning: a result no write interned is a value all the same,
+which `Get` returns and an equality compares as egglog's interned one, and which no row holds. `Version` counts the
+effective changes the scope's own calls made to its own contents. `Serialize(options)` is egglog's `EGraph::serialize`:
+the scope's view as the graph of the egraph-serialize crate (`SerializedGraph`, and its JSON from `ToJson`), which
+egglog's visualizer reads; its departures are decision 23 of [`engine/decisions.md`](engine/decisions.md).
 
 A query (`EGraph.DefineQuery`) is a conjunctive body with variables, defined once and run in any scope with `Any`,
 `Count` or `ForEachMatch`, which delivers the distinct bindings in content order. Its atoms skip subsumed rows, as a

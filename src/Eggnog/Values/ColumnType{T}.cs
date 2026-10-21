@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -124,6 +125,18 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
+
+        /// <summary>
+        /// Gets whether two non-null values are one value as the codec interns them: by <see cref="IEquatable{T}"/>, as
+        /// the intern tables compare, unless the codec makes more values one.
+        /// </summary>
+        /// <param name="x">One value.</param>
+        /// <param name="y">The other value.</param>
+        /// <returns>Whether they would intern as one cell.</returns>
+        internal virtual bool ValuesEqual(T x, T y) => EqualityComparer<T>.Default.Equals(x, y);
+
+        /// <inheritdoc />
+        internal override bool ObjectsEqual(object x, object y) => ValuesEqual(Cast(x), Cast(y));
 
         /// <inheritdoc />
         internal override object DecodeObject(uint cell, Scope? scope) => Decode(cell, scope)!;
