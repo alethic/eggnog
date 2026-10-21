@@ -12,9 +12,10 @@ namespace Eggnog
     /// An immutable map of values, equal by content: egglog's <c>Map</c> container (src/sort/map.rs), whose column type
     /// <see cref="ValueStore.RegisterMap{TKey, TValue}"/> registers and whose primitives are <see cref="Primitives"/>'
     /// <c>Map*</c> methods. A map is interned as a container, so equal maps have equal cells. It enumerates in ascending
-    /// key order, as <see cref="ValueSet{T}"/> orders its elements (by code point for strings, <c>Comparer&lt;T&gt;.Default</c>
-    /// otherwise), so the key type must be <c>string</c> or comparable; egglog orders a map by its keys' cells, which is
-    /// the order its terms and serialized nodes list. Operations return a new map, or this one when nothing changes.
+    /// key order, as <see cref="ValueSet{T}"/> orders its elements (by code point for strings, as egglog's
+    /// <c>OrderedFloat</c> for doubles, NaN last, <c>Comparer&lt;T&gt;.Default</c> otherwise), so the key type must be
+    /// <c>string</c> or comparable, and its order must agree with its equality; egglog orders a map by its keys' cells,
+    /// which is the order its terms, serialized nodes and cells' text list. Operations return a new map, or this one when nothing changes.
     /// </summary>
     /// <typeparam name="TKey">The key type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
@@ -52,12 +53,12 @@ namespace Eggnog
         /// <summary>
         /// Gets the keys, ascending.
         /// </summary>
-        public IEnumerable<TKey> Keys => keys;
+        public IEnumerable<TKey> Keys => Array.AsReadOnly(keys);
 
         /// <summary>
         /// Gets the values, in key order.
         /// </summary>
-        public IEnumerable<TValue> Values => values;
+        public IEnumerable<TValue> Values => Array.AsReadOnly(values);
 
         /// <inheritdoc />
         IEnumerable<(object Key, object Value)> IMap.Entries
@@ -290,6 +291,33 @@ namespace Eggnog
             }
 
             return new(keys.ToArray(), values.ToArray());
+        }
+
+        /// <summary>
+        /// Makes a map of distinct keys, each with its value, in any order: one sort, the arrays owned from now on.
+        /// </summary>
+        /// <param name="keys">The keys, distinct.</param>
+        /// <param name="values">The values, one per key.</param>
+        /// <returns>The map.</returns>
+        /// <exception cref="ArgumentException">Two keys compare equal.</exception>
+        internal static Map<TKey, TValue> FromDistinct(TKey[] keys, TValue[] values)
+        {
+            if (keys.Length == 0)
+                return Empty;
+
+            var sorted = true;
+            for (var i = 1; i < keys.Length && sorted; i++)
+                sorted = Order.Compare(keys[i - 1], keys[i]) < 0;
+
+            if (sorted == false)
+            {
+                Array.Sort(keys, values, Order);
+                for (var i = 1; i < keys.Length; i++)
+                    if (Order.Compare(keys[i - 1], keys[i]) == 0)
+                        throw new ArgumentException($"Two of a map's keys compare equal: {keys[i]}.", nameof(keys));
+            }
+
+            return new(keys, values);
         }
 
         /// <summary>

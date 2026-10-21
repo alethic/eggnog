@@ -77,7 +77,11 @@ namespace Eggnog
                 i++;
             }
 
-            return env.GetOrInsertShared(Relations.MapContainer.Collect(false, false, keys, values), counters);
+            var container = Relations.MapContainer.Collect(false, false, keys, values);
+            if (container.Count != map.Count)
+                throw Merged(map);
+
+            return env.GetOrInsertShared(container, counters);
         }
 
         /// <inheritdoc />
@@ -96,7 +100,11 @@ namespace Eggnog
                 i++;
             }
 
-            return env.TryGetId(Relations.MapContainer.Collect(false, false, keys, values), out cell);
+            var container = Relations.MapContainer.Collect(false, false, keys, values);
+            if (container.Count != map.Count)
+                throw Merged(map);
+
+            return env.TryGetId(container, out cell);
         }
 
         /// <summary>
@@ -109,11 +117,15 @@ namespace Eggnog
         internal override Map<TKey, TValue> Decode(uint cell, Scope? scope)
         {
             var map = Read(cell);
-            var entries = new KeyValuePair<TKey, TValue>[map.Count];
-            for (var i = 0; i < entries.Length; i++)
-                entries[i] = new(key.Decode(map.Keys[i], scope), value.Decode(map.Values[i], scope));
+            var keys = new TKey[map.Count];
+            var values = new TValue[map.Count];
+            for (var i = 0; i < keys.Length; i++)
+            {
+                keys[i] = key.Decode(map.Keys[i], scope);
+                values[i] = value.Decode(map.Values[i], scope);
+            }
 
-            return Map<TKey, TValue>.Create(entries);
+            return Map<TKey, TValue>.FromDistinct(keys, values);
         }
 
         /// <summary>
@@ -133,6 +145,50 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override string DebugValue(Map<TKey, TValue> map) => FormatValue(map);
+
+        /// <summary>
+        /// Formats a map's cell as egglog prints it, its entries in key-cell order, the order its extracted term lists.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>The literal.</returns>
+        internal override string FormatCell(uint cell)
+        {
+            var map = Read(cell);
+            var text = "(map-empty)";
+            for (var i = 0; i < map.Count; i++)
+                text = "(map-insert " + text + " " + key.FormatCell(map.Keys[i]) + " " + value.FormatCell(map.Values[i]) + ")";
+
+            return text;
+        }
+
+        /// <summary>
+        /// Compares two maps' cells as <see cref="CompareValues"/> compares the maps, decoding each once.
+        /// </summary>
+        /// <param name="x">One cell.</param>
+        /// <param name="y">The other cell.</param>
+        /// <returns>The order.</returns>
+        internal override int CompareCells(uint x, uint y) => x == y ? 0 : CompareValues(Decode(x, null), Decode(y, null));
+
+        /// <summary>
+        /// Gets a key's value from a map's cell, by the key's cell, without decoding the map: <c>map-get</c> over cells.
+        /// </summary>
+        /// <param name="cell">The map's cell.</param>
+        /// <param name="keyCell">The key's cell.</param>
+        /// <param name="valueCell">The value's cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether the map has the key.</returns>
+        internal bool TryGetCell(uint cell, uint keyCell, out uint valueCell)
+        {
+            var map = Read(cell);
+            var at = map.Keys.BinarySearch(keyCell);
+            valueCell = at >= 0 ? map.Values[at] : 0;
+            return at >= 0;
+        }
+
+        /// <summary>
+        /// Makes the error for a map whose order keeps two keys apart that the key type's codec stores as one.
+        /// </summary>
+        ArgumentException Merged(Map<TKey, TValue> map) =>
+            new($"Two keys of the map {map} are distinct in their order but one value to {key.Name}, which stores them in one cell: the type's comparer must agree with its equality.", nameof(map));
 
         /// <summary>
         /// Compares two maps lexicographically over their entries in key order, each by key then value, a shorter prefix

@@ -138,7 +138,10 @@ host can retire a graph and build a new one. Host reads never intern, and answer
 value no write interned, a constant or a computation's result, equals only itself and reads back as itself, and as a
 key or an output it is in no row, as egglog's newly interned one is in none. A container egglog's `check` interns takes
 an id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
-by them, can differ from egglog's.
+by them, can differ from egglog's. So can the ids after a map constant: it interns one container, its keys in key order,
+where its egglog form, a chain of `map-insert`s, also interns the empty map and each map between; written as that chain
+(`Primitives.MapInsert`), it interns what egglog's does. A host write interns its literals first, in term order, and then
+its computations' results, as egglog lowers a command before it evaluates a primitive.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
 child databases share their root's base-value registry and container environments by reference, and
@@ -150,7 +153,7 @@ any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in term order, and then each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |

@@ -15,6 +15,7 @@ namespace Eggnog
 
         readonly PartialFunc<T1, T2, TResult>? partial;
         readonly Func<uint, uint, uint>? cells;
+        readonly Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)>? containerCells;
         readonly Func<uint, uint, bool>? cellPredicate;
 
         /// <summary>
@@ -40,6 +41,28 @@ namespace Eggnog
         {
             Function = function;
             this.partial = partial;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of a primitive over values whose calls in a run or a write read its arguments' cells
+        /// instead, through their column types: a lookup in a container by cell, which needs no decoding. A read, over
+        /// values that may not be interned, calls the function over values.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="function">The function over values, which throws where there is no result.</param>
+        /// <param name="partial">The partial function over values; <c>null</c> for a total primitive.</param>
+        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types:
+        /// whether there is a result, and its cell.</param>
+        internal Primitive(
+            string name,
+            Func<T1, T2, TResult> function,
+            PartialFunc<T1, T2, TResult>? partial,
+            Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)> containerCells)
+            : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, partial is not null)
+        {
+            Function = function;
+            this.partial = partial;
+            this.containerCells = containerCells;
         }
 
         /// <summary>
@@ -118,6 +141,12 @@ namespace Eggnog
             if (cells is not null)
                 return cells(arguments[0], arguments[1]);
 
+            if (containerCells is not null)
+            {
+                var (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1]);
+                return found ? cell : throw NoResult(Name);
+            }
+
             if (cellPredicate is not null)
                 return EncodePredicate(result, cellPredicate(arguments[0], arguments[1]));
 
@@ -137,6 +166,13 @@ namespace Eggnog
             {
                 cell = cells(arguments[0], arguments[1]);
                 return true;
+            }
+
+            if (containerCells is not null)
+            {
+                bool found;
+                (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1]);
+                return found;
             }
 
             if (cellPredicate is not null)

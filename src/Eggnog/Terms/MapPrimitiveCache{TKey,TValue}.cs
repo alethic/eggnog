@@ -28,10 +28,14 @@ namespace Eggnog
             new("map-insert", static (m, k, v) => m.SetItem(k, v), false);
 
         /// <summary>
-        /// <c>map-get</c>: no result for a missing key.
+        /// <c>map-get</c>: no result for a missing key. A run looks the key's cell up in the map's container.
         /// </summary>
-        public static readonly Primitive<Map<TKey, TValue>, TKey, TValue> Get =
-            BuiltInPrimitive.Partial<Map<TKey, TValue>, TKey, TValue>("map-get", TryGet);
+        public static readonly Primitive<Map<TKey, TValue>, TKey, TValue> Get = new(
+            "map-get",
+            static (m, k) => TryGet(m, k, out var v) ? v : throw Primitive.NoResult("map-get"),
+            TryGet,
+            static (map, _, _, mapCell, keyCell) =>
+                ((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out var valueCell) ? (true, valueCell) : (false, 0u));
 
         /// <summary>
         /// <c>map-remove</c>.
@@ -47,8 +51,12 @@ namespace Eggnog
         /// <summary>
         /// <c>map-contains</c>.
         /// </summary>
-        public static readonly Primitive<Map<TKey, TValue>, TKey, bool> Contains =
-            new("bool-map-contains", static (m, k) => m.ContainsKey(k), false)
+        public static readonly Primitive<Map<TKey, TValue>, TKey, bool> Contains = new(
+            "bool-map-contains",
+            static (m, k) => m.ContainsKey(k),
+            null,
+            static (map, key, result, mapCell, keyCell) =>
+                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out _))))
         {
             FilterName = "map-contains",
         };
@@ -56,8 +64,12 @@ namespace Eggnog
         /// <summary>
         /// <c>map-not-contains</c>.
         /// </summary>
-        public static readonly Primitive<Map<TKey, TValue>, TKey, bool> NotContains =
-            new("bool-map-not-contains", static (m, k) => m.ContainsKey(k) == false, false)
+        public static readonly Primitive<Map<TKey, TValue>, TKey, bool> NotContains = new(
+            "bool-map-not-contains",
+            static (m, k) => m.ContainsKey(k) == false,
+            null,
+            static (map, key, result, mapCell, keyCell) =>
+                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out _) == false)))
         {
             FilterName = "map-not-contains",
         };

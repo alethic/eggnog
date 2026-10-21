@@ -32,6 +32,39 @@ namespace Eggnog.Tests.Values
             Assert.False(map.TryGetValue("c", out _));
             Assert.Throws<KeyNotFoundException>(() => map["c"]);
             Assert.Equal("{a: 2, b: 3}", map.ToString());
+            Assert.Throws<NotSupportedException>(() => ((IList<string>)map.Keys)[0] = "z");
+            Assert.Throws<NotSupportedException>(() => ((IList<long>)map.Values)[0] = 9L);
+        }
+
+        [Fact]
+        public void AHostWriteInternsItsLiteralsBeforeItsComputations()
+        {
+            // (let $s (map-insert (map-insert (map-empty) (+ "x" "y") 1) "b" 2)) (extract $s) prints
+            // (map-insert (map-insert (map-empty) "b" 2) "xy" 1): egglog interns a command's literals, "b" among them,
+            // before it computes "xy".
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterMap<string, long>();
+            var insert = Primitives.MapInsert<string, long>();
+            var s = t.Graph.DefineFunction<Map<string, long>>("s");
+            var leaf = t.Graph.DefineConstructor<Map<string, long>, Node>("Leaf");
+            var computed = StringPrimitives.Concat.Of("x", "y");
+            t.Root.Assume(s.Of().Is(insert.Of(insert.Of(Primitives.MapEmpty<string, long>().Of(), computed, 1L), "b", 2L)));
+
+            var x = t.Root.Make(leaf.Of(s.Of()));
+            Assert.Equal("(Leaf (map-insert (map-insert (map-empty) \"b\" 2) \"xy\" 1))", t.Root.Extract(x).ToString());
+        }
+
+        [Fact]
+        public void KeysTheirOrderKeepsApartButTheirTypeStoresAsOneAreRefused()
+        {
+            var graph = new EGraph();
+            graph.Values.Register<CaseKey>("CaseKey");
+            graph.Values.RegisterMap<CaseKey, long>();
+            var f = graph.DefineFunction<long, Map<CaseKey, long>>("f");
+            var map = Map.Of((new CaseKey("A"), 1L), (new CaseKey("a"), 2L));
+            Assert.Equal(2, map.Count);
+            Assert.Throws<ArgumentException>(() => graph.Root.Assume(f.Of(1L).Is(map)));
+            Assert.Equal(0, graph.Root.CountRows(f));
         }
 
         [Fact]
