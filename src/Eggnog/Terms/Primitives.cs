@@ -152,6 +152,101 @@ namespace Eggnog
             where T2 : notnull => PairPrimitiveCache<T1, T2>.Second;
 
         /// <summary>
+        /// <c>vec-empty</c>: the empty vector, egglog's (src/sort/vec.rs:117-120). Its type is registered with
+        /// <see cref="ValueStore.RegisterVec{T}"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static PrimitiveN<Vec<T>> VecEmpty<T>() where T : notnull => VecPrimitiveCache<T>.Empty;
+
+        /// <summary>
+        /// <c>vec-of</c>: the vector of any number of elements, in order (vec.rs:121-124).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static VariadicPrimitive<T, Vec<T>> VecOf<T>() where T : notnull => VecPrimitiveCache<T>.Of;
+
+        /// <summary>
+        /// <c>vec-append</c>: the concatenation of any number of vectors (vec.rs:125-128).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static VariadicPrimitive<Vec<T>, Vec<T>> VecAppend<T>() where T : notnull => VecPrimitiveCache<T>.Append;
+
+        /// <summary>
+        /// <c>vec-push</c>: the vector with an element appended (vec.rs:130).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, T, Vec<T>> VecPush<T>() where T : notnull => VecPrimitiveCache<T>.Push;
+
+        /// <summary>
+        /// <c>vec-pop</c>: the vector without its last element; an empty vector stays empty (vec.rs:131).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, Vec<T>> VecPop<T>() where T : notnull => VecPrimitiveCache<T>.Pop;
+
+        /// <summary>
+        /// <c>vec-length</c> (vec.rs:133).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, long> VecLength<T>() where T : notnull => VecPrimitiveCache<T>.Length;
+
+        /// <summary>
+        /// <c>vec-contains</c>: whether the vector holds an element, as a <c>bool</c>; as a filter, egglog's
+        /// <c>vec-contains</c> (vec.rs:134), and as a value <c>bool-vec-contains</c>, a name egglog has not.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, T, bool> VecContains<T>() where T : notnull => VecPrimitiveCache<T>.Contains;
+
+        /// <summary>
+        /// <c>vec-not-contains</c>: whether the vector lacks an element, as a <c>bool</c>; as a filter, egglog's
+        /// <c>vec-not-contains</c> (vec.rs:135), and as a value <c>bool-vec-not-contains</c>.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, T, bool> VecNotContains<T>() where T : notnull => VecPrimitiveCache<T>.NotContains;
+
+        /// <summary>
+        /// <c>vec-get</c>: the element at an index; no result out of range (vec.rs:137).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, long, T> VecGet<T>() where T : notnull => VecPrimitiveCache<T>.Get;
+
+        /// <summary>
+        /// <c>vec-set</c>: the vector with the element at an index replaced; no result out of range, as egglog
+        /// 3.0.0's, where the pin panics (vec.rs:138).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, long, T, Vec<T>> VecSet<T>() where T : notnull => VecPrimitiveCache<T>.Set;
+
+        /// <summary>
+        /// <c>vec-remove</c>: the vector without the element at an index; no result out of range, as egglog
+        /// 3.0.0's, where the pin panics (vec.rs:139).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive<Vec<T>, long, Vec<T>> VecRemove<T>() where T : notnull => VecPrimitiveCache<T>.Remove;
+
+        /// <summary>
+        /// <c>vec-range</c>: the vector <c>0, 1, …, end - 1</c>, empty for a negative end (vec.rs:151-161), which egglog
+        /// registers for vectors of <c>i64</c> only.
+        /// </summary>
+        public static Primitive<long, Vec<long>> VecRange { get; } = BuiltInPrimitive.Total<long, Vec<long>>("vec-range", static end =>
+        {
+            var items = new long[end > 0 ? checked((int)end) : 0];
+            for (var i = 0; i < items.Length; i++)
+                items[i] = i;
+
+            return Vec.Of(items);
+        });
+
+        /// <summary>
         /// <c>ordering-min</c>: of two values, the one whose cell is the smaller, as egglog's compares the values'
         /// representations. A cell is a small integer itself, or an intern index, as egglog's representation is, so the
         /// order is that of interning, not of the values. It runs only in a rule: its <c>Function</c> throws

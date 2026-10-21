@@ -557,6 +557,15 @@ namespace Eggnog
                 return builder.Append(')').ToString();
             }
 
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Vec<>))
+            {
+                var builder = new StringBuilder("(vec-of");
+                foreach (var element in (IEnumerable)value)
+                    builder.Append(' ').Append(DefaultLiteral(element!));
+
+                return builder.Length == "(vec-of".Length ? "(vec-empty)" : builder.Append(')').ToString();
+            }
+
             foreach (var face in type.GetInterfaces())
             {
                 if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(ISort<>) && face.GetProperty("Id")?.GetValue(value) is ClassId sortId)

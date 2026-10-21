@@ -30,7 +30,7 @@ namespace Eggnog
         readonly EGraph graph;
         readonly Relations.BaseValues values;
         readonly object sync = new();
-        Relations.ContainerEnv<Relations.PairContainer>? pairs;
+        Relations.ContainerEnvBase[] containers = [];
         readonly ConcurrentDictionary<Type, ColumnType> byType = new();
         readonly Dictionary<string, ColumnType> byName = new(StringComparer.Ordinal);
 
@@ -59,13 +59,23 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
-        /// constant that is not stored inline (strings, doubles, sets, pairs, registered values, and <c>long</c>s outside
+        /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and <c>long</c>s outside
         /// <c>[0, 2^31)</c>, and every <c>BigInt</c>); a run interns each new result of a primitive or a lattice merge,
         /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
         /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
-        /// intern. A pair also takes an id from the graph's id counter, as egglog's containers do.
+        /// intern. A pair or a vector also takes an id from the graph's id counter, as egglog's containers do.
         /// </remarks>
-        public long InternedCount => values.InternedCount + (Volatile.Read(ref pairs)?.Count ?? 0);
+        public long InternedCount
+        {
+            get
+            {
+                var count = values.InternedCount;
+                foreach (var env in Volatile.Read(ref containers))
+                    count += env.Count;
+
+                return count;
+            }
+        }
 
         /// <summary>
         /// Gets the column type of <typeparamref name="T"/>.
@@ -74,7 +84,8 @@ namespace Eggnog
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
         /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterPair{T1, T2}"/>,
-        /// <see cref="RegisterEnum{TEnum}"/> or <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
+        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
+        /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
         /// <summary>
@@ -128,6 +139,9 @@ namespace Eggnog
 
             if (IsPair(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a pair: register it with ValueStore.RegisterPair.");
+
+            if (IsVec(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a vector: register it with ValueStore.RegisterVec.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
@@ -224,7 +238,7 @@ namespace Eggnog
 
             // Outside the store's lock: the environment's registration takes the graph's definition lock, which
             // DefineSort takes before this lock.
-            var env = graph.PairContainers();
+            var env = graph.ValueContainers<Relations.PairContainer>();
             lock (sync)
             {
                 if (TryGetType<Pair<T1, T2>>(out existing))
@@ -234,9 +248,54 @@ namespace Eggnog
                 CheckFree(typeof(Pair<T1, T2>), name);
                 var type = new PairColumnType<T1, T2>(name, first, second, env, graph.Engine.Counters);
                 Add(type);
-                Volatile.Write(ref pairs, env);
+                AddContainers(env);
                 return type;
             }
+        }
+
+        /// <summary>
+        /// Registers the vector type of <typeparamref name="T"/>, egglog's <c>(sort … (Vec T))</c>, named
+        /// <c>Vec&lt;{element name}&gt;</c>, or gets it when it is registered already. A vector is egglog's <c>Vec</c>
+        /// container: its cell is a container id from the graph's id counter, equal vectors have one cell, and its
+        /// primitives are <see cref="Primitives"/>' <c>Vec*</c> methods. It extracts as <c>(vec-of a b)</c>, or
+        /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements are value types,
+        /// containers included; vectors of classes, egglog's eq-sort containers, are not supported yet.
+        /// </summary>
+        /// <typeparam name="T">The element type; registered, and not a sort.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">The element type is unknown or a sort, or the name is taken.</exception>
+        public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Vec<T>>(out var existing))
+                return existing;
+
+            var element = TypeOf<T>();
+            if (element.Kind == ColumnKind.Sort)
+                throw new ArgumentException($"Vectors hold values only so far; {element.Name} is a sort, and vectors of classes are egglog's eq-sort containers, which are not supported yet.");
+
+            var env = graph.ValueContainers<Relations.VecContainer>();
+            lock (sync)
+            {
+                if (TryGetType<Vec<T>>(out existing))
+                    return existing;
+
+                var name = $"Vec<{element.Name}>";
+                CheckFree(typeof(Vec<T>), name);
+                var type = new VecColumnType<T>(name, element, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Counts a container environment in <see cref="InternedCount"/>, once. Called under the lock.
+        /// </summary>
+        void AddContainers(Relations.ContainerEnvBase env)
+        {
+            if (System.Array.IndexOf(containers, env) < 0)
+                Volatile.Write(ref containers, [.. containers, env]);
         }
 
         /// <summary>
@@ -320,7 +379,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
-        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterVec</c>, <c>ValueStore.RegisterEnum</c> or
+        /// <c>EGraph.DefineSort</c>.</returns>
         [UnconditionalSuppressMessage("Trimming", "IL2067",
             Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
                 + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
@@ -332,6 +392,9 @@ namespace Eggnog
 
             if (IsPair(clrType))
                 return "ValueStore.RegisterPair";
+
+            if (IsVec(clrType))
+                return "ValueStore.RegisterVec";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
@@ -369,6 +432,13 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a pair type.</returns>
         internal static bool IsPair(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Pair<,>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a vector type, a <see cref="Vec{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a vector type.</returns>
+        internal static bool IsVec(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Vec<>);
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.

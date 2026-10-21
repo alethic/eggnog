@@ -106,7 +106,7 @@ A column holds either a class or a value.
   other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`), and
   `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
-  `RegisterSet<T>` and `RegisterPair<T1, T2>`.
+  `RegisterSet<T>`, `RegisterPair<T1, T2>` and `RegisterVec<T>`.
 - **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
   classes: there are no sets of classes.
 - **`Pair<T1, T2>`** is egglog's `Pair` container over value types (`ValueStore.RegisterPair<T1, T2>`, named
@@ -114,26 +114,31 @@ A column holds either a class or a value.
   engine container, minted from the graph's id counter as egglog mints its containers' ids; a pair of values is never
   rebuilt, so equal pairs have one cell in every scope, as any value's. It extracts as `(pair a b)` and costs what its
   elements cost. Pairs of classes, egglog's eq-sort containers, are not supported yet.
+- **`Vec<T>`** is egglog's `Vec` container over a value type, in the same way (`ValueStore.RegisterVec<T>`, named
+  `Vec<i64>` and so on, with `Primitives.VecEmpty`, `VecOf`, `VecAppend`, `VecPush`, `VecPop`, `VecLength`,
+  `VecContains`, `VecNotContains`, `VecGet`, `VecSet`, `VecRemove` and, for `Vec<long>`, `VecRange`). It extracts as
+  `(vec-of a b)` or `(vec-empty)`.
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
-inline; a pair is a container id; every other value is interned and stored as its intern index. Interning pools are
+inline; a pair or a vector is a container id; every other value is interned and stored as its intern index. Interning pools are
 permanent for the life of the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived
 host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a
 value no write interned, a constant or a computation's result, equals only itself and reads back as itself, and as a
-key or an output it is in no row, as egglog's newly interned one is in none. A pair egglog's `check` interns takes an
-id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
+key or an output it is in no row, as egglog's newly interned one is in none. A container egglog's `check` interns takes
+an id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
 by them, can differ from egglog's.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
 child databases share their root's base-value registry and container environments by reference, and
-`ColumnType<T>.Encode` takes no scope (a pair is interned without an execution state, from the shared id counter). So a
+`ColumnType<T>.Encode` takes no scope (a container of values is interned without an execution state, from the shared
+id counter). So a
 value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
 cells across scopes and lifts. What a scope interned stays after the scope is disposed. These operations intern, in
 any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, pairs, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, sets, pairs, vectors, registered values, and `long`s outside `[0, 2^31)`), and each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |

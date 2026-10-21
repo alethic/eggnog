@@ -363,6 +363,7 @@ static class Eggnog.Primitives
     static Primitive<Int64, Int64> BitwiseNot { get }
     static Primitive<Int64, Int64> Log2 { get }
     static Primitive<Int64, String> Format { get }
+    static Primitive<Int64, Vec<Int64>> VecRange { get }
     static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
     static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
     static Primitive<T, T, Boolean> NotEqual<T>()
@@ -380,7 +381,18 @@ static class Eggnog.Primitives
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Except<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Intersect<T>()
     static Primitive<ValueSet<T>, ValueSet<T>, ValueSet<T>> Union<T>()
+    static Primitive<Vec<T>, Int64, T, Vec<T>> VecSet<T>()
+    static Primitive<Vec<T>, Int64, T> VecGet<T>()
+    static Primitive<Vec<T>, Int64, Vec<T>> VecRemove<T>()
+    static Primitive<Vec<T>, Int64> VecLength<T>()
+    static Primitive<Vec<T>, T, Boolean> VecContains<T>()
+    static Primitive<Vec<T>, T, Boolean> VecNotContains<T>()
+    static Primitive<Vec<T>, T, Vec<T>> VecPush<T>()
+    static Primitive<Vec<T>, Vec<T>> VecPop<T>()
+    static PrimitiveN<Vec<T>> VecEmpty<T>()
     static VariadicPrimitive<T, ValueSet<T>> SetOf<T>()
+    static VariadicPrimitive<T, Vec<T>> VecOf<T>()
+    static VariadicPrimitive<Vec<T>, Vec<T>> VecAppend<T>()
 sealed class Eggnog.Query : IDisposable
     Boolean IsDisposed { get }
     IReadOnlyList<Term> Variables { get }
@@ -760,6 +772,7 @@ sealed class Eggnog.ValueStore
     ColumnType<T> TypeOf<T>()
     ColumnType<TEnum> RegisterEnum<TEnum : struct, Enum>()
     ColumnType<ValueSet<T>> RegisterSet<T>()
+    ColumnType<Vec<T>> RegisterVec<T>()
     Int64 InternedCount { get }
 sealed class Eggnog.Var<T> : Term<T>
     String Name { get }
@@ -768,3 +781,21 @@ sealed class Eggnog.VariadicPrimitive<T, TResult>
     String Name { get }
     Term<TResult> Of(params Term<T>[] arguments)
     override String ToString()
+static class Eggnog.Vec
+    static Vec<T> From<T>(IEnumerable<T> items)
+    static Vec<T> Of<T>(params T[] items)
+sealed class Eggnog.Vec<T> : IEnumerable, IEnumerable<T>, IEquatable<Vec<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
+    Boolean Contains(T item)
+    Boolean Equals(Vec<T> other)
+    IEnumerator<T> GetEnumerator()
+    Int32 Count { get }
+    T this[Int32 index] { get }
+    Vec<T> Append(Vec<T> other)
+    Vec<T> Pop()
+    Vec<T> Push(T item)
+    Vec<T> RemoveAt(Int32 index)
+    Vec<T> SetItem(Int32 index, T item)
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Vec<T> Empty { get }
