@@ -28,7 +28,7 @@ namespace Eggnog
         /// <returns>The fact.</returns>
         /// <exception cref="ArgumentException">The number of arguments is not the relation's, or an argument's type is
         /// not its column's.</exception>
-        public Fact Of(params object[] keys) => new RelationFact(this, ToArguments(keys));
+        public Fact Of(params ReadOnlySpan<object> keys) => new RelationFact(this, ToArguments(keys));
 
         /// <summary>
         /// A read-only scoped view of the table, which must have no sort column, as for the typed relations.
