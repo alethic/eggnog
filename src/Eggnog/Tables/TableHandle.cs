@@ -200,9 +200,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="keys">The arguments, one per key column.</param>
         /// <returns>The terms, a new array.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="keys"/> or a key is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException">A key is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">The number or a type does not match.</exception>
-        internal Term[] ToArguments(object[] keys)
+        internal Term[] ToArguments(ReadOnlySpan<object> keys)
         {
             var types = new Type[this.keys.Length];
             for (var i = 0; i < types.Length; i++)
