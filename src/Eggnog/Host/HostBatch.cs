@@ -230,6 +230,7 @@ namespace Eggnog
         public void PlanFact(Fact fact)
         {
             ArgumentNullException.ThrowIfNull(fact);
+            InternLiterals(fact);
             switch (fact)
             {
                 case RelationFact relation:
@@ -274,6 +275,52 @@ namespace Eggnog
                     throw new ArgumentException($"host writes go to the scope written; Fact.In('{scoped.Scope.Name}') is read-only", nameof(fact));
                 default:
                     throw new ArgumentException($"a {fact.GetType().Name} is not a host write", nameof(fact));
+            }
+        }
+
+        /// <summary>
+        /// Interns the value constants of a fact, in term order, before any of its computations runs: egglog lowers a
+        /// command, interning its literals, before it evaluates a primitive, so that a literal written after a computed
+        /// value still interns before it.
+        /// </summary>
+        void InternLiterals(Fact fact)
+        {
+            switch (fact)
+            {
+                case RelationFact relation:
+                    foreach (var argument in relation.Arguments)
+                        InternLiterals(argument.Shape);
+
+                    break;
+                case EqualityFact equality:
+                    InternLiterals(equality.Left.Shape);
+                    InternLiterals(equality.Right.Shape);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Interns the value constants of a term, in term order.
+        /// </summary>
+        void InternLiterals(TermShape shape)
+        {
+            switch (shape.Kind)
+            {
+                case TermShapeKind.Constant:
+                {
+                    var type = TypeOf(shape);
+                    if (type.Kind != ColumnKind.Sort)
+                        type.EncodeObject(shape.Constant!);
+
+                    break;
+                }
+                case TermShapeKind.Variable:
+                    break;
+                default:
+                    foreach (var argument in shape.Arguments)
+                        InternLiterals(argument.Shape);
+
+                    break;
             }
         }
 
