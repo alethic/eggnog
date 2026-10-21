@@ -35,6 +35,11 @@ namespace Eggnog
         /// </summary>
         Delete,
 
+        /// <summary>
+        /// A rule callback (<see cref="RuleBuilder.ThenCall"/>, <see cref="RuleBuilder.ThenCallFull"/>).
+        /// </summary>
+        Callback,
+
     }
 
 }

@@ -50,6 +50,11 @@ namespace Eggnog
         /// </summary>
         Collect,
 
+        /// <summary>
+        /// A rule callback's call, with the variables it sees as inputs (<see cref="HeadOp.Callback"/>).
+        /// </summary>
+        Callback,
+
     }
 
 }

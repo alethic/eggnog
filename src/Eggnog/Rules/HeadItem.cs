@@ -12,6 +12,8 @@ namespace Eggnog
     /// <param name="Left">The term of <see cref="HeadItemKind.Make"/>, the left side of a rewrite, or the constructor
     /// term of <see cref="HeadItemKind.Subsume"/>.</param>
     /// <param name="Right">The right side of a rewrite.</param>
-    internal readonly record struct HeadItem(HeadItemKind Kind, Fact? Fact, Term? Variable, Term? Left, Term? Right);
+    /// <param name="Callback">The callback of <see cref="HeadItemKind.Callback"/>.</param>
+    internal readonly record struct HeadItem(HeadItemKind Kind, Fact? Fact, Term? Variable, Term? Left, Term? Right,
+        RuleCallbackDefinition? Callback = null);
 
 }

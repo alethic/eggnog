@@ -55,6 +55,22 @@ namespace Eggnog.Relations
         internal void AttachViews(ViewSnapshot snapshot) => views = snapshot;
 
         /// <summary>
+        /// Gets the canonical id of <paramref name="id"/> in the state's context without entering its thread domain, as
+        /// <see cref="ContextView.TryCanonicalize"/> does: a child's layered find, which never writes, or the root's find
+        /// without path compression; both are safe from a rule run's threads, while the union-find holds still. The id
+        /// itself in a bare database.
+        /// </summary>
+        /// <param name="id">Any id.</param>
+        /// <returns>The canonical id.</returns>
+        internal uint Canonicalize(uint id)
+        {
+            if (layers is { } child)
+                return child.Owner.UnionFind.Find(id);
+
+            return RequireView().Owner.Owner is { IsRoot: true } root ? root.Store.RootUnionFind.FindNaive(id) : id;
+        }
+
+        /// <summary>
         /// Increments <paramref name="counter"/> on the store's shared counters, never redirected to a child context's
         /// id blocks: for ids that must not be local to any context. Interned container ids are minted here, so a
         /// container interned in a child is the same id everywhere.

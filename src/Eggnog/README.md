@@ -79,7 +79,7 @@ ExtractedTerm best = root.Extract(e);                              // (Add (Var 
 | `Constructor<..., TSort>` | Terms: one class per key (`DefineConstructor`), with a cost for extraction. |
 | `RelationN`, `FunctionN<TOut>`, `ConstructorN<TSort>`, `PrimitiveN<TResult>` | Tables and primitives of any arity, as egglog's take, where the typed ones stop at four: defined by their key or parameter types (`DefineRelationN`, `DefineFunctionN`, `DefineConstructorN`, `Primitive.Create`), and applied to terms or values. |
 | `Term<T>`, `Fact` | Expressions and statements, written with `Of`, `Is`, `IsNot`, primitives and lambdas; used in rules, writes, checks and queries. |
-| `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`). |
+| `Ruleset`, `RuleBuilder` | Named groups of rules; a rule has a body (`When`, `Where`) and a head (`Then`, `Rewrite`, `Subsume`, `Delete`: egglog's `delete`, also `Scope.Delete`; `ThenCall` and `ThenCallFull`: egglog's `rust_rule` and `rust_rule_full`, host code). |
 | `TableOptions` | A table's role, lift policy and extractability, and whether its rows may be subsumed (`Subsumable`): egglog's `subsume`, through `RuleBuilder.Subsume`, `Rewrite(left, right, subsume: true)` and `Scope.Subsume`. Rules, queries and extraction skip a subsumed row; checks and lookups still see it. |
 | `Schedule` | What a run does: `Run`, `Repeat`, `Saturate`, `Sequence`, `Until`, `Split`, and `RunWith`, a step under a scheduler. |
 | `IRuleScheduler`, `RuleScheduler`, `BackOffScheduler` | egglog's schedulers: which of a rule's matches fire in a step (`EGraph.AddScheduler`, `Schedule.RunWith`); egglog-experimental's back-off. |

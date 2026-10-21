@@ -304,6 +304,39 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Adds a callback to the head: egglog's <c>rust_rule</c>, whose right-hand side is host code. For each match it
+        /// gets the values of the rule's variables (<see cref="RuleCallbackContext.Get"/>) and writes as a head does:
+        /// rows, function values, terms, unions, deletions and subsumptions. It reads no table, so the rule stays
+        /// semi-naive; <see cref="ThenCallFull"/> reads. It runs in order with the other head items, sees the variables
+        /// the body binds and those made before it, and runs on the engine's threads, so it must be thread-safe. A write
+        /// is checked when the callback makes it (<see cref="RuleCallbackContext"/>); one refused, or an exception it
+        /// throws, fails the rule.
+        /// </summary>
+        /// <param name="callback">The callback.</param>
+        public void ThenCall(Action<RuleCallbackContext> callback)
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(callback);
+            draft.Head.Add(new HeadItem(HeadItemKind.Callback, null, null, null, null, new RuleCallbackDefinition(callback)));
+        }
+
+        /// <summary>
+        /// Adds a callback that reads tables too (<see cref="FullRuleCallbackContext"/>): egglog's <c>rust_rule_full</c>.
+        /// As egglog marks such a rule, the rule becomes naive (<see cref="Naive"/>): matched in full every run, so that a
+        /// match is found again when a row the callback read changes; under <see cref="Schedule.RunWith"/> its query is
+        /// semi-naive, as egglog builds every scheduler's. A rule under a licence reads outside it here, so it must call
+        /// <see cref="ReadsOwnFacts"/>. Otherwise as <see cref="ThenCall"/>.
+        /// </summary>
+        /// <param name="callback">The callback.</param>
+        public void ThenCallFull(Action<FullRuleCallbackContext> callback)
+        {
+            ThrowIfClosed();
+            ArgumentNullException.ThrowIfNull(callback);
+            draft.Head.Add(new HeadItem(HeadItemKind.Callback, null, null, null, null, new RuleCallbackDefinition(callback)));
+            draft.Naive = true;
+        }
+
+        /// <summary>
         /// Makes every run match in full: against every row, not only the rows new since the rule last ran here or in
         /// an ancestor.
         /// </summary>

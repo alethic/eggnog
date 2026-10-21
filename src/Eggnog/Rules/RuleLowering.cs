@@ -143,6 +143,15 @@ namespace Eggnog
                         case HeadOpKind.Delete:
                             builder.Remove(op.Table!.Function, inputs);
                             break;
+                        case HeadOpKind.Callback:
+                        {
+                            var call = new RuleCallbackCall(graph, program.Name, op.Callback!, op.CallbackVariables!, Types(op.Inputs));
+                            var function = engine.RegisterExternalFunction(call);
+                            owned.Add(function);
+                            var name = program.Name;
+                            builder.CallExternalFunc(function, inputs, unitType, () => $"'{name}': its callback failed");
+                            break;
+                        }
                         case HeadOpKind.Collect:
                         {
                             // The collector never fails, so its panic message is never built; the call stages nothing. A

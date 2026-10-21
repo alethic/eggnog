@@ -251,8 +251,10 @@ namespace Eggnog
                 deleted |= matches > 0 && rule.Compiled.Program.Deletes.Length > 0;
             }
 
-            if (deleted && scope.Tag is { } tag)
-                ReconcileMirrors(scope, rules, tag);
+            // A callback's deletions are known only once it ran (RuleCallbackContext.Remove).
+            var called = scope.Runtime.TakeCallbackDeletions();
+            if ((deleted || called is not null) && scope.Tag is { } tag)
+                ReconcileMirrors(scope, rules, called, tag);
 
             Statistics.SearchTime += report.SearchAndApplyTime;
             Statistics.MergeTime += report.MergeTime;
@@ -279,8 +281,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="scope">The scope the iteration ran in.</param>
         /// <param name="rules">The iteration's rules.</param>
+        /// <param name="called">The tables rule callbacks deleted rows of; <c>null</c> for none.</param>
         /// <param name="tag">The scope's tag.</param>
-        static void ReconcileMirrors(Scope scope, IReadOnlyList<CompiledRule> rules, ScopeTag tag)
+        static void ReconcileMirrors(Scope scope, IReadOnlyList<CompiledRule> rules, ICollection<TableHandle>? called, ScopeTag tag)
         {
             // Indexed, not enumerated: this runs every iteration, and an idle iteration allocates nothing here.
             List<MirrorTable>? mirrors = null;
@@ -291,6 +294,11 @@ namespace Eggnog
                     if (scope.Graph.Mirrors.TryGet(deletes[d], tag, out var mirror) && (mirrors ??= new()).Contains(mirror) == false)
                         mirrors.Add(mirror);
             }
+
+            if (called is not null)
+                foreach (var table in called)
+                    if (scope.Graph.Mirrors.TryGet(table, tag, out var mirror) && (mirrors ??= new()).Contains(mirror) == false)
+                        mirrors.Add(mirror);
 
             if (mirrors is null)
                 return;
