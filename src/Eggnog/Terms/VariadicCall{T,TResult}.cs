@@ -70,10 +70,6 @@ namespace Eggnog
             value = function(values);
             return true;
         }
-
-        /// <summary>
-        /// Gets the parameter types of an arity.
-        /// </summary>
     }
 
 }
