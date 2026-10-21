@@ -245,6 +245,24 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+
+        /// <inheritdoc />
+        public bool RebuildsInOrder =>
+            first is IContainerColumnType { RebuildsInOrder: true } || second is IContainerColumnType { RebuildsInOrder: true };
+
+        /// <inheritdoc />
+        public long[] Content(uint cell)
+        {
+            var pair = Read(cell);
+            return [pair.First, pair.Second];
+        }
+
+        /// <inheritdoc />
+        public long[] Rebuild(long[] content, Func<uint, uint> find) =>
+            [rebuildFirst ? find((uint)content[0]) : content[0], rebuildSecond ? find((uint)content[1]) : content[1]];
+
+        /// <inheritdoc />
         public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
         {
             var pair = Read(cell);

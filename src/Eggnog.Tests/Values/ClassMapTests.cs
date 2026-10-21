@@ -165,6 +165,134 @@ namespace Eggnog.Tests.Values
             Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(first.Of().Is(Primitives.MultiSetUnionValues<Node>().Of(of.Of()))));
         }
 
+        sealed class Passes
+        {
+
+            // (Num 1) #0, (Num 10) #1, (Num 20) #2, (G (Num 10)) #3, (G (Num 20)) #4, and M = {#0: 1, #3: 2, #4: 3}; one
+            // batch of (union (Num 1) (G (Num 20))) (union (Num 10) (Num 20)) collapses #0 and #4 in the rebuild's first
+            // pass, keeping 3, and #3 into them in the second, by G's congruence, keeping 2: M is {(Num 1): 2}, as
+            // egglog's and the engine's rebuild make it.
+            public Passes()
+            {
+                Graph.DefineSort<Node>("Math");
+                Num = Graph.DefineConstructor<long, Node>("Num");
+                G = Graph.DefineConstructor<Node, Node>("G");
+                Graph.Values.RegisterMap<Node, long>();
+                F = Graph.DefineFunction<Map<Node, long>, long>("f");
+                K1 = Root.Make(Num.Of(1L));
+                A = Root.Make(Num.Of(10L));
+                B = Root.Make(Num.Of(20L));
+                K2 = Root.Make(G.Of(Num.Of(10L)));
+                K3 = Root.Make(G.Of(Num.Of(20L)));
+            }
+
+            public EGraph Graph { get; } = new();
+
+            public Scope Root => Graph.Root;
+
+            public Constructor<long, Node> Num { get; }
+
+            public Constructor<Node, Node> G { get; }
+
+            public Function<Map<Node, long>, long> F { get; }
+
+            public Node K1 { get; }
+
+            public Node A { get; }
+
+            public Node B { get; }
+
+            public Node K2 { get; }
+
+            public Node K3 { get; }
+
+            public Map<Node, long> M => Map.Of((K1, 1L), (K2, 2L), (K3, 3L));
+
+            public void Merge() => Root.Write(w =>
+            {
+                w.Union(K1, K3);
+                w.Union(A, B);
+            });
+
+        }
+
+        [Fact]
+        public void AMapCollapsesPassByPass()
+        {
+            var t = new Passes();
+            var m = t.Graph.DefineFunction<Map<Node, long>>("m");
+            t.Root.Assume(m.Of().Is(t.M));
+
+            t.Merge();
+
+            Assert.Equal(Map.Of((t.Root.Find(t.K1), 2L)), t.Root.Get(m.Of()));
+        }
+
+        [Fact]
+        public void RowsOfMapsMeetAsThePassesMakeThem()
+        {
+            // f(M) = 100 and f({#3: 2}) = 200 meet when M is {(Num 1): 2}: egglog panics, and the batch refuses it.
+            var conflict = new Passes();
+            conflict.Root.Assume(conflict.F.Of(conflict.M).Is(100L), conflict.F.Of(Map.Of((conflict.K2, 2L))).Is(200L));
+            Assert.Throws<FactConflictException>(conflict.Merge);
+            Assert.False(conflict.Root.IsFaulted);
+
+            // f(M) = 100 and f({#4: 3}) = 200 never meet, since M keeps 2: egglog keeps both rows.
+            var apart = new Passes();
+            apart.Root.Assume(apart.F.Of(apart.M).Is(100L), apart.F.Of(Map.Of((apart.K3, 3L))).Is(200L));
+            apart.Merge();
+            Assert.Equal(2, apart.Root.CountRows(apart.F));
+        }
+
+        [Fact]
+        public void AMergeCheckReadsCountsNotRepeats()
+        {
+            // A multiset of 2^40 of one class: the check of a merge reads its distinct elements, never its repeats.
+            var t = new Theory();
+            var g = t.Graph.DefineFunction<MultiSet<Node>, long>("g");
+            t.Root.Assume(g.Of(Primitives.MultiSetSingle<Node>().Of(t.Num.Of(1L), 1L << 40)).Is(1L));
+
+            t.Root.Union(t.Make(1L), t.Make(2L));
+
+            Assert.True(t.Root.Check(Primitives.MultiSetCount<Node>().Of(Primitives.MultiSetSingle<Node>().Of(t.Num.Of(2L), 1L << 40), t.Num.Of(1L)).Is(1L << 40)));
+            Assert.Equal(1, t.Root.CountRows(g));
+        }
+
+        [Fact]
+        public void AConstantMapWhoseContainerKeysAreOneIsRefused()
+        {
+            // Which of two vector keys egglog's rebuild keeps depends on their containers' cells, which a map the host holds
+            // from before a union no longer knows.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterVec<Node>();
+            graph.Values.RegisterMap<Vec<Node>, long>();
+            var m = graph.DefineFunction<long, Map<Vec<Node>, long>>("m");
+            var root = graph.Root;
+            var (one, two) = (root.Make(num.Of(1L)), root.Make(num.Of(2L)));
+            var before = Map.Of((Vec.Of(two), 20L), (Vec.Of(one), 10L));
+            root.Assume(m.Of(1L).Is(before));
+
+            root.Union(one, two);
+
+            Assert.Equal(1, root.Get(m.Of(1L)).Count);
+            var refused = Assert.Throws<ArgumentException>(() => root.Assume(m.Of(2L).Is(before)));
+            Assert.Contains("one now", refused.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void ClassesOfTwoGraphsAreTwoKeys()
+        {
+            var first = new Theory();
+            var second = new Theory();
+            var (a, b) = (first.Make(1L), second.Make(1L));
+            var map = Map.Of((a, 1L), (b, 2L));
+            Assert.Equal(2, map.Count);
+            Assert.NotEqual(0, Map.Of((a, 1L)).CompareTo(Map.Of((b, 1L))));
+            Assert.Equal(2, MultiSet.Of(a, b).Counts.Count());
+        }
+
         [Fact]
         public void NestedAndValueSidedContainersOfClassesRebuild()
         {

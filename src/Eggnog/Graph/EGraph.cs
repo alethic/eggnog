@@ -28,9 +28,17 @@ namespace Eggnog
     public sealed partial class EGraph
     {
 
+        static long graphs;
+
         int serial;
         int scopeSerial;
         int engineCalls;
+
+        /// <summary>
+        /// Gets the graph's number in the process, in creation order: the order of classes of two graphs, which no
+        /// container holds together, so that one never equals the other.
+        /// </summary>
+        internal long Number { get; }
 
         /// <summary>
         /// Initializes an empty graph: its value types, its root (tagged <see cref="RootTag"/>), and its
@@ -42,6 +50,7 @@ namespace Eggnog
         public EGraph(EGraphOptions? options = null)
         {
             EngineCallMarker.ThrowIfActive();
+            Number = System.Threading.Interlocked.Increment(ref graphs);
             options ??= EGraphOptions.Default;
             if (options.DegreeOfParallelism < 1)
                 throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must be at least 1.");

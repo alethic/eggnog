@@ -226,7 +226,7 @@ namespace Eggnog
         /// counter, equal pairs have one cell, and its primitives are <see cref="Primitives.PairOf{T1, T2}"/>,
         /// <see cref="Primitives.PairFirst{T1, T2}"/> and <see cref="Primitives.PairSecond{T1, T2}"/>. It extracts as
         /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. An element may be a value, a
-        /// class of a sort, or a pair or vector of them. A pair that holds classes is egglog's eq-sort container: rebuilt
+        /// class of a sort, or a container of them. A pair that holds classes is egglog's eq-sort container: rebuilt
         /// when its classes merge, never unioned, and made only at the root (decisions row 9). The first pair type
         /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
         /// first that holds classes registers only while the root is writable.
@@ -234,8 +234,7 @@ namespace Eggnog
         /// <typeparam name="T1">The type of the first element; registered.</typeparam>
         /// <typeparam name="T2">The type of the second element; registered.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">An element type is unknown, or a map or a multiset of classes, or the name
-        /// is taken.</exception>
+        /// <exception cref="ArgumentException">An element type is unknown, or the name is taken.</exception>
         /// <exception cref="InvalidOperationException">The first pair type is registered while another thread is using
         /// the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
@@ -274,15 +273,14 @@ namespace Eggnog
         /// container: its cell is a container id from the graph's id counter, equal vectors have one cell, and its
         /// primitives are <see cref="Primitives"/>' <c>Vec*</c> methods. It extracts as <c>(vec-of a b)</c>, or
         /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements may be values,
-        /// containers of values included, classes of a sort, or pairs or vectors of them. A vector that holds classes is
+        /// containers of values included, classes of a sort, or containers of them. A vector that holds classes is
         /// egglog's eq-sort container: rebuilt when its classes merge, never unioned, and made only at the root (decisions
         /// row 9). The first vector type registered is an engine definition: while the root is writable, that call enters
         /// the root's domain, and the first that holds classes registers only while the root is writable.
         /// </summary>
         /// <typeparam name="T">The element type; registered.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">The element type is unknown, or a map or a multiset of classes, or the
-        /// name is taken.</exception>
+        /// <exception cref="ArgumentException">The element type is unknown, or the name is taken.</exception>
         /// <exception cref="InvalidOperationException">The first vector type is registered while another thread is using
         /// the writable root, or the first that holds classes while the root is frozen.</exception>
         public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull

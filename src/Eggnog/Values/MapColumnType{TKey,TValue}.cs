@@ -132,8 +132,8 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        /// <remarks>Keys that are classes, and are one class now, collapse, the later in the map's order kept, as
-        /// egglog's rebuild of a <c>BTreeMap</c> keeps the later in key-cell order.</remarks>
+        /// <remarks>Class keys that are one class now collapse, the later in key-cell order kept, as egglog's rebuild of a
+        /// <c>BTreeMap</c> keeps it; keys that hold classes and are one now are refused (<see cref="Collapsed"/>).</remarks>
         internal override uint EncodeCanonical(Map<TKey, TValue> map, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch)
         {
             if (HoldsClasses == false)
@@ -210,19 +210,36 @@ namespace Eggnog
             foreach (var (k, v) in map)
                 entries.Add(new(key.Canonical(k, scope, find), value.Canonical(v, scope, find)));
 
-            return Map<TKey, TValue>.Create(entries);
+            var canonical = Map<TKey, TValue>.Create(entries);
+            if (key.HoldsClasses && canonical.Count != map.Count)
+                throw Collapsed(map);
+
+            return canonical;
         }
 
         /// <summary>
-        /// Makes the container of a map's cells, its entries in key-cell order: keys that are classes may collapse, as
-        /// egglog's rebuild makes them; keys of values the map keeps apart but the key type stores as one are refused.
+        /// Makes the error for a map whose keys hold classes and are one now: egglog's rebuild keeps the later of them in
+        /// the order of their containers' cells, which a map a host holds no longer knows once they are rebuilt, so which
+        /// to keep is not known.
         /// </summary>
-        /// <exception cref="ArgumentException">Two keys of values the map keeps apart are one cell.</exception>
+        ArgumentException Collapsed(Map<TKey, TValue> map) =>
+            new($"Two keys of the map {map} hold classes that are one now, so they are one key; which value egglog's rebuild keeps depends on their containers' cells, which this map no longer holds. Make the map anew from the classes as they are.", nameof(map));
+
+        /// <summary>
+        /// Makes the container of a map's cells, its entries in key-cell order: class keys may collapse, as egglog's
+        /// rebuild makes them; keys of values the map keeps apart but the key type stores as one are refused, and so are
+        /// keys that hold classes and are one now (<see cref="Collapsed"/>).
+        /// </summary>
+        /// <exception cref="ArgumentException">Two keys of values the map keeps apart are one cell, or two keys that hold
+        /// classes are.</exception>
         Relations.MapContainer Collect(Map<TKey, TValue> map, uint[] keys, uint[] values)
         {
             var container = Relations.MapContainer.Collect(rebuildKeys, rebuildValues, keys, values);
-            if (rebuildKeys == false && container.Count != map.Count)
+            if (container.Count != map.Count && rebuildKeys == false)
                 throw Merged(map);
+
+            if (container.Count != map.Count && key.HoldsClasses)
+                throw Collapsed(map);
 
             return container;
         }
@@ -320,6 +337,54 @@ namespace Eggnog
 
             Array.Sort(entries, (a, b) => key.CompareCells(a.Key, b.Key));
             return entries;
+        }
+
+        /// <inheritdoc />
+        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+
+        /// <inheritdoc />
+        public bool RebuildsInOrder =>
+            rebuildKeys || key is IContainerColumnType { RebuildsInOrder: true } || value is IContainerColumnType { RebuildsInOrder: true };
+
+        /// <inheritdoc />
+        public long[] Content(uint cell)
+        {
+            var map = Read(cell);
+            var content = new long[map.Count * 2];
+            for (var i = 0; i < map.Count; i++)
+            {
+                content[2 * i] = map.Keys[i];
+                content[2 * i + 1] = map.Values[i];
+            }
+
+            return content;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>As <see cref="Relations.MapContainer"/>'s rebuild, egglog's: the keys and values rebuilt, then the
+        /// entries collected again in their order, the later of two equal keys kept.</remarks>
+        public long[] Rebuild(long[] content, Func<uint, uint> find)
+        {
+            if (HoldsClasses == false)
+                return content;
+
+            var keys = new uint[content.Length / 2];
+            var values = new uint[keys.Length];
+            for (var i = 0; i < keys.Length; i++)
+            {
+                keys[i] = rebuildKeys ? find((uint)content[2 * i]) : (uint)content[2 * i];
+                values[i] = rebuildValues ? find((uint)content[2 * i + 1]) : (uint)content[2 * i + 1];
+            }
+
+            var collected = Relations.MapContainer.Collect(rebuildKeys, rebuildValues, keys, values);
+            var rebuilt = new long[collected.Count * 2];
+            for (var i = 0; i < collected.Count; i++)
+            {
+                rebuilt[2 * i] = collected.Keys[i];
+                rebuilt[2 * i + 1] = collected.Values[i];
+            }
+
+            return rebuilt;
         }
 
         /// <inheritdoc />

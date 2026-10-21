@@ -31,7 +31,7 @@ namespace Eggnog
                 return;
 
             var elements = new List<(ColumnType Type, uint Cell)>();
-            ((IContainerColumnType)type).AppendElements(cell, elements);
+            ((IContainerColumnType)type).AppendDistinctElements(cell, elements);
             foreach (var (elementType, elementCell) in elements)
                 AppendClasses(elementType, elementCell, classes);
         }

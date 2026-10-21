@@ -109,12 +109,12 @@ A column holds either a class or a value.
   `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>` and `RegisterMultiSet<T>`.
 - **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
   classes: there are no sets of classes.
-- **`Pair<T1, T2>`** is egglog's `Pair` container over value types (`ValueStore.RegisterPair<T1, T2>`, named
+- **`Pair<T1, T2>`** is egglog's `Pair` container (`ValueStore.RegisterPair<T1, T2>`, named
   `Pair<i64, String>` and so on, with `Primitives.PairOf`, `PairFirst` and `PairSecond`). Its cell is the id of an
   engine container, minted from the graph's id counter as egglog mints its containers' ids; a pair of values is never
   rebuilt, so equal pairs have one cell in every scope, as any value's. It extracts as `(pair a b)` and costs what its
   elements cost.
-- **`Vec<T>`** is egglog's `Vec` container over a value type, in the same way (`ValueStore.RegisterVec<T>`, named
+- **`Vec<T>`** is egglog's `Vec` container, in the same way (`ValueStore.RegisterVec<T>`, named
   `Vec<i64>` and so on, with `Primitives.VecEmpty`, `VecOf`, `VecAppend`, `VecPush`, `VecPop`, `VecLength`,
   `VecContains`, `VecNotContains`, `VecGet`, `VecSet`, `VecRemove` and, for `Vec<long>`, `VecRange`). It extracts as
   `(vec-of a b)` or `(vec-empty)`.
@@ -142,15 +142,16 @@ A column holds either a class or a value.
     a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
     multiset.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
-    constant, its classes made canonical first.
+    constant, its classes made canonical first. A constant map whose keys hold classes and are one now is refused:
+    which key egglog's rebuild keeps depends on container cells the host's map no longer knows.
   - As a constructor's argument it extracts as its value, the container of its classes, and each class extracts as its
     own term.
-- **`Map<TKey, TValue>`** is egglog's `Map` container over value types, in the same way (`ValueStore.RegisterMap`, named
+- **`Map<TKey, TValue>`** is egglog's `Map` container, in the same way (`ValueStore.RegisterMap`, named
   `Map<i64, String>` and so on, with `Primitives.MapEmpty`, `MapInsert`, `MapGet`, `MapRemove`, `MapLength`,
   `MapContains` and `MapNotContains`). It enumerates in key order, as a `ValueSet` does, so its keys are comparable; its
   container keeps the entries in key-cell order, as egglog's `BTreeMap`, which is the order its term,
   `(map-insert (map-insert (map-empty) k0 v0) k1 v1)`, and its serialized node list them.
-- **`MultiSet<T>`** is egglog's `MultiSet` container over a value type, in the same way (`ValueStore.RegisterMultiSet`,
+- **`MultiSet<T>`** is egglog's `MultiSet` container, in the same way (`ValueStore.RegisterMultiSet`,
   with egglog's first-order `multiset-*` primitives as `Primitives.MultiSet*`). It enumerates in element order, and its
   container keeps the elements in cell order, the order of its term, `(multiset-of a a b)`. `MultiSetPick` and
   `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would

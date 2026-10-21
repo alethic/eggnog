@@ -357,6 +357,55 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
+        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        {
+            foreach (var element in Read(cell).Elements)
+                destination.Add((this.element, element));
+        }
+
+        /// <inheritdoc />
+        public bool RebuildsInOrder => element is IContainerColumnType { RebuildsInOrder: true };
+
+        /// <inheritdoc />
+        public long[] Content(uint cell)
+        {
+            var multiset = Read(cell);
+            var content = new long[multiset.Elements.Length * 2];
+            for (var i = 0; i < multiset.Elements.Length; i++)
+            {
+                content[2 * i] = multiset.Elements[i];
+                content[2 * i + 1] = multiset.Counts[i];
+            }
+
+            return content;
+        }
+
+        /// <inheritdoc />
+        public long[] Rebuild(long[] content, Func<uint, uint> find)
+        {
+            if (rebuild == false)
+                return content;
+
+            var cells = new uint[content.Length / 2];
+            var counts = new long[cells.Length];
+            for (var i = 0; i < cells.Length; i++)
+            {
+                cells[i] = find((uint)content[2 * i]);
+                counts[i] = content[2 * i + 1];
+            }
+
+            var collected = Relations.MultiSetContainer.FromCounts(rebuild, cells, counts);
+            var rebuilt = new long[collected.Elements.Length * 2];
+            for (var i = 0; i < collected.Elements.Length; i++)
+            {
+                rebuilt[2 * i] = collected.Elements[i];
+                rebuilt[2 * i + 1] = collected.Counts[i];
+            }
+
+            return rebuilt;
+        }
+
+        /// <inheritdoc />
         public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
         {
             var multiset = Read(cell);
