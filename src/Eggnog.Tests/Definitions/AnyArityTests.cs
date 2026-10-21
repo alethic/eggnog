@@ -103,7 +103,7 @@ namespace Eggnog.Tests.Definitions
             var t = new NodeTheory();
             var join = Primitive.Create<string>("join5", new[] { typeof(long), typeof(string), typeof(bool), typeof(double), typeof(long) },
                 args => FormattableString.Invariant($"{args[0]}{args[1]}{args[2]}{args[3]}{args[4]}"));
-            var positive = Primitive.CreatePartial<long>("positive5", Five, (System.Collections.Generic.IReadOnlyList<object> args, out long result) =>
+            var positive = Primitive.CreatePartial<long>("positive5", Five, (ReadOnlySpan<object> args, out long result) =>
             {
                 result = (long)args[0];
                 return result > 0;
@@ -165,7 +165,7 @@ namespace Eggnog.Tests.Definitions
         public void APartialPrimitiveOfFiveParametersWithNoResultFailsAHead()
         {
             var t = new NodeTheory();
-            var positive = Primitive.CreatePartial<long>("positive5", Five, (System.Collections.Generic.IReadOnlyList<object> args, out long result) =>
+            var positive = Primitive.CreatePartial<long>("positive5", Five, (ReadOnlySpan<object> args, out long result) =>
             {
                 result = (long)args[0];
                 return result > 0;

@@ -35,7 +35,7 @@ namespace Eggnog
         /// <returns>The term.</returns>
         /// <exception cref="ArgumentException">The number of arguments is not the function's, or an argument's type is
         /// not its column's.</exception>
-        public Term<TOut> Of(params object[] keys) => new ApplicationTerm<TOut>(this, ToArguments(keys));
+        public Term<TOut> Of(params ReadOnlySpan<object> keys) => new ApplicationTerm<TOut>(this, ToArguments(keys));
 
         /// <summary>
         /// A read-only scoped view of the table, which must have no sort column, as for the typed functions.
