@@ -59,8 +59,7 @@ namespace Eggnog
         /// <param name="root">The class.</param>
         /// <returns>The term.</returns>
         /// <exception cref="InvalidOperationException">No finite term exists, the scope changed since the extractor was
-        /// created, a cost function returned a negative cost, or a class with a saturated cost has no row egglog's
-        /// extractor may build it from.</exception>
+        /// created, or a cost function returned a negative cost.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
@@ -81,9 +80,8 @@ namespace Eggnog
         /// <param name="root">The class.</param>
         /// <param name="term">The term, when the result is <c>true</c>.</param>
         /// <returns>Whether a finite term exists.</returns>
-        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, a cost function
-        /// returned a negative cost, or a class with a saturated cost has no row egglog's extractor may build it
-        /// from.</exception>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, or a cost
+        /// function returned a negative cost.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
@@ -138,8 +136,7 @@ namespace Eggnog
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, a cost function
-        /// returned a negative cost, a class with a saturated cost has no row egglog's extractor may build it from, or
-        /// an earlier call of this extractor failed midway; or the scope is faulted; or it
+        /// returned a negative cost, or an earlier call of this extractor failed midway; or the scope is faulted; or it
         /// is writable and in use on another thread; or the call comes from a primitive, lattice, filter or cost
         /// function.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>

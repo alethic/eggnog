@@ -215,10 +215,9 @@ namespace Eggnog
         /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
         /// <returns>The term.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">No finite term exists, a cost function returned a negative cost,
-        /// or a class with a saturated cost has no row egglog's extractor may build it from; or the scope is faulted; or
-        /// it is writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes from a
-        /// primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">No finite term exists, or a cost function returned a negative
+        /// cost; or the scope is faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch
+        /// open; or the call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph, or
         /// the class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
@@ -240,8 +239,7 @@ namespace Eggnog
         /// none when the class has no finite term or <paramref name="count"/> is 0.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">A cost function returned a negative cost, or a class with a
-        /// saturated cost has no row egglog's extractor may build it from; or the scope is
+        /// <exception cref="InvalidOperationException">A cost function returned a negative cost; or the scope is
         /// faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes
         /// from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph, or

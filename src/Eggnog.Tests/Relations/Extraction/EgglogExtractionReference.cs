@@ -10,13 +10,16 @@ namespace Eggnog.Relations.Tests
     /// passes of <c>bellman_ford</c> over the rows in egglog's order, stamping every update with the next rank until a
     /// pass changes nothing, then each class's parent edge, the first row in the same order that costs the class's cost
     /// and whose class's rank exceeds every child's (src/extract.rs:407-499); and the variants of a class sorted by cost,
-    /// function name and raw row values (src/extract.rs:651-703).
+    /// function name and raw row values (src/extract.rs:651-703). Where a cost saturated at <see cref="long.MaxValue"/>
+    /// leaves a class no parent edge, on which egglog's reconstruction panics, it takes eggnog's fallback: the first row
+    /// whose children all had their first updates before the class had its own.
     /// </summary>
     sealed class EgglogExtractionReference
     {
 
         readonly RandomExtractionGraph graph;
         readonly Dictionary<uint, long> ranks = new();
+        readonly Dictionary<uint, long> firstRanks = new();
 
         /// <summary>
         /// Runs egglog's extractor over <paramref name="graph"/>.
@@ -49,10 +52,14 @@ namespace Eggnog.Relations.Tests
                         continue;
 
                     var owner = row[^1].Rep;
-                    if (Costs.TryGetValue(owner, out var current) == false || cost < current)
+                    var known = Costs.TryGetValue(owner, out var current);
+                    if (known == false || cost < current)
                     {
                         Costs[owner] = cost;
                         ranks[owner] = ++rank;
+                        if (known == false)
+                            firstRanks[owner] = rank;
+
                         changed = true;
                     }
                 }
@@ -72,6 +79,25 @@ namespace Eggnog.Relations.Tests
                 if (ranks[owner] > childRank)
                     Choices[owner] = (function, row);
             }
+
+            var missing = Costs.Keys.Where(c => Choices.ContainsKey(c) == false).ToHashSet();
+            Fallbacks = new HashSet<uint>();
+            foreach (var (function, row) in Rows)
+            {
+                var owner = row[^1].Rep;
+                if (missing.Contains(owner) == false || Fallbacks.Contains(owner))
+                    continue;
+
+                if (graph.NodeCost(function, row, Costs) != Costs[owner])
+                    continue;
+
+                var childRank = graph.ChildClasses(function, row).Select(c => firstRanks[c]).DefaultIfEmpty(0).Max();
+                if (firstRanks[owner] > childRank)
+                {
+                    Choices[owner] = (function, row);
+                    Fallbacks.Add(owner);
+                }
+            }
         }
 
         /// <summary>
@@ -85,14 +111,14 @@ namespace Eggnog.Relations.Tests
         public Dictionary<uint, long> Costs { get; }
 
         /// <summary>
-        /// Gets each class's parent edge; a class with a cost but none is one egglog's reconstruction panics on.
+        /// Gets each class's parent edge, or its fallback.
         /// </summary>
         public Dictionary<uint, (int Function, Value[] Row)> Choices { get; }
 
         /// <summary>
-        /// Gets whether the term of <paramref name="owner"/> can be built: every class its parent edges reach has one.
+        /// Gets the saturated classes egglog finds no parent edge for, which take the fallback.
         /// </summary>
-        public bool CanBuild(uint owner) => CanBuild(owner, new HashSet<uint>());
+        public HashSet<uint> Fallbacks { get; }
 
         /// <summary>
         /// Gets up to <paramref name="count"/> variants of <paramref name="owner"/>: its rows with a cost, sorted by cost,
@@ -118,14 +144,6 @@ namespace Eggnog.Relations.Tests
             });
 
             return variants.Take(count).ToList();
-        }
-
-        bool CanBuild(uint owner, HashSet<uint> seen)
-        {
-            if (seen.Add(owner) == false)
-                return true;
-
-            return Choices.TryGetValue(owner, out var choice) && graph.ChildClasses(choice.Function, choice.Row).All(c => CanBuild(c, seen));
         }
 
     }

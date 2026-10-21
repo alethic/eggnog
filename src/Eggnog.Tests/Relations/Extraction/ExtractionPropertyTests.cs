@@ -10,8 +10,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Property tests of extraction on small random e-graphs (<see cref="RandomExtractionGraph"/>) against independent
     /// references: every class's cost equals a Bellman-Ford fixpoint over the rows; every class's choice is the parent
-    /// edge egglog's extractor, run literally, chooses (<see cref="EgglogExtractionReference"/>), and a class egglog
-    /// cannot build a term for throws; the extracted term's cost, recomputed over its tree, equals the reported cost;
+    /// edge egglog's extractor, run literally, chooses (<see cref="EgglogExtractionReference"/>), or its fallback where a
+    /// saturated cost leaves none; the extracted term's cost, recomputed over its tree, equals the reported cost;
     /// the term evaluates back to its class; no term found by brute-force enumeration is cheaper; on-demand and
     /// root-sort extractors agree, whatever order classes are asked in (also with mostly zero and saturated costs); and
     /// the variants are egglog's, the class's ten first nodes with a cost by cost, function name and raw row values,
@@ -84,25 +84,14 @@ namespace Eggnog.Relations.Tests
                 Assert.True(egglog.Costs[owner] == cost, context);
                 coverage[0]++;
 
-                // The choice is egglog's parent edge.
-                var hasChoice = egglog.Choices.TryGetValue(owner, out var choice);
-                Assert.True(hasChoice == all.TryGetChoice(graph.E, value, out var function, out var row), context);
-                Assert.True(hasChoice == onDemand.TryGetChoice(graph.E, value, out var lazyFunction, out var lazyRow), context);
-                if (hasChoice)
-                {
-                    Assert.Equal(graph.Functions[choice.Function], function);
-                    Assert.Equal(choice.Row, row);
-                    Assert.Equal(function, lazyFunction);
-                    Assert.Equal(row, lazyRow);
-                }
-
-                // Where egglog's reconstruction panics, extraction throws.
-                if (egglog.CanBuild(owner) == false)
-                {
-                    Assert.Throws<InvalidOperationException>(() => all.ExtractTerm(graph.E, value));
-                    Assert.Throws<InvalidOperationException>(() => onDemand.ExtractTerm(graph.E, value));
-                    continue;
-                }
+                // The choice is egglog's parent edge, or the fallback.
+                Assert.True(egglog.Choices.TryGetValue(owner, out var choice), context);
+                Assert.True(all.TryGetChoice(graph.E, value, out var function, out var row), context);
+                Assert.True(onDemand.TryGetChoice(graph.E, value, out var lazyFunction, out var lazyRow), context);
+                Assert.Equal(graph.Functions[choice.Function], function);
+                Assert.Equal(choice.Row, row);
+                Assert.Equal(function, lazyFunction);
+                Assert.Equal(row, lazyRow);
 
                 // The term: its tree cost is its reported cost, every subterm is optimal for its class, and it
                 // evaluates back to the class.
@@ -128,15 +117,8 @@ namespace Eggnog.Relations.Tests
                     coverage[2]++;
                 }
 
-                // The variants are egglog's, in its order, the first as cheap as the best term; where egglog cannot
-                // build one of them, extraction throws.
+                // The variants are egglog's, in its order, the first as cheap as the best term.
                 var expectedVariants = egglog.Variants(owner, 10);
-                if (expectedVariants.Any(v => graph.ChildClasses(v.Function, v.Row).All(egglog.CanBuild) == false))
-                {
-                    Assert.Throws<InvalidOperationException>(() => all.ExtractVariants(graph.E, value, 10, dag));
-                    continue;
-                }
-
                 var variants = all.ExtractVariants(graph.E, value, 10, dag);
                 Assert.Equal(best.Cost, variants[0].Cost);
                 Assert.True(variants.Zip(variants.Skip(1)).All(p => p.First.Cost <= p.Second.Cost), context);
@@ -283,11 +265,12 @@ namespace Eggnog.Relations.Tests
             // of a warmed on-demand extractor, is the root-sort extractor's and egglog's.
             var choices = mode == 0 ? new long[] { 0, 0, 0, 1 } : new long[] { 0, 1, long.MaxValue / 2, long.MaxValue };
             var compared = 0;
-            var unbuildable = 0;
+            var fallbacks = 0;
             for (var seed = batch * 100; seed < (batch + 1) * 100; seed++)
             {
                 var graph = new RandomExtractionGraph(seed, false, choices);
                 var egglog = new EgglogExtractionReference(graph);
+                fallbacks += egglog.Fallbacks.Count;
                 var all = Extractor.ComputeCostsFromRootSorts(graph.Fx.Schema);
                 for (var order = 0; order < 3; order++)
                 {
@@ -307,21 +290,14 @@ namespace Eggnog.Relations.Tests
                         Assert.True(choice.Row.SequenceEqual(row), context);
                         Assert.True(function == lazyFunction, context);
                         Assert.True(row.SequenceEqual(lazyRow), context);
-                        if (egglog.CanBuild(owner) == false)
-                        {
-                            Assert.Throws<InvalidOperationException>(() => onDemand.ExtractTerm(graph.E, value));
-                            unbuildable++;
-                            continue;
-                        }
-
                         Assert.Equal(all.ExtractTerm(graph.E, value).ToString(), onDemand.ExtractTerm(graph.E, value).ToString());
                         compared++;
                     }
                 }
             }
 
-            // The batch compared many choices.
-            Assert.True(compared >= 1000, $"compared {compared}, unbuildable {unbuildable}");
+            // The batch compared many choices, and with saturating costs some took the fallback.
+            Assert.True(compared >= 1000 && (mode == 0 || fallbacks > 0), $"compared {compared}, fallbacks {fallbacks}");
         }
 
         [Fact]

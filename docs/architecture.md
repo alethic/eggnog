@@ -525,8 +525,10 @@ Unextractable heads and subsumed rows are skipped.
 Costs are computed with Knuth's generalization of Dijkstra's algorithm over the classes reachable from the ones asked
 about. Ties are broken as egglog's extractor breaks them: a class extracts as the first of its cheapest rows, with
 constructors breadth-first from the sort asked about and each table's rows in storage order, whose arguments reached
-their costs before the class did in egglog's passes, so the chosen terms are finite, even with zero costs. Where a cost
-saturates egglog may find no such row; extraction then throws, where egglog panics. An extractor
+their costs before the class did in egglog's passes, so the chosen terms are finite, even with zero costs. Costs
+saturate at `long.MaxValue`, below egglog's `u64::MAX`; a saturated class with no such row extracts as the first of its
+rows whose arguments had a cost before it did, where egglog, whose costs would be exact there, chooses by them. An
+extractor
 reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
 so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.

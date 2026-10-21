@@ -35,8 +35,7 @@ namespace Eggnog.Relations
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ArgumentException">The extractor knows a different sort of the same name.</exception>
         /// <exception cref="InvalidOperationException">The e-graph changed since the extractor was created, the cost model
-        /// gave a negative cost, an earlier query failed, or a class with a saturated cost has no row egglog's extractor
-        /// may build it from.</exception>
+        /// gave a negative cost, or an earlier query failed.</exception>
         public IReadOnlyList<ExtractionResult> ExtractVariants(Sort sort, Value value, int count, TermDag dag)
         {
             ArgumentNullException.ThrowIfNull(sort);

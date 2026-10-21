@@ -110,6 +110,58 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
+        public void EachQueryTakesTheOrderOfItsSort()
+        {
+            // (sort A) (sort B) (constructor F (B) A :cost 0) (constructor L () B :cost 1) (constructor G () A :cost 1)
+            // (constructor W (A) B :cost 0) (let b (L)) (let c (F b)) (union c (G)) (let x (W c)) (extract c) (extract x)
+            // prints (G) and (W (F (L))): rooted at A the passes meet F, G, L, W, so (G) sets c's class before (L)
+            // sets b's; rooted at B they meet L, W, F, G, so (F b) sets it after. One on-demand extractor answers both.
+            var fx = new ExtractionFixture();
+            var a = new EqSort("A");
+            var b = new EqSort("B");
+            var f = fx.Constructor("F", a, 0, b);
+            var l = fx.Constructor("L", b, 1);
+            var g = fx.Constructor("G", a, 1);
+            var w = fx.Constructor("W", b, 0, a);
+            var bId = fx.Make(l);
+            var c = fx.Make(f, bId);
+            fx.Union(c, fx.Make(g));
+            c = fx.Canon(c);
+            var x = fx.Make(w, c);
+
+            Assert.Equal(("(G)", 1L), fx.Extract(a, c));
+            Assert.Equal(("(W (F (L)))", 1L), fx.Extract(b, x));
+            var onDemand = Extractor.CreateOnDemand(fx.Schema);
+            Assert.Equal("(W (F (L)))", onDemand.ExtractTerm(b, x).ToString());
+            Assert.Equal("(G)", onDemand.ExtractTerm(a, c).ToString());
+            Assert.Equal("(W (F (L)))", onDemand.ExtractTerm(b, x).ToString());
+        }
+
+        [Fact]
+        public void ASaturatedClassStillExtracts()
+        {
+            // (datatype E (F E :cost 9223372036854775807) (H E :cost 1) (K :cost 100) (N E :cost 1) (Q :cost 1))
+            // (let k (K)) (let c (F k)) (let q (Q)) (let m (N q)) (union k (H m)) (extract c) prints
+            // (F (H (N (Q)))). egglog's u64 costs keep c's cost exact, so its last update follows k's; here it saturates
+            // at long.MaxValue on its first update, before k's last, and takes the fallback: the first row whose child
+            // had its first update before c had its own.
+            var fx = new ExtractionFixture();
+            var e = new EqSort("E");
+            var f = fx.Constructor("F", e, long.MaxValue, e);
+            var h = fx.Constructor("H", e, 1, e);
+            var kHead = fx.Constructor("K", e, 100);
+            var n = fx.Constructor("N", e, 1, e);
+            var q = fx.Constructor("Q", e, 1);
+            var k = fx.Make(kHead);
+            var c = fx.Make(f, k);
+            var m = fx.Make(n, fx.Make(q));
+            fx.Union(k, fx.Make(h, m));
+
+            Assert.Equal(("(F (H (N (Q))))", long.MaxValue), fx.Extract(e, c));
+            Assert.Equal("(F (H (N (Q))))", Extractor.CreateOnDemand(fx.Schema).ExtractTerm(e, c).ToString());
+        }
+
+        [Fact]
         public void CheaperAlwaysBeatsEarlier()
         {
             var fx = new ExtractionFixture();

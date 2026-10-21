@@ -23,7 +23,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// Terminates because the choices are acyclic: every class among a choice's children had its last update before
-        /// the choice's class did. O(distinct values in the term).
+        /// the choice's class did, or for a saturated class's fallback its first update (Extractor.Choices.cs).
+        /// O(distinct values in the term).
         /// </remarks>
         /// <typeparam name="TBuilder">The builder; a struct, so the walk is specialized for it.</typeparam>
         /// <typeparam name="TResult">What a built term is.</typeparam>
@@ -34,8 +35,6 @@ namespace Eggnog.Relations
         /// <param name="memo">The terms built so far, by (sort, value); shared across calls that build into the same
         /// place.</param>
         /// <returns>The term.</returns>
-        /// <exception cref="InvalidOperationException">A class with a saturated cost has no row egglog's extractor may
-        /// build it from.</exception>
         TResult Build<TBuilder, TResult>(ExtractionOrder order, int sort, uint value, ref TBuilder builder, Dictionary<ulong, TResult> memo)
             where TBuilder : struct, IExtractionBuilder<TResult>
         {
@@ -61,10 +60,8 @@ namespace Eggnog.Relations
                     {
                         var owner = FindClass(frame.Sort, frame.Value);
                         Debug.Assert(owner >= 0 && classCost[owner] >= 0, "only classes with a cost are built");
-                        Debug.Assert(order.State[owner] == ExtractionOrder.Solved, "only classes with a choice are built");
-                        var node = order.Choice[owner];
-                        if (node < 0)
-                            throw NoChoice(owner);
+                        Debug.Assert(order.StateOf(owner) == ExtractionOrder.Solved, "only classes with a choice are built");
+                        var node = order.Choice[order.LocalOf(owner)];
 
                         var slot = nodeSlot[node];
                         var columnSorts = slotColumnSorts[slot];
@@ -77,12 +74,7 @@ namespace Eggnog.Relations
                             {
                                 Debug.Assert(
                                     sortKinds[columnSorts[i]] != SortKind.Eq
-                                        || IsLater(
-                                            order,
-                                            order.FinalPass[owner],
-                                            order.FinalNode[owner],
-                                            order.FinalPass[FindClass(columnSorts[i], rowCells[row + i])],
-                                            order.FinalNode[FindClass(columnSorts[i], rowCells[row + i])]),
+                                        || IsBelow(order, owner, FindClass(columnSorts[i], rowCells[row + i])),
                                     "choices are acyclic");
                                 if (memo.ContainsKey(Key(columnSorts[i], rowCells[row + i])) == false)
                                     frames.Push(new ExtractionFrame(columnSorts[i], rowCells[row + i], false));
@@ -127,26 +119,13 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Ends the query and makes the error for a class without a choice: egglog's reconstruction unwraps its missing
-        /// parent edge (src/extract.rs:541-546). The caches are whole, so the extractor stays usable.
-        /// </summary>
-        InvalidOperationException NoChoice(int owner)
-        {
-            Exit();
-            return new InvalidOperationException(
-                $"Class {classValue[owner]} of sort {sorts[classSort[owner]].Name} costs {classCost[owner]}, a saturated "
-                + "cost, but no row of it has children that all reached their costs before it did, so egglog's extractor "
-                + "has no term to build for it.");
-        }
-
-        /// <summary>
         /// Gets the node chosen for the class of <paramref name="value"/>, for tests: its function and its row.
         /// </summary>
         /// <param name="sort">An e-class sort.</param>
         /// <param name="value">The class.</param>
         /// <param name="function">The chosen node's function.</param>
         /// <param name="row">The chosen node's schema columns.</param>
-        /// <returns>Whether the class has a cost and a choice.</returns>
+        /// <returns>Whether the class has a cost.</returns>
         internal bool TryGetChoice(Sort sort, Value value, out FunctionId function, out Value[] row)
         {
             function = default;
@@ -159,7 +138,7 @@ namespace Eggnog.Relations
                 var order = OrderFor(index);
                 var owner = FindClass(index, canonical);
                 EnsureChoices(order, owner);
-                node = order.Choice[owner];
+                node = order.Choice[order.LocalOf(owner)];
             }
 
             Exit();

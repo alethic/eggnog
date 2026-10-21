@@ -67,12 +67,6 @@ namespace Eggnog.Relations.Tests
         public ColumnTy ColumnOf(Sort sort) => sort.Kind == SortKind.Base ? baseColumns[sort] : ColumnTy.Id;
 
         /// <summary>
-        /// Adds another base sort over the registered type of <paramref name="like"/>, for example one with its own
-        /// formatter or comparer.
-        /// </summary>
-        public void AddBaseSort(Sort sort, Sort like) => baseColumns.Add(sort, baseColumns[like]);
-
-        /// <summary>
         /// Declares a constructor (fresh-id default, union-id merge, subsumable) in the e-graph and the schema.
         /// </summary>
         public FunctionId Constructor(string name, EqSort output, long? cost, params Sort[] inputs)
