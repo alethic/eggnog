@@ -69,7 +69,7 @@ abstract class Eggnog.ConstructorHandle : TableHandle
     Boolean Extractable { get }
     Int64 Cost { get }
 sealed class Eggnog.ConstructorN<TSort> : ConstructorHandle
-    ConstructorTerm<TSort> Of(params Object[] keys)
+    ConstructorTerm<TSort> Of(params ReadOnlySpan<Object> keys)
 sealed class Eggnog.ConstructorTerm<TSort> : Term<TSort>
     ConstructorHandle Head { get }
 sealed class Eggnog.Constructor<TSort> : ConstructorHandle
@@ -198,9 +198,11 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
     TableHandle Table { get }
     ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
 sealed class Eggnog.FullRuleCallbackContext : RuleCallbackContext
-    Boolean Contains(RelationHandle relation, params Object[] keys)
-    Boolean TryLookup<T>(TableHandle table, Object[] keys, out T value)
+    Boolean Contains(RelationHandle relation, params ReadOnlySpan<Object> keys)
+    Boolean TryLookup<T>(TableHandle table, ReadOnlySpan<Object> keys, out T value)
     Int64 TableSize(TableHandle table)
+delegate Eggnog.FuncN<TResult>
+    TResult Invoke(ReadOnlySpan<Object> arguments)
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
 static class Eggnog.FunctionMerge
@@ -213,7 +215,7 @@ struct Eggnog.FunctionMerge<T>
     override String ToString()
 sealed class Eggnog.FunctionN<TOut> : FunctionHandle
     FunctionN<TOut> In(ScopeTag scope)
-    Term<TOut> Of(params Object[] keys)
+    Term<TOut> Of(params ReadOnlySpan<Object> keys)
     ValueLattice<TOut> Lattice { get }
 sealed class Eggnog.Function<TOut> : FunctionHandle
     Function<TOut> In(ScopeTag scope)
@@ -283,7 +285,7 @@ ref struct Eggnog.NodeView
     Object Get(Int32 column)
     T Get<T>(Int32 column)
 delegate Eggnog.PartialFuncN<TResult>
-    Boolean Invoke(IReadOnlyList<Object> arguments, out TResult result)
+    Boolean Invoke(ReadOnlySpan<Object> arguments, out TResult result)
 delegate Eggnog.PartialFunc<T1, TResult>
     Boolean Invoke(T1 arg1, out TResult result)
 delegate Eggnog.PartialFunc<T1, T2, TResult>
@@ -306,13 +308,13 @@ abstract class Eggnog.Primitive
     static Primitive<T1, T2, TResult> CreatePartial<T1, T2, TResult>(String name, PartialFunc<T1, T2, TResult> function)
     static Primitive<T1, TResult> Create<T1, TResult>(String name, Func<T1, TResult> function)
     static Primitive<T1, TResult> CreatePartial<T1, TResult>(String name, PartialFunc<T1, TResult> function)
-    static PrimitiveN<TResult> Create<TResult>(String name, IReadOnlyList<Type> parameters, Func<IReadOnlyList<Object>, TResult> function)
+    static PrimitiveN<TResult> Create<TResult>(String name, IReadOnlyList<Type> parameters, FuncN<TResult> function)
     static PrimitiveN<TResult> CreatePartial<TResult>(String name, IReadOnlyList<Type> parameters, PartialFuncN<TResult> function)
     static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(String name, Func<IReadOnlyList<T>, TResult> function)
 sealed class Eggnog.PrimitiveN<TResult> : Primitive
-    Boolean TryInvoke(IReadOnlyList<Object> arguments, out TResult result)
-    Func<IReadOnlyList<Object>, TResult> Function { get }
-    Term<TResult> Of(params Object[] arguments)
+    Boolean TryInvoke(ReadOnlySpan<Object> arguments, out TResult result)
+    FuncN<TResult> Function { get }
+    Term<TResult> Of(params ReadOnlySpan<Object> arguments)
 sealed class Eggnog.Primitive<T1, TResult> : Primitive
     Boolean TryInvoke(T1 a, out TResult result)
     Func<T1, TResult> Function { get }
@@ -390,7 +392,7 @@ sealed class Eggnog.Relation : RelationHandle
     Relation In(ScopeTag scope)
 abstract class Eggnog.RelationHandle : TableHandle
 sealed class Eggnog.RelationN : RelationHandle
-    Fact Of(params Object[] keys)
+    Fact Of(params ReadOnlySpan<Object> keys)
     RelationN In(ScopeTag scope)
 sealed class Eggnog.Relation<T1> : RelationHandle
     Fact Of(Term<T1> a)
@@ -440,11 +442,11 @@ sealed class Eggnog.RuleBuilder
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
 class Eggnog.RuleCallbackContext
     T Get<T>(Var<T> variable)
-    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params Object[] keys)
-    Void Insert(RelationHandle relation, params Object[] keys)
-    Void Remove(TableHandle table, params Object[] keys)
-    Void Set(FunctionHandle function, Object[] keys, Object value)
-    Void Subsume(TableHandle table, params Object[] keys)
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params ReadOnlySpan<Object> keys)
+    Void Insert(RelationHandle relation, params ReadOnlySpan<Object> keys)
+    Void Remove(TableHandle table, params ReadOnlySpan<Object> keys)
+    Void Set(FunctionHandle function, ReadOnlySpan<Object> keys, Object value)
+    Void Subsume(TableHandle table, params ReadOnlySpan<Object> keys)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.RuleDefinitionException : Exception
     String RuleName { get }
