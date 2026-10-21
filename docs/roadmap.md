@@ -34,8 +34,6 @@ gates").
   key columns and four parameters. An untyped definition API serves the rest.
 - **Extraction ties.** Where costs tie, egglog's extractor chooses as its algorithm meets the nodes, and its variants sort
   by function name and row values; here ties go by content (architecture 2.10, decisions row 21b).
-- **Strings by code point.** Rust compares strings by code point; here extraction and set order compare UTF-16 code
-  units, which differ only when a supplementary character meets U+E000-U+FFFF.
 - **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
