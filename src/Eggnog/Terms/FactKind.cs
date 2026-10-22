@@ -23,7 +23,7 @@ namespace Eggnog
         NotEqual,
 
         /// <summary>
-        /// An application has a row.
+        /// A call holds or runs (<see cref="Fact.Exists"/>): an application has a row or a primitive's call a result, or, in a head or a host write, the call runs for its effect.
         /// </summary>
         Exists,
 

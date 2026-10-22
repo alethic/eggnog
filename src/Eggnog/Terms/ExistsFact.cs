@@ -2,7 +2,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The fact that a function or constructor application has a row.
+    /// The fact that a call holds or runs (<see cref="Fact.Exists"/>): in a body or a check, an application has a row or a primitive's call a result; in a head or a host write, the call runs for its effect alone.
     /// </summary>
     internal sealed class ExistsFact : Fact
     {

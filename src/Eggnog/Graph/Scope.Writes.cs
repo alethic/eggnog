@@ -52,17 +52,18 @@ namespace Eggnog
         /// <summary>
         /// Writes ground facts as one batch, egglog's commands one after the other (see <see cref="Write"/>): relation
         /// rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice); <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a
-        /// sort (a union). Facts that hold already write nothing, so they move neither <see cref="Version"/> nor any
-        /// extractor. A fact that fails writes nothing, and the facts before it stand. On a case whose contradiction
-        /// stopped it, or a scope under one, the call does nothing.
+        /// sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts that
+        /// hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that fails
+        /// writes nothing, where egglog's failed command keeps what it wrote before it failed (roadmap, "Failed
+        /// commands"), and the facts before it stand. On a case whose contradiction stopped it, or a scope under one, the
+        /// call does nothing.
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
         /// make would merge two of its keys that hold different values.</exception>
-        /// <exception cref="ArgumentException">A fact is a value equality that is not a function write, a filter, an
-        /// existence, or reads or computes in a term; or it writes through a scoped view (<c>T.In(tag)</c>) or a
-        /// <see cref="Fact.In"/>, which are read-only.</exception>
+        /// <exception cref="ArgumentException">A fact is a value equality that is not a function write or a filter; or it
+        /// writes through a scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (the fact writes

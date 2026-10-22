@@ -18,7 +18,7 @@ namespace Eggnog.Tests.Rules
         [Fact]
         public void AHostActionMakesATermRunsAPrimitiveAndReadsAFunction()
         {
-            // (datatype Math (Num i64)) (function f (i64) i64 :no-merge) (set (f 1) 10)
+            // (datatype Math (Num i64)) (function f (i64) i64 :no-merge) (set (f 1) 10) (sort V (Vec i64))
             // (f 1) (Num 4) (check (Num 4)) (vec-get (vec-of 1 2) 1) (fail (vec-get (vec-of 1 2) 5)) (fail (f 2))
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
@@ -34,8 +34,8 @@ namespace Eggnog.Tests.Rules
             var get = Primitives.VecGet<long>();
             var two = Primitives.VecOf<long>().Of(1L, 2L);
             root.Assume(Fact.Exists(get.Of(two, 1L)));
-            Assert.ThrowsAny<Exception>(() => root.Assume(Fact.Exists(get.Of(two, 5L))));
-            Assert.ThrowsAny<Exception>(() => root.Assume(Fact.Exists(f.Of(2L))));
+            Assert.Throws<RuleEvaluationException>(() => root.Assume(Fact.Exists(get.Of(two, 5L))));
+            Assert.Contains("(f 2) has no value", Assert.Throws<InvalidOperationException>(() => root.Assume(Fact.Exists(f.Of(2L)))).Message, StringComparison.Ordinal);
             Assert.False(root.IsFaulted);
         }
 

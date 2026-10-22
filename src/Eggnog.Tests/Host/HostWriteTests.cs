@@ -476,7 +476,8 @@ namespace Eggnog.Tests.Host
 
             Assert.Equal("value equality is not a write: 1 = 2", Assert.Throws<ArgumentException>(() => t.Root.Assume(((Term<long>)1L).Is(2L))).Message.Split(" (Parameter")[0]);
             Assert.Contains("(g \"k\") has no value", Assert.Throws<InvalidOperationException>(() => t.Root.Assume(f.Of("k").Is(g.Of("k")))).Message);
-            Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.Exists(t.A.Of())));
+            t.Root.Assume(Fact.Exists(t.A.Of()));
+            Assert.True(t.Root.Check(Fact.Exists(t.A.Of())));
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.True(true)));
             Assert.Contains("(f \"k\") has no value", Assert.Throws<InvalidOperationException>(() => t.Root.Make(byLength.Of(f.Of("k")))).Message);
             var other = new NodeTheory();

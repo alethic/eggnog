@@ -19,8 +19,9 @@ namespace Eggnog
     /// flushes and rebuilds what it planned before it, see <c>HostBatch.Rebuilds.cs</c>), resolves existing terms by
     /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
     /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
-    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped, as egglog's failed command writes nothing (see
-    /// <c>HostBatch.Facts.cs</c>), and the batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
+    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped whole (see <c>HostBatch.Facts.cs</c>), where egglog's
+    /// failed command keeps what it wrote before it failed (roadmap, "Failed commands"), and the batch's other facts
+    /// stand. A <see cref="ScopeWriter"/> call refused for its
     /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
