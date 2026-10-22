@@ -105,7 +105,9 @@ A column holds either a class or a value.
   `OrderedFloat` semantics: both zeros are one value, and so are all NaNs, which equal each other and sort above every
   other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`),
   `BigRational` (egglog's `BigRat`, in lowest terms, rendered as egglog renders it,
-  `(bigrat (from-string "3") (from-string "4"))`), and `Set<long>`, `Set<int>` and `Set<string>`. Others are registered through
+  `(bigrat (from-string "3") (from-string "4"))`), `ValueTuple` (egglog's `Unit`, one value rendered `()`: the output of a
+  function that holds no value, `(function is-even (Math) Unit)`, and of egglog's fallible primitives), and `Set<long>`,
+  `Set<int>` and `Set<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
   `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>`, `RegisterMultiSet<T>` and
   `RegisterFn<T1, …, TResult>`.
@@ -191,13 +193,18 @@ A column holds either a class or a value.
   - It serializes as a node of its target's name, its arguments the children, and extracts as
     `(unstable-fn "name" args)`, costing what its arguments cost.
   - egglog's higher-order container primitives apply one: `Primitives.UnstableVecMap` (`unstable-vec-map`, an element
-    with no result dropped), `UnstableMultiSetMap`, `UnstableMultiSetFlatMap` (an element with no result kept) and
-    `UnstableMultiSetReduce`. Each is pure, and each application runs where the call site's context allows the
+    with no result dropped), `UnstableMultiSetMap`, `UnstableMultiSetFlatMap` (an element with no result kept),
+    `UnstableMultiSetFilter` and `UnstableMultiSetFilterNot` (of a function into `Unit`, the elements it has a result
+    for and those it has none for) and `UnstableMultiSetReduce`. Each is pure, and each application runs where the call site's context allows the
     function, as `unstable-app`'s. A multiset's elements go in cell order, egglog's representation order, so a
     reduction folds as egglog's does; in a read, one element no write interned folds last, as egglog's `check` interns
     it after the others, and two or more have no reduction, as with `MultiSetPick`. A map's result is a multiset of its
-    own sort, where egglog's copies the input's rebuild flag (decisions row 22). egglog's `-filter` and `-filter-not`, of a function into `Unit`, and `-fill-index` and
+    own sort, where egglog's copies the input's rebuild flag (decisions row 22). egglog's `-fill-index` and
     `-clear-index`, actions for their effect, are not yet followed (roadmap, "Function values").
+  - A function into `Unit` applies a function of `Unit` output, which has a result where it has a row, or a primitive
+    of `Unit`: `Primitives.Fallible(filter)` is egglog's fallible form of a filter primitive, `<` of `bool-<`,
+    `set-contains`, `multiset-contains-swapped`, `!=` and so on, with a result where the filter holds; egglog's other
+    fallible primitives are `BooleanPrimitives.Guard` (`guard`) and `Primitives.ValueEq` (`value-eq`).
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
 inline; a container (a set, a pair, a vector, a map, a multiset, a function value) is a container id; every other value is interned and stored

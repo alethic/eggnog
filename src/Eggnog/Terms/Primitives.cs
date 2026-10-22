@@ -133,6 +133,16 @@ namespace Eggnog
         public static Primitive<T, T, bool> NotEqual<T>() where T : notnull => PrimitiveCache<T>.NotEqual;
 
         /// <summary>
+        /// <c>value-eq</c>: egglog's fallible equality of two values of any sort, classes included, a partial primitive
+        /// of <c>Unit</c> with a result where they are one (src/lib.rs:453), as egglog compares representations. A rule
+        /// states an equality with <c>Is</c>, as egglog's lowering uses <c>value-eq</c> for one; this is the primitive, for
+        /// a function value into <c>Unit</c>, such as egglog's <c>(unstable-fn "value-eq" x)</c>.
+        /// </summary>
+        /// <typeparam name="T">The values' type.</typeparam>
+        /// <returns>The primitive.</returns>
+        public static Primitive ValueEq<T>() where T : notnull => PrimitiveCache<T>.ValueEq;
+
+        /// <summary>
         /// <c>pair</c>: the pair of two values, egglog's (src/sort/pair.rs:122-129). Its type is registered with
         /// <see cref="ValueStore.RegisterPair{T1, T2}"/>.
         /// </summary>
