@@ -44,6 +44,11 @@ namespace Eggnog
         public virtual bool CanSimulate => true;
 
         /// <summary>
+        /// Gets whether the merge calls a primitive over the tables, which writes what it chooses when the engine merges.
+        /// </summary>
+        public virtual bool WritesTables => false;
+
+        /// <summary>
         /// Gets the tables the merge calls: those of an expression's applications; none for the others.
         /// </summary>
         public virtual IReadOnlyCollection<TableHandle> Tables => Array.Empty<TableHandle>();

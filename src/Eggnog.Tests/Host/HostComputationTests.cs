@@ -65,12 +65,12 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// A batch stages its merges of classes after its writes, so after a merge it cannot read a function of classes
-        /// as egglog's next command would, with the rows the merge makes equal merged: the read is refused, and the batch
-        /// writes nothing. A function of values may still be read, and two calls give egglog's answer.
+        /// A read of a function of classes after a merge in the batch sees the rows the merge makes equal merged, as
+        /// egglog's next command does after the union's rebuild: (set (f (B)) 7) (union (A) (B)) (set (g 2) (f (A))) gives
+        /// 7. A function of values reads as before.
         /// </summary>
         [Fact]
-        public void AReadOfAFunctionOfClassesAfterAMergeInTheBatchIsRefused()
+        public void AReadOfAFunctionOfClassesAfterAMergeInTheBatchSeesTheMerge()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<Node, long>("f");
@@ -79,22 +79,18 @@ namespace Eggnog.Tests.Host
             var b = t.Root.Make(t.B.Of());
             t.Root.Assume(f.Of(b).Is(7L), g.Of(1L).Is(1L));
 
-            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Assume(t.A.Of().Is(t.B.Of()), g.Of(2L).Is(f.Of(a))));
+            t.Root.Assume(t.A.Of().Is(t.B.Of()), g.Of(2L).Is(f.Of(a)));
 
-            Assert.Contains("read it in a later call", e.Message);
-            Assert.False(t.Root.AreEqual(a, t.B.Of()));
-            Assert.False(t.Root.IsFaulted);
-
+            Assert.True(t.Root.AreEqual(a, t.B.Of()));
+            Assert.Equal(7L, t.Root.Get(g.Of(2L)));
             t.Root.Assume(t.A.Of().Is(t.Lit.Of(1L)), g.Of(3L).Is(Primitives.Add.Of(g.Of(1L), 1L)));
             Assert.Equal(2L, t.Root.Get(g.Of(3L)));
-            t.Root.Assume(t.A.Of().Is(t.B.Of()));
-            t.Root.Assume(g.Of(2L).Is(f.Of(a)));
-            Assert.Equal(7L, t.Root.Get(g.Of(2L)));
         }
 
         [Fact]
-        public void AMissingValueRefusesTheWholeBatch()
+        public void AMissingValueRefusesItsFact()
         {
+            // (num 1) stands; (set (g 1) (f 2)) fails, as egglog's command does.
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
             var g = t.Graph.DefineFunction<long, long>("g");
@@ -102,16 +98,17 @@ namespace Eggnog.Tests.Host
             var e = Assert.Throws<InvalidOperationException>(() => t.Root.Assume(t.Num.Of(1L), g.Of(1L).Is(f.Of(2L))));
 
             Assert.Equal("(f 2) has no value here.", e.Message);
-            Assert.False(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.Equal(0, t.Root.CountRows(g));
             Assert.False(t.Root.IsFaulted);
         }
 
         /// <summary>
-        /// A primitive with no result, or one that throws, refuses the whole batch without faulting the scope, as egglog's
-        /// top-level action fails with an error.
+        /// A primitive with no result, or one that throws, refuses its fact without faulting the scope, as egglog's
+        /// top-level action fails with an error; the facts before it stand.
         /// </summary>
         [Fact]
-        public void APrimitiveWithNoResultRefusesTheWholeBatch()
+        public void APrimitiveWithNoResultRefusesItsFact()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
@@ -122,7 +119,7 @@ namespace Eggnog.Tests.Host
 
             Assert.Contains("primitive '/' has no result", none.Message);
             Assert.IsType<InvalidOperationException>(threw.InnerException);
-            Assert.Equal(0, t.Root.CountRows(t.Num));
+            Assert.Equal(1, t.Root.CountRows(t.Num));
             Assert.Equal(0, t.Root.CountRows(f));
             Assert.False(t.Root.IsFaulted);
         }

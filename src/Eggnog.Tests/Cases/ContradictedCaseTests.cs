@@ -136,6 +136,32 @@ namespace Eggnog.Tests.Cases
             Assert.True(@case.IsDisposed);
         }
 
+        [Fact]
+        public void ABatchThatAFlushStopsWritesNothingMore()
+        {
+            // A write of a function of classes after a union flushes the batch first, which here stops the case: the
+            // batch's later calls write nothing, as a stopped case's do.
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, Node>("f");
+            var parent = t.Root.CreateChild();
+            using var cases = parent.OpenCases();
+            var write = cases.Add();
+            var a = write.Make(t.A.Of());
+            var b = write.Make(t.B.Of());
+            write.Write(w =>
+            {
+                w.Union(a, b);
+                w.Assume(t.Graph.Contradiction.Of());
+                w.Assume(f.Of(1L).Is(t.A.Of()));
+                w.Assume(t.Tag.Of(a));
+            });
+            Assert.True(write.IsContradictory);
+
+            var assume = cases.Add();
+            assume.Assume(t.A.Of().Is(t.B.Of()), t.Graph.Contradiction.Of(), f.Of(1L).Is(t.A.Of()), t.Tag.Of(t.A.Of()));
+            Assert.True(assume.IsContradictory);
+        }
+
         /// <summary>
         /// A scope under a stopped case has no model either, and the engine refuses to catch it up with the stopped
         /// case. A plain child, and a case of a set opened under that child, answer as the stopped case does, naming

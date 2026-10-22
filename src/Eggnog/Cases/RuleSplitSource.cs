@@ -122,8 +122,8 @@ namespace Eggnog
             var facts = program.Template.Instantiate(tuple, element, parent);
             scope.Engine.EnsureClean();
             // A case's assumptions hold together, so their order is the batch's to choose: the function writes go first,
-            // before any union or constructor write that merges classes, after which a batch would refuse to write a
-            // class.
+            // before any union or constructor write that merges classes, after which a write of a class would need the
+            // batch flushed and rebuilt first.
             var batch = new HostBatch(scope);
             foreach (var pass in new[] { true, false })
             {

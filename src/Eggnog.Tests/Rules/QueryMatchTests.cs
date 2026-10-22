@@ -72,11 +72,11 @@ namespace Eggnog.Tests.Rules
         {
             var t = new NodeTheory();
             Node made = default;
-            Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            t.Root.Write(w =>
             {
                 made = w.Make(t.A.Of());
-                throw new InvalidOperationException("abort");
-            }));
+                BatchRejection.FromAnotherThread(w, t.Num.Of(1L));
+            });
             var query = t.Graph.DefineQuery("wrapped", q =>
             {
                 var n = q.Var<Node>("n");

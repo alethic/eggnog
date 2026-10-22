@@ -529,10 +529,10 @@ namespace Eggnog.Tests.Terms
         }
 
         [Fact]
-        public void AHostWritesPrimitiveReadsNoTableOfClassesAfterAMerge()
+        public void AHostWritesPrimitiveReadsTablesOfClassesAfterAMerge()
         {
-            // egglog's next command would see r(a) and r(b) become one row once a = b; the batch merges after its writes,
-            // so a primitive's read of r after the batch's union is refused, and a later call reads 1.
+            // egglog's next command sees r(a) and r(b) become one row once a = b, and node(1) and node(2) one class once
+            // c = d: a primitive's reads after the batch's union see the rebuild.
             var graph = new EGraph();
             graph.DefineSort<Node>("T");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -547,30 +547,29 @@ namespace Eggnog.Tests.Terms
             var b = graph.Root.Make(num.Of(2L));
             graph.Root.Assume(r.Of(a), r.Of(b));
 
-            var refused = Assert.Throws<RuleEvaluationException>(() => graph.Root.Write(w =>
+            graph.Root.Write(w =>
             {
                 w.Union(a, b);
                 w.Assume(o.Of(0L).Is(size.Of()));
-            }));
-            Assert.Contains("read after this batch merged classes", refused.Message, StringComparison.Ordinal);
+            });
+            Assert.Equal(1L, graph.Root.Get(o.Of(0L)));
 
             var node = graph.DefineFunction<long, Node>("node");
-            graph.Root.Assume(node.Of(1L).Is(a), node.Of(2L).Is(b));
+            var c = graph.Root.Make(num.Of(3L));
+            var d = graph.Root.Make(num.Of(4L));
+            graph.Root.Assume(node.Of(1L).Is(c), node.Of(2L).Is(d));
             var same = Primitive.CreateRead("same", [], (ITableReader tables, ReadOnlySpan<object> _, out long result) =>
             {
                 result = tables.TryLookup(node, [1L], out Node x) && tables.TryLookup(node, [2L], out Node y) && x == y ? 1 : 0;
                 return true;
             });
-            var classes = Assert.Throws<RuleEvaluationException>(() => graph.Root.Write(w =>
+            Assert.True(graph.Root.Check(same.Of().Is(0L)));
+            graph.Root.Write(w =>
             {
-                w.Union(a, b);
-                w.Assume(o.Of(0L).Is(same.Of()));
-            }));
-            Assert.Contains("read after this batch merged classes", classes.Message, StringComparison.Ordinal);
-
-            graph.Root.Union(a, b);
-            Assert.True(graph.Root.Check(size.Of().Is(1L)));
-            Assert.True(graph.Root.Check(same.Of().Is(1L)));
+                w.Union(c, d);
+                w.Assume(o.Of(1L).Is(same.Of()));
+            });
+            Assert.Equal(1L, graph.Root.Get(o.Of(1L)));
         }
 
         [Fact]
@@ -823,6 +822,29 @@ namespace Eggnog.Tests.Terms
             graph.Root.Subsume(rs.Of(remRs.Of(1L)));
             graph.Root.Assume(o.Of(1L).Is(bothRs.Of(2L)));
             Assert.Equal(0L, graph.Root.CountRows(rs));
+        }
+
+        [Fact]
+        public void ALaterFactSeesWhatAMergesPrimitiveWrote()
+        {
+            // (function total (String) i64 :merge (+ old (set-w new))), set-w setting (weight new) to 99: the merge runs at
+            // the flush, and egglog's next command sees its write, here a read of weight in the same Assume.
+            var graph = new EGraph();
+            var weight = graph.DefineFunction<long, long>("weight", ValueLattice.Max<long>());
+            var setW = Primitive.CreateWrite("set-w", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Set(weight, [args[0]], 99L);
+                result = 0;
+                return true;
+            });
+            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, setW.Of(@new))));
+            var copy = graph.DefineFunction<long, long>("copy");
+            graph.Root.Assume(weight.Of(6L).Is(1L), total.Of("k").Is(0L));
+
+            graph.Root.Assume(total.Of("k").Is(6L), copy.Of(2L).Is(weight.Of(6L)));
+
+            Assert.Equal(99L, graph.Root.Get(weight.Of(6L)));
+            Assert.Equal(99L, graph.Root.Get(copy.Of(2L)));
         }
 
         [Fact]

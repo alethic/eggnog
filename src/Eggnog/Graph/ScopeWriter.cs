@@ -4,18 +4,20 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The writes of one <see cref="Scope.Write"/> batch: each call is checked as it is made, and the batch is
-    /// staged, flushed and rebuilt once, after the callback returns. Reads are not available; the scope's own members
-    /// refuse calls while the batch is open. Valid only during the batch (<see cref="ObjectDisposedException"/>
-    /// afterwards).
+    /// The writes of one <see cref="Scope.Write"/> batch, egglog's commands one after the other: each call is checked
+    /// as it is made, and the batch is staged, flushed and rebuilt after the callback returns, and before a call that
+    /// needs an earlier call's merge of classes rebuilt. Reads are not available; the scope's own members refuse calls
+    /// while the batch is open. Valid only during the batch (<see cref="ObjectDisposedException"/> afterwards).
     /// </summary>
     /// <remarks>
     /// Every call enters the scope's thread domain for its duration: from the thread that called
     /// <see cref="Scope.Write"/> it is re-entrant, and from any other thread it throws
-    /// <see cref="InvalidOperationException"/> instead of interleaving with the batch. A call that throws, for any reason,
-    /// rejects the whole batch: <see cref="Scope.Write"/> then writes nothing, even when the callback caught the
-    /// exception, and the classes the batch's <see cref="Make{TSort}"/> calls returned stay invalid. While the batch
-    /// is open, the scope's writable ancestors refuse writes and runs.
+    /// <see cref="InvalidOperationException"/> instead of interleaving with the batch, which it rejects:
+    /// <see cref="Scope.Write"/> then writes nothing more. In any other call that throws, the fact that failed writes
+    /// nothing, as egglog's failed command does, and the batch's other facts stand, the call's own earlier ones
+    /// included. The batch flushes before a call that needs what an earlier
+    /// call's merge of classes makes, as egglog's next command runs after the last one's rebuild (see
+    /// <see cref="Scope.Write"/>). While the batch is open, the scope's writable ancestors refuse writes and runs.
     /// </remarks>
     public sealed class ScopeWriter
     {
@@ -45,8 +47,8 @@ namespace Eggnog
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">A fact is not a write.</exception>
         /// <exception cref="FactConflictException">A function without a lattice would get a second value, from the facts
-        /// or from a merge of the batch. Two classes of a function of a sort that the batch's merges make meet are
-        /// compared when the batch commits, and <see cref="Scope.Write"/> throws then.</exception>
+        /// or from a merge of the batch, two classes of a function of a sort that the batch's merges make meet included;
+        /// the fact that fails writes nothing.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
@@ -58,11 +60,6 @@ namespace Eggnog
                 ArgumentNullException.ThrowIfNull(facts);
                 foreach (var fact in facts)
                     batch.PlanFact(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
-            }
-            catch
-            {
-                batch.Reject();
-                throw;
             }
             finally
             {
@@ -91,11 +88,6 @@ namespace Eggnog
                 ArgumentNullException.ThrowIfNull(term);
                 return TSort.FromId(new ClassId(batch.PlanTerm(term), batch.Origin));
             }
-            catch
-            {
-                batch.Reject();
-                throw;
-            }
             finally
             {
                 Scope.Guard.Exit();
@@ -110,8 +102,7 @@ namespace Eggnog
         /// <param name="b">The other class.</param>
         /// <exception cref="ArgumentException">A class value is not usable in this scope.</exception>
         /// <exception cref="FactConflictException">The union would merge two keys of a function without a lattice that
-        /// hold different values; two that hold classes are compared when the batch commits, and
-        /// <see cref="Scope.Write"/> throws then.</exception>
+        /// hold different values, or two different classes; the union writes nothing.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>
@@ -123,11 +114,6 @@ namespace Eggnog
                 var x = ClassChecks.Require(Scope, a.Id, nameof(a), batch.Origin);
                 var y = ClassChecks.Require(Scope, b.Id, nameof(b), batch.Origin);
                 batch.PlanUnion(x, y);
-            }
-            catch
-            {
-                batch.Reject();
-                throw;
             }
             finally
             {
@@ -156,11 +142,6 @@ namespace Eggnog
                 ArgumentNullException.ThrowIfNull(term);
                 batch.PlanSubsume(term);
             }
-            catch
-            {
-                batch.Reject();
-                throw;
-            }
             finally
             {
                 Scope.Guard.Exit();
@@ -185,11 +166,6 @@ namespace Eggnog
                 ArgumentNullException.ThrowIfNull(rows);
                 foreach (var row in rows)
                     batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
-            }
-            catch
-            {
-                batch.Reject();
-                throw;
             }
             finally
             {

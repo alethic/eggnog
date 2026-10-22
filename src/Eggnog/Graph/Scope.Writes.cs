@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.ExceptionServices;
 
 namespace Eggnog
 {
@@ -49,10 +50,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Writes ground facts as one atomic batch: relation rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice);
-        /// <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a sort (a union). Facts that hold already write
-        /// nothing, so they move neither <see cref="Version"/> nor any extractor. Nothing is written when a fact fails. On a
-        /// case whose contradiction stopped it, or a scope under one, the call does nothing.
+        /// Writes ground facts as one batch, egglog's commands one after the other (see <see cref="Write"/>): relation
+        /// rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice); <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a
+        /// sort (a union). Facts that hold already write nothing, so they move neither <see cref="Version"/> nor any
+        /// extractor. A fact that fails writes nothing, and the facts before it stand. On a case whose contradiction
+        /// stopped it, or a scope under one, the call does nothing.
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -63,9 +65,9 @@ namespace Eggnog
         /// <see cref="Fact.In"/>, which are read-only.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (nothing is written,
-        /// the scope is not faulted) or while merging, the catch-up the call makes first included (the scope is
-        /// faulted).</exception>
+        /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (the fact writes
+        /// nothing, the facts before it stand, and the scope is not faulted) or while merging, the catch-up the call makes
+        /// first included (the scope is faulted).</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -82,8 +84,17 @@ namespace Eggnog
                     return;
 
                 var batch = new HostBatch(this);
-                foreach (var fact in facts)
-                    batch.PlanFact(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
+                try
+                {
+                    foreach (var fact in facts)
+                        batch.PlanFact(fact ?? throw new ArgumentNullException(nameof(facts), "A fact is null."));
+                }
+                catch
+                {
+                    // egglog's commands before the one that failed stand.
+                    CommitBefore(batch);
+                    throw;
+                }
 
                 Commit(batch);
             }
@@ -185,13 +196,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Subsumes ground relation rows (<c>r.Of(a, b)</c>) as one atomic batch: egglog's <c>(subsume (r a b))</c>.
+        /// Subsumes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(subsume (r a b))</c>, one command
+        /// per row.
         /// Each row stays, and <see cref="Check"/> and <see cref="Rows"/> still find it, but rule bodies, queries and
         /// split rules no longer match it. A row that does not exist yet is inserted, subsumed. Subsumption is sticky,
         /// and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any extractor. In a
-        /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. Nothing is
-        /// written when a row fails. On a case whose contradiction stopped it, or a scope under one, the call does
-        /// nothing.
+        /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. A row that
+        /// fails writes nothing, and the rows before it stand. On a case whose contradiction stopped it, or a scope under
+        /// one, the call does nothing.
         /// </summary>
         /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -218,8 +230,16 @@ namespace Eggnog
                     return;
 
                 var batch = new HostBatch(this);
-                foreach (var row in rows)
-                    batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+                try
+                {
+                    foreach (var row in rows)
+                        batch.PlanSubsume(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+                }
+                catch
+                {
+                    CommitBefore(batch);
+                    throw;
+                }
 
                 Commit(batch);
             }
@@ -276,17 +296,18 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Deletes ground relation rows (<c>r.Of(a, b)</c>) as one atomic batch: egglog's <c>(delete (r a b))</c>. A row
-        /// that does not exist deletes nothing. The rows' terms are evaluated as for <see cref="Delete{T}"/>, and the
-        /// same scopes may delete. Nothing is written when a row fails. On a case whose contradiction stopped it, or a
-        /// scope under one, the call does nothing.
+        /// Deletes ground relation rows (<c>r.Of(a, b)</c>) as one batch: egglog's <c>(delete (r a b))</c>, one command
+        /// per row. A row that does not exist deletes nothing. The rows' terms are evaluated as for
+        /// <see cref="Delete{T}"/>, and the same scopes may delete. A row that fails deletes nothing, and the rows before it
+        /// stand. On a case whose contradiction stopped it, or a scope under one, the call does nothing.
         /// </summary>
         /// <param name="rows">The rows.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A fact is not a relation row, a term in a row is a variable or holds a
         /// class value this scope cannot use, or a row is of a scoped view (<c>T.In(tag)</c>) or a
         /// <see cref="Fact.In"/>, which are read-only.</exception>
-        /// <exception cref="InvalidOperationException">As for <see cref="Delete{T}"/>. Nothing is written.</exception>
+        /// <exception cref="InvalidOperationException">As for <see cref="Delete{T}"/>. The row deletes nothing, and the
+        /// rows before it stand.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="Delete{T}"/>.</exception>
         /// <exception cref="OverflowException">As for <see cref="Delete{T}"/>.</exception>
         public void Delete(params Fact[] rows)
@@ -300,8 +321,16 @@ namespace Eggnog
                     return;
 
                 var batch = new HostBatch(this);
-                foreach (var row in rows)
-                    batch.PlanDelete(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+                try
+                {
+                    foreach (var row in rows)
+                        batch.PlanDelete(row ?? throw new ArgumentNullException(nameof(rows), "A fact is null."));
+                }
+                catch
+                {
+                    CommitBefore(batch);
+                    throw;
+                }
 
                 Commit(batch);
             }
@@ -312,17 +341,27 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Makes several writes one atomic batch: each call is checked as it is made, and the batch is staged,
-        /// flushed and rebuilt once, after <paramref name="write"/> returns. If <paramref name="write"/> throws or a call is
-        /// rejected, nothing is written and the class values the batch's <c>Make</c> calls returned are invalid.
+        /// Makes several writes one batch, egglog's commands one after the other: each call is checked as it is made, and
+        /// the batch is staged, flushed and rebuilt once, after <paramref name="write"/> returns, unless a call needs what
+        /// an earlier call's merge of classes makes, as egglog's next command sees it after the rebuild: the batch then
+        /// flushes and rebuilds its earlier calls before that call. Each fact of a call is a command: one that fails writes
+        /// nothing, as egglog's failed command does, and the batch's other facts stand, the call's own earlier facts
+        /// included; an exception <paramref name="write"/> lets escape propagates once they are written.
         /// </summary>
         /// <remarks>
-        /// An exception <paramref name="write"/> lets escape propagates. A rejected call whose exception
-        /// <paramref name="write"/> caught still rejects the batch: <see cref="Write"/> then returns without writing
-        /// anything, and <see cref="Version"/> does not move. A <see cref="ScopeWriter"/> call from another thread is
-        /// refused and rejects the batch too. A conflict a merge of the batch would cause is found as the call that
-        /// causes it is made, except that two rows of a function of a sort that its merges make meet are compared when
-        /// it commits, as the rebuild's passes will compare them. While the batch is open, the scopes it reads through (its writable ancestors) refuse
+        /// A call from another thread, or from a user delegate the engine invoked, is refused and rejects the batch:
+        /// <see cref="Write"/> then writes nothing more, even when <paramref name="write"/> caught the exception, and the
+        /// class values the batch's <c>Make</c> calls returned since its last flush are invalid; so does a flush of the
+        /// batch that fails. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
+        /// whose keys are classes, computes over classes, writes a function that holds classes, or one with a merge that
+        /// is not a lattice whose keys are classes or whose merge compares classes or calls tables, or deletes a row keyed
+        /// by classes; when it calls a primitive over the tables, or reads a key or writes a table that an earlier call's
+        /// merge expression merges or reads, and that merge only the engine evaluates; after a merge expression that
+        /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
+        /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds
+        /// after each command. A conflict a merge of the batch would cause is found in the fact that causes
+        /// it, which then writes nothing: two rows of a function of a sort that its merges make meet are compared at the
+        /// end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it reads through (its writable ancestors) refuse
         /// writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
         /// batch is brought up to date with them before each of its calls and before it commits, without moving
@@ -333,15 +372,17 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
-        /// different classes when the rebuild compares them; nothing is written.</exception>
+        /// different classes when the rebuild compares them; the fact whose merge made them meet is not
+        /// written.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), in a
-        /// call of the batch or as it commits, and the scope is not faulted. When the ids ran out, or the epochs before
-        /// the merge, the batch writes nothing. When the epochs ran out in the rebuild after the merge, the batch stays
-        /// written, and if that rebuild left work undone the scope's reads throw the same way (<see cref="Check"/>). Every
-        /// later call that needs an id or an epoch throws the same way.</exception>
+        /// call of the batch or as it commits, and the scope is not faulted. When the ids ran out in a call, its fact
+        /// writes nothing; when they or the epochs ran out before a flush's merge, the flush writes nothing, and the batch
+        /// nothing more. When the epochs ran out in the rebuild after the merge, the flush stays written, and if that
+        /// rebuild left work undone the scope's reads throw the same way (<see cref="Check"/>). Every later call that needs
+        /// an id or an epoch throws the same way.</exception>
         public void Write(Action<ScopeWriter> write)
         {
             ArgumentNullException.ThrowIfNull(write);
@@ -353,9 +394,14 @@ namespace Eggnog
                 var writer = new ScopeWriter(this, batch);
                 openBatch = batch;
                 CountOpenBatch(1);
+                ExceptionDispatchInfo? failure = null;
                 try
                 {
                     write(writer);
+                }
+                catch (Exception exception)
+                {
+                    failure = ExceptionDispatchInfo.Capture(exception);
                 }
                 finally
                 {
@@ -364,9 +410,18 @@ namespace Eggnog
                     writer.Close();
                 }
 
-                // A call was rejected and the callback caught it: the batch writes nothing, and its origin never commits.
+                // A call was refused for being made from another thread, or from a user delegate the engine invoked: the
+                // batch writes nothing more, and its origin never commits.
                 if (batch.IsRejected)
+                {
+                    failure?.Throw();
                     return;
+                }
+
+                // The calls are egglog's commands: those that did not fail stand, though the callback threw, unless the
+                // failure faulted the scope or a flush stopped it.
+                if (failure is not null && (IsFaulted || IsStopped))
+                    failure.Throw();
 
                 // The callback may have made calls in this scope's domain that left it behind its ancestors without
                 // changing what the batch read (a mirror sync before an ancestor's query). The catch-up is made here,
@@ -385,6 +440,7 @@ namespace Eggnog
                 }
 
                 Commit(batch);
+                failure?.Throw();
             }
             finally
             {
@@ -393,11 +449,23 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Commits a planned batch: stages and flushes it unless it is empty, and commits its origin. A failure a merge
-        /// recorded faults the scope.
+        /// Commits what a batch planned before a call of it failed, as egglog's commands before a failed one stand, unless
+        /// the failure faulted the scope or stopped it.
+        /// </summary>
+        void CommitBefore(HostBatch batch)
+        {
+            if (IsFaulted || IsStopped || batch.IsRejected)
+                return;
+
+            Commit(batch);
+        }
+
+        /// <summary>
+        /// Commits a planned batch, or the part of it planned so far: stages and flushes it unless it is empty, and commits
+        /// its origin. A failure a merge recorded faults the scope.
         /// </summary>
         /// <exception cref="RuleEvaluationException">A merge failed.</exception>
-        void Commit(HostBatch batch)
+        internal void Commit(HostBatch batch)
         {
             if (batch.IsEmpty == false)
             {

@@ -19,9 +19,10 @@ namespace Eggnog
         // a sort (or, below the root, a function with a merge that only the root writes, keyed by a sort or holding
         // one); otherwise no merge can conflict, and none of this state exists. It then reads every row of the tables
         // whose keys a merge can change (those functions, and the constructors whose outputs can reach their keys or
-        // the classes they hold): an O(rows of those tables) scan, once per batch that merges. Two rows of a function
-        // of a sort that meet are checked at the end of the planning instead (CheckClassOutputs), since whether their
-        // classes are one when the rebuild compares them depends on the rebuild's passes.
+        // the classes they hold): an O(rows of those tables) scan, once per flushed part of a batch that merges, and
+        // again when a fact fails after it (UndoFact). Two rows of a function of a sort that meet are checked at the end
+        // of the planning instead (CheckClassOutputs), since whether their classes are one when the rebuild compares
+        // them depends on the rebuild's passes.
 
         List<(TableHandle Table, uint[] Key, uint Output, bool Stored)>? mergeRows;
         HashSet<TableHandle>? congruent;
@@ -36,11 +37,36 @@ namespace Eggnog
         Dictionary<string, uint>? contents;
         Dictionary<uint, uint>? childMerges;
         bool rowsRebuildInOrder;
+        bool passSensitive;
         List<(uint A, uint B)>? factUnions;
         Action<uint, uint>? collectUnion;
         Func<uint, uint>? canonical;
         bool mergeCheckDecided;
         bool mergedClasses;
+
+        /// <summary>
+        /// Forgets the congruence check and the merges, once the batch has flushed and rebuilt what it planned
+        /// (<see cref="Rebuild"/>).
+        /// </summary>
+        void ResetMergeCheck()
+        {
+            mergeRows = null;
+            congruent = null;
+            signatures = null;
+            overlay = null;
+            uses = null;
+            merges = null;
+            rootOnlyKeys = null;
+            smallest = null;
+            classOutputs = null;
+            direct = null;
+            contents = null;
+            childMerges = null;
+            rowsRebuildInOrder = false;
+            passSensitive = false;
+            mergeCheckDecided = false;
+            mergedClasses = false;
+        }
 
         /// <summary>
         /// Records that the batch merges two classes (canonical or fresh cells), starting the congruence check at the
@@ -140,6 +166,12 @@ namespace Eggnog
 
             mergeRows = new List<(TableHandle, uint[], uint, bool)>();
             congruent = new HashSet<TableHandle>(tables, ReferenceEqualityComparer.Instance);
+
+            // Rows of a function of a sort, or keyed by a map of classes, are compared as the rebuild's passes make them
+            // meet: two merges in one rebuild can conflict where egglog's two commands, each rebuilt, do not.
+            foreach (var table in tables)
+                if ((table is FunctionHandle && table.Output!.InvolvesClasses) || RebuildsInOrder(table))
+                    passSensitive = true;
             signatures = new Dictionary<string, int>(System.StringComparer.Ordinal);
             overlay = new Dictionary<uint, uint>();
             direct = new Dictionary<uint, uint>();

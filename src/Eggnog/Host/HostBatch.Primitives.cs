@@ -118,8 +118,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The batch merged classes before the call.</exception>
         internal TSort MakeForPrimitive<TSort>(ConstructorHandle constructor, ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>
         {
-            // egglog's next command would see the merge's classes, which the batch merges after its writes.
-            if (mergedClasses)
+            // egglog's next command would see the merge's classes; the batch rebuilds before a fact with a primitive over
+            // the tables (RebuildFor), but for a rejected batch.
+            if (mergedBeforeFact)
                 throw new InvalidOperationException(
                     $"A primitive makes a '{constructor.Name}' term after this batch merged classes; make it in a later call, which sees the merge as egglog's next command does.");
 
@@ -334,7 +335,7 @@ namespace Eggnog
         /// classes.</exception>
         void CheckReadAfterMerge(TableHandle table)
         {
-            if (mergedClasses && (HasSortKey(table) || table.Output is { InvolvesClasses: true }))
+            if (mergedBeforeFact && (HasSortKey(table) || table.Output is { InvolvesClasses: true }))
                 throw new InvalidOperationException(
                     $"'{table.Name}' is read after this batch merged classes, and it holds classes; read it in a later call, which sees the merge as egglog's next command does.");
         }

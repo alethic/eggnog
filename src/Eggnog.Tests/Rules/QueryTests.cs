@@ -418,11 +418,11 @@ namespace Eggnog.Tests.Rules
         {
             var t = new NodeTheory();
             Node made = default;
-            Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            t.Root.Write(w =>
             {
                 made = w.Make(t.A.Of());
-                throw new InvalidOperationException("abandon the batch");
-            }));
+                BatchRejection.FromAnotherThread(w, t.Num.Of(1L));
+            });
 
             // The batch never committed: the query compiles, and refuses the class when it runs.
             var wrapped = t.Graph.DefineQuery("wrapped", q =>

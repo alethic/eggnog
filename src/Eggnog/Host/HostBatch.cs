@@ -15,13 +15,13 @@ namespace Eggnog
     /// <para>
     /// Phase 1 (planning) validates facts, checks class values, encodes constants (interning), evaluates primitives and
     /// reads function values, as egglog's top-level actions do (a read sees the batch's earlier writes, merged, as
-    /// egglog's next command would; after the batch merges classes, a read of a function with a sort key is refused,
-    /// since the merges are staged after the writes), resolves existing terms by lookup, mints a fresh id per new term,
-    /// records only the rows, subsumptions and unions that do not hold already, and checks conflicts of functions
-    /// without a lattice, including those a merge of the batch would cause (see <c>HostBatch.Merges.cs</c>). An
-    /// exception discards the batch: nothing is staged and <see cref="Origin"/> never commits. A
-    /// <see cref="ScopeWriter"/> call that throws marks the batch <see cref="IsRejected"/>, and
-    /// <see cref="Scope.Write"/> then commits nothing, even when its callback caught the exception.
+    /// egglog's next command would; a fact that needs what the batch's merges of classes make is planned after the batch
+    /// flushes and rebuilds what it planned before it, see <c>HostBatch.Rebuilds.cs</c>), resolves existing terms by
+    /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
+    /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
+    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped, as egglog's failed command writes nothing (see
+    /// <c>HostBatch.Facts.cs</c>), and the batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
+    /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
     /// Phase 2 (<see cref="Commit"/>) stages the new terms' rows children first (subsumed where the batch subsumes the
@@ -70,7 +70,7 @@ namespace Eggnog
         /// Gets the batch's origin: the values its <c>Make</c> calls return are valid in later calls of the batch,
         /// and once it commits.
         /// </summary>
-        public ScopeOrigin Origin { get; }
+        public ScopeOrigin Origin { get; private set; }
 
         /// <summary>
         /// Gets whether there is nothing to stage: every fact held already.
@@ -78,13 +78,14 @@ namespace Eggnog
         public bool IsEmpty => pending.Count == 0 && rows.Count == 0 && subsumes.Count == 0 && unions.Count == 0 && removes.Count == 0;
 
         /// <summary>
-        /// Gets whether a call of the batch was rejected (<see cref="Reject"/>): the batch must then write nothing.
+        /// Gets whether the batch was rejected (<see cref="Reject"/>): it must then write nothing more.
         /// </summary>
         public bool IsRejected => rejected;
 
         /// <summary>
-        /// Marks the batch rejected: a call of it threw, so nothing of it may be written (see
-        /// <see cref="Scope.Write"/>). Any thread may call it, including one that a guard refused.
+        /// Marks the batch rejected: a call of it was refused for its thread or for coming from a delegate the engine
+        /// invoked, or a flush of it failed, so nothing more of it may be written (see <see cref="Scope.Write"/>). Any
+        /// thread may call it, including one that a guard refused.
         /// </summary>
         public void Reject() => rejected = true;
 
@@ -103,10 +104,22 @@ namespace Eggnog
         {
             ArgumentNullException.ThrowIfNull(term);
             PlanFactUnions();
-            Literals.Call(term.Shape);
-            var cell = PlanTermCore(term);
-            PlanFactUnions();
-            return cell;
+            try
+            {
+                RebuildFor(term);
+                if (stopped)
+                    scope.ThrowIfStopped();
+
+                Literals.Call(term.Shape);
+                var cell = PlanTermCore(term);
+                PlanFactUnions();
+                return cell;
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -167,8 +180,8 @@ namespace Eggnog
         uint ReadFunction(TableHandle table, uint[] keys, bool existing)
         {
             // egglog's next command would read the function after the merge's rebuild, which merges its rows whose keys
-            // become equal; the batch stages its merges after its writes, so it cannot read the function that way.
-            if (mergedClasses && HasSortKey(table))
+            // become equal; the batch rebuilds before such a read (RebuildFor), but for a rejected batch.
+            if (mergedBeforeFact && HasSortKey(table))
                 throw new InvalidOperationException(
                     $"'{table.Name}' is read after this batch merged classes, and its keys are classes; read it in a later call, which sees the merge as egglog's next command does.");
 
@@ -207,7 +220,7 @@ namespace Eggnog
 
             var result = TypeOf(primitive.ResultType);
             var overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
-            if (mergedClasses && overClasses)
+            if (mergedBeforeFact && overClasses)
                 throw new InvalidOperationException(
                     $"primitive '{primitive.Name}' computes over classes after this batch merged classes; compute it in a later call, which sees the merge as egglog's next command does.");
             var arguments = new uint[parameters.Length];
@@ -282,8 +295,20 @@ namespace Eggnog
         public void PlanFact(Fact fact)
         {
             PlanFactUnions();
-            PlanFactCore(fact);
-            PlanFactUnions();
+            try
+            {
+                RebuildFor(fact);
+                if (stopped)
+                    return;
+
+                PlanFactCore(fact);
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -384,8 +409,22 @@ namespace Eggnog
         {
             ArgumentNullException.ThrowIfNull(term);
             PlanFactUnions();
-            PlanSubsumeCore(term);
-            PlanFactUnions();
+            try
+            {
+                if (term.Shape is { Kind: TermShapeKind.Application } shape)
+                    RebuildFor(shape.Table!, shape.Arguments, deletes: false);
+
+                if (stopped)
+                    return;
+
+                PlanSubsumeCore(term);
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -431,7 +470,8 @@ namespace Eggnog
             }
 
             PlanNewTerm((ConstructorHandle)table, keys, key);
-            subsumedTerms.Add(key);
+            if (subsumedTerms.Add(key))
+                OnUndo(() => subsumedTerms.Remove(key));
         }
 
         /// <summary>
@@ -446,8 +486,22 @@ namespace Eggnog
         {
             PlanFactUnions();
             ArgumentNullException.ThrowIfNull(fact);
-            PlanSubsumeCore(fact);
-            PlanFactUnions();
+            try
+            {
+                if (fact is RelationFact relation)
+                    RebuildFor(relation.Table, relation.Arguments, deletes: false);
+
+                if (stopped)
+                    return;
+
+                PlanSubsumeCore(fact);
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -488,7 +542,20 @@ namespace Eggnog
         public void PlanUnion(uint a, uint b)
         {
             PlanFactUnions();
-            PlanUnionCore(a, b);
+            try
+            {
+                RebuildForUnion();
+                if (stopped)
+                    return;
+
+                PlanUnionCore(a, b);
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -505,7 +572,7 @@ namespace Eggnog
             if (unionKeys.Add(key))
             {
                 unions.Add(key);
-                NoteMerge(x, y);
+                Merge(x, y);
             }
         }
 
@@ -565,7 +632,7 @@ namespace Eggnog
             // egglog's next command would write a class after the merge's rebuild; the batch stages its merges after its
             // writes, so a class it compares now may become equal to another only later, and so may a container of
             // classes. New and Old compare nothing.
-            if (mergedClasses && table.Output!.InvolvesClasses && table.Merge is null)
+            if (mergedBeforeFact && table.Output!.InvolvesClasses && table.Merge is null)
                 throw new InvalidOperationException(
                     $"'{table.Name}' is written after this batch merged classes, and its output {(table.Output.Kind == ColumnKind.Sort ? "is a class" : "holds classes")}; write it in a later call, which sees the merge as egglog's next command does.");
 
@@ -603,13 +670,13 @@ namespace Eggnog
 
             // The value a later read in the batch sees: the incoming one, merged by the lattice with the value before it.
             if (table.Lattice is null)
-                currentValues[key] = cell;
+                SetValue(currentValues, key, cell);
             else if (currentValues.TryGetValue(key, out var before) || (existing && TryStored(table, keys, out before)))
-                currentValues[key] = MergeCells(table, before, cell);
+                SetValue(currentValues, key, MergeCells(table, before, cell));
             else
-                currentValues[key] = cell;
+                SetValue(currentValues, key, cell);
 
-            functionValues[key] = cell;
+            SetValue(functionValues, key, cell);
             var row = new uint[keys.Length + 1];
             keys.CopyTo(row, 0);
             row[^1] = cell;
@@ -635,7 +702,7 @@ namespace Eggnog
 
             // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
             // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
-            if (mergedClasses && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues)))
+            if (mergedBeforeFact && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues)))
                 throw new InvalidOperationException(
                     $"'{table.Name}' is written after this batch merged classes, its keys or output are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
 
@@ -648,15 +715,27 @@ namespace Eggnog
                 // An expression that calls tables only the engine evaluates, and it reads them as the flush leaves them,
                 // after every write of the batch: egglog's next command would see neither a merge of classes nor a later
                 // write of a table it reads before this one, so the batch refuses both orders, which separate calls give.
-                if (mergedClasses)
+                if (mergedBeforeFact)
                     throw new InvalidOperationException(
                         $"'{table.Name}' is written after this batch merged classes, and its merge {table.Merge.Name} calls tables; write it in a later call, which sees the merge as egglog's next command does.");
 
                 CheckNotReadByExpression(table);
-                currentValues.Remove(key);
-                (unknownValues ??= new HashSet<string>(StringComparer.Ordinal)).Add(key);
+                RemoveValue(currentValues, key);
+                if ((unknownValues ??= new HashSet<string>(StringComparer.Ordinal)).Add(key))
+                    OnUndo(() => unknownValues.Remove(key));
+
+                if ((unknownTables ??= new HashSet<TableHandle>(ReferenceEqualityComparer.Instance)).Add(table))
+                    OnUndo(() => unknownTables.Remove(table));
+
                 foreach (var read in table.Merge.Tables)
-                    (expressionReads ??= new Dictionary<TableHandle, FunctionHandle>(ReferenceEqualityComparer.Instance)).TryAdd(read, table);
+                    NoteExpressionRead(read, table);
+
+                // A primitive the expression calls writes what it chooses, which only the flush makes.
+                if (table.Merge.WritesTables && opaqueMerges == false)
+                {
+                    opaqueMerges = true;
+                    OnUndo(() => opaqueMerges = false);
+                }
 
                 rows.Add((table, Row(keys, cell)));
                 return;
@@ -668,11 +747,11 @@ namespace Eggnog
                 if (merged == before)
                     return;
 
-                currentValues[key] = merged;
+                SetValue(currentValues, key, merged);
             }
             else
             {
-                currentValues[key] = cell;
+                SetValue(currentValues, key, cell);
             }
 
             CheckNotReadByExpression(table);
@@ -756,7 +835,7 @@ namespace Eggnog
                 keys.CopyTo(row, 0);
                 row[^1] = cell;
                 AddRow(table, row);
-                NoteMerge(stored, cell);
+                Merge(stored, cell);
                 return;
             }
 
@@ -781,6 +860,7 @@ namespace Eggnog
 
             var id = engine.FreshId();
             fresh.Add(id);
+            factFresh.Add(id);
             AddTerm(table, keys, key, id);
             return id;
         }
@@ -806,7 +886,8 @@ namespace Eggnog
             if (pendingByKey.ContainsKey(key) == false)
                 AddTerm(table, keys, key, id);
 
-            subsumedTerms.Add(key);
+            if (subsumedTerms.Add(key))
+                OnUndo(() => subsumedTerms.Remove(key));
         }
 
         /// <summary>
@@ -994,10 +1075,13 @@ namespace Eggnog
                     PlanUnionCore(a, b);
             }
 
-            // The next fact's primitives see the terms planned so far, and its deletions cancel them.
-            factTerms = pending.Count;
-            factRows = rows.Count;
-            factSubsumes = subsumes.Count;
+            // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares them.
+            CheckFactClassOutputs();
+
+            // The next fact starts here: its primitives see the terms planned so far, its deletions cancel them, and its
+            // failure drops what it plans after.
+            MarkFact();
+            SettleFact();
         }
 
         /// <summary>

@@ -307,8 +307,9 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AWriteOfAVectorOfClassesAfterAMergeInOneBatchIsRefused()
+        public void AWriteOfAVectorOfClassesAfterAMergeInOneBatchSeesTheMerge()
         {
+            // (union one two) (set (f) (vec-of two)): the vector holds the merged class, as egglog's next command makes it.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -317,12 +318,13 @@ namespace Eggnog.Tests.Values
             var root = graph.Root;
             var one = root.Make(num.Of(1L));
             var two = root.Make(num.Of(2L));
-            Assert.Throws<InvalidOperationException>(() => root.Write(w =>
+            root.Write(w =>
             {
                 w.Union(one, two);
                 w.Assume(f.Of().Is(Primitives.VecOf<Node>().Of(two)));
-            }));
-            Assert.False(root.AreEqual(one, two));
+            });
+            Assert.True(root.AreEqual(one, two));
+            Assert.Equal(Vec.Of(root.Find(two)), root.Get(f.Of()));
         }
 
         [Fact]
@@ -436,9 +438,10 @@ namespace Eggnog.Tests.Values
         public void AVectorOfVectorsMergesAPassAfterTheVectorsItHolds()
         {
             // (function f (Math) VVM :no-merge) (set (f (Num 1)) (vec-of (vec-of (Num 3)))) (set (f (Num 2)) (vec-of (vec-of (Num 4))))
-            // then one action of (union (Num 3) (Num 4)) (union (Num 1) (Num 2)): egglog's rebuild merges the outer vectors
-            // a pass after the rows meet, and panics; the batch refuses it. Two commands are fine.
-            foreach (var oneBatch in new[] { true, false })
+            // then one action of (union (Num 3) (Num 4)) (union (Num 1) (Num 2)), here a primitive that makes both unions:
+            // egglog's rebuild merges the outer vectors a pass after the rows meet, and panics; the batch refuses it. Two
+            // commands are fine, in one batch or two.
+            foreach (var oneAction in new[] { true, false })
             {
                 var graph = new EGraph();
                 graph.DefineSort<Node>("Math");
@@ -451,20 +454,27 @@ namespace Eggnog.Tests.Values
                 var root = graph.Root;
                 root.Assume(f.Of(num.Of(1L)).Is(outer.Of(inner.Of(num.Of(3L)))), f.Of(num.Of(2L)).Is(outer.Of(inner.Of(num.Of(4L)))));
                 var (one, two, three, four) = (root.Make(num.Of(1L)), root.Make(num.Of(2L)), root.Make(num.Of(3L)), root.Make(num.Of(4L)));
-                if (oneBatch)
+                if (oneAction)
                 {
-                    Assert.Throws<FactConflictException>(() => root.Write(w =>
+                    var o = graph.DefineFunction<long, long>("o");
+                    var both = Primitive.CreateWrite("both", [], (ITableWriter tables, ReadOnlySpan<object> _, out long result) =>
                     {
-                        w.Union(three, four);
-                        w.Union(one, two);
-                    }));
+                        tables.Union(three, four);
+                        tables.Union(one, two);
+                        result = 0;
+                        return true;
+                    });
+                    Assert.Throws<FactConflictException>(() => root.Assume(o.Of(0L).Is(both.Of())));
                     Assert.False(root.IsFaulted);
                     Assert.False(root.AreEqual(three, four));
                 }
                 else
                 {
-                    root.Union(three, four);
-                    root.Union(one, two);
+                    root.Write(w =>
+                    {
+                        w.Union(three, four);
+                        w.Union(one, two);
+                    });
                     Assert.True(root.Check(f.Of(num.Of(1L)).Is(f.Of(num.Of(2L)))));
                 }
             }

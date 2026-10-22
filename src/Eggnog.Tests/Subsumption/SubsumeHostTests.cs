@@ -98,11 +98,10 @@ namespace Eggnog.Tests.Subsumption
         }
 
         [Fact]
-        public void ARejectedSubsumptionRejectsItsBatch()
+        public void ARefusedSubsumptionWritesNothingAndTheOtherCallsStand()
         {
             var t = new MathTheory();
             var plain = t.Graph.DefineConstructor<long, Node>("Plain", 1, MathTheory.NotSubsumable);
-            var version = t.Root.Version;
 
             t.Root.Write(w =>
             {
@@ -111,8 +110,8 @@ namespace Eggnog.Tests.Subsumption
                 Assert.Throws<ArgumentException>(() => w.Subsume(plain.Of(1L)));
             });
 
-            Assert.Equal(version, t.Root.Version);
-            Assert.Equal(0L, t.Root.CountRows(t.Num));
+            Assert.Equal(2L, t.Root.CountRows(t.Num));
+            Assert.Equal(0L, t.Root.CountRows(plain));
         }
 
         [Fact]

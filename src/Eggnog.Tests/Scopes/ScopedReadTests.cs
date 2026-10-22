@@ -240,7 +240,7 @@ namespace Eggnog.Tests.Scopes
 
         /// <summary>
         /// A write through a scoped view, or through <c>Fact.In</c>, is an <see cref="ArgumentException"/> in a host
-        /// write, and nothing is written.
+        /// write, and writes nothing; the facts before it stand.
         /// </summary>
         [Fact]
         public void HostWritesThroughScopedViewsAreArgumentExceptions()
@@ -253,8 +253,9 @@ namespace Eggnog.Tests.Scopes
             Assert.Throws<ArgumentException>(() => outer.Assume(t.Fact.Of("b"), Fact.In(t.Outer, t.Fact.Of("a"))));
             Assert.Throws<ArgumentException>(() => outer.Assume(t.Best.In(t.Outer).Of("k").Is(1L)));
 
-            Assert.Equal(version, outer.Version);
-            Assert.False(outer.Check(t.Fact.Of("b")));
+            Assert.NotEqual(version, outer.Version);
+            Assert.True(outer.Check(t.Fact.Of("b")));
+            Assert.Equal(1, outer.CountRows(t.Fact));
         }
 
         /// <summary>

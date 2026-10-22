@@ -131,12 +131,12 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// A batch stages its unions after its writes, so after it merges classes it cannot write such a function of
-        /// classes in egglog's order (the union's rebuild first): the write is refused and the batch writes nothing. A
-        /// write before the merge keeps egglog's order, and a later call gives egglog's result.
+        /// A write of such a function of classes after the batch merged classes comes after the union's rebuild, as
+        /// egglog's next command does: (set (newest (A)) 5) (set (newest (B)) 7) (union (A) (B)) (set (newest (A)) 1)
+        /// leaves 1. A write before the merge keeps egglog's order.
         /// </summary>
         [Fact]
-        public void ABatchCannotWriteAFunctionOfClassesWithAMergeAfterAMerge()
+        public void ABatchWritesAFunctionOfClassesWithAMergeAfterAMerge()
         {
             var t = new NodeTheory();
             var newest = t.Graph.DefineFunction<Node, long>("newest", FunctionMerge.New<long>());
@@ -144,18 +144,13 @@ namespace Eggnog.Tests.Values
             var b = t.Root.Make(t.B.Of());
             t.Root.Assume(newest.Of(a).Is(5L), newest.Of(b).Is(7L));
 
-            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            t.Root.Write(w =>
             {
                 w.Union(a, b);
                 w.Assume(newest.Of(a).Is(1L));
-            }));
+            });
 
-            Assert.Contains("write it in a later call", e.Message);
-            Assert.False(t.Root.AreEqual(a, t.B.Of()));
-            Assert.Equal(5L, t.Root.Get(newest.Of(a)));
-
-            t.Root.Union(a, b);
-            t.Root.Assume(newest.Of(a).Is(1L));
+            Assert.True(t.Root.AreEqual(a, t.B.Of()));
             Assert.Equal(1L, t.Root.Get(newest.Of(a)));
 
             // Written first, the value is merged by the union's rebuild after it, as egglog's next command would: the

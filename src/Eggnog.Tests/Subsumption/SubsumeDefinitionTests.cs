@@ -206,10 +206,10 @@ namespace Eggnog.Tests.Subsumption
             Assert.Throws<ArgumentException>(() => t.Root.Subsume(Fact.In(tag, fact.Of(1L))));
             Assert.Throws<ArgumentException>(() => t.Root.Subsume(t.Num.Of(1L).Is(t.Num.Of(2L))));
 
-            // A batch with a refused row writes nothing, its other rows included.
-            Assert.Throws<ArgumentException>(() => t.Root.Subsume(fact.Of(1L), t.Seen.Of(1L)));
+            // A refused row writes nothing, and the rows before it stand, as egglog's commands do.
             Assert.Equal(version, t.Root.Version);
-            Assert.Equal(0L, t.Root.CountRows(fact));
+            Assert.Throws<ArgumentException>(() => t.Root.Subsume(fact.Of(1L), t.Seen.Of(1L)));
+            Assert.Equal(1L, t.Root.CountRows(fact));
             Assert.Equal(0L, t.Root.CountRows(plain));
         }
 

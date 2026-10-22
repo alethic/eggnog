@@ -247,9 +247,10 @@ write's value may then be a constructor term too, made if absent, as egglog's `s
 again after a union that made it equal holds. Two rows that a union makes meet must hold one class by then: the rebuild
 compares them in the pass that makes them meet, under the merges of the passes before it, and its assert-equal merge
 panics on two classes that only that pass's congruences would make one, as egglog's does. A host batch replays those
-passes when it commits and refuses that before anything is written; a rule's run fails with `RuleEvaluationException`. A
-batch that merged classes refuses a later write of such a function without a merge, which a later call can make; a
-split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
+passes at the end of the fact whose merge makes the rows meet, and refuses that fact, as egglog's command panics; a rule's
+run fails with `RuleEvaluationException`. A
+batch that merged classes flushes and rebuilds before a later write of such a function, as egglog's next command runs
+after the rebuild; a split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
 egglog would look up in the head. Below the root a function with `New`, `Old` or an expression is root-only like any
 other, and a union in which a class one of its rows outputs would lose is refused as for its keys.
 
@@ -261,13 +262,13 @@ that a merge of classes may make terms, as `(Join old new)` does. An expression 
 is defined, and named by its rendering; a lookup with no row, or a primitive that throws or has no result, fails the
 merge as egglog's merge panics, which fails a rule's run or a host write's flush and faults the scope. A host batch
 works out an expression of primitives and constants itself, so its failure writes nothing and faults nothing; one that
-calls tables only the engine evaluates, after every write of the batch, so the batch stages each write as it comes and
-refuses a later read of the key, a later write of a table the expression reads, and the write itself after a merge of
-classes, each of which a later call can make. Each write folds into the value before it, in the order the writes come,
+calls tables only the engine evaluates, after every write of the batch, so the batch stages each write as it comes, and
+flushes what it planned before a later read of the key, a later write of a table the expression reads, and the write
+itself after a merge of classes, as egglog's next command runs after the last one's flush. Each write folds into the value before it, in the order the writes come,
 so a host write of the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys
 equal merges the row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild
-does. A batch stages its unions after its writes, so after it merges classes it refuses a write of such a function whose
-keys are classes; a later call gives egglog's result. A rule's matches reach the merge in the engine's match order,
+does. A batch stages its unions after its writes, so after it merges classes it flushes and rebuilds before a write of
+such a function whose keys are classes, which then gives egglog's result. A rule's matches reach the merge in the engine's match order,
 which is not egglog's (the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so a rule that
 writes one key more than once in an iteration may leave another value than egglog's. A parallel insert (a flush of many
 rows with `DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the stored row, as
@@ -476,16 +477,18 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 
 A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)`
 and `Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer:
-a deletion is a call of its own. Each call is one atomic batch; `Write(w => ...)` makes several calls one batch
-through a `ScopeWriter`. A batch is planned first, reading only: it validates the facts, checks class origins, interns
+a deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
+`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails writes nothing, and the
+others stand. A batch is planned first, reading only: it validates the facts, checks class origins, interns
 constants, evaluates primitives and reads function values as egglog's top-level actions do (a read sees the batch's
 earlier writes, merged by the function's lattice, as egglog's next command sees the last; the batch stages its unions
-after its writes, so after a union it refuses a read of a function whose keys are classes, which a later call can make),
+after its writes, so a call that needs what a union makes, such as a read of a function whose keys are classes, comes
+after the batch flushes and rebuilds its earlier calls, as egglog's next command comes after the last one's rebuild),
 resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not already hold,
 and checks every conflict a function without a lattice would see, including conflicts a union in the batch would cause
-through congruence. An exception discards the whole batch: a function read with no value, or a primitive with no result
-or that throws, refuses it without faulting the scope. The batch is then staged and flushed: merged, rebuilt, and
-visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
+through congruence. A fact that throws is dropped: a function read with no value, or a primitive with no result or
+that throws, refuses it without faulting the scope. The batch is then staged and flushed: merged,
+rebuilt, and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
 `Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
