@@ -38,6 +38,18 @@ namespace Eggnog
         public void End() => tables.End();
 
         /// <inheritdoc />
+        public override bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value) => tables.TryLookupCell(table, keys, out value);
+
+        /// <inheritdoc />
+        public override bool TryLookupObject(FunctionHandle table, ReadOnlySpan<object> keys, out object? value) => tables.TryLookupObject(table, keys, out value);
+
+        /// <inheritdoc />
+        public override uint MakeCell(ConstructorHandle constructor, ReadOnlySpan<uint> keys) => tables.MakeCell(constructor, keys);
+
+        /// <inheritdoc />
+        public override void UnionCells(uint a, uint b) => tables.UnionCells(a, b);
+
+        /// <inheritdoc />
         protected override bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, out T value) => tables.TryLookup(table, keys, out value);
 
         /// <inheritdoc />

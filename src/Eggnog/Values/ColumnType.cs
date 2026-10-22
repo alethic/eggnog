@@ -104,6 +104,23 @@ namespace Eggnog
         internal abstract bool TryEncodeExistingObject(object value, out uint cell);
 
         /// <summary>
+        /// Encodes a non-null value a primitive returned in <paramref name="scope"/>, as the typed
+        /// <c>EncodeIn</c> does: a class, or the classes a container holds, checked usable there.
+        /// </summary>
+        /// <param name="value">The value, of the type's CLR type.</param>
+        /// <param name="scope">The scope the call runs in.</param>
+        /// <returns>The cell.</returns>
+        internal abstract uint EncodeInObject(object value, Scope? scope);
+
+        /// <summary>
+        /// Compares two non-null values of the type in content order, as the typed <c>CompareValues</c> does.
+        /// </summary>
+        /// <param name="x">One value.</param>
+        /// <param name="y">The other value.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        internal abstract int CompareObjects(object x, object y);
+
+        /// <summary>
         /// Gets whether the type's values hold classes: a container of a sort, or of such containers, egglog's eq-sort
         /// container (<c>is_eq_container_sort</c>). Its cell is a container id that the union-find rebuilds, as a
         /// class's; its value is not a class, so it is never unioned and is no constructor's output.

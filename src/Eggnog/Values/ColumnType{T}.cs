@@ -171,6 +171,12 @@ namespace Eggnog
         internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
 
         /// <inheritdoc />
+        internal override uint EncodeInObject(object value, Scope? scope) => EncodeIn(Cast(value), scope);
+
+        /// <inheritdoc />
+        internal override int CompareObjects(object x, object y) => CompareValues(Cast(x), Cast(y));
+
+        /// <inheritdoc />
         internal override uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>
             EncodeCanonical(Cast(value), scope, find, openBatch);
 

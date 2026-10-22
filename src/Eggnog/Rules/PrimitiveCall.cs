@@ -65,7 +65,7 @@ namespace Eggnog
                 unionAction = new Relations.UnionAction(graph.Engine);
 
             this.context = context;
-            if (primitive.Access != PrimitiveAccess.Pure && primitive.IsWrite == false)
+            if (primitive.UsesTables)
                 actions = new();
         }
 
@@ -73,7 +73,8 @@ namespace Eggnog
         /// Gets whether the primitive reads tables, a read or full primitive's: its result may then depend on rows a
         /// descendant context adds, so its rule never seeds a watermark from an ancestor's.
         /// </summary>
-        public override bool ReadsTables => primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full;
+        /// <remarks>So does a function value's application, which reads where the context does.</remarks>
+        public override bool ReadsTables => primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full || primitive.DispatchesOnContext;
 
         /// <inheritdoc />
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)

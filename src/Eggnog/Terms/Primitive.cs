@@ -509,6 +509,26 @@ namespace Eggnog
         internal virtual bool IsWrite => false;
 
         /// <summary>
+        /// Gets whether the primitive's effect is its arguments' to decide, by the call site's context: egglog's
+        /// <c>unstable-app</c>, pure itself, whose function value reads or writes the tables where the context allows it
+        /// (<c>FunctionContainer::apply</c>, src/sort/fn.rs:575-633). It runs through the call site's tables
+        /// (<see cref="TryInvokeTables"/>).
+        /// </summary>
+        internal virtual bool DispatchesOnContext => false;
+
+        /// <summary>
+        /// Gets whether a call of the primitive needs the call site's tables: a primitive over the tables
+        /// (<see cref="Access"/>), or one whose effect its arguments decide (<see cref="DispatchesOnContext"/>).
+        /// </summary>
+        internal bool UsesTables => (Access != PrimitiveAccess.Pure && IsWrite == false) || DispatchesOnContext;
+
+        /// <summary>
+        /// Gets a literal the primitive's application renders before its arguments: egglog's <c>unstable-fn</c> names its
+        /// function, <c>(unstable-fn "name" args)</c>; <c>null</c> for any other.
+        /// </summary>
+        internal virtual string? LeadingLiteral => null;
+
+        /// <summary>
         /// Calls a write primitive over its arguments' cells, its unions made through <paramref name="union"/>.
         /// </summary>
         /// <param name="arguments">The argument cells.</param>

@@ -33,6 +33,38 @@ namespace Eggnog
         public void End() => done = true;
 
         /// <inheritdoc />
+        public override bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
+        {
+            Check(table);
+            if (Scope.Engine.TryLookup(table.Function, keys.ToArray(), out value) == false)
+                return false;
+
+            if (table.Columns[^1].InvolvesClasses)
+                value = Scope.Engine.Find(value);
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public override bool TryLookupObject(FunctionHandle table, ReadOnlySpan<object> keys, out object? value)
+        {
+            value = null;
+            Check(table);
+            if (TryKeys(table, keys, out var cells) == false || Scope.Engine.TryLookup(table.Function, cells, out var cell) == false)
+                return false;
+
+            var output = table.Columns[^1];
+            value = output.DecodeObject(output.InvolvesClasses ? Scope.Engine.Find(cell) : cell, Scope);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public override uint MakeCell(ConstructorHandle constructor, ReadOnlySpan<uint> keys) => throw WritesNothing();
+
+        /// <inheritdoc />
+        public override void UnionCells(uint a, uint b) => throw WritesNothing();
+
+        /// <inheritdoc />
         protected override bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
         {
             value = default!;

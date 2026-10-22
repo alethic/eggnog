@@ -274,6 +274,11 @@ namespace Eggnog
         static void AppendComputation(StringBuilder builder, TermShape shape, string name, ScopeTag? enclosing)
         {
             builder.Append('(').Append(name);
+
+            // egglog's unstable-fn names its function before its arguments.
+            if (shape.Primitive?.LeadingLiteral is { } literal)
+                builder.Append(' ').Append(literal);
+
             foreach (var argument in shape.Arguments)
             {
                 builder.Append(' ');
@@ -547,6 +552,14 @@ namespace Eggnog
                     return formattable.ToString(null, CultureInfo.InvariantCulture);
                 case IPair pair:
                     return "(pair " + DefaultLiteral(pair.FirstValue) + " " + DefaultLiteral(pair.SecondValue) + ")";
+                case IFnValue { Content: { } fn }:
+                {
+                    var text = "(unstable-fn " + Relations.LiteralText.String(fn.Name);
+                    foreach (var argument in fn.Arguments)
+                        text += " " + DefaultLiteral(argument);
+
+                    return text + ")";
+                }
                 case IMap map:
                 {
                     var text = "(map-empty)";

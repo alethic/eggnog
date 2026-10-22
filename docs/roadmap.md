@@ -21,9 +21,9 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 2). Such a rule
   inherits no progress in a child.
-- **Function values.** egglog's `unstable-fn` and `unstable-app` (src/sort/fn.rs), a container of a function and
-  its partial arguments, and the higher-order container primitives over them, such as `unstable-multiset-map`. The
-  capability contexts their application dispatches on are followed (decisions row 12).
+- **Function values.** egglog's higher-order container primitives over function values: `unstable-vec-map`, and
+  `unstable-multiset-map`, `-filter`, `-filter-not`, `-reduce`, `-flat-map`, `-fill-index` and `-clear-index`. The
+  function values themselves, `unstable-fn` and `unstable-app` (src/sort/fn.rs), are followed (architecture 2.2).
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
   layers.

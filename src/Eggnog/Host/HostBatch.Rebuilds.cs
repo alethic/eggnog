@@ -174,7 +174,7 @@ namespace Eggnog
         /// Gets whether a term needs the facts before it rebuilt: a read of a function whose keys are classes after a
         /// merge of classes, or of a function a merge only the engine evaluates wrote; a constructor term of a table a
         /// merge expression reads, which it may make; a computation over classes after a merge of classes; or a primitive
-        /// over the tables, which reads and writes what it chooses.
+        /// over the tables, a function value's application among them, which reads and writes what it chooses.
         /// </summary>
         bool Needs(TermShape shape)
         {
@@ -198,7 +198,7 @@ namespace Eggnog
                 case TermShapeKind.Computation:
                 {
                     var primitive = shape.Primitive!;
-                    if (primitive.Access != PrimitiveAccess.Pure && primitive.IsWrite == false)
+                    if (primitive.UsesTables)
                         return true;
 
                     if (mergedBeforeFact && OverClasses(primitive))

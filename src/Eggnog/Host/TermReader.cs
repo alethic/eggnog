@@ -240,9 +240,10 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                if (primitive.Access == PrimitiveAccess.Read)
+                if (primitive.Access == PrimitiveAccess.Read || primitive.DispatchesOnContext)
                 {
-                    // A read primitive reads the scope's view, in egglog's read context of a check.
+                    // A read primitive reads the scope's view, in egglog's read context of a check, and so does a function
+                    // value's application.
                     var tables = new ReaderPrimitiveTables(scope, primitive);
                     try
                     {

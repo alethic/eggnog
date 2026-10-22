@@ -177,6 +177,50 @@ namespace Eggnog
             return true;
         }
 
+        /// <summary>
+        /// Reads the output of a function's row at keys' cells, the class canonical through the state.
+        /// </summary>
+        /// <exception cref="ArgumentException">The function belongs to another graph or is a scoped view.</exception>
+        public bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
+        {
+            CheckTable(table, writes: false);
+            if (Action(table).TryLookup(State, keys, out value) == false)
+                return false;
+
+            if (table.Columns[^1].InvolvesClasses)
+                value = State.Canonicalize(value);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reads the output of a function's row at keys, as a value.
+        /// </summary>
+        /// <exception cref="ArgumentException">The function belongs to another graph or is a scoped view, or a key is not
+        /// of its column's type or not usable here.</exception>
+        public bool TryLookupObject(FunctionHandle table, ReadOnlySpan<object> keys, out object? value)
+        {
+            value = null;
+            if (TryRow(table, keys, 0, writes: false, out var key) == false || Action(table).TryLookup(State, key, out var cell) == false)
+                return false;
+
+            var output = table.Columns[^1];
+            value = output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets or makes the class of a constructor's term at keys' cells: egglog's <c>lookup_or_insert</c>.
+        /// </summary>
+        /// <exception cref="ArgumentException">The constructor belongs to another graph, or may not be written
+        /// here.</exception>
+        public uint MakeCell(ConstructorHandle constructor, ReadOnlySpan<uint> keys)
+        {
+            CheckTable(constructor, writes: true);
+            Action(constructor).TryLookupOrInsert(State, keys, out var cell);
+            return cell;
+        }
+
         /// <inheritdoc cref="ITableReader.Contains"/>
         public bool Contains(RelationHandle relation, ReadOnlySpan<object> keys) =>
             TryRow(relation, keys, 0, writes: false, out var row) && Action(relation).TryLookup(State, row, out _);
