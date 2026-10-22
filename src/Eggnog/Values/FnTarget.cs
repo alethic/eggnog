@@ -34,8 +34,13 @@ namespace Eggnog
             Output = output;
             Parameters = [.. partial, .. inputs];
             for (var i = 0; i < partial.Length; i++)
+            {
                 if (partial[i].InvolvesClasses)
                     Rebuild |= 1UL << i;
+
+                if (partial[i] is IFnColumnType)
+                    Nested |= 1UL << i;
+            }
         }
 
         /// <summary>
@@ -90,9 +95,16 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the rebuild flags of the partially applied arguments, one bit per argument of an e-class or eq-container
-        /// sort, as egglog's <c>rebuild_contents</c> rebuilds them.
+        /// sort, as egglog's <c>rebuild_contents</c> rebuilds them. A value clears the bit of a nested function value that
+        /// holds no classes (<see cref="Nested"/>).
         /// </summary>
         public ulong Rebuild { get; }
+
+        /// <summary>
+        /// Gets the flags of the partially applied arguments that are function values, which hold classes or not by their
+        /// own arguments.
+        /// </summary>
+        public ulong Nested { get; }
 
         /// <summary>
         /// Gets the message of an application in a context where the target is not valid: egglog's panic of

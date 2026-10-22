@@ -19,7 +19,7 @@ namespace Eggnog
         private protected ColumnType(string name, ColumnKind kind)
             : base(name, kind, typeof(T))
         {
-
+            ValueOrder.Register<T>();
         }
 
         /// <summary>

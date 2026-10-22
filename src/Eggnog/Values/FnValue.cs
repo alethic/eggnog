@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -13,6 +14,12 @@ namespace Eggnog
     /// </summary>
     internal sealed class FnValue : IEquatable<FnValue>
     {
+
+        /// <summary>
+        /// The order of distinct targets of one name, by the order they were first compared in.
+        /// </summary>
+        static readonly ConditionalWeakTable<object, object> TargetOrder = new();
+        static long targetCount;
 
         readonly object[] arguments;
 
@@ -158,32 +165,38 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares in content order: by name, by code point, then argument by argument as <see cref="Set{T}"/> orders
-        /// its elements. Lets function values be the elements of multisets and the keys of maps.
+        /// Compares in content order: by name, by code point, distinct targets of one name in the order they were first
+        /// compared, then argument by argument as <see cref="Set{T}"/> orders its elements (<see cref="ValueOrder"/>).
+        /// Zero exactly when the values are equal; lets function values be the elements of sets and multisets and the keys
+        /// of maps.
         /// </summary>
         /// <param name="other">The other value.</param>
         /// <returns>Negative, zero or positive.</returns>
-        /// <exception cref="ArgumentException">An argument is not comparable.</exception>
+        /// <exception cref="ArgumentException">An argument is of a type no column type orders, and not
+        /// comparable.</exception>
         public int CompareTo(FnValue other)
         {
             var order = Relations.CodePointComparer.Instance.Compare(Name, other.Name);
-            if (order != 0)
-                return order;
+            if (order == 0 && ReferenceEquals(Target, other.Target) == false)
+                order = OrderOf(Target).CompareTo(OrderOf(other.Target));
 
-            order = arguments.Length.CompareTo(other.arguments.Length);
+            if (order == 0)
+                order = arguments.Length.CompareTo(other.arguments.Length);
+
             for (var i = 0; order == 0 && i < arguments.Length; i++)
-                order = CompareArguments(arguments[i], other.arguments[i]);
+                order = ValueOrder.Compare(arguments[i], other.arguments[i]);
 
             return order;
         }
 
         /// <summary>
-        /// Renders the value as egglog writes its term: <c>(unstable-fn "name" args)</c>, numbers in the invariant culture.
+        /// Renders the value for display: <c>(unstable-fn "name" args)</c>, its arguments as .NET formats them, numbers in
+        /// the invariant culture. A graph renders it as egglog writes the term (<see cref="ColumnType.Format(object)"/>).
         /// </summary>
         /// <returns>The text.</returns>
         public override string ToString()
         {
-            var text = "(unstable-fn \"" + Name + "\"";
+            var text = "(unstable-fn " + Relations.LiteralText.String(Name);
             foreach (var argument in arguments)
                 text += " " + (argument is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : argument.ToString());
 
@@ -191,14 +204,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares two arguments of one parameter.
+        /// Gets a target's place among the targets compared so far.
         /// </summary>
-        static int CompareArguments(object x, object y) => (x, y) switch
-        {
-            (string a, string b) => Relations.CodePointComparer.Instance.Compare(a, b),
-            (double a, double b) => OrderedDouble.Instance.Compare(a, b),
-            _ => Comparer<object>.Default.Compare(x, y),
-        };
+        static long OrderOf(object target) =>
+            (long)TargetOrder.GetValue(target, static _ => Interlocked.Increment(ref targetCount));
 
         /// <summary>
         /// Gets the refusal of a target whose signature is not the function value's.

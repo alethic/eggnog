@@ -56,6 +56,20 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets the primitive of a number of arguments: for a function value of it, egglog's
+        /// <c>(unstable-fn "vec-of" a)</c>, which egglog resolves at the arity of its partially applied arguments and its
+        /// sort's inputs (<see cref="Primitives.UnstableFn{T1, TResult}(Primitive)"/>).
+        /// </summary>
+        /// <param name="arity">The number of arguments.</param>
+        /// <returns>The primitive, one per arity.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="arity"/> is negative.</exception>
+        public Primitive WithArity(int arity)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(arity);
+            return Call(arity);
+        }
+
+        /// <summary>
         /// Gets the name.
         /// </summary>
         /// <returns>The name.</returns>

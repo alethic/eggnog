@@ -171,7 +171,9 @@ A column holds either a class or a value.
   arguments partially applied.
   - `Primitives.UnstableFn<…>(target)` is egglog's `unstable-fn`: a pure primitive of the partial arguments, rendered
     `(unstable-fn "name" args)`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`,
-    `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`.
+    `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive
+    is a target at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
+  - A write primitive such as `vec-union` runs through a function value only at the root, as when it is called.
   - The target's parameters must end with the sort's inputs and its result be the sort's output, as egglog's type
     checker requires. A relation is no target: egglog's relation outputs a sort of its own that no function sort names.
   - `Primitives.UnstableApp<…>()` is egglog's `unstable-app`. It applies the value to the inputs where the call site's
@@ -181,7 +183,11 @@ A column holds either a class or a value.
     to read a function.
   - Its cell is a container id. Its arguments may hold classes whatever the sort's inputs, so a value that holds
     classes is a container of classes, as above, rebuilt when they merge and made only at a writable root; a type
-    registered while the root is frozen makes values of values only.
+    registered while the root is frozen makes values of values only. A nested function value is rebuilt when it holds
+    classes, where egglog's `rebuild_contents` decides by its sort's inputs. For the same reason the type counts as one
+    of classes, so a set, a vector, a pair, a map or a multiset of function values is a container of classes, made only
+    at a writable root, and rebuilds the values it holds, which egglog's leaves stale when the sort's inputs hold no
+    classes (roadmap, "Containers of classes in children").
   - It serializes as a node of its target's name, its arguments the children, and extracts as
     `(unstable-fn "name" args)`, costing what its arguments cost.
   - egglog's higher-order container primitives over function values, such as `unstable-vec-map`, are not yet followed

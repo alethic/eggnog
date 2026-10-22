@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -20,8 +21,14 @@ namespace Eggnog
         /// </summary>
         /// <param name="inputs">The CLR types of the inputs.</param>
         /// <returns>The primitive.</returns>
-        public static PrimitiveN<TResult> Of(Type[] inputs) =>
-            apply ??= new PrimitiveN<TResult>("unstable-app", [typeof(TFn), .. inputs]);
+        public static PrimitiveN<TResult> Of(Type[] inputs)
+        {
+            if (Volatile.Read(ref apply) is { } made)
+                return made;
+
+            Interlocked.CompareExchange(ref apply, new PrimitiveN<TResult>("unstable-app", [typeof(TFn), .. inputs]), null);
+            return apply;
+        }
 
     }
 

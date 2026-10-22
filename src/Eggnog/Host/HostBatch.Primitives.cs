@@ -342,8 +342,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Reads the output cell of a row at keys' cells: what the batch's earlier facts left, else the stored row, but no
-        /// row the fact being planned stages and none the batch deletes; a relation's unit.
+        /// Reads the output cell of a function's or a constructor's row at keys' cells: what the batch's earlier facts
+        /// left, else the stored row, but no row the fact being planned stages and none the batch deletes.
         /// </summary>
         bool TryReadCells(TableHandle table, uint[] cells, bool existing, out uint cell)
         {
@@ -352,21 +352,6 @@ namespace Eggnog
                 return TryReadFunction(table, cells, existing, out cell);
 
             CheckReadAfterMerge(table);
-            if (table.IsRelation)
-            {
-                var row = new uint[cells.Length + 1];
-                cells.CopyTo(row, 0);
-                row[^1] = graph.Unit.Unit;
-                var rowKey = Key(table, row);
-                if (rowKeys.Contains(rowKey) || subsumeKeys.Contains(rowKey) || (existing && TryStored(table, cells, out _)))
-                {
-                    cell = graph.Unit.Unit;
-                    return true;
-                }
-
-                return false;
-            }
-
             var key = Key(table, cells);
             if (pendingByKey.TryGetValue(key, out var planned))
             {

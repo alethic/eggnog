@@ -26,6 +26,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The function is not valid in the call site's context.</exception>
         public static bool TryInvoke(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
+            // The classes the value holds are canonical: the root rebuilds its container, and a child may not merge away a
+            // class a container holds (decisions row 9).
             var (target, partial) = ((IFnColumnType)parameters[0]).DecodeCells(arguments[0]);
             var cells = new uint[partial.Length + arguments.Length - 1];
             partial.CopyTo(cells, 0);
@@ -51,7 +53,15 @@ namespace Eggnog
                         throw target.NotValidIn(context);
 
                     if (primitive.IsWrite)
+                    {
+                        // As a write primitive called directly: it unions classes that containers hold, which a child never
+                        // rebuilds (decisions row 9).
+                        if (tables.Scope.IsRoot == false)
+                            throw new InvalidOperationException(
+                                $"primitive '{primitive.Name}' unions classes that containers hold, which only the root rebuilds, so only the root may compute it.");
+
                         return primitive.TryInvokeWrite(cells, target.Parameters, result, tables.UnionCells, out cell);
+                    }
 
                     if (primitive.UsesTables == false)
                         return primitive.TryInvokeCore(cells, target.Parameters, result, tables.Scope, out cell);

@@ -1,3 +1,5 @@
+using System;
+
 namespace Eggnog
 {
 
@@ -20,6 +22,16 @@ namespace Eggnog
         /// <param name="cell">The cell.</param>
         /// <returns>The target and the cells.</returns>
         (FnTarget Target, uint[] Arguments) DecodeCells(uint cell);
+
+        /// <summary>
+        /// Gets whether a function value holds classes: whether one of its partially applied arguments is a class or holds
+        /// one.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>Whether it does.</returns>
+        /// <exception cref="ArgumentException">The value is a default one, or its function's signature is not this
+        /// type's.</exception>
+        bool HoldsClassesIn(object value);
 
     }
 

@@ -55,6 +55,12 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterVec<long>();
             graph.Values.RegisterFn<Vec<long>>();
             Assert.True(graph.Root.Check(Primitives.UnstableApp<Vec<long>>().Of(Primitives.UnstableFn<Vec<long>>(Primitives.VecEmpty<long>()).Of()).Is(Primitives.VecEmpty<long>().Of())));
+
+            // (sort MapI64String (Map i64 String)) (check (= (unstable-app (unstable-fn "map-empty")) (map-empty)))
+            graph.Values.RegisterMap<long, string>();
+            graph.Values.RegisterFn<Map<long, string>>();
+            var mapEmpty = Primitives.MapEmpty<long, string>();
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<Map<long, string>>().Of(Primitives.UnstableFn<Map<long, string>>(mapEmpty).Of()).Is(mapEmpty.Of())));
         }
 
         /// <summary>
@@ -380,6 +386,11 @@ namespace Eggnog.Tests.Values
 
             // (sort TestNullaryFunction (UnstableFn () Math))
             Assert.Equal("UnstableFn<(), Math>", graph.Values.RegisterFn<Node>().Name);
+
+            // (extract (unstable-fn "square")), held by a constructor, since a class is what extracts here.
+            var holder = graph.DefineConstructor<UnstableFn<Node, Node>, Node>("holder");
+            var held = graph.Root.Make(holder.Of(squareFn.Of()));
+            Assert.Equal("(holder (unstable-fn \"square\"))", graph.Root.Extract(held).ToString());
         }
 
         /// <summary>

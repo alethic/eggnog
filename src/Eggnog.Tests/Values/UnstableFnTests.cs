@@ -201,6 +201,133 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterFn<string, long>();
         }
 
+        [Fact]
+        public void ANestedFunctionValueOfValuesIsAValue()
+        {
+            // (unstable-fn "first" (unstable-fn "+" 1)) holds no class, so a child makes it.
+            var graph = new EGraph();
+            graph.Values.RegisterFn<long, long>();
+            var app = Primitives.UnstableApp<long, long>();
+            var first = Primitive.Create<long>("first", [typeof(UnstableFn<long, long>), typeof(long)], args => (long)args[1]);
+            var h = graph.DefineFunction<UnstableFn<long, long>>("h");
+            graph.Root.Freeze();
+            using var child = graph.Root.CreateChild();
+            child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(first).Of(Primitives.UnstableFn<long, long>(Primitives.Add).Of(1L))));
+            Assert.True(child.Check(app.Of(h.Of(), 7L).Is(7L)));
+            Assert.Equal("(unstable-fn \"first\" (unstable-fn \"+\" 1))", child.Get(h.Of()).ToString());
+        }
+
+        [Fact]
+        public void AChildMergesNoClassAFunctionValueHolds()
+        {
+            // The root holds (unstable-fn "score" (Num 1)), whose container only the root rebuilds; a child may not merge
+            // (Num 1) away, so the class the value holds stays canonical there, and a rule reads its row.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var score = graph.DefineFunction<Node, long, long>("score");
+            graph.Values.RegisterFn<long, long>();
+            var app = Primitives.UnstableApp<long, long>();
+            var fv = graph.DefineFunction<UnstableFn<long, long>>("fv");
+            var output = graph.DefineFunction<long, long>("out");
+            var root = graph.Root;
+            var two = root.Make(num.Of(2L));
+            var one = root.Make(num.Of(1L));
+            root.Assume(score.Of(num.Of(1L), 1L).Is(5L), fv.Of().Is(Primitives.UnstableFn<long, long>(score).Of(num.Of(1L))));
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("apply", r =>
+            {
+                var f = r.Var<UnstableFn<long, long>>("f");
+                r.Naive();
+                r.When(f.Is(fv.Of()));
+                r.Then(output.Of(0L).Is(app.Of(f, 1L)));
+            });
+            root.Freeze();
+
+            using var child = root.CreateChild();
+            var merge = Assert.Throws<InvalidOperationException>(() => child.Union(one, two));
+            Assert.Contains("a container of classes holds", merge.Message, StringComparison.Ordinal);
+            Assert.True(child.Check(app.Of(fv.Of(), 1L).Is(5L)));
+            child.Run(rules);
+            Assert.True(child.Check(output.Of(0L).Is(5L)));
+        }
+
+        [Fact]
+        public void AWritePrimitiveAppliesOnlyAtTheRoot()
+        {
+            // (let $fv (unstable-fn "vec-union" (vec-of (Num 1)))) (unstable-app $fv (vec-of (Num 2))) unions (Num 1) and
+            // (Num 2), which containers hold; only the root rebuilds them, as when vec-union is called.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterVec<Node>();
+            graph.Values.RegisterFn<Vec<Node>, Vec<Node>>();
+            var of = Primitives.VecOf<Node>();
+            var app = Primitives.UnstableApp<Vec<Node>, Vec<Node>>();
+            var fv = graph.DefineFunction<UnstableFn<Vec<Node>, Vec<Node>>>("fv");
+            var output = graph.DefineFunction<long, Vec<Node>>("out");
+            var root = graph.Root;
+            root.Assume(fv.Of().Is(Primitives.UnstableFn<Vec<Node>, Vec<Node>>(Primitives.VecUnion<Node>()).Of(of.Of(num.Of(1L)))));
+            root.Assume(output.Of(0L).Is(app.Of(fv.Of(), of.Of(num.Of(2L)))));
+            Assert.True(root.Check(num.Of(1L).Is(num.Of(2L))));
+
+            root.Assume(output.Of(1L).Is(of.Of(num.Of(3L))));
+            root.Freeze();
+            using var child = root.CreateChild();
+            var refused = Assert.ThrowsAny<Exception>(() => child.Assume(output.Of(2L).Is(app.Of(fv.Of(), output.Of(1L)))));
+            Assert.Contains("only the root may compute it", refused.ToString(), StringComparison.Ordinal);
+            Assert.False(child.Check(num.Of(1L).Is(num.Of(3L))));
+        }
+
+        [Fact]
+        public void FunctionValuesOrderAsTheirContents()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var add = graph.DefineConstructor<Node, Node, Node>("Add");
+            graph.Values.RegisterFn<Node, Node>();
+            var one = graph.Root.Make(num.Of(1L));
+            var two = graph.Root.Make(num.Of(2L));
+            var x = UnstableFn.Of<Node, Node>(add, one);
+            var y = UnstableFn.Of<Node, Node>(add, two);
+            Assert.Equal(0, x.CompareTo(UnstableFn.Of<Node, Node>(add, one)));
+            Assert.Equal(-Math.Sign(x.CompareTo(y)), Math.Sign(y.CompareTo(x)));
+            Assert.NotEqual(0, x.CompareTo(y));
+            Assert.Equal(2, Set.Of(x, y, x).Count);
+
+            // Two primitives of one name are two functions.
+            graph.Values.RegisterFn<long, long>();
+            var p = Primitive.Create<long>("p", [typeof(long)], args => (long)args[0]);
+            var q = Primitive.Create<long>("p", [typeof(long)], args => (long)args[0]);
+            var fp = UnstableFn.Of<long, long>(p);
+            var fq = UnstableFn.Of<long, long>(q);
+            Assert.NotEqual(fp, fq);
+            Assert.NotEqual(0, fp.CompareTo(fq));
+            Assert.Equal(-Math.Sign(fp.CompareTo(fq)), Math.Sign(fq.CompareTo(fp)));
+        }
+
+        [Fact]
+        public void AVariadicPrimitiveIsATargetAtAnArity()
+        {
+            // (sort IntVecFn (UnstableFn (i64) (Vec i64))) (check (= (unstable-app (unstable-fn "vec-of" 1) 2) (vec-of 1 2)))
+            var graph = new EGraph();
+            graph.Values.RegisterVec<long>();
+            graph.Values.RegisterFn<long, Vec<long>>();
+            var vecOf = Primitives.VecOf<long>();
+            Assert.Same(vecOf.WithArity(2), vecOf.WithArity(2));
+            var fn = Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(2));
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, Vec<long>>().Of(fn.Of(1L), 2L).Is(Vec.Of(1L, 2L))));
+            Assert.Equal("(unstable-fn \"vec-of\" 1)", UnstableFn.Of<long, Vec<long>>(vecOf.WithArity(2), 1L).ToString());
+            Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(1)).Of(1L));
+
+            // (sort BoolFn (UnstableFn (bool) bool)) (check (= (unstable-app (unstable-fn "or" false) true) true))
+            graph.Values.RegisterFn<bool, bool>();
+            var or = Primitives.UnstableFn<bool, bool>(BooleanPrimitives.Or.WithArity(2));
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<bool, bool>().Of(or.Of(false), true).Is(true)));
+            Assert.Throws<ArgumentOutOfRangeException>(() => vecOf.WithArity(-1));
+        }
+
     }
 
 }

@@ -19,13 +19,13 @@ namespace Eggnog
         /// Gets the <c>unstable-fn</c> primitive of a function: its parameters the function's partially applied
         /// arguments, its result the function value.
         /// </summary>
-        /// <param name="target">A constructor, a function or a relation, or a primitive.</param>
+        /// <param name="target">A constructor or a function, or a primitive.</param>
         /// <param name="inputs">The CLR types of the function sort's inputs.</param>
         /// <param name="output">The CLR type of its output.</param>
         /// <param name="wrap">Makes a value of a content.</param>
         /// <returns>The primitive.</returns>
-        /// <exception cref="ArgumentException">The function's signature does not end with the inputs and the
-        /// output.</exception>
+        /// <exception cref="ArgumentException">The target is a relation, or its signature does not end with the inputs
+        /// and the output.</exception>
         public static PrimitiveN<TFn> Of(object target, Type[] inputs, Type output, Func<FnValue, TFn> wrap)
         {
             ArgumentNullException.ThrowIfNull(target);

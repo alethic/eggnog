@@ -28,6 +28,7 @@ namespace Eggnog
         readonly FnTargets targets;
         readonly Relations.FunctionSort sort;
         readonly object sync = new();
+        readonly System.Collections.Concurrent.ConcurrentDictionary<object, FnTarget> resolved = new(ReferenceEqualityComparer.Instance);
         ColumnType[] partialTypes = [];
 
         /// <summary>
@@ -115,7 +116,7 @@ namespace Eggnog
         internal override uint Encode(TFn value)
         {
             var (content, target) = Content(value);
-            if (target.Rebuild != 0)
+            if (MaskOf(content, target) != 0)
                 throw ContainerClasses.NeedScope(Name);
 
             var arguments = content.ArgumentArray;
@@ -137,7 +138,8 @@ namespace Eggnog
         internal override uint EncodeIn(TFn value, Scope? scope)
         {
             var (content, target) = Content(value);
-            if (target.Rebuild == 0)
+            var mask = MaskOf(content, target);
+            if (mask == 0)
                 return Encode(value);
 
             var arguments = content.ArgumentArray;
@@ -145,14 +147,15 @@ namespace Eggnog
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = target.Partial[i].EncodeInObject(arguments[i], scope);
 
-            return ContainerClasses.Intern(env, new Relations.FunctionContainer(target.Id, target.Rebuild, cells), counters, Name, scope);
+            return ContainerClasses.Intern(env, new Relations.FunctionContainer(target.Id, mask, cells), counters, Name, scope);
         }
 
         /// <inheritdoc />
         internal override uint EncodeCanonical(TFn value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch)
         {
             var (content, target) = Content(value);
-            if (target.Rebuild == 0)
+            var mask = MaskOf(content, target);
+            if (mask == 0)
                 return Encode(value);
 
             var arguments = content.ArgumentArray;
@@ -160,14 +163,14 @@ namespace Eggnog
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = target.Partial[i].EncodeCanonicalObject(arguments[i], scope, find, openBatch);
 
-            return find(ContainerClasses.Intern(env, new Relations.FunctionContainer(target.Id, target.Rebuild, cells), counters, Name, scope));
+            return find(ContainerClasses.Intern(env, new Relations.FunctionContainer(target.Id, mask, cells), counters, Name, scope));
         }
 
         /// <inheritdoc />
         internal override TFn Canonical(TFn value, Scope scope, Func<uint, uint> find)
         {
             var (content, target) = Content(value);
-            if (target.Rebuild == 0)
+            if (MaskOf(content, target) == 0)
                 return value;
 
             var arguments = content.ArgumentArray;
@@ -189,14 +192,15 @@ namespace Eggnog
                 if (target.Partial[i].TryEncodeExistingObject(arguments[i], out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(new Relations.FunctionContainer(target.Id, target.Rebuild, cells), out cell);
+            return env.TryGetId(new Relations.FunctionContainer(target.Id, MaskOf(content, target), cells), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(TFn value, Scope scope, Func<uint, uint> find, out uint cell)
         {
             var (content, target) = Content(value);
-            if (target.Rebuild == 0)
+            var mask = MaskOf(content, target);
+            if (mask == 0)
                 return TryEncodeExisting(value, out cell);
 
             cell = 0;
@@ -206,7 +210,7 @@ namespace Eggnog
                 if (target.Partial[i].TryEncodeCanonicalObject(arguments[i], scope, find, out cells[i]) == false)
                     return false;
 
-            if (env.TryGetId(new Relations.FunctionContainer(target.Id, target.Rebuild, cells), out var id) == false)
+            if (env.TryGetId(new Relations.FunctionContainer(target.Id, mask, cells), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -241,6 +245,13 @@ namespace Eggnog
         {
             var (fn, target) = Read(cell);
             return (target, fn.Arguments.ToArray());
+        }
+
+        /// <inheritdoc />
+        public bool HoldsClassesIn(object value)
+        {
+            var (content, target) = Content((TFn)value);
+            return MaskOf(content, target) != 0;
         }
 
         /// <summary>
@@ -422,7 +433,27 @@ namespace Eggnog
         (FnValue Content, FnTarget Target) Content(TFn value)
         {
             var content = value.Content ?? throw new ArgumentException($"A default {Name} applies nothing; make one with UnstableFn.Of or unstable-fn.", nameof(value));
-            return (content, Resolve(content.Target));
+            return (content, resolved.TryGetValue(content.Target, out var target) ? target : resolved.GetOrAdd(content.Target, Resolve(content.Target)));
+        }
+
+        /// <summary>
+        /// Gets which of a value's partially applied arguments hold classes, which its container rebuilds: those of its
+        /// target's that do (<see cref="FnTarget.Rebuild"/>), but a nested function value that holds none. egglog's
+        /// <c>rebuild_contents</c> (src/sort/fn.rs:57-66) decides a nested one by its sort's inputs; a value's own arguments
+        /// decide it here, so a function value of values is one in any scope, and one of classes is rebuilt.
+        /// </summary>
+        static ulong MaskOf(FnValue content, FnTarget target)
+        {
+            var mask = target.Rebuild;
+            if (target.Nested == 0)
+                return mask;
+
+            var arguments = content.ArgumentArray;
+            for (var i = 0; i < arguments.Length; i++)
+                if ((target.Nested & (1UL << i)) != 0 && ((IFnColumnType)target.Partial[i]).HoldsClassesIn(arguments[i]) == false)
+                    mask &= ~(1UL << i);
+
+            return mask;
         }
 
         /// <summary>
