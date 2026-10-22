@@ -67,6 +67,32 @@ namespace Eggnog
             => FnMultiSetPrimitiveCache<T>.FilterNot;
 
         /// <summary>
+        /// <c>unstable-multiset-fill-index</c>: sets the row of a function value's function at the multiset and each of
+        /// its distinct elements to the element's count, in cell order, stopping at the first such row there is, as
+        /// egglog's does (multiset.rs:411-479); returns <c>()</c>, so it is an action run for its effect alone
+        /// (<see cref="Fact.Exists"/>). A full primitive, as egglog's: it reads the rows, so it runs in a naive rule's head
+        /// (<see cref="RuleBuilder.Naive"/>) or a host write. The function value's function must be a function, keyed by
+        /// the multiset and an element, of an <c>i64</c> output; a primitive's is refused when it runs, as egglog
+        /// panics.
+        /// </summary>
+        /// <typeparam name="T">The multiset's element type.</typeparam>
+        /// <returns>The primitive, of the multiset and the function value.</returns>
+        public static PrimitiveN<ValueTuple> UnstableMultiSetFillIndex<T>()
+            where T : notnull
+            => FnMultiSetPrimitiveCache<T>.FillIndex;
+
+        /// <summary>
+        /// <c>unstable-multiset-clear-index</c>: deletes the rows <see cref="UnstableMultiSetFillIndex{T}"/> sets, those
+        /// of a function value's function at the multiset and each of its elements (multiset.rs:481-536); returns
+        /// <c>()</c>. A write primitive, as egglog's: it runs in a rule's head or a host write.
+        /// </summary>
+        /// <typeparam name="T">The multiset's element type.</typeparam>
+        /// <returns>The primitive, of the multiset and the function value.</returns>
+        public static PrimitiveN<ValueTuple> UnstableMultiSetClearIndex<T>()
+            where T : notnull
+            => FnMultiSetPrimitiveCache<T>.ClearIndex;
+
+        /// <summary>
         /// egglog's fallible form of a filter primitive: <c>&lt;</c> of <see cref="Less"/> (<c>bool-&lt;</c>),
         /// <c>set-contains</c> of <see cref="Contains{T}"/>, <c>!=</c> of <see cref="NotEqual{T}"/>, and so on, which
         /// <see cref="RuleBuilder.Where(Term{bool})"/> renders. A partial primitive of <c>Unit</c>, named as egglog names
