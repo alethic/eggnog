@@ -29,8 +29,9 @@ namespace Eggnog
         /// <param name="ruleset">The ruleset.</param>
         /// <param name="inCase">Whether the scope is a case.</param>
         /// <returns>Whether the step changed the scope: a head's writes, or the rebuild.</returns>
-        /// <exception cref="RuleEvaluationException">An evaluation failure, or the scheduler threw; the scope is
-        /// faulted.</exception>
+        /// <exception cref="RuleEvaluationException">An evaluation failure, which leaves the run's own scope usable, the
+        /// matches its queries found kept for the next step (<see cref="FailRun"/>); or the scheduler threw, and the
+        /// scope is faulted.</exception>
         /// <exception cref="InvalidOperationException">The scheduler was removed.</exception>
         public bool RunSchedulerStep(Scope scope, RuleScheduler scheduler, Ruleset ruleset, bool inCase)
         {
@@ -54,12 +55,25 @@ namespace Eggnog
                 scheduled[i] = scheduler.Schedule(rules[i]);
             }
 
-            // A state taken from an ancestor continues the ancestor's queries: their progress becomes this scope's own.
+            // A state taken from an ancestor continues the ancestor's queries: their progress becomes this scope's own,
+            // and the matches a failed step of the ancestor chose but did not apply go to this scope's worklists.
             if (state.Seeded == false)
             {
                 foreach (var (rule, held) in state.Rules)
                     if (held.Progress is { } progress)
                         engine.SetProgress(Query(engine, rule).Id, progress);
+
+                if (StageDecided(scope, state) > 0)
+                {
+                    try
+                    {
+                        engine.Flush();
+                    }
+                    catch (Relations.PanicException panic)
+                    {
+                        throw FailRun(scope, null, panic);
+                    }
+                }
 
                 state.Seeded = true;
             }
@@ -83,7 +97,8 @@ namespace Eggnog
                 }
                 catch (Relations.PanicException panic)
                 {
-                    throw scope.FaultWith(panic);
+                    KeepDecided(scope, state, scheduled);
+                    throw FailRun(scope, null, panic);
                 }
             }
 
@@ -104,7 +119,8 @@ namespace Eggnog
             }
             catch (Relations.PanicException panic)
             {
-                throw scope.FaultWith(panic);
+                KeepDecided(scope, state, scheduled);
+                throw FailRun(scope, rules, panic);
             }
 
             var changed = Account(scope, rules, actions, iteration, Stopwatch.GetElapsedTime(started));
@@ -174,7 +190,10 @@ namespace Eggnog
             }
             catch (Relations.PanicException panic)
             {
-                throw scope.FaultWith(panic);
+                if (ReferenceEquals(scope, Top))
+                    KeepFound(scope, state, scheduled, queries, buffers);
+
+                throw FailRun(scope, null, panic);
             }
             finally
             {
@@ -185,6 +204,106 @@ namespace Eggnog
             Statistics.MergeTime += iteration.Report.MergeTime;
             Statistics.RebuildTime += iteration.RebuildTime;
             return iteration.Report;
+        }
+
+        /// <summary>
+        /// Keeps the matches each query found before a failure stopped the step, after those the scheduler left, with the
+        /// query's progress, which the engine committed: the next step offers them, as egglog 3.0.0 keeps the matches its
+        /// failed query collected (its src/scheduler.rs:229-314), where egglog at 5e655cae loses every ruleset and scheduler
+        /// (defect 28 of the engine map's list).
+        /// </summary>
+        static void KeepFound(Scope scope, SchedulerState state, ScheduledRule[] scheduled, LoweredRule[] queries,
+            Dictionary<int, SchedulerMatchBuffer> buffers)
+        {
+            var engine = scope.Engine;
+            for (var i = 0; i < scheduled.Length; i++)
+            {
+                var rule = scheduled[i];
+                if (buffers.TryGetValue(rule.Slot, out var buffer) == false)
+                    continue;
+
+                var held = Held(state, rule);
+                var found = buffer.Cells;
+                var cells = new uint[held.Pending.Length + found.Length];
+                held.Pending.CopyTo(cells, 0);
+                found.CopyTo(cells.AsSpan(held.Pending.Length));
+                var progress = engine.TryGetProgress(queries[i].Id, out var ran) ? ran : held.Progress;
+                state.Rules[rule] = held with { Pending = cells, Progress = progress };
+            }
+        }
+
+        /// <summary>
+        /// After a step failed once its matches were chosen, as egglog's step whose worklist flush or action run panics:
+        /// marks each rule's worklist as one that may hold rows, and, in the run's own scope, records in each rule's state
+        /// the rows its worklist still holds, which the action rule did not reach or whose actions failed. The scope's
+        /// next step applies them from the worklist, as egglog 3.0.0's next step applies its <c>decided</c> rows; a child,
+        /// whose worklists are its own, stages them at its first step, as egglog's <c>push</c> clones the
+        /// <c>decided</c> tables (<see cref="StageDecided"/>). A case the step failed in is faulted, so its rows go with
+        /// it.
+        /// </summary>
+        void KeepDecided(Scope scope, SchedulerState state, ScheduledRule[] scheduled)
+        {
+            foreach (var rule in scheduled)
+                rule.WorklistMayHoldRows = true;
+
+            if (ReferenceEquals(scope, Top) == false)
+                return;
+
+            var engine = scope.Engine;
+            foreach (var rule in scheduled)
+            {
+                var width = rule.Types.Length;
+                var cells = new List<uint>();
+                engine.ForEach(rule.Worklist.Function, row =>
+                {
+                    for (var i = 0; i < width; i++)
+                        cells.Add(row.Values[i].Rep);
+                });
+
+                state.Rules[rule] = Held(state, rule) with { Decided = cells.Count > 0 ? cells.ToArray() : null };
+            }
+        }
+
+        /// <summary>
+        /// Stages into this scope's worklists the matches a failed step of the ancestor the state came from chose but did
+        /// not apply (<see cref="KeepDecided"/>), with their classes canonical here, and forgets them in the state, whose
+        /// later steps apply them from the worklists. Returns the number of rows staged.
+        /// </summary>
+        static int StageDecided(Scope scope, SchedulerState state)
+        {
+            List<ScheduledRule>? decided = null;
+            foreach (var (rule, held) in state.Rules)
+                if (held.Decided is not null)
+                    (decided ??= new()).Add(rule);
+
+            if (decided is null)
+                return 0;
+
+            var engine = scope.Engine;
+            var unit = scope.Graph.Unit.Unit;
+            var rows = 0;
+            foreach (var rule in decided)
+            {
+                var held = state.Rules[rule];
+                var cells = (uint[])held.Decided!.Clone();
+                var width = rule.Types.Length;
+                if (rule.ClassColumns.Length > 0)
+                    engine.CanonicalizeColumns(cells, width, rule.ClassColumns);
+
+                for (var offset = 0; offset < cells.Length; offset += width)
+                {
+                    var staged = new uint[width + 1];
+                    cells.AsSpan(offset, width).CopyTo(staged);
+                    staged[^1] = unit;
+                    engine.StageRow(rule.Worklist.Function, staged);
+                    rows++;
+                }
+
+                rule.WorklistMayHoldRows = true;
+                state.Rules[rule] = held with { Decided = null };
+            }
+
+            return rows;
         }
 
         /// <summary>

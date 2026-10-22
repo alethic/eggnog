@@ -109,7 +109,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a nullary function. With no lattice, two different values are an error: a host
         /// write throws <see cref="FactConflictException"/> without writing the value, and a rule's write fails its run with
-        /// <see cref="RuleEvaluationException"/>, faulting the scope.
+        /// <see cref="RuleEvaluationException"/>, keeping the value before it, as egglog's.
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
@@ -128,7 +128,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a function of one key. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> without writing the value, and a rule's write fails its run
-        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
+        /// with <see cref="RuleEvaluationException"/>, keeping the value before it, as egglog's.
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
@@ -148,7 +148,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a function of two keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> without writing the value, and a rule's write fails its run
-        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
+        /// with <see cref="RuleEvaluationException"/>, keeping the value before it, as egglog's.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
@@ -170,7 +170,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a function of three keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> without writing the value, and a rule's write fails its run
-        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
+        /// with <see cref="RuleEvaluationException"/>, keeping the value before it, as egglog's.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
@@ -193,7 +193,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a function of four keys. With no lattice, two different values are an error: a
         /// host write throws <see cref="FactConflictException"/> without writing the value, and a rule's write fails its run
-        /// with <see cref="RuleEvaluationException"/>, faulting the scope.
+        /// with <see cref="RuleEvaluationException"/>, keeping the value before it, as egglog's.
         /// </summary>
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>

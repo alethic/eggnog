@@ -48,7 +48,7 @@ namespace Eggnog
         /// merge is checked and lowered when its function is defined, and named by its rendering, such as
         /// <c>(Join old new)</c>. A merge over classes may make terms; a function lookup with no row, or a primitive that
         /// throws or has no result, fails the merge, as egglog's merge panics, which fails a rule's run, or a host write's
-        /// flush, and faults the scope. As every merge that is not a lattice, only the root writes its function.
+        /// flush, and keeps what they wrote. As every merge that is not a lattice, only the root writes its function.
         /// </summary>
         /// <typeparam name="T">The value type, or the sort.</typeparam>
         /// <param name="merge">Builds the merge from the old and the new value.</param>

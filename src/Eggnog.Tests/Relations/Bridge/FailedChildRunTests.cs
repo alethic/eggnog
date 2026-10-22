@@ -106,8 +106,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A panic is a recorded failure, not an exception: the child is not faulted, its run committed no progress,
-        /// and it keeps working.
+        /// A panic is a recorded failure, not an exception: the child is not faulted, its run committed its progress, as
+        /// egglog sets <c>last_run_at</c> before the run, and it keeps working.
         /// </summary>
         [Fact]
         public void APanicDoesNotFaultTheChild()
@@ -127,7 +127,7 @@ namespace Eggnog.Relations.Tests
             child.FlushUpdates();
             Assert.Throws<PanicException>(() => child.RunRules(rule));
             Assert.False(child.IsFaulted);
-            Assert.Equal(0u, child.CommittedLastRunAt(rule, g.EGraph.GetRuleInfo(rule).Generation));
+            Assert.NotEqual(0u, child.CommittedLastRunAt(rule, g.EGraph.GetRuleInfo(rule).Generation));
 
             // What merged before the stop stays (egglog's partial run), and the child is still usable.
             child.CheckInvariants();

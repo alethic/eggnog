@@ -263,6 +263,31 @@ namespace Eggnog.Tests.Deletion
             Assert.Equal(1, t.Root.CountRows(t.Num));
         }
 
+        /// <summary>
+        /// A deletion that merged in an iteration a later rule's failure stopped keeps the scope's own mirror equal to the
+        /// table, as after an iteration that did not fail.
+        /// </summary>
+        [Fact]
+        public void AFailedRunsDeletionKeepsTheScopesOwnMirrorEqualToTheTable()
+        {
+            var t = new NodeTheory();
+            var output = t.Graph.DefineRelation<long>("output");
+            var seen = t.Graph.DefineQuery("seen", q => q.When(t.Num.In(t.Graph.RootTag).Of(q.Var<long>("x"))));
+            t.Rules.DefineRule("drop two", r => r.Delete(t.Num.Of(2L)));
+            t.Rules.DefineRule("fails on three", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(t.Num.Of(x));
+                r.Then(output.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L))));
+            });
+            t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L));
+            Assert.Equal(3, t.Root.Count(seen));
+
+            Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
+            Assert.Equal(2, t.Root.CountRows(t.Num));
+            Assert.Equal(2, t.Root.Count(seen));
+        }
+
 
         /// <summary>
         /// egglog's update idiom: a rule deletes a row and writes its key again in one iteration. The scope's own mirror

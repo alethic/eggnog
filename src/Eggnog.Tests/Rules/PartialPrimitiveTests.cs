@@ -56,7 +56,7 @@ namespace Eggnog.Tests.Rules
             Assert.Contains("primitive '/' threw DivideByZeroException", e.Message);
             Assert.Contains("x=0", e.Bindings);
             Assert.IsType<DivideByZeroException>(e.InnerException);
-            Assert.True(t.Root.IsFaulted);
+            Assert.False(t.Root.IsFaulted);
         }
 
         [Fact]

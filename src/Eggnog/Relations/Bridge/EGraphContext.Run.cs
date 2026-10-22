@@ -32,16 +32,21 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// Progress: each rule's <c>(T, K, generation)</c> is staged when the rule set is built and committed once the
-        /// run has merged and no failure was recorded, before the rebuild. Then, if the run grew the union-find, the
+        /// run has merged, a recorded failure included, before the rebuild. Then, if the run grew the union-find, the
         /// context rebuilds with its first pass at <c>T</c>; otherwise the clock advances. A stopped context runs
         /// nothing and reports <see cref="IterationReport.Stopped"/>.
         /// </para>
         /// <para>
         /// Failures. A panic (a failure an action or a merge recorded) is thrown as <see cref="PanicException"/> after the
-        /// iteration's bookkeeping, with no progress committed. An exception thrown while the rules run undoes the run
-        /// (no write it staged survives, no progress, the clock unchanged); in a child it also faults the context. An
-        /// exception thrown while the run's writes merge cannot be undone: at the root the rules' progress is committed
-        /// (unless a failure was recorded), so no match is applied twice; a child is faulted.
+        /// iteration's bookkeeping, its writes merged and its progress committed, as egglog sets each rule's
+        /// <c>last_run_at</c> before it runs the rule set (egglog-bridge/src/lib.rs:1411-1417). A panic stops the failing
+        /// binding's actions and the join, as egglog's panic triggers an early stop (egglog-bridge/src/lib.rs:1459, 1508):
+        /// the batches of bindings already formed still run, and the matches the join had not reached, in the failing rule
+        /// or another, are not applied; a later run does not apply a semi-naive rule's either, since its progress moved
+        /// past them, but a naive rule matches in full again. An exception thrown while the rules
+        /// run undoes the run (no write it staged survives, no progress, the clock unchanged); in a child it also faults
+        /// the context. An exception thrown while the run's writes merge cannot be undone: at the root the rules' progress
+        /// is committed, so no match is applied twice; a child is faulted.
         /// </para>
         /// <para>
         /// The report is at the e-graph's <see cref="EGraph.ReportLevel"/>.
@@ -135,9 +140,9 @@ namespace Eggnog.Relations
         /// <remarks>
         /// In a child, the catch-up before the run (<see cref="EnsureClean"/>) can record a failing lattice merge without
         /// throwing. The database keeps only the first failure, so the run then reports the catch-up's failure as its
-        /// own and commits no progress, and a failure of the run itself is not reported beside it. The outcome is sound:
-        /// the child is faulted either way. Callers that need the two told apart take the catch-up's failure before the
-        /// run, as the library does after each scope's rebuild and on entry to each case.
+        /// own, and a failure of the run itself is not reported beside it. Callers that need the two told apart take the
+        /// catch-up's failure before the run, as the library does after each scope's rebuild and on entry to each case,
+        /// where a catch-up's failure faults the scope, and a run's faults only a case of a split step.
         /// </remarks>
         internal IterationReport RunRulesCore(ReadOnlySpan<EGraphRuleId> rules, bool egglogCompatible)
         {
@@ -252,9 +257,8 @@ namespace Eggnog.Relations
                 catch
                 {
                     // A merge cannot be undone: what merged stays, so the matches are committed and never applied
-                    // twice, unless a failure was recorded. A child is faulted and runs nothing again.
-                    if (database.Failure is null)
-                        Commit(rules, staged);
+                    // twice. A child is faulted and runs nothing again.
+                    Commit(rules, staged);
 
                     throw;
                 }
@@ -264,11 +268,11 @@ namespace Eggnog.Relations
                 ruleSet?.Dispose();
             }
 
-            // Progress is committed when the run merged and recorded no failure, before the rebuild, which is sound
-            // because every row the run wrote has ts >= T.
+            // Progress is committed when the run merged, a recorded failure included, as egglog sets each rule's
+            // last_run_at before it runs (lib.rs:1409-1416), before the rebuild, which is sound because every row the run
+            // wrote has ts >= T.
             var failed = TakeFailure(out var message);
-            if (failed == false)
-                Commit(rules, staged);
+            Commit(rules, staged);
 
             if (IsStopped)
             {

@@ -5,10 +5,11 @@ namespace Eggnog
 
     /// <summary>
     /// An evaluation failure: a primitive, filter or lattice delegate threw, or a function without a lattice received two
-    /// values from rules. After a run or a write the scope is faulted, because nothing is rolled back; after a query it is
-    /// not, because a query writes nothing. A lattice merge that throws in the catch-up a call makes first faults the
-    /// scope whatever the call, a read, query or extraction included, because the catch-up merges into the scope (see
-    /// the remarks on <see cref="Scope"/>).
+    /// values from rules. After a run or a write the scope stays usable, as egglog's e-graph after a failed run or
+    /// command: nothing is rolled back, and what the run or the write staged before it failed stands. A lattice merge
+    /// that throws in the catch-up a call makes first faults the scope whatever the call, a read, query or extraction
+    /// included, because the catch-up merges into the scope, and so does a failure in a case of a split step (see the
+    /// remarks on <see cref="Scope"/>).
     /// </summary>
     public sealed class RuleEvaluationException : Exception
     {

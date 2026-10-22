@@ -184,7 +184,7 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AMergeThatThrowsDuringARulesMergeFaultsTheScope()
+        public void AMergeThatThrowsDuringARulesMergeFailsTheRun()
         {
             var graph = new EGraph();
             var sum = graph.DefineFunction<string, long>("sum", Sum);
@@ -196,7 +196,7 @@ namespace Eggnog.Tests.Values
 
             Assert.IsType<OverflowException>(e.InnerException);
             Assert.Contains("merge 'sum'", e.Message);
-            Assert.True(graph.Root.IsFaulted);
+            Assert.False(graph.Root.IsFaulted);
         }
 
         [Fact]

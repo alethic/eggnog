@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -18,6 +19,8 @@ namespace Eggnog
     /// </remarks>
     internal sealed class ScheduledRule
     {
+
+        bool worklistMayHoldRows;
 
         /// <summary>
         /// Initializes a new instance.
@@ -66,6 +69,17 @@ namespace Eggnog
         /// Gets the worklist: a context-private relation of the matches chosen for one step.
         /// </summary>
         public TableHandle Worklist { get; }
+
+        /// <summary>
+        /// Gets or sets whether a step of the rule failed after it chose matches, so that a scope's worklist may still
+        /// hold rows: such a worklist is never given to another rule (<see cref="RuleScheduler"/>). Set by any scope's
+        /// step, read when the scheduler is removed.
+        /// </summary>
+        public bool WorklistMayHoldRows
+        {
+            get => Volatile.Read(ref worklistMayHoldRows);
+            set => Volatile.Write(ref worklistMayHoldRows, value);
+        }
 
         /// <summary>
         /// Gets the query rule's variants, of which the semi-naive one runs.

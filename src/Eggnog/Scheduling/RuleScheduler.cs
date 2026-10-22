@@ -132,8 +132,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Frees a scheduled rule's variants, now or before the next engine call, and returns its worklist, which every
-        /// step leaves empty, to the graph.
+        /// Frees a scheduled rule's variants, now or before the next engine call, and returns its worklist to the graph,
+        /// unless a failed step may have left rows in it (<see cref="ScheduledRule.WorklistMayHoldRows"/>): every other
+        /// step leaves it empty.
         /// </summary>
         void Release(ScheduledRule scheduled, bool deferred)
         {
@@ -148,7 +149,8 @@ namespace Eggnog
                 scheduled.Action.Free(Graph);
             }
 
-            Graph.ReturnWorklist(scheduled.Worklist);
+            if (scheduled.WorklistMayHoldRows == false)
+                Graph.ReturnWorklist(scheduled.Worklist);
         }
 
     }

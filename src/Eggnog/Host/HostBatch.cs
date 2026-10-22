@@ -85,7 +85,8 @@ namespace Eggnog
 
         /// <summary>
         /// Marks the batch rejected: a call of it was refused for its thread or for coming from a delegate the engine
-        /// invoked, or a flush of it failed, so nothing more of it may be written (see <see cref="Scope.Write"/>). Any
+        /// invoked, or a flush of it failed for want of ids or epochs or for a conflict, so nothing more of it may be
+        /// written (see <see cref="Scope.Write"/>). Any
         /// thread may call it, including one that a guard refused.
         /// </summary>
         public void Reject() => rejected = true;
@@ -621,7 +622,19 @@ namespace Eggnog
             foreach (var (a, b) in unions)
                 engine.StageUnion(a, b);
 
-            var changed = engine.Flush();
+            bool changed;
+            try
+            {
+                changed = engine.Flush();
+            }
+            catch (Relations.PanicException)
+            {
+                // The engine merged and rebuilt the flush before it threw, as egglog's failed command keeps what it
+                // staged: the terms the batch made stand.
+                Origin.Committed = true;
+                throw;
+            }
+
             Origin.Committed = true;
             return changed;
         }

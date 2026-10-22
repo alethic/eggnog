@@ -17,9 +17,12 @@ namespace Eggnog
     /// frozen scope are thread-safe.
     /// </para>
     /// <para>
-    /// After a <see cref="RuleEvaluationException"/> from a run or a write the scope is faulted, and every later call
-    /// except <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that
-    /// throws in the catch-up a call makes first, a read's, query's or extraction's included.
+    /// A <see cref="RuleEvaluationException"/> from a run or a write leaves the scope usable, as egglog's failed run or
+    /// command leaves its e-graph: what the run's matches or the write's calls staged before they failed stands, merged
+    /// and rebuilt. A failure with no egglog counterpart faults the scope, and every later call except
+    /// <see cref="Dispose"/> throws; a faulted root makes its graph unusable. So it is after a lattice merge that throws
+    /// in the catch-up a call makes first, a read's, query's or extraction's included, and after a failure in a case of
+    /// a split step, which faults the case and the scope the run was called on.
     /// <see cref="Dispose"/> never throws: it makes the scope unusable at once, and releases its engine state once
     /// nothing defers it.
     /// </para>
@@ -108,8 +111,9 @@ namespace Eggnog
         public bool IsRoot { get; }
 
         /// <summary>
-        /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> from a run or a write,
-        /// or from a lattice merge that threw in the catch-up of any call into this scope or a descendant, or after the
+        /// Gets whether the scope is faulted: set after a <see cref="RuleEvaluationException"/> with no egglog
+        /// counterpart (a lattice merge that threw in the catch-up of any call into this scope or a descendant, a failure
+        /// in a case of a split step or a lift, a scheduler that threw), or after the
         /// engine faulted the scope's context because an exception escaped one of its writes, runs or rebuilds (an
         /// ancestor row the scope stopped seeing before its rewritten copy was merged would stay lost, so the scope
         /// cannot be repaired).

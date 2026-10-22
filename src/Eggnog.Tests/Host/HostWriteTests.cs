@@ -316,17 +316,23 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void AFlushThatFailsLeavesTheBatchNothingMoreToWrite()
+        public void ABatchGoesOnAfterAFlushThatFails()
         {
             // A write of weight, which the earlier write's merge expression reads, flushes the batch first; the merge's
-            // lookup of (weight 5) has no row, so the flush fails and faults the scope, and the batch writes nothing more.
+            // lookup of (weight 5) has no row, so the flush fails, as egglog's command whose merge panics: what it staged
+            // stands, the write of weight that flushed writes nothing, and the batch goes on, as egglog's later commands
+            // do after (fail (set (total "k") 5)). egglog at 5e655cae: (set (total "k") 0) (Wrap (A))
+            // (fail (set (total "k") 5)) (check (= (total "k") 0)) (Num 2) (set (weight 6) 1) (check (Num 2))
+            // (check (= (weight 6) 1)) (check (Wrap (A))).
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight");
             var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
             t.Root.Assume(total.Of("k").Is(0L));
+            var made = default(Node);
 
             t.Root.Write(w =>
             {
+                made = w.Make(t.Wrap.Of(t.A.Of()));
                 w.Assume(t.Num.Of(1L));
                 w.Assume(total.Of("k").Is(5L));
                 Assert.Throws<RuleEvaluationException>(() => w.Assume(weight.Of(5L).Is(1L)));
@@ -334,7 +340,34 @@ namespace Eggnog.Tests.Host
                 w.Assume(weight.Of(6L).Is(1L));
             });
 
-            Assert.True(t.Root.IsFaulted);
+            Assert.False(t.Root.IsFaulted);
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.AreEqual(made, t.Wrap.Of(t.A.Of())));
+            Assert.Equal(0L, t.Root.Get(total.Of("k")));
+            Assert.False(t.Root.TryGet(weight.Of(5L), out _));
+            Assert.True(t.Root.Check(t.Num.Of(2L)));
+            Assert.Equal(1L, t.Root.Get(weight.Of(6L)));
+        }
+
+        [Fact]
+        public void TheTermsOfABatchWhoseLastFlushFailsStand()
+        {
+            // As egglog's command whose merge panics: what the batch staged stands, the terms it made included.
+            var t = new NodeTheory();
+            var weight = t.Graph.DefineFunction<long, long>("weight");
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            t.Root.Assume(total.Of("k").Is(0L));
+            var made = default(Node);
+
+            Assert.Throws<RuleEvaluationException>(() => t.Root.Write(w =>
+            {
+                made = w.Make(t.Wrap.Of(t.A.Of()));
+                w.Assume(total.Of("k").Is(5L));
+            }));
+
+            Assert.False(t.Root.IsFaulted);
+            Assert.True(t.Root.AreEqual(made, t.Wrap.Of(t.A.Of())));
+            Assert.Equal(0L, t.Root.Get(total.Of("k")));
         }
 
         [Fact]

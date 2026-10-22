@@ -94,8 +94,7 @@ namespace Eggnog.Tests.Values
             Assert.Null(e.Bindings);
             Assert.Same(boom, e.InnerException);
             Assert.Contains("picky", e.Message);
-            Assert.True(graph.Root.IsFaulted);
-            Assert.Same(e, graph.Root.Failure);
+            Assert.False(graph.Root.IsFaulted);
         }
 
         [Fact]
@@ -116,7 +115,7 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// A lattice that throws during a rule's merge in a child is recorded in the child's runtime, so the child's
-        /// exception carries it, as at the root; the child is faulted, and the root is not.
+        /// exception carries it, as at the root; neither the child nor the root is faulted.
         /// </summary>
         /// <param name="frozenRoot">Whether the root is frozen before the child is made.</param>
         [Theory]
@@ -140,14 +139,14 @@ namespace Eggnog.Tests.Values
             Assert.Null(e.RuleName);
             Assert.Same(boom, e.InnerException);
             Assert.Contains("picky", e.Message);
-            Assert.True(child.IsFaulted);
+            Assert.False(child.IsFaulted);
             Assert.False(graph.Root.IsFaulted);
         }
 
         /// <summary>
         /// A lattice that throws during a rule's merge in a child's run gives a <see cref="RuleEvaluationException"/>
-        /// whose inner exception is the delegate's: the failure is recorded on the child's runtime, and the child is
-        /// faulted.
+        /// whose inner exception is the delegate's: the failure is recorded on the child's runtime, and the child stays
+        /// usable.
         /// </summary>
         [Fact]
         public void ALatticeThatThrowsInAChildsRunKeepsItsCause()
@@ -165,7 +164,7 @@ namespace Eggnog.Tests.Values
 
             Assert.Same(boom, e.InnerException);
             Assert.Contains("picky", e.Message);
-            Assert.True(child.IsFaulted);
+            Assert.False(child.IsFaulted);
             Assert.False(graph.Root.IsFaulted);
         }
 
@@ -399,7 +398,7 @@ namespace Eggnog.Tests.Values
 
             Assert.Same(boom, e.InnerException);
             Assert.Contains("picky-bound", e.Message);
-            Assert.True(child.IsFaulted);
+            Assert.False(child.IsFaulted);
             Assert.False(graph.Root.IsFaulted);
             Assert.Equal(new NumericBound(2m, false), graph.Root.Get(f.Of("k")));
         }

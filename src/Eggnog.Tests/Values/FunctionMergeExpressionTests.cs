@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Values
 
             var lookup = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
             Assert.Contains("Lookup on weight failed in the merge function for total", lookup.ToString(), StringComparison.Ordinal);
-            Assert.True(t.Root.IsFaulted);
+            Assert.False(t.Root.IsFaulted);
 
             var graph = new EGraph();
             var sum = graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
@@ -96,7 +96,8 @@ namespace Eggnog.Tests.Values
             Assert.Equal(long.MaxValue, graph.Root.Get(sum.Of("k")));
             var rule = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Contains("merge (+ old new) of function 'sum'", rule.Message, StringComparison.Ordinal);
-            Assert.True(graph.Root.IsFaulted);
+            Assert.False(graph.Root.IsFaulted);
+            Assert.Equal(long.MaxValue, graph.Root.Get(sum.Of("k")));
             Assert.NotNull(host.InnerException);
         }
 

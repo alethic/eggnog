@@ -23,7 +23,8 @@ namespace Eggnog
         /// subterm reads has no value, and the terms made before it stand, as egglog's failed command keeps
         /// them.</exception>
         /// <exception cref="RuleEvaluationException">A primitive of a subterm threw or has no result, and the terms made
-        /// before it stand; or a merge failed, and the scope is faulted.</exception>
+        /// before it stand; or a merge failed, and what the call staged stands, as egglog's failed command keeps
+        /// it.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, before the call
         /// or through it, or lies under one.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
@@ -81,9 +82,10 @@ namespace Eggnog
         /// writes through a scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A primitive had no result or threw, or a lattice's merge failed:
-        /// while planning a fact (the fact keeps what it staged before, the facts before it stand, and the scope is not
-        /// faulted) or while merging, the catch-up the call makes first included (the scope is faulted).</exception>
+        /// <exception cref="RuleEvaluationException">A primitive had no result or threw, or a merge failed, as egglog's
+        /// failed command: while planning a fact, which keeps what it staged before, the facts before it standing; or
+        /// while merging, and what the facts staged stands. The scope is not faulted. Or a lattice merge threw in the
+        /// catch-up the call makes first, and the scope is faulted.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -135,9 +137,9 @@ namespace Eggnog
         /// them; nothing is written.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A merge failed (the scope is faulted); or a lattice merge threw in the
-        /// catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is the
-        /// ancestor.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed, and the union stands, as egglog's failed command
+        /// keeps it; or a lattice merge threw in the catch-up the call makes first, here or in a writable ancestor: the
+        /// scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -195,7 +197,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in
         /// use on another thread; or the call comes from a run observer or a user delegate the engine
         /// invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed, and what the call staged stands, as egglog's failed
+        /// command keeps it.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and
         /// the scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the
         /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
@@ -249,7 +252,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in
         /// use on another thread; or the call comes from a run observer or a user delegate the engine
         /// invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed, and what the call staged stands, as egglog's failed
+        /// command keeps it.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and
         /// the scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the
         /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
@@ -309,7 +313,7 @@ namespace Eggnog
         /// before it stand, as egglog's failed command keeps them; or the call comes from a run observer or a user delegate
         /// the engine invoked, and nothing is written.</exception>
         /// <exception cref="RuleEvaluationException">A primitive in the keys threw or has no result, and the terms the keys
-        /// made before it stand; or a merge failed, and the scope is faulted.</exception>
+        /// made before it stand; or a merge failed, and what the call staged stands.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), as
         /// for <see cref="Subsume{TSort}"/>.</exception>
         public void Delete<T>(Term<T> term)
@@ -401,7 +405,8 @@ namespace Eggnog
         /// A call from another thread, or from a user delegate the engine invoked, is refused and rejects the batch:
         /// <see cref="Write"/> then writes nothing more, even when <paramref name="write"/> caught the exception, and the
         /// class values the batch's <c>Make</c> calls returned since its last flush are invalid; so does a flush of the
-        /// batch that fails. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
+        /// batch that fails for want of ids or epochs, or for a conflict. A flush whose merge failed stands, as egglog's
+        /// failed command, and the batch goes on. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
         /// whose keys are classes, computes over classes, writes a function that holds classes, or one with a merge that
         /// is not a lattice whose keys are classes or whose merge compares classes or calls tables, or deletes a row keyed
         /// by classes; when it calls a primitive over the tables, or reads a key or writes a table that an earlier call's
@@ -423,7 +428,9 @@ namespace Eggnog
         /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
         /// different classes when the rebuild compares them; the fact whose merge made them meet is not
         /// written.</exception>
-        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// <exception cref="RuleEvaluationException">A merge failed as a flush merged the batch's calls: what the flush
+        /// staged stands, as egglog's failed command keeps it, and the scope is not faulted. A flush before a later call
+        /// fails that call, which writes nothing, and the batch goes on, as egglog's later commands do.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, or lies
         /// under one.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), in a
@@ -511,7 +518,8 @@ namespace Eggnog
 
         /// <summary>
         /// Commits a planned batch, or the part of it planned so far: stages and flushes it unless it is empty, and commits
-        /// its origin. A failure a merge recorded faults the scope.
+        /// its origin. A failure a merge recorded fails the call as egglog's failed command: the engine merged and rebuilt
+        /// the flush before it threw, and the scope stays usable.
         /// </summary>
         /// <exception cref="RuleEvaluationException">A merge failed.</exception>
         internal void Commit(HostBatch batch)
@@ -525,7 +533,7 @@ namespace Eggnog
                 }
                 catch (Relations.PanicException panic)
                 {
-                    throw FaultWith(panic);
+                    throw FailWith(panic);
                 }
             }
 

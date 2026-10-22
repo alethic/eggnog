@@ -421,11 +421,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A panic is thrown after the run merged and rebuilt, and the rule's watermark is not committed (egglog
-        /// advances it), so the next run finds the match again.
+        /// A panic is thrown after the run merged and rebuilt, with the rule's watermark committed, as egglog sets
+        /// <c>last_run_at</c> before the run (egglog-bridge/src/lib.rs:1409-1416), so the next run matches only rows
+        /// written since.
         /// </summary>
         [Fact]
-        public void APanicIsThrownAfterTheRunWithoutCommittingTheWatermark()
+        public void APanicIsThrownAfterTheRunWithItsWatermarkCommitted()
         {
             var fx = new RunFixture();
             var egraph = fx.EGraph;
@@ -446,15 +447,15 @@ namespace Eggnog.Relations.Tests
             var error = Assert.Throws<PanicException>(() => egraph.RunRules(rule));
             Assert.Equal("boom", error.PanicMessage);
             Assert.Equal(fx.Canon(n1), fx.Canon(n2));
-            Assert.Equal(0u, egraph.GetRuleInfo(rule).LastRunAt);
+            Assert.Equal(t, egraph.GetRuleInfo(rule).LastRunAt);
             Assert.True(egraph.NextTimestamp > t);
 
-            // No progress was committed, so every later run matches same(n1, n1) again and panics again; the union it
-            // repeats changes nothing.
+            // The rebuild rewrote same(n1, n2) after the watermark, so the next run matches the rewritten row and panics
+            // again; its union changes nothing, so the run after it matches nothing.
             var again = Assert.Throws<PanicException>(() => egraph.RunRules(rule));
             Assert.Equal("boom", again.PanicMessage);
-            Assert.Equal(0u, egraph.GetRuleInfo(rule).LastRunAt);
-            Assert.Throws<PanicException>(() => egraph.RunRules(rule));
+            Assert.True(egraph.GetRuleInfo(rule).LastRunAt > t);
+            Assert.Equal(0, egraph.RunRules(rule).RuleSetReport.NumMatches("union then panic"));
         }
 
         [Fact]
@@ -765,11 +766,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A merge that throws after a failure was recorded: a panic action records a failure in the search, then a
-        /// merge primitive throws. Progress is committed unless a failure was recorded, so neither rule's watermark
-        /// moves.
+        /// merge primitive throws. What merged cannot be undone, so both rules' progress is committed, as egglog sets it
+        /// before the run.
         /// </summary>
         [Fact]
-        public void AMergeExceptionAfterARecordedFailureCommitsNoProgress()
+        public void AMergeExceptionAfterARecordedFailureCommitsTheProgress()
         {
             var g = new ContextGraph();
             var failing = false;
@@ -797,9 +798,9 @@ namespace Eggnog.Relations.Tests
 
             failing = true;
             Assert.Throws<InvalidOperationException>(() => g.Root.RunRules(write, panics));
-            Assert.Equal(0u, g.EGraph.GetRuleInfo(write).LastRunAt);
-            Assert.Equal(0u, g.EGraph.GetRuleInfo(panics).LastRunAt);
-            Assert.Equal(0u, g.Root.CommittedLastRunAt(write, g.EGraph.GetRuleInfo(write).Generation));
+            Assert.NotEqual(0u, g.EGraph.GetRuleInfo(write).LastRunAt);
+            Assert.Equal(g.EGraph.GetRuleInfo(write).LastRunAt, g.EGraph.GetRuleInfo(panics).LastRunAt);
+            Assert.Equal(g.EGraph.GetRuleInfo(write).LastRunAt, g.Root.CommittedLastRunAt(write, g.EGraph.GetRuleInfo(write).Generation));
         }
 
         /// <summary>
