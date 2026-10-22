@@ -157,9 +157,13 @@ namespace Eggnog
                 {
                     var primitive = shape.Primitive!;
 
-                    // Splits are an addition, whose assumptions egglog has no context for: their computations are pure.
+                    // Splits are an addition, whose assumptions egglog has no context for: their computations are pure, and
+                    // apply no function value, whose function may read or write the tables.
                     if (primitive.Access != PrimitiveAccess.Pure)
                         throw Error($"{Primitive.Refusal(primitive, "a split's assumptions", PrimitiveAccess.Pure)}: a split's assumptions compute over values only");
+
+                    if (primitive.DispatchesOnContext)
+                        throw Error($"primitive '{primitive.Name}' applies a function value, whose function may read or write the tables: a split's assumptions compute over values only");
 
                     var types = new ColumnType[primitive.ParameterTypes.Count];
                     for (var i = 0; i < types.Length; i++)

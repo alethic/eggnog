@@ -44,6 +44,55 @@ namespace Eggnog
         public override uint EncodeResult<T>(ColumnType<T> type, T value) => batch.EncodeForPrimitive(type, value!);
 
         /// <inheritdoc />
+        public override bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
+        {
+            Check();
+            try
+            {
+                return batch.TryReadCellsForPrimitive(table, keys, out value);
+            }
+            catch (Exception refused) when (refused is ArgumentException or InvalidOperationException)
+            {
+                throw Refuse(refused);
+            }
+        }
+
+        /// <inheritdoc />
+        public override bool TryLookupObject(FunctionHandle table, ReadOnlySpan<object> keys, out object? value)
+        {
+            Check();
+            try
+            {
+                return batch.TryLookupObjectForPrimitive(table, keys, out value);
+            }
+            catch (Exception refused) when (refused is ArgumentException or InvalidOperationException)
+            {
+                throw Refuse(refused);
+            }
+        }
+
+        /// <inheritdoc />
+        public override uint MakeCell(ConstructorHandle constructor, ReadOnlySpan<uint> keys)
+        {
+            Check();
+            try
+            {
+                return batch.MakeCellsForPrimitive(constructor, keys);
+            }
+            catch (Exception refused) when (refused is ArgumentException or InvalidOperationException)
+            {
+                throw Refuse(refused);
+            }
+        }
+
+        /// <inheritdoc />
+        public override void UnionCells(uint a, uint b)
+        {
+            Check();
+            batch.HoldUnion(a, b);
+        }
+
+        /// <inheritdoc />
         protected override bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
         {
             Check();

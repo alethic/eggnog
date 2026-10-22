@@ -107,7 +107,8 @@ A column holds either a class or a value.
   `BigRational` (egglog's `BigRat`, in lowest terms, rendered as egglog renders it,
   `(bigrat (from-string "3") (from-string "4"))`), and `Set<long>`, `Set<int>` and `Set<string>`. Others are registered through
   `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
-  `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>` and `RegisterMultiSet<T>`.
+  `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>`, `RegisterMultiSet<T>` and
+  `RegisterFn<T1, …, TResult>`.
 - **`Pair<T1, T2>`** is egglog's `Pair` container (`ValueStore.RegisterPair<T1, T2>`, named
   `Pair<i64, String>` and so on, with `Primitives.PairOf`, `PairFirst` and `PairSecond`). Its cell is the id of an
   engine container, minted from the graph's id counter as egglog mints its containers' ids; a pair of values is never
@@ -117,8 +118,8 @@ A column holds either a class or a value.
   `Vec<i64>` and so on, with `Primitives.VecEmpty`, `VecOf`, `VecAppend`, `VecPush`, `VecPop`, `VecLength`,
   `VecContains`, `VecNotContains`, `VecGet`, `VecSet`, `VecRemove` and, for `Vec<long>`, `VecRange`). It extracts as
   `(vec-of a b)` or `(vec-empty)`.
-- **Containers of classes**, such as `Set<Node>`, `Vec<Node>`, `Pair<Node, long>`, `Map<Node, long>` or
-  `MultiSet<Vec<Node>>`, are
+- **Containers of classes**, such as `Set<Node>`, `Vec<Node>`, `Pair<Node, long>`, `Map<Node, long>`,
+  `MultiSet<Vec<Node>>` or a function value partially applied to a class, are
   egglog's eq-sort containers. The cell is a container id that the union-find rebuilds as it rebuilds a class's:
   - Two containers become one when their classes merge, as egglog's rebuild makes them. A set keeps one element of
     elements that become one, a map whose keys become one keeps the later key's value in key-cell order, and a
@@ -165,9 +166,35 @@ A column holds either a class or a value.
   `Set<string>` itself. It keeps its elements in element order, and its container keeps them in cell order, the order
   of its term, `(set-of a b)`, and of `Get`, which reads that order as egglog's `set-get` does: a read over elements no
   write interned gives no result where the order decides, as `MultiSetPick`'s.
+- **`UnstableFn<T1, …, TResult>`**, of up to four inputs, is egglog's `UnstableFn` sort (`ValueStore.RegisterFn`, named
+  `UnstableFn<(i64, i64), i64>` and so on): a function value, a constructor, a function or a primitive with its leading
+  arguments partially applied.
+  - `Primitives.UnstableFn<…>(target)` is egglog's `unstable-fn`: a pure primitive of the partial arguments, rendered
+    `(unstable-fn "name" args)`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`,
+    `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive
+    is a target at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
+  - A write primitive such as `vec-union` runs through a function value only at the root, as when it is called.
+  - The target's parameters must end with the sort's inputs and its result be the sort's output, as egglog's type
+    checker requires. A relation is no target: egglog's relation outputs a sort of its own that no function sort names.
+  - `Primitives.UnstableApp<…>()` is egglog's `unstable-app`. It applies the value to the inputs where the call site's
+    context allows the target, as egglog's `FunctionContainer::apply` dispatches (decisions row 12): a constructor
+    makes its term where the context writes, a function reads its row where the context reads, and a primitive runs
+    where its access is allowed. Anywhere else the application fails, egglog's panic: in a rule, it needs `Naive()`
+    to read a function.
+  - Its cell is a container id. Its arguments may hold classes whatever the sort's inputs, so a value that holds
+    classes is a container of classes, as above, rebuilt when they merge and made only at a writable root; a type
+    registered while the root is frozen makes values of values only. A nested function value is rebuilt when it holds
+    classes, where egglog's `rebuild_contents` decides by its sort's inputs. For the same reason the type counts as one
+    of classes, so a set, a vector, a pair, a map or a multiset of function values is a container of classes, made only
+    at a writable root, and rebuilds the values it holds, which egglog's leaves stale when the sort's inputs hold no
+    classes (roadmap, "Containers of classes in children").
+  - It serializes as a node of its target's name, its arguments the children, and extracts as
+    `(unstable-fn "name" args)`, costing what its arguments cost.
+  - egglog's higher-order container primitives over function values, such as `unstable-vec-map`, are not yet followed
+    (roadmap, "Function values").
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
-inline; a container (a set, a pair, a vector, a map, a multiset) is a container id; every other value is interned and stored
+inline; a container (a set, a pair, a vector, a map, a multiset, a function value) is a container id; every other value is interned and stored
 as its intern index. Interning pools are
 permanent for the life of the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived
 host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a
@@ -369,7 +396,8 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   that deletes where the scope may not, and in a run that splits, whose cases stay live until it ends; one defined on
   another thread during the run takes part only in the iterations where it may run. `graph.Contradiction` is not
   deleted.
-- **Heads never read tables**, but in a full rule callback (`ThenCallFull`), whose rule is naive. A function value used
+- **Heads never read tables**, but in a full rule callback (`ThenCallFull`) or a primitive of full access, a function
+  value's application among them, whose rule is naive. A function's output used
   in a head must be matched in the body. This keeps every match a function of the body alone, which is what lets a
   child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
@@ -686,8 +714,8 @@ with egglog" lists:
 
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
-2. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
-   no defaults: a lookup without a row fails.
+2. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) or a full primitive's, a function
+   value's application among them, in its naive rule, and functions have no defaults: a lookup without a row fails.
 3. No proofs or explanations.
 4. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 

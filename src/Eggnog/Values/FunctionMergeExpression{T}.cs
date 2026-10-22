@@ -49,7 +49,7 @@ namespace Eggnog
         static bool CallsTablePrimitive(Term term)
         {
             var shape = term.Shape;
-            if (shape.Kind == TermShapeKind.Computation && shape.Primitive!.Access != PrimitiveAccess.Pure && shape.Primitive.IsWrite == false)
+            if (shape.Kind == TermShapeKind.Computation && shape.Primitive!.UsesTables)
                 return true;
 
             foreach (var argument in shape.Arguments)

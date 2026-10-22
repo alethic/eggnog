@@ -531,6 +531,21 @@ static class Eggnog.Primitives
     static Primitive<Vec<T>, Vec<T>> VecPop<T>()
     static Primitive<Vec<TSort>, Vec<TSort>, Vec<TSort>> VecUnion<TSort : struct, ISort<TSort>>()
     static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
+    static PrimitiveN<TResult> UnstableApp<T1, T2, T3, T4, TResult>()
+    static PrimitiveN<TResult> UnstableApp<T1, T2, T3, TResult>()
+    static PrimitiveN<TResult> UnstableApp<T1, T2, TResult>()
+    static PrimitiveN<TResult> UnstableApp<T1, TResult>()
+    static PrimitiveN<TResult> UnstableApp<TResult>()
+    static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult>(Primitive target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult>(Primitive target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult>(Primitive target)
+    static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(Primitive target)
+    static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(Primitive target)
+    static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(TableHandle target)
     static PrimitiveN<Vec<T>> VecEmpty<T>()
     static VariadicPrimitive<T, MultiSet<T>> MultiSetOf<T>()
     static VariadicPrimitive<T, Set<T>> SetOf<T>()
@@ -898,6 +913,72 @@ abstract class Eggnog.Term<T> : Term
     Fact IsNot(Term<T> other)
     Type ClrType { get }
     static Term<T> op_Implicit(T value)
+static class Eggnog.UnstableFn
+    static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, TResult> Of<T1, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, TResult> Of<T1, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<TResult> Of<TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<TResult> Of<TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+struct Eggnog.UnstableFn<TResult> : IComparable<UnstableFn<TResult>>, IEquatable<UnstableFn<TResult>>
+    Boolean Equals(UnstableFn<TResult> other)
+    IReadOnlyList<Object> Arguments { get }
+    Int32 CompareTo(UnstableFn<TResult> other)
+    Object Target { get }
+    String Name { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(UnstableFn<TResult> left, UnstableFn<TResult> right)
+    static Boolean op_Inequality(UnstableFn<TResult> left, UnstableFn<TResult> right)
+struct Eggnog.UnstableFn<T1, TResult> : IComparable<UnstableFn<T1, TResult>>, IEquatable<UnstableFn<T1, TResult>>
+    Boolean Equals(UnstableFn<T1, TResult> other)
+    IReadOnlyList<Object> Arguments { get }
+    Int32 CompareTo(UnstableFn<T1, TResult> other)
+    Object Target { get }
+    String Name { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(UnstableFn<T1, TResult> left, UnstableFn<T1, TResult> right)
+    static Boolean op_Inequality(UnstableFn<T1, TResult> left, UnstableFn<T1, TResult> right)
+struct Eggnog.UnstableFn<T1, T2, TResult> : IComparable<UnstableFn<T1, T2, TResult>>, IEquatable<UnstableFn<T1, T2, TResult>>
+    Boolean Equals(UnstableFn<T1, T2, TResult> other)
+    IReadOnlyList<Object> Arguments { get }
+    Int32 CompareTo(UnstableFn<T1, T2, TResult> other)
+    Object Target { get }
+    String Name { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(UnstableFn<T1, T2, TResult> left, UnstableFn<T1, T2, TResult> right)
+    static Boolean op_Inequality(UnstableFn<T1, T2, TResult> left, UnstableFn<T1, T2, TResult> right)
+struct Eggnog.UnstableFn<T1, T2, T3, TResult> : IComparable<UnstableFn<T1, T2, T3, TResult>>, IEquatable<UnstableFn<T1, T2, T3, TResult>>
+    Boolean Equals(UnstableFn<T1, T2, T3, TResult> other)
+    IReadOnlyList<Object> Arguments { get }
+    Int32 CompareTo(UnstableFn<T1, T2, T3, TResult> other)
+    Object Target { get }
+    String Name { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(UnstableFn<T1, T2, T3, TResult> left, UnstableFn<T1, T2, T3, TResult> right)
+    static Boolean op_Inequality(UnstableFn<T1, T2, T3, TResult> left, UnstableFn<T1, T2, T3, TResult> right)
+struct Eggnog.UnstableFn<T1, T2, T3, T4, TResult> : IComparable<UnstableFn<T1, T2, T3, T4, TResult>>, IEquatable<UnstableFn<T1, T2, T3, T4, TResult>>
+    Boolean Equals(UnstableFn<T1, T2, T3, T4, TResult> other)
+    IReadOnlyList<Object> Arguments { get }
+    Int32 CompareTo(UnstableFn<T1, T2, T3, T4, TResult> other)
+    Object Target { get }
+    String Name { get }
+    override Boolean Equals(Object obj)
+    override Int32 GetHashCode()
+    override String ToString()
+    static Boolean op_Equality(UnstableFn<T1, T2, T3, T4, TResult> left, UnstableFn<T1, T2, T3, T4, TResult> right)
+    static Boolean op_Inequality(UnstableFn<T1, T2, T3, T4, TResult> left, UnstableFn<T1, T2, T3, T4, TResult> right)
 abstract class Eggnog.ValueLattice
     String Name { get }
     Type ValueType { get }
@@ -920,12 +1001,18 @@ sealed class Eggnog.ValueStore
     ColumnType<T> Register<T : IEquatable<T>>(String name, IComparer<T> order = null, Func<T, String> format = null)
     ColumnType<T> TypeOf<T>()
     ColumnType<TEnum> RegisterEnum<TEnum : struct, Enum>()
+    ColumnType<UnstableFn<T1, T2, T3, T4, TResult>> RegisterFn<T1, T2, T3, T4, TResult>()
+    ColumnType<UnstableFn<T1, T2, T3, TResult>> RegisterFn<T1, T2, T3, TResult>()
+    ColumnType<UnstableFn<T1, T2, TResult>> RegisterFn<T1, T2, TResult>()
+    ColumnType<UnstableFn<T1, TResult>> RegisterFn<T1, TResult>()
+    ColumnType<UnstableFn<TResult>> RegisterFn<TResult>()
     ColumnType<Vec<T>> RegisterVec<T>()
     Int64 InternedCount { get }
 sealed class Eggnog.Var<T> : Term<T>
     String Name { get }
 sealed class Eggnog.VariadicPrimitive<T, TResult>
     Func<IReadOnlyList<T>, TResult> Function { get }
+    Primitive WithArity(Int32 arity)
     String Name { get }
     Term<TResult> Of(params Term<T>[] arguments)
     override String ToString()

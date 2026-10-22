@@ -973,7 +973,7 @@ namespace Eggnog
 
                     // A primitive over the tables runs once per call, as egglog gives each call of an action its own
                     // binding: two calls of one that writes write twice.
-                    var pure = primitive.Access == PrimitiveAccess.Pure;
+                    var pure = primitive.Access == PrimitiveAccess.Pure && primitive.DispatchesOnContext == false;
                     var key = "c" + PrimitiveId(primitive).ToString(CultureInfo.InvariantCulture) + Key(inputs);
                     if (pure && headMemo.TryGetValue(key, out var shared))
                         return Operand.Register(shared, registers[shared].Type);
@@ -1154,7 +1154,11 @@ namespace Eggnog
             var type = shape.ConstantType ?? ResolveType(shape.ClrType);
             CheckStore(type);
 
-            // egglog has no literal for a container of classes; a rule builds one from terms with its primitives.
+            // egglog has no literal for a container of classes or a function value; a rule builds one from terms with its
+            // primitives.
+            if (type is IFnColumnType)
+                throw Error($"a constant {type.Name} is a function value, which egglog has no literal for; make it in the rule with Primitives.UnstableFn");
+
             if (type.HoldsClasses)
                 throw Error($"a constant {type.Name} holds classes; build it in the rule with its primitives over terms, such as Primitives.VecOf, as egglog has no literal for one");
 
@@ -1253,7 +1257,9 @@ namespace Eggnog
             if (Primitive.Allows(context, primitive.Access) == false)
                 throw Error(Primitive.Refusal(primitive, site, context));
 
-            if (primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full)
+            // A function value's application reads the tables where the context does.
+            if (primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full
+                || (primitive.DispatchesOnContext && context is PrimitiveAccess.Read or PrimitiveAccess.Full))
                 tableReader ??= primitive;
 
             var parameters = new ColumnType[primitive.ParameterTypes.Count];

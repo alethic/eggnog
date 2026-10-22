@@ -47,7 +47,7 @@ namespace Eggnog
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
             if (primitive.IsWrite)
                 unionAction = new Relations.UnionAction(graph.Engine);
-            else if (primitive.Access != PrimitiveAccess.Pure)
+            else if (primitive.UsesTables)
                 actions = new();
         }
 

@@ -238,7 +238,7 @@ namespace Eggnog
             var canonicalizer = result.HoldsClasses ? ClassCanonicalizer.Enter(canonical ??= Canonical) : null;
             try
             {
-                if (primitive.Access != PrimitiveAccess.Pure && primitive.IsWrite == false)
+                if (primitive.UsesTables)
                 {
                     // A primitive over the tables, in egglog's full context of a top-level action, over the batch.
                     var tables = new BatchPrimitiveTables(this, scope, primitive);

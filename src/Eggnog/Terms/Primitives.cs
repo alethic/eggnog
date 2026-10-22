@@ -21,7 +21,7 @@ namespace Eggnog
     /// comparisons return a <c>bool</c>, which is egglog's <c>bool-&lt;</c> family as a value and its <c>&lt;</c> family
     /// as a filter (<see cref="RuleBuilder.Where(Term{bool})"/>), and render as each.
     /// </remarks>
-    public static class Primitives
+    public static partial class Primitives
     {
 
         /// <summary>

@@ -21,6 +21,8 @@ namespace Eggnog
 
         readonly PartialFuncN<TResult>? partial;
         readonly TableFuncN<ITables, TResult>? tables;
+        readonly bool applies;
+        readonly string? leadingLiteral;
 
         /// <summary>
         /// Initializes a new instance of a named primitive.
@@ -54,6 +56,41 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Initializes a new instance of a total primitive whose application renders a literal before its arguments:
+        /// egglog's <c>unstable-fn</c>, which names its function.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="leadingLiteral">The literal rendered before the arguments.</param>
+        /// <param name="parameters">The parameter types.</param>
+        /// <param name="function">The function.</param>
+        internal PrimitiveN(string name, string leadingLiteral, Type[] parameters, FuncN<TResult> function)
+            : base(name, parameters, typeof(TResult), false, false)
+        {
+            Function = function;
+            this.leadingLiteral = leadingLiteral;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of egglog's <c>unstable-app</c> over a function sort: pure, its function value
+        /// applied where the call site's context allows it (<see cref="FnApply"/>), partial as a lookup that misses is.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: the function sort's value type, then its inputs.</param>
+        internal PrimitiveN(string name, Type[] parameters)
+            : base(name, parameters, typeof(TResult), false, true)
+        {
+            Function = _ => throw new InvalidOperationException(
+                $"Primitive '{name}' applies a function value, which needs the graph's tables; it runs only in a graph.");
+            applies = true;
+        }
+
+        /// <inheritdoc />
+        internal override bool DispatchesOnContext => applies;
+
+        /// <inheritdoc />
+        internal override string? LeadingLiteral => leadingLiteral;
+
+        /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
         /// result, and for one over the tables (<see cref="Primitive.Access"/> other than
         /// <see cref="PrimitiveAccess.Pure"/>) it always throws <see cref="InvalidOperationException"/>: it needs the
@@ -83,7 +120,7 @@ namespace Eggnog
         /// graph.</exception>
         public bool TryInvoke(ReadOnlySpan<object> arguments, [MaybeNullWhen(false)] out TResult result)
         {
-            if (tables is not null)
+            if (tables is not null || applies)
             {
                 result = Function(arguments);
                 return true;
@@ -149,6 +186,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeTables(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
+            if (applies)
+                return FnApply.TryInvoke(arguments, parameters, result, tables, out cell);
+
             if (this.tables is null)
                 return base.TryInvokeTables(arguments, parameters, result, tables, out cell);
 
@@ -174,6 +214,9 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeValueTables(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value)
         {
+            if (applies)
+                return FnApply.TryInvokeValue(arguments, parameters, tables, out value);
+
             if (this.tables is null)
                 return base.TryInvokeValueTables(arguments, parameters, tables, out value);
 

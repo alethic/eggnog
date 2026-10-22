@@ -37,6 +37,11 @@ namespace Eggnog
         readonly Dictionary<string, ColumnType> byName = new(StringComparer.Ordinal);
 
         /// <summary>
+        /// Gets the graph's function values' targets.
+        /// </summary>
+        internal FnTargets FnTargets { get; }
+
+        /// <summary>
         /// Initializes the store of a graph with the built-in types, registering their codecs with the graph's base value
         /// registry.
         /// </summary>
@@ -45,6 +50,7 @@ namespace Eggnog
         {
             this.graph = graph;
             values = graph.BaseValues;
+            FnTargets = new FnTargets(graph);
             Add(new BaseColumnType<Relations.Int64Codec, long>("i64", values, static v => v.ToString(CultureInfo.InvariantCulture), Comparer<long>.Default));
             Add(new WidenedColumnType<int>("i32", values, static v => v, static v => checked((int)v), static v => v.ToString(CultureInfo.InvariantCulture)));
             Add(new BaseColumnType<Relations.BooleanCodec, bool>("bool", values, static v => v ? "true" : "false", Comparer<bool>.Default));
@@ -160,6 +166,9 @@ namespace Eggnog
 
             if (IsMultiSet(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a multiset: register it with ValueStore.RegisterMultiSet.");
+
+            if (IsFn(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a function sort: register it with ValueStore.RegisterFn.");
 
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
@@ -405,6 +414,182 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Registers the column type of <see cref="UnstableFn{TResult}"/>, egglog's <c>(UnstableFn () TResult)</c>
+        /// function sort (src/sort/fn.rs), named <c>UnstableFn&lt;(inputs), output&gt;</c>, or gets it if it is
+        /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
+        /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
+        /// function sort registered is an engine definition: while the root is writable, that call enters the root's
+        /// domain; registered while the root is frozen, function values never hold classes.
+        /// </summary>
+        /// <typeparam name="TResult">The type of the output; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An input or the output type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first function sort is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<UnstableFn<TResult>> RegisterFn<TResult>()
+            where TResult : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<UnstableFn<TResult>>(out var existing))
+                return existing;
+
+            var output = TypeOf<TResult>();
+            return RegisterFnType<UnstableFn<TResult>>([], output, static content => new UnstableFn<TResult>(content));
+        }
+
+        /// <summary>
+        /// Registers the column type of <see cref="UnstableFn{T1, TResult}"/>, egglog's <c>(UnstableFn (T1) TResult)</c>
+        /// function sort (src/sort/fn.rs), named <c>UnstableFn&lt;(inputs), output&gt;</c>, or gets it if it is
+        /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
+        /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
+        /// function sort registered is an engine definition: while the root is writable, that call enters the root's
+        /// domain; registered while the root is frozen, function values never hold classes.
+        /// </summary>
+        /// <typeparam name="T1">The type of input 1; registered.</typeparam>
+        /// <typeparam name="TResult">The type of the output; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An input or the output type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first function sort is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<UnstableFn<T1, TResult>> RegisterFn<T1, TResult>()
+            where T1 : notnull
+            where TResult : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<UnstableFn<T1, TResult>>(out var existing))
+                return existing;
+
+            var input1 = TypeOf<T1>();
+            var output = TypeOf<TResult>();
+            return RegisterFnType<UnstableFn<T1, TResult>>([input1], output, static content => new UnstableFn<T1, TResult>(content));
+        }
+
+        /// <summary>
+        /// Registers the column type of <see cref="UnstableFn{T1, T2, TResult}"/>, egglog's <c>(UnstableFn (T1 T2) TResult)</c>
+        /// function sort (src/sort/fn.rs), named <c>UnstableFn&lt;(inputs), output&gt;</c>, or gets it if it is
+        /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
+        /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
+        /// function sort registered is an engine definition: while the root is writable, that call enters the root's
+        /// domain; registered while the root is frozen, function values never hold classes.
+        /// </summary>
+        /// <typeparam name="T1">The type of input 1; registered.</typeparam>
+        /// <typeparam name="T2">The type of input 2; registered.</typeparam>
+        /// <typeparam name="TResult">The type of the output; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An input or the output type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first function sort is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<UnstableFn<T1, T2, TResult>> RegisterFn<T1, T2, TResult>()
+            where T1 : notnull
+            where T2 : notnull
+            where TResult : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<UnstableFn<T1, T2, TResult>>(out var existing))
+                return existing;
+
+            var input1 = TypeOf<T1>();
+            var input2 = TypeOf<T2>();
+            var output = TypeOf<TResult>();
+            return RegisterFnType<UnstableFn<T1, T2, TResult>>([input1, input2], output, static content => new UnstableFn<T1, T2, TResult>(content));
+        }
+
+        /// <summary>
+        /// Registers the column type of <see cref="UnstableFn{T1, T2, T3, TResult}"/>, egglog's <c>(UnstableFn (T1 T2 T3) TResult)</c>
+        /// function sort (src/sort/fn.rs), named <c>UnstableFn&lt;(inputs), output&gt;</c>, or gets it if it is
+        /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
+        /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
+        /// function sort registered is an engine definition: while the root is writable, that call enters the root's
+        /// domain; registered while the root is frozen, function values never hold classes.
+        /// </summary>
+        /// <typeparam name="T1">The type of input 1; registered.</typeparam>
+        /// <typeparam name="T2">The type of input 2; registered.</typeparam>
+        /// <typeparam name="T3">The type of input 3; registered.</typeparam>
+        /// <typeparam name="TResult">The type of the output; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An input or the output type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first function sort is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<UnstableFn<T1, T2, T3, TResult>> RegisterFn<T1, T2, T3, TResult>()
+            where T1 : notnull
+            where T2 : notnull
+            where T3 : notnull
+            where TResult : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<UnstableFn<T1, T2, T3, TResult>>(out var existing))
+                return existing;
+
+            var input1 = TypeOf<T1>();
+            var input2 = TypeOf<T2>();
+            var input3 = TypeOf<T3>();
+            var output = TypeOf<TResult>();
+            return RegisterFnType<UnstableFn<T1, T2, T3, TResult>>([input1, input2, input3], output, static content => new UnstableFn<T1, T2, T3, TResult>(content));
+        }
+
+        /// <summary>
+        /// Registers the column type of <see cref="UnstableFn{T1, T2, T3, T4, TResult}"/>, egglog's <c>(UnstableFn (T1 T2 T3 T4) TResult)</c>
+        /// function sort (src/sort/fn.rs), named <c>UnstableFn&lt;(inputs), output&gt;</c>, or gets it if it is
+        /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
+        /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
+        /// function sort registered is an engine definition: while the root is writable, that call enters the root's
+        /// domain; registered while the root is frozen, function values never hold classes.
+        /// </summary>
+        /// <typeparam name="T1">The type of input 1; registered.</typeparam>
+        /// <typeparam name="T2">The type of input 2; registered.</typeparam>
+        /// <typeparam name="T3">The type of input 3; registered.</typeparam>
+        /// <typeparam name="T4">The type of input 4; registered.</typeparam>
+        /// <typeparam name="TResult">The type of the output; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An input or the output type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first function sort is registered while another thread is
+        /// using the writable root.</exception>
+        public ColumnType<UnstableFn<T1, T2, T3, T4, TResult>> RegisterFn<T1, T2, T3, T4, TResult>()
+            where T1 : notnull
+            where T2 : notnull
+            where T3 : notnull
+            where T4 : notnull
+            where TResult : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<UnstableFn<T1, T2, T3, T4, TResult>>(out var existing))
+                return existing;
+
+            var input1 = TypeOf<T1>();
+            var input2 = TypeOf<T2>();
+            var input3 = TypeOf<T3>();
+            var input4 = TypeOf<T4>();
+            var output = TypeOf<TResult>();
+            return RegisterFnType<UnstableFn<T1, T2, T3, T4, TResult>>([input1, input2, input3, input4], output, static content => new UnstableFn<T1, T2, T3, T4, TResult>(content));
+        }
+
+        /// <summary>
+        /// Registers a function sort's column type (<see cref="FnColumnType{TFn}"/>) of its inputs and output.
+        /// </summary>
+        ColumnType<TFn> RegisterFnType<TFn>(ColumnType[] inputs, ColumnType output, Func<FnValue, TFn> wrap)
+            where TFn : struct, IFnValue
+        {
+            // Outside the store's lock, as RegisterPair registers its environment: a value's partially applied arguments
+            // may be classes whatever the sort's inputs, so the environment holds ids while the root is writable.
+            var env = graph.Root.IsFrozen
+                ? graph.ValueContainers<Relations.FunctionContainer>()
+                : graph.ClassContainers<Relations.FunctionContainer>();
+            lock (sync)
+            {
+                if (TryGetType<TFn>(out var existing))
+                    return existing;
+
+                var name = $"UnstableFn<({string.Join(", ", Array.ConvertAll(inputs, input => input.Name))}), {output.Name}>";
+                CheckFree(typeof(TFn), name);
+                var type = new FnColumnType<TFn>(name, inputs, output, wrap, env, graph.Engine.Counters, FnTargets,
+                    values.GetTypeId<Relations.StringCodec, string>());
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
         /// Counts a container environment in <see cref="InternedCount"/>, once. Called under the lock.
         /// </summary>
         void AddContainers(Relations.ContainerEnvBase env)
@@ -520,6 +705,9 @@ namespace Eggnog
             if (IsMultiSet(clrType))
                 return "ValueStore.RegisterMultiSet";
 
+            if (IsFn(clrType))
+                return "ValueStore.RegisterFn";
+
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
 
@@ -577,6 +765,21 @@ namespace Eggnog
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a multiset type.</returns>
         internal static bool IsMultiSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(MultiSet<>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a function sort's value type, an <see cref="UnstableFn{T1, TResult}"/> of any arity.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a function sort's.</returns>
+        internal static bool IsFn(Type clrType)
+        {
+            if (clrType.IsGenericType == false)
+                return false;
+
+            var definition = clrType.GetGenericTypeDefinition();
+            return definition == typeof(UnstableFn<>) || definition == typeof(UnstableFn<,>) || definition == typeof(UnstableFn<,,>)
+                || definition == typeof(UnstableFn<,,,>) || definition == typeof(UnstableFn<,,,,>);
+        }
 
         /// <summary>
         /// Gets a readable name of a CLR type: <c>Foo</c>, <c>Set&lt;Foo&gt;</c>.

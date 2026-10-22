@@ -19,14 +19,15 @@ the C# API, pass; an item that touches the engine's root paths also passes the r
 gates").
 
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
-  heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 2). Such a rule
-  inherits no progress in a child.
-- **Function values.** egglog's `unstable-fn` and `unstable-app` (src/sort/fn.rs), a container of a function and
-  its partial arguments, and the higher-order container primitives over them, such as `unstable-multiset-map`. The
-  capability contexts their application dispatches on are followed (decisions row 12).
+  heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
+  value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
+- **Function values.** egglog's higher-order container primitives over function values: `unstable-vec-map`, and
+  `unstable-multiset-map`, `-filter`, `-filter-not`, `-reduce`, `-flat-map`, `-fill-index` and `-clear-index`. The
+  function values themselves, `unstable-fn` and `unstable-app` (src/sort/fn.rs), are followed (architecture 2.2).
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
-  layers.
+  layers. A container of function values counts as one of classes whatever the values hold, since a function value may
+  hold classes whatever its sort's inputs (architecture 2.2), where egglog's counts by those inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

@@ -250,6 +250,104 @@ namespace Eggnog
             if (TryReadKeys(table, keys, out var cells, out var existing) == false)
                 return false;
 
+            return TryReadCells(table, cells, existing, out cell);
+        }
+
+        /// <summary>
+        /// Reads the output cell of a function at keys' cells for a function value a host write applies
+        /// (<see cref="FnApply"/>), as <see cref="TryReadCell"/> reads it: the class canonical.
+        /// </summary>
+        /// <exception cref="ArgumentException">The function is not of the batch's graph.</exception>
+        /// <exception cref="InvalidOperationException">The table holds classes, and the batch merged classes before the
+        /// read.</exception>
+        internal bool TryReadCellsForPrimitive(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
+        {
+            CheckTable(table);
+            var (cells, existing) = CanonicalKeys(table, keys);
+            if (TryReadCells(table, cells, existing, out value) == false)
+                return false;
+
+            if (table.Columns[^1].InvolvesClasses)
+                value = Canonical(value);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reads the output of a function's row at keys for a function value a host write applies, as a value; never
+        /// interning a key.
+        /// </summary>
+        /// <exception cref="ArgumentException">The function is not of the batch's graph, or a value is not of its column's
+        /// type or a class not usable here.</exception>
+        internal bool TryLookupObjectForPrimitive(FunctionHandle table, ReadOnlySpan<object> keys, out object? value)
+        {
+            value = null;
+            CheckTable(table);
+            if (TryReadKeys(table, keys, out var cells, out var existing) == false || TryReadCells(table, cells, existing, out var cell) == false)
+                return false;
+
+            value = DecodeForPrimitive(table.Output!, cell);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets or makes the class of a constructor's term at keys' cells for a function value a host write applies, as
+        /// <see cref="MakeForPrimitive"/> does: egglog's <c>lookup_or_insert</c>.
+        /// </summary>
+        /// <exception cref="ArgumentException">The constructor is not of the batch's graph.</exception>
+        /// <exception cref="InvalidOperationException">The batch merged classes before the call.</exception>
+        internal uint MakeCellsForPrimitive(ConstructorHandle constructor, ReadOnlySpan<uint> keys)
+        {
+            // As MakeForPrimitive: the batch rebuilds before a fact with a function value's application (RebuildFor), but
+            // for a rejected batch.
+            if (mergedBeforeFact)
+                throw new InvalidOperationException(
+                    $"A function value makes a '{constructor.Name}' term after this batch merged classes; make it in a later call, which sees the merge as egglog's next command does.");
+
+            CheckTable(constructor);
+            var (cells, existing) = CanonicalKeys(constructor, keys);
+            if (existing && TryStored(constructor, cells, out var stored))
+                return stored;
+
+            return PlanNewTerm(constructor, cells, Key(constructor, cells));
+        }
+
+        /// <summary>
+        /// Holds back a union of two class cells of a write primitive a function value applies, as
+        /// <see cref="CollectUnion"/> does.
+        /// </summary>
+        internal void HoldUnion(uint a, uint b) => CollectUnion(a, b);
+
+        /// <summary>
+        /// Gets keys' cells canonical, a class the batch made as it is, and whether no key is a class the batch made.
+        /// </summary>
+        (uint[] Cells, bool Existing) CanonicalKeys(TableHandle table, ReadOnlySpan<uint> keys)
+        {
+            var columns = table.KeyArray;
+            if (keys.Length != columns.Length)
+                throw new ArgumentException($"'{table.Name}' takes {columns.Length} keys, not {keys.Length}.", nameof(keys));
+
+            var cells = keys.ToArray();
+            var existing = true;
+            for (var i = 0; i < cells.Length; i++)
+            {
+                if (columns[i].Kind != ColumnKind.Sort)
+                    continue;
+
+                cells[i] = Canonical(cells[i]);
+                existing &= fresh.Contains(cells[i]) == false;
+            }
+
+            return (cells, existing);
+        }
+
+        /// <summary>
+        /// Reads the output cell of a function's or a constructor's row at keys' cells: what the batch's earlier facts
+        /// left, else the stored row, but no row the fact being planned stages and none the batch deletes.
+        /// </summary>
+        bool TryReadCells(TableHandle table, uint[] cells, bool existing, out uint cell)
+        {
+            cell = 0;
             if (table.Kind == TableKind.Function)
                 return TryReadFunction(table, cells, existing, out cell);
 

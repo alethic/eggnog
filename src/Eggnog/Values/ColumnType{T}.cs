@@ -19,7 +19,7 @@ namespace Eggnog
         private protected ColumnType(string name, ColumnKind kind)
             : base(name, kind, typeof(T))
         {
-
+            ValueOrder.Register<T>();
         }
 
         /// <summary>
@@ -169,6 +169,12 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
+
+        /// <inheritdoc />
+        internal override uint EncodeInObject(object value, Scope? scope) => EncodeIn(Cast(value), scope);
+
+        /// <inheritdoc />
+        internal override int CompareObjects(object x, object y) => CompareValues(Cast(x), Cast(y));
 
         /// <inheritdoc />
         internal override uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>

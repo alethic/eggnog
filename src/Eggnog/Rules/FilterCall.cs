@@ -45,14 +45,14 @@ namespace Eggnog
             unit = graph.Unit.Unit;
             overClasses = Array.Exists(parameters, p => p.InvolvesClasses);
             this.context = context;
-            if (primitive.Access != PrimitiveAccess.Pure)
+            if (primitive.UsesTables)
                 actions = new();
         }
 
         /// <summary>
         /// Gets whether the primitive reads tables, a read primitive's (see <see cref="PrimitiveCall.ReadsTables"/>).
         /// </summary>
-        public override bool ReadsTables => primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full;
+        public override bool ReadsTables => primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full || primitive.DispatchesOnContext;
 
         /// <inheritdoc />
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
