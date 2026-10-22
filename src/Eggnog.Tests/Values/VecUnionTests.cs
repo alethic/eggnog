@@ -45,13 +45,24 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AWriteUnionsTheVectorsClasses()
+        public void AnActionUnionsTheVectorsClasses()
         {
-            // (push) (vec-union $p $q) (check (= $p $q)) (check (= (a) (b))) (pop), the union written as a value.
+            // (push) (vec-union $p $q) (check (= $p $q)) (check (= (a) (b))) (pop): the union run for its effect alone.
             var t = new Theory();
-            var u = t.Graph.DefineFunction<Vec<Node>>("u");
             Assert.False(t.Root.Check(t.P.Of().Is(t.Q.Of())));
 
+            t.Root.Assume(Fact.Exists(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of())));
+
+            Assert.True(t.Root.Check(t.P.Of().Is(t.Q.Of())));
+            Assert.True(t.Merged);
+        }
+
+        [Fact]
+        public void AWriteUnionsTheVectorsClasses()
+        {
+            // The union written as a value: (set (u) (vec-union $p $q)).
+            var t = new Theory();
+            var u = t.Graph.DefineFunction<Vec<Node>>("u");
             t.Root.Assume(u.Of().Is(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of())));
 
             Assert.True(t.Root.Check(t.P.Of().Is(t.Q.Of())));
@@ -64,10 +75,9 @@ namespace Eggnog.Tests.Values
         {
             // (fail (vec-union (vec-of (a)) (vec-of (b) (a)))).
             var t = new Theory();
-            var u = t.Graph.DefineFunction<Vec<Node>>("u");
             var of = Primitives.VecOf<Node>();
             Assert.Throws<RuleEvaluationException>(() =>
-                t.Root.Assume(u.Of().Is(Primitives.VecUnion<Node>().Of(of.Of(t.A.Of()), of.Of(t.B.Of(), t.A.Of())))));
+                t.Root.Assume(Fact.Exists(Primitives.VecUnion<Node>().Of(of.Of(t.A.Of()), of.Of(t.B.Of(), t.A.Of())))));
             Assert.False(t.Merged);
             Assert.False(t.Root.IsFaulted);
         }

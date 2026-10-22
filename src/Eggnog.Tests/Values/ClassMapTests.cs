@@ -163,6 +163,12 @@ namespace Eggnog.Tests.Values
             Assert.True(t.Root.AreEqual(t.Make(6L), t.Make(5L)));
             Assert.True(t.Root.AreEqual(t.Root.Get(first.Of()), t.Make(5L)));
             Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(first.Of().Is(Primitives.MultiSetUnionValues<Node>().Of(of.Of()))));
+
+            // web-demo/multiset.egg: (push) (multiset-union-values $xs) (check (= (Num 1) (Num 2))) (pop), run for its
+            // effect alone.
+            t.Root.Assume(Fact.Exists(Primitives.MultiSetUnionValues<Node>().Of(of.Of(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L)))));
+            Assert.True(t.Root.AreEqual(t.Make(1L), t.Make(2L)));
+            Assert.True(t.Root.AreEqual(t.Make(3L), t.Make(2L)));
         }
 
         sealed class Passes

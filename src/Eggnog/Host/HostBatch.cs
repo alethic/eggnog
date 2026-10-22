@@ -284,8 +284,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans a ground fact: a relation row, a function value, a constructor output, or a union. Facts that
-        /// hold already plan nothing.
+        /// Plans a ground fact: a relation row, a function value, a constructor output, a union, or a call run for its
+        /// effect (<see cref="Fact.Exists"/>). Facts that hold already plan nothing.
         /// </summary>
         /// <param name="fact">The fact.</param>
         /// <exception cref="ArgumentException">The fact is not a write.</exception>
@@ -360,8 +360,12 @@ namespace Eggnog
                 }
                 case NotEqualFact:
                     throw new ArgumentException("host writes are ground facts; 'IsNot' is a filter", nameof(fact));
-                case ExistsFact:
-                    throw new ArgumentException("host writes are ground facts; 'Exists' is a check, not a write", nameof(fact));
+                case ExistsFact exists:
+                    // egglog's action of an expression for its effect alone: a let of its value, never used
+                    // (src/core.rs:765-770), so a function's application is read and fails without a row.
+                    PlanTermCore(exists.Application);
+                    ApplyFactRemovals();
+                    break;
                 case FilterFact:
                     throw new ArgumentException("host writes are ground facts; 'True' is a filter", nameof(fact));
                 case ScopedFact scoped:

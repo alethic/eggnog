@@ -86,7 +86,7 @@ namespace Eggnog
                 case NotEqualFact:
                     throw Error("assumptions are writes; 'IsNot' is a filter");
                 case ExistsFact:
-                    throw Error("assumptions are writes; 'Exists' is a check");
+                    throw Error("assumptions are writes of rows; 'Exists' is a check or a call for its effect");
                 case FilterFact:
                     throw Error("assumptions are writes; 'True' is a filter");
                 case ScopedFact scoped:

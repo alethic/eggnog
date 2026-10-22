@@ -139,8 +139,8 @@ A column holds either a class or a value.
       batch simulates with its own unions. A rule's body, a query and a read refuse it, as egglog's query does.
     - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
     - Only the root runs it, since the classes it unions are held by the vectors.
-    - egglog's bare action, `(vec-union a b)` on its own, waits for host and head actions that compute only for
-      their effect; here the union is the value of a write.
+    - egglog's bare action, `(vec-union a b)` on its own, is `Fact.Exists(Primitives.VecUnion<Node>().Of(a, b))`
+      in a head or a host write, run for its effect alone; the union may also be the value of a write.
   - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
     a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
     multiset.
@@ -339,7 +339,9 @@ whose access (`Primitive.Access`) it does not allow is refused there: a semi-nai
 its head writes, a naive rule's body reads and its head does both, a merge writes, a host write does both, a host check
 and a query read. What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
-or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
+or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`, egglog's bare call: in a body or a check, that an application has a row or a
+primitive's call a result; in a head or a host write, an action run for its effect alone, a constructor's term made
+or a primitive called, as egglog runs `(vec-union a b)` or `(Num 4)`), a condition
 (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule
 bodies, rule heads, host writes, host checks and queries; each use checks that a fact is allowed there.
 

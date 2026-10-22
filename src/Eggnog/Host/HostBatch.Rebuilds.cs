@@ -131,6 +131,8 @@ namespace Eggnog
 
                     return Needs(left) || Needs(right);
                 }
+                case ExistsFact exists:
+                    return Needs(exists.Application.Shape);
                 default:
                     return false;
             }

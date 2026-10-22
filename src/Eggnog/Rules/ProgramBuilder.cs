@@ -885,8 +885,11 @@ namespace Eggnog
                 }
                 case NotEqualFact:
                     throw Error("head facts are writes; 'IsNot' is a filter");
-                case ExistsFact:
-                    throw Error("head facts are writes; 'Exists' is a filter");
+                case ExistsFact exists:
+                    // egglog's action of an expression for its effect alone: a let of its value, never used
+                    // (src/core.rs:765-770). A function's application reads, which a head does not.
+                    EvalHead(exists.Application);
+                    break;
                 case FilterFact:
                     throw Error("head facts are writes; 'True' is a filter");
                 case ScopedFact scoped:

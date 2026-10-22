@@ -120,7 +120,8 @@ namespace Eggnog
 
         /// <summary>
         /// Walks the literals of a written fact, a command's or a rule head's: a relation's row; an equality with a
-        /// function's application, the write of its value; or any other equality, a union.
+        /// function's application, the write of its value; any other equality, a union; or a call run for its effect,
+        /// the let egglog lowers it to.
         /// </summary>
         /// <param name="fact">The fact.</param>
         public void Write(Fact fact)
@@ -141,6 +142,9 @@ namespace Eggnog
                     Call(equality.Right.Shape);
                     Own(equality.Left.Shape);
                     Own(equality.Right.Shape);
+                    break;
+                case ExistsFact exists:
+                    Call(exists.Application.Shape);
                     break;
             }
         }
