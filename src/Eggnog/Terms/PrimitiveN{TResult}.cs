@@ -21,7 +21,7 @@ namespace Eggnog
 
         readonly PartialFuncN<TResult>? partial;
         readonly TableFuncN<ITables, TResult>? tables;
-        readonly bool applies;
+        readonly FnPrimitiveBody? body;
         readonly string? leadingLiteral;
 
         /// <summary>
@@ -71,21 +71,23 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Initializes a new instance of egglog's <c>unstable-app</c> over a function sort: pure, its function value
-        /// applied where the call site's context allows it (<see cref="FnApply"/>), partial as a lookup that misses is.
+        /// Initializes a new instance of a primitive that applies function values: egglog's <c>unstable-app</c> and its
+        /// higher-order container primitives, pure themselves, each application where the call site's context allows its
+        /// function (<see cref="FnPrimitiveBody"/>).
         /// </summary>
         /// <param name="name">The name it renders as.</param>
-        /// <param name="parameters">The parameter types: the function sort's value type, then its inputs.</param>
-        internal PrimitiveN(string name, Type[] parameters)
-            : base(name, parameters, typeof(TResult), false, true)
+        /// <param name="parameters">The parameter types.</param>
+        /// <param name="body">What it does.</param>
+        internal PrimitiveN(string name, Type[] parameters, FnPrimitiveBody body)
+            : base(name, parameters, typeof(TResult), false, body.IsPartial)
         {
             Function = _ => throw new InvalidOperationException(
                 $"Primitive '{name}' applies a function value, which needs the graph's tables; it runs only in a graph.");
-            applies = true;
+            this.body = body;
         }
 
         /// <inheritdoc />
-        internal override bool DispatchesOnContext => applies;
+        internal override bool DispatchesOnContext => body is not null;
 
         /// <inheritdoc />
         internal override string? LeadingLiteral => leadingLiteral;
@@ -120,7 +122,7 @@ namespace Eggnog
         /// graph.</exception>
         public bool TryInvoke(ReadOnlySpan<object> arguments, [MaybeNullWhen(false)] out TResult result)
         {
-            if (tables is not null || applies)
+            if (tables is not null || body is not null)
             {
                 result = Function(arguments);
                 return true;
@@ -186,8 +188,8 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeTables(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
-            if (applies)
-                return FnApply.TryInvoke(arguments, parameters, result, tables, out cell);
+            if (body is not null)
+                return body.TryInvoke(arguments, parameters, result, tables, out cell);
 
             if (this.tables is null)
                 return base.TryInvokeTables(arguments, parameters, result, tables, out cell);
@@ -214,8 +216,8 @@ namespace Eggnog
         /// <inheritdoc />
         internal override bool TryInvokeValueTables(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value)
         {
-            if (applies)
-                return FnApply.TryInvokeValue(arguments, parameters, tables, out value);
+            if (body is not null)
+                return body.TryInvokeValue(arguments, parameters, tables, out value);
 
             if (this.tables is null)
                 return base.TryInvokeValueTables(arguments, parameters, tables, out value);
