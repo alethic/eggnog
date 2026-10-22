@@ -680,9 +680,12 @@ with egglog" lists:
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
 2. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
    no defaults: a lookup without a row fails.
-3. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-4. No proofs or explanations.
-5. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
+3. No proofs or explanations.
+4. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
+
+Kept by choice, and not a departure to remove: there is no `.egg` front end. Programs are written in C#, egglog's
+`push` and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the
+egglog binary (the roadmap's "Closed").
 
 ---
 
