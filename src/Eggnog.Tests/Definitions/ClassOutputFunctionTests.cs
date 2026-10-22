@@ -35,7 +35,8 @@ namespace Eggnog.Tests.Definitions
 
             Assert.Throws<FactConflictException>(() => t.Root.Assume(bar.Of().Is(t.Lit.Of(3L))));
             Assert.True(t.Root.AreEqual(t.Root.Get(bar.Of()), t.B.Of()));
-            Assert.False(t.Root.Check(Fact.Exists(t.Lit.Of(3L))));
+            // The conflicting write's value term stands, as egglog's (fail (set (bar) (Lit 3))) leaves (Lit 3).
+            Assert.True(t.Root.Check(Fact.Exists(t.Lit.Of(3L))));
         }
 
         /// <summary>

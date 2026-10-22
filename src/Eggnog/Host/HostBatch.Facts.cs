@@ -77,6 +77,12 @@ namespace Eggnog
         bool factHeldFailed;
 
         /// <summary>
+        /// Whether the fact being planned failed as egglog's command panics where it runs: a function read with no value,
+        /// a subsumption of a row that is not there (<see cref="FailFact"/>).
+        /// </summary>
+        bool factPanicked;
+
+        /// <summary>
         /// Marks the start of a fact: what it plans from here is dropped if it fails (<see cref="UndoFact"/>).
         /// </summary>
         void MarkFact()
@@ -94,6 +100,7 @@ namespace Eggnog
             factUndo?.Clear();
             factRemovalsApplied = null;
             factHeldFailed = false;
+            factPanicked = false;
         }
 
         /// <summary>
@@ -117,14 +124,25 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Ends a fact that failed as egglog's failed command ends: what it staged before it failed stands, since its
-        /// actions run as a rule whose staged writes outlive the panic (src/lib.rs:1171-1195). The terms its calls made
-        /// stand, with their ids; so do the writes, deletions and unions its primitives held, planned again here as the
-        /// fact's end plans them; its own write does not happen, or was refused. A failure while those held effects were
-        /// planned, or of the congruence check after them, drops them too, as does a failure of planning them again.
+        /// Ends a fact that failed. One that failed as egglog's command panics where it runs (a primitive that threw or has
+        /// no result, a merge that failed, a conflict, a function read with no value) ends as egglog's failed command
+        /// ends: what it staged before it failed stands, since its actions run as a rule whose staged writes outlive the
+        /// panic (src/lib.rs:1171-1195). The terms its calls made stand, with their ids; so do the writes, deletions and
+        /// unions its primitives held, planned again here as the fact's end plans them; its own write does not happen, or
+        /// was refused. A failure while those held effects were planned, or of the congruence check after them, drops
+        /// them too, and the fact's own write with them, where egglog keeps that write and refuses nothing; so does a
+        /// failure of planning them again. Any other failure is a refusal, which egglog's type checker or the library
+        /// makes before the command runs, or the ids running out: the fact writes nothing.
         /// </summary>
-        void FailFact()
+        /// <param name="failure">What the fact threw.</param>
+        void FailFact(Exception failure)
         {
+            if (factPanicked == false && failure is not (RuleEvaluationException or FactConflictException))
+            {
+                UndoFact(keepTerms: false);
+                return;
+            }
+
             var removals = factRemovalsApplied is { } applied ? (factRemovals is { } held ? [.. applied, .. held] : applied) : factRemovals;
             var writes = factWrites;
             var unions = factUnions;
@@ -149,7 +167,8 @@ namespace Eggnog
 
         /// <summary>
         /// Drops what the fact being planned planned, which failed: the batch is as it was when the fact started, but for
-        /// the terms the fact made and the ids it minted when <paramref name="keepTerms"/> is set.
+        /// the terms the fact made, of the ids it minted, when <paramref name="keepTerms"/> is set. A term of a class that
+        /// was there before is the fact's own write, a constructor's output set to a class, which goes.
         /// </summary>
         /// <param name="keepTerms">Whether the fact's terms stand.</param>
         void UndoFact(bool keepTerms)
@@ -160,15 +179,21 @@ namespace Eggnog
             factReaders = null;
             factRemovalsApplied = null;
             factHeldFailed = false;
+            factPanicked = false;
+            for (var i = pending.Count - 1; i >= factTerms; i--)
+            {
+                if (keepTerms && factFresh.Contains(pending[i].Id))
+                    continue;
+
+                pendingByKey.Remove(Key(pending[i].Head, pending[i].Keys));
+                pending.RemoveAt(i);
+            }
+
             if (keepTerms == false)
             {
-                for (var i = factTerms; i < pending.Count; i++)
-                    pendingByKey.Remove(Key(pending[i].Head, pending[i].Keys));
-                pending.RemoveRange(factTerms, pending.Count - factTerms);
                 foreach (var id in factFresh)
                     fresh.Remove(id);
             }
-
 
             // A function with a merge that is not a lattice stages every write as a row of its own, outside rowKeys.
             for (var i = factRows; i < rows.Count; i++)

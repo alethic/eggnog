@@ -85,15 +85,13 @@ namespace Eggnog.Tests.Host
             Assert.ThrowsAny<Exception>(() => t.Root.Assume(t.H.Of(t.Num.Of(51L)).Is(t.H.Of(t.Num.Of(53L)))));
             Assert.True(t.Has(t.Num.Of(53L)));
 
-            // A conflict at a new key's write keeps the key's term: (fail (set (h (Num 54)) 1 ... )) as one batch of two
-            // writes of the same new key.
-            Assert.Throws<FactConflictException>(() => t.Root.Write(w =>
-            {
-                w.Assume(t.H.Of(t.Num.Of(54L)).Is(1L));
-                w.Assume(t.H.Of(t.Add.Of(t.Num.Of(55L), t.Num.Of(54L))).Is(1L), t.H.Of(t.Num.Of(54L)).Is(2L));
-            }));
-            Assert.Equal(1L, t.Root.Get(t.H.Of(t.Num.Of(54L))));
-            Assert.True(t.Has(t.Add.Of(t.Num.Of(55L), t.Num.Of(54L))));
+            // (function g (i64) Math :no-merge) (set (g 1) (Num 58)) (fail (set (g 1) (Num 57))) (check (Num 57))
+            // (check (= (g 1) (Num 58))): the conflicting write's value term stands, the write does not.
+            var g = t.Graph.DefineFunction<long, Node>("g");
+            t.Root.Assume(g.Of(1L).Is(t.Num.Of(58L)));
+            Assert.Throws<FactConflictException>(() => t.Root.Assume(g.Of(1L).Is(t.Num.Of(57L))));
+            Assert.True(t.Has(t.Num.Of(57L)));
+            Assert.True(t.Root.Check(g.Of(1L).Is(t.Num.Of(58L))));
         }
 
         [Fact]
@@ -145,6 +143,63 @@ namespace Eggnog.Tests.Host
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.True(true)));
             Assert.Throws<ArgumentException>(() => t.Root.Assume(((Term<long>)1L).Is(2L)));
             Assert.Equal(0, t.Root.CountRows(t.Num));
+        }
+
+        [Fact]
+        public void AConflictingConstructorWriteGoesWithItsCongruence()
+        {
+            // (set (h x) 1) (set (h y) 2), y = (Wrap (Num 2)), then (union (Num 1) (Num 2)) and (union (Wrap (Num 1)) x) in
+            // one call: the second makes (Wrap (Num 1)) meet y, so h's rows of x and y meet with two values. The fact is
+            // refused, its constructor's output set to x with it; the union before it stands, and nothing faults.
+            var t = new Theory();
+            var wrap = t.Graph.DefineConstructor<Node, Node>("Wrap");
+            var y = t.Root.Make(wrap.Of(t.Num.Of(2L)));
+            var x = t.Root.Make(t.Lit.Of(1L));
+            t.Root.Make(t.Num.Of(1L));
+            t.Root.Assume(t.H.Of(x).Is(1L), t.H.Of(y).Is(2L));
+            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(1L).Is(t.Num.Of(2L)), wrap.Of(t.Num.Of(1L)).Is(x)));
+            Assert.False(t.Root.IsFaulted);
+            Assert.True(t.Root.Check(t.Num.Of(1L).Is(t.Num.Of(2L))));
+            Assert.False(t.Root.AreEqual(x, y));
+            Assert.Equal(1L, t.Root.Get(t.H.Of(x)));
+        }
+
+        [Fact]
+        public void ADeletionAPrimitiveHeldGoesBackWhenItsWriteConflicts()
+        {
+            // (set (k 0) 1); a write primitive p deletes (C a), sets (k 0) to 2 and returns a: (C 1) made, then a
+            // subsumption of (C (p 1)) whose held write conflicts. The conflict is the failure, and (C 1) stands.
+            var t = new Theory();
+            var c = t.Graph.DefineConstructor<long, Node>("C");
+            var k = t.Graph.DefineFunction<long, long>("k");
+            t.Root.Assume(k.Of(0L).Is(1L));
+            var p = Primitive.CreateWrite("p", [typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(c, args[0]);
+                tables.Set(k, [0L], 2L);
+                result = (long)args[0];
+                return true;
+            });
+            Assert.Throws<FactConflictException>(() => t.Root.Write(w =>
+            {
+                w.Make(c.Of(1L));
+                w.Subsume(c.Of(p.Of(1L)));
+            }));
+            Assert.True(t.Has(c.Of(1L)));
+            Assert.Equal(1L, t.Root.Get(k.Of(0L)));
+        }
+
+        [Fact]
+        public void ARefusalAfterATermWritesNothing()
+        {
+            // A class of another graph is refused as egglog's type checker refuses a command before it runs: the term
+            // planned before it, (Num 72), goes too.
+            var t = new Theory();
+            var other = new EGraph();
+            other.DefineSort<Node>("Math");
+            var foreign = other.Root.Make(other.DefineConstructor<long, Node>("Num").Of(1L));
+            Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.Exists(t.Add.Of(t.Num.Of(72L), foreign))));
+            Assert.False(t.Has(t.Num.Of(72L)));
         }
     }
 

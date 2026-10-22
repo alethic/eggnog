@@ -116,9 +116,9 @@ namespace Eggnog
                 PlanFactUnions();
                 return cell;
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -201,6 +201,8 @@ namespace Eggnog
             for (var i = 0; i < keys.Length; i++)
                 text.Append(' ').Append(table.KeyArray[i].FormatCell(keys[i]));
 
+            // egglog's lookup panics where the command runs, after its earlier calls.
+            factPanicked = true;
             throw new InvalidOperationException(text.Append(") has no value here.").ToString());
         }
 
@@ -305,9 +307,9 @@ namespace Eggnog
                 PlanFactCore(fact);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -425,9 +427,9 @@ namespace Eggnog
                 PlanSubsumeCore(term);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -502,9 +504,9 @@ namespace Eggnog
                 PlanSubsumeCore(fact);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -556,9 +558,9 @@ namespace Eggnog
                 PlanUnionCore(a, b);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }

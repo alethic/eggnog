@@ -16,11 +16,14 @@ namespace Eggnog
         /// <returns>The class, usable in this scope and its descendants; once this scope is disposed it refuses new calls
         /// itself, and the class stays usable in its live descendants.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="ArgumentException">A subterm reads a function (<c>Get</c> it first), computes, is a variable, or
-        /// holds a class value this scope cannot use.</exception>
+        /// <exception cref="ArgumentException">A subterm is a variable, or holds a class value this scope cannot use; nothing
+        /// is written.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
-        /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A merge failed; the scope is faulted.</exception>
+        /// another thread; or the call comes from a run observer or a user delegate the engine invoked; or a function a
+        /// subterm reads has no value, and the terms made before it stand, as egglog's failed command keeps
+        /// them.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive of a subterm threw or has no result, and the terms made
+        /// before it stand; or a merge failed, and the scope is faulted.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it, before the call
         /// or through it, or lies under one.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
@@ -236,8 +239,7 @@ namespace Eggnog
         /// and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any extractor. In a
         /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. A row that
         /// fails keeps the terms its keys made, as egglog's failed command does, and the rows before it stand. On a case
-        /// whose contradiction stopped it, or a scope under
-        /// one, the call does nothing.
+        /// whose contradiction stopped it, or a scope under one, the call does nothing.
         /// </summary>
         /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
@@ -303,10 +305,11 @@ namespace Eggnog
         /// scope cannot use.</exception>
         /// <exception cref="InvalidOperationException">The scope may not delete (it has live descendants or a writable
         /// parent, or the function's merge is not a lattice and the scope is not the root); the scope is frozen or
-        /// faulted, or in use on another thread; a function read in the keys has no value; or the call comes from a run
-        /// observer or a user delegate the engine invoked. Nothing is written.</exception>
-        /// <exception cref="RuleEvaluationException">A primitive in the keys threw or has no result, and nothing is
-        /// written; or a merge failed, and the scope is faulted.</exception>
+        /// faulted, or in use on another thread; a function read in the keys has no value, and the terms the keys made
+        /// before it stand, as egglog's failed command keeps them; or the call comes from a run observer or a user delegate
+        /// the engine invoked, and nothing is written.</exception>
+        /// <exception cref="RuleEvaluationException">A primitive in the keys threw or has no result, and the terms the keys
+        /// made before it stand; or a merge failed, and the scope is faulted.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), as
         /// for <see cref="Subsume{TSort}"/>.</exception>
         public void Delete<T>(Term<T> term)
@@ -388,9 +391,11 @@ namespace Eggnog
         /// Makes several writes one batch, egglog's commands one after the other: each call is checked as it is made, and
         /// the batch is staged, flushed and rebuilt once, after <paramref name="write"/> returns, unless a call needs what
         /// an earlier call's merge of classes makes, as egglog's next command sees it after the rebuild: the batch then
-        /// flushes and rebuilds its earlier calls before that call. Each fact of a call is a command: one that fails writes
-        /// nothing, as egglog's failed command does, and the batch's other facts stand, the call's own earlier facts
-        /// included; an exception <paramref name="write"/> lets escape propagates once they are written.
+        /// flushes and rebuilds its earlier calls before that call. Each fact of a call is a command: one that fails keeps
+        /// what it staged before it failed, as egglog's failed command does, the terms its calls made and what its
+        /// primitives wrote, but not its own write; the batch's other facts stand, the call's own earlier facts included,
+        /// and the call's later facts are not written; an exception <paramref name="write"/> lets escape propagates once
+        /// they are written.
         /// </summary>
         /// <remarks>
         /// A call from another thread, or from a user delegate the engine invoked, is refused and rejects the batch:
@@ -403,11 +408,10 @@ namespace Eggnog
         /// merge expression merges or reads, and that merge only the engine evaluates; after a merge expression that
         /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
         /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds
-        /// after each command. A conflict a merge of the batch would cause is found in the fact that causes
-        /// it, which then fails, keeping only the terms it made: two rows of a function of a sort that its merges make meet
-        /// are compared at the
-        /// end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it reads through (its writable ancestors) refuse
-        /// writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
+        /// after each command. A conflict a merge of the batch would cause is found in the fact that causes it, which then
+        /// fails, keeping only the terms it made: two rows of a function of a sort that its merges make meet are compared
+        /// at the end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it
+        /// reads through (its writable ancestors) refuse writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
         /// batch is brought up to date with them before each of its calls and before it commits, without moving
         /// <see cref="Version"/>.

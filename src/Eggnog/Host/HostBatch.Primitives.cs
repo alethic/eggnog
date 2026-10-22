@@ -187,6 +187,7 @@ namespace Eggnog
                 }
             }
 
+            factPanicked = true;
             throw new InvalidOperationException($"'{table.Name}' holds no row for the keys, which a subsumption needs, as egglog's subsume does.");
         }
 

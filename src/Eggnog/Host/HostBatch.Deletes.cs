@@ -62,9 +62,9 @@ namespace Eggnog
                 PlanDelete(shape.Table!, shape.Arguments, nameof(term));
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -98,9 +98,9 @@ namespace Eggnog
                 PlanDelete(relation.Table, relation.Arguments, nameof(fact));
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                FailFact();
+                FailFact(failure);
                 throw;
             }
         }

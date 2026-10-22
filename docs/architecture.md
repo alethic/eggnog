@@ -525,8 +525,11 @@ A scope is written through `Assume(facts)`, `Make(term)` (returns the term's cla
 deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
 `ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails keeps what it staged
 before it failed, as egglog's failed command does, since its actions run as a rule whose staged writes outlive the
-panic: the terms its calls made, and the writes, deletions and unions its primitives made, but not its own write. The
-call then stops, as egglog's program stops at an error, and the facts before stand. A batch
+panic: the terms its calls made, and the writes, deletions and unions its primitives made, but not its own write (a
+failure of those primitive effects drops them and the fact's own write, where egglog keeps the write). A refusal
+egglog's type checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then
+stops, as egglog's program stops at an error, and the facts before stand; a `Write` callback may catch the failure and
+go on. A batch
 is planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives
 and reads function values as egglog's top-level actions do (a read sees the batch's earlier writes, merged by the
 function's lattice, as egglog's next command sees the last; the batch stages its unions after its writes, so a call that
