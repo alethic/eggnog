@@ -8,10 +8,9 @@ namespace Eggnog
     /// batch (<see cref="HostBatch"/>): its reads see the batch's earlier facts, as egglog's next command sees the last
     /// one's, and not what the fact being planned stages, as egglog's lookup does not; it gets or makes a term's class at
     /// once, as egglog's lookup of a constructor in an action does; and its other writes and its unions are held back until
-    /// the end of the fact, as egglog stages a command's writes, then planned as the facts they are. A write's table is
-    /// checked when it is made; the batch's other checks apply when it plans the write, as to any of its facts. A batch
-    /// stages its deletions apart from its writes, so a primitive here deletes nothing, and one in a deletion's keys writes
-    /// nothing but terms.
+    /// the end of the fact, as egglog stages a command's writes, then planned as the facts they are, its deletions at the
+    /// fact's write point, before the fact's own writes, as egglog's flush applies removals before inserts. A write's
+    /// table is checked when it is made; the batch's other checks apply when it plans the write, as to any of its facts.
     /// </summary>
     internal sealed class BatchPrimitiveTables : PrimitiveTables
     {
@@ -133,33 +132,28 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        /// <remarks>Refused: a host write's batch stages its deletions apart from its writes, where egglog's top-level
-        /// actions interleave them, command by command.</remarks>
         protected override void RemoveCore(TableHandle table, ReadOnlySpan<object> keys)
         {
             Check();
-            throw Refuse(new InvalidOperationException(
-                $"A primitive of a host write does not delete, here from '{table?.Name}': the write's batch stages its deletions apart from its writes; delete with Scope.Delete, or from a rule."));
+            var arguments = ArgumentsOf(table, keys);
+            Run(() => batch.CheckRemovableForPrimitive(table));
+            batch.HoldRemove(table, arguments);
         }
 
         /// <inheritdoc />
         protected override void SubsumeCore(TableHandle table, ReadOnlySpan<object> keys)
         {
             Check();
-            var arguments = ArgumentsOf(table, keys);
             try
             {
-                batch.CheckSubsumableForPrimitive(table, keys);
+                // egglog's subsume reads the row when it is called, before the fact's deletions apply.
+                ArgumentNullException.ThrowIfNull(table);
+                batch.HoldWrite(batch.SubsumeForPrimitive(table, keys));
             }
             catch (Exception refused) when (refused is ArgumentException or InvalidOperationException)
             {
                 throw Refuse(refused);
             }
-
-            if (table is RelationHandle relation)
-                batch.HoldWrite(() => batch.PlanSubsumeCore(new RelationFact(relation, arguments)));
-            else
-                batch.HoldWrite(() => batch.PlanSubsumeCore(new UntypedApplicationTerm(table, arguments)));
         }
 
         /// <inheritdoc />

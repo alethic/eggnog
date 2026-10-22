@@ -146,7 +146,7 @@ namespace Eggnog
                     if (table.Kind == TableKind.Function)
                         return ReadFunction(table, keys, existing);
 
-                    if (existing && engine.TryLookup(table.Function, keys, out var output))
+                    if (existing && TryStored(table, keys, out var output))
                         return output;
 
                     return PlanNewTerm((ConstructorHandle)table, keys, Key(table, keys));
@@ -180,7 +180,7 @@ namespace Eggnog
             if (currentValues.TryGetValue(key, out var current))
                 return current;
 
-            if (existing && engine.TryLookup(table.Function, keys, out var stored))
+            if (existing && TryStored(table, keys, out var stored))
                 return stored;
 
             var text = new StringBuilder("(").Append(table.Name);
@@ -299,7 +299,8 @@ namespace Eggnog
                 {
                     CheckTable(relation.Table);
                     var keys = PlanKeys(relation.Table, relation.Arguments, out var existing);
-                    if (existing && engine.TryLookup(relation.Table.Function, keys, out _))
+                    ApplyFactRemovals();
+                    if (existing && TryStored(relation.Table, keys, out _))
                         return;
 
                     var row = new uint[keys.Length + 1];
@@ -321,7 +322,12 @@ namespace Eggnog
                     else if (IsApplication(right, TableKind.Constructor) && IsClassConstant(left))
                         PlanConstructorWrite(right, equality.Left);
                     else if (TypeOf(equality.Left.ClrType).Kind == ColumnKind.Sort && IsApplication(left, TableKind.Function) == false && IsApplication(right, TableKind.Function) == false)
-                        PlanUnionCore(PlanTermCore(equality.Left), PlanTermCore(equality.Right));
+                    {
+                        var a = PlanTermCore(equality.Left);
+                        var b = PlanTermCore(equality.Right);
+                        ApplyFactRemovals();
+                        PlanUnionCore(a, b);
+                    }
                     else
                         throw new ArgumentException($"value equality is not a write: {equality.Left} = {equality.Right}", nameof(fact));
 
@@ -386,7 +392,7 @@ namespace Eggnog
         /// Plans the subsumption of a constructor term as <see cref="PlanSubsume(Term)"/> does, the writes held back
         /// left for <see cref="PlanFactUnions"/>.
         /// </summary>
-        internal void PlanSubsumeCore(Term term)
+        void PlanSubsumeCore(Term term)
         {
             var shape = term.Shape;
             if (shape.Kind != TermShapeKind.Application || shape.Table!.Kind != TableKind.Constructor)
@@ -397,18 +403,34 @@ namespace Eggnog
             CheckSubsumable(table, nameof(term));
             Literals.Action(shape.Arguments, null);
             var keys = PlanKeys(table, shape.Arguments, out var existing);
-            if (existing && engine.TryLookup(table.Function, keys, out var output, out var subsumed))
+            var key = Key(table, keys);
+
+            // egglog's subsume looks the row up, as the batch's earlier facts left it, before the fact's deletions apply:
+            // a row it finds is inserted subsumed after them, and one already subsumed is left to them.
+            uint output = 0;
+            var subsumed = false;
+            var stored = existing && TryStored(table, keys, out output, out subsumed);
+            PendingTerm? planned = null;
+            if (stored)
+                subsumed |= subsumeKeys.Contains(Key(table, Row(keys, output)));
+            else if (pendingByKey.TryGetValue(key, out planned))
+                subsumed = subsumedTerms.Contains(key);
+
+            ApplyFactRemovals();
+            if (stored || planned is not null)
             {
-                if (subsumed == false)
+                if (subsumed)
+                    return;
+
+                if (stored)
                     AddSubsume(table, Row(keys, output));
+                else
+                    SubsumeTerm((ConstructorHandle)table, keys, key, planned!.Id);
 
                 return;
             }
 
-            var key = Key(table, keys);
-            if (pendingByKey.ContainsKey(key) == false)
-                PlanNewTerm((ConstructorHandle)table, keys, key);
-
+            PlanNewTerm((ConstructorHandle)table, keys, key);
             subsumedTerms.Add(key);
         }
 
@@ -432,7 +454,7 @@ namespace Eggnog
         /// Plans the subsumption of a relation row as <see cref="PlanSubsume(Fact)"/> does, the writes held back left for
         /// <see cref="PlanFactUnions"/>.
         /// </summary>
-        internal void PlanSubsumeCore(Fact fact)
+        void PlanSubsumeCore(Fact fact)
         {
             if (fact is not RelationFact relation)
             {
@@ -446,10 +468,13 @@ namespace Eggnog
             CheckSubsumable(table, nameof(fact));
             Literals.Action(relation.Arguments, null);
             var keys = PlanKeys(table, relation.Arguments, out var existing);
-            if (existing && engine.TryLookup(table.Function, keys, out _, out var subsumed) && subsumed)
-                return;
+            var row = Row(keys, graph.Unit.Unit);
 
-            AddSubsume(table, Row(keys, graph.Unit.Unit));
+            // egglog's subsume looks the row up before the fact's deletions apply: one already subsumed is left to them.
+            var subsumed = subsumeKeys.Contains(Key(table, row)) || (existing && TryStored(table, keys, out _, out var held) && held);
+            ApplyFactRemovals();
+            if (subsumed == false)
+                AddSubsume(table, row);
         }
 
         /// <summary>
@@ -552,6 +577,7 @@ namespace Eggnog
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);
+            ApplyFactRemovals();
             var key = Key(table, keys);
             if (functionValues.TryGetValue(key, out var earlier))
             {
@@ -561,7 +587,7 @@ namespace Eggnog
                 if (table.Lattice is null)
                     throw new FactConflictException(table, DecodeKeys(table, keys), Decode(table.Output!, earlier), Decode(table.Output!, cell));
             }
-            else if (existing && engine.TryLookup(table.Function, keys, out var stored))
+            else if (existing && TryStored(table, keys, out var stored))
             {
                 if (table.Lattice is null)
                 {
@@ -578,7 +604,7 @@ namespace Eggnog
             // The value a later read in the batch sees: the incoming one, merged by the lattice with the value before it.
             if (table.Lattice is null)
                 currentValues[key] = cell;
-            else if (currentValues.TryGetValue(key, out var before) || (existing && engine.TryLookup(table.Function, keys, out before)))
+            else if (currentValues.TryGetValue(key, out var before) || (existing && TryStored(table, keys, out before)))
                 currentValues[key] = MergeCells(table, before, cell);
             else
                 currentValues[key] = cell;
@@ -615,6 +641,7 @@ namespace Eggnog
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);
+            ApplyFactRemovals();
             var key = Key(table, keys);
             if (table.Merge!.CanSimulate == false)
             {
@@ -635,7 +662,7 @@ namespace Eggnog
                 return;
             }
 
-            if (currentValues.TryGetValue(key, out var before) || (existing && engine.TryLookup(table.Function, keys, out before)))
+            if (currentValues.TryGetValue(key, out var before) || (existing && TryStored(table, keys, out before)))
             {
                 var merged = MergeCells(table, before, cell);
                 if (merged == before)
@@ -697,8 +724,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans <c>C.Of(k).Is(x)</c> for a constructor C and a class constant x: a new key becomes a pending term
-        /// whose class is x; an existing key with another class is a row that the union-id merge unions with x.
+        /// Plans <c>C.Of(k).Is(x)</c> for a constructor C and a class constant x, egglog's <c>(union (C k) x)</c>: a new
+        /// key becomes a pending term whose class is x; an existing key with another class is a row that the union-id
+        /// merge unions with x. The term is looked up as the batch's earlier facts left it, before the fact's deletions
+        /// apply, as egglog's union looks it up in its command: one that deletes the term's row keeps the union.
         /// </summary>
         void PlanConstructorWrite(TermShape application, Term value)
         {
@@ -706,10 +735,22 @@ namespace Eggnog
             CheckTable(table);
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);
-            if (existing && engine.TryLookup(table.Function, keys, out var stored))
+            var key = Key(table, keys);
+            uint stored = 0;
+            var found = existing && TryStored(table, keys, out stored);
+            var planned = found ? null : pendingByKey.GetValueOrDefault(key);
+            ApplyFactRemovals();
+            if (found)
             {
                 if (stored == cell)
                     return;
+
+                // The fact deletes the term's row: the union stays.
+                if (TryStored(table, keys, out _) == false)
+                {
+                    PlanUnionCore(stored, cell);
+                    return;
+                }
 
                 var row = new uint[keys.Length + 1];
                 keys.CopyTo(row, 0);
@@ -719,18 +760,13 @@ namespace Eggnog
                 return;
             }
 
-            var key = Key(table, keys);
-            if (pendingByKey.TryGetValue(key, out var planned))
+            if (planned is not null)
             {
                 PlanUnionCore(planned.Id, cell);
                 return;
             }
 
-            CheckNotReadByExpression(table);
-            var term = new PendingTerm(table, keys, cell);
-            pending.Add(term);
-            pendingByKey.Add(key, term);
-            TrackRow(table, keys, cell);
+            AddTerm(table, keys, key, cell);
         }
 
         /// <summary>
@@ -743,14 +779,34 @@ namespace Eggnog
             if (pendingByKey.TryGetValue(key, out var planned))
                 return planned.Id;
 
-            CheckNotReadByExpression(table);
             var id = engine.FreshId();
             fresh.Add(id);
+            AddTerm(table, keys, key, id);
+            return id;
+        }
+
+        /// <summary>
+        /// Plans the row of a new term of the class <paramref name="id"/>.
+        /// </summary>
+        void AddTerm(ConstructorHandle table, uint[] keys, string key, uint id)
+        {
+            CheckNotReadByExpression(table);
             var term = new PendingTerm(table, keys, id);
             pending.Add(term);
             pendingByKey.Add(key, term);
             TrackRow(table, keys, id);
-            return id;
+        }
+
+        /// <summary>
+        /// Subsumes a term the batch plans: the term of <paramref name="id"/> at the key, planned again where a deletion
+        /// of the fact cancelled it, as egglog's subsume inserts the row it looked up, subsumed, after the removal.
+        /// </summary>
+        void SubsumeTerm(ConstructorHandle table, uint[] keys, string key, uint id)
+        {
+            if (pendingByKey.ContainsKey(key) == false)
+                AddTerm(table, keys, key, id);
+
+            subsumedTerms.Add(key);
         }
 
         /// <summary>
@@ -920,8 +976,10 @@ namespace Eggnog
         /// container of classes holds.</exception>
         void PlanFactUnions()
         {
-            // A primitive's writes first, in order, as egglog's flush applies a command's staged writes before its rebuild
-            // merges the unions; each may hold back unions of its own.
+            // A primitive's deletions first, where the fact had no write point of its own; then its writes, in order, as
+            // egglog's flush applies a command's staged removals, then its inserts, before its rebuild merges the unions;
+            // each may hold back unions of its own.
+            ApplyFactRemovals();
             if (factWrites is { Count: > 0 } writes)
             {
                 factWrites = null;
@@ -936,8 +994,10 @@ namespace Eggnog
                     PlanUnionCore(a, b);
             }
 
-            // The next fact's primitives see the terms planned so far.
+            // The next fact's primitives see the terms planned so far, and its deletions cancel them.
             factTerms = pending.Count;
+            factRows = rows.Count;
+            factSubsumes = subsumes.Count;
         }
 
         /// <summary>

@@ -19,12 +19,6 @@ namespace Eggnog
         int factTerms;
 
         /// <summary>
-        /// Whether the batch deletes (<see cref="PlanDelete(Term)"/>): a deletion's batch only deletes, so a primitive in
-        /// its keys writes nothing but terms.
-        /// </summary>
-        bool deleting;
-
-        /// <summary>
         /// Reads a function's value, or a constructor's class, at a key for a primitive of a host write, egglog's
         /// <c>lookup</c> in a top-level action: the value the batch's earlier facts left, else the stored one, never a
         /// row the fact being planned stages; never interning a key.
@@ -72,7 +66,7 @@ namespace Eggnog
             if (rowKeys.Contains(rowKey) || subsumeKeys.Contains(rowKey))
                 return true;
 
-            return existing && removeKeys.Contains(Key(relation, cells)) == false && engine.TryLookup(relation.Function, cells, out _);
+            return existing && TryStored(relation, cells, out _);
         }
 
         /// <summary>
@@ -112,7 +106,7 @@ namespace Eggnog
                     return 0;
 
                 var keys = row.AsSpan(0, keyCount).ToArray();
-                return added.Add(Key(table, keys)) && (Fresh(keys) || engine.TryLookup(table.Function, keys, out _) == false) ? 1 : 0;
+                return added.Add(Key(table, keys)) && (Fresh(keys) || TryStored(table, keys, out _) == false) ? 1 : 0;
             }
         }
 
@@ -138,13 +132,11 @@ namespace Eggnog
 
         /// <summary>
         /// Checks that a primitive of a host write may write a table: one of the batch's graph, not a scoped view, and
-        /// below the root no function whose merge is not a lattice; and that the batch does not delete.
+        /// below the root no function whose merge is not a lattice.
         /// </summary>
-        /// <exception cref="ArgumentException">It may not write the table.</exception>
-        /// <exception cref="InvalidOperationException">The batch deletes.</exception>
+        /// <exception cref="ArgumentException">It may not.</exception>
         internal void CheckWritableForPrimitive(TableHandle table)
         {
-            CheckNotDeleting($"'{table.Name}'");
             CheckTable(table);
             if (scope.IsRoot == false && table is FunctionHandle { Merge: { } merge })
                 throw new ArgumentException(
@@ -152,21 +144,49 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a primitive of a host write may subsume a row: the table subsumable, and the row one the
-        /// primitive's lookup sees, as egglog's subsume looks it up.
+        /// Reads the row a primitive of a host write subsumes, when it calls, as egglog's subsume looks it up: what the
+        /// batch's earlier facts left, else the stored row; and gets the subsumption to plan at the end of the fact, the
+        /// row as read made subsumed, or nothing for a row subsumed already.
         /// </summary>
+        /// <returns>Plans the subsumption.</returns>
         /// <exception cref="ArgumentException">The table is not of the batch's graph, is a scoped view or is not
-        /// subsumable, or a value is not of its column's type.</exception>
-        /// <exception cref="InvalidOperationException">The table holds no row for the keys, or the batch
-        /// deletes.</exception>
-        internal void CheckSubsumableForPrimitive(TableHandle table, ReadOnlySpan<object> keys)
+        /// subsumable, or a value is not of its column's type or a class not usable here.</exception>
+        /// <exception cref="InvalidOperationException">The table holds no row for the keys, or holds classes and the
+        /// batch merged classes before the call.</exception>
+        internal Action SubsumeForPrimitive(TableHandle table, ReadOnlySpan<object> keys)
         {
-            CheckNotDeleting($"'{table.Name}'");
             CheckTable(table);
             CheckSubsumable(table, nameof(table));
-            var holds = table is RelationHandle relation ? ContainsForPrimitive(relation, keys) : TryReadCell(table, keys, out _);
-            if (holds == false)
-                throw new InvalidOperationException($"'{table.Name}' holds no row for the keys, which a subsumption needs, as egglog's subsume does.");
+            CheckReadAfterMerge(table);
+            if (TryReadKeys(table, keys, out var cells, out var existing))
+            {
+                var key = Key(table, cells);
+                if (table.IsRelation)
+                {
+                    var row = Row(cells, graph.Unit.Unit);
+                    var rowKey = Key(table, row);
+                    if (subsumeKeys.Contains(rowKey))
+                        return static () => { };
+
+                    if (rowKeys.Contains(rowKey))
+                        return () => AddSubsume(table, row);
+
+                    if (existing && TryStored(table, cells, out _, out var held))
+                        return held ? static () => { } : () => AddSubsume(table, row);
+                }
+                else if (pendingByKey.TryGetValue(key, out var planned) && OfThisFact(planned) == false)
+                {
+                    var constructor = (ConstructorHandle)table;
+                    return subsumedTerms.Contains(key) ? static () => { } : () => SubsumeTerm(constructor, cells, key, planned.Id);
+                }
+                else if (existing && TryStored(table, cells, out var output, out var held))
+                {
+                    var row = Row(cells, output);
+                    return held || subsumeKeys.Contains(Key(table, row)) ? static () => { } : () => AddSubsume(table, row);
+                }
+            }
+
+            throw new InvalidOperationException($"'{table.Name}' holds no row for the keys, which a subsumption needs, as egglog's subsume does.");
         }
 
         /// <summary>
@@ -180,10 +200,8 @@ namespace Eggnog
         /// Holds back a union of two classes of a primitive of a host write until the end of the fact.
         /// </summary>
         /// <exception cref="ArgumentException">A class is not usable here.</exception>
-        /// <exception cref="InvalidOperationException">The batch deletes.</exception>
         internal void UnionForPrimitive<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>
         {
-            CheckNotDeleting("classes");
             var x = Canonical(ClassChecks.Require(scope, a.Id, nameof(a), Origin));
             var y = Canonical(ClassChecks.Require(scope, b.Id, nameof(b), Origin));
             CollectUnion(x, y);
@@ -210,15 +228,15 @@ namespace Eggnog
         internal void PlanHeldFact(Fact fact) => PlanFactCore(fact);
 
         /// <summary>
-        /// Refuses a primitive's write in a deletion's batch, which only deletes.
+        /// Checks that a primitive of a host write may delete a row of a table, as <see cref="CheckDeletable"/> does.
         /// </summary>
-        /// <param name="what">What the primitive writes.</param>
-        /// <exception cref="InvalidOperationException">The batch deletes.</exception>
-        void CheckNotDeleting(string what)
+        /// <exception cref="ArgumentException">The table is not of the batch's graph, is a scoped view, or is the graph's
+        /// contradiction.</exception>
+        /// <exception cref="InvalidOperationException">The scope may not delete.</exception>
+        internal void CheckRemovableForPrimitive(TableHandle table)
         {
-            if (deleting)
-                throw new InvalidOperationException(
-                    $"A primitive in a deletion's keys writes {what}; a deletion's batch only deletes, so write it in a write.");
+            CheckTable(table);
+            CheckDeletable(table);
         }
 
         /// <summary>
@@ -245,7 +263,7 @@ namespace Eggnog
                 return true;
             }
 
-            return existing && removeKeys.Contains(key) == false && engine.TryLookup(table.Function, cells, out cell);
+            return existing && TryStored(table, cells, out cell);
         }
 
         /// <summary>
@@ -304,7 +322,7 @@ namespace Eggnog
             if (currentValues.TryGetValue(key, out value))
                 return true;
 
-            return existing && removeKeys.Contains(key) == false && engine.TryLookup(table.Function, keys, out value);
+            return existing && TryStored(table, keys, out value);
         }
 
         /// <summary>

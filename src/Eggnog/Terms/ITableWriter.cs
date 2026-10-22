@@ -11,8 +11,7 @@ namespace Eggnog
     /// merge is not a lattice is written only at the root, a deletion only where the scope may delete, a subsumption only
     /// of a row a subsumable table holds, and no scoped view is written; in a rule or a merge no analysis table either,
     /// since an analysis depends only on terms. A host write's other checks, such as of a second value for a key, apply
-    /// when it plans the write; and a primitive in a deletion's keys writes nothing but terms, as the deletion's batch only
-    /// deletes. Values are of their columns' types, a class a sort value usable in the scope the call runs
+    /// when it plans the write. Values are of their columns' types, a class a sort value usable in the scope the call runs
     /// in. Valid only during the call.
     /// </summary>
     public interface ITableWriter
@@ -57,13 +56,13 @@ namespace Eggnog
         void Union<TSort>(TSort a, TSort b) where TSort : struct, ISort<TSort>;
 
         /// <summary>
-        /// Deletes the row of a key: egglog's <c>remove</c>. Only where the scope may delete, and not in a host write,
-        /// whose batch stages its deletions apart from its writes; <see cref="Scope.Delete(Fact[])"/> deletes there.
+        /// Deletes the row of a key: egglog's <c>remove</c>. Only where the scope may delete. As egglog's flush applies a
+        /// command's removals before its inserts, the call's writes at the key are kept, and its reads still see the row.
         /// </summary>
         /// <param name="table">The relation, function or constructor, of the call's graph.</param>
         /// <param name="keys">One value per key column.</param>
         /// <exception cref="ArgumentException">The table, or a value, is not one the call may write.</exception>
-        /// <exception cref="InvalidOperationException">The scope may not delete, or the call is a host write's.</exception>
+        /// <exception cref="InvalidOperationException">The scope may not delete.</exception>
         void Remove(TableHandle table, params ReadOnlySpan<object> keys);
 
         /// <summary>

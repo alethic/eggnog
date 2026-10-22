@@ -627,14 +627,13 @@ namespace Eggnog.Tests.Terms
         }
 
         [Fact]
-        public void AHostWritesPrimitiveDeletesNothing()
+        public void AHostWritesPrimitiveDeletesAsEgglogsCommandsDo()
         {
-            // A host write's batch stages its deletions apart from its writes, where egglog's top-level actions interleave
-            // them, so a primitive there deletes nothing, and one in a deletion's keys writes nothing but terms; a rule's
-            // head deletes through one.
+            // egglog's flush applies a command's removals before its inserts, and its lookups see no staged removal; the
+            // facts of a write are egglog's commands, one after the other.
             var graph = new EGraph();
             var f = graph.DefineFunction<long, long>("f");
-            var seen = graph.DefineRelation<long>("seen");
+            var r = graph.DefineRelation<long>("r");
             var o = graph.DefineFunction<long, long>("o");
             var del = Primitive.CreateWrite("del", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
@@ -642,27 +641,188 @@ namespace Eggnog.Tests.Terms
                 result = 0;
                 return true;
             });
+            var delR = Primitive.CreateWrite("del-r", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(r, args[0]);
+                result = (long)args[0];
+                return true;
+            });
+            var take = Primitive.CreateFull("take", Long, (ITables tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(f, args[0]);
+                if (tables.TryLookup(f, [args[0]], out result) == false)
+                    result = -1;
+
+                return true;
+            });
+            var size = Primitive.CreateRead("size", [], (ITableReader tables, ReadOnlySpan<object> _, out long result) =>
+            {
+                result = tables.TableSize(f);
+                return true;
+            });
+            graph.Root.Assume(f.Of(1L).Is(3L), f.Of(2L).Is(4L), f.Of(3L).Is(6L), f.Of(4L).Is(8L), r.Of(5L));
+
+            // (set (o 0) (del 1)): the row is gone.
+            graph.Root.Assume(o.Of(0L).Is(del.Of(1L)));
+            Assert.False(graph.Root.Check(Fact.Exists(f.Of(1L))));
+
+            // (set (f 2) (+ 4 (del 2))) and (r (del-r 5)): the command's own write of the row it deletes is kept.
+            graph.Root.Assume(f.Of(2L).Is(Primitives.Add.Of(4L, del.Of(2L))), r.Of(delR.Of(5L)));
+            Assert.True(graph.Root.Check(f.Of(2L).Is(4L)));
+            Assert.True(graph.Root.Check(r.Of(5L)));
+
+            // The command's own lookup still sees the row: (set (o 1) (take 3)).
+            graph.Root.Assume(o.Of(1L).Is(take.Of(3L)));
+            Assert.Equal(6L, graph.Root.Get(o.Of(1L)));
+            Assert.False(graph.Root.Check(Fact.Exists(f.Of(3L))));
+
+            // (set (f 5) 7) (set (o 2) (del 5)): an earlier command's write is deleted. (set (o 3) (del 4)) (set (f 4) 9):
+            // a later command writes the key afresh, and a later lookup sees the deletion.
+            graph.Root.Write(w =>
+            {
+                w.Assume(f.Of(5L).Is(7L));
+                w.Assume(o.Of(2L).Is(del.Of(5L)));
+                w.Assume(o.Of(3L).Is(del.Of(4L)));
+                w.Assume(o.Of(4L).Is(size.Of()));
+                w.Assume(f.Of(4L).Is(9L));
+                w.Assume(o.Of(5L).Is(size.Of()));
+            });
+            Assert.False(graph.Root.Check(Fact.Exists(f.Of(5L))));
+            Assert.True(graph.Root.Check(f.Of(4L).Is(9L)));
+            Assert.Equal(1L, graph.Root.Get(o.Of(4L)));
+            Assert.Equal(2L, graph.Root.Get(o.Of(5L)));
+
+            // (delete (f (mark 2))): a primitive in a deletion's keys writes.
+            var seen = graph.DefineRelation<long>("seen");
             var mark = Primitive.CreateWrite("mark", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
                 tables.Insert(seen, args[0]);
                 result = (long)args[0];
                 return true;
             });
-            graph.Root.Assume(f.Of(1L).Is(3L), f.Of(2L).Is(4L));
+            graph.Root.Delete(f.Of(mark.Of(2L)));
+            Assert.False(graph.Root.Check(Fact.Exists(f.Of(2L))));
+            Assert.True(graph.Root.Check(seen.Of(2L)));
 
-            var write = Assert.Throws<RuleEvaluationException>(() => graph.Root.Assume(o.Of(0L).Is(del.Of(1L))));
-            Assert.Contains("does not delete", write.Message, StringComparison.Ordinal);
-            var delete = Assert.Throws<RuleEvaluationException>(() => graph.Root.Delete(f.Of(mark.Of(2L))));
-            Assert.Contains("a deletion's batch only deletes", delete.Message, StringComparison.Ordinal);
-            Assert.True(graph.Root.Check(f.Of(1L).Is(3L)));
-            Assert.True(graph.Root.Check(f.Of(2L).Is(4L)));
-            Assert.Equal(0L, graph.Root.CountRows(seen));
-
+            // From a rule's head, as from a host write.
             var rules = graph.DefineRuleset("rules");
-            rules.DefineRule("delete", r => r.Then(o.Of(0L).Is(del.Of(1L))));
+            rules.DefineRule("delete", b => b.Then(o.Of(6L).Is(del.Of(4L))));
             graph.Root.Run(rules);
-            Assert.False(graph.Root.Check(Fact.Exists(f.Of(1L))));
-            Assert.True(graph.Root.Check(f.Of(2L).Is(4L)));
+            Assert.False(graph.Root.Check(Fact.Exists(f.Of(4L))));
+        }
+
+        [Fact]
+        public void AHostWritesPrimitiveDeletesBeforeItsUnionsMerge()
+        {
+            // (f a) = 1, (f b) = 2: a primitive that deletes (f a) and unions a and b in one command meets no conflict,
+            // since egglog's flush deletes before its rebuild merges.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("T");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var f = graph.DefineFunction<Node, long>("f");
+            var o = graph.DefineFunction<long, long>("o");
+            var a = graph.Root.Make(num.Of(1L));
+            var b = graph.Root.Make(num.Of(2L));
+            graph.Root.Assume(f.Of(a).Is(1L), f.Of(b).Is(2L));
+            var merge = Primitive.CreateWrite("merge", [], (ITableWriter tables, ReadOnlySpan<object> _, out long result) =>
+            {
+                tables.Remove(f, a);
+                tables.Union(a, b);
+                result = 0;
+                return true;
+            });
+
+            graph.Root.Assume(o.Of(0L).Is(merge.Of()));
+            Assert.True(graph.Root.AreEqual(a, b));
+            Assert.True(graph.Root.Check(f.Of(a).Is(2L)));
+        }
+
+        [Fact]
+        public void AUnionAndASubsumptionLookUpTheRowBeforeTheirCommandsDeletions()
+        {
+            // egglog's (union (C k) x) and (subsume (C k)) look the row up, as the earlier commands left it, and write after
+            // their command's removals: a deletion of the row in the same command keeps the union, and the subsumed row,
+            // unless it was subsumed already.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("T");
+            var c = graph.DefineConstructor<long, Node>("C");
+            var rs = graph.DefineRelation<long>("rs");
+            var o = graph.DefineFunction<long, long>("o");
+            var rem = Primitive.CreateWrite("rem", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(c, args[0]);
+                result = (long)args[0];
+                return true;
+            });
+            var remRs = Primitive.CreateWrite("rem-rs", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(rs, args[0]);
+                result = (long)args[0];
+                return true;
+            });
+            var both = Primitive.CreateWrite("rem-and-subsume", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(c, args[0]);
+                tables.Subsume(c, args[0]);
+                result = 0;
+                return true;
+            });
+            var bothRs = Primitive.CreateWrite("rem-and-subsume-rs", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Remove(rs, args[0]);
+                tables.Subsume(rs, args[0]);
+                result = 0;
+                return true;
+            });
+            var subsume = Primitive.CreateWrite("subsume", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Subsume(c, args[0]);
+                result = (long)args[0];
+                return true;
+            });
+            var x = graph.Root.Make(c.Of(5L));
+
+            // (union (C (rem 4)) x): C(4) is gone, its class is x's.
+            var c4 = graph.Root.Make(c.Of(4L));
+            graph.Root.Assume(c.Of(rem.Of(4L)).Is(x));
+            Assert.True(graph.Root.AreEqual(c4, x));
+            Assert.False(graph.Root.Check(Fact.Exists(c.Of(4L))));
+
+            // The same of a term an earlier command of the write made.
+            Node c7 = default;
+            graph.Root.Write(w =>
+            {
+                c7 = w.Make(c.Of(7L));
+                w.Assume(c.Of(rem.Of(7L)).Is(x));
+            });
+            Assert.True(graph.Root.AreEqual(c7, x));
+            Assert.False(graph.Root.Check(Fact.Exists(c.Of(7L))));
+
+            // (subsume (C (rem 8))), a primitive's remove then subsume, and (delete (C (subsume 10))): the row stays,
+            // subsumed, with its class.
+            var c8 = graph.Root.Make(c.Of(8L));
+            var c9 = graph.Root.Make(c.Of(9L));
+            var c10 = graph.Root.Make(c.Of(10L));
+            graph.Root.Subsume(c.Of(rem.Of(8L)));
+            graph.Root.Assume(o.Of(0L).Is(both.Of(9L)));
+            graph.Root.Delete(c.Of(subsume.Of(10L)));
+            Assert.True(graph.Root.AreEqual(c8, graph.Root.Make(c.Of(8L))));
+            Assert.True(graph.Root.AreEqual(c9, graph.Root.Make(c.Of(9L))));
+            Assert.True(graph.Root.AreEqual(c10, graph.Root.Make(c.Of(10L))));
+            var terms = graph.DefineQuery("terms", q =>
+            {
+                var k = q.Var<long>("k");
+                q.When(Fact.Exists(c.Of(k)));
+            });
+            Assert.Equal(1, graph.Root.Count(terms));
+
+            // A row subsumed already is left to the deletion: (subsume (rs (rem-rs 1))) and a primitive's remove then
+            // subsume of rs(2).
+            graph.Root.Assume(rs.Of(1L), rs.Of(2L));
+            graph.Root.Subsume(rs.Of(1L), rs.Of(2L));
+            graph.Root.Subsume(rs.Of(remRs.Of(1L)));
+            graph.Root.Assume(o.Of(1L).Is(bothRs.Of(2L)));
+            Assert.Equal(0L, graph.Root.CountRows(rs));
         }
 
         [Fact]
