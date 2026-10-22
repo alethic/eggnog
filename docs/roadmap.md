@@ -25,9 +25,12 @@ gates").
   actions for their effect (`Fact.Exists`). The function values, `unstable-fn` and `unstable-app` (src/sort/fn.rs),
   and `unstable-vec-map`, `unstable-multiset-map`, `-flat-map`, `-filter`, `-filter-not` and `-reduce` are followed
   (architecture 2.2).
-- **Failed commands.** egglog's failed command keeps what it wrote before it failed: its actions run as a rule whose
-  staged writes outlive the panic (src/lib.rs:1171-1195), so `(fail (Add (Num 30) (Lit (vec-get (vec-of 1) 5))))`
-  leaves `(Num 30)`. Here a host fact that fails writes nothing (`HostBatch.Facts.cs`, `UndoFact`).
+- **Failed runs.** egglog's failed run keeps what its rules wrote and stays usable: every match runs, each keeps what
+  it staged before its call failed, and `(fail (run 1))` goes on, as with
+  `(rule ((R x)) ((Num x) (set (k x) x) (Lit (vec-get (vec-of 1) (- x 2)))))` over `(R 1) (R 2) (R 3)`, after which
+  `(Num 1)`, `(Num 3)`, `(k 1)`, `(k 3)` and `(Lit 1)` stand. The engine here merges and rebuilds what a failed run
+  staged too (defect 22 of the engine map's list), but a `RuleEvaluationException` from a run faults the scope
+  (architecture 2.12), which then refuses every call.
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
   layers. A container of function values counts as one of classes whatever the values hold, since a function value may

@@ -157,10 +157,11 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AFailedFactUndoesTheTermsItsMapMade()
+        public void AFailedFactKeepsTheTermsItsMapMade()
         {
-            // (set (out) (multiset-of (Num 9))) then a fact that sets (out) to a map over Wrap: the fact conflicts, and
-            // the terms its map made go with it.
+            // egglog at 5e655cae: (set (out) (multiset-of (Num 9)))
+            // (fail (set (out) (unstable-multiset-map (unstable-fn "Wrap") (multiset-of (Num 1))))) (check (Wrap (Num 1)))
+            // (check (= (out) (multiset-of (Num 9)))): the write conflicts, and the terms its map made stand.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -173,7 +174,7 @@ namespace Eggnog.Tests.Values
             root.Assume(output.Of().Is(of.Of(num.Of(9L))));
             var map = Primitives.UnstableMultiSetMap<Node, Node>().Of(Primitives.UnstableFn<Node, Node>(wrap).Of(), of.Of(num.Of(1L)));
             Assert.ThrowsAny<Exception>(() => root.Assume(output.Of().Is(map)));
-            Assert.False(root.Check(Fact.Exists(wrap.Of(num.Of(1L)))));
+            Assert.True(root.Check(Fact.Exists(wrap.Of(num.Of(1L)))));
             Assert.True(root.Check(output.Of().Is(of.Of(num.Of(9L)))));
         }
 

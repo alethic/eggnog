@@ -13,9 +13,9 @@ namespace Eggnog
     /// Every call enters the scope's thread domain for its duration: from the thread that called
     /// <see cref="Scope.Write"/> it is re-entrant, and from any other thread it throws
     /// <see cref="InvalidOperationException"/> instead of interleaving with the batch, which it rejects:
-    /// <see cref="Scope.Write"/> then writes nothing more. In any other call that throws, the fact that failed writes
-    /// nothing, as egglog's failed command does, and the batch's other facts stand, the call's own earlier ones
-    /// included. The batch flushes before a call that needs what an earlier
+    /// <see cref="Scope.Write"/> then writes nothing more. In any other call that throws, the fact that failed keeps
+    /// what it staged before it failed, as egglog's failed command does: the terms its calls made and what its primitives
+    /// wrote, but not its own write; and the batch's other facts stand, the call's own earlier ones included. The batch flushes before a call that needs what an earlier
     /// call's merge of classes makes, as egglog's next command runs after the last one's rebuild (see
     /// <see cref="Scope.Write"/>). While the batch is open, the scope's writable ancestors refuse writes and runs.
     /// </remarks>
@@ -48,7 +48,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">A fact is not a write.</exception>
         /// <exception cref="FactConflictException">A function without a lattice would get a second value, from the facts
         /// or from a merge of the batch, two classes of a function of a sort that the batch's merges make meet included;
-        /// the fact that fails writes nothing.</exception>
+        /// the fact that fails keeps the terms it made, but not its write.</exception>
         /// <exception cref="InvalidOperationException">The call came from another thread, or from a user delegate the
         /// engine invoked.</exception>
         /// <exception cref="ObjectDisposedException">The batch has ended.</exception>

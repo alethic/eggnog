@@ -36,7 +36,18 @@ namespace Eggnog
             {
                 ThrowIfStopped();
                 var batch = new HostBatch(this);
-                var id = batch.PlanTerm(term);
+                uint id;
+                try
+                {
+                    id = batch.PlanTerm(term);
+                }
+                catch
+                {
+                    // egglog's failed command keeps the terms its calls made before it failed.
+                    CommitBefore(batch);
+                    throw;
+                }
+
                 Commit(batch);
 
                 // A case whose write made it contradictory stopped: the class names nothing in a scope with no model.
@@ -54,8 +65,9 @@ namespace Eggnog
         /// rows; <c>F.Of(k).Is(v)</c> (merged by F's lattice); <c>C.Of(k).Is(x)</c> (unions outputs); <c>a.Is(b)</c> of a
         /// sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts that
         /// hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that fails
-        /// writes nothing, where egglog's failed command keeps what it wrote before it failed (roadmap, "Failed
-        /// commands"), and the facts before it stand. On a case whose contradiction stopped it, or a scope under one, the
+        /// ends the call as egglog's failed command ends its program: what it staged before it failed stands, the terms
+        /// its calls made and what its primitives wrote, while its own write does not happen; the facts before it stand,
+        /// and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
         /// call does nothing.
         /// </summary>
         /// <param name="facts">The facts.</param>
@@ -66,9 +78,9 @@ namespace Eggnog
         /// writes through a scoped view (<c>T.In(tag)</c>) or a <see cref="Fact.In"/>, which are read-only.</exception>
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
-        /// <exception cref="RuleEvaluationException">A lattice's merge failed: while checking a fact (the fact writes
-        /// nothing, the facts before it stand, and the scope is not faulted) or while merging, the catch-up the call makes
-        /// first included (the scope is faulted).</exception>
+        /// <exception cref="RuleEvaluationException">A primitive had no result or threw, or a lattice's merge failed:
+        /// while planning a fact (the fact keeps what it staged before, the facts before it stand, and the scope is not
+        /// faulted) or while merging, the catch-up the call makes first included (the scope is faulted).</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>), and the
         /// scope is not faulted. When the ids ran out, or the epochs before the merge, nothing is written. When the epochs
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
@@ -141,7 +153,17 @@ namespace Eggnog
                 var y = ClassChecks.Require(this, b.Id, nameof(b));
                 var distinct = Engine.Find(x) != Engine.Find(y);
                 var batch = new HostBatch(this);
-                batch.PlanUnion(x, y);
+                try
+                {
+                    batch.PlanUnion(x, y);
+                }
+                catch
+                {
+                    // egglog's failed command keeps what it staged before it failed.
+                    CommitBefore(batch);
+                    throw;
+                }
+
                 Commit(batch);
                 return distinct;
             }
@@ -187,7 +209,17 @@ namespace Eggnog
                     return;
 
                 var batch = new HostBatch(this);
-                batch.PlanSubsume(term);
+                try
+                {
+                    batch.PlanSubsume(term);
+                }
+                catch
+                {
+                    // egglog's failed command keeps the terms its calls made before it failed.
+                    CommitBefore(batch);
+                    throw;
+                }
+
                 Commit(batch);
             }
             finally
@@ -203,7 +235,8 @@ namespace Eggnog
         /// split rules no longer match it. A row that does not exist yet is inserted, subsumed. Subsumption is sticky,
         /// and rows already subsumed write nothing, so they move neither <see cref="Version"/> nor any extractor. In a
         /// child, the subsumption shadows the ancestor's row: the ancestors and the siblings still match it. A row that
-        /// fails writes nothing, and the rows before it stand. On a case whose contradiction stopped it, or a scope under
+        /// fails keeps the terms its keys made, as egglog's failed command does, and the rows before it stand. On a case
+        /// whose contradiction stopped it, or a scope under
         /// one, the call does nothing.
         /// </summary>
         /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
@@ -287,7 +320,17 @@ namespace Eggnog
                     return;
 
                 var batch = new HostBatch(this);
-                batch.PlanDelete(term);
+                try
+                {
+                    batch.PlanDelete(term);
+                }
+                catch
+                {
+                    // egglog's failed command keeps the terms its calls made before it failed.
+                    CommitBefore(batch);
+                    throw;
+                }
+
                 Commit(batch);
             }
             finally
@@ -361,7 +404,8 @@ namespace Eggnog
         /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
         /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds
         /// after each command. A conflict a merge of the batch would cause is found in the fact that causes
-        /// it, which then writes nothing: two rows of a function of a sort that its merges make meet are compared at the
+        /// it, which then fails, keeping only the terms it made: two rows of a function of a sort that its merges make meet
+        /// are compared at the
         /// end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it reads through (its writable ancestors) refuse
         /// writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the

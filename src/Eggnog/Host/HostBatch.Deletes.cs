@@ -64,7 +64,7 @@ namespace Eggnog
             }
             catch
             {
-                UndoFact();
+                FailFact();
                 throw;
             }
         }
@@ -100,7 +100,7 @@ namespace Eggnog
             }
             catch
             {
-                UndoFact();
+                FailFact();
                 throw;
             }
         }
@@ -138,6 +138,7 @@ namespace Eggnog
                 return;
 
             factRemovals = null;
+            factRemovalsApplied = factRemovalsApplied is { } applied ? [.. applied, .. held] : held;
             foreach (var (table, arguments) in held)
             {
                 var keys = PlanKeys(table, arguments, out var existing);

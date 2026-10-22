@@ -703,8 +703,10 @@ namespace Eggnog.Tests.Host
         /// terms.
         /// </summary>
         [Fact]
-        public void APartlyPlannedFactThatIsRejectedLeavesNoTerm()
+        public void APartlyPlannedFactThatFailsKeepsItsTerms()
         {
+            // egglog at 5e655cae: (fail (link (Wrap (A)) (f 1))) (check (A)) (check (Wrap (A))), its terms made before the
+            // read with no value.
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
             var link = t.Graph.DefineRelation<Node, long>("link");
@@ -722,8 +724,9 @@ namespace Eggnog.Tests.Host
                 }
             });
 
-            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
-            Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
+            Assert.True(t.Root.Check(Fact.Exists(t.A.Of())));
+            Assert.True(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
+            Assert.Equal(0, t.Root.CountRows(link));
         }
 
         /// <summary>
