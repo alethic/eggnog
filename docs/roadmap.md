@@ -29,15 +29,12 @@ gates").
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
-- **A `.egg` front end.** egglog's language: parser, typechecking, desugaring and commands, `push` and `pop` as child
-  scopes with their definitions scoped too. It runs egglog's own test files, the fidelity suite for every item above,
-  and the benchmark programs that need it (herbie, eggcc, `math.egg`, the transformer programs).
 - **Proofs.** As in Parked, when upstream's proof API settles in a release.
 
 Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
 [`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
 relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
-item 5), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
+item 4), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
 `pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
 
 ## Engine work
@@ -213,6 +210,10 @@ Each waits on its trigger.
 
 Considered and not planned. Each line says what would reopen it.
 
+- A `.egg` front end, egglog's language (parser, typechecking, desugaring and commands): programs are written in C#.
+  egglog's tests are ported to the C# API and their answers checked against the egglog binary, and the benchmark
+  programs that need the language (herbie, eggcc, `math.egg`, the transformer programs) are translated by hand or not
+  run. Reopened only by a decision to accept egglog programs as text.
 - Compiling plans at run time (expression trees, emitted IL, generic structs composed by reflection): if kernel
   specialization goes ahead and its shapes prove open-ended.
 - 64-bit cells, and recycling ids or the clock globally in place: if a host cannot retire its graph on the gauge.

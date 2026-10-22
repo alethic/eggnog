@@ -51,6 +51,7 @@ namespace Eggnog
         readonly HashSet<string> subsumedTerms = new(StringComparer.Ordinal);
         readonly List<(uint A, uint B)> unions = new();
         readonly HashSet<(uint, uint)> unionKeys = new();
+        LiteralOrder? literals;
         volatile bool rejected;
 
         /// <summary>
@@ -100,7 +101,9 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive it computes threw, or has no result.</exception>
         public uint PlanTerm(Term term)
         {
+            ArgumentNullException.ThrowIfNull(term);
             PlanFactUnions();
+            Literals.Call(term.Shape);
             var cell = PlanTermCore(term);
             PlanFactUnions();
             return cell;
@@ -319,49 +322,29 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Interns the value constants of a fact, in term order, before any of its computations runs: egglog lowers a
-        /// command, interning its literals, before it evaluates a primitive, so that a literal written after a computed
-        /// value still interns before it.
+        /// Interns the value constants of a fact before any of its computations runs, in the order egglog interns a
+        /// command's literals (<see cref="LiteralOrder"/>), so that a literal written after a computed value still
+        /// interns before it.
         /// </summary>
-        void InternLiterals(Fact fact)
-        {
-            switch (fact)
-            {
-                case RelationFact relation:
-                    foreach (var argument in relation.Arguments)
-                        InternLiterals(argument.Shape);
-
-                    break;
-                case EqualityFact equality:
-                    InternLiterals(equality.Left.Shape);
-                    InternLiterals(equality.Right.Shape);
-                    break;
-            }
-        }
+        void InternLiterals(Fact fact) => Literals.Write(fact);
 
         /// <summary>
-        /// Interns the value constants of a term, in term order.
+        /// Gets the walk of a write's literals in egglog's order, which interns each plain constant
+        /// (<see cref="InternConstant"/>) and takes a container or a <c>BigInt</c> as the call it renders as.
         /// </summary>
-        void InternLiterals(TermShape shape)
+        LiteralOrder Literals => literals ??= new LiteralOrder(InternConstant, shape => LiteralOrder.Parts(TypeOf(shape), shape.Constant!, graph.Values));
+
+        /// <summary>
+        /// Interns a constant's value, unless it holds classes, which are never interned; nothing for any other shape.
+        /// </summary>
+        void InternConstant(TermShape shape)
         {
-            switch (shape.Kind)
-            {
-                case TermShapeKind.Constant:
-                {
-                    var type = TypeOf(shape);
-                    if (type.InvolvesClasses == false)
-                        type.EncodeObject(shape.Constant!);
+            if (shape.Kind != TermShapeKind.Constant)
+                return;
 
-                    break;
-                }
-                case TermShapeKind.Variable:
-                    break;
-                default:
-                    foreach (var argument in shape.Arguments)
-                        InternLiterals(argument.Shape);
-
-                    break;
-            }
+            var type = TypeOf(shape);
+            if (type.InvolvesClasses == false)
+                type.EncodeObject(shape.Constant!);
         }
 
         /// <summary>
@@ -383,6 +366,7 @@ namespace Eggnog
             var table = shape.Table;
             CheckTable(table);
             CheckSubsumable(table, nameof(term));
+            Literals.Action(shape.Arguments, null);
             var keys = PlanKeys(table, shape.Arguments, out var existing);
             if (existing && engine.TryLookup(table.Function, keys, out var output, out var subsumed))
             {
@@ -421,6 +405,7 @@ namespace Eggnog
             var table = relation.Table;
             CheckTable(table);
             CheckSubsumable(table, nameof(fact));
+            Literals.Action(relation.Arguments, null);
             var keys = PlanKeys(table, relation.Arguments, out var existing);
             if (existing && engine.TryLookup(table.Function, keys, out _, out var subsumed) && subsumed)
                 return;

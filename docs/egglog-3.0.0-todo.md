@@ -26,7 +26,7 @@ Several 3.0.0 changelog entries were already in `5e655cae`, in its "Unreleased" 
 nothing new to evaluate:
 
 - relations as non-unionable constructors (#770); Eggnog keeps them as unit-valued functions
-  ([`architecture.md`](architecture.md), section 2.13, item 5);
+  ([`architecture.md`](architecture.md), section 2.13, item 4);
 - the capability-specific primitive traits (#856; decisions row 12) and the `:naive` rule option;
 - typed extension state (#884), the body-defined primitive APIs (#881, #889), f64 `exp`, `log` and `sqrt` and BigRat
   to i64 (#890, #891), `RunReport::can_stop` (#882), full source paths (#886), the nested-container semi-naive fix

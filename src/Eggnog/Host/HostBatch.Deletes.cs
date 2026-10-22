@@ -70,6 +70,7 @@ namespace Eggnog
         {
             CheckTable(table);
             CheckDeletable(table);
+            Literals.Action(arguments, null);
             var keys = PlanKeys(table, arguments, out var existing);
             if (existing == false || engine.TryLookup(table.Function, keys, out _) == false)
                 return;

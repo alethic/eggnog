@@ -69,9 +69,9 @@ namespace Eggnog
                     throw new RuleDefinitionException(name, "a birewrite's head is its rewrite: define adds variables and conditions (When, Where) only");
 
                 if (backward)
-                    builder.Rewrite(right, left);
+                    builder.RewriteFirst(right, left);
                 else
-                    builder.Rewrite(left, right);
+                    builder.RewriteFirst(left, right);
             }
             finally
             {

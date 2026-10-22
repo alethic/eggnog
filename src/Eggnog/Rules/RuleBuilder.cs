@@ -6,8 +6,10 @@ namespace Eggnog
 
     /// <summary>
     /// Collects one rule: <see cref="When"/> and <c>Where</c> make the body; <see cref="Then"/>, <see
-    /// cref="Make{TSort}"/>, <c>Rewrite</c> and <c>Subsume</c> make the head. Body calls are unordered; head items are
-    /// lowered in the order the builder calls were made. Usable only inside the definition's callback.
+    /// cref="Make{TSort}"/>, <c>Rewrite</c> and <c>Subsume</c> make the head. Body calls are unordered for matching,
+    /// and their order is the order in which the rule interns its constants, as egglog's order of a rule's query does;
+    /// head items are lowered in the order the builder calls were made. Usable only inside the definition's
+    /// callback.
     /// </summary>
     public sealed class RuleBuilder
     {
@@ -216,13 +218,30 @@ namespace Eggnog
         /// <param name="left">The pattern.</param>
         /// <param name="right">The replacement.</param>
         /// <param name="subsume">Whether to subsume the matched left side.</param>
-        public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right, bool subsume) where TSort : struct, ISort<TSort>
+        public void Rewrite<TSort>(Term<TSort> left, Term<TSort> right, bool subsume) where TSort : struct, ISort<TSort> =>
+            Rewrite(left, right, subsume, false);
+
+        /// <summary>
+        /// A rewrite whose left side is the body's first fact, before the conditions already added: egglog's
+        /// <c>rewrite</c> as its desugaring builds it (src/ast/desugar.rs, <c>desugar_rewrite</c>), the left side then the
+        /// <c>:when</c> conditions, for a <c>birewrite</c>.
+        /// </summary>
+        /// <typeparam name="TSort">The sort.</typeparam>
+        /// <param name="left">The pattern.</param>
+        /// <param name="right">The replacement.</param>
+        internal void RewriteFirst<TSort>(Term<TSort> left, Term<TSort> right) where TSort : struct, ISort<TSort> =>
+            Rewrite(left, right, false, true);
+
+        /// <summary>
+        /// Adds a rewrite, its left side last in the body, or first.
+        /// </summary>
+        void Rewrite<TSort>(Term<TSort> left, Term<TSort> right, bool subsume, bool first) where TSort : struct, ISort<TSort>
         {
             ThrowIfClosed();
             ArgumentNullException.ThrowIfNull(left);
             ArgumentNullException.ThrowIfNull(right);
             var variable = Var<TSort>("$rw" + (rewrites++).ToString(CultureInfo.InvariantCulture));
-            draft.Body.Add(variable.Is(left));
+            draft.Body.Insert(first ? 0 : draft.Body.Count, variable.Is(left));
             draft.Head.Add(new HeadItem(HeadItemKind.Rewrite, null, variable, left, right));
             if (subsume)
                 draft.Head.Add(new HeadItem(HeadItemKind.Subsume, null, variable, left, null));

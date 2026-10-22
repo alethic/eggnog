@@ -20,6 +20,16 @@ namespace Eggnog
         void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination);
 
         /// <summary>
+        /// Appends the parts of a constant of the type, each with its column type, as egglog's form of it lists them, the
+        /// arguments of a call: a set's, a vector's or a multiset's elements, in element order with a multiset's
+        /// repeats; a pair's two; a map's keys and values in key order, key before value
+        /// (<see cref="LiteralOrder.Parts"/>).
+        /// </summary>
+        /// <param name="value">The constant.</param>
+        /// <param name="destination">Receives the parts.</param>
+        void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination);
+
+        /// <summary>
         /// Gets the column types of the container's elements: egglog's <c>inner_sorts</c>.
         /// </summary>
         IReadOnlyList<ColumnType> ElementTypes { get; }
