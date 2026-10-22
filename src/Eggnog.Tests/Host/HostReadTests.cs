@@ -66,7 +66,14 @@ namespace Eggnog.Tests.Host
             Assert.False(t.Root.Check(Fact.Exists(f.Of("j"))));
             Assert.True(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
             Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(t.B.Of()))));
-            Assert.Throws<ArgumentException>(() => Fact.Exists(Primitives.Add.Of(1L, 2L)));
+            // egglog's (check (+ 1 2)), (check (+ "a" "b")) and (check (vec-push (vec-of 1) 2)) hold: a call with a result,
+            // interned or not.
+            Assert.True(t.Root.Check(Fact.Exists(Primitives.Add.Of(1L, 2L))));
+            Assert.True(t.Root.Check(Fact.Exists(StringPrimitives.Concat.Of("a", "b"))));
+            t.Graph.Values.RegisterVec<long>();
+            Assert.True(t.Root.Check(Fact.Exists(Primitives.VecPush<long>().Of(Primitives.VecOf<long>().Of(1L), 2L))));
+            Assert.True(t.Root.Check(Fact.Exists(Primitives.Multiply.Of(4000000000L, 4000000L))));
+            Assert.False(t.Root.Check(Fact.Exists(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L), 5L))));
         }
 
         [Fact]

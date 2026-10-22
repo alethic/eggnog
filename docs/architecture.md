@@ -137,12 +137,13 @@ A column holds either a class or a value.
     the child's rebuild derives faults the child, as the engine's eq-container guard refuses it (decisions row 9).
   - egglog's `vec-union` is `Primitives.VecUnion`, a write primitive as egglog's: it unions two vectors' classes
     element by element and returns the first, with no result for two lengths.
-    - It runs as a value a head or a host write writes, and in a merge such as `(vec-union old new)`, which a host
-      batch simulates with its own unions. A rule's body, a query and a read refuse it, as egglog's query does.
+    - It runs in a head or a host write, for its effect alone or as a value written, and in a merge such as
+      `(vec-union old new)`, which a host batch simulates with its own unions. A rule's body, a query and a read
+      refuse it, as egglog's query does.
     - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
     - Only the root runs it, since the classes it unions are held by the vectors.
-    - egglog's bare action, `(vec-union a b)` on its own, waits for host and head actions that compute only for
-      their effect; here the union is the value of a write.
+    - egglog's bare action, `(vec-union a b)` on its own, is `Fact.Exists(Primitives.VecUnion<Node>().Of(a, b))`
+      in a head or a host write, run for its effect alone; the union may also be the value of a write.
   - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
     a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
     multiset.
@@ -352,9 +353,12 @@ whose access (`Primitive.Access`) it does not allow is refused there: a semi-nai
 its head writes, a naive rule's body reads and its head does both, a merge writes, a host write does both, a host check
 and a query read. What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
-or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
-(`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule
-bodies, rule heads, host writes, host checks and queries; each use checks that a fact is allowed there.
+or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`, egglog's bare call: in a
+body or a check, that an application has a row or a primitive's call a result; in a head or a host write, an action
+run for its effect alone, a constructor's term made or a primitive called, as egglog runs `(vec-union a b)` or
+`(Num 4)`), a condition (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms
+and facts serve rule bodies, rule heads, host writes, host checks and queries; each use checks that a fact is allowed
+there.
 
 ### 2.5 Rules and rulesets
 
@@ -516,21 +520,21 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 
 ### 2.7 Host writes, reads and queries
 
-A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)`
-and `Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer:
-a deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
-`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails writes nothing, and the
-others stand. A batch is planned first, reading only: it validates the facts, checks class origins, interns
-constants, evaluates primitives and reads function values as egglog's top-level actions do (a read sees the batch's
-earlier writes, merged by the function's lattice, as egglog's next command sees the last; the batch stages its unions
-after its writes, so a call that needs what a union makes, such as a read of a function whose keys are classes, comes
-after the batch flushes and rebuilds its earlier calls, as egglog's next command comes after the last one's rebuild),
-resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not already hold,
-and checks every conflict a function without a lattice would see, including conflicts a union in the batch would cause
-through congruence. A fact that throws is dropped: a function read with no value, or a primitive with no result or
-that throws, refuses it without faulting the scope. The batch is then staged and flushed: merged,
-rebuilt, and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
-`Version` nor any extractor.
+A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)` and
+`Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer: a
+deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
+`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails writes nothing, where
+egglog's failed command keeps what it wrote before it failed (roadmap, "Failed commands"), and the others stand. A batch
+is planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives
+and reads function values as egglog's top-level actions do (a read sees the batch's earlier writes, merged by the
+function's lattice, as egglog's next command sees the last; the batch stages its unions after its writes, so a call that
+needs what a union makes, such as a read of a function whose keys are classes, comes after the batch flushes and
+rebuilds its earlier calls, as egglog's next command comes after the last one's rebuild), resolves existing terms, mints
+ids for new ones, keeps only the rows, subsumptions and unions that do not already hold, and checks every conflict a
+function without a lattice would see, including conflicts a union in the batch would cause through congruence. A fact
+that throws is dropped: a function read with no value, or a primitive with no result or that throws, refuses it without
+faulting the scope. The batch is then staged and flushed: merged, rebuilt, and visible when the call returns. A batch
+whose facts all hold already stages nothing, so it moves neither the scope's `Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do, and

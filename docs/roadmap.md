@@ -22,12 +22,12 @@ gates").
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
 - **Function values.** egglog's `unstable-multiset-fill-index` and `-clear-index`, which return `Unit` and are used as
-  actions for their effect, after "Bare actions". The function values, `unstable-fn` and `unstable-app`
-  (src/sort/fn.rs), and `unstable-vec-map`, `unstable-multiset-map`, `-flat-map`, `-filter`, `-filter-not` and
-  `-reduce` are followed (architecture 2.2).
-- **Bare actions.** egglog runs a primitive as an action for its effect alone, `(vec-union a b)` or
-  `(multiset-union-values ms)` on its own, in a rule's head and at the top level; here a head's and a host's actions are
-  facts, so a write primitive's effect comes with a value a fact writes (architecture 2.2, "Containers of classes").
+  actions for their effect (`Fact.Exists`). The function values, `unstable-fn` and `unstable-app` (src/sort/fn.rs),
+  and `unstable-vec-map`, `unstable-multiset-map`, `-flat-map`, `-filter`, `-filter-not` and `-reduce` are followed
+  (architecture 2.2).
+- **Failed commands.** egglog's failed command keeps what it wrote before it failed: its actions run as a rule whose
+  staged writes outlive the panic (src/lib.rs:1171-1195), so `(fail (Add (Num 30) (Lit (vec-get (vec-of 1) 5))))`
+  leaves `(Num 30)`. Here a host fact that fails writes nothing (`HostBatch.Facts.cs`, `UndoFact`).
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
   layers. A container of function values counts as one of classes whatever the values hold, since a function value may

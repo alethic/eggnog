@@ -19,8 +19,9 @@ namespace Eggnog
     /// flushes and rebuilds what it planned before it, see <c>HostBatch.Rebuilds.cs</c>), resolves existing terms by
     /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
     /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
-    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped, as egglog's failed command writes nothing (see
-    /// <c>HostBatch.Facts.cs</c>), and the batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
+    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped whole (see <c>HostBatch.Facts.cs</c>), where egglog's
+    /// failed command keeps what it wrote before it failed (roadmap, "Failed commands"), and the batch's other facts
+    /// stand. A <see cref="ScopeWriter"/> call refused for its
     /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
@@ -284,8 +285,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans a ground fact: a relation row, a function value, a constructor output, or a union. Facts that
-        /// hold already plan nothing.
+        /// Plans a ground fact: a relation row, a function value, a constructor output, a union, or a call run for its
+        /// effect (<see cref="Fact.Exists"/>). Facts that hold already plan nothing.
         /// </summary>
         /// <param name="fact">The fact.</param>
         /// <exception cref="ArgumentException">The fact is not a write.</exception>
@@ -360,8 +361,12 @@ namespace Eggnog
                 }
                 case NotEqualFact:
                     throw new ArgumentException("host writes are ground facts; 'IsNot' is a filter", nameof(fact));
-                case ExistsFact:
-                    throw new ArgumentException("host writes are ground facts; 'Exists' is a check, not a write", nameof(fact));
+                case ExistsFact exists:
+                    // egglog's action of an expression for its effect alone: a let of its value, never used
+                    // (src/core.rs:765-770), so a function's application is read and fails without a row.
+                    PlanTermCore(exists.Application);
+                    ApplyFactRemovals();
+                    break;
                 case FilterFact:
                     throw new ArgumentException("host writes are ground facts; 'True' is a filter", nameof(fact));
                 case ScopedFact scoped:

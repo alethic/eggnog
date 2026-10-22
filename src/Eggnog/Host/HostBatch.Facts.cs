@@ -99,8 +99,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Drops what the fact being planned planned, which failed: the batch is as it was when the fact started, as
-        /// egglog's failed command writes nothing.
+        /// Drops what the fact being planned planned, which failed: the batch is as it was when the fact started. egglog's
+        /// failed command keeps what it wrote before it failed, a term its earlier calls made, since its actions run as a
+        /// rule whose staged writes outlive the panic (src/lib.rs:1171-1195): roadmap, "Failed commands".
         /// </summary>
         void UndoFact()
         {

@@ -20,17 +20,20 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// The fact that a function or constructor application has a row.
+        /// The fact of a call, as egglog's bare call is one. In a body, a query or a host check, it holds where a
+        /// function's or a constructor's application has a row, or where a primitive's has a result; one with none drops
+        /// the match. In a head or a host write, it is egglog's action of an expression for its effect alone, a
+        /// <c>let</c> of a value never used (src/core.rs:765-770): a constructor's term is made, a primitive runs, a
+        /// write primitive's unions take effect, and a call with no result fails the rule or the fact, as egglog panics.
         /// </summary>
-        /// <param name="application">The application.</param>
+        /// <param name="application">The application of a function, a constructor or a primitive.</param>
         /// <returns>The fact.</returns>
-        /// <exception cref="ArgumentException"><paramref name="application"/> is not an application of a function or
-        /// constructor.</exception>
+        /// <exception cref="ArgumentException"><paramref name="application"/> is a variable or a constant.</exception>
         public static Fact Exists(Term application)
         {
             ArgumentNullException.ThrowIfNull(application);
-            if (application.Shape.Kind != TermShapeKind.Application)
-                throw new ArgumentException("Fact.Exists takes an application of a function or constructor.", nameof(application));
+            if (application.Shape.Kind is not (TermShapeKind.Application or TermShapeKind.Computation))
+                throw new ArgumentException("Fact.Exists takes an application of a function, a constructor or a primitive.", nameof(application));
 
             return new ExistsFact(application);
         }

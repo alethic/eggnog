@@ -205,7 +205,6 @@ namespace Eggnog.Tests.Rules
                 r.Then(x.IsNot(y));
             }, "head facts are writes; 'IsNot' is a filter");
             AssertRefused(t, "true", r => r.Then(Fact.True(true)), "head facts are writes; 'True' is a filter");
-            AssertRefused(t, "exists", r => r.Then(Fact.Exists(t.A.Of())), "head facts are writes; 'Exists' is a filter");
         }
 
         [Fact]

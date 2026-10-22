@@ -275,8 +275,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks a ground fact: a relation row exists, two classes are equal, two values are equal, or an
-        /// application has a row.
+        /// Checks a ground fact: a relation row exists, two classes are equal, two values are equal, or a call holds
+        /// (<see cref="Fact.Exists"/>): an application has a row, or a primitive's call has a result.
         /// </summary>
         /// <param name="scope">The scope read.</param>
         /// <param name="fact">The fact.</param>
@@ -322,7 +322,8 @@ namespace Eggnog
                     return type.ObjectsEqual(looseX ?? type.DecodeObject(x, scope), looseY ?? type.DecodeObject(y, scope));
                 }
                 case ExistsFact exists:
-                    return TryReadIn(scope, exists.Application, enclosing, out _);
+                    // A primitive's result no write interned still is one, which egglog's check interns.
+                    return TryReadValueIn(scope, exists.Application, enclosing, out _, out _);
                 case ScopedFact scoped:
                 {
                     if (enclosing is not null)

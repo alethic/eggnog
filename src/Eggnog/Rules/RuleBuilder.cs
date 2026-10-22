@@ -164,7 +164,8 @@ namespace Eggnog
 
         /// <summary>
         /// Adds head facts, which are writes: relation rows, function values (<c>dom.Of(p).Is(d)</c>), constructor outputs
-        /// and unions of classes.
+        /// and unions of classes; and egglog's bare actions, a constructor's term or a primitive's call run for its effect
+        /// alone (<see cref="Fact.Exists"/>), such as <c>(vec-union a b)</c>.
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>

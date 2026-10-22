@@ -234,9 +234,10 @@ namespace Eggnog
 
         /// <summary>
         /// <c>vec-union</c>: unions the classes of two vectors of one length, element by element, and returns the first;
-        /// no result for two lengths (vec.rs:140-148, 285-340). A write primitive, as egglog's: it runs as a value a
-        /// rule's head or a host write writes, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a
-        /// rule's body, a query or a read. Its unions take effect after the fact or the rule's iteration, as egglog's after
+        /// no result for two lengths (vec.rs:140-148, 285-340). A write primitive, as egglog's: it runs in a rule's head
+        /// or a host write, for its effect alone (<see cref="Fact.Exists"/>, egglog's <c>(vec-union a b)</c>) or as a value
+        /// written, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a rule's body, a query or a
+        /// read. Its unions take effect after the fact or the rule's iteration, as egglog's after
         /// the command. It runs only at the root: the classes it unions are held by vectors, which only the root rebuilds
         /// (decisions row 9). Its <c>Function</c> and <c>TryInvoke</c> throw <see cref="InvalidOperationException"/>.
         /// </summary>
@@ -472,8 +473,9 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-union-values</c>: unions every element of a multiset of classes with its first, the element of
         /// least cell, and returns that; no result for an empty multiset (multiset.rs:198-208, 785-832). A write
-        /// primitive, as <see cref="VecUnion{TSort}"/> is: it runs as a value a rule's head or a host write writes, and in
-        /// a merge expression, only at the root, its unions taking effect after the fact or the rule's iteration.
+        /// primitive, as <see cref="VecUnion{TSort}"/> is: it runs in a rule's head or a host write, for its effect alone
+        /// (<see cref="Fact.Exists"/>) or as a value written, and in a merge expression, only at the root, its unions
+        /// taking effect after the fact or the rule's iteration.
         /// </summary>
         /// <typeparam name="TSort">The sort of the elements.</typeparam>
         /// <returns>The primitive.</returns>
