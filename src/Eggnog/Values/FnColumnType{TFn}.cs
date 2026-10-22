@@ -70,7 +70,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the column type of the output.
         /// </summary>
-        internal ColumnType Output => output;
+        public ColumnType Output => output;
 
         /// <inheritdoc />
         /// <remarks>Every value may hold classes in its partially applied arguments, whatever the sort's inputs.</remarks>

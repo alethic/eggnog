@@ -26,7 +26,7 @@ namespace Eggnog
             if (Volatile.Read(ref apply) is { } made)
                 return made;
 
-            Interlocked.CompareExchange(ref apply, new PrimitiveN<TResult>("unstable-app", [typeof(TFn), .. inputs]), null);
+            Interlocked.CompareExchange(ref apply, new PrimitiveN<TResult>("unstable-app", [typeof(TFn), .. inputs], FnApplyBody.Instance), null);
             return apply;
         }
 

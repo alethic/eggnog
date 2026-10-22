@@ -588,6 +588,19 @@ namespace Eggnog
         internal uint[] ElementCells(uint cell) => Read(cell).Elements.ToArray();
 
         /// <summary>
+        /// Gets a multiset's distinct elements' cells, in cell order, the order egglog's <c>BTreeMap</c> keeps them in, and
+        /// their counts: what a higher-order primitive iterates (<see cref="FnMultiSetMapBody{T, TResult}"/>).
+        /// </summary>
+        /// <param name="cell">The multiset's cell.</param>
+        /// <returns>The elements' cells and their counts.</returns>
+        /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
+        internal (uint[] Elements, long[] Counts) ElementCounts(uint cell)
+        {
+            var multiset = Read(cell);
+            return (multiset.Elements.ToArray(), multiset.Counts.ToArray());
+        }
+
+        /// <summary>
         /// Reads the container of a cell.
         /// </summary>
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>

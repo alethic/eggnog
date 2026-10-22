@@ -17,6 +17,11 @@ namespace Eggnog
         FnTarget Resolve(object target);
 
         /// <summary>
+        /// Gets the column type of the output.
+        /// </summary>
+        ColumnType Output { get; }
+
+        /// <summary>
         /// Decodes the container of a cell: the target and the partially applied arguments' cells.
         /// </summary>
         /// <param name="cell">The cell.</param>
