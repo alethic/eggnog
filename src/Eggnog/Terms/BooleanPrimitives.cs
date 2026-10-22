@@ -1,3 +1,5 @@
+using System;
+
 namespace Eggnog
 {
 
@@ -17,6 +19,16 @@ namespace Eggnog
         /// Gets <c>and</c>.
         /// </summary>
         public static Primitive<bool, bool, bool> And { get; } = BuiltInPrimitive.Total<bool, bool, bool>("and", static (a, b) => a && b);
+
+        /// <summary>
+        /// Gets <c>guard</c>: egglog's fallible primitive of a <c>bool</c>, a partial primitive of <c>Unit</c> with a
+        /// result, <c>()</c>, where it is true (bool.rs:33); what a filter over another <c>bool</c> renders as.
+        /// </summary>
+        public static Primitive<bool, ValueTuple> Guard { get; } = BuiltInPrimitive.Partial<bool, ValueTuple>("guard", static (bool a, out ValueTuple result) =>
+        {
+            result = default;
+            return a;
+        });
 
         /// <summary>
         /// Gets <c>or</c> of any number of arguments; of none, <c>false</c>.

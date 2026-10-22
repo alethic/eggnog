@@ -63,7 +63,8 @@ namespace Eggnog
 
             BaseValues = Engine.BaseValues;
             Values = new ValueStore(this);
-            Unit = new UnitColumnType(BaseValues) { Store = Values };
+            Unit = new UnitColumnType(BaseValues);
+            Values.AddUnit(Unit);
             NotEqual = Engine.RegisterExternalFunction(new NotEqualFunction(Unit.Unit));
             Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));
             Extraction = new ExtractionCatalog(this);
@@ -190,7 +191,7 @@ namespace Eggnog
         internal Relations.BaseValues BaseValues { get; }
 
         /// <summary>
-        /// Gets the unit type of relation outputs.
+        /// Gets egglog's <c>Unit</c> sort: the output of relations, and the value type of <see cref="ValueTuple"/>.
         /// </summary>
         internal UnitColumnType Unit { get; }
 

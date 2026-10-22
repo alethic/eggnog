@@ -21,9 +21,10 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
-- **Function values.** egglog's higher-order container primitives over function values: `unstable-vec-map`, and
-  `unstable-multiset-map`, `-filter`, `-filter-not`, `-reduce`, `-flat-map`, `-fill-index` and `-clear-index`. The
-  function values themselves, `unstable-fn` and `unstable-app` (src/sort/fn.rs), are followed (architecture 2.2).
+- **Function values.** egglog's `unstable-multiset-fill-index` and `-clear-index`, which return `Unit` and are used as
+  actions for their effect (`Fact.Exists`). The function values, `unstable-fn` and `unstable-app` (src/sort/fn.rs),
+  and `unstable-vec-map`, `unstable-multiset-map`, `-flat-map`, `-filter`, `-filter-not` and `-reduce` are followed
+  (architecture 2.2).
 - **Failed commands.** egglog's failed command keeps what it wrote before it failed: its actions run as a rule whose
   staged writes outlive the panic (src/lib.rs:1171-1195), so `(fail (Add (Num 30) (Lit (vec-get (vec-of 1) 5))))`
   leaves `(Num 30)`. Here a host fact that fails writes nothing (`HostBatch.Facts.cs`, `UndoFact`).

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -26,6 +27,7 @@ namespace Eggnog
         internal const string LambdaName = "<lambda>";
 
         readonly IReadOnlyList<Type> parameterTypes;
+        Primitive? fallible;
 
         /// <summary>
         /// Initializes a new instance.
@@ -429,6 +431,21 @@ namespace Eggnog
         /// <c>(guard …)</c>.
         /// </summary>
         internal string? FilterName { get; init; }
+
+        /// <summary>
+        /// Gets egglog's fallible form of this filter primitive (<see cref="Primitives.Fallible"/>), made once.
+        /// </summary>
+        internal Primitive FallibleForm
+        {
+            get
+            {
+                if (Volatile.Read(ref fallible) is { } made)
+                    return made;
+
+                Interlocked.CompareExchange(ref fallible, new FallibleCall(this), null);
+                return fallible;
+            }
+        }
 
         /// <summary>
         /// Decodes each argument cell with its parameter's column type, calls the function and encodes the result
