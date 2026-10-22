@@ -194,8 +194,9 @@ A column holds either a class or a value.
     with no result dropped), `UnstableMultiSetMap`, `UnstableMultiSetFlatMap` (an element with no result kept) and
     `UnstableMultiSetReduce`. Each is pure, and each application runs where the call site's context allows the
     function, as `unstable-app`'s. A multiset's elements go in cell order, egglog's representation order, so a
-    reduction folds as egglog's does; a read over elements no write interned has no reduction where their order
-    decides, as `MultiSetPick`'s. egglog's `-filter` and `-filter-not`, of a function into `Unit`, and `-fill-index` and
+    reduction folds as egglog's does; in a read, one element no write interned folds last, as egglog's `check` interns
+    it after the others, and two or more have no reduction, as with `MultiSetPick`. A map's result is a multiset of its
+    own sort, where egglog's copies the input's rebuild flag (decisions row 22). egglog's `-filter` and `-filter-not`, of a function into `Unit`, and `-fill-index` and
     `-clear-index`, actions for their effect, are not yet followed (roadmap, "Function values").
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored

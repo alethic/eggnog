@@ -135,6 +135,7 @@ namespace Eggnog.Tests.Values
             var flat = graph.DefineFunction<MultiSet<Node>>("flat");
             root.Assume(flat.Of().Is(flatMap.Of(Primitives.UnstableFn<Node, MultiSet<Node>>(toMultiSet).Of(), of.Of(num.Of(1L), num.Of(1L), num.Of(2L)))));
             Assert.Equal(4L, root.Get(Primitives.MultiSetCount<Node>().Of(flat.Of(), num.Of(1L))));
+            Assert.Equal(1L, root.Get(Primitives.MultiSetCount<Node>().Of(flat.Of(), num.Of(2L))));
         }
 
         /// <summary>
@@ -192,6 +193,130 @@ namespace Eggnog.Tests.Values
             var app = Primitives.UnstableApp<UnstableFn<bool, bool>, Vec<bool>, Vec<bool>>();
             var bools = Primitives.VecOf<bool>();
             Assert.True(graph.Root.Check(app.Of(vecMap.Of(), not.Of(), bools.Of(true, false)).Is(bools.Of(false, true))));
+        }
+
+        /// <summary>
+        /// factoring-multisets.egg's to_polynomial and from_polynomial rulesets over a smaller expression: naive rules
+        /// whose bodies map a flat-map of a function's rows over a multiset of multisets of classes, and a head that
+        /// reduces a constructor over a map of reductions of a constructor. egglog at 5e655cae, the same program with the
+        /// sorts it declares: after to_polynomial, $x is (polynomial (multiset-of (multiset-of d) (multiset-of e)
+        /// (multiset-of a b c))) and polynomial holds 4 rows; after from_polynomial, $x extracts as
+        /// (Value___add__ (Value___add__ d e) (Value___mul__ (Value___mul__ a b) c)) and polynomial holds none.
+        /// </summary>
+        [Fact]
+        public void APolynomialFlattensAndFoldsBack()
+        {
+            // (sort Value) (constructor Value___mul__ (Value Value) Value) (constructor Value___add__ (Value Value) Value)
+            // (constructor Value_var (String) Value) (sort Int) (constructor Value_from_int (Int) Value) (constructor Int___init__ (i64) Int)
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Value");
+            var mul = graph.DefineConstructor<Node, Node, Node>("Value___mul__");
+            var add = graph.DefineConstructor<Node, Node, Node>("Value___add__");
+            var var = graph.DefineConstructor<string, Node>("Value_var");
+            graph.DefineSort<NodeList>("Int");
+            var fromInt = graph.DefineConstructor<NodeList, Node>("Value_from_int");
+            var intInit = graph.DefineConstructor<long, NodeList>("Int___init__");
+            var root = graph.Root;
+
+            // (let $x (Value___add__ (Value___mul__ (Value___mul__ a b) c) (Value___add__ d e)))
+            var x = root.Make(add.Of(mul.Of(mul.Of(var.Of("a"), var.Of("b")), var.Of("c")), add.Of(var.Of("d"), var.Of("e"))));
+
+            // (sort MultiSet[Value] (MultiSet Value)) (sort MultiSet[MultiSet[Value]] (MultiSet MultiSet[Value]))
+            // (constructor polynomial (MultiSet[MultiSet[Value]]) Value)
+            // (function get_sole_polynomial (MultiSet[Value]) MultiSet[MultiSet[Value]] :merge new)
+            // (function get_monomial (Value) MultiSet[Value] :merge new)
+            graph.Values.RegisterMultiSet<Node>();
+            graph.Values.RegisterMultiSet<MultiSet<Node>>();
+            var polynomial = graph.DefineConstructor<MultiSet<MultiSet<Node>>, Node>("polynomial");
+            var getSole = graph.DefineFunction<MultiSet<Node>, MultiSet<MultiSet<Node>>>("get_sole_polynomial", FunctionMerge.New<MultiSet<MultiSet<Node>>>());
+            var getMonomial = graph.DefineFunction<Node, MultiSet<Node>>("get_monomial", FunctionMerge.New<MultiSet<Node>>());
+            var ms = Primitives.MultiSetOf<Node>();
+            var mss = Primitives.MultiSetOf<MultiSet<Node>>();
+            graph.Values.RegisterFn<MultiSet<Node>, MultiSet<Node>>();
+            graph.Values.RegisterFn<Node, MultiSet<Node>>();
+            graph.Values.RegisterFn<MultiSet<Node>, MultiSet<MultiSet<Node>>>();
+            graph.Values.RegisterFn<Node, Node, Node>();
+            graph.Values.RegisterFn<MultiSet<Node>, Node>();
+
+            var to = graph.DefineRuleset("to");
+            // (rule ((= _n3 (Value___add__ _n1 _n2)) (= _mss (multiset-of (multiset-of _n1) (multiset-of _n2))))
+            //       ((union _n3 (polynomial _mss)) (set (get_sole_polynomial (multiset-of (polynomial _mss))) _mss) (delete (Value___add__ _n1 _n2))))
+            to.DefineRule("add", r =>
+            {
+                var (n1, n2, n3) = r.Vars<Node, Node, Node>("_n1", "_n2", "_n3");
+                var m = r.Var<MultiSet<MultiSet<Node>>>("_mss");
+                r.When(n3.Is(add.Of(n1, n2)), m.Is(mss.Of(ms.Of(n1), ms.Of(n2))));
+                r.Then(n3.Is(polynomial.Of(m)), getSole.Of(ms.Of(polynomial.Of(m))).Is(m));
+                r.Delete(add.Of(n1, n2));
+            });
+
+            // (rule ((= _n3 (Value___mul__ _n1 _n2)) (= _ms (multiset-of _n1 _n2)))
+            //       ((union _n3 (polynomial (multiset-of _ms))) (set (get_monomial (polynomial (multiset-of _ms))) _ms) (delete (Value___mul__ _n1 _n2))))
+            to.DefineRule("mul", r =>
+            {
+                var (n1, n2, n3) = r.Vars<Node, Node, Node>("_n1", "_n2", "_n3");
+                var m = r.Var<MultiSet<Node>>("_ms");
+                r.When(n3.Is(mul.Of(n1, n2)), m.Is(ms.Of(n1, n2)));
+                r.Then(n3.Is(polynomial.Of(mss.Of(m))), getMonomial.Of(polynomial.Of(mss.Of(m))).Is(m));
+                r.Delete(mul.Of(n1, n2));
+            });
+
+            // (rule ((= _n1 (polynomial _mss))
+            //        (= _mss1 (unstable-multiset-map (unstable-fn "unstable-multiset-flat-map" (unstable-fn "get_monomial")) _mss))
+            //        (!= _mss _mss1))
+            //       ((union _n1 (polynomial _mss1)) (delete (polynomial _mss)) (set (get_sole_polynomial (multiset-of _n1)) _mss1)) :naive)
+            var flatMonomials = Primitives.UnstableFn<MultiSet<Node>, MultiSet<Node>>(Primitives.UnstableMultiSetFlatMap<Node>())
+                .Of(Primitives.UnstableFn<Node, MultiSet<Node>>(getMonomial).Of());
+            to.DefineRule("unwrap monomial", r =>
+            {
+                var n1 = r.Var<Node>("_n1");
+                var (m, m1) = r.Vars<MultiSet<MultiSet<Node>>, MultiSet<MultiSet<Node>>>("_mss", "_mss1");
+                r.Naive();
+                r.When(n1.Is(polynomial.Of(m)), m1.Is(Primitives.UnstableMultiSetMap<MultiSet<Node>, MultiSet<Node>>().Of(flatMonomials, m)), m.IsNot(m1));
+                r.Then(n1.Is(polynomial.Of(m1)), getSole.Of(ms.Of(n1)).Is(m1));
+                r.Delete(polynomial.Of(m));
+            });
+
+            // (rule ((= _n1 (polynomial _mss)) (= _mss1 (unstable-multiset-flat-map (unstable-fn "get_sole_polynomial") _mss)) (!= _mss _mss1))
+            //       ((union _n1 (polynomial _mss1)) (delete (polynomial _mss)) (set (get_sole_polynomial (multiset-of _n1)) _mss1)) :naive)
+            to.DefineRule("unwrap polynomial", r =>
+            {
+                var n1 = r.Var<Node>("_n1");
+                var (m, m1) = r.Vars<MultiSet<MultiSet<Node>>, MultiSet<MultiSet<Node>>>("_mss", "_mss1");
+                r.Naive();
+                r.When(n1.Is(polynomial.Of(m)), m1.Is(Primitives.UnstableMultiSetFlatMap<MultiSet<Node>>().Of(Primitives.UnstableFn<MultiSet<Node>, MultiSet<MultiSet<Node>>>(getSole).Of(), m)), m.IsNot(m1));
+                r.Then(n1.Is(polynomial.Of(m1)), getSole.Of(ms.Of(n1)).Is(m1));
+                r.Delete(polynomial.Of(m));
+            });
+
+            // (rule ((= _n (polynomial _mss)))
+            //       ((union _n (unstable-multiset-reduce (unstable-fn "Value___add__") (Value_from_int (Int___init__ 0))
+            //           (unstable-multiset-map (unstable-fn "unstable-multiset-reduce" (unstable-fn "Value___mul__") (Value_from_int (Int___init__ 1))) _mss)))
+            //        (delete (polynomial _mss))))
+            var from = graph.DefineRuleset("from");
+            from.DefineRule("from", r =>
+            {
+                var n = r.Var<Node>("_n");
+                var m = r.Var<MultiSet<MultiSet<Node>>>("_mss");
+                var product = Primitives.UnstableFn<MultiSet<Node>, Node>(Primitives.UnstableMultiSetReduce<Node>())
+                    .Of(Primitives.UnstableFn<Node, Node, Node>(mul).Of(), fromInt.Of(intInit.Of(1L)));
+                r.When(n.Is(polynomial.Of(m)));
+                r.Then(n.Is(Primitives.UnstableMultiSetReduce<Node>().Of(Primitives.UnstableFn<Node, Node, Node>(add).Of(), fromInt.Of(intInit.Of(0L)),
+                    Primitives.UnstableMultiSetMap<MultiSet<Node>, Node>().Of(product, m))));
+                r.Delete(polynomial.Of(m));
+            });
+
+            // (run-schedule (saturate (run to)))
+            root.Run(Schedule.Saturate(to));
+            Assert.Equal(4, root.CountRows(polynomial));
+            Assert.True(root.AreEqual(x, polynomial.Of(mss.Of(ms.Of(var.Of("d")), ms.Of(var.Of("e")), ms.Of(var.Of("a"), var.Of("b"), var.Of("c"))))));
+
+            // (run-schedule (saturate (run from))) (extract $x)
+            root.Run(Schedule.Saturate(from));
+            Assert.Equal(0, root.CountRows(polynomial));
+            Assert.Equal(
+                "(Value___add__ (Value___add__ (Value_var \"d\") (Value_var \"e\")) (Value___mul__ (Value___mul__ (Value_var \"a\") (Value_var \"b\")) (Value_var \"c\")))",
+                root.Extract(x).ToString());
         }
 
         /// <summary>

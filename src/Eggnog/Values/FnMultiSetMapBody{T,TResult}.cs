@@ -8,7 +8,10 @@ namespace Eggnog
     /// egglog's <c>unstable-multiset-map</c> (src/sort/multiset.rs:356-409): a function value applied to each distinct
     /// element of a multiset, in cell order, where the call site's context allows its function (<see cref="FnApply"/>);
     /// each result keeps its element's count, results that are one value add their counts, and an element it gives no
-    /// result for is dropped. Its arguments are the function value and the multiset.
+    /// result for is dropped. Its arguments are the function value and the multiset. The result is a multiset of its
+    /// own sort, rebuilt when that sort's elements are classes, where egglog's copies the input's rebuild flag
+    /// (<c>..multiset</c>, multiset.rs:403-406), so a map from values to classes is unequal to the same multiset made
+    /// otherwise, and stale after a union: the egglog engine map's defect 27.
     /// </summary>
     /// <typeparam name="T">The input multiset's element type.</typeparam>
     /// <typeparam name="TResult">The output multiset's element type.</typeparam>

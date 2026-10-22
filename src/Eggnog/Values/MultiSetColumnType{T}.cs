@@ -601,6 +601,40 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Orders a multiset's elements for a read, which never interns, as egglog's would hold them once its
+        /// <c>check</c> interned them: the elements writes interned in cell order, then one no write interned, which
+        /// egglog's interns after every value it holds, as <see cref="TryPickValue"/> takes it. Two or more no write
+        /// interned have no order, since egglog's <c>check</c> sets theirs by interning them in turn.
+        /// </summary>
+        /// <param name="value">The multiset.</param>
+        /// <param name="ordered">The elements and their counts in that order, when there is one.</param>
+        /// <returns>Whether there is an order.</returns>
+        internal bool TryOrderByCell(MultiSet<T> value, out List<KeyValuePair<T, long>> ordered)
+        {
+            var interned = new List<(uint Cell, KeyValuePair<T, long> Entry)>();
+            KeyValuePair<T, long>? fresh = null;
+            ordered = [];
+            foreach (var entry in value.Counts)
+            {
+                if (element.TryEncodeExisting(entry.Key, out var cell))
+                    interned.Add((cell, entry));
+                else if (fresh is null)
+                    fresh = entry;
+                else
+                    return false;
+            }
+
+            interned.Sort(static (a, b) => a.Cell.CompareTo(b.Cell));
+            foreach (var (_, entry) in interned)
+                ordered.Add(entry);
+
+            if (fresh is { } last)
+                ordered.Add(last);
+
+            return true;
+        }
+
+        /// <summary>
         /// Reads the container of a cell.
         /// </summary>
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>

@@ -6,7 +6,7 @@ namespace Eggnog
     /// <summary>
     /// What a primitive that applies function values does: egglog's <c>unstable-app</c> (<see cref="FnApplyBody"/>) and
     /// its higher-order container primitives, pure themselves, each application dispatched on the call site's context
-    /// as egglog's <c>apply_function</c> dispatches it (src/exec_state.rs:207-221, <see cref="FnApply"/>).
+    /// as egglog's <c>apply_function</c> dispatches it (src/exec_state.rs:208-225, <see cref="FnApply"/>).
     /// </summary>
     internal abstract class FnPrimitiveBody
     {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Eggnog
 {
@@ -58,27 +57,15 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        /// <remarks>The elements fold in cell order: a read over a multiset of more than one distinct element, one of them
-        /// no write interned, has no result, since egglog's <c>check</c> would set that order by interning it, as
-        /// <c>multiset-pick</c>'s read (decisions row 22).</remarks>
+        /// <remarks>The elements fold in the order egglog's <c>check</c> would hold them in once it interned them: those
+        /// writes interned in cell order, then one no write interned; two or more no write interned have no order, so no
+        /// result (<see cref="MultiSetColumnType{T}.TryOrderByCell"/>, decisions row 22).</remarks>
         public override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value)
         {
-            var entries = ((MultiSet<T>)arguments[2]).Counts.ToList();
-            if (entries.Count > 1)
+            if (((MultiSetColumnType<T>)parameters[2]).TryOrderByCell((MultiSet<T>)arguments[2], out var entries) == false)
             {
-                var element = (ColumnType<T>)((IContainerColumnType)parameters[2]).ElementTypes[0];
-                var cells = new uint[entries.Count];
-                for (var i = 0; i < cells.Length; i++)
-                {
-                    if (element.TryEncodeExisting(entries[i].Key, out cells[i]) == false)
-                    {
-                        value = null;
-                        return false;
-                    }
-                }
-
-                var order = Enumerable.Range(0, cells.Length).OrderBy(i => cells[i]).ToArray();
-                entries = Array.ConvertAll(order, i => entries[i]).ToList();
+                value = null;
+                return false;
             }
 
             value = arguments[1];
