@@ -61,6 +61,13 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterFn<Map<long, string>>();
             var mapEmpty = Primitives.MapEmpty<long, string>();
             Assert.True(graph.Root.Check(Primitives.UnstableApp<Map<long, string>>().Of(Primitives.UnstableFn<Map<long, string>>(mapEmpty).Of()).Is(mapEmpty.Of())));
+
+            // (sort IntToUnit (UnstableFn (i64) Unit)) (check (= (unstable-app (unstable-fn "<" 1) 2) ()))
+            graph.Values.RegisterFn<long, ValueTuple>();
+            var less = Primitives.UnstableFn<long, ValueTuple>(Primitives.Fallible(Primitives.Less));
+            var test = Primitives.UnstableApp<long, ValueTuple>();
+            Assert.True(graph.Root.Check(test.Of(less.Of(1L), 2L).Is(default(ValueTuple))));
+            Assert.False(graph.Root.Check(test.Of(less.Of(2L), 1L).Is(default(ValueTuple))));
         }
 
         /// <summary>

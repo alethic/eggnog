@@ -455,6 +455,7 @@ sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
     Func<T1, T2, T3, T4, TResult> Function { get }
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 static class Eggnog.Primitives
+    static Primitive Fallible(Primitive filter)
     static Primitive<Int64, Double> ToDouble { get }
     static Primitive<Int64, Int64, Boolean> Equal { get }
     static Primitive<Int64, Int64, Boolean> Greater { get }
@@ -531,6 +532,8 @@ static class Eggnog.Primitives
     static Primitive<Vec<T>, Vec<T>> VecPop<T>()
     static Primitive<Vec<TSort>, Vec<TSort>, Vec<TSort>> VecUnion<TSort : struct, ISort<TSort>>()
     static PrimitiveN<Map<TKey, TValue>> MapEmpty<TKey, TValue>()
+    static PrimitiveN<MultiSet<T>> UnstableMultiSetFilter<T>()
+    static PrimitiveN<MultiSet<T>> UnstableMultiSetFilterNot<T>()
     static PrimitiveN<MultiSet<T>> UnstableMultiSetFlatMap<T>()
     static PrimitiveN<MultiSet<TResult>> UnstableMultiSetMap<T, TResult>()
     static PrimitiveN<T> UnstableMultiSetReduce<T>()

@@ -63,6 +63,13 @@ namespace Eggnog
         /// Registers the built-in set types, once the graph's root exists: a set is a container, whose environment the
         /// graph registers in the root's domain.
         /// </summary>
+        /// <summary>
+        /// Adds egglog's <c>Unit</c> sort, of <see cref="ValueTuple"/>: the output of relations, and of functions, function
+        /// sorts and primitives that hold no value, such as egglog's fallible comparisons.
+        /// </summary>
+        /// <param name="unit">The graph's unit type.</param>
+        internal void AddUnit(UnitColumnType unit) => Add(unit);
+
         internal void RegisterBuiltInSets()
         {
             Add(new BaseColumnType<BigRationalCodec, BigRational>("BigRat", values, FormatBigRational, Comparer<BigRational>.Default));

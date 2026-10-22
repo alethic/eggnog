@@ -238,7 +238,7 @@ namespace Eggnog
         /// </summary>
         void CheckType(ColumnType type)
         {
-            if (ReferenceEquals(type.Store, graph.Values) == false || type is UnitColumnType)
+            if (ReferenceEquals(type.Store, graph.Values) == false)
                 throw new ArgumentException($"Column type {type.Name} of the cost model belongs to another graph.");
         }
 

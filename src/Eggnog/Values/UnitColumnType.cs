@@ -11,6 +11,7 @@ namespace Eggnog
     {
 
         readonly Relations.ColumnTy engineType;
+        readonly Relations.BaseSort<Relations.UnitCodec, ValueTuple> sort = new("Unit", static _ => "()");
 
         /// <summary>
         /// Initializes a new instance and registers the codec with <paramref name="values"/>.
@@ -32,7 +33,7 @@ namespace Eggnog
         internal override Relations.ColumnTy EngineType => engineType;
 
         /// <inheritdoc />
-        internal override Relations.Sort ExtractionSort => throw new InvalidOperationException("The unit type of relation outputs has no extraction sort.");
+        internal override Relations.Sort ExtractionSort => sort;
 
         /// <inheritdoc />
         internal override uint Encode(ValueTuple value) => Unit;

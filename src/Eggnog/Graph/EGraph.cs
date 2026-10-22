@@ -63,7 +63,8 @@ namespace Eggnog
 
             BaseValues = Engine.BaseValues;
             Values = new ValueStore(this);
-            Unit = new UnitColumnType(BaseValues) { Store = Values };
+            Unit = new UnitColumnType(BaseValues);
+            Values.AddUnit(Unit);
             NotEqual = Engine.RegisterExternalFunction(new NotEqualFunction(Unit.Unit));
             Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));
             Extraction = new ExtractionCatalog(this);
