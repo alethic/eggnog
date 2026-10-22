@@ -34,9 +34,9 @@ namespace Eggnog.Tests.Extraction
             var t = new NodeTheory();
             var free = t.Graph.DefineConstructor<Node, Node>("Free", cost: 0);
             var term = t.Root.Extract(t.Root.Make(free.Of(t.Lit.Of(1L))));
-            Assert.Equal(2, term.Cost);
+            Assert.Equal<ulong>(2, term.Cost);
             Assert.Equal("(Free (Lit 1))", term.ToString());
-            Assert.Equal(2, term.Child(0).Cost);
+            Assert.Equal<ulong>(2, term.Child(0).Cost);
         }
 
         [Fact]
@@ -64,9 +64,9 @@ namespace Eggnog.Tests.Extraction
             t.Root.Union(s, t.Root.Make(t.Lit.Of(1L)));
             var term = t.Root.Extract(s);
             Assert.Equal("(Lit 1)", term.ToString());
-            Assert.Equal(2, term.Cost);
+            Assert.Equal<ulong>(2, term.Cost);
             Assert.True(t.Root.CreateExtractor().TryGetCost(s, out var cost));
-            Assert.Equal(2, cost);
+            Assert.Equal<ulong>(2, cost);
         }
 
         [Fact]
@@ -82,13 +82,13 @@ namespace Eggnog.Tests.Extraction
                 heads.Add(node.Head.Name);
                 Assert.Equal(1, node.Arity);
                 Assert.Equal(5L, (long)node.Get(0));
-                return node.Get<long>(0) * 100;
+                return (ulong)(node.Get<long>(0) * 100);
             });
 
             var term = t.Root.Extract(s, costs);
 
             Assert.Equal("(Slow 3)", term.ToString());
-            Assert.Equal(101, term.Cost);
+            Assert.Equal<ulong>(101, term.Cost);
             Assert.Contains("Lit", heads);
             Assert.Equal("(Lit 5)", t.Root.Extract(s, CostModel.Default.With(slow, 1000)).ToString());
         }
@@ -116,12 +116,11 @@ namespace Eggnog.Tests.Extraction
             var lit = t.Root.Make(t.Lit.Of(7L));
             var name = t.Root.Make(named.Of("seven"));
 
-            Assert.Equal(2, t.Root.Extract(lit).Cost);
-            Assert.Equal(101, t.Root.Extract(lit, CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<long>(), 100)).Cost);
-            Assert.Equal(6, t.Root.Extract(name, CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<string>(), s => s.Length)).Cost);
+            Assert.Equal<ulong>(2, t.Root.Extract(lit).Cost);
+            Assert.Equal<ulong>(101, t.Root.Extract(lit, CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<long>(), 100)).Cost);
+            Assert.Equal<ulong>(6, t.Root.Extract(name, CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<string>(), s => (ulong)s.Length)).Cost);
             Assert.Throws<ArgumentException>(() => CostModel.Default.WithValueCost(t.Graph.Values.TypeOf<Node>(), 1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => CostModel.Default.With(t.Lit, -1));
-            Assert.Throws<InvalidOperationException>(() => t.Root.Extract(lit, CostModel.Default.With(t.Lit, _ => -1)));
+            Assert.ThrowsAny<InvalidOperationException>(() => t.Root.Extract(lit, CostModel.Default.With(t.Lit, _ => throw new InvalidOperationException("no cost"))));
         }
 
         [Fact]
@@ -131,7 +130,7 @@ namespace Eggnog.Tests.Extraction
             var sum = t.Root.Make(t.Add.Of(t.Lit.Of(1L), t.Lit.Of(1L)));
             var term = t.Root.Extract(sum);
             Assert.Same(term.Child(0), term.Child(1));
-            Assert.Equal(5, term.Cost);
+            Assert.Equal<ulong>(5, term.Cost);
             Assert.Equal("(Add (Lit 1) (Lit 1))", term.ToString());
         }
 
@@ -223,7 +222,7 @@ namespace Eggnog.Tests.Extraction
             graph.DefineSort<Node>("Node");
             var values = graph.DefineConstructor<long, int, bool, double, Node>("V");
             var text = graph.DefineConstructor<string, Node>("T");
-            var sets = graph.DefineConstructor<ValueSet<string>, ValueSet<long>, ValueSet<int>, Node>("S");
+            var sets = graph.DefineConstructor<Set<string>, Set<long>, Set<int>, Node>("S");
             var root = graph.Root;
 
             // As printed by the egglog CLI built from ext/egglog at 5e655cae: (FL -42), (FB true), (FD 1.5), (FD 2.0),
@@ -232,7 +231,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Equal("(V 42 -1 false 2.0)", root.Extract(root.Make(values.Of(42L, -1, false, 2.0))).ToString());
             Assert.Equal("(T \"kind\")", root.Extract(root.Make(text.Of("kind"))).ToString());
             Assert.Equal("(S (set-of \"a\" \"b\") (set-of 1 3) (set-of))",
-                root.Extract(root.Make(sets.Of(ValueSet.Of("b", "a"), ValueSet.Of(3L, 1L), ValueSet<int>.Empty))).ToString());
+                root.Extract(root.Make(sets.Of(Set.Of("b", "a"), Set.Of(3L, 1L), Set<int>.Empty))).ToString());
         }
 
         /// <summary>
@@ -283,8 +282,8 @@ namespace Eggnog.Tests.Extraction
             var both = graph.DefineConstructor<int, long, Node>("Both");
             var n = graph.Root.Make(both.Of(1, 2L));
             var costs = CostModel.Default.WithValueCost(graph.Values.TypeOf<int>(), 10);
-            Assert.Equal(12, graph.Root.Extract(n, costs).Cost);
-            Assert.Equal(3, graph.Root.Extract(n).Cost);
+            Assert.Equal<ulong>(12, graph.Root.Extract(n, costs).Cost);
+            Assert.Equal<ulong>(3, graph.Root.Extract(n).Cost);
         }
 
         /// <summary>

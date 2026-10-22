@@ -50,7 +50,7 @@ namespace Eggnog
 
             var sorts = new List<int>();
             for (var i = 0; i < types.Length; i++)
-                if (types[i].Kind == ColumnKind.Sort)
+                if (types[i].InvolvesClasses)
                     sorts.Add(i);
 
             SortColumns = sorts.ToArray();

@@ -19,7 +19,8 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Its value constants are interned when it is defined, into the graph's pools, and stay interned after it is
-        /// disposed (<see cref="ValueStore.InternedCount"/>). Matching never interns.
+        /// disposed (<see cref="ValueStore.InternedCount"/>). Matching interns only the new results of the computations in
+        /// its body, as a rule's body does.
         /// </remarks>
         /// <param name="name">The query's name, unique among the graph's live queries.</param>
         /// <param name="define">Declares the variables (the columns of a match) and the body.</param>

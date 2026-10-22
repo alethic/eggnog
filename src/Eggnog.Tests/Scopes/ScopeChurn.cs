@@ -39,8 +39,8 @@ namespace Eggnog.Tests.Scopes
             Schema = Graph.Root.CreateChild(c.Schema);
             var values = new[] { "a", "b", "c" }.Concat(Enumerable.Range(3, domain - 3).Select(i => "v" + i.ToString(CultureInfo.InvariantCulture))).ToArray();
             Schema.Assume(
-                c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of(values)),
-                c.Types.Of("n").Is(ValueSet.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L));
+                c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(Set.Of(values)),
+                c.Types.Of("n").Is(Set.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L));
             c.DeclareBranch(Schema, "kind", "a", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(Schema, "kind", "b", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(Schema, "kind", "c", c.Form.Of("at", "instant-ms"));
@@ -110,7 +110,7 @@ namespace Eggnog.Tests.Scopes
         public void InternLiteral(string literal)
         {
             Graph.Values.TypeOf<string>().Encode(literal);
-            Graph.Values.TypeOf<ValueSet<string>>().Encode(ValueSet.Of(literal));
+            Graph.Values.TypeOf<Set<string>>().Encode(Set.Of(literal));
         }
 
         /// <summary>
@@ -127,7 +127,7 @@ namespace Eggnog.Tests.Scopes
             var c = Theory;
             return scope.DefineRule(c.Horn, name, r =>
             {
-                var d = r.Var<ValueSet<string>>("d");
+                var d = r.Var<Set<string>>("d");
                 r.When(c.Present.Of("kind"), d.Is(c.Dom.Of("kind")));
                 r.Where(Primitives.Contains<string>().Of(d, "a"));
                 r.Then(c.Ne.Of("kind", constant));
@@ -177,7 +177,7 @@ namespace Eggnog.Tests.Scopes
             {
                 var sibling = Graph.Root.CreateChild(c.Schema);
                 tracked.Add(new WeakReference(sibling));
-                sibling.Assume(c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b", "c")));
+                sibling.Assume(c.Present.Of("kind"), c.Discriminator.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b", "c")));
                 for (var j = 0; j < rules; j++)
                 {
                     var rule = DefineLocalRule(sibling, "rule " + j.ToString(CultureInfo.InvariantCulture), "x" + j.ToString(CultureInfo.InvariantCulture));

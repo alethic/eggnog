@@ -26,6 +26,10 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(rebuilder);
             ArgumentNullException.ThrowIfNull(state);
 
+            // A type of base values only: none of its containers rebuilds, so egglog's walk over them changes nothing.
+            if (HoldsIds == false)
+                return new ContainerRebuildSummary();
+
             var count = Count;
             if (recent is { } subset && rebuilder.HintColumn is { } column && IsIncremental(subset.Size, count, parallelism.ParallelizeIntraContainerOp(count)))
                 return ApplyRebuildIncremental(table, rebuilder, state, subset, column);

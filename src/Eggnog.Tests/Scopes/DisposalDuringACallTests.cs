@@ -160,7 +160,7 @@ namespace Eggnog.Tests.Scopes
                 return Math.Max(x, y);
             });
             var g = graph.DefineFunction<string, long>("g", max);
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var chosen = graph.DefineRelation<string, string>("chosen");
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("chosen bumps g", r =>
@@ -170,7 +170,7 @@ namespace Eggnog.Tests.Scopes
             });
             var split = graph.DefineSplit("choose", s =>
             {
-                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Assume(chosen.Of(p, v));
@@ -178,7 +178,7 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
             var node = scope.Make(a.Of());
-            scope.Assume(dom.Of("kind").Is(ValueSet.Of("x", "y")));
+            scope.Assume(dom.Of("kind").Is(Set.Of("x", "y")));
             scope.Assume(g.Of("k").Is(1L));
             var child = scope.CreateChild();
             var inCase = Schedule.Sequence(Schedule.Saturate(rules), Schedule.Until(Schedule.Saturate(rules), tag.Of(node)));
@@ -256,7 +256,7 @@ namespace Eggnog.Tests.Scopes
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
             var a = graph.DefineConstructor<Node>("A");
-            var dom = graph.DefineFunction<Node, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<Node, Set<string>>("dom", ValueLattice.Intersect<string>());
             var chosen = graph.DefineRelation<Node, string>("chosen");
             var disposing = new Primitive<string, string>("disposing", x =>
             {
@@ -268,7 +268,7 @@ namespace Eggnog.Tests.Scopes
             var split = graph.DefineSplit("choose", s =>
             {
                 var p = s.Var<Node>("p");
-                var d = s.Var<ValueSet<string>>("d");
+                var d = s.Var<Set<string>>("d");
                 s.When(d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Assume(chosen.Of(p, disposing.Of(v)));
@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Scopes
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
             var node = scope.Make(a.Of());
-            scope.Assume(dom.Of(node).Is(ValueSet.Of("x", "y")));
+            scope.Assume(dom.Of(node).Is(Set.Of("x", "y")));
             disposed = scope;
 
             var report = scope.Run(Schedule.Split(split, Schedule.Saturate(none)));

@@ -27,7 +27,7 @@ namespace Eggnog
         /// <param name="cells">Each argument's cell.</param>
         /// <param name="scope">The extractor's scope.</param>
         /// <param name="engine">The engine's term, which renders it.</param>
-        internal ExtractedTerm(ConstructorHandle head, ClassId @class, long cost, object[] arguments, uint[] cells, Scope scope, Relations.ExtractedTerm engine)
+        internal ExtractedTerm(ConstructorHandle head, ClassId @class, ulong cost, object[] arguments, uint[] cells, Scope scope, Relations.ExtractedTerm engine)
         {
             Head = head;
             Class = @class;
@@ -51,7 +51,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the tree cost: the node's head and every argument, shared subterms counted as often as they occur.
         /// </summary>
-        public long Cost { get; }
+        public ulong Cost { get; }
 
         /// <summary>
         /// Gets the number of arguments.

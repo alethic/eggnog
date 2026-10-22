@@ -32,18 +32,18 @@ namespace Eggnog.Relations.Tests
             Assert.Equal("List", term.Name);
             Assert.Same(e, term.Sort);
             Assert.Equal(all, term.Value);
-            Assert.Equal(1 + (1 + 3 + 3) + 3, term.Cost);
+            Assert.Equal<ulong>(1 + (1 + 3 + 3) + 3, term.Cost);
 
             var container = term.Child(0);
             Assert.Equal(ExtractedTermKind.Container, container.Kind);
             Assert.Same(vec, container.Sort);
             Assert.Equal("VecE", container.Name);
-            Assert.Equal(10, container.Cost);
+            Assert.Equal<ulong>(10, container.Cost);
             Assert.Throws<InvalidOperationException>(() => container.Function);
 
             var addTerm = container.Child(0);
             Assert.Equal("Add", addTerm.Name);
-            Assert.Equal(7, addTerm.Cost);
+            Assert.Equal<ulong>(7, addTerm.Cost);
             Assert.Same(addTerm.Child(0), addTerm.Child(1));
             Assert.Same(addTerm.Child(0), container.Child(1));
 
@@ -51,7 +51,7 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(ExtractedTermKind.Base, literal.Kind);
             Assert.Equal("3", literal.Name);
             Assert.Equal(fx.Int(3), literal.Value);
-            Assert.Equal(1, literal.Cost);
+            Assert.Equal<ulong>(1, literal.Cost);
             Assert.Equal(0, literal.Arity);
             Assert.Throws<ArgumentOutOfRangeException>(() => literal.Child(0));
 
@@ -78,7 +78,7 @@ namespace Eggnog.Relations.Tests
 
             var empty = extractor.ExtractTerm(vec, fx.Get(holder));
             Assert.Equal(ExtractedTermKind.Container, empty.Kind);
-            Assert.Equal(0, empty.Cost);
+            Assert.Equal<ulong>(0, empty.Cost);
             Assert.Equal("(vec-empty)", empty.ToString());
 
             var text = extractor.ExtractTerm(fx.String, fx.Str("a\"b"));

@@ -41,7 +41,7 @@ namespace Eggnog
             Template = assumptions;
             var sorts = new List<int>();
             for (var i = 0; i < columns.Length; i++)
-                if (columns[i].Kind == ColumnKind.Sort)
+                if (columns[i].InvolvesClasses)
                     sorts.Add(i);
 
             SortColumns = sorts.ToArray();
@@ -94,14 +94,14 @@ namespace Eggnog
         public ColumnType ElementType { get; }
 
         /// <summary>
-        /// Gets the number of elements of a set cell, given the set's column type: one case per element. Allocates
-        /// nothing (a set is an interned base value).
+        /// Gets the number of elements of a set cell, given the set's column type: one case per element. Reads the
+        /// set's container; allocates nothing.
         /// </summary>
         public Func<ColumnType, uint, int> CountOf { get; }
 
         /// <summary>
-        /// Gets the element of a set cell at a position in set order (<see cref="ValueSetOrder{T}"/>), given the set's
-        /// column type: case <c>i</c>'s element. Boxes a value-type element.
+        /// Gets the element of a set cell at a position in set order (<see cref="ElementOrder{T}"/>), given the set's
+        /// column type: case <c>i</c>'s element. Decodes the set, and boxes a value-type element.
         /// </summary>
         public Func<ColumnType, uint, int, object> ElementAt { get; }
 

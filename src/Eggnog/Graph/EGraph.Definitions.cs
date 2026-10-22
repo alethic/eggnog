@@ -119,7 +119,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
@@ -138,7 +139,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
@@ -158,7 +160,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function,
@@ -180,7 +183,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function,
@@ -203,7 +207,8 @@ namespace Eggnog
         /// <see cref="TableOptions.Subsumable"/>.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function,
@@ -329,14 +334,13 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<TSort> DefineConstructor<TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<TSort> DefineConstructor<TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<TSort>(), name, TableKind.Constructor, Array.Empty<ColumnType>(), Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -345,14 +349,13 @@ namespace Eggnog
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, TSort>(), name, TableKind.Constructor, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -362,14 +365,13 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -381,14 +383,13 @@ namespace Eggnog
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -401,14 +402,13 @@ namespace Eggnog
         /// <typeparam name="T4">The fourth key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, T4, TSort>(), name, TableKind.Constructor,
                 new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TSort>(), options, null, cost);
 
@@ -480,7 +480,8 @@ namespace Eggnog
         /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output, the role is <see cref="TableRole.Term"/>, or the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
+        /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
         public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, lattice, 0);
@@ -509,14 +510,13 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, long cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
@@ -551,10 +551,10 @@ namespace Eggnog
         /// <param name="name">The name.</param>
         /// <param name="keys">The key types, of this graph.</param>
         /// <param name="sort">The sort of its terms, of this graph.</param>
-        /// <param name="cost">The cost of a node with this head, at least 0.</param>
+        /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it and the lift policy.</param>
         /// <returns>The constructor.</returns>
-        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, long cost = 1, TableOptions? options = null) =>
+        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, TableOptions? options = null) =>
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
@@ -570,7 +570,7 @@ namespace Eggnog
         /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
-        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, long cost,
+        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, ulong cost,
             bool builtIn = false, FunctionMergeDefinition? merge = null)
             where T : TableHandle
         {
@@ -594,17 +594,23 @@ namespace Eggnog
 
                     // A function may output a class, as egglog's function of an e-class sort: its merge then asserts
                     // the classes equal, or keeps the old or the new one; a lattice and a merge function decode values.
-                    if (kind == TableKind.Function && output!.Kind == ColumnKind.Sort)
+                    // So may it a container of classes, egglog's eq-sort container, which a lattice and a merge function
+                    // would decode outside any scope.
+                    if (kind == TableKind.Function && output!.InvolvesClasses)
                     {
+                        var what = output.Kind == ColumnKind.Sort ? $"the sort {output.Name}" : $"{output.Name}, which holds classes";
                         if (lattice is not null)
-                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
+                            throw new ArgumentException($"Function '{name}' outputs {what}; lattice '{lattice.Name}' merges values, not classes.", nameof(lattice));
 
                         if (merge is { DecodesValues: true })
-                            throw new ArgumentException($"Function '{name}' outputs the sort {output.Name}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New, Old and Expression merge classes.", nameof(merge));
+                            throw new ArgumentException($"Function '{name}' outputs {what}; merge '{merge.Name}' is a function of values, and only FunctionMerge.New, Old and Expression merge classes.", nameof(merge));
                     }
 
                     if (lattice is not null && lattice.ValueType != output!.ClrType)
                         throw new ArgumentException($"Lattice '{lattice.Name}' merges {lattice.ValueType.Name}, not {output.ClrType.Name}.", nameof(lattice));
+
+                    if (lattice is { Ordered: true } && output!.IsOrdered == false)
+                        throw new ArgumentException($"Lattice '{lattice.Name}' orders the values of {output!.Name}, which holds an element that is not comparable.", nameof(lattice));
 
                     // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
                     if (kind == TableKind.Function && options.Subsumable == true)
@@ -612,7 +618,6 @@ namespace Eggnog
 
                     break;
                 default:
-                    ArgumentOutOfRangeException.ThrowIfNegative(cost);
                     if (output!.Kind != ColumnKind.Sort)
                         throw new ArgumentException($"Constructor '{name}' outputs {output.Name}, which is not a sort defined with DefineSort.", nameof(name));
 

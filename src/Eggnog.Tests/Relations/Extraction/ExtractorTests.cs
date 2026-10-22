@@ -26,7 +26,7 @@ namespace Eggnog.Relations.Tests
 
             var dag = new TermDag();
             var result = Extractor.ExtractValue(fx.Schema, op, expr, dag);
-            Assert.Equal(3, result.Cost);
+            Assert.Equal<ulong>(3, result.Cost);
             Assert.Equal("(Add 1 1)", dag.ToString(result.Term));
         }
 
@@ -56,7 +56,7 @@ namespace Eggnog.Relations.Tests
             var (fx, term, _, _, tb) = StepGraph();
             var extracted = fx.Extract(term, tb);
             Assert.NotNull(extracted);
-            Assert.Equal(4, extracted.Value.Cost);
+            Assert.Equal<ulong>(4, extracted.Value.Cost);
             Assert.Equal("(SmallStep (SmallStep (SmallStep (SmallStep (Origin)))))", extracted.Value.Text);
         }
 
@@ -77,10 +77,10 @@ namespace Eggnog.Relations.Tests
             var b = fx.Make(broccoli, fx.Boolean(true));
             var c = fx.Make(carrot, a);
 
-            Assert.Equal(("(Apple 5)", 2L), fx.Extract(fruit, a));
-            Assert.Equal(("(Orange 3.14)", 3L), fx.Extract(fruit, o));
-            Assert.Equal(("(Broccoli true)", 4L), fx.Extract(vegetable, b));
-            Assert.Equal(("(Carrot (Apple 5))", 6L), fx.Extract(vegetable, c));
+            Assert.Equal(("(Apple 5)", 2UL), fx.Extract(fruit, a));
+            Assert.Equal(("(Orange 3.14)", 3UL), fx.Extract(fruit, o));
+            Assert.Equal(("(Broccoli true)", 4UL), fx.Extract(vegetable, b));
+            Assert.Equal(("(Carrot (Apple 5))", 6UL), fx.Extract(vegetable, c));
         }
 
         [Fact]
@@ -117,7 +117,7 @@ namespace Eggnog.Relations.Tests
             var quaz = fx.Function("Quaz", quaMap);
             fx.Set(quaz, [], fx.EGraph.GetContainerValue(new MapContainer(true)));
 
-            Assert.Equal(("(map-empty)", 0L), fx.Extract(quaMap, fx.Get(quaz)));
+            Assert.Equal(("(map-empty)", 0UL), fx.Extract(quaMap, fx.Get(quaz)));
         }
 
         [Fact]
@@ -131,7 +131,7 @@ namespace Eggnog.Relations.Tests
             var quaz = fx.Function("Quaz", quaMap);
             fx.Set(quaz, [], fx.EGraph.GetContainerValue(new MapContainer(true)));
 
-            Assert.Equal(("(map-empty)", 0L), fx.Extract(quaMap, fx.Get(quaz)));
+            Assert.Equal(("(map-empty)", 0UL), fx.Extract(quaMap, fx.Get(quaz)));
         }
 
         [Fact]
@@ -154,8 +154,8 @@ namespace Eggnog.Relations.Tests
             fx.Union(barId, bazId);
 
             // bar and baz tie at cost 1, and a tie goes to the function declared first: bar.
-            Assert.Equal(("(map-insert (map-empty) 0 (bar))", 2L), fx.Extract(mapsrt1, fx.Get(map1)));
-            Assert.Equal(("(map-insert (map-empty) false (bar))", 2L), fx.Extract(mapsrt2, fx.Get(map2)));
+            Assert.Equal(("(map-insert (map-empty) 0 (bar))", 2UL), fx.Extract(mapsrt1, fx.Get(map1)));
+            Assert.Equal(("(map-insert (map-empty) false (bar))", 2UL), fx.Extract(mapsrt2, fx.Get(map2)));
         }
 
         [Fact]
@@ -169,7 +169,7 @@ namespace Eggnog.Relations.Tests
             var barId = fx.Make(bar);
             fx.Set(func, [], barId);
 
-            Assert.Equal(("(bar)", 10L), fx.Extract(foo, fx.Get(func)));
+            Assert.Equal(("(bar)", 10UL), fx.Extract(foo, fx.Get(func)));
         }
 
         [Fact]
@@ -204,10 +204,10 @@ namespace Eggnog.Relations.Tests
             foreach (var (sort, value) in new (Sort, Value)[] { (nodeA, a), (nodeB, b), (nodeC, c) })
             {
                 Assert.True(extractor.TryGetCost(sort, value, out var cost));
-                Assert.Equal(long.MaxValue, cost);
+                Assert.Equal<ulong>(ulong.MaxValue, cost);
             }
 
-            Assert.Equal(("(groundedA (barbar (bar) (bar)))", long.MaxValue), fx.Extract(nodeA, a));
+            Assert.Equal(("(groundedA (barbar (bar) (bar)))", ulong.MaxValue), fx.Extract(nodeA, a));
         }
 
         [Fact]
@@ -291,7 +291,7 @@ namespace Eggnog.Relations.Tests
             fx.Union(cheapId, fx.Make(expensive));
             fx.Subsume(cheap);
 
-            Assert.Equal(("(expensive)", 100L), fx.Extract(math, fx.Canon(cheapId)));
+            Assert.Equal(("(expensive)", 100UL), fx.Extract(math, fx.Canon(cheapId)));
         }
 
         [Fact]
@@ -405,7 +405,7 @@ namespace Eggnog.Relations.Tests
 
             var one = Extractor.ComputeCostsFromRootSorts(fx.Schema, [a]);
             Assert.True(one.TryExtractBest(value, new TermDag(), out var result));
-            Assert.Equal(1, result.Cost);
+            Assert.Equal<ulong>(1, result.Cost);
         }
 
         [Fact]
@@ -416,7 +416,7 @@ namespace Eggnog.Relations.Tests
             var add = fx.Constructor("Add", op, null, fx.I64, fx.I64);
             var expr = fx.Make(add, fx.Int(-7), fx.Int(1L << 40));
             Assert.Equal("(Add -7 1099511627776)", Extractor.ExtractValueToString(fx.Schema, op, expr, out var cost));
-            Assert.Equal(3, cost);
+            Assert.Equal<ulong>(3, cost);
         }
 
         [Fact]
@@ -431,9 +431,9 @@ namespace Eggnog.Relations.Tests
             var holder = fx.Function("holder", vec);
             fx.Set(holder, [], fx.EGraph.GetContainerValue(new VecContainer(leafId.Rep, leafId.Rep)));
 
-            Assert.Equal(("7", 1L), fx.Extract(fx.I64, fx.Int(7)));
-            Assert.Equal(("\"hi\"", 1L), fx.Extract(fx.String, fx.Str("hi")));
-            Assert.Equal(("(vec-of (leaf) (leaf))", 6L), fx.Extract(vec, fx.Get(holder)));
+            Assert.Equal(("7", 1UL), fx.Extract(fx.I64, fx.Int(7)));
+            Assert.Equal(("\"hi\"", 1UL), fx.Extract(fx.String, fx.Str("hi")));
+            Assert.Equal(("(vec-of (leaf) (leaf))", 6UL), fx.Extract(vec, fx.Get(holder)));
         }
 
     }

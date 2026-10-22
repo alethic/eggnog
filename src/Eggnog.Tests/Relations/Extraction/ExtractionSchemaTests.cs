@@ -44,7 +44,6 @@ namespace Eggnog.Relations.Tests
             Assert.Throws<ArgumentException>(() => fx.Schema.Declare(leaf, Ctor(e, fx.Bool)));
             Assert.Throws<ArgumentException>(() => fx.Schema.Declare(leaf, Ctor(fx.I64, fx.I64)));
             Assert.Throws<ArgumentException>(() => fx.Schema.Declare(leaf, new FunctionSignature { Inputs = [fx.I64], Output = new TestVecSort("V", e), IsConstructor = true }));
-            Assert.Throws<ArgumentOutOfRangeException>(() => fx.Schema.Declare(leaf, new FunctionSignature { Inputs = [fx.I64], Output = e, Cost = -1 }));
             Assert.Throws<ArgumentException>(() => fx.Schema.Declare(new FunctionId(99), Ctor(e)));
             Assert.False(fx.Schema.IsDeclared(leaf));
             Assert.Empty(fx.Schema.Sorts);
@@ -94,17 +93,17 @@ namespace Eggnog.Relations.Tests
             fx.Union(c, fx.Make(hidden));
             fx.Union(c, fx.Make(visible));
 
-            Assert.Equal(("(visible)", 10L), fx.Extract(e, c));
+            Assert.Equal(("(visible)", 10UL), fx.Extract(e, c));
 
             var dag = new TermDag();
             var all = Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], options: ExtractionOptions.AllowUnextractable);
             Assert.True(all.TryExtractBest(e, c, dag, out var result));
-            Assert.Equal(("(cheap)", 1L), (dag.ToString(result.Term), result.Cost));
+            Assert.Equal(("(cheap)", 1UL), (dag.ToString(result.Term), result.Cost));
 
             var hiddenAllowed = new ExtractionOptions { RespectUnextractable = true, RespectHidden = false };
             var onlyHidden = Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], options: hiddenAllowed);
             Assert.True(onlyHidden.TryExtractBest(e, c, dag, out result));
-            Assert.Equal(("(hidden)", 2L), (dag.ToString(result.Term), result.Cost));
+            Assert.Equal(("(hidden)", 2UL), (dag.ToString(result.Term), result.Cost));
 
             // With no root sorts, the roots are the extractable output sorts: an unextractable-only sort is not one.
             var only = new EqSort("Only");
@@ -141,19 +140,19 @@ namespace Eggnog.Relations.Tests
             var dag = new TermDag();
             var extractor = Extractor.ComputeCostsFromRootSorts(fx.Schema, [e]);
             Assert.True(extractor.TryExtractBest(e, sum, dag, out var result));
-            Assert.Equal(("(AddT (Num 1) (Num 2))", 9L), (dag.ToString(result.Term), result.Cost));
+            Assert.Equal(("(AddT (Num 1) (Num 2))", 9UL), (dag.ToString(result.Term), result.Cost));
 
             // The cost model can price the view itself, or its term constructor.
             Assert.True(Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], CostModel.Default.WithFunctionCost(addView, 3)).TryGetCost(e, sum, out var cost));
-            Assert.Equal(7, cost);
+            Assert.Equal<ulong>(7, cost);
             Assert.True(Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], CostModel.Default.WithFunctionCost(addT, 2)).TryGetCost(e, sum, out cost));
-            Assert.Equal(6, cost);
+            Assert.Equal<ulong>(6, cost);
 
             // Proof extraction skips views and uses the hidden term table, which has no row for this class.
             var proofs = Extractor.ComputeCostsFromRootSorts(fx.Schema, [e], options: ExtractionOptions.AllowUnextractable);
             Assert.False(proofs.TryGetCost(e, sum, out _));
             Assert.True(Extractor.CreateOnDemand(fx.Schema).TryGetCost(e, sum, out cost));
-            Assert.Equal(9, cost);
+            Assert.Equal<ulong>(9, cost);
         }
 
     }

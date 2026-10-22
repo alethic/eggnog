@@ -67,7 +67,7 @@ namespace Eggnog.Tests.Cases
                 Assert.False(schema.Check(c.Form.Of("body.key", "uuid-lower")));
                 var best = query.Extract(q);
                 Assert.Equal($"(And (StrEq \"kind\" \"b\") (StrEq \"body.key\" \"{DiscriminatedSchema.Key}\"))", best.ToString());
-                Assert.Equal(7, best.Cost);
+                Assert.Equal<ulong>(7, best.Cost);
             }
         }
 
@@ -86,7 +86,7 @@ namespace Eggnog.Tests.Cases
                 Assert.True(query.AreEqual(q, c.StrEq.Of("type", "Record")));
                 var best = query.Extract(q);
                 Assert.Equal("(StrEq \"type\" \"Record\")", best.ToString());
-                Assert.Equal(3, best.Cost);
+                Assert.Equal<ulong>(3, best.Cost);
             }
         }
 
@@ -102,11 +102,11 @@ namespace Eggnog.Tests.Cases
             using (query)
             {
                 Assert.False(query.Check(c.Form.Of("body.ref", "uuid-lower")));
-                Assert.Equal(ValueSet.Of("a", "c"), query.Get(c.Dom.Of("kind")));
+                Assert.Equal(Set.Of("a", "c"), query.Get(c.Dom.Of("kind")));
                 var best = query.Extract(q);
                 Assert.True(best.Mentions(c.UuidEq));
                 Assert.Equal($"(And (Not (StrEq \"kind\" \"b\")) (UuidEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))", best.ToString());
-                Assert.Equal(1007, best.Cost);
+                Assert.Equal<ulong>(1007, best.Cost);
             }
         }
 
@@ -132,7 +132,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\"))",
                     best.ToString());
-                Assert.Equal(11, best.Cost);
+                Assert.Equal<ulong>(11, best.Cost);
             }
         }
 
@@ -150,7 +150,7 @@ namespace Eggnog.Tests.Cases
             using (query)
             {
                 Assert.Equal(2, report.CasesOpened);
-                Assert.Equal(ValueSet.Of("a", "b"), query.Get(c.Dom.Of("kind")));
+                Assert.Equal(Set.Of("a", "b"), query.Get(c.Dom.Of("kind")));
                 Assert.True(query.Check(c.Form.Of("body.ref", "uuid-lower")));
                 Assert.True(query.AreEqual(q, c.Or.Of(
                     c.And.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("body.ref", DiscriminatedSchema.Ref)),
@@ -163,7 +163,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(Or (And (StrEq \"kind\" \"a\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (StrEq \"kind\" \"b\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")))",
                     best.ToString());
-                Assert.Equal(15, best.Cost);
+                Assert.Equal<ulong>(15, best.Cost);
             }
         }
 
@@ -189,7 +189,7 @@ namespace Eggnog.Tests.Cases
                 Assert.Equal(
                     $"(And (And (Or (StrEq \"kind\" \"a\") (StrEq \"kind\" \"b\")) (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (BoolTrue \"flag\") (StrGt \"meta.updated\" \"{DiscriminatedSchema.Since}\")))",
                     best.ToString());
-                Assert.Equal(18, best.Cost);
+                Assert.Equal<ulong>(18, best.Cost);
             }
         }
 
@@ -207,15 +207,15 @@ namespace Eggnog.Tests.Cases
             var c = new PredicateTheory(new EGraph());
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
-            schema.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(ValueSet.Of("0", "1")), c.Discriminator.Of("$anyOf/0"));
-            c.DeclareBranch(schema, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(ValueSet.Of("active", "archived")));
-            c.DeclareBranch(schema, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(ValueSet.Of("draft", "active")));
+            schema.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(Set.Of("0", "1")), c.Discriminator.Of("$anyOf/0"));
+            c.DeclareBranch(schema, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(Set.Of("active", "archived")));
+            c.DeclareBranch(schema, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(Set.Of("draft", "active")));
 
             var compiled = schema.Run(c.Facts);
             Assert.True(compiled.Saturated);
             Assert.Equal(2, compiled.CasesOpened);
             Assert.Empty(schema.Children);
-            Assert.Equal(ValueSet.Of("active", "archived", "draft"), schema.Get(c.Dom.Of("status")));
+            Assert.Equal(Set.Of("active", "archived", "draft"), schema.Get(c.Dom.Of("status")));
             Assert.False(schema.Check(c.Present.Of("legacyId")));
             Assert.False(schema.Check(c.Present.Of("id2")));
             schema.Freeze();
@@ -228,7 +228,7 @@ namespace Eggnog.Tests.Cases
                 Assert.True(query.AreEqual(q, c.PFalse.Of()));
                 var best = query.Extract(q);
                 Assert.Equal("(PFalse)", best.ToString());
-                Assert.Equal(0, best.Cost);
+                Assert.Equal<ulong>(0, best.Cost);
             }
         }
 

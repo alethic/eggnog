@@ -100,6 +100,18 @@ namespace Eggnog
         /// <exception cref="RuleEvaluationException">A primitive it computes threw, or has no result.</exception>
         public uint PlanTerm(Term term)
         {
+            PlanFactUnions();
+            var cell = PlanTermCore(term);
+            PlanFactUnions();
+            return cell;
+        }
+
+        /// <summary>
+        /// Plans a ground term as <see cref="PlanTerm"/> does, the unions of the write primitives it computes held back
+        /// for <see cref="PlanFactUnions"/>, as egglog applies a command's unions after it evaluates the command.
+        /// </summary>
+        uint PlanTermCore(Term term)
+        {
             ArgumentNullException.ThrowIfNull(term);
             var shape = term.Shape;
             switch (shape.Kind)
@@ -112,6 +124,11 @@ namespace Eggnog
                         var cell = ClassChecks.Require(scope, type.ClassOf(shape.Constant!), nameof(term), Origin);
                         return fresh.Contains(cell) ? cell : engine.Find(cell);
                     }
+
+                    // A container of classes: its classes usable and canonical, as a class constant's, and the container
+                    // interned at the root.
+                    if (type.HoldsClasses)
+                        return type.EncodeCanonicalObject(shape.Constant!, scope, canonical ??= Canonical, Origin);
 
                     return type.EncodeObject(shape.Constant!);
                 }
@@ -186,36 +203,49 @@ namespace Eggnog
                 parameters[i] = TypeOf(primitive.ParameterTypes[i]);
 
             var result = TypeOf(primitive.ResultType);
-            var overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            var overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
             if (mergedClasses && overClasses)
                 throw new InvalidOperationException(
                     $"primitive '{primitive.Name}' computes over classes after this batch merged classes; compute it in a later call, which sees the merge as egglog's next command does.");
             var arguments = new uint[parameters.Length];
             for (var i = 0; i < arguments.Length; i++)
-                arguments[i] = PlanTerm(shape.Arguments[i]);
+                arguments[i] = PlanTermCore(shape.Arguments[i]);
+
+            // A write primitive unions classes that containers hold, which a child never rebuilds (decisions row 9).
+            if (primitive.IsWrite && scope.IsRoot == false)
+                throw new InvalidOperationException(
+                    $"primitive '{primitive.Name}' unions classes that containers hold, which only the root rebuilds, so only the root may compute it.");
 
             bool found;
             uint cell;
             EngineCallMarker.Enter();
+            var canonicalizer = result.HoldsClasses ? ClassCanonicalizer.Enter(canonical ??= Canonical) : null;
             try
             {
-                found = primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
+                // A write primitive's unions are the batch's, as egglog's global action makes them, at the end of the fact.
+                found = primitive.IsWrite
+                    ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, out cell)
+                    : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not OverflowException || graph.IdsExhausted == false)
             {
                 throw new RuleEvaluationException(null, null,
                     $"primitive '{primitive.Name}' threw {exception.GetType().Name}: {exception.Message}", exception);
             }
             finally
             {
+                if (result.HoldsClasses)
+                    ClassCanonicalizer.Exit(canonicalizer);
+
                 EngineCallMarker.Exit();
             }
 
             if (found == false)
                 throw new RuleEvaluationException(null, null, $"primitive '{primitive.Name}' has no result for these arguments", null);
 
-            // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it.
-            return result.Kind == ColumnKind.Sort && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
+            // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it; so is
+            // a container of classes, which the batch never makes fresh.
+            return result.InvolvesClasses && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
         }
 
         /// <summary>
@@ -229,7 +259,18 @@ namespace Eggnog
         /// holds.</exception>
         public void PlanFact(Fact fact)
         {
+            PlanFactUnions();
+            PlanFactCore(fact);
+            PlanFactUnions();
+        }
+
+        /// <summary>
+        /// Plans a fact as <see cref="PlanFact"/> does, the unions of its write primitives held back.
+        /// </summary>
+        void PlanFactCore(Fact fact)
+        {
             ArgumentNullException.ThrowIfNull(fact);
+            InternLiterals(fact);
             switch (fact)
             {
                 case RelationFact relation:
@@ -258,7 +299,7 @@ namespace Eggnog
                     else if (IsApplication(right, TableKind.Constructor) && IsClassConstant(left))
                         PlanConstructorWrite(right, equality.Left);
                     else if (TypeOf(equality.Left.ClrType).Kind == ColumnKind.Sort && IsApplication(left, TableKind.Function) == false && IsApplication(right, TableKind.Function) == false)
-                        PlanUnion(PlanTerm(equality.Left), PlanTerm(equality.Right));
+                        PlanUnionCore(PlanTermCore(equality.Left), PlanTermCore(equality.Right));
                     else
                         throw new ArgumentException($"value equality is not a write: {equality.Left} = {equality.Right}", nameof(fact));
 
@@ -278,6 +319,52 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Interns the value constants of a fact, in term order, before any of its computations runs: egglog lowers a
+        /// command, interning its literals, before it evaluates a primitive, so that a literal written after a computed
+        /// value still interns before it.
+        /// </summary>
+        void InternLiterals(Fact fact)
+        {
+            switch (fact)
+            {
+                case RelationFact relation:
+                    foreach (var argument in relation.Arguments)
+                        InternLiterals(argument.Shape);
+
+                    break;
+                case EqualityFact equality:
+                    InternLiterals(equality.Left.Shape);
+                    InternLiterals(equality.Right.Shape);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Interns the value constants of a term, in term order.
+        /// </summary>
+        void InternLiterals(TermShape shape)
+        {
+            switch (shape.Kind)
+            {
+                case TermShapeKind.Constant:
+                {
+                    var type = TypeOf(shape);
+                    if (type.InvolvesClasses == false)
+                        type.EncodeObject(shape.Constant!);
+
+                    break;
+                }
+                case TermShapeKind.Variable:
+                    break;
+                default:
+                    foreach (var argument in shape.Arguments)
+                        InternLiterals(argument.Shape);
+
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Plans the subsumption of a ground constructor term (egglog's <c>subsume</c>): a term whose row is not
         /// subsumed yet gets a subsumed copy of its row, which the constructor's merge makes sticky; a new term is
         /// planned as by <see cref="PlanTerm"/> and staged subsumed; a term already subsumed plans nothing.
@@ -288,6 +375,7 @@ namespace Eggnog
         public void PlanSubsume(Term term)
         {
             ArgumentNullException.ThrowIfNull(term);
+            PlanFactUnions();
             var shape = term.Shape;
             if (shape.Kind != TermShapeKind.Application || shape.Table!.Kind != TableKind.Constructor)
                 throw new ArgumentException($"Subsume takes a constructor term; {term} is not one", nameof(term));
@@ -321,6 +409,7 @@ namespace Eggnog
         /// subsumable, or a term in it is not a ground value or class this scope can use.</exception>
         public void PlanSubsume(Fact fact)
         {
+            PlanFactUnions();
             ArgumentNullException.ThrowIfNull(fact);
             if (fact is not RelationFact relation)
             {
@@ -349,6 +438,15 @@ namespace Eggnog
         /// one key.</exception>
         public void PlanUnion(uint a, uint b)
         {
+            PlanFactUnions();
+            PlanUnionCore(a, b);
+        }
+
+        /// <summary>
+        /// Plans a union as <see cref="PlanUnion"/> does, inside a fact or for the unions held back.
+        /// </summary>
+        void PlanUnionCore(uint a, uint b)
+        {
             var x = fresh.Contains(a) ? a : engine.Find(a);
             var y = fresh.Contains(b) ? b : engine.Find(b);
             if (x == y)
@@ -373,6 +471,7 @@ namespace Eggnog
         /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
         public bool Commit()
         {
+            PlanFactUnions();
             if (IsEmpty)
                 return false;
 
@@ -415,10 +514,11 @@ namespace Eggnog
             CheckTable(table);
 
             // egglog's next command would write a class after the merge's rebuild; the batch stages its merges after its
-            // writes, so a class it compares now may become equal to another only later. New and Old compare nothing.
-            if (mergedClasses && table.Output!.Kind == ColumnKind.Sort && table.Merge is null)
+            // writes, so a class it compares now may become equal to another only later, and so may a container of
+            // classes. New and Old compare nothing.
+            if (mergedClasses && table.Output!.InvolvesClasses && table.Merge is null)
                 throw new InvalidOperationException(
-                    $"'{table.Name}' is written after this batch merged classes, and its output is a class; write it in a later call, which sees the merge as egglog's next command does.");
+                    $"'{table.Name}' is written after this batch merged classes, and its output {(table.Output.Kind == ColumnKind.Sort ? "is a class" : "holds classes")}; write it in a later call, which sees the merge as egglog's next command does.");
 
             if (table.Merge is not null)
             {
@@ -427,7 +527,7 @@ namespace Eggnog
             }
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
-            var cell = PlanTerm(value);
+            var cell = PlanTermCore(value);
             var key = Key(table, keys);
             if (functionValues.TryGetValue(key, out var earlier))
             {
@@ -485,12 +585,12 @@ namespace Eggnog
 
             // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
             // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
-            if (mergedClasses && (HasSortKey(table) || (table.Output!.Kind == ColumnKind.Sort && table.Merge!.ComparesValues)))
+            if (mergedClasses && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues)))
                 throw new InvalidOperationException(
                     $"'{table.Name}' is written after this batch merged classes, its keys or output are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
-            var cell = PlanTerm(value);
+            var cell = PlanTermCore(value);
             var key = Key(table, keys);
             if (table.Merge!.CanSimulate == false)
             {
@@ -556,10 +656,11 @@ namespace Eggnog
             try
             {
                 return table.Merge is { } merge
-                    ? merge.MergeCells(scope, table.Output!, stored, incoming)
+                    ? merge.MergeCells(scope, table.Output!, stored, incoming, collectUnion ??= CollectUnion)
                     : table.Lattice!.MergeCells(table.Output!, stored, incoming);
             }
-            catch (Exception exception) when (exception is not RuleEvaluationException)
+            catch (Exception exception) when (exception is not RuleEvaluationException
+                && (exception is not OverflowException || graph.IdsExhausted == false))
             {
                 var what = table.Merge is { } merge ? $"merge '{merge.Name}'" : $"lattice '{table.Lattice!.Name}'";
                 throw new RuleEvaluationException(null, null,
@@ -580,7 +681,7 @@ namespace Eggnog
             var table = (ConstructorHandle)application.Table!;
             CheckTable(table);
             var keys = PlanKeys(table, application.Arguments, out var existing);
-            var cell = PlanTerm(value);
+            var cell = PlanTermCore(value);
             if (existing && engine.TryLookup(table.Function, keys, out var stored))
             {
                 if (stored == cell)
@@ -597,7 +698,7 @@ namespace Eggnog
             var key = Key(table, keys);
             if (pendingByKey.TryGetValue(key, out var planned))
             {
-                PlanUnion(planned.Id, cell);
+                PlanUnionCore(planned.Id, cell);
                 return;
             }
 
@@ -670,7 +771,7 @@ namespace Eggnog
             existing = true;
             for (var i = 0; i < keys.Length; i++)
             {
-                keys[i] = PlanTerm(arguments[i]);
+                keys[i] = PlanTermCore(arguments[i]);
                 if (table.KeyArray[i].Kind == ColumnKind.Sort && fresh.Contains(keys[i]))
                     existing = false;
             }
@@ -778,6 +879,34 @@ namespace Eggnog
         /// </summary>
         static bool IsWritable(TermShape application, TermShape value) =>
             IsValue(value) || (application.Table!.Output!.Kind == ColumnKind.Sort && IsApplication(value, TableKind.Constructor));
+
+        /// <summary>
+        /// Holds back a union a write primitive or a merge makes while a fact is planned.
+        /// </summary>
+        void CollectUnion(uint a, uint b) => (factUnions ??= new List<(uint, uint)>()).Add((a, b));
+
+        /// <summary>
+        /// Plans the unions held back while the fact or term was planned, in order, as egglog applies a command's unions
+        /// after it evaluates the command: a later fact of the batch sees them, as egglog's next command would.
+        /// </summary>
+        /// <exception cref="FactConflictException">A union would give a function without a lattice two values for one
+        /// key.</exception>
+        /// <exception cref="InvalidOperationException">The scope is a child, and a union would displace a class a
+        /// container of classes holds.</exception>
+        void PlanFactUnions()
+        {
+            if (factUnions is not { Count: > 0 } held)
+                return;
+
+            factUnions = null;
+            foreach (var (a, b) in held)
+                PlanUnionCore(a, b);
+        }
+
+        /// <summary>
+        /// Gets the canonical cell of a class the batch plans: a fresh one as it is.
+        /// </summary>
+        uint Canonical(uint cell) => fresh.Contains(cell) ? cell : engine.Find(cell);
 
         /// <summary>
         /// Decodes key cells for an exception.

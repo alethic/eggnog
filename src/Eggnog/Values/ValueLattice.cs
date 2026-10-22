@@ -32,11 +32,18 @@ namespace Eggnog
         public Type ValueType { get; }
 
         /// <summary>
+        /// Gets whether the lattice orders its values, as <see cref="Max{T}"/> and <see cref="Min{T}"/> do, so that a
+        /// function's output type must hold only comparable values: a container of a type that is not comparable is
+        /// <see cref="IComparable{T}"/> but cannot compare.
+        /// </summary>
+        internal bool Ordered { get; init; }
+
+        /// <summary>
         /// The intersection lattice: merge ∩, case join ∪ (a domain: the values something can hold).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The lattice.</returns>
-        public static ValueLattice<ValueSet<T>> Intersect<T>() where T : notnull =>
+        public static ValueLattice<Set<T>> Intersect<T>() where T : notnull =>
             new("intersect", static (a, b) => a.Intersect(b), static (a, b) => a.Union(b));
 
         /// <summary>
@@ -44,14 +51,14 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <returns>The lattice.</returns>
-        public static ValueLattice<ValueSet<T>> Union<T>() where T : notnull =>
+        public static ValueLattice<Set<T>> Union<T>() where T : notnull =>
             new("union", static (a, b) => a.Union(b), static (a, b) => a.Intersect(b));
 
         /// <summary>
         /// The maximum lattice: merge max, case join min (a lower bound).
         /// </summary>
         /// <remarks>
-        /// Values are ordered as <see cref="ValueSet{T}"/> orders its elements: strings by code point, as Rust's are,
+        /// Values are ordered as <see cref="Set{T}"/> orders its elements: strings by code point, as Rust's are,
         /// never by the current culture, so the result does not depend on the machine or the thread; doubles as egglog's
         /// <c>OrderedFloat</c>, NaN the greatest, so that <c>max</c> keeps NaN as egglog's <c>(max old new)</c> does; every
         /// other type by <see cref="Comparer{T}.Default"/>, which calls <see cref="IComparable{T}.CompareTo"/>. A type's
@@ -63,14 +70,17 @@ namespace Eggnog
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Max<T>() where T : IComparable<T> =>
             new("max",
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b,
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b);
+                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b,
+                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b)
+            {
+                Ordered = true,
+            };
 
         /// <summary>
         /// The minimum lattice: merge min, case join max (an upper bound).
         /// </summary>
         /// <remarks>
-        /// Values are ordered as for <see cref="Max{T}"/>: strings by code point, as <see cref="ValueSet{T}"/> orders them,
+        /// Values are ordered as for <see cref="Max{T}"/>: strings by code point, as <see cref="Set{T}"/> orders them,
         /// doubles as <c>OrderedFloat</c>, and every other type by its <see cref="IComparable{T}.CompareTo"/>, which must be a total order consistent
         /// with <see cref="IEquatable{T}.Equals(T)"/>; <see cref="ValueLattice{T}.Verify"/> checks this on samples.
         /// </remarks>
@@ -78,8 +88,11 @@ namespace Eggnog
         /// <returns>The lattice.</returns>
         public static ValueLattice<T> Min<T>() where T : IComparable<T> =>
             new("min",
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b,
-                static (a, b) => ValueSetOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b);
+                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) <= 0 ? a : b,
+                static (a, b) => ElementOrder<T>.Comparer.Compare(a, b) >= 0 ? a : b)
+            {
+                Ordered = true,
+            };
 
         /// <summary>
         /// Gets the lattice's name.

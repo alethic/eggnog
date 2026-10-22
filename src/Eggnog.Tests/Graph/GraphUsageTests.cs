@@ -48,8 +48,9 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// The gauge reads the graph's counters: a query with a new string interns two values and reserves one first id
-        /// block, and the epochs are the store clock's progress since its start.
+        /// The gauge reads the graph's counters: a query with a new string interns two values, the string and its
+        /// singleton set, and reserves one first id block and the set's id, which a container takes from the graph's id
+        /// counter as egglog's do; and the epochs are the store clock's progress since its start.
         /// </summary>
         [Fact]
         public void TheGaugeMovesWithTheGraphsCounters()
@@ -66,7 +67,7 @@ namespace Eggnog.Tests.Graph
 
                 Assert.Equal(before.InternedValues + 2, after.InternedValues);
                 Assert.Equal(churn.Graph.Values.InternedCount, after.InternedValues);
-                Assert.Equal(before.IdsReserved + Relations.IdBlockAllocator.FirstBlockSize, after.IdsReserved);
+                Assert.Equal(before.IdsReserved + Relations.IdBlockAllocator.FirstBlockSize + 1, after.IdsReserved);
                 Assert.Equal(store.Counters.Read(store.IdCounter), after.IdsReserved);
                 Assert.Equal(store.Counters.Read(store.ClockCounter) - 1, after.Epochs);
                 Assert.True(after.Epochs > before.Epochs);

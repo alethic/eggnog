@@ -29,7 +29,7 @@ namespace Eggnog.Relations
                 HasIdKey |= IdKeys[i];
             }
 
-            OutputIsId = info.OutputType.IsId;
+            OutputIsId = info.OutputType.IsId && table.ValueOutput == false;
         }
 
         /// <summary>
@@ -58,7 +58,8 @@ namespace Eggnog.Relations
         public bool HasIdKey { get; }
 
         /// <summary>
-        /// Gets whether the output holds an id.
+        /// Gets whether the output holds an id a case's find may move: a class, or a container of classes; a container
+        /// of values (<see cref="LiftTable.ValueOutput"/>) is a base output.
         /// </summary>
         public bool OutputIsId { get; }
 

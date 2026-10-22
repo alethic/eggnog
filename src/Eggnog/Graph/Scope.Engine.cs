@@ -15,6 +15,9 @@ namespace Eggnog
         static InvalidOperationException RootOnly(CompiledRule rule, FunctionHandle function, string why) =>
             new($"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {why}.");
 
+        static InvalidOperationException RootOnly(CompiledRule rule, Primitive primitive, string why) =>
+            new($"Rule '{rule.Rule.Name}' computes '{primitive.Name}', which unions classes that containers hold, and only the root rebuilds containers (decisions row 9), so only the root may run it, and {why}.");
+
         /// <summary>
         /// Runs a schedule in this scope.
         /// </summary>
@@ -115,6 +118,9 @@ namespace Eggnog
                     if (IsRoot == false && rule.Program.RootOnlyWrite is { } function)
                         throw RootOnly(rule, function, $"'{Path}' is not the root");
 
+                    if (IsRoot == false && rule.Program.WritePrimitive is { } primitive)
+                        throw RootOnly(rule, primitive, $"'{Path}' is not the root");
+
                     if (rule.Program.Deletes is [var deleted, ..])
                     {
                         if (splits.Count > 0)
@@ -138,8 +144,13 @@ namespace Eggnog
                 // The cases of a split are children, at the root too.
                 if (IsRoot && inCases.Count > 0)
                     foreach (var rule in ScheduleExecutor.RulesFor(new List<Ruleset>(inCases), this))
+                    {
                         if (rule.Program.RootOnlyWrite is { } function)
                             throw RootOnly(rule, function, "the cases of a split are children");
+
+                        if (rule.Program.WritePrimitive is { } primitive)
+                            throw RootOnly(rule, primitive, "the cases of a split are children");
+                    }
 
                 var executor = new ScheduleExecutor(this, options, cancellationToken);
                 RunStopReason reason;
@@ -215,9 +226,9 @@ namespace Eggnog
         /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
         /// <returns>The term.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">No finite term exists, or a cost function returned a negative
-        /// cost; or the scope is faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch
-        /// open; or the call comes from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">No finite term exists; or the scope is faulted; or it is
+        /// writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes from a primitive,
+        /// lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph, or
         /// the class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a
@@ -239,9 +250,9 @@ namespace Eggnog
         /// none when the class has no finite term or <paramref name="count"/> is 0.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">A cost function returned a negative cost; or the scope is
-        /// faulted; or it is writable and in use on another thread, or has a <c>Write</c> batch open; or the call comes
-        /// from a primitive, lattice, filter or cost function.</exception>
+        /// <exception cref="InvalidOperationException">The scope is faulted; or it is writable and in use on another
+        /// thread, or has a <c>Write</c> batch open; or the call comes from a primitive, lattice, filter or cost
+        /// function.</exception>
         /// <exception cref="ArgumentException">The cost model names a constructor or column type of another graph, or
         /// the class value is not usable in this scope.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up the call makes first, here or in a

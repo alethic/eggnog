@@ -57,7 +57,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming)
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming, Action<uint, uint> union)
         {
             if (ReferenceEquals(this, NewMerge))
                 return incoming;

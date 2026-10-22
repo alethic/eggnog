@@ -69,6 +69,11 @@ namespace Eggnog
                     builder.QueryTable(atom.Table.Function, columns, program.IncludeSubsumed ? null : atom.SubsumedOnly);
                 }
 
+                var bound = new HashSet<Operand>();
+                foreach (var atom in program.Atoms)
+                    foreach (var column in atom.Columns)
+                        bound.Add(column);
+
                 foreach (var step in program.Steps)
                 {
                     var arguments = new Relations.RuleEntry[step.Arguments.Length + 1];
@@ -79,11 +84,14 @@ namespace Eggnog
                     {
                         case ProgramStepKind.Let:
                         {
-                            var call = new PrimitiveCall(graph, program.Name, step.Primitive!, Types(step.Arguments), step.Target.Type, Names(program, step.Arguments), true);
+                            var call = new PrimitiveCall(
+                                graph, program.Name, step.Primitive!, Types(step.Arguments), step.Target.Type, Names(program, step.Arguments), true,
+                                bound.Contains(step.Target));
                             var function = engine.RegisterExternalFunction(call);
                             owned.Add(function);
                             arguments[^1] = Entry(step.Target, variables, lowered);
                             builder.QueryPrim(function, arguments, step.Target.Type.EngineType);
+                            bound.Add(step.Target);
                             break;
                         }
                         case ProgramStepKind.Filter:

@@ -62,7 +62,6 @@ namespace Eggnog.Relations
         /// sort does not fit its column, or its name belongs to another sort; the number of input sorts is not the number
         /// of keys; a constructor's output, or a view's last input, is not an e-class sort; or a view's term constructor
         /// is not a function of the e-graph.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The cost is negative.</exception>
         public void Declare(FunctionId function, FunctionSignature signature)
         {
             ArgumentNullException.ThrowIfNull(signature);
@@ -78,9 +77,6 @@ namespace Eggnog.Relations
                 throw new ArgumentException(
                     $"{info.Name} takes {math.KeyCount} keys, not {signature.Inputs.Count} input sorts.",
                     nameof(signature));
-
-            if (signature.Cost is < 0)
-                throw new ArgumentOutOfRangeException(nameof(signature), signature.Cost, $"The cost of {info.Name} must not be negative.");
 
             // Validate everything before registering anything, so that a bad declaration leaves the schema unchanged.
             var columns = new Sort[math.FunctionColumns];

@@ -27,7 +27,7 @@ namespace Eggnog.Tests.Scopes
         static (ThrowingLatticeWorld World, Schedule Schedule) Build(bool untilDone)
         {
             var w = new ThrowingLatticeWorld((old, incoming) => old != incoming);
-            var dom = w.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = w.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var weight = w.Graph.DefineFunction<string, long>("weight");
             var pick = w.Graph.DefineRelation<string, string>("pick");
             var done = w.Graph.DefineRelation<string>("done");
@@ -41,12 +41,12 @@ namespace Eggnog.Tests.Scopes
             });
             var split = w.Graph.DefineSplit("pick a value", s =>
             {
-                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Assume(pick.Of(p, v));
             });
-            w.Parent.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
+            w.Parent.Assume(dom.Of("k").Is(Set.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
             var inCase = untilDone ? Schedule.Until(Schedule.Saturate(Schedule.Run(rules)), done.Of("x")) : Schedule.Saturate(Schedule.Run(rules));
             return (w, Schedule.Split(split, inCase));
         }
@@ -113,7 +113,7 @@ namespace Eggnog.Tests.Scopes
         public void ACasesCatchUpMergeFailureInsideASplitStepIsReported(int depthLimit)
         {
             var w = new World((old, incoming) => old != incoming);
-            var dom = w.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = w.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var weight = w.Graph.DefineFunction<string, long>("weight");
             var pick = w.Graph.DefineRelation<string, string>("pick");
             var rules = w.Graph.DefineRuleset("rules");
@@ -126,14 +126,14 @@ namespace Eggnog.Tests.Scopes
             });
             var split = w.Graph.DefineSplit("pick a value", s =>
             {
-                var (p, d) = s.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Assume(pick.Of(p, v));
             });
             w.Graph.Root.Freeze();
             var scope = w.Graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
+            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
             w.Arm();
 
             var thrown = Record.Exception(() => scope.Run(Schedule.Split(split, Schedule.Saturate(rules)), new RunOptions { SplitDepthLimit = depthLimit }));

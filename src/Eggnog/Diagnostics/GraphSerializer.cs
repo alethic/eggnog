@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -16,9 +15,8 @@ namespace Eggnog
     /// <remarks>
     /// egglog makes a relation a constructor over a sort of its own that cannot be unioned (<c>desugar_relation</c>,
     /// <c>src/ast/desugar.rs</c>), named <c>@{relation}Sort</c> by its symbol generator; a relation's row here is
-    /// likewise a class of its own, of that type, numbered by its row. A set's elements are its node's children in cell
-    /// order, as an egglog set's are (a <c>BTreeSet</c> of values); an element that was never interned on its own has no
-    /// cell, so it comes after those that have one, in a class of its own numbered per type.
+    /// likewise a class of its own, of that type, numbered by its row. A container's elements are its node's children, in
+    /// the order egglog's <c>inner_values</c> lists them.
     /// </remarks>
     internal sealed class GraphSerializer
     {
@@ -33,8 +31,6 @@ namespace Eggnog
         readonly Dictionary<TableHandle, string> relationSorts = new();
         readonly Dictionary<string, int> sortHints = new(StringComparer.Ordinal);
         readonly Dictionary<uint, string> classSorts = new();
-        readonly Dictionary<(ColumnType Type, object Value), string> literalClasses = new();
-        readonly Dictionary<ColumnType, int> literalCounts = new();
 
         /// <summary>
         /// Initializes a serialization of a scope.
@@ -160,28 +156,17 @@ namespace Eggnog
                 return SerializeClass(classId, type.Name);
 
             var nodeId = "primitive-" + classId;
-            if (ValueStore.IsSet(type.ClrType))
+            if (type is IContainerColumnType container)
             {
-                // egglog's set is a BTreeSet of values, so its elements come in cell order; an element with no cell of
-                // its own comes after those that have one, in the set's order.
-                var element = scope.Graph.Values.TypeOf(type.ClrType.GetGenericArguments()[0]);
-                var interned = new List<uint>();
-                var literals = new List<object>();
-                foreach (var member in (IEnumerable)type.DecodeObject(cell, scope))
-                    if (element.TryEncodeExistingObject(member!, out var memberCell))
-                        interned.Add(memberCell);
-                    else
-                        literals.Add(member!);
+                // egglog's container: its elements, serialized in turn, are its children, and its operator is its
+                // serialized name (src/serialize.rs:342-371). The stored cells are read; nothing is interned.
+                var elements = new List<(ColumnType Type, uint Cell)>();
+                container.AppendElements(cell, elements);
+                var children = new List<string>(elements.Count);
+                foreach (var (elementType, elementCell) in elements)
+                    children.Add(SerializeValue(elementType, elementCell, ClassOf(elementType, elementCell)));
 
-                interned.Sort();
-                var children = new List<string>(interned.Count + literals.Count);
-                foreach (var memberCell in interned)
-                    children.Add(SerializeValue(element, memberCell, ClassOf(element, memberCell)));
-
-                foreach (var member in literals)
-                    children.Add(SerializeLiteral(element, member));
-
-                AddNode(new SerializedNode(nodeId, "set-of", classId, 1, children.AsReadOnly(), false));
+                AddNode(new SerializedNode(nodeId, container.SerializedName(cell), classId, 1, children.AsReadOnly(), false));
             }
             else
             {
@@ -189,27 +174,6 @@ namespace Eggnog
                     false));
             }
 
-            AddClass(classId, type.Name);
-            return nodeId;
-        }
-
-        /// <summary>
-        /// Serializes a set's element that has no cell: a node of a class of its own, <c>{type}-~{n}</c>, numbered per
-        /// type in the order the elements are first met, one per distinct value; its operator is the text its codec would
-        /// print for its cell (<see cref="ColumnType.FormatDebug"/>), as for any other value.
-        /// </summary>
-        string SerializeLiteral(ColumnType type, object value)
-        {
-            if (literalClasses.TryGetValue((type, value), out var classId) == false)
-            {
-                literalCounts.TryGetValue(type, out var count);
-                literalCounts[type] = count + 1;
-                classId = type.Name + "-~" + count.ToString(CultureInfo.InvariantCulture);
-                literalClasses.Add((type, value), classId);
-            }
-
-            var nodeId = "primitive-" + classId;
-            AddNode(new SerializedNode(nodeId, type.FormatDebug(value), classId, 1, Array.Empty<string>(), false));
             AddClass(classId, type.Name);
             return nodeId;
         }

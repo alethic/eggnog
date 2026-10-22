@@ -263,7 +263,7 @@ namespace Eggnog
                     if (shape.Kind == TermShapeKind.Computation)
                     {
                         var primitive = shape.Primitive!;
-                        var (parameters, result) = CheckPrimitive(primitive);
+                        var (parameters, result) = CheckPrimitive(primitive, body: true);
                         if (result.ClrType != typeof(bool))
                             throw Error($"primitive '{primitive.Name}' returns {result.Name}, not bool, so it cannot filter");
 
@@ -329,7 +329,7 @@ namespace Eggnog
                 default:
                 {
                     var primitive = shape.Primitive!;
-                    var (parameters, result) = CheckPrimitive(primitive);
+                    var (parameters, result) = CheckPrimitive(primitive, body: true);
                     var arguments = FlattenArguments(shape.Arguments, parameters, primitive, body: true, enclosing);
                     var key = "c" + PrimitiveId(primitive).ToString(CultureInfo.InvariantCulture) + Key(arguments);
                     if (bodyMemo.TryGetValue(key, out var shared))
@@ -983,6 +983,11 @@ namespace Eggnog
         {
             var type = shape.ConstantType ?? ResolveType(shape.ClrType);
             CheckStore(type);
+
+            // egglog has no literal for a container of classes; a rule builds one from terms with its primitives.
+            if (type.HoldsClasses)
+                throw Error($"a constant {type.Name} holds classes; build it in the rule with its primitives over terms, such as Primitives.VecOf, as egglog has no literal for one");
+
             if (type.Kind == ColumnKind.Sort)
             {
                 var id = type.ClassOf(shape.Constant!);
@@ -1042,10 +1047,14 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the column types of a primitive's parameters and result, values or sorts.
+        /// Gets the column types of a primitive's parameters and result, values or sorts; a primitive of the body must not
+        /// write, as egglog rejects a write primitive in a rule's query.
         /// </summary>
-        (ColumnType[] Parameters, ColumnType Result) CheckPrimitive(Primitive primitive)
+        (ColumnType[] Parameters, ColumnType Result) CheckPrimitive(Primitive primitive, bool body = false)
         {
+            if (body && primitive.IsWrite)
+                throw Error($"primitive '{primitive.Name}' writes the graph, so it runs in the head, not the body, as egglog rejects a write primitive in a rule's query");
+
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
                 parameters[i] = ResolveType(primitive.ParameterTypes[i]);

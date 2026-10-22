@@ -84,7 +84,7 @@ namespace Eggnog.Tests.Cases
 
             var named = Enumerable.Range(0, kinds).Select(i => $"k{i}").ToArray();
             var schema = c.Graph.Root.CreateChild(c.Schema);
-            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.From(named.Append("other"))), c.Discriminator.Of("kind"));
+            schema.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.From(named.Append("other"))), c.Discriminator.Of("kind"));
             foreach (var kind in named)
                 c.DeclareBranch(schema, "kind", kind, c.Form.Of("ref", "uuid-lower"));
 

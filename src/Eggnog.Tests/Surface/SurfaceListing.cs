@@ -21,7 +21,7 @@ namespace Eggnog.Tests.Surface
         /// </summary>
         static readonly HashSet<string> ListedInterfaces = new(StringComparer.Ordinal)
         {
-            "IDisposable", "IEquatable`1", "IReadOnlyList`1", "IReadOnlyCollection`1", "IEnumerable`1", "IEnumerable",
+            "IComparable`1", "IDisposable", "IEquatable`1", "IReadOnlyList`1", "IReadOnlyCollection`1", "IEnumerable`1", "IEnumerable",
         };
 
         /// <summary>
@@ -72,7 +72,7 @@ namespace Eggnog.Tests.Surface
                 && baseType != typeof(MulticastDelegate))
                 bases.Add(Name(baseType));
 
-            bases.AddRange(type.GetInterfaces().Where(i => i.Namespace?.StartsWith("Eggnog", StringComparison.Ordinal) == true || ListedInterfaces.Contains(i.Name))
+            bases.AddRange(type.GetInterfaces().Where(i => (i.IsPublic && i.Namespace?.StartsWith("Eggnog", StringComparison.Ordinal) == true) || ListedInterfaces.Contains(i.Name))
                 .Select(Name).OrderBy(n => n, StringComparer.Ordinal));
             if (bases.Count > 0)
                 builder.Append(" : ").Append(string.Join(", ", bases));

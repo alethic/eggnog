@@ -16,7 +16,7 @@ namespace Eggnog.Tests.Predicates.Scoped
     public sealed partial class PredicateTheory
     {
 
-        static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
+        static readonly Set<string> StringOrNull = Set.Of("string", "null");
 
         /// <summary>
         /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen:
@@ -39,11 +39,11 @@ namespace Eggnog.Tests.Predicates.Scoped
             Form = graph.DefineRelation<string, string>("form");
             Ne = graph.DefineRelation<string, string>("ne");
             Discriminator = graph.DefineRelation<string>("discriminator");
-            Dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            Types = graph.DefineFunction<string, ValueSet<string>>("types", ValueLattice.Intersect<string>());
+            Dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            Types = graph.DefineFunction<string, Set<string>>("types", ValueLattice.Intersect<string>());
             Lo = graph.DefineFunction<string, long>("lo", ValueLattice.Max<long>());
             Hi = graph.DefineFunction<string, long>("hi", ValueLattice.Min<long>());
-            IDom = graph.DefineFunction<string, ValueSet<long>>("idom", ValueLattice.Intersect<long>());
+            IDom = graph.DefineFunction<string, Set<long>>("idom", ValueLattice.Intersect<long>());
 
             // Predicates. Truth and falsehood cost nothing, and the UUID and instant comparisons cost 1000, so that
             // extraction prefers the string comparisons they lower to.
@@ -68,8 +68,8 @@ namespace Eggnog.Tests.Predicates.Scoped
             var analysis = new TableOptions { Role = TableRole.Analysis };
             WhereClause = graph.DefineRelation<Pred>("where", queryOnly);
             Conjunct = graph.DefineRelation<Pred>("conjunct", queryOnly);
-            InSet = graph.DefineFunction<Pred, string, ValueSet<string>>("inset", ValueLattice.Intersect<string>(), analysis);
-            Admits = graph.DefineFunction<Pred, string, ValueSet<string>>("admits", ValueLattice.Intersect<string>(), analysis);
+            InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>(), analysis);
+            Admits = graph.DefineFunction<Pred, string, Set<string>>("admits", ValueLattice.Intersect<string>(), analysis);
 
             Horn = graph.DefineRuleset("horn");
             Lattice = graph.DefineRuleset("lattice");
@@ -107,10 +107,10 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Relation<string> Discriminator { get; }
 
         /// <summary>Gets the values a path can hold, if present.</summary>
-        public Function<string, ValueSet<string>> Dom { get; }
+        public Function<string, Set<string>> Dom { get; }
 
         /// <summary>Gets the JSON types a path can hold, if present.</summary>
-        public Function<string, ValueSet<string>> Types { get; }
+        public Function<string, Set<string>> Types { get; }
 
         /// <summary>Gets a lower bound on a numeric path.</summary>
         public Function<string, long> Lo { get; }
@@ -119,7 +119,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Function<string, long> Hi { get; }
 
         /// <summary>Gets the integers a numeric path can hold, if present.</summary>
-        public Function<string, ValueSet<long>> IDom { get; }
+        public Function<string, Set<long>> IDom { get; }
 
         /// <summary>Gets the true predicate.</summary>
         public Constructor<Pred> PTrue { get; }
@@ -179,10 +179,10 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Relation<Pred> Conjunct { get; }
 
         /// <summary>Gets "the predicate holds exactly when path p holds a value of S".</summary>
-        public Function<Pred, string, ValueSet<string>> InSet { get; }
+        public Function<Pred, string, Set<string>> InSet { get; }
 
         /// <summary>Gets "the predicate implies that path p holds a value of S".</summary>
-        public Function<Pred, string, ValueSet<string>> Admits { get; }
+        public Function<Pred, string, Set<string>> Admits { get; }
 
         /// <summary>Gets the Horn ruleset.</summary>
         public Ruleset Horn { get; }
@@ -208,7 +208,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Rule DeclareBranch(Scope schema, string path, string value, params Fact[] consequences) =>
             schema.DefineRule(Horn, $"{path} = {value}", r =>
             {
-                r.When(Present.Of(path), Dom.Of(path).Is(ValueSet.Of(value)));
+                r.When(Present.Of(path), Dom.Of(path).Is(Set.Of(value)));
                 r.Then(consequences);
             });
 
@@ -235,13 +235,13 @@ namespace Eggnog.Tests.Predicates.Scoped
             Horn.DefineRule("inset of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
+                var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(InSet.Of(a, p)), sb.Is(InSet.Of(b, p)));
                 r.Then(InSet.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
             });
             Horn.DefineRule("inset admits", r =>
             {
-                var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
+                var (e, p, s) = r.Vars<Pred, string, Set<string>>("e", "p", "s");
                 r.When(s.Is(InSet.Of(e, p)));
                 r.Then(Admits.Of(e, p).Is(s));
             });
@@ -250,7 +250,7 @@ namespace Eggnog.Tests.Predicates.Scoped
                 Horn.DefineRule(left ? "and admits left" : "and admits right", r =>
                 {
                     var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                    var s = r.Var<ValueSet<string>>("s");
+                    var s = r.Var<Set<string>>("s");
                     r.When(e.Is(And.Of(a, b)), s.Is(Admits.Of(left ? a : b, p)));
                     r.Then(Admits.Of(e, p).Is(s));
                 });
@@ -258,7 +258,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             Horn.DefineRule("admits of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
+                var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(Admits.Of(a, p)), sb.Is(Admits.Of(b, p)));
                 r.Then(Admits.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
             });
@@ -266,7 +266,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             // What a conjunct establishes, written to the running scope: the query.
             Horn.DefineRule("a conjunct admits", r =>
             {
-                var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
+                var (e, p, s) = r.Vars<Pred, string, Set<string>>("e", "p", "s");
                 r.When(Conjunct.Of(e), s.Is(Admits.Of(e, p)));
                 r.Then(Present.Of(p), Dom.Of(p).Is(s));
             });
@@ -289,13 +289,13 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumGt.Of(p, n)));
-                r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(ValueSet.Of("number")));
+                r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(Set.Of("number")));
             });
             Horn.DefineRule("a numeric upper bound", r =>
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumLt.Of(p, n)));
-                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(ValueSet.Of("number")));
+                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(Set.Of("number")));
             });
         }
 
@@ -303,9 +303,9 @@ namespace Eggnog.Tests.Predicates.Scoped
         {
             Lattice.DefineRule("a domain settles the type", r =>
             {
-                var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(d.Is(Dom.Of(p)));
-                r.Then(Types.Of(p).Is(ValueSet.Of("string")));
+                r.Then(Types.Of(p).Is(Set.Of("string")));
             });
             Lattice.DefineRule("a form describes strings", r =>
             {
@@ -315,40 +315,40 @@ namespace Eggnog.Tests.Predicates.Scoped
             });
             Lattice.DefineRule("a disequality narrows a domain", r =>
             {
-                var (p, v, d) = r.Vars<string, string, ValueSet<string>>("p", "v", "d");
+                var (p, v, d) = r.Vars<string, string, Set<string>>("p", "v", "d");
                 r.When(Ne.Of(p, v), d.Is(Dom.Of(p)));
                 r.Where(Primitives.Contains<string>().Of(d, v));
                 r.Then(Dom.Of(p).Is(Primitives.Remove<string>().Of(d, v)));
             });
             Lattice.DefineRule("a lower bound narrows an integer domain", r =>
             {
-                var (p, d, l) = r.Vars<string, ValueSet<long>, long>("p", "d", "l");
+                var (p, d, l) = r.Vars<string, Set<long>, long>("p", "d", "l");
                 r.When(d.Is(IDom.Of(p)), l.Is(Lo.Of(p)));
                 r.Then(IDom.Of(p).Is(Compute.Of(d, l, (d, l) => d.Where(x => x >= l))));
             });
             Lattice.DefineRule("an upper bound narrows an integer domain", r =>
             {
-                var (p, d, h) = r.Vars<string, ValueSet<long>, long>("p", "d", "h");
+                var (p, d, h) = r.Vars<string, Set<long>, long>("p", "d", "h");
                 r.When(d.Is(IDom.Of(p)), h.Is(Hi.Of(p)));
                 r.Then(IDom.Of(p).Is(Compute.Of(d, h, (d, h) => d.Where(x => x <= h))));
             });
             Lattice.DefineRule("an empty domain", r =>
             {
-                var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(Present.Of(p), d.Is(Dom.Of(p)));
                 r.Where(Primitives.IsEmpty<string>().Of(d));
                 r.Then(Graph.Contradiction.Of());
             });
             Lattice.DefineRule("an empty integer domain", r =>
             {
-                var (p, d) = r.Vars<string, ValueSet<long>>("p", "d");
+                var (p, d) = r.Vars<string, Set<long>>("p", "d");
                 r.When(Present.Of(p), d.Is(IDom.Of(p)));
                 r.Where(Primitives.IsEmpty<long>().Of(d));
                 r.Then(Graph.Contradiction.Of());
             });
             Lattice.DefineRule("no possible type", r =>
             {
-                var (p, t) = r.Vars<string, ValueSet<string>>("p", "t");
+                var (p, t) = r.Vars<string, Set<string>>("p", "t");
                 r.When(Present.Of(p), t.Is(Types.Of(p)));
                 r.Where(Primitives.IsEmpty<string>().Of(t));
                 r.Then(Graph.Contradiction.Of());
@@ -389,7 +389,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             // Not(IsString p) admits nothing a present string-or-null path holds: it is Not(IsDefined p).
             Rewrite.DefineRule("a string path's negated string test", r =>
             {
-                var (e, p, t) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "t");
+                var (e, p, t) = r.Vars<Pred, string, Set<string>>("e", "p", "t");
                 r.ReadsOwnFacts("an equivalence under type facts whose conjuncts stay in the predicate");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(p)));
                 r.Where(t, t => t.IsSubsetOf(StringOrNull));
@@ -402,7 +402,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             Rewrite.DefineRule("declared tautology", r =>
             {
                 var (e, p) = r.Vars<Pred, string>("e", "p");
-                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+                var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(InSet.Of(e, p)), Present.In(Schema).Of(p), d.Is(Dom.In(Schema).Of(p)));
                 r.Where(Primitives.IsSubsetOf<string>().Of(d, s));
                 r.Then(e.Is(PTrue.Of()));

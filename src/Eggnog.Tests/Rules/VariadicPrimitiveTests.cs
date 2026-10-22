@@ -21,7 +21,7 @@ namespace Eggnog.Tests.Rules
             var graph = new EGraph();
             var parts = graph.DefineRelation<string, string, string>("parts");
             var joined = graph.DefineRelation<string>("joined");
-            var members = graph.DefineFunction<string, ValueSet<string>>("members", ValueLattice.Union<string>());
+            var members = graph.DefineFunction<string, Set<string>>("members", ValueLattice.Union<string>());
             var rules = graph.DefineRuleset("rules");
             var rule = rules.DefineRule("join", r =>
             {
@@ -34,7 +34,7 @@ namespace Eggnog.Tests.Rules
             graph.Root.Run(Schedule.Saturate(rules));
 
             Assert.True(graph.Root.Check(joined.Of("xyz")));
-            Assert.Equal(ValueSet.Of("x", "y", "z"), graph.Root.Get(members.Of("x")));
+            Assert.Equal(Set.Of("x", "y", "z"), graph.Root.Get(members.Of("x")));
             Assert.Equal("(rule ((parts a b c)) ((joined (+ a b c)) (set (members a) (set-of a b c))) :ruleset rules)", rule.ToString());
         }
 
@@ -65,7 +65,7 @@ namespace Eggnog.Tests.Rules
         {
             var graph = new EGraph();
             var num = graph.DefineRelation<long>("num");
-            var empty = graph.DefineFunction<long, ValueSet<long>>("empty");
+            var empty = graph.DefineFunction<long, Set<long>>("empty");
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("empty", r =>
             {
@@ -77,7 +77,7 @@ namespace Eggnog.Tests.Rules
 
             graph.Root.Run(Schedule.Saturate(rules));
 
-            Assert.Equal(ValueSet<long>.Empty, graph.Root.Get(empty.Of(1L)));
+            Assert.Equal(Set<long>.Empty, graph.Root.Get(empty.Of(1L)));
         }
 
         [Fact]

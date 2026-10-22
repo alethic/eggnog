@@ -21,7 +21,7 @@ namespace Eggnog.Tests.Cases
         public void CaseJoinsComeFromTheLattices()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lo = graph.DefineFunction<string, long>("lo", ValueLattice.Max<long>());
             var mostly = graph.DefineFunction<string, long>("mostly", new ValueLattice<long>("max-or-ten", Math.Max, (a, b) => Math.Max(10, Math.Min(a, b))));
             var exact = graph.DefineFunction<string, long>("exact");
@@ -29,13 +29,13 @@ namespace Eggnog.Tests.Cases
 
             using var cases = root.OpenCases();
             var first = cases.Add();
-            first.Assume(dom.Of("x").Is(ValueSet.Of("a")), lo.Of("x").Is(5L), mostly.Of("x").Is(12L), exact.Of("x").Is(1L), exact.Of("y").Is(1L));
+            first.Assume(dom.Of("x").Is(Set.Of("a")), lo.Of("x").Is(5L), mostly.Of("x").Is(12L), exact.Of("x").Is(1L), exact.Of("y").Is(1L));
             var second = cases.Add();
-            second.Assume(dom.Of("x").Is(ValueSet.Of("b")), lo.Of("x").Is(7L), mostly.Of("x").Is(3L), exact.Of("x").Is(1L), exact.Of("y").Is(2L));
+            second.Assume(dom.Of("x").Is(Set.Of("b")), lo.Of("x").Is(7L), mostly.Of("x").Is(3L), exact.Of("x").Is(1L), exact.Of("y").Is(2L));
 
             var lifted = cases.Lift();
 
-            Assert.Equal(ValueSet.Of("a", "b"), root.Get(dom.Of("x")));   // ∩ merges, so the case join is ∪
+            Assert.Equal(Set.Of("a", "b"), root.Get(dom.Of("x")));   // ∩ merges, so the case join is ∪
             Assert.Equal(5L, root.Get(lo.Of("x")));                         // max merges, so the case join is min
             Assert.Equal(10L, root.Get(mostly.Of("x")));                    // the lattice's own case join
             Assert.Equal(1L, root.Get(exact.Of("x")));                      // no lattice: the cases agree
@@ -422,18 +422,18 @@ namespace Eggnog.Tests.Cases
             }
 
             var later = graph.DefineRelation<string>("later");
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             using (var cases = root.OpenCases())
             {
-                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(ValueSet.Of("x")));
-                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(ValueSet.Of("y")));
+                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of("x")));
+                cases.Add().Assume(later.Of("b"), dom.Of("k").Is(Set.Of("y")));
                 var lifted = cases.Lift();
                 Assert.Equal(1, lifted.Rows);
                 Assert.Equal(1, lifted.Values);
             }
 
             Assert.True(root.Check(later.Of("b")));
-            Assert.Equal(ValueSet.Of("x", "y"), root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of("x", "y"), root.Get(dom.Of("k")));
         }
 
         /// <summary>

@@ -41,6 +41,58 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Registers the container type <typeparamref name="TContainer"/> as one holding ids if it is not registered,
+        /// and leaves one registered over base values as it is.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        internal void EnsureContainerType<TContainer>()
+            where TContainer : struct, IContainerValue<TContainer>
+        {
+            if (db.Containers.TryGetTypeId<TContainer>(out _) == false)
+                RegisterContainerType<TContainer>();
+        }
+
+        /// <summary>
+        /// Registers the container type <typeparamref name="TContainer"/> as one that holds no e-class ids, or gets it,
+        /// and returns its environment, whose <see cref="ContainerEnv{TContainer}.GetOrInsertShared"/> interns without
+        /// an execution state from <see cref="Counters"/>. Registration changes the database's container set, so the
+        /// caller holds the e-graph's definition lock and the root's domain while it is writable.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <returns>The environment.</returns>
+        internal ContainerEnv<TContainer> RegisterBaseContainerType<TContainer>()
+            where TContainer : struct, IContainerValue<TContainer>
+        {
+            if (db.Containers.TryGetEnvironment<TContainer>(out var existing))
+                return existing;
+
+            RegisterContainerType<TContainer>(holdsIds: false);
+            return db.Containers.GetEnvironment<TContainer>();
+        }
+
+        /// <summary>
+        /// Registers the container type <typeparamref name="TContainer"/> as one that may hold e-class ids, or makes the
+        /// environment of one registered over base values hold them, and returns its environment: egglog keeps a
+        /// container type's eq-sort and base containers in one environment, apart by <c>do_rebuild</c>. Its
+        /// <see cref="ContainerEnv{TContainer}.GetOrInsertAtRoot"/> interns a container of classes from the root, and
+        /// <see cref="ContainerEnv{TContainer}.GetOrInsertShared"/> still interns one of values anywhere. The caller holds
+        /// the e-graph's definition lock and the root's domain while it is writable.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <returns>The environment.</returns>
+        internal ContainerEnv<TContainer> RegisterEqContainerType<TContainer>()
+            where TContainer : struct, IContainerValue<TContainer>
+        {
+            RegisterContainerType<TContainer>(holdsIds: true);
+            return db.Containers.GetEnvironment<TContainer>();
+        }
+
+        /// <summary>
+        /// Gets the store's counters, which every execution state of the store mints ids from.
+        /// </summary>
+        internal CounterSet Counters => db.Counters;
+
+        /// <summary>
         /// Interns <paramref name="container"/> at the root, registering its type first if needed (as one holding ids), and
         /// returns its id: a fresh id the first time its contents are seen. egglog's <c>get_container_value</c>
         /// (lib.rs:231-236). Interning is immediate and global; a child interns through
@@ -52,7 +104,7 @@ namespace Eggnog.Relations
         internal Value GetContainerValue<TContainer>(in TContainer container)
             where TContainer : struct, IContainerValue<TContainer>
         {
-            RegisterContainerType<TContainer>();
+            EnsureContainerType<TContainer>();
             var state = db.CreateEngineState(NextTimestamp);
             var id = db.Containers.RegisterValue(container, state);
             state.Flush();

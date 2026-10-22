@@ -22,8 +22,7 @@ namespace Eggnog.Relations
         /// <param name="dag">The DAG to extract into.</param>
         /// <param name="costs">The cost model; <c>null</c> for <see cref="CostModel.Default"/>.</param>
         /// <returns>The term and its cost.</returns>
-        /// <exception cref="InvalidOperationException">The value has no finite term, or the cost model gave a negative
-        /// cost.</exception>
+        /// <exception cref="InvalidOperationException">The value has no finite term.</exception>
         public static ExtractionResult ExtractValue(ExtractionSchema schema, Sort sort, Value value, TermDag dag, CostModel? costs = null)
         {
             ArgumentNullException.ThrowIfNull(sort);
@@ -43,9 +42,8 @@ namespace Eggnog.Relations
         /// <param name="value">The value.</param>
         /// <param name="cost">The term's cost.</param>
         /// <returns>The term as an s-expression.</returns>
-        /// <exception cref="InvalidOperationException">The value has no finite term, or the cost model gave a negative
-        /// cost.</exception>
-        public static string ExtractValueToString(ExtractionSchema schema, Sort sort, Value value, out long cost)
+        /// <exception cref="InvalidOperationException">The value has no finite term.</exception>
+        public static string ExtractValueToString(ExtractionSchema schema, Sort sort, Value value, out ulong cost)
         {
             var dag = new TermDag();
             var result = ExtractValue(schema, sort, value, dag);
@@ -72,7 +70,6 @@ namespace Eggnog.Relations
         /// <returns>The terms and the DAG they live in.</returns>
         /// <exception cref="ArgumentException">The function is not declared in the schema.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">The cost model gave a negative cost.</exception>
         public static FunctionDag FunctionToDag(
             ExtractionSchema schema,
             FunctionId function,

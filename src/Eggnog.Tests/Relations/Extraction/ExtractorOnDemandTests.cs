@@ -38,13 +38,13 @@ namespace Eggnog.Relations.Tests
             Assert.Empty(extractor.RootSorts);
             Assert.Equal(0, extractor.ClassCount);
             Assert.True(extractor.TryGetCost(e, first, out var cost));
-            Assert.Equal(51, cost);
+            Assert.Equal<ulong>(51, cost);
             Assert.Equal(50, extractor.ClassCount);
             Assert.Equal(50, extractor.NodeCount);
 
             // A later root extends the graph; classes already costed are untouched.
             Assert.True(extractor.TryGetCost(e, second, out cost));
-            Assert.Equal(51, cost);
+            Assert.Equal<ulong>(51, cost);
             Assert.Equal(100, extractor.ClassCount);
             Assert.True(extractor.TryGetCost(e, first, out _));
             Assert.Equal(100, extractor.NodeCount);
@@ -103,7 +103,7 @@ namespace Eggnog.Relations.Tests
             var dag = new TermDag();
             Assert.True(extractor.TryExtractBest(e, outer, dag, out var result));
             Assert.Equal("(list (vec-of (list (vec-of (leaf 1) (leaf 2))) (leaf 1)))", dag.ToString(result.Term));
-            Assert.Equal(1 + (1 + 3 + 3) + 3, result.Cost);
+            Assert.Equal<ulong>(1 + (1 + 3 + 3) + 3, result.Cost);
             Assert.Equal(4, extractor.ClassCount);
             Assert.True(extractor.TryGetCost(e, unrelated, out _));
             Assert.Equal(5, extractor.ClassCount);
@@ -203,7 +203,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(extractor.TryGetCost(new EqSort("Fresh"), l, out _) == false);
             Assert.Throws<ArgumentException>(() => extractor.TryExtractTerm(new EqSort("Fresh"), l, out _));
             Assert.True(extractor.TryGetCost(e, l, out var cost));
-            Assert.Equal(1, cost);
+            Assert.Equal<ulong>(1, cost);
             Assert.Throws<ArgumentException>(() => Extractor.ComputeCostsFromRootSorts(fx.Schema, [new EqSort("E")]));
         }
 
@@ -295,7 +295,7 @@ namespace Eggnog.Relations.Tests
 
             var warmed = Extractor.CreateOnDemand(fx.Schema);
             Assert.True(warmed.TryGetCost(e, ids[Depth], out var cost));
-            Assert.Equal(0, cost);
+            Assert.Equal<ulong>(0, cost);
             Assert.True(warmed.TryGetChoice(e, ids[Depth + 1], out var function, out var row));
             Assert.Equal(wrap, function);
             Assert.Equal(ids[Depth], row[0]);

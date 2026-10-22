@@ -37,7 +37,7 @@ namespace Eggnog.Relations.Tests
         {
             Seed = seed;
             var random = new Random(seed);
-            Costs = Enumerable.Range(0, 6).Select(_ => (long)random.Next(0, 4)).ToArray();
+            Costs = Enumerable.Range(0, 6).Select(_ => (ulong)random.Next(0, 4)).ToArray();
             var depth = random.Next(1, 4);
             var frozen = new bool[depth + 1];
             for (var level = 0; level <= depth; level++)
@@ -84,7 +84,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Gets the head costs of <c>L0</c>, <c>L1</c>, <c>Num</c>, <c>U</c>, <c>W</c> and <c>B</c>.
         /// </summary>
-        public long[] Costs { get; }
+        public ulong[] Costs { get; }
 
         /// <summary>
         /// Gets the steps, in order.

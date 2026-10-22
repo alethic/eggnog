@@ -28,6 +28,9 @@ namespace Eggnog.Relations.Tests
         public ReadOnlySpan<uint> Values => values;
 
         /// <inheritdoc />
+        public bool HoldsIds => true;
+
+        /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();

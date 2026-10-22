@@ -48,14 +48,14 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void OnDemandChoiceDoesNotDependOnQueryOrderWithSaturatedCosts()
         {
-            // The same shape with positive head costs: M and Zf cost long.MaxValue, so every cost saturates and G's
+            // The same shape with positive head costs: M and Zf cost ulong.MaxValue, so every cost saturates and G's
             // head cost of 1 does not separate a node from its child. egglog extracts (G (M)), and so does the warmed
             // on-demand extractor.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var g = fx.Constructor("G", e, 1, e);
-            var m = fx.Constructor("M", e, long.MaxValue);
-            var zf = fx.Constructor("Zf", e, long.MaxValue);
+            var m = fx.Constructor("M", e, ulong.MaxValue);
+            var zf = fx.Constructor("Zf", e, ulong.MaxValue);
             var y = fx.Make(m);
             var z = fx.Make(zf);
             var gy = fx.Make(g, y);

@@ -42,6 +42,14 @@ namespace Eggnog.Relations
         ulong ComputeHash();
 
         /// <summary>
+        /// Gets whether the contents may hold e-class ids and are rebuilt: egglog's <c>do_rebuild</c>, set for a
+        /// container of an eq sort or of such containers. In an environment that holds e-class ids
+        /// (<see cref="ContainerEnvBase.HoldsIds"/>), a child context may look such a container up but not intern it;
+        /// one that holds none is interned anywhere, without an execution state.
+        /// </summary>
+        bool HoldsIds { get; }
+
+        /// <summary>
         /// Rebuilds the contents against <paramref name="rebuilder"/> (the union-find's canonicalizer): egglog's
         /// <c>rebuild_contents</c>. Leaves this container unchanged.
         /// </summary>

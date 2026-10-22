@@ -19,9 +19,16 @@ namespace Eggnog.Relations.Tests
         {
             var g = new ContextGraph();
             var values = g.EGraph.RegisterContainerType<VecContainer>(holdsIds: false);
-            Assert.Equal(values, g.EGraph.RegisterContainerType<VecContainer>());
+            Assert.Equal(values, g.EGraph.RegisterContainerType<VecContainer>(holdsIds: false));
+            g.EGraph.EnsureContainerType<VecContainer>();
             g.EGraph.GetContainerValue(new VecContainer(false, 1, 2));
             Assert.False(g.EGraph.ContainerValues.HasEqContainers);
+
+            // Registered again as holding ids, the one environment holds them, as egglog keeps a container type's eq-sort
+            // and base containers in one.
+            Assert.Equal(values, g.EGraph.RegisterContainerType<VecContainer>());
+            Assert.True(g.EGraph.ContainerValues.HasEqContainers);
+            Assert.True(g.EGraph.ContainerValues.GetEnvironment<VecContainer>().HoldsIds);
 
             var h = new ContextGraph();
             h.EGraph.RegisterContainerType<VecContainer>();

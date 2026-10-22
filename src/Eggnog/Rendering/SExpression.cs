@@ -545,16 +545,44 @@ namespace Eggnog
                     return member.ToString();
                 case IFormattable formattable:
                     return formattable.ToString(null, CultureInfo.InvariantCulture);
+                case IPair pair:
+                    return "(pair " + DefaultLiteral(pair.FirstValue) + " " + DefaultLiteral(pair.SecondValue) + ")";
+                case IMap map:
+                {
+                    var text = "(map-empty)";
+                    foreach (var (key, entry) in map.Entries)
+                        text = "(map-insert " + text + " " + DefaultLiteral(key) + " " + DefaultLiteral(entry) + ")";
+
+                    return text;
+                }
             }
 
             var type = value.GetType();
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Set<>))
             {
                 var builder = new StringBuilder("(set-of");
                 foreach (var element in (IEnumerable)value)
                     builder.Append(' ').Append(DefaultLiteral(element!));
 
                 return builder.Append(')').ToString();
+            }
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(MultiSet<>))
+            {
+                var builder = new StringBuilder("(multiset-of");
+                foreach (var element in (IEnumerable)value)
+                    builder.Append(' ').Append(DefaultLiteral(element!));
+
+                return builder.Append(')').ToString();
+            }
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Vec<>))
+            {
+                var builder = new StringBuilder("(vec-of");
+                foreach (var element in (IEnumerable)value)
+                    builder.Append(' ').Append(DefaultLiteral(element!));
+
+                return builder.Length == "(vec-of".Length ? "(vec-empty)" : builder.Append(')').ToString();
             }
 
             foreach (var face in type.GetInterfaces())

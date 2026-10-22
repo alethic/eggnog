@@ -80,7 +80,7 @@ namespace Eggnog.Tests.Scopes
         public void AFreezePlansTheSplitMatchers()
         {
             var t = new ScopeTheory();
-            var dom = t.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var split = t.Graph.DefineDomainSplit("facts", dom, [t.Fact]);
             t.Root.Freeze();
             var matcher = split.Program.Variants.Default!;

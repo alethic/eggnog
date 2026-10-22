@@ -27,7 +27,9 @@ namespace Eggnog
         readonly ColumnType result;
         readonly string[] argumentNames;
         readonly bool inBody;
+        readonly bool joins;
         readonly bool overClasses;
+        readonly Relations.UnionAction unionAction;
 
         /// <summary>
         /// Initializes a new instance.
@@ -40,8 +42,11 @@ namespace Eggnog
         /// <param name="argumentNames">The arguments' source names, for failures.</param>
         /// <param name="inBody">Whether the call site is a let of the body (a <c>QueryPrim</c>), where a partial
         /// primitive's no result drops the match; <c>false</c> for a head computation, where it fails the rule.</param>
+        /// <param name="joins">Whether the let's result is compared with a value the body binds otherwise, an atom's
+        /// column or an earlier let's: a container of classes the scope cannot make, and the root does not hold, then
+        /// drops the match, since it equals no cell.</param>
         public PrimitiveCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, ColumnType result, string[] argumentNames,
-            bool inBody)
+            bool inBody, bool joins = false)
         {
             this.graph = graph;
             this.ruleName = ruleName;
@@ -50,13 +55,17 @@ namespace Eggnog
             this.result = result;
             this.argumentNames = argumentNames;
             this.inBody = inBody;
-            overClasses = result.Kind == ColumnKind.Sort || Array.Exists(parameters, p => p.Kind == ColumnKind.Sort);
+            this.joins = joins;
+            overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
+            if (primitive.IsWrite)
+                unionAction = new Relations.UnionAction(graph.Engine);
         }
 
         /// <inheritdoc />
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
                 if (inBody)
@@ -64,17 +73,38 @@ namespace Eggnog
                     if (primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result) == false)
                         return false;
                 }
+                else if (primitive.IsWrite)
+                {
+                    // egglog's write primitive in an action: its unions staged through the run's state, as a head's.
+                    var action = unionAction;
+                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), out result) == false)
+                        throw Primitive.NoResult(primitive.Name);
+                }
                 else
                 {
                     result = primitive.InvokeCore(args, parameters, this.result, ScopeOf(state));
                 }
 
                 // A class the primitive returns may be one the host kept, stale since: canonical through the run's own
-                // find, which a parallel run's workers may use, so that it joins as its class before the next rebuild.
-                if (this.result.Kind == ColumnKind.Sort)
+                // find, which a parallel run's workers may use, so that it joins as its class before the next rebuild;
+                // so is a container of classes.
+                if (this.result.InvolvesClasses)
                     result = state.Canonicalize(result);
 
                 return true;
+            }
+            catch (OverflowException) when (graph.IdsExhausted)
+            {
+                // The store's limit, met interning a result such as a pair: the run ends as for a term that needs an id,
+                // discarding what it staged, and faults nothing.
+                throw;
+            }
+            catch (UninternedContainerException) when (joins)
+            {
+                // A container of classes this scope cannot make and the root does not hold equals no cell it is compared
+                // with, as egglog's newly interned one is in no row.
+                result = 0;
+                return false;
             }
             catch (Exception exception)
             {
@@ -84,6 +114,9 @@ namespace Eggnog
             }
             finally
             {
+                if (this.result.HoldsClasses)
+                    ClassCanonicalizer.Exit(canonicalizer);
+
                 EngineCallMarker.Exit();
             }
         }
@@ -134,15 +167,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Renders one argument for <see cref="RuleEvaluationException.Bindings"/>: a set as <c>{a, b}</c>
-        /// (<see cref="ValueSet{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>).
+        /// Renders one argument for <see cref="RuleEvaluationException.Bindings"/>: a set of values as <c>{a, b}</c>
+        /// (<see cref="Set{T}.ToString"/>), any other value as its literal (<c>"b"</c>, <c>42</c>, a set of classes
+        /// <c>(set-of #1 #2)</c>), which needs no scope.
         /// </summary>
         /// <param name="type">The argument's column type.</param>
         /// <param name="cell">The argument's cell.</param>
         /// <returns>The rendering.</returns>
         static string Binding(ColumnType type, uint cell)
         {
-            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(ValueSet<>))
+            if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(Set<>) && type.InvolvesClasses == false)
                 return type.DecodeObject(cell, null).ToString() ?? string.Empty;
 
             return type.FormatCell(cell);

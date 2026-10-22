@@ -52,6 +52,16 @@ namespace Eggnog
                 if (type.Kind == ColumnKind.Sort)
                     return TryReadIn(scope, term, enclosing, out cell);
 
+                // A container of classes no write interned compares as egglog's interned one would: by its canonical
+                // classes.
+                if (type.HoldsClasses)
+                {
+                    if (type.TryEncodeCanonicalObject(shape.Constant!, scope, scope.Engine.Find, out cell) == false)
+                        unencoded = type.CanonicalObject(shape.Constant!, scope, scope.Engine.Find);
+
+                    return true;
+                }
+
                 if (type.TryEncodeExistingObject(shape.Constant!, out cell) == false)
                     unencoded = shape.Constant!;
 
@@ -66,6 +76,14 @@ namespace Eggnog
 
                 if (result.Kind == ColumnKind.Sort)
                     return TryClassCell(scope, result, value!, out cell);
+
+                if (result.HoldsClasses)
+                {
+                    if (result.TryEncodeCanonicalObject(value!, scope, scope.Engine.Find, out cell) == false)
+                        unencoded = result.CanonicalObject(value!, scope, scope.Engine.Find);
+
+                    return true;
+                }
 
                 if (result.TryEncodeExistingObject(value!, out cell) == false)
                     unencoded = value!;
@@ -100,6 +118,9 @@ namespace Eggnog
                         return true;
                     }
 
+                    if (type.HoldsClasses)
+                        return type.TryEncodeCanonicalObject(shape.Constant!, scope, scope.Engine.Find, out cell);
+
                     return type.TryEncodeExistingObject(shape.Constant!, out cell);
                 }
                 case TermShapeKind.Application:
@@ -121,7 +142,7 @@ namespace Eggnog
                         return false;
 
                     // An id canonical in an ancestor names a class of this scope, so a class output reads canonical here.
-                    if (ReferenceEquals(read, scope) == false && table.Columns[^1].Kind == ColumnKind.Sort)
+                    if (ReferenceEquals(read, scope) == false && table.Columns[^1].InvolvesClasses)
                         cell = scope.Engine.Find(cell);
 
                     return true;
@@ -150,6 +171,9 @@ namespace Eggnog
             if (result.Kind == ColumnKind.Sort)
                 return TryClassCell(scope, result, value!, out cell);
 
+            if (result.HoldsClasses)
+                return result.TryEncodeCanonicalObject(value!, scope, scope.Engine.Find, out cell);
+
             return result.TryEncodeExistingObject(value!, out cell);
         }
 
@@ -166,11 +190,15 @@ namespace Eggnog
         /// <summary>
         /// Evaluates a primitive's term to its CLR value, on the calling thread under <see cref="EngineCallMarker"/>.
         /// </summary>
+        /// <exception cref="ArgumentException">The primitive writes the graph.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
         static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
         {
             value = null;
             var primitive = shape.Primitive!;
+            if (primitive.IsWrite)
+                throw new ArgumentException($"primitive '{primitive.Name}' writes the graph, and a read writes nothing", "term");
+
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
                 parameters[i] = scope.Graph.Values.TypeOf(primitive.ParameterTypes[i]);
@@ -199,9 +227,12 @@ namespace Eggnog
                     arguments[i] = parameters[i].DecodeObject(argumentCell, scope);
                 }
 
-                // A class argument must be usable here, and is seen as its canonical id, as a rule sees it.
+                // A class argument must be usable here, and is seen as its canonical id, as a rule sees it; so are the
+                // classes a container argument holds.
                 if (parameters[i].Kind == ColumnKind.Sort)
                     arguments[i] = parameters[i].DecodeObject(scope.Engine.Find(ClassChecks.Require(scope, parameters[i].ClassOf(arguments[i]), "term")), scope);
+                else if (parameters[i].HoldsClasses)
+                    arguments[i] = parameters[i].CanonicalObject(arguments[i], scope, scope.Engine.Find);
             }
 
             bool found;
@@ -355,6 +386,26 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets why a constant container's classes are not usable in a scope; <c>null</c> when they are, or without a
+        /// scope.
+        /// </summary>
+        static string? CheckClasses(Scope? scope, ColumnType type, object value)
+        {
+            if (scope is null)
+                return null;
+
+            try
+            {
+                type.CanonicalObject(value, scope, static cell => cell);
+                return null;
+            }
+            catch (ArgumentException exception)
+            {
+                return exception.Message;
+            }
+        }
+
+        /// <summary>
         /// <see cref="Validate"/> for one term.
         /// </summary>
         static string? ValidateTerm(Scope? scope, Term term, ScopeTag? enclosing)
@@ -378,7 +429,10 @@ namespace Eggnog
                         return exception.Message;
                     }
 
-                    return type.Kind == ColumnKind.Sort ? ClassChecks.Check(scope.Origin, type.ClassOf(shape.Constant!), null) : null;
+                    if (type.Kind == ColumnKind.Sort)
+                        return ClassChecks.Check(scope.Origin, type.ClassOf(shape.Constant!), null);
+
+                    return type.HoldsClasses ? CheckClasses(scope, type, shape.Constant!) : null;
                 }
                 case TermShapeKind.Application:
                 {
@@ -399,6 +453,9 @@ namespace Eggnog
                     return $"host reads are ground; '{shape.Name}' is a variable";
                 default:
                 {
+                    if (shape.Primitive!.IsWrite)
+                        return $"primitive '{shape.Primitive.Name}' writes the graph, and a read writes nothing";
+
                     foreach (var argument in shape.Arguments)
                         if (ValidateTerm(scope, argument, enclosing) is { } error)
                             return error;

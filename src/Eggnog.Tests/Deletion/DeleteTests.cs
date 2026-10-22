@@ -201,17 +201,17 @@ namespace Eggnog.Tests.Deletion
         public void ARunThatSplitsCannotDelete()
         {
             var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var split = t.Graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
                 s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
             });
             t.Rules.DefineRule("drop", r => r.Delete(t.Num.Of(1L)));
-            t.Root.Assume(t.Num.Of(1L), choice.Of("k").Is(ValueSet.Of(1L, 2L)));
+            t.Root.Assume(t.Num.Of(1L), choice.Of("k").Is(Set.Of(1L, 2L)));
 
             var e = Assert.Throws<InvalidOperationException>(() => t.Root.Run(Schedule.Sequence(t.Rules, Schedule.Split(split, t.Rules))));
 

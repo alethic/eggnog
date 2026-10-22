@@ -28,9 +28,17 @@ namespace Eggnog
     public sealed partial class EGraph
     {
 
+        static long graphs;
+
         int serial;
         int scopeSerial;
         int engineCalls;
+
+        /// <summary>
+        /// Gets the graph's number in the process, in creation order: the order of classes of two graphs, which no
+        /// container holds together, so that one never equals the other.
+        /// </summary>
+        internal long Number { get; }
 
         /// <summary>
         /// Initializes an empty graph: its value types, its root (tagged <see cref="RootTag"/>), and its
@@ -42,6 +50,7 @@ namespace Eggnog
         public EGraph(EGraphOptions? options = null)
         {
             EngineCallMarker.ThrowIfActive();
+            Number = System.Threading.Interlocked.Increment(ref graphs);
             options ??= EGraphOptions.Default;
             if (options.DegreeOfParallelism < 1)
                 throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must be at least 1.");
@@ -53,7 +62,7 @@ namespace Eggnog
                 Engine.ReportLevel = Relations.ReportLevel.WithPlan;
 
             BaseValues = Engine.BaseValues;
-            Values = new ValueStore(BaseValues);
+            Values = new ValueStore(this);
             Unit = new UnitColumnType(BaseValues) { Store = Values };
             NotEqual = Engine.RegisterExternalFunction(new NotEqualFunction(Unit.Unit));
             Equal = Engine.RegisterExternalFunction(new EqualFunction(Unit.Unit));
@@ -66,6 +75,7 @@ namespace Eggnog
             scopeTagsByName.Add(RootTagName, RootTag);
             RootOrigin = new ScopeOrigin(this, null, "root", false);
             Root = new Scope(this);
+            Values.RegisterBuiltInSets();
             Contradiction = DefineContradiction();
             Engine.DesignateContradiction(Contradiction.Function);
         }
@@ -125,6 +135,13 @@ namespace Eggnog
         /// engine definitions and a freeze's engine work; guards never block.
         /// </summary>
         internal object DefinitionLock { get; } = new();
+
+        /// <summary>
+        /// Gets whether the graph has run out of ids: an <see cref="OverflowException"/> thrown then is the store's limit,
+        /// which faults nothing (architecture, section 2.12), and the calls that catch a delegate's exceptions let it
+        /// through rather than report it as the delegate's failure.
+        /// </summary>
+        internal bool IdsExhausted => Engine.Store.IdsExhausted;
 
         /// <summary>
         /// Gets the per-context slot of <see cref="ScopeRuntime"/>s: every engine context of the graph

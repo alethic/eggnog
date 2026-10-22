@@ -391,7 +391,7 @@ namespace Eggnog.Tests.Scheduling
                 var c = new Predicates.Scoped.PredicateTheory(new EGraph());
                 c.Graph.Root.Freeze();
                 var scope = c.Graph.Root.CreateChild(c.Schema);
-                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("a", "b", "c")), c.Discriminator.Of("kind"));
+                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b", "c")), c.Discriminator.Of("kind"));
                 scope.Run(Schedule.Saturate(c.Horn, c.Lattice));
                 return (c, scope);
             }

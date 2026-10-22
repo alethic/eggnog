@@ -117,7 +117,9 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The function, or a value, is not one this rule may write.</exception>
         public void Set(FunctionHandle function, ReadOnlySpan<object> keys, object value)
         {
-            ArgumentNullException.ThrowIfNull(value);
+            if (value is null)
+                throw Refuse(new ArgumentNullException(nameof(value)));
+
             var row = Row(function, keys, 1, writes: true);
             row[^1] = Encode(function.Columns[^1], value, nameof(value));
             Call.Action(function).Insert(State, row);
@@ -220,19 +222,63 @@ namespace Eggnog
         /// here, or a value is not of its column's type or not usable here.</exception>
         internal uint[] Row(TableHandle table, ReadOnlySpan<object> keys, int extra, bool writes)
         {
+            if (TryRow(table, keys, extra, writes, out var row) == false)
+                throw new InvalidOperationException($"A key of '{table.Name}' has no cell, and a write makes one.");
+
+            return row;
+        }
+
+        /// <summary>
+        /// Encodes the keys of a row of <paramref name="table"/> as <see cref="Row"/> does, except that a read finds no
+        /// row for a key that is a container of classes no write made, which it does not intern.
+        /// </summary>
+        /// <returns>Whether every key has a cell; always <c>true</c> for a write.</returns>
+        /// <exception cref="ArgumentException">As for <see cref="Row"/>.</exception>
+        internal bool TryRow(TableHandle table, ReadOnlySpan<object> keys, int extra, bool writes, out uint[] row)
+        {
             CheckTable(table, writes);
             var columns = table.KeyArray;
             if (keys.Length != columns.Length)
                 throw Refuse(new ArgumentException($"'{table.Name}' takes {columns.Length} keys, not {keys.Length}.", nameof(keys)));
 
-            var row = new uint[columns.Length + extra];
+            row = new uint[columns.Length + extra];
             for (var i = 0; i < columns.Length; i++)
             {
                 var key = keys[i] ?? throw Refuse(new ArgumentNullException(nameof(keys), $"Key {i} is null."));
+                if (writes == false && columns[i].HoldsClasses)
+                {
+                    if (TryLookUp(columns[i], key, nameof(keys), out row[i]) == false)
+                        return false;
+
+                    continue;
+                }
+
                 row[i] = Encode(columns[i], key, nameof(keys));
             }
 
-            return row;
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the cell of a container of classes a read names, its classes usable and canonical through the state,
+        /// without interning it.
+        /// </summary>
+        /// <returns>Whether a write made it.</returns>
+        /// <exception cref="ArgumentException">The value is not of the column's type, or holds a class not usable
+        /// here.</exception>
+        bool TryLookUp(ColumnType type, object value, string parameter, out uint cell)
+        {
+            if (type.ClrType.IsInstanceOfType(value) == false)
+                throw Refuse(new ArgumentException($"A {ValueStore.DisplayName(value.GetType())} is not a {type.Name}.", parameter));
+
+            try
+            {
+                return type.TryEncodeCanonicalObject(value, Scope, State.Canonicalize, out cell);
+            }
+            catch (ArgumentException refused)
+            {
+                throw Refuse(refused);
+            }
         }
 
         /// <summary>
@@ -291,7 +337,19 @@ namespace Eggnog
                 return State.Canonicalize(cell);
             }
 
-            return type.EncodeObject(value);
+            try
+            {
+                // A container of classes: its classes usable and canonical through the state, as a class is, and the
+                // container interned at the root, or in a child the one the root holds.
+                if (type.HoldsClasses)
+                    return type.EncodeCanonicalObject(value, Scope, State.Canonicalize, null);
+
+                return type.EncodeObject(value);
+            }
+            catch (Exception refused) when (refused is ArgumentException or UninternedContainerException)
+            {
+                throw Refuse(refused);
+            }
         }
 
     }

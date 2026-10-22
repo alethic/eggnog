@@ -40,7 +40,7 @@ namespace Eggnog.Tests.Extraction
                 depth++;
 
             Assert.Equal(Depth, depth);
-            Assert.Equal(Depth + 1, term.Cost);
+            Assert.Equal<ulong>(Depth + 1, term.Cost);
             Assert.True(term.Mentions(t.A));
             Assert.Equal(term.Cost, Assert.Single(variants).Cost);
             Assert.StartsWith("(Wrap (Wrap ", term.ToString());

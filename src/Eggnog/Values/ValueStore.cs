@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Eggnog
 {
@@ -13,9 +14,11 @@ namespace Eggnog
     /// <summary>
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <see cref="BigRational"/> "BigRat",
-    /// <c>ValueSet&lt;string&gt;</c> "Set&lt;String&gt;", <c>ValueSet&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>ValueSet&lt;int&gt;</c>
+    /// <c>Set&lt;string&gt;</c> "Set&lt;String&gt;", <c>Set&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>Set&lt;int&gt;</c>
     /// "Set&lt;i32&gt;". Sorts join through
-    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types through the <c>Register*</c> methods. Thread-safe.
+    /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and containers (sets, pairs, vectors, maps, multisets) through
+    /// the <c>Register*</c> methods. Thread-safe; the first container type of each kind registered is an engine
+    /// definition, which while the root is writable enters its domain.
     /// </summary>
     /// <remarks>
     /// Names are unique across sorts and value types. Interning pools are permanent and shared by every scope of the
@@ -26,25 +29,36 @@ namespace Eggnog
     public sealed class ValueStore
     {
 
+        readonly EGraph graph;
         readonly Relations.BaseValues values;
         readonly object sync = new();
+        Relations.ContainerEnvBase[] containers = [];
         readonly ConcurrentDictionary<Type, ColumnType> byType = new();
         readonly Dictionary<string, ColumnType> byName = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Initializes the store of a graph with the built-in types, registering their codecs with
-        /// <paramref name="values"/>.
+        /// Initializes the store of a graph with the built-in types, registering their codecs with the graph's base value
+        /// registry.
         /// </summary>
-        /// <param name="values">The graph's base value registry.</param>
-        internal ValueStore(Relations.BaseValues values)
+        /// <param name="graph">The graph, whose <see cref="EGraph.BaseValues"/> is set.</param>
+        internal ValueStore(EGraph graph)
         {
-            this.values = values;
+            this.graph = graph;
+            values = graph.BaseValues;
             Add(new BaseColumnType<Relations.Int64Codec, long>("i64", values, static v => v.ToString(CultureInfo.InvariantCulture), Comparer<long>.Default));
             Add(new WidenedColumnType<int>("i32", values, static v => v, static v => checked((int)v), static v => v.ToString(CultureInfo.InvariantCulture)));
             Add(new BaseColumnType<Relations.BooleanCodec, bool>("bool", values, static v => v ? "true" : "false", Comparer<bool>.Default));
             Add(new DoubleColumnType(values));
             Add(new BaseColumnType<Relations.StringCodec, string>("String", values, Relations.LiteralText.String, Relations.CodePointComparer.Instance));
             Add(new BaseColumnType<Relations.InternedCodec<BigInteger>, BigInteger>("BigInt", values, FormatBigInteger, Comparer<BigInteger>.Default));
+        }
+
+        /// <summary>
+        /// Registers the built-in set types, once the graph's root exists: a set is a container, whose environment the
+        /// graph registers in the root's domain.
+        /// </summary>
+        internal void RegisterBuiltInSets()
+        {
             Add(new BaseColumnType<BigRationalCodec, BigRational>("BigRat", values, FormatBigRational, Comparer<BigRational>.Default));
             RegisterSet<string>();
             RegisterSet<long>();
@@ -56,12 +70,24 @@ namespace Eggnog
         /// </summary>
         /// <remarks>
         /// Every scope interns into these pools, and what a scope interned outlives it. A write interns each new
-        /// constant that is not stored inline (strings, doubles, sets, registered values, and <c>long</c>s outside
-        /// <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new result of a primitive or a lattice merge, a split each new value its
-        /// cases assume, a lift each new case join; and a rule or query interns its constants when it is defined. Reads,
-        /// checks and query matches never intern.
+        /// constant that is not stored inline (strings, doubles, sets, pairs, vectors, registered values, and <c>long</c>s outside
+        /// <c>[0, 2^31)</c>, and every <c>BigInt</c> and <c>BigRat</c>); a run interns each new result of a primitive or a lattice merge,
+        /// a split each new value its cases assume, a lift each new case join; and a rule or query interns its constants
+        /// when it is defined, and when it runs the new results of the computations in its body. Reads and checks never
+        /// intern. A container (a set, pair, vector, map or multiset) also takes an id from the graph's id counter, as egglog's
+        /// containers do.
         /// </remarks>
-        public long InternedCount => values.InternedCount;
+        public long InternedCount
+        {
+            get
+            {
+                var count = values.InternedCount;
+                foreach (var env in Volatile.Read(ref containers))
+                    count += env.Count;
+
+                return count;
+            }
+        }
 
         /// <summary>
         /// Gets the column type of <typeparamref name="T"/>.
@@ -69,8 +95,9 @@ namespace Eggnog
         /// <typeparam name="T">The CLR type.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException"><typeparamref name="T"/> is unknown; the message names the method to
-        /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterEnum{TEnum}"/> or
-        /// <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
+        /// call (<see cref="Register{T}"/>, <see cref="RegisterSet{T}"/>, <see cref="RegisterPair{T1, T2}"/>,
+        /// <see cref="RegisterVec{T}"/>, <see cref="RegisterMap{TKey, TValue}"/>, <see cref="RegisterMultiSet{T}"/>,
+        /// <see cref="RegisterEnum{TEnum}"/> or <see cref="EGraph.DefineSort{TSort}(string)"/>).</exception>
         public ColumnType<T> TypeOf<T>() => (ColumnType<T>)TypeOf(typeof(T));
 
         /// <summary>
@@ -97,7 +124,7 @@ namespace Eggnog
         /// cref="EGraph.DefineSort{TSort}(string)"/>), and a set type joins through <see cref="RegisterSet{T}"/>.
         /// </summary>
         /// <typeparam name="T">The CLR type; values must be immutable, and equal values must hash alike. Not
-        /// <see cref="ClassId"/>, a sort or a <see cref="ValueSet{T}"/>.</typeparam>
+        /// <see cref="ClassId"/>, a sort or a <see cref="Set{T}"/>.</typeparam>
         /// <param name="name">The type's name, unique among the store's types.</param>
         /// <param name="order">The content order of <see cref="ColumnType{T}.Compare"/>, which host reads sort by; must
         /// not depend on the culture. <c>null</c>: <c>Comparer&lt;T&gt;.Default</c> when <typeparamref name="T"/> is comparable,
@@ -122,6 +149,18 @@ namespace Eggnog
             if (IsSet(typeof(T)))
                 throw new ArgumentException($"{DisplayName(typeof(T))} is a set: register it with ValueStore.RegisterSet.");
 
+            if (IsPair(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a pair: register it with ValueStore.RegisterPair.");
+
+            if (IsVec(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a vector: register it with ValueStore.RegisterVec.");
+
+            if (IsMap(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a map: register it with ValueStore.RegisterMap.");
+
+            if (IsMultiSet(typeof(T)))
+                throw new ArgumentException($"{DisplayName(typeof(T))} is a multiset: register it with ValueStore.RegisterMultiSet.");
+
             order ??= typeof(IComparable<T>).IsAssignableFrom(typeof(T)) || typeof(IComparable).IsAssignableFrom(typeof(T)) ? Comparer<T>.Default : null;
             format ??= static value => value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString() ?? string.Empty;
             lock (sync)
@@ -134,55 +173,244 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers the set type of <typeparamref name="T"/>, named <c>Set&lt;{element name}&gt;</c>, or gets it when
-        /// it is registered already. Sets are interned base values, kept in ascending element order: by code
-        /// point for strings, <c>Comparer&lt;T&gt;.Default</c> otherwise, so the element type must be <c>string</c> or comparable
-        /// (<see cref="IComparable{T}"/> or <see cref="IComparable"/>); an order given to <see cref="Register{T}"/> is
-        /// not the sets' element order.
+        /// Registers the set type of <typeparamref name="T"/>, egglog's <c>(sort … (Set T))</c>, named
+        /// <c>Set&lt;{element name}&gt;</c>, or gets it when it is registered already. A set is egglog's <c>Set</c>
+        /// container: its cell is a container id from the graph's id counter, equal sets have one cell, and its
+        /// primitives are <see cref="Primitives"/>' <c>Set*</c> methods. It extracts as <c>(set-of a b)</c>, its elements
+        /// in cell order as egglog's, and costs what its elements cost. The elements may be values, containers included,
+        /// classes of a sort, or containers of them, and are <c>string</c>, comparable (<see cref="IComparable{T}"/> or
+        /// <see cref="IComparable"/>), or classes, which order by cell, as a <see cref="Set{T}"/> keeps its elements in
+        /// element order; an order given to <see cref="Register{T}"/> is not the sets' element order. A set of classes is
+        /// egglog's eq-sort container: rebuilt when its classes merge, elements that become one becoming one element,
+        /// never unioned, and made only at the root (decisions row 9). The graph registers <c>Set&lt;String&gt;</c>,
+        /// <c>Set&lt;i64&gt;</c> and <c>Set&lt;i32&gt;</c> itself; the first set type that holds classes is an engine
+        /// definition, which registers only while the root is writable and enters the root's domain.
         /// </summary>
-        /// <typeparam name="T">The element type; registered, comparable, and not a sort (there are no sets of
-        /// classes).</typeparam>
+        /// <typeparam name="T">The element type; registered, and comparable.</typeparam>
         /// <returns>The column type.</returns>
-        /// <exception cref="ArgumentException">The element type is unknown, a sort, or not comparable, or the name is
+        /// <exception cref="ArgumentException">The element type is unknown or not comparable, or the name is
         /// taken.</exception>
-        public ColumnType<ValueSet<T>> RegisterSet<T>() where T : notnull
+        /// <exception cref="InvalidOperationException">The first set type that holds classes is registered while the
+        /// root is frozen or another thread is using it.</exception>
+        public ColumnType<Set<T>> RegisterSet<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Set<T>>(out var existing))
+                return existing;
+
+            var element = TypeOf<T>();
+            if (element.IsOrdered == false)
+                throw new ArgumentException($"Sets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
+
+            var env = element.InvolvesClasses
+                ? graph.ClassContainers<Relations.SetContainer>()
+                : graph.ValueContainers<Relations.SetContainer>();
             lock (sync)
             {
-                if (TryGetType<ValueSet<T>>(out var existing))
+                if (TryGetType<Set<T>>(out existing))
                     return existing;
 
-                var element = TypeOf<T>();
-                if (element.Kind == ColumnKind.Sort)
-                    throw new ArgumentException($"Sets hold values only, never classes; {element.Name} is a sort.");
-
-                if (typeof(T) != typeof(string) && typeof(IComparable<T>).IsAssignableFrom(typeof(T)) == false && typeof(IComparable).IsAssignableFrom(typeof(T)) == false)
-                    throw new ArgumentException($"Sets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable.");
-
                 var name = $"Set<{element.Name}>";
-                CheckFree(typeof(ValueSet<T>), name);
-                var elementOrder = ValueSetOrder<T>.Comparer;
-                var order = Comparer<ValueSet<T>>.Create((x, y) =>
-                {
-                    for (var i = 0; i < x.Count && i < y.Count; i++)
-                    {
-                        var c = elementOrder.Compare(x[i], y[i]);
-                        if (c != 0)
-                            return c;
-                    }
-
-                    return x.Count.CompareTo(y.Count);
-                });
-
-                var type = new BaseColumnType<Relations.InternedCodec<ValueSet<T>>, ValueSet<T>>(
-                    name,
-                    values,
-                    set => set.Count == 0 ? "(set-of)" : "(set-of " + string.Join(" ", set.Select(element.FormatValue)) + ")",
-                    order);
+                CheckFree(typeof(Set<T>), name);
+                var type = new SetColumnType<T>(name, element, env, graph.Engine.Counters);
                 Add(type);
+                AddContainers(env);
                 return type;
             }
+        }
+
+        /// <summary>
+        /// Registers the pair type of <typeparamref name="T1"/> and <typeparamref name="T2"/>, egglog's
+        /// <c>(sort … (Pair T1 T2))</c>, named <c>Pair&lt;{first name}, {second name}&gt;</c>, or gets it when it is
+        /// registered already. A pair is egglog's <c>Pair</c> container: its cell is a container id from the graph's id
+        /// counter, equal pairs have one cell, and its primitives are <see cref="Primitives.PairOf{T1, T2}"/>,
+        /// <see cref="Primitives.PairFirst{T1, T2}"/> and <see cref="Primitives.PairSecond{T1, T2}"/>. It extracts as
+        /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. An element may be a value, a
+        /// class of a sort, or a container of them. A pair that holds classes is egglog's eq-sort container: rebuilt
+        /// when its classes merge, never unioned, and made only at the root (decisions row 9). The first pair type
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
+        /// first that holds classes registers only while the root is writable.
+        /// </summary>
+        /// <typeparam name="T1">The type of the first element; registered.</typeparam>
+        /// <typeparam name="T2">The type of the second element; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">An element type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first pair type is registered while another thread is using
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        public ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
+            where T1 : notnull
+            where T2 : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Pair<T1, T2>>(out var existing))
+                return existing;
+
+            var first = TypeOf<T1>();
+            var second = TypeOf<T2>();
+
+            // Outside the store's lock: the environment's registration takes the graph's definition lock, which
+            // DefineSort takes before this lock.
+            var env = first.InvolvesClasses || second.InvolvesClasses
+                ? graph.ClassContainers<Relations.PairContainer>()
+                : graph.ValueContainers<Relations.PairContainer>();
+            lock (sync)
+            {
+                if (TryGetType<Pair<T1, T2>>(out existing))
+                    return existing;
+
+                var name = $"Pair<{first.Name}, {second.Name}>";
+                CheckFree(typeof(Pair<T1, T2>), name);
+                var type = new PairColumnType<T1, T2>(name, first, second, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Registers the vector type of <typeparamref name="T"/>, egglog's <c>(sort … (Vec T))</c>, named
+        /// <c>Vec&lt;{element name}&gt;</c>, or gets it when it is registered already. A vector is egglog's <c>Vec</c>
+        /// container: its cell is a container id from the graph's id counter, equal vectors have one cell, and its
+        /// primitives are <see cref="Primitives"/>' <c>Vec*</c> methods. It extracts as <c>(vec-of a b)</c>, or
+        /// <c>(vec-empty)</c>, and costs what its elements cost, as egglog's containers do. The elements may be values,
+        /// containers of values included, classes of a sort, or containers of them. A vector that holds classes is
+        /// egglog's eq-sort container: rebuilt when its classes merge, never unioned, and made only at the root (decisions
+        /// row 9). The first vector type registered is an engine definition: while the root is writable, that call enters
+        /// the root's domain, and the first that holds classes registers only while the root is writable.
+        /// </summary>
+        /// <typeparam name="T">The element type; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">The element type is unknown, or the name is taken.</exception>
+        /// <exception cref="InvalidOperationException">The first vector type is registered while another thread is using
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Vec<T>>(out var existing))
+                return existing;
+
+            var element = TypeOf<T>();
+            var env = element.InvolvesClasses
+                ? graph.ClassContainers<Relations.VecContainer>()
+                : graph.ValueContainers<Relations.VecContainer>();
+            lock (sync)
+            {
+                if (TryGetType<Vec<T>>(out existing))
+                    return existing;
+
+                var name = $"Vec<{element.Name}>";
+                CheckFree(typeof(Vec<T>), name);
+                var type = new VecColumnType<T>(name, element, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Registers the map type from <typeparamref name="TKey"/> to <typeparamref name="TValue"/>, egglog's
+        /// <c>(sort … (Map K V))</c>, named <c>Map&lt;{key name}, {value name}&gt;</c>, or gets it when it is registered
+        /// already. A map is egglog's <c>Map</c> container: its cell is a container id from the graph's id counter, equal
+        /// maps have one cell, and its primitives are <see cref="Primitives"/>' <c>Map*</c> methods. It extracts as a
+        /// chain of <c>map-insert</c>s over <c>(map-empty)</c>, its entries in key-cell order as egglog's, and costs what
+        /// its keys and values cost. Keys and values may be values, containers included, classes of a sort, or containers
+        /// of them; the keys are <c>string</c>, comparable, or classes, which order by cell, as a
+        /// <see cref="Map{TKey, TValue}"/> enumerates in key order. A map that holds classes is egglog's eq-sort
+        /// container: rebuilt when its classes merge, keys that become one collapsing as egglog's do, never unioned, and
+        /// made only at the root (decisions row 9). The first map type registered is an engine definition: while the root
+        /// is writable, that call enters the root's domain, and the first that holds classes registers only while the
+        /// root is writable.
+        /// </summary>
+        /// <typeparam name="TKey">The key type; registered, and comparable.</typeparam>
+        /// <typeparam name="TValue">The value type; registered.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">A type is unknown, the key type is not comparable, or the name is
+        /// taken.</exception>
+        /// <exception cref="InvalidOperationException">The first map type is registered while another thread is using
+        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        public ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
+            where TKey : notnull
+            where TValue : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<Map<TKey, TValue>>(out var existing))
+                return existing;
+
+            var key = TypeOf<TKey>();
+            var value = TypeOf<TValue>();
+            if (key.IsOrdered == false)
+                throw new ArgumentException($"Maps keep their keys in Comparer<T>.Default order, and {DisplayName(typeof(TKey))} implements neither IComparable<{DisplayName(typeof(TKey))}> nor IComparable, or holds an element that does not.");
+
+            var env = key.InvolvesClasses || value.InvolvesClasses
+                ? graph.ClassContainers<Relations.MapContainer>()
+                : graph.ValueContainers<Relations.MapContainer>();
+            lock (sync)
+            {
+                if (TryGetType<Map<TKey, TValue>>(out existing))
+                    return existing;
+
+                var name = $"Map<{key.Name}, {value.Name}>";
+                CheckFree(typeof(Map<TKey, TValue>), name);
+                var type = new MapColumnType<TKey, TValue>(name, key, value, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Registers the multiset type of <typeparamref name="T"/>, egglog's <c>(sort … (MultiSet T))</c>, named
+        /// <c>MultiSet&lt;{element name}&gt;</c>, or gets it when it is registered already. A multiset is egglog's
+        /// <c>MultiSet</c> container: its cell is a container id from the graph's id counter, equal multisets have one
+        /// cell, and its primitives are <see cref="Primitives"/>' <c>MultiSet*</c> methods. It extracts as
+        /// <c>(multiset-of a a b)</c>, its elements in cell order as egglog's, and costs what its elements cost. The
+        /// elements may be values, containers included, classes of a sort, or containers of them, and are <c>string</c>,
+        /// comparable, or classes, which order by cell, as a <see cref="MultiSet{T}"/> enumerates in element order. A
+        /// multiset of classes is egglog's eq-sort container: rebuilt when its classes merge, elements that become one
+        /// adding their counts, never unioned, and made only at the root (decisions row 9). The first multiset type
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
+        /// first that holds classes registers only while the root is writable.
+        /// </summary>
+        /// <typeparam name="T">The element type; registered, and comparable.</typeparam>
+        /// <returns>The column type.</returns>
+        /// <exception cref="ArgumentException">The element type is unknown or not comparable, or the name is
+        /// taken.</exception>
+        /// <exception cref="InvalidOperationException">The first multiset type is registered while another thread is
+        /// using the writable root, or the first that holds classes while the root is frozen.</exception>
+        public ColumnType<MultiSet<T>> RegisterMultiSet<T>() where T : notnull
+        {
+            EngineCallMarker.ThrowIfActive();
+            if (TryGetType<MultiSet<T>>(out var existing))
+                return existing;
+
+            var element = TypeOf<T>();
+            if (element.IsOrdered == false)
+                throw new ArgumentException($"Multisets keep their elements in Comparer<T>.Default order, and {DisplayName(typeof(T))} implements neither IComparable<{DisplayName(typeof(T))}> nor IComparable, or holds an element that does not.");
+
+            var env = element.InvolvesClasses
+                ? graph.ClassContainers<Relations.MultiSetContainer>()
+                : graph.ValueContainers<Relations.MultiSetContainer>();
+            lock (sync)
+            {
+                if (TryGetType<MultiSet<T>>(out existing))
+                    return existing;
+
+                var name = $"MultiSet<{element.Name}>";
+                CheckFree(typeof(MultiSet<T>), name);
+                var type = new MultiSetColumnType<T>(name, element, env, graph.Engine.Counters);
+                Add(type);
+                AddContainers(env);
+                return type;
+            }
+        }
+
+        /// <summary>
+        /// Counts a container environment in <see cref="InternedCount"/>, once. Called under the lock.
+        /// </summary>
+        void AddContainers(Relations.ContainerEnvBase env)
+        {
+            if (System.Array.IndexOf(containers, env) < 0)
+                Volatile.Write(ref containers, [.. containers, env]);
         }
 
         /// <summary>
@@ -257,6 +485,9 @@ namespace Eggnog
                 CheckFree(typeof(TSort), name);
                 var type = new SortColumnType<TSort>(name);
                 Add(type);
+
+                // A map's keys and a multiset's elements order a sort's classes by cell, as egglog's BTreeMap does.
+                ElementOrder<TSort>.Use(ClassOrder<TSort>.Instance);
                 return type;
             }
         }
@@ -266,7 +497,8 @@ namespace Eggnog
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The method, as <c>ValueStore.Register</c>, <c>ValueStore.RegisterSet</c>,
-        /// <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
+        /// <c>ValueStore.RegisterPair</c>, <c>ValueStore.RegisterVec</c>, <c>ValueStore.RegisterMap</c>,
+        /// <c>ValueStore.RegisterMultiSet</c>, <c>ValueStore.RegisterEnum</c> or <c>EGraph.DefineSort</c>.</returns>
         [UnconditionalSuppressMessage("Trimming", "IL2067",
             Justification = "The result only words a hint in an error message. A sort the program defines keeps its ISort<> "
                 + "implementation, because EGraph.DefineSort constrains its type argument to it; a type whose implementation the "
@@ -275,6 +507,18 @@ namespace Eggnog
         {
             if (IsSet(clrType))
                 return "ValueStore.RegisterSet";
+
+            if (IsPair(clrType))
+                return "ValueStore.RegisterPair";
+
+            if (IsVec(clrType))
+                return "ValueStore.RegisterVec";
+
+            if (IsMap(clrType))
+                return "ValueStore.RegisterMap";
+
+            if (IsMultiSet(clrType))
+                return "ValueStore.RegisterMultiSet";
 
             if (clrType.IsEnum)
                 return "ValueStore.RegisterEnum";
@@ -300,14 +544,42 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether a CLR type is a set type, a <see cref="ValueSet{T}"/>.
+        /// Gets whether a CLR type is a set type, a <see cref="Set{T}"/>.
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>Whether the type is a set type.</returns>
-        internal static bool IsSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(ValueSet<>);
+        internal static bool IsSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Set<>);
 
         /// <summary>
-        /// Gets a readable name of a CLR type: <c>Foo</c>, <c>ValueSet&lt;Foo&gt;</c>.
+        /// Gets whether a CLR type is a pair type, a <see cref="Pair{T1, T2}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a pair type.</returns>
+        internal static bool IsPair(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Pair<,>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a vector type, a <see cref="Vec{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a vector type.</returns>
+        internal static bool IsVec(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Vec<>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a map type, a <see cref="Map{TKey, TValue}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a map type.</returns>
+        internal static bool IsMap(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(Map<,>);
+
+        /// <summary>
+        /// Gets whether a CLR type is a multiset type, a <see cref="MultiSet{T}"/>.
+        /// </summary>
+        /// <param name="clrType">The CLR type.</param>
+        /// <returns>Whether the type is a multiset type.</returns>
+        internal static bool IsMultiSet(Type clrType) => clrType.IsGenericType && clrType.GetGenericTypeDefinition() == typeof(MultiSet<>);
+
+        /// <summary>
+        /// Gets a readable name of a CLR type: <c>Foo</c>, <c>Set&lt;Foo&gt;</c>.
         /// </summary>
         /// <param name="clrType">The CLR type.</param>
         /// <returns>The name.</returns>

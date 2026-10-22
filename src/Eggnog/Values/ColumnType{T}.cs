@@ -79,6 +79,43 @@ namespace Eggnog
         internal virtual uint EncodeIn(T value, Scope? scope) => Encode(value);
 
         /// <summary>
+        /// Encodes a host's value in <paramref name="scope"/> (<see cref="ColumnType.EncodeCanonicalObject"/>): as
+        /// <see cref="EncodeIn"/>, except that each class the value holds is checked and canonical through
+        /// <paramref name="find"/>.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="scope">The scope written.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <param name="openBatch">The origin of an open Write batch whose classes the scope may use; <c>null</c> for
+        /// none.</param>
+        /// <returns>The cell.</returns>
+        internal virtual uint EncodeCanonical(T value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>
+            EncodeIn(value, scope);
+
+        /// <summary>
+        /// Gets the cell of a host's value in <paramref name="scope"/> without interning
+        /// (<see cref="ColumnType.TryEncodeCanonicalObject"/>): as <see cref="TryEncodeExisting"/>, except that each class
+        /// the value holds is checked and canonical through <paramref name="find"/>.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <param name="cell">The cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether the value has a cell already.</returns>
+        internal virtual bool TryEncodeCanonical(T value, Scope scope, Func<uint, uint> find, out uint cell) =>
+            TryEncodeExisting(value, out cell);
+
+        /// <summary>
+        /// Gets a host's value as <paramref name="scope"/> sees it (<see cref="ColumnType.CanonicalObject"/>): each class
+        /// it holds checked and canonical through <paramref name="find"/>.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="scope">The scope read.</param>
+        /// <param name="find">The canonical id of a class cell.</param>
+        /// <returns>The value.</returns>
+        internal virtual T Canonical(T value, Scope scope, Func<uint, uint> find) => value;
+
+        /// <summary>
         /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
         /// graph's interning pools, which are permanent.
         /// </summary>
@@ -94,6 +131,12 @@ namespace Eggnog
         /// <param name="scope">The scope serving the call; needed for a sort.</param>
         /// <returns>The value.</returns>
         internal abstract T Decode(uint cell, Scope? scope);
+
+        /// <inheritdoc />
+        internal override bool IsOrdered =>
+            typeof(T) == typeof(string)
+                || typeof(IComparable<T>).IsAssignableFrom(typeof(T))
+                || typeof(IComparable).IsAssignableFrom(typeof(T));
 
         /// <summary>
         /// Formats a non-null value.
@@ -126,6 +169,18 @@ namespace Eggnog
 
         /// <inheritdoc />
         internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
+
+        /// <inheritdoc />
+        internal override uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>
+            EncodeCanonical(Cast(value), scope, find, openBatch);
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, out uint cell) =>
+            TryEncodeCanonical(Cast(value), scope, find, out cell);
+
+        /// <inheritdoc />
+        internal override object CanonicalObject(object value, Scope scope, Func<uint, uint> find) =>
+            Canonical(Cast(value), scope, find)!;
 
         /// <summary>
         /// Gets whether two non-null values are one value as the codec interns them: by <see cref="IEquatable{T}"/>, as

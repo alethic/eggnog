@@ -214,7 +214,7 @@ namespace Eggnog.Tests.Concurrency
 
             t.Root.Freeze();
             var serial = t.Root.CreateExtractor();
-            var expected = new long[terms.Length];
+            var expected = new ulong[terms.Length];
             for (var i = 0; i < terms.Length; i++)
                 Assert.True(serial.TryGetCost(terms[i], out expected[i]));
 
@@ -405,7 +405,7 @@ namespace Eggnog.Tests.Concurrency
             var schema = graph.Root.CreateChild(c.Schema);
             schema.Assume(
                 c.Present.Of("kind"),
-                c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice", "note")),
+                c.Dom.Of("kind").Is(Set.Of("order", "invoice", "note")),
                 c.Discriminator.Of("kind"));
             c.DeclareBranch(schema, "kind", "order", c.Form.Of("ref", "uuid-lower"));
             c.DeclareBranch(schema, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));

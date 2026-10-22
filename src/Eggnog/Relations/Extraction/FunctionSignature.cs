@@ -32,9 +32,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the cost of one row, without its children: egglog's <c>:cost</c>. <c>null</c> means 1, egglog's
-        /// <c>DefaultCost::unit()</c>. Must not be negative.
+        /// <c>DefaultCost::unit()</c>.
         /// </summary>
-        public long? Cost { get; init; }
+        public ulong? Cost { get; init; }
 
         /// <summary>
         /// Gets whether extraction must not use the function's rows: egglog's <c>:unextractable</c>. Ignored by

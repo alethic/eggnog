@@ -67,7 +67,8 @@ namespace Eggnog.Relations
         /// <param name="timestamp">The timestamp the merge state carries (the pass's timestamp in the rebuild loop), or
         /// <c>null</c> for the store clock's current value, or without a store the timestamp of the union-find's newest
         /// union.</param>
-        /// <returns>What changed; nothing when no container type was ever registered.</returns>
+        /// <returns>What changed; nothing when no registered container type holds e-class ids, whose containers never
+        /// change.</returns>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or it is taken out.</exception>
         /// <exception cref="InvalidOperationException">This is a child context's database: children never rebuild
         /// containers; or the database is frozen.</exception>
@@ -76,7 +77,11 @@ namespace Eggnog.Relations
             ThrowIfChildRebuild(nameof(RebuildContainers));
             ThrowIfFrozen();
             var table = GetTable(unionFind);
-            if (containers is not { } values)
+
+            // Containers of base values never change, so egglog's walk over them is skipped. The subset tracker then
+            // keeps its old version, and the first rebuild after a type comes to hold ids sees every update since: more
+            // than the displaced ids, which a rebuild may see.
+            if (containers is not { HasEqContainers: true } values)
                 return new ContainerRebuildSummary();
 
             containersTakenOut = true;

@@ -32,6 +32,11 @@ namespace Eggnog
         internal override Relations.Sort ExtractionSort => sort;
 
         /// <inheritdoc />
+        /// <remarks>By cell (<see cref="ClassOrder{TSort}"/>), as egglog orders a map's keys and a multiset's
+        /// elements.</remarks>
+        internal override bool IsOrdered => true;
+
+        /// <inheritdoc />
         internal override uint Encode(TSort value)
         {
             var id = value.Id;
@@ -47,8 +52,24 @@ namespace Eggnog
             if (scope is not null && ClassChecks.Check(scope.Origin, value.Id, null) is { } error)
                 throw new InvalidOperationException($"A primitive returned a class this scope cannot use: {error}.");
 
-            return Encode(value);
+            // Canonical through the engine call's own find, where one runs, as the call makes a class it returns.
+            return ClassCanonicalizer.Canonical(Encode(value));
         }
+
+        /// <inheritdoc />
+        internal override uint EncodeCanonical(TSort value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch) =>
+            find(ClassChecks.Require(scope, value.Id, nameof(value), openBatch));
+
+        /// <inheritdoc />
+        internal override bool TryEncodeCanonical(TSort value, Scope scope, Func<uint, uint> find, out uint cell)
+        {
+            cell = find(ClassChecks.Require(scope, value.Id, nameof(value)));
+            return true;
+        }
+
+        /// <inheritdoc />
+        internal override TSort Canonical(TSort value, Scope scope, Func<uint, uint> find) =>
+            TSort.FromId(new ClassId(find(ClassChecks.Require(scope, value.Id, nameof(value))), scope.Origin));
 
         /// <inheritdoc />
         internal override bool TryEncodeExisting(TSort value, out uint cell)

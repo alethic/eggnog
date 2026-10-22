@@ -122,21 +122,21 @@ namespace Eggnog.Relations.Benchmarks
         /// </summary>
         /// <returns>The sum of the costs.</returns>
         [Benchmark(Baseline = true)]
-        public long RootApi() => Sum(Extractor.CreateOnDemand(schema!), rootQueries!);
+        public ulong RootApi() => Sum(Extractor.CreateOnDemand(schema!), rootQueries!);
 
         /// <summary>
         /// The context form at the root.
         /// </summary>
         /// <returns>The sum of the costs.</returns>
         [Benchmark]
-        public long RootContext() => Sum(Extractor.CreateOnDemand(schema!, schema!.EGraph.Root), rootQueries!);
+        public ulong RootContext() => Sum(Extractor.CreateOnDemand(schema!, schema!.EGraph.Root), rootQueries!);
 
         /// <summary>
         /// The context form in the child.
         /// </summary>
         /// <returns>The sum of the costs.</returns>
         [Benchmark]
-        public long Child() => Sum(Extractor.CreateOnDemand(schema!, child!), childQueries!);
+        public ulong Child() => Sum(Extractor.CreateOnDemand(schema!, child!), childQueries!);
 
         /// <inheritdoc />
         public long ItemsPerInvocation(string benchmarkMethod) => Queries;
@@ -144,9 +144,9 @@ namespace Eggnog.Relations.Benchmarks
         /// <summary>
         /// Costs every queried class.
         /// </summary>
-        long Sum(Extractor extractor, Value[] queries)
+        ulong Sum(Extractor extractor, Value[] queries)
         {
-            long sum = 0;
+            ulong sum = 0;
             foreach (var value in queries)
                 if (extractor.TryGetCost(sort!, value, out var cost))
                     sum += cost;

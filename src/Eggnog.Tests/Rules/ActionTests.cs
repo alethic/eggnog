@@ -75,19 +75,19 @@ namespace Eggnog.Tests.Rules
         {
             var t = new NodeTheory();
             var best = t.Graph.DefineFunction<string, long>("best", ValueLattice.Max<long>());
-            var dom = t.Graph.DefineFunction<string, ValueSet<long>>("dom", ValueLattice.Intersect<long>());
+            var dom = t.Graph.DefineFunction<string, Set<long>>("dom", ValueLattice.Intersect<long>());
             t.Rules.DefineRule("collect", r =>
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.Insert<long>().Of(ValueSet.Of(100L), x)));
+                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.Insert<long>().Of(Set.Of(100L), x)));
             });
             t.Root.Assume(t.Num.Of(3L), t.Num.Of(9L), t.Num.Of(5L));
 
             t.Root.Run(Schedule.Saturate(t.Rules));
 
             Assert.Equal(9L, t.Root.Get(best.Of("k")));
-            Assert.Equal(ValueSet.Of(100L), t.Root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of(100L), t.Root.Get(dom.Of("k")));
         }
 
         [Fact]
@@ -275,16 +275,16 @@ namespace Eggnog.Tests.Rules
         public void BindingsRenderSetsAsSets()
         {
             var t = new NodeTheory();
-            var dom = t.Graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            var pick = Primitive.Create<ValueSet<string>, string, bool>("pick", (_, _) => throw new InvalidOperationException("pick"));
+            var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            var pick = Primitive.Create<Set<string>, string, bool>("pick", (_, _) => throw new InvalidOperationException("pick"));
             t.Rules.DefineRule("picks", r =>
             {
-                var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
+                var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(d.Is(dom.Of(p)));
                 r.Where(pick.Of(d, p));
                 r.Then(t.Num.Of(1L));
             });
-            t.Root.Assume(dom.Of("k").Is(ValueSet.Of("b", "a")), dom.Of("e").Is(ValueSet<string>.Empty));
+            t.Root.Assume(dom.Of("k").Is(Set.Of("b", "a")), dom.Of("e").Is(Set<string>.Empty));
 
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
 
@@ -299,18 +299,18 @@ namespace Eggnog.Tests.Rules
         public void BindingsRenderASetAsDocumented()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var pick = graph.DefineRelation<string, string>("pick");
             var rules = graph.DefineRuleset("rules");
-            var boom = Primitive.Create<ValueSet<string>, string, bool>("boom", (_, _) => throw new InvalidOperationException("boom"));
+            var boom = Primitive.Create<Set<string>, string, bool>("boom", (_, _) => throw new InvalidOperationException("boom"));
             rules.DefineRule("throws on a set", r =>
             {
-                var (p, d, v) = r.Vars<string, ValueSet<string>, string>("p", "d", "v");
+                var (p, d, v) = r.Vars<string, Set<string>, string>("p", "d", "v");
                 r.When(d.Is(dom.Of(p)), pick.Of(p, v));
                 r.Where(boom.Of(d, v));
                 r.Then(pick.Of(v, p));
             });
-            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")), pick.Of("k", "b"));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b")), pick.Of("k", "b"));
 
             var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Equal("d={a, b} v=\"b\"", e.Bindings);

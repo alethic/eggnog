@@ -33,12 +33,12 @@ namespace Eggnog.Tests.Rendering
         public void ASetMembershipAndADisequalityFilterAsEgglogsFallibleForms()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var pick = graph.DefineRelation<string, string>("pick");
             var rules = graph.DefineRuleset("rules");
             var rule = rules.DefineRule("pick", r =>
             {
-                var (p, d, v) = r.Vars<string, ValueSet<string>, string>("p", "d", "v");
+                var (p, d, v) = r.Vars<string, Set<string>, string>("p", "d", "v");
                 r.When(d.Is(dom.Of(p)), pick.Of(p, v));
                 r.Where(Primitives.Contains<string>().Of(d, v));
                 r.Where(Primitives.NotContains<string>().Of(d, p));

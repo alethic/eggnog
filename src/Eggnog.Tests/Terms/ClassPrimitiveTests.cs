@@ -238,12 +238,12 @@ namespace Eggnog.Tests.Terms
         public void ASplitsAssumptionsComputeOverValuesOnly()
         {
             var t = new NodeTheory();
-            var choice = t.Graph.DefineFunction<string, ValueSet<long>>("choice", ValueLattice.Intersect<long>());
+            var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var pick = t.Graph.DefineFunction<string, Node>("pick");
 
             var e = Assert.Throws<RuleDefinitionException>(() => t.Graph.DefineSplit("pick", s =>
             {
-                var (k, d) = s.Vars<string, ValueSet<long>>("k", "d");
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 var v = s.Cases("v", d);
                 s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), pick.Of(k).Is(Primitives.OrderingMin<Node>().Of(t.A.Of(), t.B.Of())));

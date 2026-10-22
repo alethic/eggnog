@@ -20,7 +20,7 @@ namespace Eggnog.Tests.Predicates.Literal
     public sealed class ContextArgumentTheory
     {
 
-        static readonly ValueSet<string> StringOrNull = ValueSet.Of("string", "null");
+        static readonly Set<string> StringOrNull = Set.Of("string", "null");
 
         /// <summary>
         /// Defines the theory in <paramref name="graph"/>.
@@ -35,8 +35,8 @@ namespace Eggnog.Tests.Predicates.Literal
             Assume = graph.DefineConstructor<Ctx, string, string, Ctx>("Assume");
             Parent = graph.DefineRelation<Ctx, Ctx>("parent");
 
-            Dom = graph.DefineFunction<Ctx, string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            Types = graph.DefineFunction<Ctx, string, ValueSet<string>>("types", ValueLattice.Intersect<string>());
+            Dom = graph.DefineFunction<Ctx, string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            Types = graph.DefineFunction<Ctx, string, Set<string>>("types", ValueLattice.Intersect<string>());
             Lo = graph.DefineFunction<Ctx, string, long>("lo", ValueLattice.Max<long>());
             Hi = graph.DefineFunction<Ctx, string, long>("hi", ValueLattice.Min<long>());
             Present = graph.DefineRelation<Ctx, string>("present");
@@ -45,10 +45,10 @@ namespace Eggnog.Tests.Predicates.Literal
             Contradicts = graph.DefineRelation<Ctx>("contradicts");
             Discriminator = graph.DefineRelation<string, string>("discriminator");
 
-            FormCases = graph.DefineFunction<Ctx, string, string, string, ValueSet<string>>("form-cases", ValueLattice.Union<string>());
-            PresentCases = graph.DefineFunction<Ctx, string, string, ValueSet<string>>("present-cases", ValueLattice.Union<string>());
-            DomCases = graph.DefineFunction<Ctx, string, string, ValueSet<string>>("dom-cases", ValueLattice.Union<string>());
-            DomReported = graph.DefineFunction<Ctx, string, string, ValueSet<string>>("dom-reported", ValueLattice.Union<string>());
+            FormCases = graph.DefineFunction<Ctx, string, string, string, Set<string>>("form-cases", ValueLattice.Union<string>());
+            PresentCases = graph.DefineFunction<Ctx, string, string, Set<string>>("present-cases", ValueLattice.Union<string>());
+            DomCases = graph.DefineFunction<Ctx, string, string, Set<string>>("dom-cases", ValueLattice.Union<string>());
+            DomReported = graph.DefineFunction<Ctx, string, string, Set<string>>("dom-reported", ValueLattice.Union<string>());
 
             graph.DefineSort<Pred>("Pred");
             PTrue = graph.DefineConstructor<Pred>("PTrue", cost: 0);
@@ -68,8 +68,8 @@ namespace Eggnog.Tests.Predicates.Literal
 
             WhereClause = graph.DefineRelation<Pred>("where");
             Conjunct = graph.DefineRelation<Pred>("conjunct");
-            InSet = graph.DefineFunction<Pred, string, ValueSet<string>>("inset", ValueLattice.Intersect<string>());
-            Admits = graph.DefineFunction<Pred, string, ValueSet<string>>("admits", ValueLattice.Intersect<string>());
+            InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>());
+            Admits = graph.DefineFunction<Pred, string, Set<string>>("admits", ValueLattice.Intersect<string>());
 
             Horn = graph.DefineRuleset("horn");
             Lattice = graph.DefineRuleset("lattice");
@@ -100,10 +100,10 @@ namespace Eggnog.Tests.Predicates.Literal
         public Relation<Ctx, Ctx> Parent { get; }
 
         /// <summary>Gets <c>dom</c>: the values a path can hold.</summary>
-        public Function<Ctx, string, ValueSet<string>> Dom { get; }
+        public Function<Ctx, string, Set<string>> Dom { get; }
 
         /// <summary>Gets <c>types</c>: the JSON types a path can hold.</summary>
-        public Function<Ctx, string, ValueSet<string>> Types { get; }
+        public Function<Ctx, string, Set<string>> Types { get; }
 
         /// <summary>Gets <c>lo</c>: a lower bound on a numeric path.</summary>
         public Function<Ctx, string, long> Lo { get; }
@@ -127,16 +127,16 @@ namespace Eggnog.Tests.Predicates.Literal
         public Relation<string, string> Discriminator { get; }
 
         /// <summary>Gets <c>form-cases</c>: the values of p whose case proves a form of q.</summary>
-        public Function<Ctx, string, string, string, ValueSet<string>> FormCases { get; }
+        public Function<Ctx, string, string, string, Set<string>> FormCases { get; }
 
         /// <summary>Gets <c>present-cases</c>: the values of p whose case proves q present.</summary>
-        public Function<Ctx, string, string, ValueSet<string>> PresentCases { get; }
+        public Function<Ctx, string, string, Set<string>> PresentCases { get; }
 
         /// <summary>Gets <c>dom-cases</c>: the union of the cases' domains of q.</summary>
-        public Function<Ctx, string, string, ValueSet<string>> DomCases { get; }
+        public Function<Ctx, string, string, Set<string>> DomCases { get; }
 
         /// <summary>Gets <c>dom-reported</c>: the values of p whose case reported a domain of q.</summary>
-        public Function<Ctx, string, string, ValueSet<string>> DomReported { get; }
+        public Function<Ctx, string, string, Set<string>> DomReported { get; }
 
         /// <summary>Gets the true predicate.</summary>
         public Constructor<Pred> PTrue { get; }
@@ -193,10 +193,10 @@ namespace Eggnog.Tests.Predicates.Literal
         public Relation<Pred> Conjunct { get; }
 
         /// <summary>Gets <c>inset</c>: the predicate holds exactly when path p holds a value of S.</summary>
-        public Function<Pred, string, ValueSet<string>> InSet { get; }
+        public Function<Pred, string, Set<string>> InSet { get; }
 
         /// <summary>Gets <c>admits</c>: the predicate implies that path p holds a value of S.</summary>
-        public Function<Pred, string, ValueSet<string>> Admits { get; }
+        public Function<Pred, string, Set<string>> Admits { get; }
 
         /// <summary>Gets the horn ruleset.</summary>
         public Ruleset Horn { get; }
@@ -229,7 +229,7 @@ namespace Eggnog.Tests.Predicates.Literal
             Horn.DefineRule($"{path} = {value} declares {formPath} {form}", r =>
             {
                 var c = r.Var<Ctx>("c");
-                r.When(Present.Of(c, path), Dom.Of(c, path).Is(ValueSet.Of(value)));
+                r.When(Present.Of(c, path), Dom.Of(c, path).Is(Set.Of(value)));
                 r.Then(Form.Of(c, formPath, form));
             });
 
@@ -237,13 +237,13 @@ namespace Eggnog.Tests.Predicates.Literal
         {
             Horn.DefineRule("inherit dom", r =>
             {
-                var (k, c, p, d) = r.Vars<Ctx, Ctx, string, ValueSet<string>>("k", "c", "p", "d");
+                var (k, c, p, d) = r.Vars<Ctx, Ctx, string, Set<string>>("k", "c", "p", "d");
                 r.When(Parent.Of(k, c), d.Is(Dom.Of(c, p)));
                 r.Then(Dom.Of(k, p).Is(d));
             });
             Horn.DefineRule("inherit types", r =>
             {
-                var (k, c, p, t) = r.Vars<Ctx, Ctx, string, ValueSet<string>>("k", "c", "p", "t");
+                var (k, c, p, t) = r.Vars<Ctx, Ctx, string, Set<string>>("k", "c", "p", "t");
                 r.When(Parent.Of(k, c), t.Is(Types.Of(c, p)));
                 r.Then(Types.Of(k, p).Is(t));
             });
@@ -289,9 +289,9 @@ namespace Eggnog.Tests.Predicates.Literal
         {
             Lattice.DefineRule("a domain settles the type", r =>
             {
-                var (c, p, d) = r.Vars<Ctx, string, ValueSet<string>>("c", "p", "d");
+                var (c, p, d) = r.Vars<Ctx, string, Set<string>>("c", "p", "d");
                 r.When(d.Is(Dom.Of(c, p)));
-                r.Then(Types.Of(c, p).Is(ValueSet.Of("string")));
+                r.Then(Types.Of(c, p).Is(Set.Of("string")));
             });
             Lattice.DefineRule("a form describes strings", r =>
             {
@@ -301,20 +301,20 @@ namespace Eggnog.Tests.Predicates.Literal
             });
             Lattice.DefineRule("a disequality narrows a domain", r =>
             {
-                var (c, p, v, d) = r.Vars<Ctx, string, string, ValueSet<string>>("c", "p", "v", "d");
+                var (c, p, v, d) = r.Vars<Ctx, string, string, Set<string>>("c", "p", "v", "d");
                 r.When(Ne.Of(c, p, v), d.Is(Dom.Of(c, p)));
                 r.Where(Primitives.Contains<string>().Of(d, v));
                 r.Then(Dom.Of(c, p).Is(Primitives.Remove<string>().Of(d, v)));
             });
             Lattice.DefineRule("an empty domain", r =>
             {
-                var (c, p, d) = r.Vars<Ctx, string, ValueSet<string>>("c", "p", "d");
+                var (c, p, d) = r.Vars<Ctx, string, Set<string>>("c", "p", "d");
                 r.When(Present.Of(c, p), d.Is(Dom.Of(c, p)), Primitives.Count<string>().Of(d).Is(0L));
                 r.Then(Contradicts.Of(c));
             });
             Lattice.DefineRule("no possible type", r =>
             {
-                var (c, p, t) = r.Vars<Ctx, string, ValueSet<string>>("c", "p", "t");
+                var (c, p, t) = r.Vars<Ctx, string, Set<string>>("c", "p", "t");
                 r.When(Present.Of(c, p), t.Is(Types.Of(c, p)), Primitives.Count<string>().Of(t).Is(0L));
                 r.Then(Contradicts.Of(c));
             });
@@ -332,7 +332,7 @@ namespace Eggnog.Tests.Predicates.Literal
         {
             Split.DefineRule("split on a discriminator", r =>
             {
-                var (p, v, c, d) = r.Vars<string, string, Ctx, ValueSet<string>>("p", "v", "c", "d");
+                var (p, v, c, d) = r.Vars<string, string, Ctx, Set<string>>("p", "v", "c", "d");
                 r.When(Discriminator.Of(p, v), Present.Of(c, p), d.Is(Dom.Of(c, p)));
                 r.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
                 r.Where(Primitives.Contains<string>().Of(d, v));
@@ -344,7 +344,7 @@ namespace Eggnog.Tests.Predicates.Literal
             Split.DefineRule("a vacuous case removes its value", r =>
             {
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
-                var d = r.Var<ValueSet<string>>("d");
+                var d = r.Var<Set<string>>("d");
                 r.When(k.Is(Assume.Of(c, p, v)), Contradicts.Of(k), d.Is(Dom.Of(c, p)));
                 r.Where(Primitives.Contains<string>().Of(d, v));
                 r.Then(Dom.Of(c, p).Is(Primitives.Remove<string>().Of(d, v)));
@@ -359,7 +359,7 @@ namespace Eggnog.Tests.Predicates.Literal
             Split.DefineRule("lift a stored form", r =>
             {
                 var (c, p, q, f) = r.Vars<Ctx, string, string, string>("c", "p", "q", "f");
-                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+                var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(FormCases.Of(c, p, q, f)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
                 r.Then(Form.Of(c, q, f));
@@ -374,7 +374,7 @@ namespace Eggnog.Tests.Predicates.Literal
             Split.DefineRule("lift presence", r =>
             {
                 var (c, p, q) = r.Vars<Ctx, string, string>("c", "p", "q");
-                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+                var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(PresentCases.Of(c, p, q)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
                 r.Then(Present.Of(c, q));
@@ -382,14 +382,14 @@ namespace Eggnog.Tests.Predicates.Literal
             Split.DefineRule("report a domain", r =>
             {
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
-                var (q, dq) = r.Vars<string, ValueSet<string>>("q", "dq");
+                var (q, dq) = r.Vars<string, Set<string>>("q", "dq");
                 r.When(k.Is(Assume.Of(c, p, v)), dq.Is(Dom.Of(k, q)));
                 r.Then(DomCases.Of(c, p, q).Is(dq), DomReported.Of(c, p, q).Is(Primitives.Singleton<string>().Of(v)));
             });
             Split.DefineRule("lift a domain", r =>
             {
                 var (c, p, q) = r.Vars<Ctx, string, string>("c", "p", "q");
-                var (reported, u, d) = r.Vars<ValueSet<string>, ValueSet<string>, ValueSet<string>>("r", "u", "d");
+                var (reported, u, d) = r.Vars<Set<string>, Set<string>, Set<string>>("r", "u", "d");
                 r.When(reported.Is(DomReported.Of(c, p, q)), u.Is(DomCases.Of(c, p, q)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, reported)).Is(0L));
                 r.Then(Dom.Of(c, q).Is(u));
@@ -419,40 +419,40 @@ namespace Eggnog.Tests.Predicates.Literal
             Horn.DefineRule("inset of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
+                var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(InSet.Of(a, p)), sb.Is(InSet.Of(b, p)));
                 r.Then(InSet.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
             });
             Horn.DefineRule("inset admits", r =>
             {
-                var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
+                var (e, p, s) = r.Vars<Pred, string, Set<string>>("e", "p", "s");
                 r.When(s.Is(InSet.Of(e, p)));
                 r.Then(Admits.Of(e, p).Is(s));
             });
             Horn.DefineRule("and admits left", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var s = r.Var<ValueSet<string>>("s");
+                var s = r.Var<Set<string>>("s");
                 r.When(e.Is(And.Of(a, b)), s.Is(Admits.Of(a, p)));
                 r.Then(Admits.Of(e, p).Is(s));
             });
             Horn.DefineRule("and admits right", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var s = r.Var<ValueSet<string>>("s");
+                var s = r.Var<Set<string>>("s");
                 r.When(e.Is(And.Of(a, b)), s.Is(Admits.Of(b, p)));
                 r.Then(Admits.Of(e, p).Is(s));
             });
             Horn.DefineRule("admits of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
-                var (sa, sb) = r.Vars<ValueSet<string>, ValueSet<string>>("sa", "sb");
+                var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(Admits.Of(a, p)), sb.Is(Admits.Of(b, p)));
                 r.Then(Admits.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
             });
             Horn.DefineRule("a conjunct admits", r =>
             {
-                var (e, p, s) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "s");
+                var (e, p, s) = r.Vars<Pred, string, Set<string>>("e", "p", "s");
                 r.When(Conjunct.Of(e), s.Is(Admits.Of(e, p)));
                 r.Then(Present.Of(Query.Of(), p), Dom.Of(Query.Of(), p).Is(s));
             });
@@ -479,7 +479,7 @@ namespace Eggnog.Tests.Predicates.Literal
                 r.Then(
                     Present.Of(Query.Of(), p),
                     Lo.Of(Query.Of(), p).Is(Primitives.Add.Of(n, 1L)),
-                    Types.Of(Query.Of(), p).Is(ValueSet.Of("number")));
+                    Types.Of(Query.Of(), p).Is(Set.Of("number")));
             });
         }
 
@@ -506,14 +506,14 @@ namespace Eggnog.Tests.Predicates.Literal
             Rewrite.DefineRule("declared tautology", r =>
             {
                 var (e, p) = r.Vars<Pred, string>("e", "p");
-                var (s, d) = r.Vars<ValueSet<string>, ValueSet<string>>("s", "d");
+                var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(InSet.Of(e, p)), Present.Of(Schema.Of(), p), d.Is(Dom.Of(Schema.Of(), p)));
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
                 r.Then(e.Is(PTrue.Of()));
             });
             Rewrite.DefineRule("a string path's negated string test", r =>
             {
-                var (e, p, t) = r.Vars<Pred, string, ValueSet<string>>("e", "p", "t");
+                var (e, p, t) = r.Vars<Pred, string, Set<string>>("e", "p", "t");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(Query.Of(), p)));
                 r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(t, StringOrNull)).Is(0L));
                 r.Then(e.Is(Not.Of(IsDefined.Of(p))));

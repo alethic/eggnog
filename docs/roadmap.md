@@ -19,15 +19,13 @@ the C# API, pass; an item that touches the engine's root paths also passes the r
 gates").
 
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
-  heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 3). Such a rule
+  heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 2). Such a rule
   inherits no progress in a child.
-- **Containers.** egglog's `Set`, `Vec`, `Map`, `MultiSet` and `Pair` over any sort, e-class sorts included, as the
-  engine's containers, which it already has at the root; here a value set is a .NET value, its elements in their own
-  order, and there are no containers of classes (decisions row 9 refuses them in children, which then need their
-  rebuild in layers). This brings `set-get`, egglog's element order and the zero and NaN a set interns (decisions row
-  22), the set elements the serializer names by literal (row 23c), and then function values (`unstable-fn`).
-- **Costs to `u64::MAX`.** egglog's costs are `u64` and saturate at `u64::MAX`; here at `long.MaxValue`, so a cost
-  egglog keeps exact saturates here, and a tie among saturated classes can fall otherwise (architecture 2.10).
+- **Function values.** egglog's `unstable-fn` and `unstable-app` (src/sort/fn.rs), a container of a function and
+  its partial arguments, and the higher-order container primitives over them, such as `unstable-multiset-map`.
+- **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
+  makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
+  layers.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
@@ -39,7 +37,7 @@ gates").
 Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
 [`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
 relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
-item 7), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
+item 5), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
 `pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
 
 ## Engine work

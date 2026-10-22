@@ -23,7 +23,7 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// O((nodes queued) log (nodes queued) + occurrences released). Optimal because costs are saturating sums of
-        /// non-negative costs, which never decrease along a hyperedge, so the costs are the least fixpoint Bellman-Ford
+        /// costs, which never decrease along a hyperedge, so the costs are the least fixpoint Bellman-Ford
         /// reaches. The order in which equal-cost nodes leave the queue changes no cost, so it is left to the heap.
         /// </remarks>
         void RunKnuth()
@@ -34,17 +34,18 @@ namespace Eggnog.Relations
                 var owner = nodeClass[node];
 
                 // Its class became final first.
-                if (classCost[owner] >= 0)
+                if (classKnown[owner])
                     continue;
 
                 classCost[owner] = nodeCost[node];
+                classKnown[owner] = true;
                 for (var occurrence = classFirstParent[owner]; occurrence >= 0; occurrence = occNext[occurrence])
                 {
                     var parent = occNode[occurrence];
                     if (--nodePending[parent] > 0)
                         continue;
 
-                    if (classCost[nodeClass[parent]] < 0)
+                    if (classKnown[nodeClass[parent]] == false)
                         Push(parent, ComputeNodeCost(parent));
                 }
 
@@ -56,7 +57,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Queues a node whose dependencies are all final, at its cost.
         /// </summary>
-        void Push(int node, long cost)
+        void Push(int node, ulong cost)
         {
             nodeCost[node] = cost;
             if (heapCount == heap.Length)

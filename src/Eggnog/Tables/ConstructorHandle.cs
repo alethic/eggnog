@@ -18,7 +18,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the declared cost of a node with this head, without its children (extraction's default).
         /// </summary>
-        public long Cost { get; internal set; }
+        public ulong Cost { get; internal set; }
 
         /// <summary>
         /// Gets whether extraction may use the constructor's rows.

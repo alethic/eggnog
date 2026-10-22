@@ -26,10 +26,10 @@ namespace Eggnog.Tests.Values
             Assert.Equal("bool", values.TypeOf<bool>().Name);
             Assert.Equal("f64", values.TypeOf<double>().Name);
             Assert.Equal("String", values.TypeOf<string>().Name);
-            Assert.Equal("Set<String>", values.TypeOf<ValueSet<string>>().Name);
-            Assert.Equal("Set<i64>", values.TypeOf<ValueSet<long>>().Name);
-            Assert.Equal("Set<i32>", values.TypeOf<ValueSet<int>>().Name);
-            Assert.All(new ColumnType[] { values.TypeOf<long>(), values.TypeOf<string>(), values.TypeOf<ValueSet<int>>() }, t => Assert.Equal(ColumnKind.Value, t.Kind));
+            Assert.Equal("Set<String>", values.TypeOf<Set<string>>().Name);
+            Assert.Equal("Set<i64>", values.TypeOf<Set<long>>().Name);
+            Assert.Equal("Set<i32>", values.TypeOf<Set<int>>().Name);
+            Assert.All(new ColumnType[] { values.TypeOf<long>(), values.TypeOf<string>(), values.TypeOf<Set<int>>() }, t => Assert.Equal(ColumnKind.Value, t.Kind));
         }
 
         [Fact]
@@ -41,9 +41,9 @@ namespace Eggnog.Tests.Values
             RoundTrip(graph, false, true);
             RoundTrip(graph, 0.0, 1.5, -2.25, double.MaxValue, double.PositiveInfinity);
             RoundTrip(graph, "", "kind", "with \"quotes\"", "ünïcödé");
-            RoundTrip(graph, ValueSet<string>.Empty, ValueSet.Of("a"), ValueSet.Of("b", "a"));
-            RoundTrip(graph, ValueSet.Of(-2L, 1L, 3L), ValueSet<long>.Empty);
-            RoundTrip(graph, ValueSet.Of(-1, int.MinValue));
+            RoundTrip(graph, Set<string>.Empty, Set.Of("a"), Set.Of("b", "a"));
+            RoundTrip(graph, Set.Of(-2L, 1L, 3L), Set<long>.Empty);
+            RoundTrip(graph, Set.Of(-1, int.MinValue));
         }
 
         [Fact]
@@ -56,8 +56,8 @@ namespace Eggnog.Tests.Values
             Assert.Equal("1.5", values.TypeOf<double>().Format(1.5));
             Assert.Equal("2.0", values.TypeOf<double>().Format(2.0));
             Assert.Equal("\"kind\"", values.TypeOf<string>().Format("kind"));
-            Assert.Equal("(set-of \"a\" \"b\")", values.TypeOf<ValueSet<string>>().Format(ValueSet.Of("b", "a")));
-            Assert.Equal("(set-of)", values.TypeOf<ValueSet<long>>().Format(ValueSet<long>.Empty));
+            Assert.Equal("(set-of \"a\" \"b\")", values.TypeOf<Set<string>>().Format(Set.Of("b", "a")));
+            Assert.Equal("(set-of)", values.TypeOf<Set<long>>().Format(Set<long>.Empty));
             Assert.Equal("42", values.TypeOf<long>().Format((object)42L));
             Assert.Throws<ArgumentException>(() => values.TypeOf<long>().Format((object)"42"));
         }
@@ -70,8 +70,8 @@ namespace Eggnog.Tests.Values
             Assert.True(values.TypeOf<long>().Compare(-5L, 3L) < 0);
             Assert.True(values.TypeOf<int>().Compare(-1, 0) < 0);
             Assert.True(values.TypeOf<bool>().Compare(false, true) < 0);
-            Assert.True(values.TypeOf<ValueSet<string>>().Compare(ValueSet.Of("a"), ValueSet.Of("a", "b")) < 0);
-            Assert.True(values.TypeOf<ValueSet<string>>().Compare(ValueSet.Of("a", "z"), ValueSet.Of("b")) < 0);
+            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of("a"), Set.Of("a", "b")) < 0);
+            Assert.True(values.TypeOf<Set<string>>().Compare(Set.Of("a", "z"), Set.Of("b")) < 0);
         }
 
         [Fact]
@@ -148,7 +148,7 @@ namespace Eggnog.Tests.Values
 
             // A set keeps its elements in Comparer<T>.Default order, so its element type must be comparable.
             Assert.Contains("IComparable", Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Point>()).Message);
-            Assert.False(graph.Values.TryGetType<ValueSet<Point>>(out _));
+            Assert.False(graph.Values.TryGetType<Set<Point>>(out _));
             graph.Values.Register<Guid>("Guid");
             var set = graph.Values.RegisterSet<Guid>();
             Assert.Equal("Set<Guid>", set.Name);
@@ -162,7 +162,7 @@ namespace Eggnog.Tests.Values
             graph.DefineSort<Node>("Node");
             Assert.Contains("EGraph.DefineSort", Assert.Throws<ArgumentException>(() => graph.Values.Register<ClassId>("cid")).Message);
             Assert.Contains("EGraph.DefineSort", Assert.Throws<ArgumentException>(() => new EGraph().Values.Register<Node>("Node")).Message);
-            Assert.Contains("RegisterSet", Assert.Throws<ArgumentException>(() => graph.Values.Register<ValueSet<long>>("longs")).Message);
+            Assert.Contains("RegisterSet", Assert.Throws<ArgumentException>(() => graph.Values.Register<Set<long>>("longs")).Message);
             Assert.False(graph.Values.TryGetType<ClassId>(out _));
         }
 
@@ -190,7 +190,7 @@ namespace Eggnog.Tests.Values
         {
             var values = new EGraph().Values;
             Assert.Contains("ValueStore.Register.", Assert.Throws<ArgumentException>(() => values.TypeOf<Point>()).Message);
-            Assert.Contains("ValueStore.RegisterSet", Assert.Throws<ArgumentException>(() => values.TypeOf<ValueSet<double>>()).Message);
+            Assert.Contains("ValueStore.RegisterSet", Assert.Throws<ArgumentException>(() => values.TypeOf<Set<double>>()).Message);
             Assert.Contains("ValueStore.RegisterEnum", Assert.Throws<ArgumentException>(() => values.TypeOf<Shade>()).Message);
             Assert.Contains("EGraph.DefineSort", Assert.Throws<ArgumentException>(() => values.TypeOf<Node>()).Message);
             Assert.False(values.TryGetType<Point>(out _));
@@ -198,17 +198,20 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void SetsOfClassesAreRefused()
+        public void SetsOfClassesAreEqSortContainers()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
-            Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Node>());
+            var type = graph.Values.RegisterSet<Node>();
+            Assert.Equal("Set<Node>", type.Name);
+            Assert.True(type.HoldsClasses);
+            Assert.Same(type, graph.Values.RegisterSet<Node>());
         }
 
         [Fact]
         public void ValueSetOperationsKeepOrderAndReturnThisWhenNothingChanges()
         {
-            var set = ValueSet.Of("b", "a", "b");
+            var set = Set.Of("b", "a", "b");
             Assert.Equal(new[] { "a", "b" }, set.ToArray());
             Assert.Equal(2, set.Count);
             Assert.False(set.IsEmpty);
@@ -218,33 +221,33 @@ namespace Eggnog.Tests.Values
             Assert.Equal(new[] { "a", "b", "c" }, set.Add("c").ToArray());
             Assert.Same(set, set.Remove("z"));
             Assert.Equal(new[] { "b" }, set.Remove("a").ToArray());
-            Assert.Same(ValueSet<string>.Empty, ValueSet.Of("a").Remove("a"));
-            Assert.Same(set, set.Union(ValueSet.Of("a")));
-            Assert.Equal(new[] { "a", "b", "c" }, set.Union(ValueSet.Of("c")).ToArray());
-            Assert.Same(set, set.Intersect(ValueSet.Of("a", "b", "c")));
-            Assert.Equal(new[] { "b" }, set.Intersect(ValueSet.Of("b", "c")).ToArray());
-            Assert.Same(set, set.Except(ValueSet.Of("c")));
-            Assert.Equal(new[] { "a" }, set.Except(ValueSet.Of("b")).ToArray());
+            Assert.Same(Set<string>.Empty, Set.Of("a").Remove("a"));
+            Assert.Same(set, set.Union(Set.Of("a")));
+            Assert.Equal(new[] { "a", "b", "c" }, set.Union(Set.Of("c")).ToArray());
+            Assert.Same(set, set.Intersect(Set.Of("a", "b", "c")));
+            Assert.Equal(new[] { "b" }, set.Intersect(Set.Of("b", "c")).ToArray());
+            Assert.Same(set, set.Except(Set.Of("c")));
+            Assert.Equal(new[] { "a" }, set.Except(Set.Of("b")).ToArray());
             Assert.Same(set, set.Where(s => s.Length == 1));
             Assert.Equal(new[] { "b" }, set.Where(s => s == "b").ToArray());
-            Assert.True(ValueSet.Of("a").IsSubsetOf(set));
-            Assert.False(set.IsSubsetOf(ValueSet.Of("a")));
-            Assert.True(set.Overlaps(ValueSet.Of("b", "z")));
-            Assert.False(set.Overlaps(ValueSet.Of("z")));
-            Assert.Equal(ValueSet.Of("a", "b"), set);
-            Assert.Equal(ValueSet.Of("a", "b").GetHashCode(), set.GetHashCode());
-            Assert.NotEqual(ValueSet.Of("a"), set);
+            Assert.True(Set.Of("a").IsSubsetOf(set));
+            Assert.False(set.IsSubsetOf(Set.Of("a")));
+            Assert.True(set.Overlaps(Set.Of("b", "z")));
+            Assert.False(set.Overlaps(Set.Of("z")));
+            Assert.Equal(Set.Of("a", "b"), set);
+            Assert.Equal(Set.Of("a", "b").GetHashCode(), set.GetHashCode());
+            Assert.NotEqual(Set.Of("a"), set);
             Assert.Equal("{a, b}", set.ToString());
-            Assert.Equal(new[] { "B", "a" }, ValueSet.Of("a", "B").ToArray());
-            Assert.Equal(new[] { -2L, 1L, 3L }, ValueSet.Of(3L, -2L, 1L).ToArray());
-            Assert.Equal(new[] { 1, 2 }, ValueSet.From(new List<int> { 2, 1, 2 }).ToArray());
-            Assert.Throws<ArgumentNullException>(() => ValueSet.Of<string>("a", null!));
+            Assert.Equal(new[] { "B", "a" }, Set.Of("a", "B").ToArray());
+            Assert.Equal(new[] { -2L, 1L, 3L }, Set.Of(3L, -2L, 1L).ToArray());
+            Assert.Equal(new[] { 1, 2 }, Set.From(new List<int> { 2, 1, 2 }).ToArray());
+            Assert.Throws<ArgumentNullException>(() => Set.Of<string>("a", null!));
         }
 
         [Fact]
         public void ValueSetOfAStringIsTheSingletonOfThatString()
         {
-            var set = ValueSet.Of("abc");
+            var set = Set.Of("abc");
             Assert.Single(set);
             Assert.Equal("abc", set[0]);
         }
@@ -277,13 +280,13 @@ namespace Eggnog.Tests.Values
         {
             var graph = new EGraph();
             var r = graph.DefineRelation<string>("r");
-            var f = graph.DefineFunction<string, ValueSet<string>>("f");
+            var f = graph.DefineFunction<string, Set<string>>("f");
             graph.Root.Assume(r.Of("seen"));
             var before = graph.Values.InternedCount;
 
             Assert.False(graph.Root.Check(r.Of("never interned")));
             Assert.False(graph.Root.TryGet(f.Of("also never interned"), out _));
-            Assert.False(graph.Root.Check(f.Of("seen").Is(ValueSet.Of("an unseen set"))));
+            Assert.False(graph.Root.Check(f.Of("seen").Is(Set.Of("an unseen set"))));
             Assert.True(graph.Root.Check(r.Of("seen")));
             Assert.Equal(before, graph.Values.InternedCount);
         }
@@ -322,7 +325,7 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// <c>default(ClassId)</c> names no class and every scope rejects it, and class values never enter value cells:
-        /// there are no sets of classes, and classes compare only with <c>Is</c> and <c>IsNot</c>.
+        /// classes compare only with <c>Is</c> and <c>IsNot</c>.
         /// <c>ValueStore.Register</c> refuses <see cref="ClassId"/>, and a sort, as a value type.
         /// </summary>
         [Fact]
@@ -355,7 +358,7 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// A <see cref="ValueSet{T}"/> keeps its elements in <c>Comparer&lt;T&gt;.Default</c> order: <c>RegisterSet</c>
+        /// A <see cref="Set{T}"/> keeps its elements in <c>Comparer&lt;T&gt;.Default</c> order: <c>RegisterSet</c>
         /// either refuses an element type with no default order, or registers a set type whose sets hold two elements.
         /// </summary>
         [Fact]
@@ -368,7 +371,7 @@ namespace Eggnog.Tests.Values
                 return;
 
             Assert.Null(registered);
-            var two = Record.Exception(() => ValueSet.Of(new Opaque(1), new Opaque(2)));
+            var two = Record.Exception(() => Set.Of(new Opaque(1), new Opaque(2)));
             Assert.Null(two);
         }
 

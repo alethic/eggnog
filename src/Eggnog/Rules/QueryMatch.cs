@@ -64,12 +64,12 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets a column's cell: a class canonical in the queried scope now. The matches were canonical when collected,
-        /// but the callback may have written since (a union makes a delivered class a non-canonical member). One engine
-        /// call per class read; a value cell is returned as collected.
+        /// Gets a column's cell: a class, or a container of classes, canonical in the queried scope now. The matches were
+        /// canonical when collected, but the callback may have written since (a union makes a delivered class a
+        /// non-canonical member). One engine call per such cell; a value cell is returned as collected.
         /// </summary>
         uint Cell(ColumnType type, Scope queried, int column) =>
-            type.Kind == ColumnKind.Sort ? queried.Engine.Find(tuple[column]) : tuple[column];
+            type.InvolvesClasses ? queried.Engine.Find(tuple[column]) : tuple[column];
 
         /// <summary>
         /// Gets the query and the scope of a match that is not <c>default</c>.

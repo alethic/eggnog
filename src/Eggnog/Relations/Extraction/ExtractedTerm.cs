@@ -41,7 +41,7 @@ namespace Eggnog.Relations
             Value value,
             FunctionId function,
             string name,
-            long cost,
+            ulong cost,
             ExtractedTerm[] children)
         {
             this.egraph = egraph;
@@ -72,7 +72,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets the term's cost under the extractor's <see cref="CostModel"/>.
         /// </summary>
-        public long Cost { get; }
+        public ulong Cost { get; }
 
         /// <summary>
         /// Gets the head of a node (its function's name, or the term constructor's for a view), the literal text of a

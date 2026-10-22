@@ -7,15 +7,16 @@ namespace Eggnog
     /// <summary>
     /// What extraction minimizes: a head cost per constructor (default: its declared cost), optionally a per-row cost
     /// function, and value costs (default 1, egglog's <c>base_value_cost</c>); a term costs its heads' and values' costs
-    /// summed. All costs must be at least 0. Immutable and thread-safe: every <c>With</c> returns a new model.
+    /// summed, saturating at <see cref="ulong.MaxValue"/> as egglog's <c>u64</c> costs do. Immutable and thread-safe:
+    /// every <c>With</c> returns a new model.
     /// </summary>
     public sealed class CostModel
     {
 
-        readonly Dictionary<ConstructorHandle, long> headCosts;
+        readonly Dictionary<ConstructorHandle, ulong> headCosts;
         readonly Dictionary<ConstructorHandle, NodeCostFunction> nodeCosts;
-        readonly Dictionary<ColumnType, long> valueCosts;
-        readonly Dictionary<ColumnType, Func<uint, long>> valueCostFunctions;
+        readonly Dictionary<ColumnType, ulong> valueCosts;
+        readonly Dictionary<ColumnType, Func<uint, ulong>> valueCostFunctions;
         readonly HashSet<ConstructorHandle> unextractable;
 
         /// <summary>
@@ -23,10 +24,10 @@ namespace Eggnog
         /// </summary>
         CostModel()
         {
-            headCosts = new Dictionary<ConstructorHandle, long>(ReferenceEqualityComparer.Instance);
+            headCosts = new Dictionary<ConstructorHandle, ulong>(ReferenceEqualityComparer.Instance);
             nodeCosts = new Dictionary<ConstructorHandle, NodeCostFunction>(ReferenceEqualityComparer.Instance);
-            valueCosts = new Dictionary<ColumnType, long>(ReferenceEqualityComparer.Instance);
-            valueCostFunctions = new Dictionary<ColumnType, Func<uint, long>>(ReferenceEqualityComparer.Instance);
+            valueCosts = new Dictionary<ColumnType, ulong>(ReferenceEqualityComparer.Instance);
+            valueCostFunctions = new Dictionary<ColumnType, Func<uint, ulong>>(ReferenceEqualityComparer.Instance);
             unextractable = new HashSet<ConstructorHandle>(ReferenceEqualityComparer.Instance);
         }
 
@@ -35,10 +36,10 @@ namespace Eggnog
         /// </summary>
         CostModel(CostModel other)
         {
-            headCosts = new Dictionary<ConstructorHandle, long>(other.headCosts, ReferenceEqualityComparer.Instance);
+            headCosts = new Dictionary<ConstructorHandle, ulong>(other.headCosts, ReferenceEqualityComparer.Instance);
             nodeCosts = new Dictionary<ConstructorHandle, NodeCostFunction>(other.nodeCosts, ReferenceEqualityComparer.Instance);
-            valueCosts = new Dictionary<ColumnType, long>(other.valueCosts, ReferenceEqualityComparer.Instance);
-            valueCostFunctions = new Dictionary<ColumnType, Func<uint, long>>(other.valueCostFunctions, ReferenceEqualityComparer.Instance);
+            valueCosts = new Dictionary<ColumnType, ulong>(other.valueCosts, ReferenceEqualityComparer.Instance);
+            valueCostFunctions = new Dictionary<ColumnType, Func<uint, ulong>>(other.valueCostFunctions, ReferenceEqualityComparer.Instance);
             unextractable = new HashSet<ConstructorHandle>(other.unextractable, ReferenceEqualityComparer.Instance);
         }
 
@@ -51,13 +52,11 @@ namespace Eggnog
         /// Gets a model in which a node of <paramref name="head"/> costs <paramref name="cost"/>, without its children.
         /// </summary>
         /// <param name="head">The constructor.</param>
-        /// <param name="cost">The cost, at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
-        public CostModel With(ConstructorHandle head, long cost)
+        public CostModel With(ConstructorHandle head, ulong cost)
         {
             ArgumentNullException.ThrowIfNull(head);
-            ArgumentOutOfRangeException.ThrowIfNegative(cost);
             var model = new CostModel(this);
             model.nodeCosts.Remove(head);
             model.headCosts[head] = cost;
@@ -66,7 +65,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets a model in which a node of <paramref name="head"/> costs what <paramref name="cost"/> says for its row,
-        /// without its children. A negative cost fails the extraction (<see cref="InvalidOperationException"/>).
+        /// without its children.
         /// </summary>
         /// <param name="head">The constructor.</param>
         /// <param name="cost">The per-row cost: pure; it must not call into any graph.</param>
@@ -85,14 +84,13 @@ namespace Eggnog
         /// Gets a model in which every value of <paramref name="type"/> costs <paramref name="cost"/>.
         /// </summary>
         /// <param name="type">A value type.</param>
-        /// <param name="cost">The cost, at least 0.</param>
+        /// <param name="cost">The cost.</param>
         /// <returns>The new model.</returns>
-        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="cost"/> is negative.</exception>
-        public CostModel WithValueCost(ColumnType type, long cost)
+        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort, or a container, which costs its
+        /// elements' costs.</exception>
+        public CostModel WithValueCost(ColumnType type, ulong cost)
         {
             CheckValueType(type);
-            ArgumentOutOfRangeException.ThrowIfNegative(cost);
             var model = new CostModel(this);
             model.valueCostFunctions.Remove(type);
             model.valueCosts[type] = cost;
@@ -100,15 +98,15 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets a model in which a value of <paramref name="type"/> costs what <paramref name="cost"/> says for it. A
-        /// negative cost fails the extraction (<see cref="InvalidOperationException"/>).
+        /// Gets a model in which a value of <paramref name="type"/> costs what <paramref name="cost"/> says for it.
         /// </summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="type">A value type.</param>
         /// <param name="cost">The per-value cost: pure; it must not call into any graph.</param>
         /// <returns>The new model.</returns>
-        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort.</exception>
-        public CostModel WithValueCost<T>(ColumnType<T> type, Func<T, long> cost)
+        /// <exception cref="ArgumentException"><paramref name="type"/> is a sort, or a container, which costs its
+        /// elements' costs.</exception>
+        public CostModel WithValueCost<T>(ColumnType<T> type, Func<T, ulong> cost)
         {
             CheckValueType(type);
             ArgumentNullException.ThrowIfNull(cost);
@@ -134,7 +132,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the head costs.
         /// </summary>
-        internal IReadOnlyDictionary<ConstructorHandle, long> HeadCosts => headCosts;
+        internal IReadOnlyDictionary<ConstructorHandle, ulong> HeadCosts => headCosts;
 
         /// <summary>
         /// Gets the per-row cost functions.
@@ -144,12 +142,12 @@ namespace Eggnog
         /// <summary>
         /// Gets the value costs.
         /// </summary>
-        internal IReadOnlyDictionary<ColumnType, long> ValueCosts => valueCosts;
+        internal IReadOnlyDictionary<ColumnType, ulong> ValueCosts => valueCosts;
 
         /// <summary>
         /// Gets the per-value cost functions, over cells.
         /// </summary>
-        internal IReadOnlyDictionary<ColumnType, Func<uint, long>> ValueCostFunctions => valueCostFunctions;
+        internal IReadOnlyDictionary<ColumnType, Func<uint, ulong>> ValueCostFunctions => valueCostFunctions;
 
         /// <summary>
         /// Gets the heads extraction may not use under this model.
@@ -171,6 +169,11 @@ namespace Eggnog
             ArgumentNullException.ThrowIfNull(type);
             if (type.Kind == ColumnKind.Sort)
                 throw new ArgumentException($"{type.Name} is a sort; only values have value costs.", nameof(type));
+
+            if (type is IContainerColumnType)
+                throw new ArgumentException(
+                    $"{type.Name} is a container, which costs the sum of its elements' costs, as egglog's containers do; give its element types value costs.",
+                    nameof(type));
         }
 
     }

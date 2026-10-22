@@ -169,19 +169,68 @@ namespace Eggnog.Relations
         /// <param name="state">The execution state, which mints the id; it must belong to a database.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
-        /// ids; or the containers hold e-class ids and the state belongs to a child context, which may look such a
-        /// container up (<see cref="TryGetId"/>) but not intern one; or the containers hold e-class ids, the container
-        /// is new and the state's database is frozen, whose descendants never re-run their eq-container guard
-        /// (<see cref="EqContainerGuard"/>).</exception>
+        /// ids; or the environment and the container hold e-class ids and the state belongs to a child context, which
+        /// may look such a container up (<see cref="TryGetId"/>) but not intern one; or they hold e-class ids, the
+        /// container is new and the state's database is frozen, whose descendants never re-run their eq-container
+        /// guard (<see cref="EqContainerGuard"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
 
             // A child interns no eq-sort container; it may only look one up. One field test at the root, which runs in
             // no child.
-            if (state.InChildContext && HoldsIds)
+            if (state.InChildContext && HoldsIds && container.HoldsIds)
                 ThrowInternedInChild();
 
+            return GetOrInsertCore(container, state, null);
+        }
+
+        /// <summary>
+        /// Returns the id of <paramref name="container"/>, a container that holds no e-class ids, interning it with a
+        /// fresh id from <see cref="Counter"/> in <paramref name="counters"/> if it is new, without an execution state:
+        /// what <see cref="GetOrInsert"/> does for such a container, whose id is global and whose contents never change,
+        /// in any context and on any thread. The library interns its containers of values so, as it interns base
+        /// values. Thread-safe: equal containers interned concurrently get one id.
+        /// </summary>
+        /// <param name="container">The container; it must not change afterwards.</param>
+        /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>
+        /// <returns>The container's id.</returns>
+        /// <exception cref="InvalidOperationException">The container holds e-class ids, whose interning needs the
+        /// root (<see cref="GetOrInsertAtRoot"/>).</exception>
+        /// <exception cref="OverflowException">The counter has no ids left.</exception>
+        public uint GetOrInsertShared(in TContainer container, CounterSet counters)
+        {
+            ArgumentNullException.ThrowIfNull(counters);
+            if (HoldsIds && container.HoldsIds)
+                throw new InvalidOperationException($"A container of {typeof(TContainer).Name} holds e-class ids, so it is interned at the root.");
+
+            return GetOrInsertCore(container, null, counters);
+        }
+
+        /// <summary>
+        /// Returns the id of <paramref name="container"/>, which may hold e-class ids, interning it with a fresh id from
+        /// <see cref="Counter"/> in <paramref name="counters"/> if it is new, as <see cref="GetOrInsert"/> does from an
+        /// execution state of a writable root: the library interns its containers of classes so, from a host write or
+        /// a rule at the root, and the caller makes sure the root is writable, never frozen, as the frozen refusal of
+        /// <see cref="GetOrInsert"/> would. A new eq-sort container moves the eq-container version, as there.
+        /// Thread-safe.
+        /// </summary>
+        /// <param name="container">The container; it must not change afterwards.</param>
+        /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>
+        /// <returns>The container's id.</returns>
+        /// <exception cref="OverflowException">The counter has no ids left.</exception>
+        public uint GetOrInsertAtRoot(in TContainer container, CounterSet counters)
+        {
+            ArgumentNullException.ThrowIfNull(counters);
+            return GetOrInsertCore(container, null, counters);
+        }
+
+        /// <summary>
+        /// Looks <paramref name="container"/> up, interning it if it is new with an id minted through
+        /// <paramref name="state"/>, or when that is <c>null</c> from <paramref name="counters"/>.
+        /// </summary>
+        uint GetOrInsertCore(in TContainer container, ExecutionState? state, CounterSet? counters)
+        {
             var hash = container.ComputeHash();
             var shard = toId[shardData.ShardOf(hash)];
             uint id;
@@ -194,10 +243,15 @@ namespace Eggnog.Relations
 
                 // A new eq-sort container may name an id some child displaced; the children re-run their eq-container
                 // guard before they are read again. A frozen database interns none: its descendants could not be told.
-                if (HoldsIds)
-                    NoteNewEqContainer(state);
+                if (HoldsIds && container.HoldsIds)
+                {
+                    if (state is not null)
+                        NoteNewEqContainer(state);
+                    else
+                        NoteNewContent();
+                }
 
-                id = MintId(state);
+                id = state is not null ? MintId(state) : Store.CheckId(counters!.Increment(counter));
                 var entry = new ContainerEntry<TContainer>(container, hash, id);
                 AddById(entry);
                 shard.InsertInSlot(hash, ~slot, entry);

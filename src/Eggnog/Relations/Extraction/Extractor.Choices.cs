@@ -34,10 +34,10 @@ namespace Eggnog.Relations
         // after the latest first update among its children, which the same algorithm finds over those rows
         // (FirstTimes). Only the order of the ranks decides anything, and the times are ordered exactly as the ranks.
         //
-        // A saturated class may have no row whose children all reached their costs first; egglog's reconstruction would
-        // panic there, but since eggnog's costs saturate at long.MaxValue and egglog's u64 costs much later, such a class
-        // in eggnog is usually one egglog costs exactly. It then extracts as the first of its rows whose children all had
-        // their first updates before it had its own (Choose), so every class with a cost has a term.
+        // A class saturated at ulong.MaxValue may have no row whose children all reached their costs first; egglog's
+        // reconstruction panics there, as its u64 costs saturate at the same value. Here it extracts as the first of its
+        // rows whose children all had their first updates before it had its own (Choose), so every class with a cost has
+        // a term.
         //
         // A class's times depend only on the rows below it, so the times and choices of the classes a query reaches are
         // what egglog's extractor computes over the whole e-graph. Each order computes them once per class, for the
@@ -176,7 +176,7 @@ namespace Eggnog.Relations
         /// </summary>
         void EnsureChoices(ExtractionOrder order, int root)
         {
-            Debug.Assert(root >= 0 && classCost[root] >= 0, "only a class with a cost has a choice");
+            Debug.Assert(root >= 0 && classKnown[root], "only a class with a cost has a choice");
             if (order.StateOf(root) != ExtractionOrder.Unsolved)
                 return;
 
@@ -187,7 +187,7 @@ namespace Eggnog.Relations
             RunTimes(order, collected, first: false);
             foreach (var local in collected)
             {
-                if (classCost[order.Owner[local]] == long.MaxValue)
+                if (classCost[order.Owner[local]] == ulong.MaxValue)
                 {
                     order.FinalPass[local] = order.FirstPass[local];
                     order.FinalNode[local] = order.FirstNode[local];
@@ -211,7 +211,7 @@ namespace Eggnog.Relations
             for (var i = 0; i < collected.Count; i++)
             {
                 var local = collected[i];
-                if (classCost[order.Owner[local]] == long.MaxValue && order.FirstState[local] == ExtractionOrder.Unsolved)
+                if (classCost[order.Owner[local]] == ulong.MaxValue && order.FirstState[local] == ExtractionOrder.Unsolved)
                     Collect(order, order.Owner[local], collectedFirst, first: true, append: true);
             }
 
@@ -241,7 +241,7 @@ namespace Eggnog.Relations
             while (count > 0)
             {
                 var owner = solveStack[--count];
-                saturated |= classCost[owner] == long.MaxValue;
+                saturated |= classCost[owner] == ulong.MaxValue;
                 for (var node = classFirstNode[owner]; node >= 0; node = nodeNext[node])
                 {
                     if (first ? IsCostable(node) == false : IsTight(node) == false)
@@ -313,7 +313,7 @@ namespace Eggnog.Relations
             {
                 // A saturated class takes its first update as its last.
                 var owner = order.Owner[local];
-                if (first == false && classCost[owner] == long.MaxValue)
+                if (first == false && classCost[owner] == ulong.MaxValue)
                     continue;
 
                 for (var node = classFirstNode[owner]; node >= 0; node = nodeNext[node])
@@ -385,7 +385,7 @@ namespace Eggnog.Relations
             foreach (var local in classes)
             {
                 Debug.Assert(
-                    passes[local] >= 0 || (first == false && classCost[order.Owner[local]] == long.MaxValue),
+                    passes[local] >= 0 || (first == false && classCost[order.Owner[local]] == ulong.MaxValue),
                     "every class with a cost has a time");
             }
 #endif
@@ -522,10 +522,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Chooses the node the class at <paramref name="local"/> extracts as: egglog's parent edge, the first of its tight
         /// nodes, in the order, whose class's last update comes after the last update of every class among its children
-        /// (src/extract.rs:461-499). Where none qualifies, which needs a cost saturated at <see cref="long.MaxValue"/>
-        /// and so one egglog's <c>u64</c> costs may not saturate at, egglog's reconstruction would panic; here the class
-        /// takes the first of its nodes whose children all had their first updates before the class had its own, so a
-        /// term is still built. The choices stay acyclic: below a saturated class, first updates strictly decrease until
+        /// (src/extract.rs:461-499). Where none qualifies, which needs a cost saturated at <see cref="ulong.MaxValue"/>,
+        /// egglog's reconstruction panics; here the class takes the first of its nodes whose children all had their first
+        /// updates before the class had its own, so a term is still built. The choices stay acyclic: below a saturated class, first updates strictly decrease until
         /// a class whose cost does not saturate, and below that last updates do.
         /// </summary>
         /// <returns>The node.</returns>
@@ -535,7 +534,7 @@ namespace Eggnog.Relations
             var best = ChooseBy(order, owner, order.FinalPass, order.FinalNode);
             if (best < 0)
             {
-                Debug.Assert(classCost[owner] == long.MaxValue, "a cost below saturation has egglog's choice");
+                Debug.Assert(classCost[owner] == ulong.MaxValue, "a cost below saturation has egglog's choice");
                 best = ChooseBy(order, owner, order.FirstPass, order.FirstNode);
             }
 
@@ -591,7 +590,7 @@ namespace Eggnog.Relations
             if (IsLater(order, order.FinalPass[o], order.FinalNode[o], order.FinalPass[c], order.FinalNode[c]))
                 return true;
 
-            return classCost[owner] == long.MaxValue
+            return classCost[owner] == ulong.MaxValue
                 && IsLater(order, order.FirstPass[o], order.FirstNode[o], order.FirstPass[c], order.FirstNode[c]);
         }
 

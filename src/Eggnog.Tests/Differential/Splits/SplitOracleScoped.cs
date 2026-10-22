@@ -29,7 +29,7 @@ namespace Eggnog.Tests.Differential.Splits
             c.Graph.Root.Freeze();
             var schema = c.Graph.Root.CreateChild(c.Schema);
             foreach (var (path, values) in program.Discriminators)
-                schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(ValueSet.Of(values)), c.Discriminator.Of(path));
+                schema.Assume(c.Present.Of(path), c.Dom.Of(path).Is(Set.Of(values)), c.Discriminator.Of(path));
 
             foreach (var branch in program.Branches)
             {
@@ -74,7 +74,7 @@ namespace Eggnog.Tests.Differential.Splits
         static Fact[] Consequences(PredicateTheory c, SplitOracleBranch branch) =>
             branch.Present.Select(p => c.Present.Of(p))
                 .Concat(branch.Forms.Select(f => c.Form.Of(f.Path, f.Form)))
-                .Concat(branch.Domains.Select(d => c.Dom.Of(d.Path).Is(ValueSet.Of(d.Values))))
+                .Concat(branch.Domains.Select(d => c.Dom.Of(d.Path).Is(Set.Of(d.Values))))
                 .ToArray();
 
         /// <summary>

@@ -13,7 +13,9 @@ namespace Eggnog
         Sort,
 
         /// <summary>
-        /// The cells are base values (numbers, strings, sets, registered types); equal values have equal cells.
+        /// The cells are values: base values (numbers, strings, registered types) or containers (sets, pairs, vectors,
+        /// maps, multisets); equal values have equal cells, and a container of classes, egglog's eq-sort container, is
+        /// rebuilt when its classes merge.
         /// </summary>
         Value,
 

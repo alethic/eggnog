@@ -105,35 +105,99 @@ A column holds either a class or a value.
   `OrderedFloat` semantics: both zeros are one value, and so are all NaNs, which equal each other and sort above every
   other value; each reads back as the one the graph interned first), `string`, `BigInteger` (egglog's `BigInt`, rendered as egglog renders it, `(from-string "123")`),
   `BigRational` (egglog's `BigRat`, in lowest terms, rendered as egglog renders it,
-  `(bigrat (from-string "3") (from-string "4"))`), and `ValueSet<long>`, `ValueSet<int>` and `ValueSet<string>`. Others are registered through
-  `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>` and
-  `RegisterSet<T>`.
-- **`ValueSet<T>`** is an immutable ordered set of values. It is a value, interned as a whole, not a container of
-  classes: there are no sets of classes.
+  `(bigrat (from-string "3") (from-string "4"))`), and `Set<long>`, `Set<int>` and `Set<string>`. Others are registered through
+  `ValueStore.Register<T>` (any `IEquatable<T>`, with an optional order and format), `RegisterEnum<TEnum>`,
+  `RegisterSet<T>`, `RegisterPair<T1, T2>`, `RegisterVec<T>`, `RegisterMap<TKey, TValue>` and `RegisterMultiSet<T>`.
+- **`Pair<T1, T2>`** is egglog's `Pair` container (`ValueStore.RegisterPair<T1, T2>`, named
+  `Pair<i64, String>` and so on, with `Primitives.PairOf`, `PairFirst` and `PairSecond`). Its cell is the id of an
+  engine container, minted from the graph's id counter as egglog mints its containers' ids; a pair of values is never
+  rebuilt, so equal pairs have one cell in every scope, as any value's. It extracts as `(pair a b)` and costs what its
+  elements cost.
+- **`Vec<T>`** is egglog's `Vec` container, in the same way (`ValueStore.RegisterVec<T>`, named
+  `Vec<i64>` and so on, with `Primitives.VecEmpty`, `VecOf`, `VecAppend`, `VecPush`, `VecPop`, `VecLength`,
+  `VecContains`, `VecNotContains`, `VecGet`, `VecSet`, `VecRemove` and, for `Vec<long>`, `VecRange`). It extracts as
+  `(vec-of a b)` or `(vec-empty)`.
+- **Containers of classes**, such as `Set<Node>`, `Vec<Node>`, `Pair<Node, long>`, `Map<Node, long>` or
+  `MultiSet<Vec<Node>>`, are
+  egglog's eq-sort containers. The cell is a container id that the union-find rebuilds as it rebuilds a class's:
+  - Two containers become one when their classes merge, as egglog's rebuild makes them. A set keeps one element of
+    elements that become one, a map whose keys become one keeps the later key's value in key-cell order, and a
+    multiset adds the counts of elements that become one.
+  - Classes order by cell as a set's and a multiset's elements and a map's keys, as egglog's `BTreeSet` and `BTreeMap`
+    order them.
+  - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
+  - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
+    that decodes no values.
+  - Only a writable root makes one. A child, and a read of a frozen root, use those the root holds, and one the root
+    lacks matches nothing there. A write that needs one is refused.
+  - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge
+    the child's rebuild derives faults the child, as the engine's eq-container guard refuses it (decisions row 9).
+  - egglog's `vec-union` is `Primitives.VecUnion`, a write primitive as egglog's: it unions two vectors' classes
+    element by element and returns the first, with no result for two lengths.
+    - It runs as a value a head or a host write writes, and in a merge such as `(vec-union old new)`, which a host
+      batch simulates with its own unions. A rule's body, a query and a read refuse it, as egglog's query does.
+    - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
+    - Only the root runs it, since the classes it unions are held by the vectors.
+    - egglog's bare action, `(vec-union a b)` on its own, waits for host and head actions that compute only for
+      their effect; here the union is the value of a write.
+  - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
+    a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
+    multiset.
+  - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
+    constant, its classes made canonical first. A constant map whose keys hold classes and are one now is refused:
+    which key egglog's rebuild keeps depends on container cells the host's map no longer knows.
+  - As a constructor's argument it extracts as its value, the container of its classes, and each class extracts as its
+    own term.
+- **`Map<TKey, TValue>`** is egglog's `Map` container, in the same way (`ValueStore.RegisterMap`, named
+  `Map<i64, String>` and so on, with `Primitives.MapEmpty`, `MapInsert`, `MapGet`, `MapRemove`, `MapLength`,
+  `MapContains` and `MapNotContains`). It enumerates in key order, as a `Set` does, so its keys are comparable; its
+  container keeps the entries in key-cell order, as egglog's `BTreeMap`, which is the order its term,
+  `(map-insert (map-insert (map-empty) k0 v0) k1 v1)`, and its serialized node list them.
+- **`MultiSet<T>`** is egglog's `MultiSet` container, in the same way (`ValueStore.RegisterMultiSet`,
+  with egglog's first-order `multiset-*` primitives as `Primitives.MultiSet*`). It enumerates in element order, and its
+  container keeps the elements in cell order, the order of its term, `(multiset-of a a b)`. `MultiSetPick` and
+  `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would
+  intern in its own order, gives no result where the order decides. Its counts are `long`s, as egglog's are `usize`s.
+  Containers compare element by element, so they can be the elements of sets and multisets and the keys of maps.
+- **`Set<T>`** is egglog's `Set` container, in the same way (`ValueStore.RegisterSet`, with `Primitives.SetOf`,
+  `Singleton`, `Union`, `Intersect`, `Except`, `Insert`, `Remove`, `Contains`, `NotContains`, `Count` and `Get`, egglog's
+  `set-*` primitives, and the additions `IsSubsetOf` and `IsEmpty`). The graph registers `Set<long>`, `Set<int>` and
+  `Set<string>` itself. It keeps its elements in element order, and its container keeps them in cell order, the order
+  of its term, `(set-of a b)`, and of `Get`, which reads that order as egglog's `set-get` does: a read over elements no
+  write interned gives no result where the order decides, as `MultiSetPick`'s.
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
-inline; every other value is interned and stored as its intern index. Interning pools are permanent for the life of
-the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived host can retire a graph
-and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a value no write
-interned, a constant or a computation's result, equals only itself and reads back as itself, and as a key or an output
-it is in no row, as egglog's newly interned one is in none.
+inline; a container (a set, a pair, a vector, a map, a multiset) is a container id; every other value is interned and stored
+as its intern index. Interning pools are
+permanent for the life of the graph (egglog's are too): `ValueStore.InternedCount` reports their growth, so a long-lived
+host can retire a graph and build a new one. Host reads never intern, and answer as egglog's `check`, which interns: a
+value no write interned, a constant or a computation's result, equals only itself and reads back as itself, and as a
+key or an output it is in no row, as egglog's newly interned one is in none. A container egglog's `check` interns takes
+an id from the graph's counter there and none here, so the ids after it, and the ties extraction and `ordering-min` break
+by them, can differ from egglog's. So can the ids after a map constant: it interns one container, its keys in key order,
+where its egglog form, a chain of `map-insert`s, also interns the empty map and each map between; written as that chain
+(`Primitives.MapInsert`), it interns what egglog's does. A host write interns its literals first, in term order, and then
+its computations' results, as egglog lowers a command before it evaluates a primitive.
 
 There is one pool per type for the whole graph, and every scope interns into it, a child scope included: the engine's
-child databases share their root's base-value registry by reference, and `ColumnType<T>.Encode` takes no scope. So a
+child databases share their root's base-value registry and container environments by reference, and
+`ColumnType<T>.Encode` takes no scope (a container of values is interned without an execution state, from the shared
+id counter). So a
 value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
 cells across scopes and lifts. What a scope interned stays after the scope is disposed. These operations intern, in
 any scope:
 
 | Operation | What it interns |
 |---|---|
-| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline: strings, doubles, `BigInt`s, `BigRat`s, sets, registered values, and `long`s outside `[0, 2^31)` |
+| A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, `BigRat`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in term order, and then each new result of a computation it writes |
 | A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
 | A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
 | `DefineRule` (local or global) and `EGraph.DefineQuery` | each new constant, when the rule or query is defined |
 
-Reads, checks, query matches and `Until` conditions never intern (`TryEncodeExisting`). A host that serves requests
+Reads, checks and `Until` conditions never intern (`TryEncodeExisting`); a query interns its constants when it is
+defined and, when it runs, the new results of the computations in its body, as a rule does. A host that serves requests
 from long-lived scopes keeps the pools flat by reusing its literals: a query scope that names only values already
 interned interns nothing, and one that names a new string interns the string and whatever the rules compute from it.
 `EGraph.Usage` reports the pools' size beside the graph's ids and epochs (section 2.12).
@@ -158,7 +222,7 @@ reads are the same.
 
 A function with a lattice (`ValueLattice<T>`) merges two outputs for one key with the lattice's `Merge`, which must be
 associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparable<T>`), and `Intersect` and `Union`
-over `ValueSet<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
+over `Set<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
 (`Max` merges, so its case join is `Min`; `Intersect` merges, so its case join is `Union`). `ValueLattice<T>.Verify`
 checks the laws on samples. A function with neither a lattice nor a merge refuses two different outputs for one key: a
 host write throws `FactConflictException` and writes nothing; a rule that derives a conflict fails with
@@ -242,7 +306,7 @@ A ruleset (`DefineRuleset`) is a named group of rules that a schedule runs toget
 ```csharp
 rules.DefineRule("a singleton domain makes a path present", r =>
 {
-    var (p, d) = r.Vars<string, ValueSet<string>>("p", "d");
+    var (p, d) = r.Vars<string, Set<string>>("p", "d");
     r.When(d.Is(dom.Of(p)));          // body: atoms joined over the tables
     r.Where(d, d => d.Count == 1);    // filter, run after the join on every match
     r.Then(present.Of(p));            // head: writes
@@ -527,10 +591,9 @@ Costs are computed with Knuth's generalization of Dijkstra's algorithm over the 
 about. Ties are broken as egglog's extractor breaks them: a class extracts as the first of its cheapest rows, with
 constructors breadth-first from the sort asked about and each table's rows in storage order, whose arguments reached
 their costs before the class did in egglog's passes, so the chosen terms are finite, even with zero costs. Costs
-saturate at `long.MaxValue`, below egglog's `u64::MAX`; a saturated class with no such row extracts as the first of its
-rows whose arguments had a cost before it did, where egglog, whose costs would be exact there, chooses by them. An
-extractor
-reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
+are `ulong`s and saturate at `ulong.MaxValue`, as egglog's `u64` costs do at `u64::MAX`; a saturated class with no such
+row, where egglog's reconstruction panics, extracts as the first of its rows whose arguments had a cost before it did.
+An extractor reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
 so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.
 
@@ -604,12 +667,11 @@ with egglog" lists:
 
 1. Queries and split rules skip subsumed rows as rule bodies do, where egglog's `check` sees them; the other
    departures of subsumption are listed in decision 20 of [`engine/decisions.md`](engine/decisions.md).
-2. Sets hold values only, and are values themselves, not containers of classes.
-3. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
+2. Rule heads never read tables, except a full rule callback's (`ThenCallFull`) in its naive rule, and functions have
    no defaults: a lookup without a row fails.
-4. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
-5. No proofs or explanations.
-6. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
+3. No `.egg` frontend: programs are written in C#. egglog's `push` and `pop` become child scopes.
+4. No proofs or explanations.
+5. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
 ---
 

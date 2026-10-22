@@ -7,7 +7,7 @@ namespace Eggnog
     /// <summary>
     /// A constructor over any number of key columns, as egglog's constructors take: a term head whose rows map keys to the
     /// class of the term, defined with
-    /// <see cref="EGraph.DefineConstructorN{TSort}(string, IReadOnlyList{Type}, long, TableOptions)"/>
+    /// <see cref="EGraph.DefineConstructorN{TSort}(string, IReadOnlyList{Type}, ulong, TableOptions)"/>
     /// where the typed constructors stop at four children.
     /// </summary>
     /// <typeparam name="TSort">The sort of the terms.</typeparam>

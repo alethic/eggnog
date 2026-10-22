@@ -54,14 +54,14 @@ namespace Eggnog.Tests.Differential
         public static DiffPrimitive GreaterOrEqual { get; } = Named(">=", "GreaterOrEqual", new[] { DiffType.I64, DiffType.I64 }, DiffType.Bool, a => (long)a[0] >= (long)a[1], () => Primitives.GreaterOrEqual);
 
         /// <summary>Gets <c>set-length</c>.</summary>
-        public static DiffPrimitive SetLength { get; } = Named("set-length", "Count<int>()", new[] { DiffType.IntSet }, DiffType.I64, a => (long)((ValueSet<int>)a[0]).Count, () => Primitives.Count<int>());
+        public static DiffPrimitive SetLength { get; } = Named("set-length", "Count<int>()", new[] { DiffType.IntSet }, DiffType.I64, a => (long)((Set<int>)a[0]).Count, () => Primitives.Count<int>());
 
         /// <summary>Gets <c>set-is-empty</c>.</summary>
-        public static DiffPrimitive SetEmpty { get; } = Named("set-is-empty", "IsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((ValueSet<int>)a[0]).IsEmpty, () => Primitives.IsEmpty<int>());
+        public static DiffPrimitive SetEmpty { get; } = Named("set-is-empty", "IsEmpty<int>()", new[] { DiffType.IntSet }, DiffType.Bool, a => ((Set<int>)a[0]).IsEmpty, () => Primitives.IsEmpty<int>());
 
         /// <summary>Gets <c>set-union</c>.</summary>
         public static DiffPrimitive SetUnion { get; } = Named("set-union", "Union<int>()", new[] { DiffType.IntSet, DiffType.IntSet }, DiffType.IntSet,
-            a => ((ValueSet<int>)a[0]).Union((ValueSet<int>)a[1]), () => Primitives.Union<int>());
+            a => ((Set<int>)a[0]).Union((Set<int>)a[1]), () => Primitives.Union<int>());
 
         /// <summary>Gets the lambda <c>x =&gt; (x * 3 + 1) % 7</c>.</summary>
         public static DiffPrimitive Affine { get; } = Lambda("affine", new[] { DiffType.I64 }, DiffType.I64, "x => (x * 3 + 1) % 7",
@@ -77,16 +77,16 @@ namespace Eggnog.Tests.Differential
 
         /// <summary>Gets the lambda <c>d =&gt; d.Where(e =&gt; e % 2 == 0)</c>.</summary>
         public static DiffPrimitive SetEven { get; } = Lambda("set even", new[] { DiffType.IntSet }, DiffType.IntSet, "d => d.Where(e => e % 2 == 0)",
-            a => ((ValueSet<int>)a[0]).Where(e => e % 2 == 0), () => new Primitive<ValueSet<int>, ValueSet<int>>(Primitive.LambdaName, d => d.Where(e => e % 2 == 0), true));
+            a => ((Set<int>)a[0]).Where(e => e % 2 == 0), () => new Primitive<Set<int>, Set<int>>(Primitive.LambdaName, d => d.Where(e => e % 2 == 0), true));
 
         /// <summary>Gets the lambda <c>d =&gt; d.Count &gt; 1</c>.</summary>
         public static DiffPrimitive SetBig { get; } = Lambda("set big", new[] { DiffType.IntSet }, DiffType.Bool, "d => d.Count > 1",
-            a => ((ValueSet<int>)a[0]).Count > 1, () => new Primitive<ValueSet<int>, bool>(Primitive.LambdaName, d => d.Count > 1, true));
+            a => ((Set<int>)a[0]).Count > 1, () => new Primitive<Set<int>, bool>(Primitive.LambdaName, d => d.Count > 1, true));
 
-        /// <summary>Gets the lambda <c>x =&gt; ValueSet.Of((int)(x % 5), (int)((x + 2) % 5))</c>.</summary>
-        public static DiffPrimitive SetAround { get; } = Lambda("set around", new[] { DiffType.I64 }, DiffType.IntSet, "x => ValueSet.Of((int)(x % 5), (int)((x + 2) % 5))",
-            a => ValueSet.Of((int)((long)a[0] % 5), (int)(((long)a[0] + 2) % 5)),
-            () => new Primitive<long, ValueSet<int>>(Primitive.LambdaName, x => ValueSet.Of((int)(x % 5), (int)((x + 2) % 5)), true));
+        /// <summary>Gets the lambda <c>x =&gt; Set.Of((int)(x % 5), (int)((x + 2) % 5))</c>.</summary>
+        public static DiffPrimitive SetAround { get; } = Lambda("set around", new[] { DiffType.I64 }, DiffType.IntSet, "x => Set.Of((int)(x % 5), (int)((x + 2) % 5))",
+            a => Set.Of((int)((long)a[0] % 5), (int)(((long)a[0] + 2) % 5)),
+            () => new Primitive<long, Set<int>>(Primitive.LambdaName, x => Set.Of((int)(x % 5), (int)((x + 2) % 5)), true));
 
         /// <summary>Gets the lambda <c>(x, y) =&gt; (x + y) % 6</c>.</summary>
         public static DiffPrimitive SumMod { get; } = Lambda("sum mod", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, "(x, y) => (x + y) % 6",

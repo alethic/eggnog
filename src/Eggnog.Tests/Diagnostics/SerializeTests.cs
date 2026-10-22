@@ -234,8 +234,8 @@ namespace Eggnog.Tests.Diagnostics
         public void ASetsElementsAreItsChildren()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b")));
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b")));
 
             var serialized = graph.Root.Serialize();
 
@@ -272,8 +272,8 @@ namespace Eggnog.Tests.Diagnostics
         public void SerializingInternsNothing()
         {
             var graph = new EGraph();
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("never on its own")));
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
+            graph.Root.Assume(dom.Of("k").Is(Set.Of("never on its own")));
             var interned = graph.Values.InternedCount;
 
             graph.Root.Serialize().ToJson();
@@ -323,43 +323,45 @@ namespace Eggnog.Tests.Diagnostics
         }
 
         /// <summary>
-        /// A set's elements come in cell order, as an egglog set's do; an element never interned on its own comes after
-        /// them, and prints as its codec would print its cell: Rust's <c>Debug</c>, a string escaped.
+        /// A set's elements come in cell order, as an egglog set's do, each its interned value's node, printed as egglog
+        /// prints it: Rust's <c>Debug</c>, a string escaped. egglog's <c>--to-json</c> lists <c>"b"</c>, <c>"a"</c>,
+        /// <c>"q\"x"</c> under <c>set-of</c>.
         /// </summary>
         [Fact]
         public void ASetsElementsComeInCellOrderAndPrintAsEgglogs()
         {
             var graph = new EGraph();
             var text = graph.DefineRelation<string>("text");
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             graph.Root.Assume(text.Of("b"));
             graph.Root.Assume(text.Of("a"));
-            graph.Root.Assume(dom.Of("k").Is(ValueSet.Of("a", "b", "q\"x")));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b", "q\"x")));
 
             var serialized = graph.Root.Serialize();
 
             var set = serialized.Nodes.Single(n => n.Op == "set-of");
             var elements = set.Children.Select(id => serialized.Nodes.Single(n => n.Id == id)).ToArray();
             Assert.Equal(new[] { "\"b\"", "\"a\"", "\"q\\\"x\"" }, elements.Select(e => e.Op));
-            Assert.StartsWith("String-~", elements[2].Class);
+            Assert.All(elements, e => Assert.Matches("^String-[0-9]+$", e.Class));
         }
 
         /// <summary>
-        /// Elements with no cell are told apart by value, not by their text: two values that print alike are two classes.
+        /// A set's elements are told apart by their cells, not by their text: two values that print alike are two
+        /// classes.
         /// </summary>
         [Fact]
-        public void ElementsWithNoCellAreToldApartByValue()
+        public void ElementsThatPrintAlikeAreTwoClasses()
         {
             var graph = new EGraph();
             graph.Values.Register<Ranked>("Ranked", format: _ => "p");
             graph.Values.RegisterSet<Ranked>();
-            var f = graph.DefineFunction<long, ValueSet<Ranked>>("f");
-            graph.Root.Assume(f.Of(1L).Is(ValueSet.Of(new Ranked(1), new Ranked(2))));
+            var f = graph.DefineFunction<long, Set<Ranked>>("f");
+            graph.Root.Assume(f.Of(1L).Is(Set.Of(new Ranked(1), new Ranked(2))));
 
             var serialized = graph.Root.Serialize();
 
             var set = serialized.Nodes.Single(n => n.Op == "set-of");
-            Assert.Equal(new[] { "primitive-Ranked-~0", "primitive-Ranked-~1" }, set.Children);
+            Assert.Equal(new[] { "primitive-Ranked-0", "primitive-Ranked-1" }, set.Children);
         }
 
         /// <summary>

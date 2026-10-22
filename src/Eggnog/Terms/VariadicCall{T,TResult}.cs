@@ -24,7 +24,7 @@ namespace Eggnog
         /// <param name="arity">The number of arguments.</param>
         /// <param name="function">The function over all the arguments.</param>
         public VariadicCall(string name, int arity, Func<IReadOnlyList<T>, TResult> function)
-            : base(name, Repeat(arity), typeof(TResult), false, false)
+            : base(name, new RepeatedTypes(typeof(T), arity), typeof(TResult), false, false)
         {
             this.function = function;
         }
@@ -70,17 +70,6 @@ namespace Eggnog
             value = function(values);
             return true;
         }
-
-        /// <summary>
-        /// Gets the parameter types of an arity.
-        /// </summary>
-        static Type[] Repeat(int arity)
-        {
-            var types = new Type[arity];
-            Array.Fill(types, typeof(T));
-            return types;
-        }
-
     }
 
 }

@@ -22,7 +22,7 @@ namespace Eggnog.Relations
         /// <param name="cost">The term's cost: the class's for its chosen node, the node's own for a variant.</param>
         /// <param name="children">The terms of the node's child columns, in order.</param>
         /// <returns>The term.</returns>
-        TResult Node(int sort, uint value, int node, long cost, ReadOnlySpan<TResult> children);
+        TResult Node(int sort, uint value, int node, ulong cost, ReadOnlySpan<TResult> children);
 
         /// <summary>
         /// Builds the term of a base value: egglog's <c>reconstruct_termdag_base</c>.

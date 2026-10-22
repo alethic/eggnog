@@ -59,7 +59,7 @@ namespace Eggnog.Relations
                     case SortKind.Eq:
                     {
                         var owner = FindClass(frame.Sort, frame.Value);
-                        Debug.Assert(owner >= 0 && classCost[owner] >= 0, "only classes with a cost are built");
+                        Debug.Assert(owner >= 0 && classKnown[owner], "only classes with a cost are built");
                         Debug.Assert(order.StateOf(owner) == ExtractionOrder.Solved, "only classes with a choice are built");
                         var node = order.Choice[order.LocalOf(owner)];
 

@@ -105,13 +105,12 @@ namespace Eggnog.Tests.Definitions
         }
 
         [Fact]
-        public void ConstructorCostsMustNotBeNegative()
+        public void AConstructorMayCostNothing()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
-            Assert.Throws<ArgumentOutOfRangeException>(() => graph.DefineConstructor<Node>("c", cost: -1));
             var free = graph.DefineConstructor<Node>("free", cost: 0, options: new TableOptions { Extractable = false });
-            Assert.Equal(0, free.Cost);
+            Assert.Equal<ulong>(0, free.Cost);
             Assert.False(free.Extractable);
         }
 
@@ -122,7 +121,7 @@ namespace Eggnog.Tests.Definitions
             graph.DefineSort<Node>("Node");
             var present = graph.DefineRelation<string>("present");
             var analysis = graph.DefineRelation<Node>("analysis", new TableOptions { Role = TableRole.Analysis });
-            var dom = graph.DefineFunction<string, ValueSet<string>>("dom", ValueLattice.Intersect<string>());
+            var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var lit = graph.DefineConstructor<long, Node>("Lit", cost: 3);
             var unlifted = graph.DefineRelation<string>("unlifted", new TableOptions { Lift = false });
 
@@ -137,14 +136,14 @@ namespace Eggnog.Tests.Definitions
             Assert.False(analysis.Lift);
             Assert.False(analysis.IsValueOnly);
             Assert.Equal(TableKind.Function, dom.Kind);
-            Assert.Same(graph.Values.TypeOf<ValueSet<string>>(), dom.Output);
+            Assert.Same(graph.Values.TypeOf<Set<string>>(), dom.Output);
             Assert.Equal("intersect", dom.Lattice!.Name);
             Assert.True(dom.IsValueOnly);
             Assert.Equal(TableKind.Constructor, lit.Kind);
             Assert.Equal(TableRole.Term, lit.Role);
             Assert.True(lit.Lift);
             Assert.True(lit.Extractable);
-            Assert.Equal(3, lit.Cost);
+            Assert.Equal<ulong>(3, lit.Cost);
             Assert.False(lit.IsValueOnly);
             Assert.False(unlifted.Lift);
         }

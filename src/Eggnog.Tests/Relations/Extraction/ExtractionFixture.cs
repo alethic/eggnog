@@ -69,7 +69,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Declares a constructor (fresh-id default, union-id merge, subsumable) in the e-graph and the schema.
         /// </summary>
-        public FunctionId Constructor(string name, EqSort output, long? cost, params Sort[] inputs)
+        public FunctionId Constructor(string name, EqSort output, ulong? cost, params Sort[] inputs)
         {
             return ConstructorWith(name, output, new FunctionSignature { Inputs = inputs, Output = output, IsConstructor = true, Cost = cost });
         }
@@ -184,7 +184,7 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Extracts with a fresh root-sort extractor and renders the term, or returns <c>null</c> when there is none.
         /// </summary>
-        public (string Text, long Cost)? Extract(Sort sort, Value value, CostModel? costs = null)
+        public (string Text, ulong Cost)? Extract(Sort sort, Value value, CostModel? costs = null)
         {
             var extractor = Extractor.ComputeCostsFromRootSorts(Schema, [sort], costs);
             var dag = new TermDag();

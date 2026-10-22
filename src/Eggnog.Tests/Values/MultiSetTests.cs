@@ -1,0 +1,284 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using Eggnog.Tests.Support;
+
+using Xunit;
+
+namespace Eggnog.Tests.Values
+{
+
+    /// <summary>
+    /// Multisets of values, egglog's <c>MultiSet</c> container: the multiset type, registration, its primitives against
+    /// what egglog's give at 5e655cae, the picks that read cells, rules, rendering, serialization and extraction.
+    /// </summary>
+    public sealed class MultiSetTests
+    {
+
+        [Fact]
+        public void AMultiSetCountsItsElements()
+        {
+            var m = MultiSet.Of("b", "a", "a");
+            Assert.Equal(3, m.Count);
+            Assert.Equal(2, m.CountOf("a"));
+            Assert.Equal(0, m.CountOf("c"));
+            Assert.Equal(new[] { "a", "a", "b" }, m);
+            Assert.Equal(m, MultiSet.Of("a", "b", "a"));
+            Assert.NotEqual(m, MultiSet.Of("a", "b"));
+            Assert.Equal(MultiSet.Of("a", "b"), m.Remove("a"));
+            Assert.Same(m, m.Remove("c"));
+            Assert.True(m.TrySubtract(MultiSet.Of("a", "b"), out var left));
+            Assert.Equal(MultiSet.Of("a"), left);
+            Assert.False(m.TrySubtract(MultiSet.Of("b", "b"), out _));
+            Assert.Equal(MultiSet.Of("a", "a", "a", "b", "c"), m.Sum(MultiSet.Of("c", "a")));
+            Assert.Equal(MultiSet.Of("a"), m.Intersect(MultiSet.Of("a", "c")));
+            Assert.Equal(MultiSet.Of("a", "b"), m.ResetCounts());
+            Assert.Equal("{a, a, b}", m.ToString());
+        }
+
+        [Fact]
+        public void ThePrimitivesAreEgglogs()
+        {
+            // (sort MS (MultiSet String)) (let $m (multiset-of "b" "a" "a")) and egglog's checks: multiset-pick is the
+            // element of least cell, "b", interned first; multiset-pick-max of a tie the last in cell order.
+            var t = new NodeTheory();
+            Assert.Equal("MultiSet<String>", t.Graph.Values.RegisterMultiSet<string>().Name);
+            var of = Primitives.MultiSetOf<string>();
+            var m = t.Graph.DefineFunction<MultiSet<string>>("m");
+            t.Root.Assume(m.Of().Is(of.Of("b", "a", "a")));
+
+            Assert.True(t.Root.Check(Primitives.MultiSetPick<string>().Of(m.Of()).Is("b")));
+            Assert.True(t.Root.Check(Primitives.MultiSetPickMax<string>().Of(m.Of()).Is("a")));
+            Assert.True(t.Root.Check(Primitives.MultiSetPickMax<string>().Of(of.Of("b", "a")).Is("a")));
+            Assert.True(t.Root.Check(Primitives.MultiSetLength<string>().Of(m.Of()).Is(3L)));
+            Assert.True(t.Root.Check(Primitives.MultiSetCount<string>().Of(m.Of(), "a").Is(2L)));
+            Assert.True(t.Root.Check(Primitives.MultiSetSingle<string>().Of("z", 0L).Is(of.Of())));
+
+            // (datatype N (Leaf MS)) (extract (Leaf $m)) prints (Leaf (multiset-of "b" "a" "a")).
+            var leaf = t.Graph.DefineConstructor<MultiSet<string>, Node>("Leaf");
+            var x = t.Root.Make(leaf.Of(m.Of()));
+            Assert.Equal("(Leaf (multiset-of \"b\" \"a\" \"a\"))", t.Root.Extract(x).ToString());
+            Assert.Equal<ulong>(1 + 3, t.Root.Extract(x).Cost);
+
+            // (sort IM (MultiSet i64)) (sort MM (MultiSet IM)) and multiset-sum-multisets, multiset-reset-counts.
+            t.Graph.Values.RegisterMultiSet<long>();
+            t.Graph.Values.RegisterMultiSet<MultiSet<long>>();
+            var ints = Primitives.MultiSetOf<long>();
+            var outer = Primitives.MultiSetOf<MultiSet<long>>().Of(ints.Of(1L, 2L), ints.Of(1L, 2L), ints.Of(3L));
+            Assert.True(t.Root.Check(Primitives.MultiSetSumMultiSets<long>().Of(outer).Is(ints.Of(1L, 1L, 2L, 2L, 3L))));
+            Assert.Equal(MultiSet.Of(1L, 3L), t.Root.Get(Primitives.MultiSetResetCounts<long>().Of(ints.Of(3L, 3L, 1L))));
+        }
+
+        [Fact]
+        public void APickOverElementsNoWriteInternedHasNoResult()
+        {
+            // A read never interns, and egglog's check would intern the elements in its own order, so of two elements
+            // with no cell which egglog picks first is unknown here: no result, as ordering-min gives none.
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var pick = Primitives.MultiSetPick<string>();
+            var of = Primitives.MultiSetOf<string>();
+            Assert.False(graph.Root.TryGet(pick.Of(of.Of("fresh-y", "fresh-x")), out _));
+            Assert.Equal("only", graph.Root.Get(pick.Of(of.Of("only"))));
+            var f = graph.DefineFunction<string>("f");
+            graph.Root.Assume(f.Of().Is("known"));
+            Assert.Equal("known", graph.Root.Get(pick.Of(of.Of("fresh", "known"))));
+
+            // The cells are a graph's: without one, the picks have no function.
+            Assert.Throws<InvalidOperationException>(() => pick.TryInvoke(MultiSet.Of("x"), out _));
+            Assert.Throws<InvalidOperationException>(() => Primitives.MultiSetPickMax<string>().TryInvoke(MultiSet.Of("x"), out _));
+        }
+
+        [Fact]
+        public void RulesReadContainsAndCountByCell()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<long, MultiSet<string>>("m");
+            var has = graph.DefineFunction<long, bool>("has");
+            var count = graph.DefineFunction<long, long>("count");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("read", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<string>>("k", "x");
+                r.When(x.Is(m.Of(k)));
+                r.Where(Primitives.MultiSetContains<string>().Of(x, "a"));
+                r.Where(Primitives.MultiSetNotContainsSwapped<string>().Of("z", x));
+                r.Then(
+                    has.Of(k).Is(Primitives.MultiSetContainsSwapped<string>().Of("b", x)),
+                    count.Of(k).Is(Primitives.MultiSetCount<string>().Of(x, "a")));
+            });
+            var of = Primitives.MultiSetOf<string>();
+            graph.Root.Assume(
+                m.Of(1L).Is(of.Of("a", "a", "b")),
+                m.Of(2L).Is(of.Of("a")),
+                m.Of(3L).Is(of.Of("b")),
+                m.Of(4L).Is(of.Of("a", "z")));
+
+            graph.Root.Run(Schedule.Run(rules));
+
+            Assert.True(graph.Root.Get(has.Of(1L)));
+            Assert.Equal(2L, graph.Root.Get(count.Of(1L)));
+            Assert.False(graph.Root.Get(has.Of(2L)));
+            Assert.Equal(1L, graph.Root.Get(count.Of(2L)));
+            Assert.False(graph.Root.TryGet(has.Of(3L), out _));
+            Assert.False(graph.Root.TryGet(has.Of(4L), out _));
+        }
+
+        [Fact]
+        public void CountsAreLongsAsEgglogsAreUsizes()
+        {
+            // (multiset-single "x" 2147483648), then multiset-sum doubles it: egglog's counts are usizes.
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<MultiSet<string>>("m");
+            var big = 1L << 31;
+            graph.Root.Assume(m.Of().Is(Primitives.MultiSetSingle<string>().Of("x", big)));
+            var multiset = graph.Root.Get(m.Of());
+            Assert.Equal(big, multiset.Count);
+            Assert.Equal(big, multiset.CountOf("x"));
+            Assert.Throws<OverflowException>(() => ((IReadOnlyCollection<string>)multiset).Count);
+            Assert.True(graph.Root.Check(Primitives.MultiSetLength<string>().Of(m.Of()).Is(big)));
+
+            var count = graph.DefineFunction<long>("count");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("count", r =>
+            {
+                var x = r.Var<MultiSet<string>>("x");
+                r.When(x.Is(m.Of()));
+                r.Then(count.Of().Is(Primitives.MultiSetCount<string>().Of(Primitives.MultiSetSum<string>().Of(x, x), "x")));
+            });
+            graph.Root.Run(Schedule.Run(rules));
+            Assert.Equal(2 * big, graph.Root.Get(count.Of()));
+        }
+
+        [Fact]
+        public void ElementsTheirOrderKeepsApartButTheirTypeStoresAsOneAreRefused()
+        {
+            var graph = new EGraph();
+            graph.Values.Register<CaseKey>("CaseKey");
+            graph.Values.RegisterMultiSet<CaseKey>();
+            var f = graph.DefineFunction<long, MultiSet<CaseKey>>("f");
+            var multiset = MultiSet.Of(new CaseKey("A"), new CaseKey("a"));
+            Assert.Equal(2, multiset.Count);
+            Assert.Throws<ArgumentException>(() => graph.Root.Assume(f.Of(1L).Is(multiset)));
+            Assert.Equal(0, graph.Root.CountRows(f));
+        }
+
+        [Fact]
+        public void AFailedRuleRendersAMultiSetInCellOrder()
+        {
+            // "b" interns before "a", so the multiset's cell lists "b" first, as its extracted term and egglog do.
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<long, MultiSet<string>>("m");
+            var removed = graph.DefineFunction<long, MultiSet<string>>("removed");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("remove", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<string>>("k", "x");
+                r.When(x.Is(m.Of(k)));
+                r.Then(removed.Of(k).Is(Primitives.MultiSetRemove<string>().Of(x, "q")));
+            });
+            graph.Root.Assume(m.Of(1L).Is(Primitives.MultiSetOf<string>().Of("b", "a")));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(rules)));
+            Assert.Contains("x=(multiset-of \"b\" \"a\")", e.Bindings, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void SetsHoldContainersAndOrderedLatticesNeedComparableElements()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterPair<long, long>();
+            graph.Values.RegisterSet<Pair<long, long>>();
+            var pairs = graph.DefineFunction<long, Set<Pair<long, long>>>("pairs");
+            graph.Root.Assume(pairs.Of(1L).Is(Set.Of(new Pair<long, long>(2L, 0L), new Pair<long, long>(1L, 9L))));
+            Assert.Equal(Set.Of(new Pair<long, long>(1L, 9L), new Pair<long, long>(2L, 0L)), graph.Root.Get(pairs.Of(1L)));
+
+            graph.Values.Register<NumericBound>("NumericBound");
+            graph.Values.RegisterPair<NumericBound, long>();
+            var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<NumericBound, long>>());
+            Assert.Contains("implements neither", set.Message, StringComparison.Ordinal);
+            var unlifted = new TableOptions { Lift = false };
+            var lattice = Assert.Throws<ArgumentException>(() =>
+                graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>(), unlifted));
+            Assert.Contains("not comparable", lattice.Message, StringComparison.Ordinal);
+
+            var max = graph.DefineFunction<long, Pair<long, long>>("max", ValueLattice.Max<Pair<long, long>>(), unlifted);
+            graph.Root.Assume(max.Of(1L).Is(new Pair<long, long>(1L, 9L)), max.Of(1L).Is(new Pair<long, long>(2L, 0L)));
+            Assert.Equal(new Pair<long, long>(2L, 0L), graph.Root.Get(max.Of(1L)));
+        }
+
+        [Fact]
+        public void PartialMultiSetPrimitivesDropAndFail()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<long>();
+            var m = graph.DefineFunction<long, MultiSet<long>>("m");
+            var removed = graph.DefineFunction<long, MultiSet<long>>("removed");
+            var picked = graph.DefineFunction<long, long>("picked");
+            var body = graph.DefineRuleset("body");
+            var rule = body.DefineRule("remove", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<long>>("k", "x");
+                var y = r.Var<MultiSet<long>>("y");
+                r.When(x.Is(m.Of(k)), y.Is(Primitives.MultiSetRemove<long>().Of(x, 5L)));
+                r.Then(removed.Of(k).Is(y), picked.Of(k).Is(Primitives.MultiSetPick<long>().Of(x)));
+            });
+            graph.Root.Assume(m.Of(1L).Is(MultiSet.Of(5L, 7L)), m.Of(2L).Is(MultiSet.Of(7L)));
+
+            graph.Root.Run(Schedule.Run(body));
+
+            Assert.Equal(MultiSet.Of(7L), graph.Root.Get(removed.Of(1L)));
+            Assert.Equal(5L, graph.Root.Get(picked.Of(1L)));
+            Assert.False(graph.Root.TryGet(removed.Of(2L), out _));
+            Assert.Equal(
+                "(rule ((= x (m k)) (= y (multiset-remove x 5))) ((set (removed k) y) (set (picked k) (multiset-pick x))) :ruleset body)",
+                rule.ToString());
+
+            var head = graph.DefineRuleset("head");
+            head.DefineRule("pick", r =>
+            {
+                var (k, x) = r.Vars<long, MultiSet<long>>("k", "x");
+                r.When(x.Is(m.Of(k)));
+                r.Then(picked.Of(k).Is(Primitives.MultiSetPick<long>().Of(x)));
+            });
+            graph.Root.Assume(m.Of(3L).Is(MultiSet<long>.Empty));
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.Run(head)));
+        }
+
+        [Fact]
+        public void RegistrationTakesClassesAndRefusesIncomparableElements()
+        {
+            var t = new NodeTheory();
+            Assert.Equal("MultiSet<Node>", t.Graph.Values.RegisterMultiSet<Node>().Name);
+            t.Graph.Values.Register<NumericBound>("NumericBound");
+            var element = Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMultiSet<NumericBound>());
+            Assert.Contains("IComparable", element.Message, StringComparison.Ordinal);
+            t.Graph.Values.RegisterVec<NumericBound>();
+            Assert.Throws<ArgumentException>(() => t.Graph.Values.RegisterMultiSet<Vec<NumericBound>>());
+            t.Graph.Values.RegisterVec<long>();
+            Assert.Equal("MultiSet<Vec<i64>>", t.Graph.Values.RegisterMultiSet<Vec<long>>().Name);
+            var register = Assert.Throws<ArgumentException>(() => t.Graph.Values.Register<MultiSet<long>>("M"));
+            Assert.Contains("ValueStore.RegisterMultiSet", register.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void AMultiSetSerializesItsElementsWithRepeatsInCellOrder()
+        {
+            var graph = new EGraph();
+            graph.Values.RegisterMultiSet<string>();
+            var m = graph.DefineFunction<MultiSet<string>>("m");
+            graph.Root.Assume(m.Of().Is(Primitives.MultiSetOf<string>().Of("b", "a", "a")));
+
+            var serialized = graph.Root.Serialize();
+            var node = serialized.Nodes.Single(n => n.Op == "multiset-of");
+            var children = node.Children.Select(c => serialized.Nodes.Single(n => n.Id == c).Op).ToArray();
+            Assert.Equal(new[] { "\"b\"", "\"a\"", "\"a\"" }, children);
+        }
+
+    }
+
+}

@@ -42,7 +42,7 @@ namespace Eggnog.Relations
         /// rebuild containers. Containers over base values are registered with <c>holdsIds: false</c> and are allowed
         /// everywhere.
         /// </summary>
-        public bool HoldsIds { get; }
+        public bool HoldsIds { get; private set; }
 
         /// <summary>
         /// Gets or sets the counter this environment increments each time it gains a container whose content it did not
@@ -114,6 +114,19 @@ namespace Eggnog.Relations
         /// debugging; O(size), allocates. Requires that nothing changes the environment meanwhile.
         /// </summary>
         public abstract void CheckInvariants();
+
+        /// <summary>
+        /// Makes the environment one that holds e-class ids, counting new contents on <paramref name="version"/>: for a
+        /// container type registered over base values first and later over an eq sort, as egglog keeps both in one
+        /// environment, telling them apart by <c>do_rebuild</c> (<see cref="IContainerValue{TSelf}.HoldsIds"/>). Its
+        /// containers so far hold no ids, so no child holds a displacement of theirs. Requires exclusive access.
+        /// </summary>
+        /// <param name="version">The eq-container version of the <see cref="ContainerValues"/> holding it.</param>
+        internal void MarkHoldsIds(StrongBox<long> version)
+        {
+            HoldsIds = true;
+            eqVersion = version;
+        }
 
         /// <summary>
         /// Records that the environment gained a container whose content it did not hold before: moves

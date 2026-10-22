@@ -58,8 +58,8 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="root">The class.</param>
         /// <returns>The term.</returns>
-        /// <exception cref="InvalidOperationException">No finite term exists, the scope changed since the extractor was
-        /// created, or a cost function returned a negative cost.</exception>
+        /// <exception cref="InvalidOperationException">No finite term exists, or the scope changed since the extractor
+        /// was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
@@ -80,8 +80,7 @@ namespace Eggnog
         /// <param name="root">The class.</param>
         /// <param name="term">The term, when the result is <c>true</c>.</param>
         /// <returns>Whether a finite term exists.</returns>
-        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, or a cost
-        /// function returned a negative cost.</exception>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
@@ -135,10 +134,9 @@ namespace Eggnog
         /// none when the class has no finite term or <paramref name="count"/> is 0.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, a cost function
-        /// returned a negative cost, or an earlier call of this extractor failed midway; or the scope is faulted; or it
-        /// is writable and in use on another thread; or the call comes from a primitive, lattice, filter or cost
-        /// function.</exception>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, or an earlier
+        /// call of this extractor failed midway; or the scope is faulted; or it is writable and in use on another thread;
+        /// or the call comes from a primitive, lattice, filter or cost function.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
@@ -180,14 +178,13 @@ namespace Eggnog
         /// <param name="root">The class.</param>
         /// <param name="cost">The cost, when the result is <c>true</c>.</param>
         /// <returns>Whether a finite term exists.</returns>
-        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created, or a cost
-        /// function returned a negative cost.</exception>
+        /// <exception cref="InvalidOperationException">The scope changed since the extractor was created.</exception>
         /// <exception cref="ArgumentException">The class value is not usable in the scope.</exception>
         /// <exception cref="ScopeContradictedException">The scope is a case whose contradiction stopped it since the
         /// extractor was made, or lies under one, the contradiction of the case's parent included.</exception>
         /// <exception cref="RuleEvaluationException">A lattice merge threw in the catch-up a query of a writable scope makes
         /// first, in the scope or a writable ancestor; the scope is faulted, and so is the ancestor.</exception>
-        public bool TryGetCost<TSort>(TSort root, out long cost) where TSort : struct, ISort<TSort>
+        public bool TryGetCost<TSort>(TSort root, out ulong cost) where TSort : struct, ISort<TSort>
         {
             var held = Scope.EnterExtraction();
             var previous = ExtractionCatalog.CurrentScope;

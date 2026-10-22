@@ -38,7 +38,7 @@ namespace Eggnog
         public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
         {
             value = default!;
-            var key = Row(table, keys, 0, writes: false);
+            var found = TryRow(table, keys, 0, writes: false, out var key);
             if (table.IsRelation)
                 throw Refuse(new ArgumentException(
                     $"'{table.Name}' is a relation, which has no value to read; use Contains.", nameof(table)));
@@ -47,11 +47,11 @@ namespace Eggnog
                 throw Refuse(new ArgumentException(
                     $"'{table.Name}' outputs {table.Columns[^1].Name}, not {typeof(T).Name}.", nameof(table)));
 
-            if (Call.Action(table).TryLookup(State, key, out var cell) == false)
+            if (found == false || Call.Action(table).TryLookup(State, key, out var cell) == false)
                 return false;
 
             var output = table.Columns[^1];
-            value = (T)output.DecodeObject(output.Kind == ColumnKind.Sort ? State.Canonicalize(cell) : cell, Scope);
+            value = (T)output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
             return true;
         }
 
@@ -64,7 +64,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The relation is not of the rule's graph, or a value is not of its column's
         /// type.</exception>
         public bool Contains(RelationHandle relation, params ReadOnlySpan<object> keys) =>
-            Call.Action(relation).TryLookup(State, Row(relation, keys, 0, writes: false), out _);
+            TryRow(relation, keys, 0, writes: false, out var row) && Call.Action(relation).TryLookup(State, row, out _);
 
         /// <summary>
         /// Gets the number of rows of a table the scope sees: egglog's <c>table_size</c>.

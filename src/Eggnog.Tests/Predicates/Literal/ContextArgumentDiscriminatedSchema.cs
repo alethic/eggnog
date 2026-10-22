@@ -30,22 +30,22 @@ namespace Eggnog.Tests.Predicates.Literal
             var schema = c.Schema.Of();
             c.Graph.Root.Assume(
                 c.Present.Of(schema, "type"),
-                c.Types.Of(schema, "type").Is(ValueSet.Of("string")),
+                c.Types.Of(schema, "type").Is(Set.Of("string")),
                 c.Present.Of(schema, "seq"),
-                c.Types.Of(schema, "seq").Is(ValueSet.Of("number")),
+                c.Types.Of(schema, "seq").Is(Set.Of("number")),
                 c.Lo.Of(schema, "seq").Is(1L),
                 c.Hi.Of(schema, "seq").Is(2147483647L),
                 c.Present.Of(schema, "kind"),
-                c.Dom.Of(schema, "kind").Is(ValueSet.Of("a", "b", "c")),
+                c.Dom.Of(schema, "kind").Is(Set.Of("a", "b", "c")),
                 c.Discriminator.Of("kind", "a"),
                 c.Discriminator.Of("kind", "b"),
                 c.Discriminator.Of("kind", "c"),
                 c.Present.Of(schema, "uid"),
                 c.Form.Of(schema, "uid", "uuid-lower"),
                 c.Present.Of(schema, "label"),
-                c.Types.Of(schema, "label").Is(ValueSet.Of("string")),
+                c.Types.Of(schema, "label").Is(Set.Of("string")),
                 c.Present.Of(schema, "flag"),
-                c.Types.Of(schema, "flag").Is(ValueSet.Of("boolean")),
+                c.Types.Of(schema, "flag").Is(Set.Of("boolean")),
                 c.Present.Of(schema, "meta"),
                 c.Form.Of(schema, "meta.created", "instant-ms"),
                 c.Form.Of(schema, "meta.updated", "instant-ms"),
@@ -53,13 +53,13 @@ namespace Eggnog.Tests.Predicates.Literal
             c.Horn.DefineRule("kind = a", r =>
             {
                 var x = r.Var<Ctx>("c");
-                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(ValueSet.Of("a")));
+                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(Set.Of("a")));
                 r.Then(c.Present.Of(x, "body.ref"), c.Form.Of(x, "body.ref", "uuid-lower"));
             });
             c.Horn.DefineRule("kind = b", r =>
             {
                 var x = r.Var<Ctx>("c");
-                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(ValueSet.Of("b")));
+                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(Set.Of("b")));
                 r.Then(
                     c.Present.Of(x, "body.ref"),
                     c.Form.Of(x, "body.ref", "uuid-lower"),
@@ -69,7 +69,7 @@ namespace Eggnog.Tests.Predicates.Literal
             c.Horn.DefineRule("kind = c", r =>
             {
                 var x = r.Var<Ctx>("c");
-                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(ValueSet.Of("c")));
+                r.When(c.Present.Of(x, "kind"), c.Dom.Of(x, "kind").Is(Set.Of("c")));
                 r.Then(c.Present.Of(x, "body.pos"));
             });
             return c;

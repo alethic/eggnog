@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace Eggnog
 {
@@ -26,7 +25,7 @@ namespace Eggnog
         /// </summary>
         internal const string LambdaName = "<lambda>";
 
-        readonly ReadOnlyCollection<Type> parameterTypes;
+        readonly IReadOnlyList<Type> parameterTypes;
 
         /// <summary>
         /// Initializes a new instance.
@@ -37,9 +36,23 @@ namespace Eggnog
         /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
         /// <param name="isPartial">Whether the primitive is partial.</param>
         private protected Primitive(string name, Type[] parameterTypes, Type resultType, bool isLambda, bool isPartial)
+            : this(name, (IReadOnlyList<Type>)Array.AsReadOnly(parameterTypes), resultType, isLambda, isPartial)
+        {
+
+        }
+
+        /// <summary>
+        /// Initializes a new instance over a read-only list of parameter types, kept as given.
+        /// </summary>
+        /// <param name="name">The name.</param>
+        /// <param name="parameterTypes">The CLR types of the parameters; read-only.</param>
+        /// <param name="resultType">The CLR type of the result.</param>
+        /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
+        /// <param name="isPartial">Whether the primitive is partial.</param>
+        private protected Primitive(string name, IReadOnlyList<Type> parameterTypes, Type resultType, bool isLambda, bool isPartial)
         {
             Name = name;
-            this.parameterTypes = Array.AsReadOnly(parameterTypes);
+            this.parameterTypes = parameterTypes;
             ResultType = resultType;
             IsLambda = isLambda;
             IsPartial = isPartial;
@@ -337,6 +350,35 @@ namespace Eggnog
         /// <param name="name">The primitive's name.</param>
         /// <returns>The exception.</returns>
         internal static InvalidOperationException NoResult(string name) => new($"Primitive '{name}' has no result for these arguments.");
+
+        /// <summary>
+        /// Gets whether the primitive writes the graph: egglog's write primitive (<c>WritePrim</c>), such as
+        /// <c>vec-union</c>, which unions classes. It runs in a rule's head, a host write and a merge, through
+        /// <see cref="TryInvokeWrite"/>, and is refused in a rule's body, a query, a read and a split's assumptions, as
+        /// egglog refuses it in a query.
+        /// </summary>
+        internal virtual bool IsWrite => false;
+
+        /// <summary>
+        /// Calls a write primitive over its arguments' cells, its unions made through <paramref name="union"/>.
+        /// </summary>
+        /// <param name="arguments">The argument cells.</param>
+        /// <param name="parameters">The parameters' column types.</param>
+        /// <param name="result">The result's column type.</param>
+        /// <param name="union">Unions two class cells where the call runs.</param>
+        /// <param name="cell">The result's cell, when the result is <c>true</c>.</param>
+        /// <returns>Whether there is a result.</returns>
+        /// <exception cref="InvalidOperationException">The primitive does not write.</exception>
+        internal virtual bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union, out uint cell) =>
+            throw new InvalidOperationException($"Primitive '{Name}' does not write the graph.");
+
+        /// <summary>
+        /// Makes the error for a write primitive called where nothing is written.
+        /// </summary>
+        /// <param name="name">The primitive's name.</param>
+        /// <returns>The error.</returns>
+        internal static InvalidOperationException Writes(string name) =>
+            new($"Primitive '{name}' writes the graph, so it runs only in a rule's head, a host write or a merge, as egglog's write primitive.");
 
     }
 

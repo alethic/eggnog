@@ -176,7 +176,7 @@ namespace Eggnog.Tests.Extraction
             Assert.Same(variants[1].Child(0), variants[1].Child(1));
             Assert.Equal(variants[0].Class, variants[1].Class);
             Assert.True(variants[1].TryMatch(t.Add, out var left, out _));
-            Assert.Equal(2, left.Term!.Cost);
+            Assert.Equal<ulong>(2, left.Term!.Cost);
         }
 
         [Fact]
@@ -190,7 +190,7 @@ namespace Eggnog.Tests.Extraction
 
             Assert.Equal(["(A)", "(Wrap (A))"], variants.Select(v => v.ToString()));
             Assert.Equal([1L, 2L], variants.Select(v => v.Cost));
-            Assert.Equal(1, variants[1].Child(0).Cost);
+            Assert.Equal<ulong>(1, variants[1].Child(0).Cost);
         }
 
         [Fact]

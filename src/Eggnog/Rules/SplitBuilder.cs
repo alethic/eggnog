@@ -139,9 +139,9 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <param name="name">The case variable's name, unique in the split rule.</param>
-        /// <param name="set">A declared body variable holding the set.</param>
+        /// <param name="set">A declared body variable holding the set, a set of values.</param>
         /// <returns>The case variable.</returns>
-        public Var<T> Cases<T>(string name, Var<ValueSet<T>> set) where T : notnull
+        public Var<T> Cases<T>(string name, Var<Set<T>> set) where T : notnull
         {
             ThrowIfClosed();
             NameRules.ValidateName(name, nameof(name));
@@ -152,9 +152,9 @@ namespace Eggnog
             element = variable;
             elementType = typeof(T);
 
-            // A set is an interned base value: decoding it returns the interned set, allocating nothing.
-            countOf = static (type, cell) => ((ColumnType<ValueSet<T>>)type).Decode(cell, null).Count;
-            elementAt = static (type, cell, index) => ((ColumnType<ValueSet<T>>)type).Decode(cell, null)[index];
+            // A split's set holds values (RuleCompiler refuses classes), which decode outside any scope.
+            countOf = static (type, cell) => ((SetColumnType<T>)type).CountOfCell(cell);
+            elementAt = static (type, cell, index) => ((ColumnType<Set<T>>)type).Decode(cell, null)[index];
 
             return variable;
         }

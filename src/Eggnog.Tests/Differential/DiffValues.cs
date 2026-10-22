@@ -8,7 +8,7 @@ namespace Eggnog.Tests.Differential
 
     /// <summary>
     /// The values of a random program, as both sides of the differential see them: <c>long</c>, <c>string</c>,
-    /// <c>ValueSet&lt;int&gt;</c>, and for the sort a class id (a <c>long</c>) that a <see cref="TermNamer"/> name
+    /// <c>Set&lt;int&gt;</c>, and for the sort a class id (a <c>long</c>) that a <see cref="TermNamer"/> name
     /// replaces. Formatting and content order are the same on both sides.
     /// </summary>
     internal static class DiffValues
@@ -25,7 +25,7 @@ namespace Eggnog.Tests.Differential
         {
             DiffType.I64 => ((long)value).ToString(CultureInfo.InvariantCulture),
             DiffType.Str => "\"" + (string)value + "\"",
-            DiffType.IntSet => "{" + string.Join(", ", (ValueSet<int>)value) + "}",
+            DiffType.IntSet => "{" + string.Join(", ", (Set<int>)value) + "}",
             DiffType.Node => names((long)value),
             DiffType.Bool => (bool)value ? "true" : "false",
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
@@ -50,8 +50,8 @@ namespace Eggnog.Tests.Differential
                     return string.CompareOrdinal((string)x, (string)y);
                 case DiffType.IntSet:
                 {
-                    var a = (ValueSet<int>)x;
-                    var b = (ValueSet<int>)y;
+                    var a = (Set<int>)x;
+                    var b = (Set<int>)y;
                     for (var i = 0; i < a.Count && i < b.Count; i++)
                         if (a[i] != b[i])
                             return a[i].CompareTo(b[i]);

@@ -33,6 +33,12 @@ namespace Eggnog
         Dictionary<uint, uint>? smallest;
         List<(int First, int Second)>? classOutputs;
         Dictionary<uint, uint>? direct;
+        Dictionary<string, uint>? contents;
+        Dictionary<uint, uint>? childMerges;
+        bool rowsRebuildInOrder;
+        List<(uint A, uint B)>? factUnions;
+        Action<uint, uint>? collectUnion;
+        Func<uint, uint>? canonical;
         bool mergeCheckDecided;
         bool mergedClasses;
 
@@ -47,16 +53,44 @@ namespace Eggnog
         void NoteMerge(uint a, uint b)
         {
             mergedClasses = true;
+            CheckChildMerge(a, b);
             if (StartMergeCheck() == false)
                 return;
 
+            // The engine keeps the smaller cell of two classes it merges, which the replay of its passes keeps too.
             var x = Find(direct!, a);
             var y = Find(direct!, b);
             if (x != y)
-                direct![x] = y;
+                direct![Math.Max(x, y)] = Math.Min(x, y);
 
             merges!.Enqueue((a, b));
             Close();
+        }
+
+        /// <summary>
+        /// Below the root, refuses a merge that would displace a class a container of classes holds: a child never
+        /// rebuilds containers, so the engine's eq-container guard would fault it (decisions row 9). The engine keeps the
+        /// smaller cell of two classes it merges, so the larger is the one displaced. A merge the rebuild derives, such as
+        /// two rows of a constructor meeting, is not foreseen here and still faults the child.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The merge displaces a class a container holds.</exception>
+        void CheckChildMerge(uint a, uint b)
+        {
+            if (scope.IsRoot || graph.Engine.ContainerValues.HasEqContainers == false)
+                return;
+
+            childMerges ??= new Dictionary<uint, uint>();
+            var x = Find(childMerges, a);
+            var y = Find(childMerges, b);
+            if (x == y)
+                return;
+
+            var (kept, displaced) = x < y ? (x, y) : (y, x);
+            if (graph.Engine.ContainerValues.AnyEqContainerMentions(displaced))
+                throw new InvalidOperationException(
+                    $"This merge in '{scope.Path}' displaces class #{displaced}, which a container of classes holds; a child never rebuilds containers, so only the root may merge it (decisions row 9).");
+
+            childMerges[displaced] = kept;
         }
 
         /// <summary>
@@ -155,15 +189,14 @@ namespace Eggnog
             foreach (var table in tables)
             {
                 if (table is FunctionHandle { Lattice: null } function && (function.Merge is null || scope.IsRoot == false)
-                    && (HasSortKey(table) || (function.Merge is not null && table.Output!.Kind == ColumnKind.Sort)))
+                    && (HasSortKey(table) || (function.Merge is not null && table.Output!.InvolvesClasses)))
                 {
                     result.Add(table);
                     AddSortKeys(table, sorts);
 
                     // Classes a function holds become equal through the constructors that reach their sort, which the
                     // check of meeting rows (CheckClassOutputs) and the refusal below the root follow.
-                    if (table.Output!.Kind == ColumnKind.Sort)
-                        sorts.Add(table.Output);
+                    ContainerClassCells.AddSorts(table.Output!, sorts);
                 }
             }
 
@@ -190,25 +223,50 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether a table has a sort among its key columns.
+        /// Gets whether a table has a key column that names classes: a sort, or a container of classes, whose cells a
+        /// merge changes.
         /// </summary>
         static bool HasSortKey(TableHandle table)
         {
             foreach (var column in table.KeyArray)
-                if (column.Kind == ColumnKind.Sort)
+                if (column.InvolvesClasses)
                     return true;
 
             return false;
         }
 
         /// <summary>
-        /// Adds the sorts of a table's key columns to <paramref name="sorts"/>.
+        /// Adds the sorts of a table's key columns, and the sorts their containers hold, to <paramref name="sorts"/>.
         /// </summary>
         static void AddSortKeys(TableHandle table, HashSet<ColumnType> sorts)
         {
             foreach (var column in table.KeyArray)
-                if (column.Kind == ColumnKind.Sort)
-                    sorts.Add(column);
+                ContainerClassCells.AddSorts(column, sorts);
+        }
+
+        /// <summary>
+        /// Gets a cell of <paramref name="column"/> as the rebuild would compare it under <paramref name="find"/>: a
+        /// class's canonical cell; a container of classes as one stand-in cell per canonical content, since the rebuild
+        /// makes containers of one content one container; any other cell as it is.
+        /// </summary>
+        uint CanonicalCell(ColumnType column, uint cell, Func<uint, uint> find)
+        {
+            if (column.Kind == ColumnKind.Sort)
+                return find(cell);
+
+            if (column.HoldsClasses == false)
+                return cell;
+
+            contents ??= new Dictionary<string, uint>(System.StringComparer.Ordinal);
+            var content = ContainerClassCells.CanonicalContent(column, cell, find);
+            if (contents.TryGetValue(content, out var standIn) == false)
+            {
+                // Stand-ins count down from the top of the id space, which a column of containers holds only so.
+                standIn = uint.MaxValue - (uint)contents.Count;
+                contents.Add(content, standIn);
+            }
+
+            return standIn;
         }
 
         /// <summary>
@@ -219,19 +277,36 @@ namespace Eggnog
             var index = mergeRows!.Count;
             mergeRows.Add((table, key, output, stored));
             var columns = table.KeyArray;
+            var classes = new List<uint>();
             for (var i = 0; i < key.Length; i++)
             {
-                if (columns[i].Kind != ColumnKind.Sort)
+                if (columns[i].InvolvesClasses == false)
                     continue;
 
-                UsesOf(Representative(key[i])).Add(index);
-                if (table is FunctionHandle { Merge: not null })
-                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(key[i], table);
+                // A key that is a container is placed again when a class it holds merges.
+                classes.Clear();
+                ContainerClassCells.AppendClasses(columns[i], key[i], classes);
+                foreach (var cell in classes)
+                {
+                    UsesOf(Representative(cell)).Add(index);
+                    if (table is FunctionHandle { Merge: not null })
+                        (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+                }
             }
 
+            // A map of classes keeps the later of two keys that become one, which depends on the order of the rebuild's
+            // passes, so only their replay (CheckClassOutputs) tells where its rows meet and with what.
+            if (RebuildsInOrder(table))
+                rowsRebuildInOrder = true;
+
             // Below the root, a merge of a class a row of such a function outputs would rewrite the row too.
-            if (table is FunctionHandle { Merge: not null } && table.Output!.Kind == ColumnKind.Sort)
-                (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(output, table);
+            if (table is FunctionHandle { Merge: not null } && table.Output!.InvolvesClasses)
+            {
+                classes.Clear();
+                ContainerClassCells.AppendClasses(table.Output, output, classes);
+                foreach (var cell in classes)
+                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+            }
 
             Place(index);
         }
@@ -248,7 +323,7 @@ namespace Eggnog
             var columns = table.KeyArray;
             var canonical = new uint[key.Length];
             for (var i = 0; i < key.Length; i++)
-                canonical[i] = columns[i].Kind == ColumnKind.Sort ? Representative(key[i]) : key[i];
+                canonical[i] = CanonicalCell(columns[i], key[i], Representative);
 
             var signature = Key(table, canonical);
             if (signatures!.TryGetValue(signature, out var other))
@@ -273,6 +348,14 @@ namespace Eggnog
             var b = mergeRows[second];
             if (a.Table.Kind == TableKind.Constructor)
             {
+                // Rows keyed by a map of classes meet as the rebuild's passes make the map, which the closure does not
+                // follow: their merge is the replay's (CheckClassOutputs).
+                if (RebuildsInOrder(a.Table))
+                {
+                    (classOutputs ??= new List<(int, int)>()).Add((first, second));
+                    return;
+                }
+
                 if (Representative(a.Output) != Representative(b.Output))
                     merges!.Enqueue((a.Output, b.Output));
 
@@ -283,8 +366,10 @@ namespace Eggnog
                 return;
 
             // Two classes agree when the rebuild has made them equal by the pass in which the rows meet, which the
-            // check at the end of the planning works out (CheckClassOutputs).
-            if (a.Table.Output!.Kind == ColumnKind.Sort)
+            // check at the end of the planning works out (CheckClassOutputs); so do two containers of classes, which
+            // the rebuild makes one container once their classes are equal. Rows keyed by a map of classes meet as the
+            // passes make the map, which only that check follows.
+            if (a.Table.Output!.InvolvesClasses || rowsRebuildInOrder)
             {
                 (classOutputs ??= new List<(int, int)>()).Add((first, second));
                 return;
@@ -365,12 +450,17 @@ namespace Eggnog
         /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
         void CheckClassOutputs()
         {
-            if (classOutputs is null)
+            if (classOutputs is null && rowsRebuildInOrder == false)
                 return;
 
             var finder = new Dictionary<uint, uint>(direct!);
+            var containers = RowContainers();
             while (true)
             {
+                // Each pass rebuilds the containers first, against the union-find as the pass starts, and merges those
+                // that became equal before the tables compare their rows; a container of containers so merges a pass
+                // after the containers it holds, as the engine's and egglog's do.
+                var mergedContainers = MergeContainers(containers, finder);
                 var placed = new Dictionary<string, int>(System.StringComparer.Ordinal);
                 var found = new List<(uint, uint)>();
                 for (var i = 0; i < mergeRows!.Count; i++)
@@ -379,7 +469,7 @@ namespace Eggnog
                     var columns = row.Table.KeyArray;
                     var canonical = new uint[row.Key.Length];
                     for (var c = 0; c < canonical.Length; c++)
-                        canonical[c] = columns[c].Kind == ColumnKind.Sort ? Find(finder, row.Key[c]) : row.Key[c];
+                        canonical[c] = columns[c].InvolvesClasses ? Find(finder, row.Key[c]) : row.Key[c];
 
                     var signature = Key(row.Table, canonical);
                     if (placed.TryGetValue(signature, out var j) == false)
@@ -388,14 +478,16 @@ namespace Eggnog
                         continue;
                     }
 
-                    // Values never change, so the closure checked them as they met; a function with a merge only the
-                    // root writes never meets a row here, since its key's merge is refused below the root.
-                    if (row.Table.Output!.Kind != ColumnKind.Sort || row.Table is FunctionHandle { Merge: not null })
+                    // A function with a merge only the root writes never meets a row here, since its key's merge is
+                    // refused below the root. A value output is as stored; a class or a container of classes is as the
+                    // passes so far make it.
+                    if (row.Table is FunctionHandle { Merge: not null })
                         continue;
 
                     var other = mergeRows[j];
-                    var x = Find(finder, other.Output);
-                    var y = Find(finder, row.Output);
+                    var output = row.Table.Output!;
+                    var x = output.InvolvesClasses ? Find(finder, other.Output) : other.Output;
+                    var y = output.InvolvesClasses ? Find(finder, row.Output) : row.Output;
                     if (x == y)
                         continue;
 
@@ -406,11 +498,10 @@ namespace Eggnog
                     }
 
                     var (held, incoming) = other.Stored || row.Stored == false ? (other, row) : (row, other);
-                    var output = held.Table.Output!;
                     throw new FactConflictException(held.Table, DecodeKeys(held.Table, held.Key), Decode(output, held.Output), Decode(output, incoming.Output));
                 }
 
-                if (found.Count == 0)
+                if (found.Count == 0 && mergedContainers == false)
                     return;
 
                 foreach (var (a, b) in found)
@@ -418,9 +509,104 @@ namespace Eggnog
                     var x = Find(finder, a);
                     var y = Find(finder, b);
                     if (x != y)
-                        finder[x] = y;
+                        finder[Math.Max(x, y)] = Math.Min(x, y);
                 }
             }
+        }
+
+        /// <summary>
+        /// Gets whether a table has a key or an output whose rebuild depends on the order of the passes: a map of classes
+        /// (<see cref="IContainerColumnType.RebuildsInOrder"/>).
+        /// </summary>
+        static bool RebuildsInOrder(TableHandle table)
+        {
+            foreach (var column in table.Columns)
+                if (column is IContainerColumnType { RebuildsInOrder: true })
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets the containers of classes the rows of the check hold, those inside them too, each with its type and its
+        /// content as stored (<see cref="IContainerColumnType.Content"/>), which each pass of the replay rebuilds.
+        /// </summary>
+        List<(ColumnType Type, uint Cell, long[] Content)> RowContainers()
+        {
+            var result = new List<(ColumnType, uint, long[])>();
+            var seen = new HashSet<uint>();
+            var pending = new Stack<(ColumnType Type, uint Cell)>();
+            foreach (var row in mergeRows!)
+            {
+                var columns = row.Table.KeyArray;
+                for (var c = 0; c < columns.Length; c++)
+                    if (columns[c].HoldsClasses)
+                        pending.Push((columns[c], row.Key[c]));
+
+                if (row.Table.Output!.HoldsClasses)
+                    pending.Push((row.Table.Output, row.Output));
+            }
+
+            while (pending.Count > 0)
+            {
+                var (type, cell) = pending.Pop();
+                if (seen.Add(cell) == false)
+                    continue;
+
+                var container = (IContainerColumnType)type;
+                var elements = new List<(ColumnType Type, uint Cell)>();
+                container.AppendDistinctElements(cell, elements);
+                result.Add((type, cell, container.Content(cell)));
+                foreach (var element in elements)
+                    if (element.Type.HoldsClasses)
+                        pending.Push(element);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Rebuilds the containers' contents against <paramref name="finder"/> as it stands, as a pass of the engine's
+        /// rebuild rebuilds what the passes before left, then merges in it those of one type whose contents are now
+        /// equal, before the pass rebuilds the tables.
+        /// </summary>
+        /// <returns>Whether two containers merged.</returns>
+        static bool MergeContainers(List<(ColumnType Type, uint Cell, long[] Content)> containers, Dictionary<uint, uint> finder)
+        {
+            if (containers.Count == 0)
+                return false;
+
+            // Every content against the union-find as the pass starts, before any of the pass's merges, as the container's
+            // rebuild makes it from the content the last pass left: a map collapses its keys, a multiset adds their counts.
+            var contents = new List<(string Content, uint Cell)>(containers.Count);
+            for (var i = 0; i < containers.Count; i++)
+            {
+                var (type, cell, content) = containers[i];
+                var rebuilt = ((IContainerColumnType)type).Rebuild(content, element => Find(finder, element));
+                containers[i] = (type, cell, rebuilt);
+                contents.Add((type.Name + ":" + string.Join(",", rebuilt), cell));
+            }
+
+            var first = new Dictionary<string, uint>(System.StringComparer.Ordinal);
+            var merged = false;
+            foreach (var (content, cell) in contents)
+            {
+                if (first.TryGetValue(content, out var other) == false)
+                {
+                    first.Add(content, cell);
+                    continue;
+                }
+
+                var x = Find(finder, other);
+                var y = Find(finder, cell);
+                if (x == y)
+                    continue;
+
+                finder[Math.Max(x, y)] = Math.Min(x, y);
+                merged = true;
+            }
+
+            return merged;
         }
 
         /// <summary>

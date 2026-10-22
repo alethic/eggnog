@@ -6,7 +6,7 @@ namespace Eggnog
     /// call into any graph, and such a call throws <see cref="System.InvalidOperationException"/>.
     /// </summary>
     /// <param name="node">The row.</param>
-    /// <returns>The cost, at least 0.</returns>
-    public delegate long NodeCostFunction(NodeView node);
+    /// <returns>The cost.</returns>
+    public delegate ulong NodeCostFunction(NodeView node);
 
 }

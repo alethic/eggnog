@@ -44,16 +44,16 @@ namespace Eggnog.Tests.Predicates.Scoped
             new("without a split, horn and lattice rules alone do not lower a disjunction",
                 (c, s) =>
                 {
-                    s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice", "note")), c.Discriminator.Of("kind"));
+                    s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("order", "invoice", "note")), c.Discriminator.Of("kind"));
                     c.DeclareBranch(s, "kind", "order", c.Form.Of("ref", "uuid-lower"));
                     c.DeclareBranch(s, "kind", "invoice", c.Form.Of("ref", "uuid-lower"));
                 },
                 c => c.And.Of(c.Or.Of(c.StrEq.Of("kind", "order"), c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
-                (c, s, q, p) => q.Get(c.Dom.Of("kind")).Equals(ValueSet.Of("invoice", "order")) && q.Check(c.Form.Of("ref", "uuid-lower")) == false),
+                (c, s, q, p) => q.Get(c.Dom.Of("kind")).Equals(Set.Of("invoice", "order")) && q.Check(c.Form.Of("ref", "uuid-lower")) == false),
             new("a domain less a refused value proves the guard",
                 (c, s) =>
                 {
-                    s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("order", "invoice")));
+                    s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("order", "invoice")));
                     c.DeclareBranch(s, "kind", "order", c.Form.Of("ref", "uuid-lower"));
                 },
                 c => c.And.Of(c.Not.Of(c.StrEq.Of("kind", "invoice")), c.UuidEq.Of("ref", Ref)),
@@ -61,22 +61,22 @@ namespace Eggnog.Tests.Predicates.Scoped
             new("without a split, the branches of an undiscriminated union never meet",
                 (c, s) =>
                 {
-                    s.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(ValueSet.Of("0", "1")), c.Discriminator.Of("$anyOf/0"));
-                    c.DeclareBranch(s, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(ValueSet.Of("active", "archived")));
-                    c.DeclareBranch(s, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(ValueSet.Of("draft", "active")));
+                    s.Assume(c.Present.Of("$anyOf/0"), c.Dom.Of("$anyOf/0").Is(Set.Of("0", "1")), c.Discriminator.Of("$anyOf/0"));
+                    c.DeclareBranch(s, "$anyOf/0", "0", c.Present.Of("legacyId"), c.Dom.Of("status").Is(Set.Of("active", "archived")));
+                    c.DeclareBranch(s, "$anyOf/0", "1", c.Present.Of("id2"), c.Dom.Of("status").Is(Set.Of("draft", "active")));
                 },
                 c => c.StrEq.Of("status", "purged"),
                 (c, s, q, p) => q.IsContradictory == false && q.Extract(p).ToString() == "(StrEq \"status\" \"purged\")"),
             new("a comparison beyond a declared bound is false",
-                (c, s) => s.Assume(c.Types.Of("n").Is(ValueSet.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
+                (c, s) => s.Assume(c.Types.Of("n").Is(Set.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 500L),
                 (c, s, q, p) => q.IsContradictory && s.IsContradictory == false && q.Extract(p).ToString() == "(PFalse)"),
             new("a bound inside the declared range is left alone",
-                (c, s) => s.Assume(c.Types.Of("n").Is(ValueSet.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
+                (c, s) => s.Assume(c.Types.Of("n").Is(Set.Of("number")), c.Lo.Of("n").Is(0L), c.Hi.Of("n").Is(100L)),
                 c => c.NumGt.Of("n", 50L),
                 (c, s, q, p) => q.Get(c.Lo.Of("n")) == 51L && q.Extract(p).ToString() == "(NumGt \"n\" 50)"),
             new("a declared type makes a weakened ordering comparison exact",
-                (c, s) => s.Assume(c.Types.Of("at").Is(ValueSet.Of("string"))),
+                (c, s) => s.Assume(c.Types.Of("at").Is(Set.Of("string"))),
                 Weakened,
                 (c, s, q, p) => q.Extract(p).ToString() == $"(StrGe \"at\" \"{At}\")"),
             new("without a declared type the comparison stays weakened",
@@ -84,21 +84,21 @@ namespace Eggnog.Tests.Predicates.Scoped
                 Weakened,
                 (c, s, q, p) => q.Extract(p).ToString() == $"(And (IsDefined \"at\") (Or (Not (IsString \"at\")) (StrGe \"at\" \"{At}\")))"),
             new("a declared tautology is deleted",
-                (c, s) => s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(ValueSet.Of("A"))),
+                (c, s) => s.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("A"))),
                 c => c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")),
                 (c, s, q, p) => q.Extract(p).ToString() == "(StrEq \"id\" \"x\")"),
             new("without a presence claim the comparison stays",
-                (c, s) => s.Assume(c.Dom.Of("kind").Is(ValueSet.Of("A"))),
+                (c, s) => s.Assume(c.Dom.Of("kind").Is(Set.Of("A"))),
                 c => c.And.Of(c.StrEq.Of("kind", "A"), c.StrEq.Of("id", "x")),
                 (c, s, q, p) => q.Extract(p).ToString() == "(And (StrEq \"kind\" \"A\") (StrEq \"id\" \"x\"))"),
             new("an integer outside a declared domain is false",
-                (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(ValueSet.Of(100L, 200L, 300L))),
+                (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(Set.Of(100L, 200L, 300L))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
                 (c, s, q, p) => q.IsContradictory && q.Extract(p).ToString() == "(PFalse)"),
             new("an integer inside the declared domain is left alone",
-                (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(ValueSet.Of(100L, 500L))),
+                (c, s) => s.Assume(c.Present.Of("n"), c.IDom.Of("n").Is(Set.Of(100L, 500L))),
                 c => c.And.Of(c.NumGt.Of("n", 499L), c.NumLt.Of("n", 501L)),
-                (c, s, q, p) => q.IsContradictory == false && q.Get(c.IDom.Of("n")).Equals(ValueSet.Of(500L))),
+                (c, s, q, p) => q.IsContradictory == false && q.Get(c.IDom.Of("n")).Equals(Set.Of(500L))),
         ];
 
         /// <summary>
