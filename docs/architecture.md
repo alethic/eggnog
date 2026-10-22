@@ -205,7 +205,8 @@ A column holds either a class or a value.
     for their effect (`Fact.Exists`) over a function value's function, keyed by the multiset and an element: the fill
     sets each element's row to its count, in cell order, stopping at the first row there is, a full primitive that
     runs in a naive rule's head or a host write; the clear deletes the rows, a write primitive. A primitive's function
-    value has no rows, which both refuse as egglog panics.
+    value has no rows, for which both have no result, as egglog 3.0.0's, where the pin panics; one with partially
+    applied arguments is refused.
   - A function into `Unit` applies a function of `Unit` output, which has a result where it has a row, or a primitive
     of `Unit`: `Primitives.Fallible(filter)` is egglog's fallible form of a filter primitive, `<` of `bool-<`,
     `set-contains`, `multiset-contains-swapped`, `!=` and so on, with a result where the filter holds; egglog's other

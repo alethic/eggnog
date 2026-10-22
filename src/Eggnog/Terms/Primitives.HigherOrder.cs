@@ -72,8 +72,8 @@ namespace Eggnog
         /// egglog's does (multiset.rs:411-479); returns <c>()</c>, so it is an action run for its effect alone
         /// (<see cref="Fact.Exists"/>). A full primitive, as egglog's: it reads the rows, so it runs in a naive rule's head
         /// (<see cref="RuleBuilder.Naive"/>) or a host write. The function value's function must be a function, keyed by
-        /// the multiset and an element, of an <c>i64</c> output; a primitive's is refused when it runs, as egglog
-        /// panics.
+        /// the multiset and an element, of an <c>i64</c> output, with no partially applied arguments; for a primitive's
+        /// there is no result, as egglog 3.0.0's, where the pin panics.
         /// </summary>
         /// <typeparam name="T">The multiset's element type.</typeparam>
         /// <returns>The primitive, of the multiset and the function value.</returns>

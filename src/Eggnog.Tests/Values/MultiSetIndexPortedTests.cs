@@ -80,9 +80,12 @@ namespace Eggnog.Tests.Values
             var rule = t.DefineFill();
             Assert.Equal("(rule ((= outer (product inner))) ((unstable-multiset-fill-index inner (unstable-fn \"ms-count\"))) :ruleset rules :naive)", rule.ToString());
 
-            // (run 10) (check (= 2 (ms-count $xs (Num 1))))
+            // (run 10) (check (= 2 (ms-count $xs (Num 1)))), and egglog's (print-function ms-count) shows the row of
+            // (Num 3) too, at 1.
             t.Root.Run(Schedule.Repeat(10, Schedule.Run(t.Rules)));
             Assert.True(t.Root.Check(t.Count.Of(t.Xs.Of(), t.Num.Of(1L)).Is(2L)));
+            Assert.True(t.Root.Check(t.Count.Of(t.Xs.Of(), t.Num.Of(3L)).Is(1L)));
+            Assert.Equal(2, t.Root.CountRows(t.Count));
 
             // (union $zz $aa) (run 10) (check (= 2 (ms-count $xs (Num 1)))): the rows are there, so the fill stops.
             t.Root.Union(zz, aa);
@@ -92,6 +95,7 @@ namespace Eggnog.Tests.Values
             // (union (Num 1) (Num 3)) (check (= 3 (ms-count $xs (Num 1)))): the two rows meet, and the merge adds them.
             t.Root.Union(t.Root.Make(t.Num.Of(1L)), t.Root.Make(t.Num.Of(3L)));
             Assert.True(t.Root.Check(t.Count.Of(t.Xs.Of(), t.Num.Of(1L)).Is(3L)));
+            Assert.Equal(1, t.Root.CountRows(t.Count));
 
             // (unstable-multiset-clear-index $xs (unstable-fn "ms-count")) (fail (ms-count $xs (Num 1)))
             t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetClearIndex<Node>().Of(t.Xs.Of(), t.CountFn)));
@@ -116,7 +120,10 @@ namespace Eggnog.Tests.Values
             Assert.True(t.Root.Check(t.Count.Of(t.Xs.Of(), t.Num.Of(1L)).Is(1L)));
         }
 
-
+        /// <summary>
+        /// egglog registers the fill as a full primitive and the clear as a write primitive: a semi-naive head, which
+        /// writes and does not read, takes the clear and refuses the fill; a host write takes both.
+        /// </summary>
         [Fact]
         public void TheFillIsFullAndTheClearIsAWrite()
         {
@@ -139,7 +146,7 @@ namespace Eggnog.Tests.Values
                 r.Then(Fact.Exists(Primitives.UnstableMultiSetClearIndex<Node>().Of(inner, t.CountFn)));
             });
 
-            // A host write fills and clears, and a product made with a read of xs in the term is one class.
+            // A host write fills, a product made with a read of xs in the term is one class, and the rule's run clears.
             t.Root.Assume(t.Xs.Of().Is(Primitives.MultiSetOf<Node>().Of(t.Num.Of(1L), t.Num.Of(1L), t.Num.Of(2L))));
             t.Root.Make(t.Product.Of(t.Xs.Of()));
             t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetFillIndex<Node>().Of(t.Xs.Of(), t.CountFn)));
@@ -149,21 +156,30 @@ namespace Eggnog.Tests.Values
             Assert.Equal(0, t.Root.CountRows(t.Count));
         }
 
+        /// <summary>
+        /// A primitive's function value has no rows: egglog 3.0.0's fill and clear have no result for one
+        /// (src/sort/multiset.rs:518-520, 583-585), where the pin panics, so the action fails. A function value with
+        /// partially applied arguments has no place in rows keyed by the multiset and an element, and is refused.
+        /// </summary>
         [Fact]
         public void APrimitiveHasNoIndex()
         {
-            // egglog panics: "Primitive functions cannot be used with unstable-multiset-fill-index, since they cannot be set".
             var t = new Theory();
             var p = Primitive.Create<long>("p", [typeof(MultiSet<Node>), typeof(Node)], static _ => 0L);
             t.Root.Assume(t.Xs.Of().Is(Primitives.MultiSetOf<Node>().Of(t.Num.Of(1L))));
-            var fill = Assert.ThrowsAny<Exception>(() => t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetFillIndex<Node>().Of(
-                t.Xs.Of(), Primitives.UnstableFn<MultiSet<Node>, Node, long>(p).Of()))));
-            Assert.Contains("cannot be set", fill.ToString(), StringComparison.Ordinal);
-            var clear = Assert.ThrowsAny<Exception>(() => t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetClearIndex<Node>().Of(
-                t.Xs.Of(), Primitives.UnstableFn<MultiSet<Node>, Node, long>(p).Of()))));
-            Assert.Contains("cannot be deleted", clear.ToString(), StringComparison.Ordinal);
+            var ofP = Primitives.UnstableFn<MultiSet<Node>, Node, long>(p).Of();
+            Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetFillIndex<Node>().Of(t.Xs.Of(), ofP))));
+            Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetClearIndex<Node>().Of(t.Xs.Of(), ofP))));
             Assert.False(t.Root.IsFaulted);
+
+            // (function c3 (i64 Maths Math) i64 :no-merge) partially applied to 7.
+            var c3 = t.Graph.DefineFunction<long, MultiSet<Node>, Node, long>("c3");
+            var partial = Primitives.UnstableFn<MultiSet<Node>, Node, long>(c3).Of(7L);
+            var refused = Assert.ThrowsAny<Exception>(() => t.Root.Assume(Fact.Exists(Primitives.UnstableMultiSetFillIndex<Node>().Of(t.Xs.Of(), partial))));
+            Assert.Contains("no partially applied arguments", refused.ToString(), StringComparison.Ordinal);
+            Assert.Equal(0, t.Root.CountRows(c3));
         }
+
     }
 
 }
