@@ -191,7 +191,7 @@ namespace Eggnog
         internal Relations.BaseValues BaseValues { get; }
 
         /// <summary>
-        /// Gets the unit type of relation outputs.
+        /// Gets egglog's <c>Unit</c> sort: the output of relations, and the value type of <see cref="ValueTuple"/>.
         /// </summary>
         internal UnitColumnType Unit { get; }
 

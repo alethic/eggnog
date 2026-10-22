@@ -203,7 +203,8 @@ A column holds either a class or a value.
     `-clear-index`, actions for their effect, are not yet followed (roadmap, "Function values").
   - A function into `Unit` applies a function of `Unit` output, which has a result where it has a row, or a primitive
     of `Unit`: `Primitives.Fallible(filter)` is egglog's fallible form of a filter primitive, `<` of `bool-<`,
-    `set-contains`, `multiset-contains-swapped`, `!=` and so on, with a result where the filter holds.
+    `set-contains`, `multiset-contains-swapped`, `!=` and so on, with a result where the filter holds; egglog's other
+    fallible primitives are `BooleanPrimitives.Guard` (`guard`) and `Primitives.ValueEq` (`value-eq`).
 
 In the engine every cell is a 32-bit `uint`. Classes are ids; small non-negative integers and booleans are stored
 inline; a container (a set, a pair, a vector, a map, a multiset, a function value) is a container id; every other value is interned and stored

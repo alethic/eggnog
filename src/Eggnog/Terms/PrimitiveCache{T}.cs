@@ -122,6 +122,19 @@ namespace Eggnog
         };
 
         /// <summary>
+        /// The equality egglog's <c>value-eq</c> is the fallible form of: of cells, as egglog compares representations.
+        /// </summary>
+        static readonly Primitive<T, T, bool> Same = new("bool-value-eq", static (a, b) => EqualityComparer<T>.Default.Equals(a, b), static (uint a, uint b) => a == b)
+        {
+            FilterName = "value-eq",
+        };
+
+        /// <summary>
+        /// <c>value-eq</c>: a result, <c>()</c>, where the two values are one, none where they differ (src/lib.rs:453).
+        /// </summary>
+        public static readonly Primitive ValueEq = Same.FallibleForm;
+
+        /// <summary>
         /// Gets what an ordering primitive's <c>Function</c> throws: it orders cells, which only a graph has.
         /// </summary>
         static InvalidOperationException CellsOnly(string name) =>

@@ -234,7 +234,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks that a column type belongs to the graph and is a value type extraction sees.
+        /// Checks that a column type belongs to the graph.
         /// </summary>
         void CheckType(ColumnType type)
         {

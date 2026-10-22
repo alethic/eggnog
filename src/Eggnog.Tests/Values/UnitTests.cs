@@ -22,7 +22,9 @@ namespace Eggnog.Tests.Values
             var unit = graph.Values.TypeOf<ValueTuple>();
             Assert.Equal("Unit", unit.Name);
             Assert.Equal("()", unit.Format(default));
-            Assert.Throws<ArgumentException>(() => graph.Values.Register<Pair<long, long>>("Unit"));
+            // (sort Unit) is "Sort Unit already declared." in egglog: the name is the sort's.
+            Assert.Contains("Unit", Assert.Throws<ArgumentException>(() => graph.Values.Register<Guid>("Unit")).Message, StringComparison.Ordinal);
+            Assert.Contains("Unit", Assert.Throws<ArgumentException>(() => graph.DefineSort<Node>("Unit")).Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -119,6 +121,37 @@ namespace Eggnog.Tests.Values
             graph.Root.Run(rules);
             Assert.False(graph.Root.TryGet(hit.Of(2L), out _));
             Assert.Equal(1L, graph.Root.Get(hit.Of(5L)));
+        }
+
+        [Fact]
+        public void GuardAndValueEqAreEgglogsOtherFalliblePrimitives()
+        {
+            // egglog at 5e655cae: (check (= (unstable-app (unstable-fn "guard") true) ()))
+            // (fail (check (= (unstable-app (unstable-fn "guard") false) ()))) (check (= (unstable-app (unstable-fn "value-eq" 1) 1) ()))
+            var graph = new EGraph();
+            Assert.Equal("guard", BooleanPrimitives.Guard.Name);
+            Assert.Equal("value-eq", Primitives.ValueEq<long>().Name);
+            Assert.Same(Primitives.ValueEq<long>(), Primitives.ValueEq<long>());
+            graph.Values.RegisterFn<bool, ValueTuple>();
+            graph.Values.RegisterFn<long, ValueTuple>();
+            var holds = Primitives.UnstableApp<bool, ValueTuple>();
+            var guard = Primitives.UnstableFn<bool, ValueTuple>(BooleanPrimitives.Guard);
+            Assert.True(graph.Root.Check(holds.Of(guard.Of(), true).Is(default(ValueTuple))));
+            Assert.False(graph.Root.Check(holds.Of(guard.Of(), false).Is(default(ValueTuple))));
+            var same = Primitives.UnstableFn<long, ValueTuple>(Primitives.ValueEq<long>());
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, ValueTuple>().Of(same.Of(1L), 1L).Is(default(ValueTuple))));
+            Assert.False(graph.Root.Check(Primitives.UnstableApp<long, ValueTuple>().Of(same.Of(1L), 2L).Is(default(ValueTuple))));
+
+            // Over classes, as a filter: (unstable-multiset-filter (unstable-fn "value-eq" (Num 1)) (multiset-of (Num 1) (Num 2))).
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterMultiSet<Node>();
+            graph.Values.RegisterFn<Node, ValueTuple>();
+            var of = Primitives.MultiSetOf<Node>();
+            var kept = graph.DefineFunction<MultiSet<Node>>("kept");
+            graph.Root.Assume(kept.Of().Is(Primitives.UnstableMultiSetFilter<Node>().Of(
+                Primitives.UnstableFn<Node, ValueTuple>(Primitives.ValueEq<Node>()).Of(num.Of(1L)), of.Of(num.Of(1L), num.Of(2L)))));
+            Assert.True(graph.Root.Check(kept.Of().Is(of.Of(num.Of(1L)))));
         }
 
     }

@@ -4,8 +4,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The unit value type of relation outputs, over <c>UnitCodec</c>, whose single value is the inline cell 0. Not
-    /// reachable through <see cref="ValueStore.TypeOf{T}"/>, and never seen by extraction.
+    /// egglog's <c>Unit</c> sort, of <see cref="ValueTuple"/>, over <c>UnitCodec</c>, whose single value is the inline
+    /// cell 0, rendered <c>()</c>: the output of relations, and of the functions, function sorts and primitives of
+    /// <c>Unit</c> (<see cref="ValueStore.TypeOf{T}"/>).
     /// </summary>
     internal sealed class UnitColumnType : ColumnType<ValueTuple>
     {

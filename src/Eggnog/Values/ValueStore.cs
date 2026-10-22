@@ -14,6 +14,7 @@ namespace Eggnog
     /// <summary>
     /// The column types of one graph, by CLR type. Built in: <c>long</c> "i64", <c>int</c> "i32", <c>bool</c> "bool",
     /// <c>double</c> "f64", <c>string</c> "String", <see cref="BigInteger"/> "BigInt", <see cref="BigRational"/> "BigRat",
+    /// <see cref="ValueTuple"/> "Unit",
     /// <c>Set&lt;string&gt;</c> "Set&lt;String&gt;", <c>Set&lt;long&gt;</c> "Set&lt;i64&gt;" and <c>Set&lt;int&gt;</c>
     /// "Set&lt;i32&gt;". Sorts join through
     /// <see cref="EGraph.DefineSort{TSort}(string)"/>, user types and containers (sets, pairs, vectors, maps, multisets) through
@@ -60,16 +61,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Registers the built-in set types, once the graph's root exists: a set is a container, whose environment the
-        /// graph registers in the root's domain.
-        /// </summary>
-        /// <summary>
         /// Adds egglog's <c>Unit</c> sort, of <see cref="ValueTuple"/>: the output of relations, and of functions, function
         /// sorts and primitives that hold no value, such as egglog's fallible comparisons.
         /// </summary>
         /// <param name="unit">The graph's unit type.</param>
         internal void AddUnit(UnitColumnType unit) => Add(unit);
 
+        /// <summary>
+        /// Registers the built-in set types, once the graph's root exists: a set is a container, whose environment the
+        /// graph registers in the root's domain.
+        /// </summary>
         internal void RegisterBuiltInSets()
         {
             Add(new BaseColumnType<BigRationalCodec, BigRational>("BigRat", values, FormatBigRational, Comparer<BigRational>.Default));

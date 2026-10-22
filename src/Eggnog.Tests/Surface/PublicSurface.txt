@@ -83,6 +83,7 @@ static class Eggnog.BooleanPrimitives
     static Primitive<Boolean, Boolean, Boolean> Implies { get }
     static Primitive<Boolean, Boolean, Boolean> Xor { get }
     static Primitive<Boolean, Boolean> Not { get }
+    static Primitive<Boolean, ValueTuple> Guard { get }
     static VariadicPrimitive<Boolean, Boolean> Or { get }
 sealed class Eggnog.CaseSet : IDisposable
     IReadOnlyList<Scope> Cases { get }
@@ -456,6 +457,7 @@ sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
     Term<TResult> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 static class Eggnog.Primitives
     static Primitive Fallible(Primitive filter)
+    static Primitive ValueEq<T>()
     static Primitive<Int64, Double> ToDouble { get }
     static Primitive<Int64, Int64, Boolean> Equal { get }
     static Primitive<Int64, Int64, Boolean> Greater { get }
