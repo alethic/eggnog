@@ -53,8 +53,20 @@ namespace Eggnog
             if (shape.Kind != TermShapeKind.Application)
                 throw new ArgumentException($"Delete takes a function or constructor application; {term} is not one", nameof(term));
 
-            PlanDelete(shape.Table!, shape.Arguments, nameof(term));
-            PlanFactUnions();
+            try
+            {
+                RebuildFor(shape.Table!, shape.Arguments, deletes: true);
+                if (stopped)
+                    return;
+
+                PlanDelete(shape.Table!, shape.Arguments, nameof(term));
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -77,8 +89,20 @@ namespace Eggnog
                     : new ArgumentException($"Delete(rows) takes relation rows, r.Of(...); {fact} is not one (delete an application with Delete(term))", nameof(fact));
             }
 
-            PlanDelete(relation.Table, relation.Arguments, nameof(fact));
-            PlanFactUnions();
+            try
+            {
+                RebuildFor(relation.Table, relation.Arguments, deletes: true);
+                if (stopped)
+                    return;
+
+                PlanDelete(relation.Table, relation.Arguments, nameof(fact));
+                PlanFactUnions();
+            }
+            catch
+            {
+                UndoFact();
+                throw;
+            }
         }
 
         /// <summary>
@@ -132,9 +156,9 @@ namespace Eggnog
         /// an expression of the batch's merges reads the table.</exception>
         void RemoveRow(TableHandle table, uint[] keys, bool existing)
         {
-            // egglog's next command would delete after the merge's rebuild had moved the rows whose keys it merged, and
-            // the batch stages its merges after its removals.
-            if (mergedClasses && HasSortKey(table))
+            // egglog's next command would delete after the merge's rebuild had moved the rows whose keys it merged; the
+            // batch rebuilds before such a deletion (RebuildFor), but for a rejected batch.
+            if (mergedBeforeFact && HasSortKey(table))
                 throw new InvalidOperationException(
                     $"'{table.Name}' loses a row after this batch merged classes, and its keys are classes; delete it in a later call, which sees the merge as egglog's next command does.");
 
@@ -163,8 +187,17 @@ namespace Eggnog
                 {
                     pending.RemoveAt(index);
                     pendingByKey.Remove(key);
-                    subsumedTerms.Remove(key);
+                    var wasSubsumed = subsumedTerms.Remove(key);
                     factTerms--;
+                    OnUndo(() =>
+                    {
+                        pending.Insert(index, term);
+                        pendingByKey.Add(key, term);
+                        if (wasSubsumed)
+                            subsumedTerms.Add(key);
+
+                        factTerms++;
+                    });
                 }
             }
 
@@ -174,9 +207,20 @@ namespace Eggnog
                 if (ReferenceEquals(written, table) == false || row.AsSpan(0, keys.Length).SequenceEqual(keys) == false)
                     continue;
 
-                rows.RemoveAt(i);
-                rowKeys.Remove(Key(table, row));
+                var index = i;
+                rows.RemoveAt(index);
+                var rowKey = Key(table, row);
+                var hadKey = rowKeys.Remove(rowKey);
                 factRows--;
+                OnUndo(() =>
+                {
+                    rows.Insert(index, (written, row));
+                    if (hadKey)
+                        rowKeys.Add(rowKey);
+
+                    factRows++;
+                });
+
                 if (table.Kind == TableKind.Constructor && TryStored(table, keys, out var stored) && stored != row[^1])
                     PlanUnionCore(stored, row[^1]);
             }
@@ -187,14 +231,23 @@ namespace Eggnog
                 if (ReferenceEquals(subsumed, table) == false || row.AsSpan(0, keys.Length).SequenceEqual(keys) == false)
                     continue;
 
-                subsumes.RemoveAt(i);
-                subsumeKeys.Remove(Key(table, row));
+                var index = i;
+                subsumes.RemoveAt(index);
+                var rowKey = Key(table, row);
+                subsumeKeys.Remove(rowKey);
                 factSubsumes--;
+                OnUndo(() =>
+                {
+                    subsumes.Insert(index, (subsumed, row));
+                    subsumeKeys.Add(rowKey);
+                    factSubsumes++;
+                });
             }
 
-            functionValues.Remove(key);
-            currentValues.Remove(key);
-            unknownValues?.Remove(key);
+            RemoveValue(functionValues, key);
+            RemoveValue(currentValues, key);
+            if (unknownValues is not null && unknownValues.Remove(key))
+                OnUndo(() => unknownValues.Add(key));
         }
 
         /// <summary>

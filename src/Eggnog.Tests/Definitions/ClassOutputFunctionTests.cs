@@ -73,8 +73,9 @@ namespace Eggnog.Tests.Definitions
 
         /// <summary>
         /// A union that makes two keys equal leaves one row when their classes are equal, and is a conflict when they
-        /// differ, as egglog's assert-equal merge panics; the batch refuses it before anything is written. A union of
-        /// the two classes in the same batch makes them agree.
+        /// differ, as egglog's assert-equal merge panics; the batch refuses it before anything is written. A later union
+        /// of the two classes in the same batch is egglog's next command, which does not save it: (union (A) (B)) fails,
+        /// (union (Lit 1) (Lit 2)) stands.
         /// </summary>
         [Fact]
         public void AUnionOfKeysNeedsTheirClassesEqual()
@@ -93,11 +94,17 @@ namespace Eggnog.Tests.Definitions
 
             t.Root.Write(w =>
             {
-                w.Union(a, b);
+                Assert.Throws<FactConflictException>(() => w.Union(a, b));
                 w.Union(one, two);
             });
-            Assert.Equal(1, t.Root.CountRows(f));
+            Assert.False(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(one, two));
+            Assert.Equal(2, t.Root.CountRows(f));
             Assert.False(t.Root.IsFaulted);
+
+            // With the classes one, the union of the keys leaves one row.
+            t.Root.Union(a, b);
+            Assert.Equal(1, t.Root.CountRows(f));
         }
 
         /// <summary>
@@ -203,21 +210,23 @@ namespace Eggnog.Tests.Definitions
         }
 
         [Fact]
-        public void ABatchCannotWriteAClassAfterItMergedClasses()
+        public void ABatchWritesAClassAfterItMergedClasses()
         {
+            // (union (A) (B)) (set (f 1) (A)) (check (= (f 1) (B))): the write comes after the union's rebuild, as egglog's
+            // next command does.
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, Node>("f");
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
 
-            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            t.Root.Write(w =>
             {
                 w.Union(a, b);
                 w.Assume(f.Of(1L).Is(t.A.Of()));
-            }));
+            });
 
-            Assert.Contains("write it in a later call", e.Message, StringComparison.Ordinal);
-            Assert.Equal(0, t.Root.CountRows(f));
+            Assert.True(t.Root.AreEqual(t.Root.Get(f.Of(1L)), t.B.Of()));
+            Assert.Equal(1, t.Root.CountRows(f));
 
             // New and Old compare no classes, so the batch may write them after its merges.
             var newest = t.Graph.DefineFunction<long, Node>("newest", FunctionMerge.New<Node>());
@@ -227,6 +236,30 @@ namespace Eggnog.Tests.Definitions
                 w.Assume(newest.Of(1L).Is(t.A.Of()));
             });
             Assert.True(t.Root.AreEqual(t.Root.Get(newest.Of(1L)), t.B.Of()));
+        }
+
+        [Fact]
+        public void ACallThatNeedsAnEarlierMergeComesAfterTheBatchFlushesIt()
+        {
+            // egglog runs a write's calls as commands, each after the last one's rebuild: the write of f, which holds
+            // classes, comes after the batch flushes the union; a later call that fails writes nothing, and the calls
+            // before it stand.
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, Node>("f");
+            var g = t.Graph.DefineFunction<long, long>("g");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+
+            Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            {
+                w.Union(a, b);
+                w.Assume(f.Of(1L).Is(t.A.Of()));
+                w.Assume(g.Of(1L).Is(g.Of(2L)));
+            }));
+
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(t.Root.Get(f.Of(1L)), b));
+            Assert.Equal(0, t.Root.CountRows(g));
         }
 
         [Fact]

@@ -93,6 +93,9 @@ namespace Eggnog
         public override bool CanSimulate => tables.Length == 0 && callsTablePrimitive == false;
 
         /// <inheritdoc />
+        public override bool WritesTables => callsTablePrimitive;
+
+        /// <inheritdoc />
         public override IReadOnlyCollection<TableHandle> Tables => tables;
 
         /// <inheritdoc />

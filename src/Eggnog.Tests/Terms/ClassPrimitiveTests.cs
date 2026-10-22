@@ -211,26 +211,23 @@ namespace Eggnog.Tests.Terms
         }
 
         /// <summary>
-        /// A batch stages its unions after its writes, so after it merges classes it refuses a computation over classes,
-        /// which egglog's next command would make after the merge; a later call does.
+        /// A computation over classes after the batch merged classes sees the merge, as egglog's next command does after
+        /// the union's rebuild.
         /// </summary>
         [Fact]
-        public void ABatchCannotComputeOverClassesAfterItMergedClasses()
+        public void ABatchComputesOverClassesAfterItMergedClasses()
         {
             var t = new NodeTheory();
             var flag = t.Graph.DefineFunction<string, bool>("flag");
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
 
-            var e = Assert.Throws<InvalidOperationException>(() => t.Root.Write(w =>
+            t.Root.Write(w =>
             {
                 w.Union(a, b);
                 w.Assume(flag.Of("k").Is(Primitives.NotEqual<Node>().Of(a, b)));
-            }));
+            });
 
-            Assert.Contains("compute it in a later call", e.Message, StringComparison.Ordinal);
-            t.Root.Union(a, b);
-            t.Root.Assume(flag.Of("k").Is(Primitives.NotEqual<Node>().Of(a, b)));
             Assert.False(t.Root.Get(flag.Of("k")));
         }
 

@@ -102,8 +102,8 @@ namespace Eggnog.Tests.Values
 
         /// <summary>
         /// A batch works out an expression of primitives itself, so two writes in one batch fold and a later read sees the
-        /// merged value; an expression that calls tables only the engine evaluates, so the batch stages each write as it
-        /// comes and refuses a later read of the key, which a later call can make.
+        /// merged value; an expression that calls tables only the engine evaluates, so a later read of the key sees it after
+        /// the batch flushes, as egglog's next command does: (set (total "k") 1) (set (copy "total") (total "k")) gives 30.
         /// </summary>
         [Fact]
         public void ABatchSimulatesAnExpressionOfPrimitivesAndStagesOneThatCallsTables()
@@ -121,19 +121,19 @@ namespace Eggnog.Tests.Values
             graph.Root.Assume(weight.Of(1L).Is(10L), total.Of("k").Is(0L));
             graph.Root.Assume(total.Of("k").Is(1L), total.Of("k").Is(1L));
             Assert.Equal(20L, graph.Root.Get(total.Of("k")));
-            var e = Assert.Throws<InvalidOperationException>(() => graph.Root.Assume(total.Of("k").Is(1L), copy.Of("total").Is(total.Of("k"))));
-            Assert.Contains("read it in a later call", e.Message, StringComparison.Ordinal);
-            Assert.Equal(20L, graph.Root.Get(total.Of("k")));
+            graph.Root.Assume(total.Of("k").Is(1L), copy.Of("total").Is(total.Of("k")));
+            Assert.Equal(30L, graph.Root.Get(total.Of("k")));
+            Assert.Equal(30L, graph.Root.Get(copy.Of("total")));
         }
 
         /// <summary>
         /// The flush merges a table an expression reads before the expression, so a later write of that table in the
-        /// batch would reach the earlier write's merge, which egglog's commands, one after the other, do not let it; and
-        /// a merge of classes earlier in the batch would not have reached the expression's classes yet. Both orders are
-        /// refused; separate calls give egglog's result.
+        /// batch, or a merge of classes before the expression's write, comes after the batch flushes what it planned, as
+        /// egglog's commands, one after the other, run: (set (total "k") 4) (set (weight 4) 40) leaves 11, and (union (A)
+        /// (B)) (set (joined "k") (B)) leaves (A), which the new value equals, so the merge does not run.
         /// </summary>
         [Fact]
-        public void ABatchRefusesWhatTheFlushWouldReorderForAnExpression()
+        public void ABatchKeepsEgglogsOrderForAnExpression()
         {
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight", ValueLattice.Max<long>());
@@ -141,14 +141,13 @@ namespace Eggnog.Tests.Values
             var joined = t.Graph.DefineFunction<string, Node>("joined", FunctionMerge.Expression<Node>((old, @new) => t.Add.Of(old, @new)));
             t.Root.Assume(weight.Of(4L).Is(10L), total.Of("k").Is(1L), joined.Of("k").Is(t.A.Of()));
 
-            var later = Assert.Throws<InvalidOperationException>(() => t.Root.Assume(total.Of("k").Is(4L), weight.Of(4L).Is(40L)));
-            var merged = Assert.Throws<InvalidOperationException>(() => t.Root.Assume(t.A.Of().Is(t.B.Of()), joined.Of("k").Is(t.B.Of())));
+            t.Root.Assume(total.Of("k").Is(4L), weight.Of(4L).Is(40L));
+            t.Root.Assume(t.A.Of().Is(t.B.Of()), joined.Of("k").Is(t.B.Of()));
 
-            Assert.Contains("whose merge (+ old (weight new)) reads it", later.Message, StringComparison.Ordinal);
-            Assert.Contains("after this batch merged classes", merged.Message, StringComparison.Ordinal);
-            t.Root.Assume(total.Of("k").Is(4L));
-            t.Root.Assume(weight.Of(4L).Is(40L));
             Assert.Equal(11L, t.Root.Get(total.Of("k")));
+            Assert.Equal(40L, t.Root.Get(weight.Of(4L)));
+            Assert.True(t.Root.AreEqual(t.Root.Get(joined.Of("k")), t.A.Of()));
+            Assert.Equal(0L, t.Root.CountRows(t.Add));
         }
 
         /// <summary>

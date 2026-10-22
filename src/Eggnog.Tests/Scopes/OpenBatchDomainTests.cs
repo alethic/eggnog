@@ -63,6 +63,31 @@ namespace Eggnog.Tests.Scopes
         }
 
         [Fact]
+        public void ABatchDoesNotFlushWhileAScopeUnderItHasABatchOpen()
+        {
+            // A call that needs the batch's union rebuilt flushes it, which would change what the child's open batch
+            // was checked against: it is refused, as a write of the root itself is then.
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, Node>("f");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var child = t.Root.CreateChild();
+            t.Root.Write(w =>
+            {
+                w.Union(a, b);
+                child.Write(cw =>
+                {
+                    cw.Assume(t.Num.Of(1L));
+                    var refused = Assert.Throws<InvalidOperationException>(() => w.Assume(f.Of(1L).Is(t.A.Of())));
+                    Assert.Contains("has a Write batch open", refused.Message, StringComparison.Ordinal);
+                });
+            });
+
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.Equal(0, t.Root.CountRows(f));
+        }
+
+        [Fact]
         public void AncestorsAcceptWritesAgainOnceTheBatchEndsEvenWhenItsCallbackThrew()
         {
             var t = new NodeTheory();
@@ -80,8 +105,8 @@ namespace Eggnog.Tests.Scopes
             inner.Write(w => w.Assume(t.Num.Of(4L)));
             outer.Assume(t.Num.Of(5L));
 
-            Assert.False(inner.Check(t.Num.Of(1L)));
-            Assert.Equal(4, inner.CountRows(t.Num));
+            Assert.True(inner.Check(t.Num.Of(1L)));
+            Assert.Equal(5, inner.CountRows(t.Num));
         }
 
         [Fact]

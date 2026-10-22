@@ -118,10 +118,11 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// A write batch whose <c>Make</c> runs out of ids writes nothing, and leaves the scope unfaulted.
+        /// A <c>Make</c> that runs out of ids writes nothing and leaves the scope unfaulted; the batch's calls before it
+        /// stand.
         /// </summary>
         [Fact]
-        public void AWriteBatchThatRunsOutOfIdsWritesNothing()
+        public void AMakeThatRunsOutOfIdsWritesNothing()
         {
             var t = new NodeTheory();
             t.Root.Freeze();
@@ -135,7 +136,8 @@ namespace Eggnog.Tests.Graph
             }));
 
             Assert.False(scope.IsFaulted);
-            Assert.False(scope.Check(t.Num.Of(1)));
+            Assert.True(scope.Check(t.Num.Of(1)));
+            Assert.False(scope.Check(Fact.Exists(t.A.Of())));
         }
 
         /// <summary>

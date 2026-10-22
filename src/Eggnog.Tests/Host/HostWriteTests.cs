@@ -9,16 +9,18 @@ namespace Eggnog.Tests.Host
 {
 
     /// <summary>
-    /// Host write batches: atomic (a batch whose callback throws or whose call is rejected writes nothing, and the
-    /// classes its <c>Make</c> calls returned are invalid), canonical, checked against functions without a lattice,
-    /// confined to the thread that holds the scope's guard, and silent when nothing changes.
+    /// Host write batches: egglog's commands one after the other (a fact that fails writes nothing, and the others stand;
+    /// a batch rejected for a call from another thread writes nothing more, and the classes its <c>Make</c> calls
+    /// returned are invalid), canonical, checked against functions without a lattice, confined to the thread that holds
+    /// the scope's guard, and silent when nothing changes.
     /// </summary>
     public sealed class HostWriteTests
     {
 
         [Fact]
-        public void ARejectedFactWritesNothing()
+        public void ARejectedFactWritesNothingAndTheFactsBeforeItStand()
         {
+            // egglog's commands: (num 1) stands though the next one fails, and so do (num 2) and (tag (A)).
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
             t.Root.Assume(f.Of("k").Is(1L));
@@ -27,10 +29,11 @@ namespace Eggnog.Tests.Host
             Assert.Throws<ArgumentException>(() => t.Root.Assume(t.Num.Of(1L), ((Term<long>)1L).IsNot(2L)));
             Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(2L), t.Tag.Of(t.A.Of()), f.Of("k").Is(5L)));
 
-            Assert.False(t.Root.Check(t.Num.Of(1L)));
-            Assert.False(t.Root.Check(t.Num.Of(2L)));
-            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
-            Assert.Equal(version, t.Root.Version);
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.Check(t.Num.Of(2L)));
+            Assert.True(t.Root.Check(t.Tag.Of(t.A.Of())));
+            Assert.Equal(1L, t.Root.Get(f.Of("k")));
+            Assert.NotEqual(version, t.Root.Version);
         }
 
         [Fact]
@@ -92,7 +95,7 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void AThrowInsideWriteWritesNothing()
+        public void AThrowInsideWritePropagatesOnceTheCallsBeforeItAreWritten()
         {
             var t = new NodeTheory();
             var version = t.Root.Version;
@@ -105,9 +108,9 @@ namespace Eggnog.Tests.Host
                 throw new InvalidOperationException("abandon");
             }));
 
-            Assert.False(t.Root.Check(t.Num.Of(1L)));
-            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
-            Assert.Equal(version, t.Root.Version);
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.Check(Fact.Exists(t.A.Of())));
+            Assert.NotEqual(version, t.Root.Version);
             Assert.Throws<ObjectDisposedException>(() => kept!.Assume(t.Num.Of(2L)));
         }
 
@@ -154,7 +157,7 @@ namespace Eggnog.Tests.Host
             Assert.Equal(new object[] { "j" }, e.Key);
             Assert.Equal(1L, e.StoredValue);
             Assert.Equal(2L, e.NewValue);
-            Assert.False(t.Root.TryGet(f.Of("j"), out _));
+            Assert.Equal(1L, t.Root.Get(f.Of("j")));
         }
 
         [Fact]
@@ -216,15 +219,16 @@ namespace Eggnog.Tests.Host
             var b = t.Root.Make(t.B.Of());
             t.Root.Assume(size.Of(a).Is(1L));
 
+            // (union a b) stands; (set (size b) 2) then meets size(a) = 1.
             Assert.Throws<FactConflictException>(() => t.Root.Write(w =>
             {
                 w.Union(a, b);
                 w.Assume(size.Of(b).Is(2L));
             }));
-            Assert.False(t.Root.AreEqual(a, b));
-            Assert.False(t.Root.TryGet(size.Of(b), out _));
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.Equal(1L, t.Root.Get(size.Of(b)));
 
-            // The same value is no conflict: the batch commits.
+            // The same value is no conflict.
             t.Root.Write(w =>
             {
                 w.Union(a, b);
@@ -235,14 +239,13 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void ARejectedCallRejectsItsWholeBatch()
+        public void ACallThatFailsWritesNothingAndTheOtherCallsStand()
         {
             var t = new NodeTheory();
             var size = t.Graph.DefineFunction<Node, long>("size");
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
             t.Root.Assume(size.Of(a).Is(1L), size.Of(b).Is(2L));
-            var version = t.Root.Version;
             var made = default(Node);
 
             t.Root.Write(w =>
@@ -253,10 +256,105 @@ namespace Eggnog.Tests.Host
                 w.Assume(t.Num.Of(2L));
             });
 
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.Check(t.Num.Of(2L)));
+            Assert.True(t.Root.AreEqual(made, t.Wrap.Of(a)));
+            Assert.False(t.Root.AreEqual(a, b));
+            Assert.False(t.Root.IsFaulted);
+        }
+
+        [Fact]
+        public void AFailedFactLeavesEveryFactBeforeItWhereverTheBatchFlushed()
+        {
+            // egglog keeps (num 1), the union, (set (f 1) (A)), whose write came after the batch flushed the union, and
+            // (num 2) when (set (g 1) (g 2)) fails.
+            var t = new NodeTheory();
+            var f = t.Graph.DefineFunction<long, Node>("f");
+            var g = t.Graph.DefineFunction<long, long>("g");
+
+            Assert.Throws<InvalidOperationException>(() => t.Root.Assume(
+                t.Num.Of(1L), t.A.Of().Is(t.B.Of()), f.Of(1L).Is(t.A.Of()), t.Num.Of(2L), g.Of(1L).Is(g.Of(2L))));
+
+            Assert.True(t.Root.Check(t.Num.Of(1L), t.Num.Of(2L)));
+            Assert.True(t.Root.AreEqual(t.Root.Make(t.A.Of()), t.B.Of()));
+            Assert.True(t.Root.AreEqual(t.Root.Get(f.Of(1L)), t.B.Of()));
+            Assert.Equal(0, t.Root.CountRows(g));
+        }
+
+        [Fact]
+        public void AConflictOfClassesFailsTheFactWhoseUnionMadeIt()
+        {
+            // (set (fo (A)) c) (set (fo (B)) d) (union (A) (B)): egglog's rebuild after the union finds two classes for one
+            // key and the command fails; the facts before it stand, and a later union that would make c and d one does
+            // not save it.
+            var t = new NodeTheory();
+            var fo = t.Graph.DefineFunction<Node, Node>("fo");
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var c = t.Root.Make(t.Lit.Of(3L));
+            var d = t.Root.Make(t.Lit.Of(4L));
+            t.Root.Assume(fo.Of(a).Is(c), fo.Of(b).Is(d));
+
+            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(1L), t.A.Of().Is(t.B.Of()), t.Num.Of(2L)));
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
+            Assert.False(t.Root.AreEqual(a, b));
+
+            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.A.Of().Is(t.B.Of()), t.Lit.Of(3L).Is(t.Lit.Of(4L))));
+            Assert.False(t.Root.AreEqual(a, b));
+            Assert.False(t.Root.AreEqual(c, d));
+
+            t.Root.Write(w =>
+            {
+                w.Assume(t.Num.Of(3L));
+                Assert.Throws<FactConflictException>(() => w.Union(a, b));
+                w.Assume(t.Num.Of(4L));
+            });
+            Assert.True(t.Root.Check(t.Num.Of(3L), t.Num.Of(4L)));
+            Assert.False(t.Root.AreEqual(a, b));
+            Assert.Equal(2, t.Root.CountRows(fo));
+        }
+
+        [Fact]
+        public void AFlushThatFailsLeavesTheBatchNothingMoreToWrite()
+        {
+            // A write of weight, which the earlier write's merge expression reads, flushes the batch first; the merge's
+            // lookup of (weight 5) has no row, so the flush fails and faults the scope, and the batch writes nothing more.
+            var t = new NodeTheory();
+            var weight = t.Graph.DefineFunction<long, long>("weight");
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            t.Root.Assume(total.Of("k").Is(0L));
+
+            t.Root.Write(w =>
+            {
+                w.Assume(t.Num.Of(1L));
+                w.Assume(total.Of("k").Is(5L));
+                Assert.Throws<RuleEvaluationException>(() => w.Assume(weight.Of(5L).Is(1L)));
+                w.Assume(t.Num.Of(2L));
+                w.Assume(weight.Of(6L).Is(1L));
+            });
+
+            Assert.True(t.Root.IsFaulted);
+        }
+
+        [Fact]
+        public void ARejectedBatchWritesNothingMore()
+        {
+            var t = new NodeTheory();
+            var version = t.Root.Version;
+            var made = default(Node);
+
+            t.Root.Write(w =>
+            {
+                made = w.Make(t.Wrap.Of(t.A.Of()));
+                w.Assume(t.Num.Of(1L));
+                BatchRejection.FromAnotherThread(w, t.Num.Of(3L));
+                w.Assume(t.Num.Of(2L));
+            });
+
             Assert.Equal(version, t.Root.Version);
             Assert.False(t.Root.Check(t.Num.Of(1L)));
             Assert.False(t.Root.Check(t.Num.Of(2L)));
-            Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(a))));
+            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
             Assert.Contains("did not commit", Assert.Throws<ArgumentException>(() => t.Root.Find(made)).Message);
             Assert.False(t.Root.IsFaulted);
         }
@@ -387,11 +485,11 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// If the write callback throws or a call is rejected, nothing is written: a rejected call whose exception the
-        /// callback catches still leaves the batch unwritten, and the version where it was.
+        /// A call that fails and whose exception the callback catches writes nothing of its own failing fact: the facts
+        /// before it, in that call and earlier ones, stand, as egglog's commands do.
         /// </summary>
         [Fact]
-        public void AWriteWithARejectedCallWritesNothingEvenWhenTheCallbackCatches()
+        public void AFailedCallTheCallbackCatchesLeavesTheFactsBeforeIt()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
@@ -410,17 +508,18 @@ namespace Eggnog.Tests.Host
                 }
             });
 
-            Assert.False(t.Root.Check(t.Num.Of(7L)));
-            Assert.False(t.Root.Check(t.Num.Of(8L)));
-            Assert.Equal(version, t.Root.Version);
+            Assert.True(t.Root.Check(t.Num.Of(7L)));
+            Assert.True(t.Root.Check(t.Num.Of(8L)));
+            Assert.Equal(1L, t.Root.Get(f.Of("k")));
+            Assert.NotEqual(version, t.Root.Version);
         }
 
         /// <summary>
-        /// Nothing is written when a fact fails: inside a <c>Write</c>, a rejected call leaves none of the facts it
-        /// planned before the failing one.
+        /// Inside a <c>Write</c>, a call that fails at its second fact keeps its first, egglog's command before the failed
+        /// one, and writes nothing of the second.
         /// </summary>
         [Fact]
-        public void ARejectedCallInsideWriteLeavesNoPartOfItself()
+        public void AFailedCallInsideWriteKeepsTheFactsBeforeTheFailedOne()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
@@ -436,7 +535,8 @@ namespace Eggnog.Tests.Host
                 }
             });
 
-            Assert.False(t.Root.Check(t.Num.Of(8L)));
+            Assert.True(t.Root.Check(t.Num.Of(8L)));
+            Assert.Equal(1L, t.Root.Get(f.Of("k")));
         }
 
         /// <summary>
@@ -545,15 +645,14 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// A rejected call that the write delegate catches still leaves the whole batch unwritten: its earlier fact and
-        /// term are not written, the version does not move, and the class its <c>Make</c> returned is invalid.
+        /// A failed call that the write delegate catches leaves the batch's other calls: its earlier fact and term are
+        /// written, and the class its <c>Make</c> returned is valid.
         /// </summary>
         [Fact]
-        public void ARejectedCallThatTheWriteDelegateCatchesStillWritesNothing()
+        public void AFailedCallThatTheWriteDelegateCatchesLeavesTheOtherCalls()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
-            var version = t.Root.Version;
             var made = default(Node);
             t.Root.Write(w =>
             {
@@ -565,21 +664,20 @@ namespace Eggnog.Tests.Host
                 }
                 catch (InvalidOperationException)
                 {
-                    // The call was rejected; the batch must write nothing.
+                    // (f 1) has no value: the call writes nothing.
                 }
             });
 
-            Assert.False(t.Root.Check(t.Num.Of(5L)));
-            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
-            Assert.Equal(version, t.Root.Version);
-            Assert.Throws<ArgumentException>(() => t.Root.Find(made));
+            Assert.True(t.Root.Check(t.Num.Of(5L)));
+            Assert.True(t.Root.AreEqual(t.Root.Find(made), t.A.Of()));
+            Assert.Equal(0, t.Root.CountRows(f));
         }
 
         /// <summary>
-        /// A conflict rejected inside a <c>Write</c> and caught there leaves the batch's earlier value unwritten too.
+        /// A conflict inside a <c>Write</c> and caught there leaves the batch's earlier value written.
         /// </summary>
         [Fact]
-        public void ARejectedConflictCaughtInsideWriteStillWritesNothing()
+        public void AConflictCaughtInsideWriteLeavesTheEarlierValue()
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, long>("f");
@@ -592,11 +690,11 @@ namespace Eggnog.Tests.Host
                 }
                 catch (FactConflictException)
                 {
-                    // Rejected.
+                    // The call writes nothing.
                 }
             });
 
-            Assert.False(t.Root.TryGet(f.Of("k"), out _));
+            Assert.Equal(1L, t.Root.Get(f.Of("k")));
         }
 
         /// <summary>

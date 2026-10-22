@@ -67,7 +67,7 @@ namespace Eggnog
             var keys = string.Join(" ", key.Select((k, i) => Format(table.Keys, i, k)));
             var stored = Format(table.Output, storedValue);
             var written = Format(table.Output, newValue);
-            return $"Function '{table.Name}' has no lattice and already holds {stored} at ({table.Name}{(keys.Length > 0 ? " " + keys : "")}); {written} conflicts with it. Nothing was written.";
+            return $"Function '{table.Name}' has no lattice and already holds {stored} at ({table.Name}{(keys.Length > 0 ? " " + keys : "")}); {written} conflicts with it. The fact was not written.";
         }
 
         /// <summary>

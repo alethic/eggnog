@@ -424,6 +424,11 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets whether a scope under this one has a <see cref="Write"/> batch open, whose plan a write here would change.
+        /// </summary>
+        internal bool HasBatchBelow => batchesBelow > 0;
+
+        /// <summary>
         /// Counts a <see cref="Write"/> batch opened (<paramref name="delta"/> 1) or ended (-1) on this scope in each of its
         /// writable ancestors, which share its thread domain and refuse writes and runs while their count is positive.
         /// Called on the domain's thread, with its guard held. Cost: one increment per writable ancestor; none at the

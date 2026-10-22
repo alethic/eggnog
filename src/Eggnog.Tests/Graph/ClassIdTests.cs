@@ -57,16 +57,16 @@ namespace Eggnog.Tests.Graph
         }
 
         [Fact]
-        public void AWriteThatThrowsLeavesTheValuesItsMakeReturnedUnusable()
+        public void ARejectedWriteLeavesTheValuesItsMakeReturnedUnusable()
         {
             var t = new NodeTheory();
             var root = t.Graph.Root;
             var made = default(Node);
-            Assert.Throws<InvalidOperationException>(() => root.Write(w =>
+            root.Write(w =>
             {
                 made = w.Make(t.A.Of());
-                throw new InvalidOperationException("abandon the batch");
-            }));
+                BatchRejection.FromAnotherThread(w, t.Num.Of(1L));
+            });
 
             Assert.False(made.Id.IsDefault);
             var e = Assert.Throws<ArgumentException>(() => root.Find(made));
@@ -233,8 +233,8 @@ namespace Eggnog.Tests.Graph
         }
 
         /// <summary>
-        /// A value made by a batch whose call was rejected is invalid afterwards: nothing of the batch is written, its
-        /// <c>Make</c> calls included.
+        /// A value made by a batch whose call was rejected, from another thread, is invalid afterwards: nothing of the
+        /// batch is written, its <c>Make</c> calls included. A call that only fails leaves the value valid.
         /// </summary>
         [Fact]
         public void AMakeOfABatchWithARejectedCallIsInvalidAfterwards()
@@ -243,9 +243,10 @@ namespace Eggnog.Tests.Graph
             var f = t.Graph.DefineFunction<string, long>("f");
             t.Root.Assume(f.Of("k").Is(1L));
             var made = default(Node);
+            var kept = default(Node);
             t.Root.Write(w =>
             {
-                made = w.Make(t.A.Of());
+                kept = w.Make(t.B.Of());
                 try
                 {
                     w.Assume(f.Of("k").Is(2L));
@@ -254,7 +255,13 @@ namespace Eggnog.Tests.Graph
                 {
                 }
             });
+            t.Root.Write(w =>
+            {
+                made = w.Make(t.A.Of());
+                BatchRejection.FromAnotherThread(w, t.Num.Of(1L));
+            });
 
+            Assert.True(t.Root.AreEqual(t.Root.Find(kept), t.B.Of()));
             Assert.Throws<ArgumentException>(() => t.Root.Find(made));
         }
 
