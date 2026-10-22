@@ -10,8 +10,9 @@ namespace Eggnog
     /// roots. Reads, queries and
     /// writes that change nothing never invalidate it; a write that changes the scope, or a run in it or in a writable
     /// ancestor, may, and it then throws <see cref="InvalidOperationException"/>; so does a constructor defined after the
-    /// extractor once it has rows that extraction may use. Staleness ignores the clock. Ties are broken by content, so a
-    /// serial graph extracts deterministically. Terms of any depth extract: nothing recurses once per level.
+    /// extractor once it has rows that extraction may use. Staleness ignores the clock. Ties are broken as egglog's
+    /// extractor breaks them, by the order in which its passes meet the rows, so a serial graph extracts
+    /// deterministically. Terms of any depth extract: nothing recurses once per level.
     /// </summary>
     /// <remarks>
     /// On a writable scope, a call takes the scope's thread domain: from another thread while the scope is in use it
@@ -119,15 +120,13 @@ namespace Eggnog
         /// Extracts up to <paramref name="count"/> variants of a class, cheapest first: egglog's <c>(extract x n)</c>.
         /// A variant is one node of the class with the cheapest terms of its arguments. Only the nodes extraction may
         /// use are variants: not subsumed, with an extractable head and a finite term for each argument. They are
-        /// ordered by cost and then by content, except that the node <see cref="Extract{TSort}"/> chooses comes first,
-        /// so the first variant is the term it gives.
+        /// ordered as egglog orders them: by cost, then by the head's name, then by the row's cells. So the first
+        /// variant costs what <see cref="Extract{TSort}"/>'s term costs, but where costs tie it may be another node.
         /// </summary>
         /// <remarks>
         /// Each variant's <see cref="ExtractedTerm.Cost"/> is its own, and every variant's
         /// <see cref="ExtractedTerm.Class"/> is the class. Below the variants, shared subterms are one instance across
-        /// them all. Variants of equal cost follow content order (constructor declaration order, then arguments), where
-        /// egglog orders them by head name and then row values; the node <see cref="Extract{TSort}"/> chooses leads
-        /// even where zero costs let it choose a node later in that order.
+        /// them all.
         /// </remarks>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="root">The class.</param>

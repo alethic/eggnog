@@ -226,12 +226,12 @@ namespace Eggnog.Relations.Tests
         }
 
         [Fact]
-        public void ReplaysFollowTheChoicesBelowAClass()
+        public void AWarmedExtractorAnswersAsAFreshOne()
         {
-            // All costs 0; declared N < Cn < P < Qleaf < Dleaf. X = { N(C), P(Q) }, C = { Cn(D) }, D = { Dleaf },
-            // Q = { Qleaf }. From scratch: Qleaf pops before Dleaf, so P(Q) is queued and pops before Dleaf; X is P(Q).
-            // A warmed extractor that costed C first must replay C's finalization behind D's: replaying C alone, as if
-            // final from the start, would release N(C) before P(Q) is queued.
+            // (datatype E (N E :cost 0) (Cn E :cost 0) (P E :cost 0) (Qleaf :cost 0) (Dleaf :cost 0))
+            // (let c (Cn (Dleaf))) (let x (N c)) (union x (P (Qleaf))) (extract x) prints (N (Cn (Dleaf))): the second
+            // pass sets c's class by (Cn (Dleaf)) and then x's by (P (Qleaf)), so (N c) costs as much and its child
+            // reached its cost first. Costing c first changes nothing.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var n = fx.Constructor("N", e, 0, e);
@@ -245,21 +245,19 @@ namespace Eggnog.Relations.Tests
             x = fx.Canon(x);
             c = fx.Canon(c);
 
-            Assert.Equal("(P (Qleaf))", fx.Extract(e, x)?.Text);
-            Assert.Equal("(P (Qleaf))", Extractor.CreateOnDemand(fx.Schema).ExtractTerm(e, x).ToString());
+            Assert.Equal("(N (Cn (Dleaf)))", fx.Extract(e, x)?.Text);
+            Assert.Equal("(N (Cn (Dleaf)))", Extractor.CreateOnDemand(fx.Schema).ExtractTerm(e, x).ToString());
 
             var warmed = Extractor.CreateOnDemand(fx.Schema);
-            Assert.True(warmed.TryGetCost(e, c, out _));
-            Assert.Equal(0, warmed.ReplayCount);
-            Assert.Equal("(P (Qleaf))", warmed.ExtractTerm(e, x).ToString());
-            Assert.Equal(2, warmed.ReplayCount);
+            Assert.Equal("(Cn (Dleaf))", warmed.ExtractTerm(e, c).ToString());
+            Assert.Equal("(N (Cn (Dleaf)))", warmed.ExtractTerm(e, x).ToString());
         }
 
         [Fact]
-        public void PositiveCostsReplayNothing()
+        public void AWarmedExtractorAnswersAsAFreshOneWithPositiveCosts()
         {
-            // With positive head costs a class final since an earlier query always costs less than the nodes that
-            // depend on it, so a from-scratch run finalizes it before they can matter: nothing is replayed.
+            // (datatype E (G E :cost 1) (M :cost 1) (Zf :cost 1)) (let y (M)) (let z (Zf)) (union (G y) (G z))
+            // (extract (G y)) prints (G (M)).
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var g = fx.Constructor("G", e, 1, e);
@@ -273,14 +271,13 @@ namespace Eggnog.Relations.Tests
             var warmed = Extractor.CreateOnDemand(fx.Schema);
             Assert.True(warmed.TryGetCost(e, z, out _));
             Assert.Equal("(G (M))", warmed.ExtractTerm(e, x).ToString());
-            Assert.Equal(0, warmed.ReplayCount);
         }
 
         [Fact]
-        public void DeepReplaysDoNotOverflowTheStack()
+        public void DeepChainsDoNotOverflowTheStack()
         {
             // A chain of 100,000 zero-cost classes, costed by one query; a second query reaches a class over its top,
-            // which replays every finalization in the chain.
+            // which times and chooses every class in the chain.
             const int Depth = 100_000;
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
@@ -299,17 +296,19 @@ namespace Eggnog.Relations.Tests
             var warmed = Extractor.CreateOnDemand(fx.Schema);
             Assert.True(warmed.TryGetCost(e, ids[Depth], out var cost));
             Assert.Equal(0, cost);
-            Assert.True(warmed.TryGetChoice(e, ids[Depth + 1], out var function, out var row, out _));
+            Assert.True(warmed.TryGetChoice(e, ids[Depth + 1], out var function, out var row));
             Assert.Equal(wrap, function);
             Assert.Equal(ids[Depth], row[0]);
-            Assert.Equal(Depth + 1, warmed.ReplayCount);
+            Assert.True(warmed.TryGetChoice(e, ids[0], out function, out _));
+            Assert.Equal(leaf, function);
         }
 
         [Fact]
-        public void VariantsStartWithTheChoiceEvenWithZeroCosts()
+        public void VariantsNeedNotStartWithTheChoice()
         {
-            // All costs 0; declared A < B < C. X = { A(Y), B }, Y = { C }. Knuth's algorithm pops B before C, so X
-            // chooses B, although A(Y) comes first in content order; the first variant is still the choice.
+            // (datatype E (A E :cost 0) (B :cost 0) (C :cost 0)) (let x (A (C))) (union x (B)) (extract x)
+            // (extract x 5) prints (B), then (A (C)) and (B): the first pass sets x's class by (B) before (C) sets
+            // its child's, so x extracts as (B), while the variants sort by function name.
             var fx = new ExtractionFixture();
             var e = new EqSort("E");
             var a = fx.Constructor("A", e, 0, e);
@@ -325,8 +324,8 @@ namespace Eggnog.Relations.Tests
                 Assert.True(extractor.TryExtractBest(e, x, dag, out var best));
                 Assert.Equal("(B)", dag.ToString(best.Term));
                 var variants = extractor.ExtractVariants(e, x, 5, dag);
-                Assert.Equal(["(B)", "(A (C))"], variants.Select(v => dag.ToString(v.Term)).ToArray());
-                Assert.Equal(best, variants[0]);
+                Assert.Equal(["(A (C))", "(B)"], variants.Select(v => dag.ToString(v.Term)).ToArray());
+                Assert.Equal(best.Cost, variants[0].Cost);
             }
         }
 

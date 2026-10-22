@@ -5,15 +5,17 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// Adds every row of a function that is not subsumed to an <see cref="Extractor"/>'s graph: the scan egglog's
-    /// <c>bellman_ford</c> relaxes over (<c>backend.for_each</c> with <c>if !row.subsumed</c>, src/extract.rs:420-457),
-    /// done once here, since Knuth's algorithm needs each row only once.
+    /// Adds every row of a function that is not subsumed to an <see cref="Extractor"/>'s graph, placed by its place in the
+    /// scan, which is the table's storage order: the scan egglog's <c>bellman_ford</c> relaxes over
+    /// (<c>backend.for_each</c> with <c>if !row.subsumed</c>, src/extract.rs:407-460), done once here, since Knuth's
+    /// algorithm needs each row only once.
     /// </summary>
-    internal readonly struct ExtractionScanVisitor : IFunctionRowVisitor
+    internal struct ExtractionScanVisitor : IFunctionRowVisitor
     {
 
         readonly Extractor extractor;
         readonly int slot;
+        long position;
 
         /// <summary>
         /// Initializes a new instance.
@@ -31,8 +33,9 @@ namespace Eggnog.Relations
         public bool Visit(FunctionRow row)
         {
             if (row.Subsumed == false)
-                extractor.AddNode(slot, MemoryMarshal.Cast<Value, uint>(row.Values));
+                extractor.AddNode(slot, position, MemoryMarshal.Cast<Value, uint>(row.Values));
 
+            position++;
             return true;
         }
 

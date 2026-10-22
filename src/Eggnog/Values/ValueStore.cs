@@ -99,8 +99,8 @@ namespace Eggnog
         /// <typeparam name="T">The CLR type; values must be immutable, and equal values must hash alike. Not
         /// <see cref="ClassId"/>, a sort or a <see cref="ValueSet{T}"/>.</typeparam>
         /// <param name="name">The type's name, unique among the store's types.</param>
-        /// <param name="order">Extraction's tie-break order and <see cref="ColumnType{T}.Compare"/>; must not depend
-        /// on the culture. <c>null</c>: <c>Comparer&lt;T&gt;.Default</c> when <typeparamref name="T"/> is comparable,
+        /// <param name="order">The content order of <see cref="ColumnType{T}.Compare"/>, which host reads sort by; must
+        /// not depend on the culture. <c>null</c>: <c>Comparer&lt;T&gt;.Default</c> when <typeparamref name="T"/> is comparable,
         /// else the values' cells.</param>
         /// <param name="format">Formats a value as a literal; <c>null</c>: its culture-invariant
         /// <c>ToString</c>.</param>

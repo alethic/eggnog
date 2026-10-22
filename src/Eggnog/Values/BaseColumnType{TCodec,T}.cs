@@ -7,7 +7,7 @@ namespace Eggnog
     /// <summary>
     /// A value type over an engine codec: encoding is <c>BaseValues.Get</c>, decoding <c>Unwrap</c>, and
     /// <see cref="TryEncodeExisting"/> <c>BaseValues.TryGetExisting</c>, which never interns; the extraction sort is a
-    /// <c>BaseSort</c> that formats and orders like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>,
+    /// <c>BaseSort</c> that formats like this type. Serves <c>string</c>, <c>bool</c>, <c>long</c>,
     /// <see cref="ValueSet{T}"/> (over <c>InternedCodec&lt;ValueSet&lt;T&gt;&gt;</c>) and registered types
     /// (<c>InternedCodec&lt;T&gt;</c>).
     /// </summary>
@@ -38,7 +38,7 @@ namespace Eggnog
             this.format = format;
             this.order = order;
             engineType = Relations.ColumnTy.Base(values.RegisterType<TCodec, T>());
-            sort = new Relations.BaseSort<TCodec, T>(name, format, order);
+            sort = new Relations.BaseSort<TCodec, T>(name, format);
         }
 
         /// <inheritdoc />

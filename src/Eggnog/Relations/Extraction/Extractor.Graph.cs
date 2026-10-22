@@ -12,12 +12,13 @@ namespace Eggnog.Relations
 
         // The extraction graph, in flat arrays that only grow.
         //
-        // A class is an (eq sort, canonical id) pair. A node is a row of a function in an extractor slot; it belongs to
-        // the class in its output column and depends on its child occurrences: each e-class among its child columns,
-        // and each e-class among the elements of its container children (recursively), with multiplicity. Base values
-        // and containers' own costs fold into the node's constant cost. A class's parent occurrences, linked through
-        // occNext, are the (node, occurrence) pairs that wait for it to become final, or on demand for the replay of its
-        // finalization (Extractor.Replay.cs); classReplay is the query in which that replay was last requested.
+        // A class is an (eq sort, canonical id) pair, with its cheapest cost once Knuth's algorithm has made it final
+        // (-1 until then). A node is a row of a function in an extractor slot; it belongs to the class in its output
+        // column and depends on its child occurrences: each e-class among its child columns, and each e-class among the
+        // elements of its container children (recursively), with multiplicity. Base values and containers' own costs,
+        // and its head's cost, fold into the node's constant cost. Its position is where the row is stored: its row id,
+        // above the index of its layer in a child context's view, or its place in a scan. A class's parent occurrences,
+        // linked through occNext, are the (node, occurrence) pairs that wait for it to become final.
 
         int classCount;
         int[] classSort = null!;
@@ -25,18 +26,15 @@ namespace Eggnog.Relations
         int[] classFirstNode = null!;
         int[] classLastNode = null!;
         int[] classFirstParent = null!;
-        int[] classBest = null!;
         long[] classCost = null!;
-        int[] classRank = null!;
-        int[] classReplay = null!;
         Dictionary<ulong, int> classIndex = null!;
         Queue<int> undiscovered = null!;
-        int nextRank;
 
         int nodeCount;
         int[] nodeSlot = null!;
         int[] nodeClass = null!;
         int[] nodeRow = null!;
+        long[] nodePosition = null!;
         long[] nodeConst = null!;
         long[] nodeCost = null!;
         int[] nodeChildStart = null!;
@@ -81,16 +79,14 @@ namespace Eggnog.Relations
             classFirstNode = new int[Initial];
             classLastNode = new int[Initial];
             classFirstParent = new int[Initial];
-            classBest = new int[Initial];
             classCost = new long[Initial];
-            classRank = new int[Initial];
-            classReplay = new int[Initial];
             classIndex = new Dictionary<ulong, int>();
             undiscovered = new Queue<int>();
 
             nodeSlot = new int[Initial];
             nodeClass = new int[Initial];
             nodeRow = new int[Initial];
+            nodePosition = new long[Initial];
             nodeConst = new long[Initial];
             nodeCost = new long[Initial];
             nodeChildStart = new int[Initial];
@@ -147,10 +143,7 @@ namespace Eggnog.Relations
                 Array.Resize(ref classFirstNode, size);
                 Array.Resize(ref classLastNode, size);
                 Array.Resize(ref classFirstParent, size);
-                Array.Resize(ref classBest, size);
                 Array.Resize(ref classCost, size);
-                Array.Resize(ref classRank, size);
-                Array.Resize(ref classReplay, size);
             }
 
             classSort[added] = sort;
@@ -158,10 +151,7 @@ namespace Eggnog.Relations
             classFirstNode[added] = -1;
             classLastNode[added] = -1;
             classFirstParent[added] = -1;
-            classBest[added] = -1;
-            classCost[added] = 0;
-            classRank[added] = -1;
-            classReplay[added] = -1;
+            classCost[added] = -1;
             classCount = added + 1;
             slot = added;
             if (onDemand)
@@ -173,13 +163,15 @@ namespace Eggnog.Relations
         /// <summary>
         /// Adds a row of the function in <paramref name="slot"/> as a node of the class in its output column, folds its
         /// head, base value and container costs into a constant, records its child occurrences, waits on the classes it
-        /// depends on (<see cref="WaitOnChildren"/>), and queues it if it waits on none. Called once per row read, by the
-        /// scan visitors.
+        /// depends on that are not final yet, and queues it if it waits on none. Called once per row read, by the scan
+        /// visitors, so a node cost function runs once per row (egglog's runs at every relaxation of the row).
         /// </summary>
         /// <param name="slot">The function's slot.</param>
+        /// <param name="position">Where the row is stored, which orders the rows of one function as egglog's scans meet
+        /// them.</param>
         /// <param name="cells">The row's schema columns, keys then output; copied.</param>
         /// <exception cref="InvalidOperationException">The cost model gave a negative cost.</exception>
-        internal void AddNode(int slot, ReadOnlySpan<uint> cells)
+        internal void AddNode(int slot, long position, ReadOnlySpan<uint> cells)
         {
             var function = slots[slot];
             var columnSorts = slotColumnSorts[slot];
@@ -195,6 +187,7 @@ namespace Eggnog.Relations
             cells.CopyTo(rowCells.AsSpan(rowLength));
             nodeRow[node] = rowLength;
             rowLength += cells.Length;
+            nodePosition[node] = position;
             nodeSlot[node] = slot;
             nodeClass[node] = owner;
             nodeNext[node] = -1;
@@ -240,13 +233,12 @@ namespace Eggnog.Relations
 
             nodeChildCount[node] = childLength - nodeChildStart[node];
             nodeConst[node] = cost;
-            var pending = WaitOnChildren(node, cost);
+            var pending = WaitOnChildren(node);
             nodePending[node] = pending;
 
-            // Waiting on nothing: a leaf, or (on demand) a node whose children all became final in earlier queries at
-            // costs below its own, which a from-scratch run would also finalize before this node's cost is reached. Its
+            // Waiting on nothing: a leaf, or (on demand) a node whose children all became final in earlier queries. Its
             // cost is known now.
-            if (pending == 0 && classBest[owner] < 0)
+            if (pending == 0 && classCost[owner] < 0)
                 Push(node, ComputeNodeCost(node));
         }
 
@@ -261,42 +253,24 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Links <paramref name="node"/> into the waiting lists of the classes it depends on whose finalization it must
-        /// wait for, and counts them. A class that is not final is waited on. A class that is already final, which on
-        /// demand means final since an earlier query, is waited on only if its cost reaches the node's lower bound (the
-        /// node's constant plus the final classes' costs): only then can a from-scratch run finalize it at the node's own
-        /// cost, where the moment it does so decides where the node falls among equal-cost nodes. Its finalization is then
-        /// replayed (<see cref="RequestReplay"/>). Every other final class is final, in a from-scratch run, before any node
-        /// of the node's cost leaves the queue, so the node may be queued as if released then. O(occurrences of the node).
+        /// Links <paramref name="node"/> into the waiting lists of the classes it depends on that are not final, and
+        /// counts them. A class already final, which on demand means final since an earlier query, has its cost already.
+        /// O(occurrences of the node).
         /// </summary>
         /// <param name="node">The node, whose children are recorded.</param>
-        /// <param name="constant">The node's constant cost.</param>
         /// <returns>The number of occurrences the node waits on.</returns>
-        int WaitOnChildren(int node, long constant)
+        int WaitOnChildren(int node)
         {
             var start = nodeChildStart[node];
             var end = start + nodeChildCount[node];
-
-            // No class is final while scanning for the root sorts, so only an on-demand extractor needs the bound.
-            var bound = constant;
-            if (onDemand)
-            {
-                for (var k = start; k < end; k++)
-                    if (classBest[childClasses[k]] >= 0)
-                        bound = CostMath.Add(bound, classCost[childClasses[k]]);
-            }
-
             var pending = 0;
             for (var k = start; k < end; k++)
             {
                 var dependency = childClasses[k];
-                if (classBest[dependency] >= 0)
+                if (classCost[dependency] >= 0)
                 {
                     Debug.Assert(onDemand, "no class is final while scanning for the root sorts");
-                    if (classCost[dependency] < bound)
-                        continue;
-
-                    RequestReplay(dependency);
+                    continue;
                 }
 
                 Wait(node, dependency);
@@ -308,7 +282,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Links an occurrence of <paramref name="dependency"/> in <paramref name="node"/> into the class's waiting list,
-        /// which the class's finalization, or the replay of it, releases.
+        /// which the class's finalization releases.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void Wait(int node, int dependency)
@@ -337,7 +311,7 @@ namespace Eggnog.Relations
             var end = start + nodeChildCount[node];
             for (var k = start; k < end; k++)
             {
-                Debug.Assert(classBest[childClasses[k]] >= 0, "a node is costed once its children are final");
+                Debug.Assert(classCost[childClasses[k]] >= 0, "a node is costed once its children are final");
                 cost = CostMath.Add(cost, classCost[childClasses[k]]);
             }
 
@@ -352,7 +326,7 @@ namespace Eggnog.Relations
             var start = nodeChildStart[node];
             var end = start + nodeChildCount[node];
             for (var k = start; k < end; k++)
-                if (classBest[childClasses[k]] < 0)
+                if (classCost[childClasses[k]] < 0)
                     return false;
 
             return true;
@@ -472,7 +446,7 @@ namespace Eggnog.Relations
             for (var k = start; k < end; k++)
             {
                 var dependency = containerClasses[k];
-                if (classBest[dependency] < 0)
+                if (classCost[dependency] < 0)
                 {
                     cost = 0;
                     return false;
@@ -500,6 +474,7 @@ namespace Eggnog.Relations
             Array.Resize(ref nodeSlot, size);
             Array.Resize(ref nodeClass, size);
             Array.Resize(ref nodeRow, size);
+            Array.Resize(ref nodePosition, size);
             Array.Resize(ref nodeConst, size);
             Array.Resize(ref nodeCost, size);
             Array.Resize(ref nodeChildStart, size);

@@ -516,16 +516,20 @@ they have no model.
 
 `Scope.Extract(class, costs)` returns the cheapest term of a class as an `ExtractedTerm` (head, arguments, child
 terms, cost, and an s-expression `ToString`). `Scope.ExtractVariants(class, count, costs)` returns up to `count`
-variants of a class, egglog's `(extract x n)`: one node of the class each, with its arguments' cheapest terms, cheapest
-first, the node `Extract` chooses leading; its departures from egglog are decision 21 of
+variants of a class, egglog's `(extract x n)`: one node of the class each, with its arguments' cheapest terms, ordered
+by cost, head name and the row's cells as egglog orders them; its departures from egglog are decision 21 of
 [`engine/decisions.md`](engine/decisions.md). `CreateExtractor(costs)` returns an `Extractor` that answers several
 questions over one state of the scope. A `CostModel` gives each constructor a head cost (its declared cost by
 default), optionally a per-row cost function, and value costs (1 by default); a term costs the sum over its nodes.
 Unextractable heads and subsumed rows are skipped.
 
 Costs are computed with Knuth's generalization of Dijkstra's algorithm over the classes reachable from the ones asked
-about, so the chosen terms are always finite, even with zero costs. Ties are broken by content (cost, then
-constructor declaration order, then arguments), so the result depends only on the scope's contents. An extractor
+about. Ties are broken as egglog's extractor breaks them: a class extracts as the first of its cheapest rows, with
+constructors breadth-first from the sort asked about and each table's rows in storage order, whose arguments reached
+their costs before the class did in egglog's passes, so the chosen terms are finite, even with zero costs. Costs
+saturate at `long.MaxValue`, below egglog's `u64::MAX`; a saturated class with no such row extracts as the first of its
+rows whose arguments had a cost before it did, where egglog, whose costs would be exact there, chooses by them. An
+extractor
 reads the scope as it was when it was made; using it after a write or run that changed the tables it reads throws, and
 so does using it once a constructor defined after it has rows extraction may use.
 Extractors over a frozen scope may run concurrently, one per thread.
@@ -727,13 +731,15 @@ A rule's progress is committed only after a run that recorded no failure.
 
 ### 3.7 Extraction
 
-`Relations/Extraction` ports egglog's extractor with two changes: costs come from Knuth's algorithm instead of a
-Bellman-Ford fixpoint, and ties are broken by content instead of scan order. The on-demand form, which the library
-uses, discovers only the classes reachable from what it is asked about, finding each class's nodes through the cached
-index on its constructors' output columns, and extends its graph as later questions reach further, replaying earlier
-decisions so that every answer equals a from-scratch run's. Over a context, a class's nodes are the rows the context
-sees. An `ExtractionWatch` records the versions of what the extractor read, so a stale extractor throws instead of
-answering.
+`Relations/Extraction` ports egglog's extractor with costs from Knuth's algorithm instead of a Bellman-Ford fixpoint.
+The choices are still egglog's: when each class reaches its cost in egglog's passes follows from the costs, by a second
+run of Knuth's algorithm over the rows that cost exactly their class's cost, and a class extracts as the first such row
+whose arguments got there before it. The on-demand form, which the library uses, discovers only the classes reachable
+from what it is asked about, finding each class's nodes through the cached index on its constructors' output columns,
+and extends its graph as later questions reach further; each answer depends only on the rows below the class asked
+about, so it is a from-scratch extractor's, rooted at the sort asked about as egglog's `extract` command roots its own.
+Over a context, a class's nodes are the rows the context sees, in the order its scan meets them. An `ExtractionWatch`
+records the versions of what the extractor read, so a stale extractor throws instead of answering.
 
 ### 3.8 Colored contexts
 

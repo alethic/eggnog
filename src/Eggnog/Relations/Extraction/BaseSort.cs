@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace Eggnog.Relations
 {
@@ -17,14 +16,6 @@ namespace Eggnog.Relations
     /// Register the type in the e-graph's <see cref="EGraph.BaseValues"/> before declaring functions over this sort.
     /// </para>
     /// <para>
-    /// Extraction's tie-break orders base values by content, which must not depend on the machine or the thread, so
-    /// that extraction is deterministic: by the comparer given here; else by code point for <see cref="string"/> (never by
-    /// the current culture's collation); else by <see cref="Comparer{T}.Default"/> when <typeparamref name="T"/>
-    /// implements <see cref="IComparable{T}"/>, which for the built-in numeric, boolean and character types is
-    /// culture-invariant. A type whose own order depends on the culture should be given a comparer. The boxed
-    /// representation breaks the remaining ties: values the order calls equal, and every value of an incomparable type.
-    /// </para>
-    /// <para>
     /// Immutable and thread-safe.
     /// </para>
     /// </remarks>
@@ -35,13 +26,7 @@ namespace Eggnog.Relations
         where T : notnull, IEquatable<T>
     {
 
-        /// <summary>
-        /// Whether <typeparamref name="T"/> has a content order; a JIT-time constant per instantiation.
-        /// </summary>
-        static readonly bool Comparable = typeof(IComparable<T>).IsAssignableFrom(typeof(T));
-
         readonly Func<T, string>? format;
-        readonly IComparer<T>? comparer;
 
         /// <summary>
         /// Initializes a new instance.
@@ -49,15 +34,11 @@ namespace Eggnog.Relations
         /// <param name="name">The sort's name.</param>
         /// <param name="format">Renders a value as literal text; <c>null</c> for egglog's literal text (see the class
         /// remarks).</param>
-        /// <param name="comparer">The content order of values for extraction's tie-break; <c>null</c> for the default
-        /// (see the class remarks). It must not depend on the current culture or on anything else that varies between
-        /// runs.</param>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
-        public BaseSort(string name, Func<T, string>? format = null, IComparer<T>? comparer = null)
+        public BaseSort(string name, Func<T, string>? format = null)
             : base(name, SortKind.Base)
         {
             this.format = format;
-            this.comparer = comparer;
         }
 
         /// <summary>
@@ -101,33 +82,6 @@ namespace Eggnog.Relations
             {
                 return false;
             }
-        }
-
-        /// <inheritdoc />
-        /// <remarks>
-        /// Culture-invariant: strings compare by code point (<see cref="CodePointComparer"/>), as Rust's do, because
-        /// <see cref="Comparer{T}.Default"/> would use the current culture's collation and make the extracted term depend
-        /// on the machine and the thread.
-        /// </remarks>
-        internal override int CompareValues(BaseValues baseValues, Value left, Value right)
-        {
-            var order = 0;
-            if (comparer is not null)
-            {
-                order = comparer.Compare(baseValues.Unwrap<TCodec, T>(left), baseValues.Unwrap<TCodec, T>(right));
-            }
-            else if (typeof(T) == typeof(string))
-            {
-                var leftText = (string)(object)baseValues.Unwrap<TCodec, T>(left);
-                var rightText = (string)(object)baseValues.Unwrap<TCodec, T>(right);
-                order = CodePointComparer.Instance.Compare(leftText, rightText);
-            }
-            else if (Comparable)
-            {
-                order = Comparer<T>.Default.Compare(baseValues.Unwrap<TCodec, T>(left), baseValues.Unwrap<TCodec, T>(right));
-            }
-
-            return order != 0 ? order : left.Rep.CompareTo(right.Rep);
         }
 
         /// <inheritdoc />

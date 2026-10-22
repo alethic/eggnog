@@ -126,10 +126,11 @@ namespace Eggnog.Tests.Extraction
         }
 
         [Fact]
-        public void WithZeroCostsTheChoiceStillLeads()
+        public void WithZeroCostsTheFirstVariantNeedNotBeTheChoice()
         {
-            // F comes first in content order, but Knuth's algorithm finalizes the class through G, whose node has no
-            // child to wait for.
+            // egglog's (datatype Node (F Node :cost 0) (G :cost 0) (H :cost 0)) (let x (F (H))) (union x (G))
+            // (extract x) (extract x 5) prints (G), then (F (H)) and (G): the first pass sets x's class by (G) before
+            // (H) sets its child's, while the variants sort by name.
             var graph = new EGraph();
             graph.DefineSort<Node>("Node");
             var f = graph.DefineConstructor<Node, Node>("F", 0);
@@ -141,7 +142,7 @@ namespace Eggnog.Tests.Extraction
             var variants = graph.Root.ExtractVariants(x, 5);
 
             Assert.Equal("(G)", graph.Root.Extract(x).ToString());
-            Assert.Equal(["(G)", "(F (H))"], variants.Select(v => v.ToString()));
+            Assert.Equal(["(F (H))", "(G)"], variants.Select(v => v.ToString()));
             Assert.Equal([0L, 0L], variants.Select(v => v.Cost));
         }
 

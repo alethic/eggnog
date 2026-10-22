@@ -65,8 +65,9 @@ namespace Eggnog.Relations.Tests
             });
             Assert.Equal(("(Num 4)", 5L), fx.Extract(e, ids[0], model));
 
-            // A constant given later replaces the per-row cost.
-            Assert.Equal(("(Num 4)", 3L), fx.Extract(e, ids[0], model.WithFunctionCost(num, 2)));
+            // A constant given later replaces the per-row cost, and the rows tie: egglog's (datatype E (Num i64 :cost 2))
+            // with the same terms and unions extracts (Num 9), the first row stored.
+            Assert.Equal(("(Num 9)", 3L), fx.Extract(e, ids[0], model.WithFunctionCost(num, 2)));
         }
 
         [Fact]

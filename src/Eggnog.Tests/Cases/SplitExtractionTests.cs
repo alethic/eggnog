@@ -156,12 +156,12 @@ namespace Eggnog.Tests.Cases
                     c.And.Of(c.StrEq.Of("kind", "a"), c.StrEq.Of("body.ref", DiscriminatedSchema.Ref)),
                     c.And.Of(c.StrEq.Of("kind", "b"), c.StrEq.Of("body.ref", DiscriminatedSchema.Ref)))));
 
-                // The two spellings of the second conjunction cost the same. Extraction breaks the tie by content, the
-                // lower class id first, and the ref's comparison was made before the equality on kind b, so the
-                // commuted spelling wins.
+                // The two spellings of the second conjunction cost the same. Extraction breaks the tie as egglog's
+                // extractor does, by the order in which its passes meet the rows, which here gives the spelling asked
+                // for.
                 var best = query.Extract(q);
                 Assert.Equal(
-                    $"(Or (And (StrEq \"kind\" \"a\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\") (StrEq \"kind\" \"b\")))",
+                    $"(Or (And (StrEq \"kind\" \"a\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")) (And (StrEq \"kind\" \"b\") (StrEq \"body.ref\" \"{DiscriminatedSchema.Ref}\")))",
                     best.ToString());
                 Assert.Equal(15, best.Cost);
             }
