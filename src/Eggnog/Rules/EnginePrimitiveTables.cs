@@ -1,0 +1,72 @@
+using System;
+using System.Collections.Concurrent;
+
+namespace Eggnog
+{
+
+    /// <summary>
+    /// The tables of a primitive an engine call runs, in a rule's body or head or in a merge, over the call's
+    /// <c>ExecutionState</c> (<see cref="EngineTables"/>): its reads see what the run sees, and its writes are staged with
+    /// the iteration's other writes, as egglog's state wrappers give a primitive the run's own state.
+    /// </summary>
+    internal sealed class EnginePrimitiveTables : PrimitiveTables
+    {
+
+        readonly EngineTables tables;
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="scope">The scope the call runs in.</param>
+        /// <param name="state">The engine's state for the call.</param>
+        /// <param name="context">The call site's context.</param>
+        /// <param name="primitive">The primitive called.</param>
+        /// <param name="actions">The table actions of the call site, made once per table.</param>
+        public EnginePrimitiveTables(Scope scope, Relations.ExecutionState state, PrimitiveAccess context, Primitive primitive,
+            ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions)
+            : base(scope, context, primitive)
+        {
+            tables = new EngineTables(scope, state, actions, "A primitive");
+        }
+
+        /// <inheritdoc />
+        public override Exception? Refusal => tables.Refusal;
+
+        /// <summary>
+        /// Ends the call: the tables answer nothing after.
+        /// </summary>
+        public void End() => tables.End();
+
+        /// <inheritdoc />
+        protected override bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, out T value) => tables.TryLookup(table, keys, out value);
+
+        /// <inheritdoc />
+        protected override bool ContainsCore(RelationHandle relation, ReadOnlySpan<object> keys) => tables.Contains(relation, keys);
+
+        /// <inheritdoc />
+        protected override long TableSizeCore(TableHandle table) => tables.TableSize(table);
+
+        /// <inheritdoc />
+        protected override void InsertCore(RelationHandle relation, ReadOnlySpan<object> keys) => tables.Insert(relation, keys);
+
+        /// <inheritdoc />
+        protected override void SetCore(FunctionHandle function, ReadOnlySpan<object> keys, object value) => tables.Set(function, keys, value);
+
+        /// <inheritdoc />
+        protected override TSort MakeCore<TSort>(ConstructorHandle constructor, ReadOnlySpan<object> keys) => tables.Make<TSort>(constructor, keys);
+
+        /// <inheritdoc />
+        protected override void UnionCore<TSort>(TSort a, TSort b) => tables.Union(a, b);
+
+        /// <inheritdoc />
+        protected override void RemoveCore(TableHandle table, ReadOnlySpan<object> keys) => tables.Remove(table, keys);
+
+        /// <inheritdoc />
+        protected override void SubsumeCore(TableHandle table, ReadOnlySpan<object> keys) => tables.Subsume(table, keys);
+
+        /// <inheritdoc />
+        protected override Exception Refuse(Exception exception) => tables.Refuse(exception);
+
+    }
+
+}

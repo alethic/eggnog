@@ -156,6 +156,11 @@ namespace Eggnog
                 default:
                 {
                     var primitive = shape.Primitive!;
+
+                    // Splits are an addition, whose assumptions egglog has no context for: their computations are pure.
+                    if (primitive.Access != PrimitiveAccess.Pure)
+                        throw Error($"{Primitive.Refusal(primitive, "a split's assumptions", PrimitiveAccess.Pure)}: a split's assumptions compute over values only");
+
                     var types = new ColumnType[primitive.ParameterTypes.Count];
                     for (var i = 0; i < types.Length; i++)
                         types[i] = TypeOf(primitive.ParameterTypes[i]);

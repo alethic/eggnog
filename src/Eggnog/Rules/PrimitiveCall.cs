@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Text;
 
 namespace Eggnog
@@ -30,6 +31,8 @@ namespace Eggnog
         readonly bool joins;
         readonly bool overClasses;
         readonly Relations.UnionAction unionAction;
+        readonly PrimitiveAccess context;
+        readonly ConcurrentDictionary<Relations.FunctionId, Relations.TableAction>? actions;
 
         /// <summary>
         /// Initializes a new instance.
@@ -42,11 +45,12 @@ namespace Eggnog
         /// <param name="argumentNames">The arguments' source names, for failures.</param>
         /// <param name="inBody">Whether the call site is a let of the body (a <c>QueryPrim</c>), where a partial
         /// primitive's no result drops the match; <c>false</c> for a head computation, where it fails the rule.</param>
+        /// <param name="context">The call site's context, egglog's: what a primitive over the tables may do here.</param>
         /// <param name="joins">Whether the let's result is compared with a value the body binds otherwise, an atom's
         /// column or an earlier let's: a container of classes the scope cannot make, and the root does not hold, then
         /// drops the match, since it equals no cell.</param>
         public PrimitiveCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, ColumnType result, string[] argumentNames,
-            bool inBody, bool joins = false)
+            bool inBody, PrimitiveAccess context, bool joins = false)
         {
             this.graph = graph;
             this.ruleName = ruleName;
@@ -59,7 +63,17 @@ namespace Eggnog
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
             if (primitive.IsWrite)
                 unionAction = new Relations.UnionAction(graph.Engine);
+
+            this.context = context;
+            if (primitive.Access != PrimitiveAccess.Pure && primitive.IsWrite == false)
+                actions = new();
         }
+
+        /// <summary>
+        /// Gets whether the primitive reads tables, a read or full primitive's: its result may then depend on rows a
+        /// descendant context adds, so its rule never seeds a watermark from an ancestor's.
+        /// </summary>
+        public override bool ReadsTables => primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full;
 
         /// <inheritdoc />
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
@@ -68,7 +82,32 @@ namespace Eggnog
             var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
-                if (inBody)
+                if (actions is not null)
+                {
+                    // A primitive over the tables: the run's own state, in the call site's context.
+                    var tables = new EnginePrimitiveTables(
+                        ScopeRuntime.Of(graph, state).Owner ?? throw new InvalidOperationException("A primitive ran in a context with no scope."),
+                        state, context, primitive, actions);
+                    try
+                    {
+                        var found = primitive.TryInvokeTables(args, parameters, this.result, tables, out result);
+                        if (tables.Refusal is { } refused)
+                            throw refused;
+
+                        if (found == false)
+                        {
+                            if (inBody)
+                                return false;
+
+                            throw Primitive.NoResult(primitive.Name);
+                        }
+                    }
+                    finally
+                    {
+                        tables.End();
+                    }
+                }
+                else if (inBody)
                 {
                     if (primitive.TryInvokeCore(args, parameters, this.result, ScopeOf(state), out result) == false)
                         return false;

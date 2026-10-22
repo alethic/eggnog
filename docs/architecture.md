@@ -299,12 +299,17 @@ stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run ask
 application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
 user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
 take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
-call: `PrimitiveN<TResult>`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
+call: `PrimitiveN<TResult>`; or, as egglog's primitives over the database, made with `Primitive.CreateRead`,
+`CreateWrite` or `CreateFull`, its function also taking the tables to read, write or both, valid only during the call:
+`ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
 value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
 (`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
 comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`
 for `i64` and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
-`Primitive.CreateVariadic`). What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
+`Primitive.CreateVariadic`). Each call site has one of egglog's capability contexts (decisions row 12), and a primitive
+whose access (`Primitive.Access`) it does not allow is refused there: a semi-naive rule's body neither reads nor writes,
+its head writes, a naive rule's body reads and its head does both, a merge writes, a host write does both, a host check
+and a query read. What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`), a condition
 (`Fact.True(term)`), or a scoped fact (`Fact.In(tag, facts)`, section 2.8). The same terms and facts serve rule

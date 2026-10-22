@@ -196,7 +196,7 @@ namespace Eggnog.Tests.Values
                 r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()), z.Is(union.Of(x, y)));
                 r.Then(t.P.Of().Is(z));
             }));
-            Assert.Contains("writes the graph", body.Message, StringComparison.Ordinal);
+            Assert.Contains("writes tables, and a semi-naive rule's body neither reads nor writes", body.Message, StringComparison.Ordinal);
             Assert.Throws<ArgumentException>(() => t.Root.Check(t.P.Of().Is(union.Of(t.P.Of(), t.Q.Of()))));
             Assert.Throws<InvalidOperationException>(() => union.TryInvoke(Vec<Node>.Empty, Vec<Node>.Empty, out _));
             Assert.False(t.Merged);

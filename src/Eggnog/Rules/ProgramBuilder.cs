@@ -30,6 +30,18 @@ namespace Eggnog
         readonly Term? caseVariable;
 
         /// <summary>
+        /// The context of the body's primitives, and the body as a refusal names it.
+        /// </summary>
+        readonly PrimitiveAccess bodyContext;
+        readonly string bodySite;
+
+        /// <summary>
+        /// The context of the head's primitives, and the head as a refusal names it.
+        /// </summary>
+        readonly PrimitiveAccess headContext;
+        readonly string headSite;
+
+        /// <summary>
         /// Whether the lowering interns its constants: <c>false</c> in a twin that only checks the draft, and in
         /// <see cref="Check"/>, which give a new constant a placeholder cell (<see cref="Placeholder"/>).
         /// </summary>
@@ -64,6 +76,7 @@ namespace Eggnog
         bool[] bound = Array.Empty<bool>();
         ProgramAtom[] atoms = Array.Empty<ProgramAtom>();
         ProgramStep[] steps = Array.Empty<ProgramStep>();
+        Primitive? tableReader;
         int fresh;
 
         /// <summary>
@@ -87,6 +100,14 @@ namespace Eggnog
             this.licence = licence;
             this.caseVariable = caseVariable;
             ruleName = draft.Name;
+
+            // egglog's contexts: a semi-naive rule's body pure and its head write, a naive rule's body read and its head
+            // full, a check-shaped query read; a split rule's matcher is a semi-naive rule's body.
+            (bodyContext, bodySite, headContext, headSite) =
+                query ? (PrimitiveAccess.Read, "a query", PrimitiveAccess.Read, "a query")
+                : caseVariable is not null ? (PrimitiveAccess.Pure, "a split rule's body", PrimitiveAccess.Pure, "a split rule's body")
+                : draft.Naive ? (PrimitiveAccess.Read, "a naive rule's body", PrimitiveAccess.Full, "a naive rule's head")
+                : (PrimitiveAccess.Pure, "a semi-naive rule's body", PrimitiveAccess.Write, "a semi-naive rule's head");
         }
 
         /// <summary>
@@ -112,7 +133,11 @@ namespace Eggnog
                     named.Add(made.TryGetValue(item.Variable!, out var register) ? register : -1);
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named.ToArray(), writesAnalysis, readScopes.ToArray());
+                named.ToArray(), writesAnalysis, readScopes.ToArray())
+            {
+                BodyContext = bodyContext,
+                HeadContext = headContext,
+            };
         }
 
         /// <summary>
@@ -144,6 +169,7 @@ namespace Eggnog
             foreach (var item in draft.Head)
                 AddHeadItem(item);
 
+            CheckLicencedPrimitives();
             return CheckAnalysisWriters();
         }
 
@@ -164,7 +190,11 @@ namespace Eggnog
                 named[i] = columns[i].IsRegister ? columns[i].Index : -1;
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named, false, readScopes.ToArray());
+                named, false, readScopes.ToArray())
+            {
+                BodyContext = bodyContext,
+                HeadContext = headContext,
+            };
         }
 
         /// <summary>
@@ -186,7 +216,11 @@ namespace Eggnog
                 named[i] = operands[i].IsRegister ? operands[i].Index : -1;
 
             return new RuleProgram(ruleName, registers.ToArray(), atoms, steps, head.ToArray(), idCells.ToArray(), idOrigins.ToArray(),
-                named, false, readScopes.ToArray());
+                named, false, readScopes.ToArray())
+            {
+                BodyContext = bodyContext,
+                HeadContext = headContext,
+            };
         }
 
         /// <summary>
@@ -936,13 +970,19 @@ namespace Eggnog
                     var primitive = shape.Primitive!;
                     var (parameters, result) = CheckPrimitive(primitive);
                     var inputs = FlattenArguments(shape.Arguments, parameters, primitive, body: false);
+
+                    // A primitive over the tables runs once per call, as egglog gives each call of an action its own
+                    // binding: two calls of one that writes write twice.
+                    var pure = primitive.Access == PrimitiveAccess.Pure;
                     var key = "c" + PrimitiveId(primitive).ToString(CultureInfo.InvariantCulture) + Key(inputs);
-                    if (headMemo.TryGetValue(key, out var shared))
+                    if (pure && headMemo.TryGetValue(key, out var shared))
                         return Operand.Register(shared, registers[shared].Type);
 
                     var target = NewHeadRegister(result, "$" + primitive.Name);
                     head.Add(new HeadOp(HeadOpKind.Compute, null, inputs, target, primitive));
-                    headMemo.Add(key, target);
+                    if (pure)
+                        headMemo.Add(key, target);
+
                     return Operand.Register(target, result);
                 }
             }
@@ -976,6 +1016,10 @@ namespace Eggnog
                 if (atom.Scope is not null)
                     throw Error($"rule writes analysis table '{written.Name}' and may not read scoped atoms; it reads '{SourceName(atom)}@{atom.Scope.Name}'");
             }
+
+            // A primitive over the tables reads any of them, which no check of the atoms sees.
+            if (tableReader is not null)
+                throw Error($"rule writes analysis table '{written.Name}' and may read only term and analysis tables; it reads tables through primitive '{tableReader.Name}'");
 
             return true;
         }
@@ -1082,6 +1126,19 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Checks the licence of the rule's primitives over the tables: with a licence and no <c>ReadsOwnFacts</c>, a read
+        /// or full primitive reads the running scope's tables, which no licence check sees, as a full callback does.
+        /// </summary>
+        void CheckLicencedPrimitives()
+        {
+            if (licence is null || draft.OwnFactsReason is not null || tableReader is null)
+                return;
+
+            throw Error($"rule reads tables through primitive '{tableReader.Name}', outside scope '{licence.Name}'; "
+                + "call ReadsOwnFacts with the reason that is sound");
+        }
+
+        /// <summary>
         /// Gets the name of the table an atom reads: a mirror's source's.
         /// </summary>
         static string SourceName(ProgramAtom atom) => (atom.Table.Source ?? atom.Table).Name;
@@ -1185,13 +1242,19 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the column types of a primitive's parameters and result, values or sorts; a primitive of the body must not
-        /// write, as egglog rejects a write primitive in a rule's query.
+        /// Gets the column types of a primitive's parameters and result, values or sorts; the primitive's access must be
+        /// one the body's or the head's context allows, as egglog's typechecker accepts a primitive only in the contexts it
+        /// is valid in: a semi-naive rule neither reads nor writes in its body and only writes in its head, a naive rule
+        /// reads in its body and both in its head, and a query only reads.
         /// </summary>
         (ColumnType[] Parameters, ColumnType Result) CheckPrimitive(Primitive primitive, bool body = false)
         {
-            if (body && primitive.IsWrite)
-                throw Error($"primitive '{primitive.Name}' writes the graph, so it runs in the head, not the body, as egglog rejects a write primitive in a rule's query");
+            var (context, site) = body ? (bodyContext, bodySite) : (headContext, headSite);
+            if (Primitive.Allows(context, primitive.Access) == false)
+                throw Error(Primitive.Refusal(primitive, site, context));
+
+            if (primitive.Access is PrimitiveAccess.Read or PrimitiveAccess.Full)
+                tableReader ??= primitive;
 
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)

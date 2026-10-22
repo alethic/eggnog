@@ -73,7 +73,7 @@ namespace Eggnog
         /// <param name="write">The function over the cell, given the parameter's column type and the union: whether
         /// there is a result, and its cell.</param>
         internal Primitive(string name, Func<ColumnType, uint, Action<uint, uint>, (bool Found, uint Cell)> write)
-            : base(name, new[] { typeof(T1) }, typeof(TResult), false, true)
+            : base(name, new[] { typeof(T1) }, typeof(TResult), false, true, PrimitiveAccess.Write)
         {
             Function = _ => throw Writes(name);
             this.write = write;

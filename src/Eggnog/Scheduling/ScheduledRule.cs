@@ -116,13 +116,19 @@ namespace Eggnog
                 free.ToArray(), false, program.ReadScopes)
             {
                 IncludeSubsumed = true,
+                BodyContext = program.BodyContext,
+                HeadContext = program.HeadContext,
             };
 
             var head = new HeadOp[program.Head.Length + 1];
             program.Head.CopyTo(head, 0);
             head[^1] = new HeadOp(HeadOpKind.Delete, worklist, operands, -1, null);
             var action = new RuleProgram(program.Name, program.Registers, [new ProgramAtom(worklist, null, operands)], [], head,
-                program.WrittenIdConstants, program.IdConstantOrigins, program.NamedRegisters, program.WritesAnalysis, []);
+                program.WrittenIdConstants, program.IdConstantOrigins, program.NamedRegisters, program.WritesAnalysis, [])
+            {
+                BodyContext = program.BodyContext,
+                HeadContext = program.HeadContext,
+            };
             return new ScheduledRule(compiled, slot, Array.AsReadOnly(names), types, classColumns.ToArray(), worklist,
                 new RuleVariants(query, null, description + ":query", false),
                 new RuleVariants(action, compiled.Rule, description + ":action", true));

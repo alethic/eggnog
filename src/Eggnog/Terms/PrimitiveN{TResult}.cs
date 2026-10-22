@@ -20,6 +20,7 @@ namespace Eggnog
     {
 
         readonly PartialFuncN<TResult>? partial;
+        readonly TableFuncN<ITables, TResult>? tables;
 
         /// <summary>
         /// Initializes a new instance of a named primitive.
@@ -37,8 +38,26 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Initializes a new instance of a primitive over the tables (<see cref="Primitive.CreateRead{TResult}"/> and its
+        /// kin), partial as egglog's read, write and full primitives are.
+        /// </summary>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types.</param>
+        /// <param name="access">What it may do to the tables: not <see cref="PrimitiveAccess.Pure"/>.</param>
+        /// <param name="tables">The function over the tables.</param>
+        internal PrimitiveN(string name, Type[] parameters, PrimitiveAccess access, TableFuncN<ITables, TResult> tables)
+            : base(name, parameters, typeof(TResult), false, true, access)
+        {
+            Function = _ => throw new InvalidOperationException(
+                $"Primitive '{name}' reads or writes the graph's tables; it runs only in a graph, where its access allows.");
+            this.tables = tables;
+        }
+
+        /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
-        /// result.
+        /// result, and for one over the tables (<see cref="Primitive.Access"/> other than
+        /// <see cref="PrimitiveAccess.Pure"/>) it always throws <see cref="InvalidOperationException"/>: it needs the
+        /// tables.
         /// </summary>
         public FuncN<TResult> Function { get; }
 
@@ -60,8 +79,16 @@ namespace Eggnog
         /// <param name="arguments">The arguments, one per parameter, passed to the function as they are.</param>
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
+        /// <exception cref="InvalidOperationException">The primitive reads or writes tables, which it gets only in a
+        /// graph.</exception>
         public bool TryInvoke(ReadOnlySpan<object> arguments, [MaybeNullWhen(false)] out TResult result)
         {
+            if (tables is not null)
+            {
+                result = Function(arguments);
+                return true;
+            }
+
             if (partial is null)
             {
                 result = Function(arguments);
@@ -110,6 +137,47 @@ namespace Eggnog
         internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
         {
             if (TryInvoke(arguments, out var result))
+            {
+                value = result;
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
+        /// <inheritdoc />
+        internal override bool TryInvokeTables(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
+        {
+            if (this.tables is null)
+                return base.TryInvokeTables(arguments, parameters, result, tables, out cell);
+
+            var scope = tables.Scope;
+            var buffer = Decode(arguments, parameters, scope);
+            try
+            {
+                if (this.tables(tables, buffer.AsSpan(0, arguments.Length), out var value))
+                {
+                    cell = tables.EncodeResult((ColumnType<TResult>)result, value);
+                    return true;
+                }
+            }
+            finally
+            {
+                Release(buffer, arguments.Length);
+            }
+
+            cell = 0;
+            return false;
+        }
+
+        /// <inheritdoc />
+        internal override bool TryInvokeValueTables(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value)
+        {
+            if (this.tables is null)
+                return base.TryInvokeValueTables(arguments, parameters, tables, out value);
+
+            if (this.tables(tables, arguments, out var result))
             {
                 value = result;
                 return true;

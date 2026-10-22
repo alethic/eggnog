@@ -156,7 +156,9 @@ namespace Eggnog
                     for (var i = 0; i < arity; i++)
                         copy[i] = row.Values[i].Rep;
 
-                    stored.Add((table, copy));
+                    // A row the batch deletes is gone before the rebuild compares the rows.
+                    if (removes.Count == 0 || removeKeys.Contains(Key(table, copy[..^1])) == false)
+                        stored.Add((table, copy));
                 });
             }
 
