@@ -225,10 +225,29 @@ namespace Eggnog
             var canonicalizer = result.HoldsClasses ? ClassCanonicalizer.Enter(canonical ??= Canonical) : null;
             try
             {
-                // A write primitive's unions are the batch's, as egglog's global action makes them, at the end of the fact.
-                found = primitive.IsWrite
-                    ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, out cell)
-                    : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
+                if (primitive.Access != PrimitiveAccess.Pure && primitive.IsWrite == false)
+                {
+                    // A primitive over the tables, in egglog's full context of a top-level action, over the batch.
+                    var tables = new BatchPrimitiveTables(this, scope, primitive);
+                    try
+                    {
+                        found = primitive.TryInvokeTables(arguments, parameters, result, tables, out cell);
+                        if (tables.Refusal is { } refused)
+                            throw refused;
+                    }
+                    finally
+                    {
+                        tables.End();
+                    }
+                }
+                else
+                {
+                    // A write primitive's unions are the batch's, as egglog's global action makes them, at the end of the
+                    // fact.
+                    found = primitive.IsWrite
+                        ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, out cell)
+                        : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
+                }
             }
             catch (Exception exception) when (exception is not OverflowException || graph.IdsExhausted == false)
             {
@@ -359,6 +378,16 @@ namespace Eggnog
         {
             ArgumentNullException.ThrowIfNull(term);
             PlanFactUnions();
+            PlanSubsumeCore(term);
+            PlanFactUnions();
+        }
+
+        /// <summary>
+        /// Plans the subsumption of a constructor term as <see cref="PlanSubsume(Term)"/> does, the writes held back
+        /// left for <see cref="PlanFactUnions"/>.
+        /// </summary>
+        internal void PlanSubsumeCore(Term term)
+        {
             var shape = term.Shape;
             if (shape.Kind != TermShapeKind.Application || shape.Table!.Kind != TableKind.Constructor)
                 throw new ArgumentException($"Subsume takes a constructor term; {term} is not one", nameof(term));
@@ -395,6 +424,16 @@ namespace Eggnog
         {
             PlanFactUnions();
             ArgumentNullException.ThrowIfNull(fact);
+            PlanSubsumeCore(fact);
+            PlanFactUnions();
+        }
+
+        /// <summary>
+        /// Plans the subsumption of a relation row as <see cref="PlanSubsume(Fact)"/> does, the writes held back left for
+        /// <see cref="PlanFactUnions"/>.
+        /// </summary>
+        internal void PlanSubsumeCore(Fact fact)
+        {
             if (fact is not RelationFact relation)
             {
                 throw fact is ScopedFact scoped
@@ -871,8 +910,9 @@ namespace Eggnog
         void CollectUnion(uint a, uint b) => (factUnions ??= new List<(uint, uint)>()).Add((a, b));
 
         /// <summary>
-        /// Plans the unions held back while the fact or term was planned, in order, as egglog applies a command's unions
-        /// after it evaluates the command: a later fact of the batch sees them, as egglog's next command would.
+        /// Plans the writes and unions held back while the fact or term was planned, in order, as egglog applies a
+        /// command's writes and unions after it evaluates the command: a later fact of the batch sees them, as egglog's
+        /// next command would.
         /// </summary>
         /// <exception cref="FactConflictException">A union would give a function without a lattice two values for one
         /// key.</exception>
@@ -880,12 +920,24 @@ namespace Eggnog
         /// container of classes holds.</exception>
         void PlanFactUnions()
         {
-            if (factUnions is not { Count: > 0 } held)
-                return;
+            // A primitive's writes first, in order, as egglog's flush applies a command's staged writes before its rebuild
+            // merges the unions; each may hold back unions of its own.
+            if (factWrites is { Count: > 0 } writes)
+            {
+                factWrites = null;
+                foreach (var write in writes)
+                    write();
+            }
 
-            factUnions = null;
-            foreach (var (a, b) in held)
-                PlanUnionCore(a, b);
+            if (factUnions is { Count: > 0 } held)
+            {
+                factUnions = null;
+                foreach (var (a, b) in held)
+                    PlanUnionCore(a, b);
+            }
+
+            // The next fact's primitives see the terms planned so far.
+            factTerms = pending.Count;
         }
 
         /// <summary>

@@ -37,6 +37,7 @@ namespace Eggnog
                 throw new ArgumentException($"Delete takes a function or constructor application; {term} is not one", nameof(term));
 
             PlanDelete(shape.Table!, shape.Arguments, nameof(term));
+            PlanFactUnions();
         }
 
         /// <summary>
@@ -60,6 +61,7 @@ namespace Eggnog
             }
 
             PlanDelete(relation.Table, relation.Arguments, nameof(fact));
+            PlanFactUnions();
         }
 
         /// <summary>
@@ -70,6 +72,7 @@ namespace Eggnog
         {
             CheckTable(table);
             CheckDeletable(table);
+            deleting = true;
             Literals.Action(arguments, null);
             var keys = PlanKeys(table, arguments, out var existing);
             if (existing == false || engine.TryLookup(table.Function, keys, out _) == false)

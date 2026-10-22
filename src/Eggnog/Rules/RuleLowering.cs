@@ -86,7 +86,7 @@ namespace Eggnog
                         {
                             var call = new PrimitiveCall(
                                 graph, program.Name, step.Primitive!, Types(step.Arguments), step.Target.Type, Names(program, step.Arguments), true,
-                                bound.Contains(step.Target));
+                                program.BodyContext, bound.Contains(step.Target));
                             var function = engine.RegisterExternalFunction(call);
                             owned.Add(function);
                             arguments[^1] = Entry(step.Target, variables, lowered);
@@ -96,7 +96,8 @@ namespace Eggnog
                         }
                         case ProgramStepKind.Filter:
                         {
-                            var call = new FilterCall(graph, program.Name, step.Primitive!, Types(step.Arguments), Names(program, step.Arguments));
+                            var call = new FilterCall(graph, program.Name, step.Primitive!, Types(step.Arguments), Names(program, step.Arguments),
+                                program.BodyContext);
                             var function = engine.RegisterExternalFunction(call);
                             owned.Add(function);
                             arguments[^1] = builder.NewVar(unitType);
@@ -174,7 +175,8 @@ namespace Eggnog
                         default:
                         {
                             var resultType = program.Registers[op.Target].Type;
-                            var call = new PrimitiveCall(graph, program.Name, op.Primitive!, Types(op.Inputs), resultType, Names(program, op.Inputs), false);
+                            var call = new PrimitiveCall(graph, program.Name, op.Primitive!, Types(op.Inputs), resultType, Names(program, op.Inputs), false,
+                                program.HeadContext);
                             var function = engine.RegisterExternalFunction(call);
                             owned.Add(function);
                             var name = program.Name;

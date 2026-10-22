@@ -138,6 +138,18 @@ namespace Eggnog
         public bool IncludeSubsumed { get; init; }
 
         /// <summary>
+        /// Gets the context of the body's primitives, egglog's: <see cref="PrimitiveAccess.Pure"/> for a semi-naive rule's
+        /// body and a split rule's, <see cref="PrimitiveAccess.Read"/> for a naive rule's and a query's.
+        /// </summary>
+        public PrimitiveAccess BodyContext { get; init; } = PrimitiveAccess.Pure;
+
+        /// <summary>
+        /// Gets the context of the head's primitives, egglog's: <see cref="PrimitiveAccess.Write"/> for a semi-naive rule's
+        /// head, <see cref="PrimitiveAccess.Full"/> for a naive rule's.
+        /// </summary>
+        public PrimitiveAccess HeadContext { get; init; } = PrimitiveAccess.Write;
+
+        /// <summary>
         /// Gets the number of body registers: the head registers follow them.
         /// </summary>
         public int BodyRegisterCount

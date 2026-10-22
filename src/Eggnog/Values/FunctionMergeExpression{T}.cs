@@ -18,6 +18,7 @@ namespace Eggnog
         readonly Var<T> @new;
         readonly Term<T> body;
         readonly TableHandle[] tables;
+        readonly bool callsTablePrimitive;
 
         /// <summary>
         /// Initializes a new instance: builds the expression over the two variables once.
@@ -38,6 +39,24 @@ namespace Eggnog
             var found = new List<TableHandle>();
             CollectTables(body, found);
             tables = found.ToArray();
+            callsTablePrimitive = CallsTablePrimitive(body);
+        }
+
+        /// <summary>
+        /// Gets whether an expression calls a primitive over the tables (<see cref="Primitive.Access"/>), whose writes
+        /// only the engine's merge stages.
+        /// </summary>
+        static bool CallsTablePrimitive(Term term)
+        {
+            var shape = term.Shape;
+            if (shape.Kind == TermShapeKind.Computation && shape.Primitive!.Access != PrimitiveAccess.Pure && shape.Primitive.IsWrite == false)
+                return true;
+
+            foreach (var argument in shape.Arguments)
+                if (CallsTablePrimitive(argument))
+                    return true;
+
+            return false;
         }
 
         /// <summary>
@@ -69,7 +88,9 @@ namespace Eggnog
         public override bool ComparesValues => true;
 
         /// <inheritdoc />
-        public override bool CanSimulate => tables.Length == 0;
+        /// <remarks>Not when the expression calls tables, or a primitive over them, whose writes the engine's merge
+        /// stages.</remarks>
+        public override bool CanSimulate => tables.Length == 0 && callsTablePrimitive == false;
 
         /// <inheritdoc />
         public override IReadOnlyCollection<TableHandle> Tables => tables;
@@ -164,6 +185,12 @@ namespace Eggnog
                 default:
                 {
                     var primitive = shape.Primitive!;
+
+                    // egglog's merge runs in its write context: pure and write primitives, never one that reads.
+                    if (Primitive.Allows(PrimitiveAccess.Write, primitive.Access) == false)
+                        throw new ArgumentException(
+                            $"The merge {Name} of '{functionName}': {Primitive.Refusal(primitive, "a merge expression", PrimitiveAccess.Write)}.", "merge");
+
                     var parameters = new ColumnType[shape.Arguments.Length];
                     for (var i = 0; i < parameters.Length; i++)
                     {

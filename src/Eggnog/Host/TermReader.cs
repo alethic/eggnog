@@ -190,14 +190,15 @@ namespace Eggnog
         /// <summary>
         /// Evaluates a primitive's term to its CLR value, on the calling thread under <see cref="EngineCallMarker"/>.
         /// </summary>
-        /// <exception cref="ArgumentException">The primitive writes the graph.</exception>
+        /// <exception cref="ArgumentException">The primitive writes tables, which a read does not, as egglog's read context
+        /// of a <c>check</c> does not.</exception>
         /// <exception cref="RuleEvaluationException">The primitive threw; the scope is not faulted.</exception>
         static bool TryEvaluate(Scope scope, TermShape shape, ScopeTag? enclosing, out object? value, out ColumnType result)
         {
             value = null;
             var primitive = shape.Primitive!;
-            if (primitive.IsWrite)
-                throw new ArgumentException($"primitive '{primitive.Name}' writes the graph, and a read writes nothing", "term");
+            if (Primitive.Allows(PrimitiveAccess.Read, primitive.Access) == false)
+                throw new ArgumentException(Primitive.Refusal(primitive, "a host read", PrimitiveAccess.Read), "term");
 
             var parameters = new ColumnType[primitive.ParameterTypes.Count];
             for (var i = 0; i < parameters.Length; i++)
@@ -239,7 +240,25 @@ namespace Eggnog
             EngineCallMarker.Enter();
             try
             {
-                found = primitive.TryInvokeValue(arguments, parameters, out value);
+                if (primitive.Access == PrimitiveAccess.Read)
+                {
+                    // A read primitive reads the scope's view, in egglog's read context of a check.
+                    var tables = new ReaderPrimitiveTables(scope, primitive);
+                    try
+                    {
+                        found = primitive.TryInvokeValueTables(arguments, parameters, tables, out value);
+                        if (tables.Refusal is { } refused)
+                            throw refused;
+                    }
+                    finally
+                    {
+                        tables.End();
+                    }
+                }
+                else
+                {
+                    found = primitive.TryInvokeValue(arguments, parameters, out value);
+                }
             }
             catch (Exception exception)
             {
@@ -453,8 +472,8 @@ namespace Eggnog
                     return $"host reads are ground; '{shape.Name}' is a variable";
                 default:
                 {
-                    if (shape.Primitive!.IsWrite)
-                        return $"primitive '{shape.Primitive.Name}' writes the graph, and a read writes nothing";
+                    if (Primitive.Allows(PrimitiveAccess.Read, shape.Primitive!.Access) == false)
+                        return Primitive.Refusal(shape.Primitive, "a host read", PrimitiveAccess.Read);
 
                     foreach (var argument in shape.Arguments)
                         if (ValidateTerm(scope, argument, enclosing) is { } error)

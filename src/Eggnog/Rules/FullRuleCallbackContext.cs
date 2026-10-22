@@ -9,7 +9,7 @@ namespace Eggnog
     /// which is why its rule is naive: matched in full every run, as egglog marks it, so that a match is found again when
     /// a row it read changes.
     /// </summary>
-    public sealed class FullRuleCallbackContext : RuleCallbackContext
+    public sealed class FullRuleCallbackContext : RuleCallbackContext, ITables
     {
 
         /// <summary>
@@ -25,58 +25,15 @@ namespace Eggnog
 
         }
 
-        /// <summary>
-        /// Reads a function's value, or a constructor's class, at a key, without inserting: egglog's <c>lookup</c>.
-        /// </summary>
-        /// <typeparam name="T">The output's type.</typeparam>
-        /// <param name="table">The function or constructor, of the rule's graph.</param>
-        /// <param name="keys">One value per key column.</param>
-        /// <param name="value">The value, when the key has a row.</param>
-        /// <returns>Whether the key has a row.</returns>
-        /// <exception cref="ArgumentException">The table is a relation or not of the rule's graph, or a value is not of its
-        /// column's type.</exception>
-        public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
-        {
-            value = default!;
-            var found = TryRow(table, keys, 0, writes: false, out var key);
-            if (table.IsRelation)
-                throw Refuse(new ArgumentException(
-                    $"'{table.Name}' is a relation, which has no value to read; use Contains.", nameof(table)));
+        /// <inheritdoc />
+        public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value) => Tables.TryLookup(table, keys, out value);
 
-            if (table.Columns[^1].ClrType != typeof(T))
-                throw Refuse(new ArgumentException(
-                    $"'{table.Name}' outputs {table.Columns[^1].Name}, not {typeof(T).Name}.", nameof(table)));
+        /// <inheritdoc />
+        public bool Contains(RelationHandle relation, params ReadOnlySpan<object> keys) => Tables.Contains(relation, keys);
 
-            if (found == false || Call.Action(table).TryLookup(State, key, out var cell) == false)
-                return false;
-
-            var output = table.Columns[^1];
-            value = (T)output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
-            return true;
-        }
-
-        /// <summary>
-        /// Gets whether a relation holds a row.
-        /// </summary>
-        /// <param name="relation">The relation, of the rule's graph.</param>
-        /// <param name="keys">One value per column.</param>
-        /// <returns>Whether the row is there.</returns>
-        /// <exception cref="ArgumentException">The relation is not of the rule's graph, or a value is not of its column's
-        /// type.</exception>
-        public bool Contains(RelationHandle relation, params ReadOnlySpan<object> keys) =>
-            TryRow(relation, keys, 0, writes: false, out var row) && Call.Action(relation).TryLookup(State, row, out _);
-
-        /// <summary>
-        /// Gets the number of rows of a table the scope sees: egglog's <c>table_size</c>.
-        /// </summary>
-        /// <param name="table">The table, of the rule's graph.</param>
-        /// <returns>The number of rows.</returns>
-        /// <exception cref="ArgumentException">The table is not of the rule's graph.</exception>
-        public long TableSize(TableHandle table)
-        {
-            CheckTable(table, writes: false);
-            return Call.Action(table).RowCount(State);
-        }
+        /// <inheritdoc />
+        /// <remarks>Of the scope the rule runs in.</remarks>
+        public long TableSize(TableHandle table) => Tables.TableSize(table);
 
     }
 

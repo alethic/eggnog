@@ -35,8 +35,10 @@ namespace Eggnog
         /// <param name="resultType">The CLR type of the result.</param>
         /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
         /// <param name="isPartial">Whether the primitive is partial.</param>
-        private protected Primitive(string name, Type[] parameterTypes, Type resultType, bool isLambda, bool isPartial)
-            : this(name, (IReadOnlyList<Type>)Array.AsReadOnly(parameterTypes), resultType, isLambda, isPartial)
+        /// <param name="access">What the primitive may do to the tables.</param>
+        private protected Primitive(string name, Type[] parameterTypes, Type resultType, bool isLambda, bool isPartial,
+            PrimitiveAccess access = PrimitiveAccess.Pure)
+            : this(name, (IReadOnlyList<Type>)Array.AsReadOnly(parameterTypes), resultType, isLambda, isPartial, access)
         {
 
         }
@@ -49,13 +51,16 @@ namespace Eggnog
         /// <param name="resultType">The CLR type of the result.</param>
         /// <param name="isLambda">Whether the primitive is an anonymous lambda.</param>
         /// <param name="isPartial">Whether the primitive is partial.</param>
-        private protected Primitive(string name, IReadOnlyList<Type> parameterTypes, Type resultType, bool isLambda, bool isPartial)
+        /// <param name="access">What the primitive may do to the tables.</param>
+        private protected Primitive(string name, IReadOnlyList<Type> parameterTypes, Type resultType, bool isLambda, bool isPartial,
+            PrimitiveAccess access = PrimitiveAccess.Pure)
         {
             Name = name;
             this.parameterTypes = parameterTypes;
             ResultType = resultType;
             IsLambda = isLambda;
             IsPartial = isPartial;
+            Access = access;
         }
 
         /// <summary>
@@ -81,6 +86,13 @@ namespace Eggnog
         /// partial: one that throws fails the rule.
         /// </summary>
         public bool IsPartial { get; }
+
+        /// <summary>
+        /// Gets what the primitive may do to the graph's tables, egglog's kind of primitive, which decides where it may be
+        /// called (<see cref="PrimitiveAccess"/>): a pure primitive anywhere, the others only where the call site's context
+        /// allows its reads or writes.
+        /// </summary>
+        public PrimitiveAccess Access { get; }
 
         /// <summary>
         /// Creates a named primitive of one parameter.
@@ -183,6 +195,117 @@ namespace Eggnog
             ArgumentNullException.ThrowIfNull(function);
             return new PrimitiveN<TResult>(name, ParameterArray(parameters), arguments => function(arguments, out var result) ? result : throw NoResult(name), function);
         }
+
+        /// <summary>
+        /// Creates a named primitive that reads tables, egglog's read primitive (<c>add_read_primitive</c>): it runs
+        /// where reads are allowed, a naive rule's body and head, a host read and a host write, and is refused elsewhere
+        /// when the call is defined (<see cref="PrimitiveAccess.Read"/>). <paramref name="function"/> gets the tables
+        /// and the arguments, and returns <c>false</c> where there is no result, as egglog's returns <c>None</c>.
+        /// </summary>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: value types or sorts.</param>
+        /// <param name="function">The function: deterministic given the tables, and thread-safe.</param>
+        /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
+        /// tables.</returns>
+        /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
+        public static PrimitiveN<TResult> CreateRead<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITableReader, TResult> function) =>
+            CreateTables(name, parameters, PrimitiveAccess.Read, function);
+
+        /// <summary>
+        /// Creates a named primitive that writes tables, egglog's write primitive (<c>add_write_primitive</c>): it runs
+        /// where writes are allowed, a rule's head, a merge expression and a host write, and is refused elsewhere when the
+        /// call is defined (<see cref="PrimitiveAccess.Write"/>). Its writes are staged as a head's are.
+        /// </summary>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: value types or sorts.</param>
+        /// <param name="function">The function: thread-safe.</param>
+        /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
+        /// tables.</returns>
+        /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
+        public static PrimitiveN<TResult> CreateWrite<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITableWriter, TResult> function) =>
+            CreateTables(name, parameters, PrimitiveAccess.Write, function);
+
+        /// <summary>
+        /// Creates a named primitive that reads and writes tables, egglog's full primitive (<c>add_full_primitive</c>):
+        /// it runs only where both are allowed, a naive rule's head and a host write, and is refused elsewhere when the call
+        /// is defined (<see cref="PrimitiveAccess.Full"/>).
+        /// </summary>
+        /// <typeparam name="TResult">The result type.</typeparam>
+        /// <param name="name">The name it renders as.</param>
+        /// <param name="parameters">The parameter types: value types or sorts.</param>
+        /// <param name="function">The function: thread-safe.</param>
+        /// <returns>The primitive; its <see cref="PrimitiveN{TResult}.Function"/> throws, since it needs the
+        /// tables.</returns>
+        /// <exception cref="ArgumentException">The name is invalid, or a parameter type is <c>null</c>.</exception>
+        public static PrimitiveN<TResult> CreateFull<TResult>(string name, IReadOnlyList<Type> parameters, TableFuncN<ITables, TResult> function) =>
+            CreateTables(name, parameters, PrimitiveAccess.Full, function);
+
+        /// <summary>
+        /// Creates a primitive over the tables, of an access other than <see cref="PrimitiveAccess.Pure"/>.
+        /// </summary>
+        static PrimitiveN<TResult> CreateTables<TResult>(string name, IReadOnlyList<Type> parameters, PrimitiveAccess access, TableFuncN<ITables, TResult> function)
+        {
+            NameRules.ValidateName(name, nameof(name));
+            ArgumentNullException.ThrowIfNull(function);
+            return new PrimitiveN<TResult>(name, ParameterArray(parameters), access, function);
+        }
+
+        /// <summary>
+        /// Gets whether a call site whose context is <paramref name="context"/> may call a primitive of
+        /// <paramref name="access"/>: egglog's <c>valid_contexts</c>, a pure primitive everywhere, a read primitive where
+        /// reads are, a write primitive where writes are, a full primitive only where both are.
+        /// </summary>
+        /// <param name="context">The call site's context.</param>
+        /// <param name="access">The primitive's access.</param>
+        /// <returns>Whether the call is valid.</returns>
+        internal static bool Allows(PrimitiveAccess context, PrimitiveAccess access) => access switch
+        {
+            PrimitiveAccess.Pure => true,
+            PrimitiveAccess.Read => context is PrimitiveAccess.Read or PrimitiveAccess.Full,
+            PrimitiveAccess.Write => context is PrimitiveAccess.Write or PrimitiveAccess.Full,
+            _ => context == PrimitiveAccess.Full,
+        };
+
+        /// <summary>
+        /// Gets the refusal of a primitive whose access the call site's context does not allow, as egglog's typechecker
+        /// finds no primitive of the name valid there.
+        /// </summary>
+        /// <param name="primitive">The primitive.</param>
+        /// <param name="site">The call site, as the message names it ("a semi-naive rule's body").</param>
+        /// <param name="context">The call site's context.</param>
+        /// <returns>The message.</returns>
+        internal static string Refusal(Primitive primitive, string site, PrimitiveAccess context)
+        {
+            var what = primitive.Access switch
+            {
+                PrimitiveAccess.Read => "reads tables",
+                PrimitiveAccess.Write => "writes tables",
+                _ => "reads and writes tables",
+            };
+
+            var allows = context switch
+            {
+                PrimitiveAccess.Pure => "neither reads nor writes",
+                PrimitiveAccess.Read => "reads but does not write",
+                PrimitiveAccess.Write => "writes but does not read",
+                _ => "reads and writes",
+            };
+
+            return $"primitive '{primitive.Name}' {what}, and {site} {allows}, as egglog's {Context(context)} context";
+        }
+
+        /// <summary>
+        /// Gets the name of egglog's context.
+        /// </summary>
+        static string Context(PrimitiveAccess context) => context switch
+        {
+            PrimitiveAccess.Pure => "pure",
+            PrimitiveAccess.Read => "read",
+            PrimitiveAccess.Write => "write",
+            _ => "full",
+        };
 
         /// <summary>
         /// Copies parameter types, refusing a missing one.
@@ -343,6 +466,32 @@ namespace Eggnog
         /// <returns>Whether there is a result: <c>false</c> for a partial primitive with none, and for a primitive over
         /// cells whose arguments have none.</returns>
         internal abstract bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value);
+
+        /// <summary>
+        /// Calls the primitive over its arguments' cells with the tables of the call site: a primitive over the tables
+        /// with them, any other as <see cref="TryInvokeCore"/> in their scope. A partial primitive's call with no result
+        /// returns <c>false</c>.
+        /// </summary>
+        /// <param name="arguments">The argument cells.</param>
+        /// <param name="parameters">The parameters' column types.</param>
+        /// <param name="result">The result's column type.</param>
+        /// <param name="tables">The tables of the call site, and its scope.</param>
+        /// <param name="cell">The result's cell, when there is a result.</param>
+        /// <returns>Whether there is a result.</returns>
+        internal virtual bool TryInvokeTables(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell) =>
+            TryInvokeCore(arguments, parameters, result, tables.Scope, out cell);
+
+        /// <summary>
+        /// Calls the primitive on CLR values with the tables of a read: a primitive over the tables with them, any other
+        /// as <see cref="TryInvokeValue"/>.
+        /// </summary>
+        /// <param name="arguments">The arguments, of the parameters' types.</param>
+        /// <param name="parameters">The parameters' column types.</param>
+        /// <param name="tables">The read's tables.</param>
+        /// <param name="value">The result, when there is one.</param>
+        /// <returns>Whether there is a result.</returns>
+        internal virtual bool TryInvokeValueTables(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value) =>
+            TryInvokeValue(arguments, parameters, out value);
 
         /// <summary>
         /// Gets what <c>Function</c> throws for a partial primitive's call that has no result.

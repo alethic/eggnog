@@ -22,7 +22,11 @@ gates").
   heads never read but in a full rule callback, egglog's `rust_rule_full` (architecture 2.13, item 2). Such a rule
   inherits no progress in a child.
 - **Function values.** egglog's `unstable-fn` and `unstable-app` (src/sort/fn.rs), a container of a function and
-  its partial arguments, and the higher-order container primitives over them, such as `unstable-multiset-map`.
+  its partial arguments, and the higher-order container primitives over them, such as `unstable-multiset-map`. The
+  capability contexts their application dispatches on are followed (decisions row 12).
+- **Deletions in host writes.** egglog's top-level actions interleave deletions and writes, command by command; a host
+  write's batch stages its deletions apart from its writes, so a primitive of a host write deletes nothing, and one in a
+  deletion's keys writes nothing but terms (decisions row 12).
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
   layers.

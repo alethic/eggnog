@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 
 namespace Eggnog
 {
@@ -24,6 +25,7 @@ namespace Eggnog
         readonly ColumnType result;
         readonly bool overClasses;
         readonly Relations.UnionAction unionAction;
+        readonly ConcurrentDictionary<Relations.FunctionId, Relations.TableAction>? actions;
 
         /// <summary>
         /// Initializes a new instance.
@@ -45,6 +47,8 @@ namespace Eggnog
             overClasses = result.InvolvesClasses || Array.Exists(parameters, p => p.InvolvesClasses);
             if (primitive.IsWrite)
                 unionAction = new Relations.UnionAction(graph.Engine);
+            else if (primitive.Access != PrimitiveAccess.Pure)
+                actions = new();
         }
 
         /// <inheritdoc />
@@ -63,6 +67,27 @@ namespace Eggnog
                         throw Primitive.NoResult(primitive.Name);
 
                     return true;
+                }
+
+                if (actions is not null)
+                {
+                    // A write primitive over the tables, in egglog's write context of a merge: its writes staged through
+                    // the merge's state.
+                    var tables = new EnginePrimitiveTables(
+                        ScopeRuntime.Of(graph, state).Owner ?? throw new InvalidOperationException("A merge ran in a context with no scope."),
+                        state, PrimitiveAccess.Write, primitive, actions);
+                    try
+                    {
+                        var found = primitive.TryInvokeTables(args, parameters, this.result, tables, out result);
+                        if (tables.Refusal is { } refused)
+                            throw refused;
+
+                        return found ? true : throw Primitive.NoResult(primitive.Name);
+                    }
+                    finally
+                    {
+                        tables.End();
+                    }
                 }
 
                 result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.Of(graph, state).Owner : null);

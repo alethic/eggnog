@@ -63,12 +63,9 @@ namespace Eggnog
         public override bool ReadsTables => definition.Full;
 
         /// <summary>
-        /// Gets the engine's table action of a table, made once per table.
+        /// Gets the engine's table actions of the call site, made once per table.
         /// </summary>
-        /// <param name="table">The table.</param>
-        /// <returns>The action.</returns>
-        public Relations.TableAction Action(TableHandle table) =>
-            actions.GetOrAdd(table.Function, static (function, engine) => new Relations.TableAction(engine, function), graph.Engine);
+        public ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> Actions => actions;
 
         /// <inheritdoc />
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
