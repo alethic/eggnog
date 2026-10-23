@@ -554,6 +554,8 @@ static class Eggnog.Primitives
     static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(TableHandle target)
     static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(Primitive target)
     static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(TableHandle target)
+    static PrimitiveN<ValueTuple> UnstableMultiSetClearIndex<T>()
+    static PrimitiveN<ValueTuple> UnstableMultiSetFillIndex<T>()
     static PrimitiveN<Vec<T>> VecEmpty<T>()
     static PrimitiveN<Vec<TResult>> UnstableVecMap<T, TResult>()
     static VariadicPrimitive<T, MultiSet<T>> MultiSetOf<T>()
