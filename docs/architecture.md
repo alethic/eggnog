@@ -978,6 +978,24 @@ runs. A container's cell that its view does not resolve formats as `#17`, as a c
 places a container in a layer: every layer is empty unless a test places one there, so a child reads the root's
 containers (decisions row 9).
 
+**Container logs.** Each level has a container log (`ContainerLog`): the store's for the root, owned by its
+container environments, and each child's in its container layers. A log records only while its level has live
+descendants: creating a child activates the log of every ancestor that is not frozen before the child takes its
+cursors, so they start at the end, and disposing the last descendant of a level clears and deactivates that level's
+log. Its Added stream records every container of classes that appears in the level's environments, interned, reinserted
+by a rebuild or renamed, as (type, id, content hash). Each environment buffers its entries per hash-cons shard under
+the shard lock the recording path already holds, so interning and the parallel rebuild take no second lock, and sets
+a pending flag; a reader drains the buffers into the stream before it reads. Its Dirty stream records the ids the
+root's container rebuild changed in place. Each child keeps, in its cursor into every unsettled ancestor, a position in
+both streams. The first pass of its rebuild re-stamps the own rows that name a Dirty id, and the eq-container guard
+checks the child's own displacements against the containers that appeared at the root since its Added cursor, before
+the rebuild's loop as well as after each pass. A child with a displacement or a container layer is not clean while
+such containers wait. A frozen level records nothing: it interns no container of classes and never rebuilds. A root
+without descendants pays one test of its log's active flag where a container of classes appears. A log keeps its
+entries until that clear, even once every live cursor has passed them: while a level has live descendants, its log
+grows by one 16-byte entry per container of classes that appears at the level and one id per container its rebuild
+changes in place.
+
 **Catch-up.** A writable ancestor may keep writing after its children exist. Each child keeps cursors into its
 ancestors' layers and journals, and at its next call (a write, a run, a read) catches up: it re-keys its union-find,
 absorbs the ancestor rows appended since its cursors that mention its own losers, and then rebuilds its own rows.

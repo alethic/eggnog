@@ -174,8 +174,9 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
         /// ids; or the environment and the container hold e-class ids and the state belongs to a child context, which
         /// may look such a container up (<see cref="TryGetId(in TContainer, out uint)"/>) but not intern one; or they
-        /// hold e-class ids, the container is new and the state's database is frozen, whose descendants never re-run
-        /// their eq-container guard (<see cref="EqContainerGuard"/>).</exception>
+        /// hold e-class ids, the container is new and the state's database is frozen: a frozen context is read-only,
+        /// and its container log, from which its descendants learn of new containers, never grows
+        /// (<see cref="ContainerLog"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
@@ -215,8 +216,8 @@ namespace Eggnog.Relations
         /// <see cref="Counter"/> in <paramref name="counters"/> if it is new, as <see cref="GetOrInsert"/> does from an
         /// execution state of a writable root: the library interns its containers of classes so, from a host write or
         /// a rule at the root, and the caller makes sure the root is writable, never frozen, as the frozen refusal of
-        /// <see cref="GetOrInsert"/> would. A new eq-sort container moves the eq-container version, as there.
-        /// Thread-safe.
+        /// <see cref="GetOrInsert"/> would. A new eq-sort container is recorded in the environment's container log
+        /// while the log is active, as there. Thread-safe.
         /// </summary>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>
@@ -235,7 +236,8 @@ namespace Eggnog.Relations
         uint GetOrInsertCore(in TContainer container, ExecutionState? state, CounterSet? counters)
         {
             var hash = container.ComputeHash();
-            var shard = toId[shardData.ShardOf(hash)];
+            var index = shardData.ShardOf(hash);
+            var shard = toId[index];
             uint id;
             lock (shard)
             {
@@ -244,20 +246,18 @@ namespace Eggnog.Relations
                 if (slot >= 0)
                     return shard.EntryAt(slot).Id;
 
-                // A new eq-sort container may name an id some child displaced; the children re-run their eq-container
-                // guard before they are read again. A frozen database interns none: its descendants could not be told.
-                if (HoldsIds && container.HoldsIds)
-                {
-                    if (state is not null)
-                        NoteNewEqContainer(state);
-                    else
-                        NoteNewContent();
-                }
+                // A new eq-sort container may name an id some descendant displaced; the descendants read it from the
+                // level's container log. A frozen database interns none: its log never grows, so they could not be told.
+                var classes = HoldsIds && container.HoldsIds;
+                if (classes && state?.View?.Owner is { IsFrozen: true })
+                    ThrowInternedInFrozen();
 
                 id = state is not null ? MintId(state) : Store.CheckId(counters!.Increment(counter));
                 var entry = new ContainerEntry<TContainer>(container, hash, id);
                 AddById(entry);
                 shard.InsertInSlot(hash, ~slot, entry);
+                if (classes)
+                    LogAdded(index, id, hash);
             }
 
             Index(container, id);
@@ -342,7 +342,8 @@ namespace Eggnog.Relations
         {
             Debug.Assert(hash == container.ComputeHash(), "the content hash is stale");
 
-            var shard = toId[shardData.ShardOf(hash)];
+            var index = shardData.ShardOf(hash);
+            var shard = toId[index];
             lock (shard)
             {
                 var match = new ContainerContentMatch<TContainer>(container, hash);
@@ -364,8 +365,9 @@ namespace Eggnog.Relations
                 AddById(fresh);
                 shard.InsertInSlot(hash, ~slot, fresh);
 
-                // A rebuilt content may name an id some child displaced: the children re-run their eq-container guard.
-                NoteNewContent();
+                // A rebuilt content may name an id some descendant displaced: it reads the entry from the log.
+                if (HoldsIds && container.HoldsIds)
+                    LogAdded(index, value, hash);
             }
 
             Index(container, value);
@@ -395,19 +397,16 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The slow path of <see cref="GetOrInsert"/> for a new container of a type that holds e-class ids:
-        /// refuses a frozen database, whose descendants never re-run their guard, and moves the eq-container version, so
-        /// every child re-checks its own displacements against the new content before it is read again. Under the
-        /// hash-cons shard's lock; nothing is inserted when it throws.
+        /// The refusal of <see cref="GetOrInsert"/> for a new container of classes from a state of a frozen database:
+        /// a frozen context is read-only, and its container log never grows, so a descendant that displaced one of the
+        /// container's elements would never learn of it. Under the hash-cons shard's lock, before anything is
+        /// inserted.
         /// </summary>
-        /// <param name="state">The interning state.</param>
-        /// <exception cref="InvalidOperationException">The state's database is frozen.</exception>
-        void NoteNewEqContainer(ExecutionState state)
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ThrowInternedInFrozen()
         {
-            if (state.View?.Owner is { IsFrozen: true })
-                throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: its descendants do not re-run their guard against it, so a descendant that displaced one of its elements would not be refused. Look it up with TryGetId.");
-
-            NoteNewContent();
+            throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: a frozen context is read-only, and its descendants, which learn of new containers from its container log, would never learn of this one. Look it up with TryGetId.");
         }
 
         /// <summary>
@@ -418,8 +417,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Renames a hash-cons entry to <paramref name="newId"/>: moves its reverse-map entry and its occurrences in the
-        /// element index, then updates the entry in place. The caller holds the entry's hash-cons shard (by lock or by
-        /// exclusive access).
+        /// element index, then updates the entry in place, and records it under the new id in the container log while
+        /// the log is active, for a container of classes. The caller holds the entry's hash-cons shard's lock (a
+        /// parallel rebuild's task holds the lock of the shard it owns).
         /// </summary>
         /// <param name="entry">The entry, in its hash-cons shard.</param>
         /// <param name="newId">The new id.</param>
@@ -434,6 +434,8 @@ namespace Eggnog.Relations
             var renamer = new ValueIndexRenamer(valIndex, oldId, newId);
             entry.Container.ForEachValue(ref renamer);
             entry.Id = newId;
+            if (HoldsIds && entry.Container.HoldsIds)
+                LogAdded(shardData.ShardOf(entry.Hash), newId, entry.Hash);
         }
 
         /// <summary>

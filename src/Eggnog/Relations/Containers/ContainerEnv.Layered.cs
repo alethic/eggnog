@@ -95,8 +95,8 @@ namespace Eggnog.Relations
         /// Inserts <paramref name="container"/>, whose content hash is <paramref name="hash"/>, under
         /// <paramref name="id"/> when the environment holds no equal container, merging nothing: the insert of a test
         /// hook that places a container in a child's layer (<see cref="ContainerLayers.Place{TContainer}"/>), where a
-        /// rebuild's insert merges (<see cref="InsertOwned(in TContainer, ulong, uint, ExecutionState)"/>).
-        /// Thread-safe.
+        /// rebuild's insert merges (<see cref="InsertOwned(in TContainer, ulong, uint, ExecutionState)"/>). A container
+        /// of classes is recorded in the container log while it is active, as every insert is. Thread-safe.
         /// </summary>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <param name="hash">Its content hash.</param>
@@ -106,7 +106,8 @@ namespace Eggnog.Relations
         {
             Debug.Assert(hash == container.ComputeHash(), "the content hash is stale");
 
-            var shard = toId[shardData.ShardOf(hash)];
+            var index = shardData.ShardOf(hash);
+            var shard = toId[index];
             lock (shard)
             {
                 var match = new ContainerContentMatch<TContainer>(container, hash);
@@ -117,6 +118,8 @@ namespace Eggnog.Relations
                 var entry = new ContainerEntry<TContainer>(container, hash, id);
                 AddById(entry);
                 shard.InsertInSlot(hash, ~slot, entry);
+                if (HoldsIds && container.HoldsIds)
+                    LogAdded(index, id, hash);
             }
 
             Index(container, id);

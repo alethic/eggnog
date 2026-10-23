@@ -66,6 +66,7 @@ namespace Eggnog.Relations
             ClockCounter = database.AddCounter();
             Counters = database.Counters;
             Counters.Increment(ClockCounter);
+            ContainerLog = database.Containers.Log;
             Schema = new LayeredSchema(this);
             Root = new Context(this, database);
         }
@@ -101,10 +102,13 @@ namespace Eggnog.Relations
         public CounterId ClockCounter { get; }
 
         /// <summary>
-        /// Gets the log of containers the root rebuilt in place while it had live descendants, from which children
-        /// re-stamp their own rows.
+        /// Gets the root's container log, which the root's container environments own
+        /// (<see cref="ContainerValues.Log"/>): while the root has live descendants, the containers of classes that
+        /// appear in its environments and the ids its container rebuild changed in place, from which each child learns
+        /// of them through its cursor into the root (<see cref="Relations.ContainerLog"/>). A child's own log belongs to
+        /// its container layers (<see cref="ContainerLayers.Log"/>).
         /// </summary>
-        public ContainerDirtyLog ContainerDirtyLog { get; } = new();
+        public ContainerLog ContainerLog { get; }
 
         /// <summary>
         /// Gets the number of ids the store can hand out: ids 0 to <see cref="UnionFind.MaxId"/>.

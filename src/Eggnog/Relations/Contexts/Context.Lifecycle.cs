@@ -19,8 +19,9 @@ namespace Eggnog.Relations
         /// rows are canonical and whose union-find is current with its own parent's; the child shares that domain. A
         /// frozen context is not entered, and the child gets a domain of its own, so children of a frozen context may
         /// run on different threads. The child is added to this context's children under their lock, and the gate of
-        /// every ancestor, this one included, counts it until it is disposed. The first child seals the store's
-        /// counters.
+        /// every ancestor, this one included, counts it until it is disposed. Before the child takes its cursors, the
+        /// container log of every ancestor that is not frozen is activated (<see cref="Relations.ContainerLog"/>), so
+        /// they start at its end. The first child seals the store's counters.
         /// </para>
         /// <para>
         /// A child created with <see cref="ContextOptions.StopOnContradiction"/> where a contradiction row is already
@@ -82,8 +83,8 @@ namespace Eggnog.Relations
         /// Disposes the child: it leaves its parent's children, every ancestor's gate stops counting it, and its
         /// structures are released. A second call does nothing; every later call to another member throws
         /// <see cref="ObjectDisposedException"/>. The ids it minted leak, which is harmless; its journal needs no
-        /// reader tracking. When the root's gate reaches zero, the store's container dirty log is cleared: no cursor
-        /// into it is left.
+        /// reader tracking. The container log of every ancestor whose gate reaches zero is cleared and deactivated
+        /// (<see cref="Relations.ContainerLog.Clear"/>): no cursor into it is left.
         /// </summary>
         /// <remarks>
         /// A frozen context is scanned without its domain, so a dispose from inside one of its
@@ -141,8 +142,11 @@ namespace Eggnog.Relations
                         ancestors[i].gate.EndChange();
                 }
 
-                if (store.Root.Gate.HasLiveDescendants == false)
-                    store.ContainerDirtyLog.Clear();
+                // An ancestor whose gate reached zero has no descendant left to read its container log. Under a frozen
+                // ancestor another thread may create a child meanwhile; it takes no cursor into a frozen level.
+                for (var i = 0; i < Depth; i++)
+                    if (ancestors[i].gate.HasLiveDescendants == false)
+                        ancestors[i].ContainerLog.Clear();
 
                 tables!.Release();
                 containerLayers!.Release();
@@ -167,9 +171,11 @@ namespace Eggnog.Relations
         /// In a child the first pass catches up: it re-keys the union-find over the parent's new displacements
         /// (<see cref="CatchUpUnionFind"/>), absorbs the rows the unsettled ancestors appended since its cursors
         /// (<see cref="ContextTables.CatchUpRows"/>), and re-stamps the own rows that name a container the root rebuilt
-        /// in place (<see cref="RefreshDirtyContainerIds"/>). Every pass then rewrites the own rows that name an id
-        /// displaced since the last pass, hides and copies the ancestor rows that name the child's own new losers, and
-        /// merges (<see cref="ContextTables.RebuildPass"/>); the eq-container guard checks the pass's own displacements
+        /// in place, from the Dirty streams of the unsettled ancestors' container logs
+        /// (<see cref="RefreshDirtyContainerIds"/>). Every pass then rewrites the own rows that name an id displaced
+        /// since the last pass, hides and copies the ancestor rows that name the child's own new losers, and merges
+        /// (<see cref="ContextTables.RebuildPass"/>); the eq-container guard checks the pass's own displacements, and
+        /// the containers the root's container log gained since the guard last read it
         /// (<see cref="EqContainerGuard"/>). A contradiction that stops the child ends the loop at once.
         /// </para>
         /// <para>
@@ -184,8 +190,10 @@ namespace Eggnog.Relations
         /// <para>
         /// Before any pass, a child refuses to catch up with a parent that a contradiction stopped: such a parent is
         /// never clean again. A child that stops on contradictions stops too; any other child is refused, unfaulted
-        /// (<see cref="StopIfParentStopped"/>). And when the store gained an eq-sort container since the child's guard
-        /// last ran, the guard checks the whole journal again, even when nothing else is to be done.
+        /// (<see cref="StopIfParentStopped"/>). And when the container log of an unsettled ancestor gained an eq-sort
+        /// container since the child's guard last read it, the guard runs, even when nothing else is to be done: it
+        /// checks the child's displacements against what the root's log gained, and the journal rows not checked yet
+        /// against every container the root holds.
         /// </para>
         /// </remarks>
         /// <returns>Whether any pass changed anything; <c>false</c> for a frozen, contradicted or clean context.</returns>
@@ -217,9 +225,9 @@ namespace Eggnog.Relations
             if (contradicted)
                 return false;
 
-            // The store gained an eq-sort container since the guard last ran; the guard reads nothing it writes, so it
-            // runs even inside a callback, before the clean test that it is part of.
-            if (IsEqGuardCurrent == false)
+            // An unsettled ancestor's container log gained an eq-sort container since the guard last read it; the guard
+            // changes nothing a reader sees, so it runs even inside a callback, before the clean test it is part of.
+            if (parent is not null && EqContainerGuard.IsBehind(this))
                 CheckEqContainers();
 
             if (parent is null ? journalMark == DisplacedCount && database.Catalog.Notifications.IsEmpty : IsClean)
@@ -269,7 +277,7 @@ namespace Eggnog.Relations
                         : tables!.RebuildPass(epoch);
 
                     if (parent is not null)
-                        EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
+                        EqContainerGuard.Check(this, ref eqCheckedRows);
                 }
                 catch when (IsRoot == false)
                 {
@@ -334,9 +342,10 @@ namespace Eggnog.Relations
         /// now on, and staging into any table throws. Then it builds every view: a child folds every hidden set into
         /// its views' frozen parts (<see cref="ContextTables.Freeze"/>) and freezes its container layers
         /// (<see cref="ContainerLayers.Freeze"/>), read without locks from then on, and the root freezes its root views
-        /// (<see cref="LayeredSchema.FreezeRoot"/>). It flattens a child's chain of union-find levels into one map for
-        /// the children created from now on; gives each live child subtree a thread domain of its own, so children of a
-        /// frozen context may run concurrently; and publishes the frozen flag last, which orders every structure a
+        /// (<see cref="LayeredSchema.FreezeRoot"/>); either drains its container log, which never grows again
+        /// (<see cref="Relations.ContainerLog.Freeze"/>). It flattens a child's chain of union-find levels into one map
+        /// for the children created from now on; gives each live child subtree a thread domain of its own, so children
+        /// of a frozen context may run concurrently; and publishes the frozen flag last, which orders every structure a
         /// child reads before the child's own reads. A second call does nothing. Freezing a context with live children
         /// is allowed: they catch up once, and get their own domains.
         /// </para>
@@ -409,6 +418,7 @@ namespace Eggnog.Relations
                     else
                     {
                         store.Schema.FreezeRoot();
+                        store.ContainerLog.Freeze();
                     }
                 }
                 catch when (IsRoot == false)
@@ -506,16 +516,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Runs the eq-container guard over the whole journal when the store gained an eq-sort container since the
-        /// guard last ran (<see cref="EqContainerGuard"/>). A refusal faults the child: its view names, through the new
-        /// container, an id it displaced, and only a container rebuild in the child could reconcile that.
+        /// Runs the eq-container guard before the rebuild loop when it is behind (<see cref="EqContainerGuard"/>): an
+        /// unsettled ancestor's container log gained containers since the guard last read it. A refusal faults the
+        /// child: its view names, through the new container, an id it displaced, and only a container rebuild in the
+        /// child could reconcile that.
         /// </summary>
         /// <exception cref="NotSupportedException">An eq-sort container holds one of the child's own displacements.</exception>
         void CheckEqContainers()
         {
             try
             {
-                EqContainerGuard.Check(this, ref eqCheckedRows, ref eqCheckedVersion);
+                EqContainerGuard.Check(this, ref eqCheckedRows);
             }
             catch
             {
@@ -569,8 +580,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Creates the child and links it in: under the child list's lock (which a concurrent dispose of this context
-        /// also takes), then the ancestors' gates. The whole change is bracketed by the gates' change marks, so the
-        /// invariant checker can tell a consistent reading of the tree and the gates from one taken half-way.
+        /// also takes), after activating the container log of every ancestor that is not frozen, so the child's cursors
+        /// start at their end, then the ancestors' gates. The whole change is bracketed by the gates' change marks, so
+        /// the invariant checker can tell a consistent reading of the tree and the gates from one taken half-way. A
+        /// child whose construction throws leaves no log active that no gate counts a descendant for.
         /// </summary>
         Context AddChild(ContextOptions options)
         {
@@ -588,7 +601,26 @@ namespace Eggnog.Relations
                 lock (children)
                 {
                     ThrowIfDisposed();
-                    child = new Context(this, options);
+
+                    // Ancestors that are not frozen share this context's domain, which the caller holds, so no
+                    // descendant of theirs is created or disposed meanwhile.
+                    for (var i = 0; i <= Depth; i++)
+                        if (ancestors[i].frozen == false)
+                            ancestors[i].ContainerLog.Activate();
+
+                    try
+                    {
+                        child = new Context(this, options);
+                    }
+                    catch
+                    {
+                        for (var i = 0; i <= Depth; i++)
+                            if (ancestors[i].frozen == false && ancestors[i].gate.HasLiveDescendants == false)
+                                ancestors[i].ContainerLog.Clear();
+
+                        throw;
+                    }
+
                     children.Add(child);
                 }
 

@@ -1,6 +1,5 @@
 using System;
-using System.Runtime.CompilerServices;
-using System.Threading;
+using System.Collections.Generic;
 
 namespace Eggnog.Relations
 {
@@ -31,12 +30,6 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The eq-container version of the <see cref="ContainerValues"/> holding this environment, when the environment
-        /// holds e-class ids; <c>null</c> otherwise (and for an environment made outside a <see cref="ContainerValues"/>).
-        /// </summary>
-        StrongBox<long>? eqVersion;
-
-        /// <summary>
         /// Whether the containers hold e-class ids (<see cref="HoldsIds"/>). Volatile: <see cref="MarkHoldsIds"/> sets it
         /// while other threads may read it.
         /// </summary>
@@ -52,15 +45,14 @@ namespace Eggnog.Relations
         public bool HoldsIds => holdsIds;
 
         /// <summary>
-        /// Gets or sets the counter this environment increments each time it gains a container whose content it did not
-        /// hold before (<see cref="ContainerValues.EqVersion"/>): set by <see cref="ContainerValues"/> on the
-        /// environments that hold e-class ids, before any container is interned.
+        /// Gets the container log of the level this environment belongs to, which it records every container of classes
+        /// that appears in it into while the log is active (<see cref="ContainerLog"/>): the root's for the environments
+        /// of the root's <see cref="ContainerValues"/> that hold e-class ids, a child's for its layers' own environments;
+        /// <c>null</c> otherwise (and for an environment made outside either). Set by <see cref="ContainerLog.Attach"/>
+        /// before the environment is published or holds ids, so a thread that reads <see cref="HoldsIds"/> set, or finds
+        /// the environment, reads the log.
         /// </summary>
-        internal StrongBox<long>? EqVersionCounter
-        {
-            get => eqVersion;
-            set => eqVersion = value;
-        }
+        public ContainerLog? Log { get; internal set; }
 
         /// <summary>
         /// Gets the environment's id in its <see cref="ContainerValues"/>.
@@ -140,32 +132,51 @@ namespace Eggnog.Relations
         public abstract void CheckInvariants();
 
         /// <summary>
-        /// Makes the environment one that holds e-class ids, counting new contents on <paramref name="version"/>: for a
-        /// container type registered over base values first and later over an eq sort, as egglog keeps both in one
-        /// environment, telling them apart by <c>do_rebuild</c> (<see cref="IContainerValue{TSelf}.HoldsIds"/>). Its
-        /// containers so far hold no ids, so no child holds a displacement of theirs. Called by
-        /// <see cref="ContainerValues.RegisterType{TContainer}"/> under its lock; other threads may read
-        /// <see cref="HoldsIds"/> meanwhile.
+        /// Moves the Added entries this environment buffered for <see cref="Log"/> to <paramref name="destination"/>,
+        /// each shard's buffer swapped out under that shard's lock. Called by <see cref="ContainerLog.Drain"/> under the
+        /// log's lock.
         /// </summary>
-        /// <param name="version">The eq-container version of the <see cref="ContainerValues"/> holding it.</param>
-        internal void MarkHoldsIds(StrongBox<long> version)
-        {
-            // The version first: the volatile write of the flag publishes it, so a thread that reads the flag set
-            // counts new contents on the version.
-            eqVersion = version;
-            holdsIds = true;
-        }
+        /// <param name="destination">Receives the entries, shard by shard.</param>
+        internal abstract void DrainLogBuffers(List<ContainerLogEntry> destination);
 
         /// <summary>
-        /// Records that the environment gained a container whose content it did not hold before: moves
-        /// <see cref="EqVersionCounter"/>, when set, so every child context re-runs its eq-container guard over its own
-        /// displacements before it is read again. One interlocked increment per new container of a type that holds ids;
-        /// nothing otherwise. Thread-safe.
+        /// Discards the Added entries this environment buffered for <see cref="Log"/>, each shard's under that shard's
+        /// lock. Called by <see cref="ContainerLog.Clear"/> under the log's lock.
         /// </summary>
-        private protected void NoteNewContent()
+        internal abstract void DiscardLogBuffers();
+
+        /// <summary>
+        /// Gets the number of Added entries this environment has buffered for <see cref="Log"/> and not drained, counted
+        /// under each shard's lock. For the invariant checker.
+        /// </summary>
+        internal abstract int BufferedLogEntries { get; }
+
+        /// <summary>
+        /// Appends to <paramref name="values"/> the values of the container stored under <paramref name="id"/> with
+        /// content hash <paramref name="hash"/>, the entry a <see cref="ContainerLogEntry"/> names, under the reverse
+        /// map's shard lock. Thread-safe; one probe sequence.
+        /// </summary>
+        /// <param name="id">The container's id.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="values">Receives the values, once per occurrence.</param>
+        /// <returns><c>false</c>, appending nothing, when no such entry is stored any more.</returns>
+        internal abstract bool TryCollectValues(uint id, ulong hash, List<uint> values);
+
+        /// <summary>
+        /// Makes the environment one that holds e-class ids, recording into <paramref name="log"/> from then on: for a
+        /// container type registered over base values first and later over an eq sort, as egglog keeps both in one
+        /// environment, telling them apart by <c>do_rebuild</c> (<see cref="IContainerValue{TSelf}.HoldsIds"/>). Its
+        /// containers so far hold no ids, so no child holds a displacement of theirs, and none is a container of classes
+        /// the log should have recorded. Called by <see cref="ContainerValues.RegisterType{TContainer}"/> under its
+        /// lock; other threads may read <see cref="HoldsIds"/> meanwhile.
+        /// </summary>
+        /// <param name="log">The container log of the <see cref="ContainerValues"/> holding it.</param>
+        internal void MarkHoldsIds(ContainerLog log)
         {
-            if (eqVersion is { } version)
-                Interlocked.Increment(ref version.Value);
+            // The log first: the volatile write of the flag publishes it, so a thread that reads the flag set records
+            // into the log.
+            log.Attach(this);
+            holdsIds = true;
         }
 
     }

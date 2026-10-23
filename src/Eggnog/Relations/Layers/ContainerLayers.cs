@@ -44,6 +44,11 @@ namespace Eggnog.Relations
     /// (<see cref="Freeze"/>).
     /// </para>
     /// <para>
+    /// Log. The context's container log (<see cref="Log"/>) records, while the context has live descendants, every
+    /// container of classes that appears in one of its layers' own environments, which those descendants read through
+    /// their cursors into it, as they read the root's from the store's (<see cref="Store.ContainerLog"/>).
+    /// </para>
+    /// <para>
     /// The engine places nothing in a context's layers: every layer is empty unless a test placed a container there
     /// (<see cref="Place{TContainer}"/>), so a child reads the root's containers.
     /// </para>
@@ -85,6 +90,12 @@ namespace Eggnog.Relations
         /// Gets the parent's layers, or <c>null</c> when the parent is the root.
         /// </summary>
         public ContainerLayers? Parent => parent;
+
+        /// <summary>
+        /// Gets the context's container log: every own environment of its layers records into it, while it is active,
+        /// each container of classes that appears there (<see cref="ContainerLog"/>).
+        /// </summary>
+        public ContainerLog Log { get; } = new();
 
         /// <summary>
         /// Gets whether the context is frozen, and its layers read without locks. One volatile read.
@@ -155,8 +166,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the context's layer of the type <paramref name="root"/> holds, creating it, with an empty own
-        /// environment, on first use. Thread-safe and lock-free: rule tasks of the context may race here and get one
-        /// layer, the one whose copy of the slots was published first.
+        /// environment that records into the context's container log (<see cref="Log"/>), on first use. Thread-safe:
+        /// rule tasks of the context may race here and get one layer, the one whose copy of the slots was published
+        /// first. The slots are published without a lock; creating a layer takes the log's lock once, to attach the new
+        /// environment, and a task whose copy lost the race takes it once more, to detach its own.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="root">The root's environment of the type.</param>
@@ -172,13 +185,26 @@ namespace Eggnog.Relations
             {
                 var current = Volatile.Read(ref slots);
                 if (index < current.Length && current[index] is { } existing)
+                {
+                    // A layer that lost the race was never published: nothing recorded into its environment.
+                    if (layer is not null)
+                        Log.Detach(layer.OwnBase);
+
                     return Unsafe.As<ContainerLayer<TContainer>>(existing);
+                }
 
                 // The context freezes on its domain thread while none of its rule tasks runs.
                 if (frozen)
                     throw new InvalidOperationException("A frozen context's container layers never change.");
 
-                layer ??= new ContainerLayer<TContainer>(root, parallelism);
+                // The own environment gets the log before the layer is published, so every task that finds the layer
+                // records into it.
+                if (layer is null)
+                {
+                    layer = new ContainerLayer<TContainer>(root, parallelism);
+                    Log.Attach(layer.OwnBase);
+                }
+
                 var grown = new ContainerLayerBase?[Math.Max(current.Length, index + 1)];
                 Array.Copy(current, grown, current.Length);
                 grown[index] = layer;

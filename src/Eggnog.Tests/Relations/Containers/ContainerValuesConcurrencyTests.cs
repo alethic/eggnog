@@ -266,9 +266,9 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// A type registered over base values comes to hold ids (<see cref="ContainerEnvBase.MarkHoldsIds"/>) on one
         /// thread while a new type registers on another, and a third thread watches the first type's environment: it
-        /// never sees the environment hold ids without the eq-container version it counts on. Afterwards both types are
-        /// registered, the first holds ids, and a new container of classes in either environment that holds ids moves
-        /// the one version.
+        /// never sees the environment hold ids without the container log it records into. Afterwards both types are
+        /// registered, the first holds ids, and, with the log active, a new container of classes in either environment
+        /// that holds ids is recorded in the one log, once.
         /// </summary>
         [Fact]
         public void ATypeComingToHoldIdsRacesANewType()
@@ -314,8 +314,8 @@ namespace Eggnog.Relations.Tests
                         do
                         {
                             left = Volatile.Read(ref pending[trial]);
-                            if (env.HoldsIds && env.EqVersionCounter is null)
-                                failures.Enqueue($"trial {trial}: the environment holds ids before it has the eq-container version");
+                            if (env.HoldsIds && ReferenceEquals(env.Log, values.Log) == false)
+                                failures.Enqueue($"trial {trial}: the environment holds ids before it has the container log");
 
                             if (Read<sbyte>(values, dbs[trial].Counters, 7) is { } wrong)
                                 failures.Enqueue($"trial {trial}: {wrong}");
@@ -340,14 +340,20 @@ namespace Eggnog.Relations.Tests
                 var other = values.GetEnvironment(added[trial]);
                 Assert.Equal(newHoldsIds, other.HoldsIds);
 
-                var version = values.EqVersion;
+                var log = values.Log;
+                log.Activate();
                 ((ContainerEnv<TaggedContainer<byte>>)env).GetOrInsertAtRoot(new TaggedContainer<byte>(1, holdsIds: true), dbs[trial].Counters);
-                Assert.Equal(version + 1, values.EqVersion);
+                log.Drain();
+                Assert.Equal(1, log.AddedCount);
                 if (newHoldsIds)
                 {
                     ((ContainerEnv<TaggedContainer<sbyte>>)other).GetOrInsertAtRoot(new TaggedContainer<sbyte>(1, holdsIds: true), dbs[trial].Counters);
-                    Assert.Equal(version + 2, values.EqVersion);
+                    log.Drain();
+                    Assert.Equal(2, log.AddedCount);
                 }
+
+                Assert.Same(newHoldsIds ? log : null, other.Log);
+                log.Clear();
 
                 values.CheckInvariants();
             }

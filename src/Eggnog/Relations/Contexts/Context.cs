@@ -144,26 +144,10 @@ namespace Eggnog.Relations
         long rekeyedMembers;
 
         /// <summary>
-        /// The child's cursor into the store's container dirty log: the ids logged before it are refreshed.
-        /// </summary>
-        int dirtyCursor;
-
-        /// <summary>
-        /// The journal rows the eq-container guard has checked.
+        /// The journal rows the eq-container guard has checked against every container the root holds; the containers
+        /// the root gains later the guard reads from the root's container log, through the cursor into it.
         /// </summary>
         int eqCheckedRows;
-
-        /// <summary>
-        /// The eq-container version the guard last checked the journal against
-        /// (<see cref="ContainerValues.EqVersion"/>); when the store's version has moved past it, the whole journal is
-        /// checked again before the child is clean.
-        /// </summary>
-        long eqCheckedVersion;
-
-        /// <summary>
-        /// The store's container environments, shared with the root; <c>null</c> at the root, which needs none here.
-        /// </summary>
-        readonly ContainerValues? containers;
 
         /// <summary>
         /// The thread domain; reassigned (on the domain's own thread) when an ancestor freezes, so read volatile.
@@ -256,17 +240,14 @@ namespace Eggnog.Relations
             database = new Database(store.Root.Database, this, overlayTable, idBlocks, parallelism);
             domain = parent.IsFrozen ? new ThreadAffinityGuard() : parent.Domain;
 
-            // The journal is empty, so the eq-container guard starts current with the store's eq-container version.
-            containers = database.Containers;
-            eqCheckedVersion = containers.EqVersion;
-
-            // No layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
+            // No layer yet; cursors at the ancestors' current versions and at the end of their container logs (which
+            // CreateChild activated), the leading frozen ancestors settled. The journal is empty, so the eq-container
+            // guard starts current.
             tables = new ContextTables(store.Schema, this);
             database.AttachLayers(tables);
 
             // No container layer yet either; the child reads containers through its own and its ancestors' layers.
             containerLayers = new ContainerLayers(parent.containerLayers, idBlocks, parallelism);
-            dirtyCursor = store.ContainerDirtyLog.End;
 
             // Read after every cursor is initialized (the union-find cursor and the row cursors above), so anything the
             // parent wrote at an earlier epoch is already part of the child's starting view.
@@ -319,6 +300,13 @@ namespace Eggnog.Relations
         /// root.
         /// </summary>
         public ContainerLayers? ContainerLayers => containerLayers;
+
+        /// <summary>
+        /// Gets the context's container log, from which its live descendants learn of the containers of classes that
+        /// appear at its level (<see cref="Relations.ContainerLog"/>): the store's at the root
+        /// (<see cref="Store.ContainerLog"/>), the container layers' in a child (<see cref="ContainerLayers.Log"/>).
+        /// </summary>
+        internal ContainerLog ContainerLog => containerLayers?.Log ?? store.ContainerLog;
 
         /// <summary>
         /// Gets the gate counting the context's live descendants.
@@ -408,9 +396,10 @@ namespace Eggnog.Relations
         /// <remarks>
         /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in
         /// egglog. A child is not clean while an ancestor that is not settled changed since it last caught up
-        /// (<see cref="ContextTables.NeedsCatchUp"/>), nor while the store gained an eq-sort container its eq-container
-        /// guard has not checked its displacements against (<see cref="ContainerValues.EqVersion"/>): such a container
-        /// is reconciled only by a rebuild, which refuses the child if the container names one of its losers.
+        /// (<see cref="ContextTables.NeedsCatchUp"/>), which includes, while the child has a displacement or a
+        /// container layer, an eq-sort container in the ancestor's container log that its eq-container guard has not
+        /// read (<see cref="Relations.ContainerLog"/>): such a container is reconciled only by a rebuild, which refuses
+        /// the child if the container names one of its losers.
         /// </remarks>
         public bool IsClean
         {
@@ -429,7 +418,6 @@ namespace Eggnog.Relations
                     && database.Catalog.Notifications.IsEmpty
                     && unionFindCursor == parent.DisplacedCount
                     && tables!.NeedsCatchUp == false
-                    && IsEqGuardCurrent
                     && parent.IsClean;
             }
         }
@@ -437,9 +425,9 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the context's views show what it sees now: <see cref="IsClean"/> without its term for writes
         /// staged and not merged, at every level of the chain. Staged writes are invisible until merged (as at a root),
-        /// so they never make a view stale; a pending own rebuild, an ancestor change not caught up with, or an
-        /// eq-container guard behind do. What rule building, planning and a rule run in a child require
-        /// (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
+        /// so they never make a view stale; a pending own rebuild, or an ancestor change not caught up with (an eq-sort
+        /// container its eq-container guard has not checked included), do. What rule building, planning and a rule run
+        /// in a child require (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
         /// </summary>
         internal bool IsViewCurrent
         {
@@ -457,17 +445,9 @@ namespace Eggnog.Relations
                 return journalMark == journal!.Count
                     && unionFindCursor == parent.DisplacedCount
                     && tables!.NeedsCatchUp == false
-                    && IsEqGuardCurrent
                     && parent.IsViewCurrent;
             }
         }
-
-        /// <summary>
-        /// Gets whether a child's eq-container guard has checked its displacements against every eq-sort container the
-        /// store holds: its journal is empty, or the store's eq-container version has not moved since the last check.
-        /// One volatile read. Always <c>true</c> at the root.
-        /// </summary>
-        internal bool IsEqGuardCurrent => containers is null || journal!.Count == 0 || eqCheckedVersion == containers.EqVersion;
 
         /// <summary>
         /// Gets or sets the object that wraps this context in the bridge (its <c>EGraphContext</c>). Set once.

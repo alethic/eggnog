@@ -104,10 +104,11 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Brings the context up to date before anything is staged in it: rebuilds a parent that is not frozen, then,
-        /// in a child that is behind its parent's union-find, some ancestor of which changed since it last caught up
-        /// (<see cref="ContextTables.NeedsCatchUp"/>), or whose eq-container guard has not seen every eq-sort container
-        /// (<see cref="IsEqGuardCurrent"/>), rebuilds the child, which catches up first. The child's own pending
-        /// rebuild work (unions merged since its last rebuild) is left for <see cref="Rebuild"/>. Nothing at the root.
+        /// in a child that is behind its parent's union-find, or some ancestor of which changed since it last caught up
+        /// (<see cref="ContextTables.NeedsCatchUp"/>, which includes an eq-sort container in an ancestor's container log
+        /// that the child's eq-container guard has not checked), rebuilds the child, which catches up first. The child's
+        /// own pending rebuild work (unions merged since its last rebuild) is left for <see cref="Rebuild"/>. Nothing at
+        /// the root.
         /// </summary>
         /// <exception cref="InvalidOperationException">The parent was stopped by a contradiction: a child that stops on
         /// contradictions is then stopped, any other is refused; neither is faulted.</exception>
@@ -123,7 +124,7 @@ namespace Eggnog.Relations
                 ThrowIfContradicted();
             }
 
-            if (IsUnionFindCurrent == false || tables!.NeedsCatchUp || IsEqGuardCurrent == false)
+            if (IsUnionFindCurrent == false || tables!.NeedsCatchUp)
                 Rebuild();
         }
 

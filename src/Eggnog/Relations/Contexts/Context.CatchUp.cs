@@ -82,21 +82,23 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The container part of a child's catch-up: re-stamps, at <paramref name="epoch"/>, the rows of the child's
-        /// own layers that name a container the root rebuilt in place since the child last looked
-        /// (<see cref="Store.ContainerDirtyLog"/>), so the child's semi-naive evaluation sees them as new, as egglog's
-        /// <c>refresh_rows_for_values</c> does at the root. Root rows are re-stamped by the root itself and arrive as
-        /// appends; ancestors in between refresh their own rows in their own rebuilds.
+        /// own layers that name a container the root rebuilt in place since the child last looked, from the Dirty
+        /// streams of the unsettled ancestors' container logs (<see cref="ContextTables.ReadDirty"/>), so the child's
+        /// semi-naive evaluation sees them as new, as egglog's <c>refresh_rows_for_values</c> does at the root. Root rows
+        /// are re-stamped by the root itself and arrive as appends; ancestors in between refresh their own rows in their
+        /// own rebuilds.
         /// </summary>
         /// <remarks>
         /// Runs <see cref="RefreshTableOperation"/> through <see cref="Relations.Database.RunOnTables{TOperation}"/>, which
-        /// notifies every layer that re-staged rows, so the pass's merge applies them. Cost: nothing when the log has not
-        /// grown; otherwise one rebuild-index probe per dirty id and own layer, plus the rows found.
+        /// notifies every layer that re-staged rows, so the pass's merge applies them. The cursors' Dirty positions are
+        /// committed with the rest after the loop (<see cref="ContextTables.CommitCursors"/>). Cost: nothing when no log
+        /// has grown; otherwise one rebuild-index probe per dirty id and own layer, plus the rows found.
         /// </remarks>
         /// <param name="epoch">The pass's epoch, which the re-staged rows get.</param>
         /// <returns>Whether any row was re-staged.</returns>
         bool RefreshDirtyContainerIds(uint epoch)
         {
-            var dirty = store.ContainerDirtyLog.Since(ref dirtyCursor);
+            var dirty = tables!.ReadDirty();
             if (dirty.Length == 0)
                 return false;
 

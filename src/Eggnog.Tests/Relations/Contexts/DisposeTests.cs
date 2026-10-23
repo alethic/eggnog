@@ -12,8 +12,8 @@ namespace Eggnog.Relations.Tests
     /// <summary>
     /// Tests for <see cref="Context.Dispose"/> in full: the rules (the root and a context with live children refuse, a
     /// second call does nothing, every later call throws <see cref="ObjectDisposedException"/>), what it releases, the
-    /// gates it exits (which release compaction and retraction above it), the container dirty log cleared with the last
-    /// descendant, and disposing faulted, frozen and scanned contexts.
+    /// gates it exits (which release compaction and retraction above it), the root's container log cleared with the
+    /// last descendant, and disposing faulted, frozen and scanned contexts.
     /// </summary>
     public class DisposeTests
     {
@@ -163,20 +163,37 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The container dirty log is cleared when the root's last descendant goes, from whichever thread disposes it.
+        /// The root's container log is cleared and deactivated when the root's last descendant goes, from whichever
+        /// thread disposes it: children created while the root was writable activated it, the root logged a container
+        /// rebuilt in place and the ones its rebuild produced, and then froze, so each child disposes on a domain of its
+        /// own.
         /// </summary>
         [Fact]
         public void TheDirtyLogIsClearedWithTheLastDescendant()
         {
             var store = new Store(ParallelHeuristics.Serial);
             var root = store.Root;
-            root.Freeze();
+            var log = store.ContainerLog;
+            store.Root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter));
+            var k = root.NewId();
+            var w = root.NewId();
+            root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(w), state));
             var children = Enumerable.Range(0, 4).Select(_ => root.CreateChild()).ToArray();
-            store.ContainerDirtyLog.Append([1, 2, 3]);
+            root.Union(k, w);
+            root.Rebuild();
+            root.Freeze();
+            Assert.True(log.Active);
+            Assert.Equal(1, log.DirtyCount);
+            Assert.True(log.AddedCount > 0);
+
             Parallel.ForEach(children.Take(3), child => child.Dispose());
-            Assert.Equal(3, store.ContainerDirtyLog.End);
+            Assert.True(log.Active);
+            Assert.Equal(1, log.DirtyCount);
             children[3].Dispose();
-            Assert.Equal(0, store.ContainerDirtyLog.End);
+            Assert.False(log.Active);
+            Assert.Equal(0, log.DirtyCount);
+            Assert.Equal(0, log.AddedCount);
+            root.CheckInvariants();
         }
 
     }

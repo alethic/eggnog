@@ -9,11 +9,11 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for containers under colored contexts, storage part: the dirty log through which children re-stamp their
-    /// own rows naming a container the root rebuilt in place, cleared when the root's last descendant goes; the eq
-    /// guard, which keeps a child from holding a view in which an eq-sort container names one of its own losers, since
-    /// children never rebuild containers; the refusal to intern an eq-sort container in a child; and children never
-    /// rebuilding containers.
+    /// Tests for containers under colored contexts, storage part: the Dirty stream of the root's container log, through
+    /// which children re-stamp their own rows naming a container the root rebuilt in place, cleared when the root's last
+    /// descendant goes; the eq guard, which keeps a child from holding a view in which an eq-sort container names one of
+    /// its own losers, since children never rebuild containers; the refusal to intern an eq-sort container in a child;
+    /// and children never rebuilding containers.
     /// </summary>
     public class ContainerContextTests
     {
@@ -37,28 +37,32 @@ namespace Eggnog.Relations.Tests
             context.Database.WithExecutionState(state => state.Containers.GetOrInsert(container, state));
 
         /// <summary>
-        /// The root rebuilds a container in place while it has a live child: the container's id goes to the dirty log,
-        /// and the child's rebuild re-stamps its own row naming it; the log is cleared with the last descendant.
+        /// The root rebuilds a container in place while it has a live child: the container's id goes to the Dirty
+        /// stream of the root's container log, and the child's rebuild re-stamps its own row naming it and moves its
+        /// cursor past it; the log is cleared with the last descendant.
         /// </summary>
         [Fact]
         public void AChildRestampsItsRowsNamingAContainerTheRootRebuiltInPlace()
         {
             var (store, f) = Setup();
             var root = store.Root;
+            var log = store.ContainerLog;
             var k = root.NewId();
             var w = root.NewId();
             var v = Intern(root, new VecContainer(w));
             var child = root.CreateChild();
             Insert(child, f, v, 5, 0);
             var stamp = Row(child, f, v)![2];
-            Assert.Equal(0, store.ContainerDirtyLog.End);
+            Assert.True(log.Active);
+            Assert.Equal(0, log.DirtyCount);
 
             // The root merges w into k: the vector [w] becomes [k] under the same id, rebuilt in place.
             root.Union(k, w);
             child.Rebuild();
             Assert.True(root.Database.Containers.TryGetValue<VecContainer>(v, out var rebuilt));
             Assert.Equal(new VecContainer(k), rebuilt);
-            Assert.Equal(1, store.ContainerDirtyLog.End);
+            Assert.Equal(1, log.DirtyCount);
+            Assert.Equal(1, child.Tables!.CursorAt(0)!.Dirty);
 
             var restamped = Row(child, f, v)!;
             Assert.Equal(5u, restamped[1]);
@@ -66,23 +70,31 @@ namespace Eggnog.Relations.Tests
             child.CheckInvariants();
 
             child.Dispose();
-            Assert.Equal(0, store.ContainerDirtyLog.End);
+            Assert.False(log.Active);
+            Assert.Equal(0, log.DirtyCount);
+            Assert.Equal(0, log.AddedCount);
         }
 
         /// <summary>
-        /// Without a live descendant the root logs nothing: no child will read it.
+        /// Without a live descendant the root's container log is inactive and records nothing, neither the container
+        /// interned nor the one its rebuild produces nor the dirty id: no child will read it.
         /// </summary>
         [Fact]
         public void ARootWithoutDescendantsLogsNothing()
         {
             var (store, _) = Setup();
             var root = store.Root;
+            var log = store.ContainerLog;
             var k = root.NewId();
             var w = root.NewId();
             Intern(root, new VecContainer(w));
             root.Union(k, w);
             root.Rebuild();
-            Assert.Equal(0, store.ContainerDirtyLog.End);
+            Assert.False(log.Active);
+            Assert.False(log.Pending);
+            Assert.Equal(0, log.AddedCount);
+            Assert.Equal(0, log.DirtyCount);
+            root.CheckInvariants();
         }
 
         /// <summary>
@@ -193,22 +205,32 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A frozen context interns no new eq-sort container: its descendants would never re-run their guard against
-        /// it. Looking one up, and interning one that exists or one over base values, stay allowed.
+        /// A frozen context interns no new eq-sort container: its container log never grows, so its descendants would
+        /// never learn of it. A child created before the freeze keeps the root's log active, and the refused intern
+        /// records nothing in it. Looking one up, and interning one that exists or one over base values, stay allowed.
         /// </summary>
         [Fact]
         public void AFrozenContextInternsNoNewEqContainer()
         {
             var (store, _) = Setup();
             var root = store.Root;
+            var log = store.ContainerLog;
             var w = root.NewId();
             var v = Intern(root, new VecContainer(w));
+            var child = root.CreateChild();
+            Intern(root, new VecContainer(w, w, w));
             root.Freeze();
+            Assert.True(log.Active);
+            Assert.False(log.Pending);
+            var drained = log.AddedCount;
+            Assert.Equal(1, drained);
             Assert.Equal(v, Intern(root, new VecContainer(w)));
-            var version = root.Database.Containers.EqVersion;
             Assert.Throws<InvalidOperationException>(() => Intern(root, new VecContainer(w, w)));
-            Assert.Equal(version, root.Database.Containers.EqVersion);
+            Assert.False(log.Pending);
+            Assert.Equal(drained, log.AddedCount);
             Assert.False(root.Database.Containers.GetEnvironment<VecContainer>().TryGetId(new VecContainer(w, w), out _));
+            root.CheckInvariants();
+            child.Dispose();
 
             var (baseStore, _) = Setup(holdsIds: false);
             baseStore.Root.Freeze();
