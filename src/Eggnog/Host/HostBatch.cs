@@ -19,9 +19,9 @@ namespace Eggnog
     /// flushes and rebuilds what it planned before it, see <c>HostBatch.Rebuilds.cs</c>), resolves existing terms by
     /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
     /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
-    /// <c>HostBatch.Merges.cs</c>). A fact that throws is dropped whole (see <c>HostBatch.Facts.cs</c>), where egglog's
-    /// failed command keeps what it wrote before it failed (roadmap, "Failed commands"), and the batch's other facts
-    /// stand. A <see cref="ScopeWriter"/> call refused for its
+    /// <c>HostBatch.Merges.cs</c>). A fact that throws keeps what it staged before it failed, as egglog's failed command
+    /// does, the terms its calls made and what its primitives wrote, but not its own write (see
+    /// <c>HostBatch.Facts.cs</c>), and the batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
     /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
@@ -116,9 +116,9 @@ namespace Eggnog
                 PlanFactUnions();
                 return cell;
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -201,6 +201,8 @@ namespace Eggnog
             for (var i = 0; i < keys.Length; i++)
                 text.Append(' ').Append(table.KeyArray[i].FormatCell(keys[i]));
 
+            // egglog's lookup panics where the command runs, after its earlier calls.
+            factPanicked = true;
             throw new InvalidOperationException(text.Append(") has no value here.").ToString());
         }
 
@@ -210,8 +212,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="InvalidOperationException">The primitive takes or returns a class, and the batch merged
         /// classes before it: egglog's next command would see the merge, which the batch stages after its writes.</exception>
-        /// <exception cref="RuleEvaluationException">The primitive threw, or has no result; nothing is written and the
-        /// scope is not faulted.</exception>
+        /// <exception cref="RuleEvaluationException">The primitive threw, or has no result; the fact fails, keeping what
+        /// it staged before, and the scope is not faulted.</exception>
         uint Compute(TermShape shape)
         {
             var primitive = shape.Primitive!;
@@ -305,9 +307,9 @@ namespace Eggnog
                 PlanFactCore(fact);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -425,9 +427,9 @@ namespace Eggnog
                 PlanSubsumeCore(term);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -502,9 +504,9 @@ namespace Eggnog
                 PlanSubsumeCore(fact);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -556,9 +558,9 @@ namespace Eggnog
                 PlanUnionCore(a, b);
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -1062,26 +1064,35 @@ namespace Eggnog
         /// container of classes holds.</exception>
         void PlanFactUnions()
         {
-            // A primitive's deletions first, where the fact had no write point of its own; then its writes, in order, as
-            // egglog's flush applies a command's staged removals, then its inserts, before its rebuild merges the unions;
-            // each may hold back unions of its own.
-            ApplyFactRemovals();
-            if (factWrites is { Count: > 0 } writes)
+            try
             {
-                factWrites = null;
-                foreach (var write in writes)
-                    write();
-            }
+                // A primitive's deletions first, where the fact had no write point of its own; then its writes, in order,
+                // as egglog's flush applies a command's staged removals, then its inserts, before its rebuild merges the
+                // unions; each may hold back unions of its own.
+                ApplyFactRemovals();
+                if (factWrites is { Count: > 0 } writes)
+                {
+                    factWrites = null;
+                    foreach (var write in writes)
+                        write();
+                }
 
-            if (factUnions is { Count: > 0 } held)
+                if (factUnions is { Count: > 0 } held)
+                {
+                    factUnions = null;
+                    foreach (var (a, b) in held)
+                        PlanUnionCore(a, b);
+                }
+
+                // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares
+                // them.
+                CheckFactClassOutputs();
+            }
+            catch
             {
-                factUnions = null;
-                foreach (var (a, b) in held)
-                    PlanUnionCore(a, b);
+                factHeldFailed = true;
+                throw;
             }
-
-            // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares them.
-            CheckFactClassOutputs();
 
             // The next fact starts here: its primitives see the terms planned so far, its deletions cancel them, and its
             // failure drops what it plans after.

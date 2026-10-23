@@ -277,7 +277,7 @@ associative, commutative and idempotent. Built in: `Max`, `Min` (over `IComparab
 over `Set<T>`. A lattice also has a `CaseJoin`, the join a lift uses to combine the values of several cases
 (`Max` merges, so its case join is `Min`; `Intersect` merges, so its case join is `Union`). `ValueLattice<T>.Verify`
 checks the laws on samples. A function with neither a lattice nor a merge refuses two different outputs for one key: a
-host write throws `FactConflictException` and writes nothing; a rule that derives a conflict fails with
+host write throws `FactConflictException` without writing the value; a rule that derives a conflict fails with
 `RuleEvaluationException`.
 
 A function may output a class, as egglog's `function` of an e-class sort does (`DefineFunction<T1, ..., TSort>`): it
@@ -523,8 +523,13 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)` and
 `Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer: a
 deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
-`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails writes nothing, where
-egglog's failed command keeps what it wrote before it failed (roadmap, "Failed commands"), and the others stand. A batch
+`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails keeps what it staged
+before it failed, as egglog's failed command does, since its actions run as a rule whose staged writes outlive the
+panic: the terms its calls made, and the writes, deletions and unions its primitives made, but not its own write (a
+failure of those primitive effects drops them and the fact's own write, where egglog keeps the write). A refusal
+egglog's type checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then
+stops, as egglog's program stops at an error, and the facts before stand; a `Write` callback may catch the failure and
+go on. A batch
 is planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives
 and reads function values as egglog's top-level actions do (a read sees the batch's earlier writes, merged by the
 function's lattice, as egglog's next command sees the last; the batch stages its unions after its writes, so a call that
@@ -532,7 +537,7 @@ needs what a union makes, such as a read of a function whose keys are classes, c
 rebuilds its earlier calls, as egglog's next command comes after the last one's rebuild), resolves existing terms, mints
 ids for new ones, keeps only the rows, subsumptions and unions that do not already hold, and checks every conflict a
 function without a lattice would see, including conflicts a union in the batch would cause through congruence. A fact
-that throws is dropped: a function read with no value, or a primitive with no result or that throws, refuses it without
+that throws, for a function read with no value, a primitive with no result or that throws, or a conflict, fails without
 faulting the scope. The batch is then staged and flushed: merged, rebuilt, and visible when the call returns. A batch
 whose facts all hold already stages nothing, so it moves neither the scope's `Version` nor any extractor.
 

@@ -9,7 +9,8 @@ namespace Eggnog.Tests.Host
 {
 
     /// <summary>
-    /// Host write batches: egglog's commands one after the other (a fact that fails writes nothing, and the others stand;
+    /// Host write batches: egglog's commands one after the other (a fact that fails keeps the terms it made, but not its
+    /// write, and the others stand;
     /// a batch rejected for a call from another thread writes nothing more, and the classes its <c>Make</c> calls
     /// returned are invalid), canonical, checked against functions without a lattice, confined to the thread that holds
     /// the scope's guard, and silent when nothing changes.
@@ -699,12 +700,14 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// A fact rejected at its second argument, after its first argument planned new terms, leaves none of those
-        /// terms.
+        /// A fact that fails at its second argument, after its first argument planned new terms, keeps those terms, as
+        /// egglog's failed command does, but not its row.
         /// </summary>
         [Fact]
-        public void APartlyPlannedFactThatIsRejectedLeavesNoTerm()
+        public void APartlyPlannedFactThatFailsKeepsItsTerms()
         {
+            // egglog at 5e655cae: (fail (link (Wrap (A)) (f 1))) (check (A)) (check (Wrap (A))), its terms made before the
+            // read with no value.
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
             var link = t.Graph.DefineRelation<Node, long>("link");
@@ -722,8 +725,9 @@ namespace Eggnog.Tests.Host
                 }
             });
 
-            Assert.False(t.Root.Check(Fact.Exists(t.A.Of())));
-            Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
+            Assert.True(t.Root.Check(Fact.Exists(t.A.Of())));
+            Assert.True(t.Root.Check(Fact.Exists(t.Wrap.Of(t.A.Of()))));
+            Assert.Equal(0, t.Root.CountRows(link));
         }
 
         /// <summary>

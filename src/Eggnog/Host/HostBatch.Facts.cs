@@ -7,11 +7,15 @@ namespace Eggnog
     internal sealed partial class HostBatch
     {
 
-        // egglog runs a batch's facts as commands, one after the other: a command that fails writes nothing, and the
-        // commands before and after it stand. The batch marks where each fact's planning starts (MarkFact) and, when the
-        // fact fails, drops what the fact planned (UndoFact): what it appended to the batch's lists is cut back to the
-        // marks, the values it set or removed and the earlier writes its deletions cancelled are put back from a log, and
-        // the congruence check is replayed from the merges of the facts before it.
+        // egglog runs a batch's facts as commands, one after the other, and the commands before and after a failed one
+        // stand. A failed command keeps what it staged before it failed: its actions run as a rule whose staged writes
+        // outlive the panic (src/lib.rs:1171-1195), so the terms its calls made stand, and so do its primitives' writes,
+        // deletions and unions, while its own write does not happen. The batch marks where each fact's planning starts
+        // (MarkFact) and, when the fact fails, drops what the fact planned but its terms (FailFact, UndoFact): what it
+        // appended to the batch's lists is cut back to the marks, the values it set or removed and the earlier writes its
+        // deletions cancelled are put back from a log, and the congruence check is replayed from the merges of the facts
+        // before it; then the writes, deletions and unions its primitives held are planned again, as the fact's end plans
+        // them.
 
         /// <summary>
         /// The number of unions planned before the fact being planned.
@@ -61,6 +65,24 @@ namespace Eggnog
         List<(Dictionary<string, uint>? Map, string? Key, bool Had, uint Old, Action? Undo)>? factUndo;
 
         /// <summary>
+        /// The deletions of primitives the fact being planned held and applied at its write point
+        /// (<see cref="ApplyFactRemovals"/>), which a failure of its own write keeps (<see cref="FailFact"/>).
+        /// </summary>
+        List<(TableHandle Table, Term[] Arguments)>? factRemovalsApplied;
+
+        /// <summary>
+        /// Whether the fact being planned failed while the writes, deletions and unions its primitives held were planned
+        /// at its end (<see cref="PlanFactUnions"/>), so its failure drops them.
+        /// </summary>
+        bool factHeldFailed;
+
+        /// <summary>
+        /// Whether the fact being planned failed as egglog's command panics where it runs: a function read with no value,
+        /// a subsumption of a row that is not there (<see cref="FailFact"/>).
+        /// </summary>
+        bool factPanicked;
+
+        /// <summary>
         /// Marks the start of a fact: what it plans from here is dropped if it fails (<see cref="UndoFact"/>).
         /// </summary>
         void MarkFact()
@@ -76,6 +98,9 @@ namespace Eggnog
             factMergeCheckDecided = mergeCheckDecided;
             factFresh.Clear();
             factUndo?.Clear();
+            factRemovalsApplied = null;
+            factHeldFailed = false;
+            factPanicked = false;
         }
 
         /// <summary>
@@ -99,23 +124,76 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Drops what the fact being planned planned, which failed: the batch is as it was when the fact started. egglog's
-        /// failed command keeps what it wrote before it failed, a term its earlier calls made, since its actions run as a
-        /// rule whose staged writes outlive the panic (src/lib.rs:1171-1195): roadmap, "Failed commands".
+        /// Ends a fact that failed. One that failed as egglog's command panics where it runs (a primitive that threw or has
+        /// no result, a merge that failed, a conflict, a function read with no value) ends as egglog's failed command
+        /// ends: what it staged before it failed stands, since its actions run as a rule whose staged writes outlive the
+        /// panic (src/lib.rs:1171-1195). The terms its calls made stand, with their ids; so do the writes, deletions and
+        /// unions its primitives held, planned again here as the fact's end plans them; its own write does not happen, or
+        /// was refused. A failure while those held effects were planned, or of the congruence check after them, drops
+        /// them too, and the fact's own write with them, where egglog keeps that write and refuses nothing; so does a
+        /// failure of planning them again. Any other failure is a refusal, which egglog's type checker or the library
+        /// makes before the command runs, or the ids running out: the fact writes nothing.
         /// </summary>
-        void UndoFact()
+        /// <param name="failure">What the fact threw.</param>
+        void FailFact(Exception failure)
+        {
+            if (factPanicked == false && failure is not (RuleEvaluationException or FactConflictException))
+            {
+                UndoFact(keepTerms: false);
+                return;
+            }
+
+            var removals = factRemovalsApplied is { } applied ? (factRemovals is { } held ? [.. applied, .. held] : applied) : factRemovals;
+            var writes = factWrites;
+            var unions = factUnions;
+            var heldFailed = factHeldFailed;
+            UndoFact(keepTerms: true);
+            if (heldFailed || (removals is null && writes is null && unions is null))
+                return;
+
+            factRemovals = removals;
+            factWrites = writes;
+            factUnions = unions;
+            try
+            {
+                PlanFactUnions();
+            }
+            catch (Exception)
+            {
+                // The fact failed already; what its primitives held cannot be planned either, so it goes.
+                UndoFact(keepTerms: true);
+            }
+        }
+
+        /// <summary>
+        /// Drops what the fact being planned planned, which failed: the batch is as it was when the fact started, but for
+        /// the terms the fact made, of the ids it minted, when <paramref name="keepTerms"/> is set. A term of a class that
+        /// was there before is the fact's own write, a constructor's output set to a class, which goes.
+        /// </summary>
+        /// <param name="keepTerms">Whether the fact's terms stand.</param>
+        void UndoFact(bool keepTerms)
         {
             factWrites = null;
             factRemovals = null;
             factUnions = null;
             factReaders = null;
+            factRemovalsApplied = null;
+            factHeldFailed = false;
+            factPanicked = false;
+            for (var i = pending.Count - 1; i >= factTerms; i--)
+            {
+                if (keepTerms && factFresh.Contains(pending[i].Id))
+                    continue;
 
-            for (var i = factTerms; i < pending.Count; i++)
                 pendingByKey.Remove(Key(pending[i].Head, pending[i].Keys));
+                pending.RemoveAt(i);
+            }
 
-            pending.RemoveRange(factTerms, pending.Count - factTerms);
-            foreach (var id in factFresh)
-                fresh.Remove(id);
+            if (keepTerms == false)
+            {
+                foreach (var id in factFresh)
+                    fresh.Remove(id);
+            }
 
             // A function with a merge that is not a lattice stages every write as a row of its own, outside rowKeys.
             for (var i = factRows; i < rows.Count; i++)
