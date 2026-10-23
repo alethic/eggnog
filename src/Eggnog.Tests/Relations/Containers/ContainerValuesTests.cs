@@ -328,6 +328,55 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new VecContainer(a), rebuilt);
         }
 
+        [Fact]
+        public void TypesRegisteredAfterACloneStayOnTheirOwnSide()
+        {
+            // The two types registered after the clone take their slots before the type registered before it, so the
+            // slot table the clone shares with its source has room for both: a registration that wrote the table in
+            // place would show its type on the other side too. The tags are used by no other test.
+            var sourceSlot = ContainerTypeSlot<TaggedContainer<DateTime>>.Index;
+            var copySlot = ContainerTypeSlot<TaggedContainer<DateTimeOffset>>.Index;
+            Assert.True(sourceSlot < ContainerTypeSlot<TaggedContainer<TimeSpan>>.Index);
+            Assert.True(copySlot < ContainerTypeSlot<TaggedContainer<TimeSpan>>.Index);
+
+            var ids = new CounterId(0);
+            var merge = NoMergeContainerMerge.Instance;
+            var source = new ContainerValues(ParallelHeuristics.Serial);
+            var shared = source.RegisterType<TaggedContainer<TimeSpan>>(ids, merge);
+            var copy = source.Clone();
+            var sourceOnly = source.RegisterType<TaggedContainer<DateTime>>(ids, merge);
+            var copyOnly = copy.RegisterType<TaggedContainer<DateTimeOffset>>(ids, merge);
+
+            // Each side gives its own new type the next id, 1, and neither sees the other's.
+            Assert.Equal(new ContainerTypeId(1), sourceOnly);
+            Assert.Equal(new ContainerTypeId(1), copyOnly);
+            Assert.False(copy.TryGetTypeId<TaggedContainer<DateTime>>(out _));
+            Assert.False(copy.TryGetEnvironment<TaggedContainer<DateTime>>(out _));
+            Assert.False(source.TryGetTypeId<TaggedContainer<DateTimeOffset>>(out _));
+            Assert.False(source.TryGetEnvironment<TaggedContainer<DateTimeOffset>>(out _));
+
+            // Id 1 names each side's own environment, by id and by type.
+            Assert.True(source.TryGetEnvironment<TaggedContainer<DateTime>>(out var sourceEnv));
+            Assert.Same(sourceEnv, source.GetEnvironment(sourceOnly));
+            Assert.Equal(sourceOnly, sourceEnv.TypeId);
+            Assert.True(copy.TryGetEnvironment<TaggedContainer<DateTimeOffset>>(out var copyEnv));
+            Assert.Same(copyEnv, copy.GetEnvironment(copyOnly));
+            Assert.Equal(copyOnly, copyEnv.TypeId);
+
+            // The type registered before the clone keeps its id on both sides, in an environment of each side's own.
+            Assert.Equal(2, source.TypeCount);
+            Assert.Equal(2, copy.TypeCount);
+            Assert.True(source.TryGetTypeId<TaggedContainer<TimeSpan>>(out var sourceShared));
+            Assert.True(copy.TryGetTypeId<TaggedContainer<TimeSpan>>(out var copyShared));
+            Assert.Equal(shared, sourceShared);
+            Assert.Equal(shared, copyShared);
+            Assert.Same(source.GetEnvironment(shared), source.GetEnvironment<TaggedContainer<TimeSpan>>());
+            Assert.Same(copy.GetEnvironment(shared), copy.GetEnvironment<TaggedContainer<TimeSpan>>());
+            Assert.NotSame(source.GetEnvironment(shared), copy.GetEnvironment(shared));
+            source.CheckInvariants();
+            copy.CheckInvariants();
+        }
+
     }
 
 }

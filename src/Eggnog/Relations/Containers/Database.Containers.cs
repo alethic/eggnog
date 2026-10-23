@@ -20,8 +20,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the container environments: egglog's <c>container_values</c> and <c>container_values_mut</c>
-        /// (core-relations/src/free_join/mod.rs:349-355). Registering a type needs exclusive access to the database;
-        /// interning and lookups are thread-safe (see <see cref="ContainerValues"/>).
+        /// (core-relations/src/free_join/mod.rs:349-355). Registering a type, interning and lookups are thread-safe;
+        /// a rebuild needs exclusive access (see <see cref="ContainerValues"/>).
         /// </summary>
         /// <exception cref="InvalidOperationException">The containers are being rebuilt (a merge function called back
         /// during <see cref="RebuildContainers"/>).</exception>

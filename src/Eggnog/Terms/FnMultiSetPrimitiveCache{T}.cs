@@ -5,7 +5,8 @@ namespace Eggnog
 
     /// <summary>
     /// The higher-order primitives over a multiset of one element type: egglog's <c>unstable-multiset-flat-map</c>,
-    /// <c>-filter</c>, <c>-filter-not</c> and <c>-reduce</c>, made once per element type.
+    /// <c>-filter</c>, <c>-filter-not</c>, <c>-fill-index</c>, <c>-clear-index</c> and <c>-reduce</c>, made once per element
+    /// type.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal static class FnMultiSetPrimitiveCache<T>
@@ -20,6 +21,12 @@ namespace Eggnog
 
         public static readonly PrimitiveN<MultiSet<T>> FilterNot =
             new("unstable-multiset-filter-not", [typeof(UnstableFn<T, ValueTuple>), typeof(MultiSet<T>)], FnMultiSetFilterBody<T>.FilterNot);
+
+        public static readonly PrimitiveN<ValueTuple> FillIndex = Primitive.CreateFull<ValueTuple>(
+            "unstable-multiset-fill-index", [typeof(MultiSet<T>), typeof(UnstableFn<MultiSet<T>, T, long>)], FnMultiSetIndex<T>.Fill);
+
+        public static readonly PrimitiveN<ValueTuple> ClearIndex = Primitive.CreateWrite<ValueTuple>(
+            "unstable-multiset-clear-index", [typeof(MultiSet<T>), typeof(UnstableFn<MultiSet<T>, T, long>)], FnMultiSetIndex<T>.Clear);
 
         public static readonly PrimitiveN<T> Reduce =
             new("unstable-multiset-reduce", [typeof(UnstableFn<T, T, T>), typeof(T), typeof(MultiSet<T>)], FnMultiSetReduceBody<T>.Instance);
