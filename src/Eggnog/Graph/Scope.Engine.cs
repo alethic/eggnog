@@ -48,11 +48,14 @@ namespace Eggnog
         /// call comes from another thread while the scope is in use, from a primitive, lattice, filter or cost function,
         /// or from a run observer.</exception>
         /// <exception cref="OperationCanceledException">The run was cancelled.</exception>
-        /// <exception cref="RuleEvaluationException">An evaluation failure, in this scope or in a case of the run (a split's
-        /// assumption that gives a function without a lattice a second value included, and a lattice merge that threw
-        /// while a split step caught a case up); the scope is then faulted, and so is the case. Or a lattice merge
-        /// threw in the catch-up the call makes first, here or in a writable ancestor: the scope is faulted, and so is
-        /// the ancestor.</exception>
+        /// <exception cref="RuleEvaluationException">An evaluation failure in an iteration of this scope, a primitive's,
+        /// a lambda's, a callback's or a merge's: as egglog's failed run, the failure stops the iteration, whose matches
+        /// applied before it stopped keep what they wrote before a call of theirs failed, merged and rebuilt; the iteration
+        /// counts as run, so a later run does not apply the matches of a semi-naive rule it did not reach, as egglog's; and
+        /// the scope is not faulted. Or a failure in a case of the run (a split's assumption that gives a function without a lattice a
+        /// second value included, and a lattice merge that threw while a split step caught a case up), or of a scheduler
+        /// that threw: the scope is then faulted, and so is the case. Or a lattice merge threw in the catch-up the call
+        /// makes first, here or in a writable ancestor: the scope is faulted, and so is the ancestor.</exception>
         /// <exception cref="OverflowException">The graph has run out of ids or epochs (<see cref="EGraph.Usage"/>): the step
         /// that ran out changes nothing, what the run's earlier iterations and lifts wrote stays, and the scope is not
         /// faulted, but every later call that needs an id or an epoch throws the same way. A rule that makes a term
@@ -163,10 +166,11 @@ namespace Eggnog
                 {
                     reason = stop.Reason;
                 }
-                catch (RuleEvaluationException failure) when (executor.ObserverFailed == false)
+                catch (RuleEvaluationException failure) when (executor.ObserverFailed == false && executor.RunFailed == false)
                 {
                     // A failure in a case of the run, in a split matcher or in a lift's case join fails the run: the
-                    // scope it ran in is faulted too, with the same cause. One in this scope faulted it already.
+                    // scope it ran in is faulted too, with the same cause. One of this scope's own iterations fails the
+                    // run as egglog's does, and leaves the scope usable.
                     Fault(failure);
                     throw;
                 }

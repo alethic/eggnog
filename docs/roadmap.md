@@ -21,12 +21,6 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
-- **Failed runs.** egglog's failed run keeps what its rules wrote and stays usable: every match runs, each keeps what
-  it staged before its call failed, and `(fail (run 1))` goes on, as with
-  `(rule ((R x)) ((Num x) (set (k x) x) (Lit (vec-get (vec-of 1) (- x 2)))))` over `(R 1) (R 2) (R 3)`, after which
-  `(Num 1)`, `(Num 3)`, `(k 1)`, `(k 3)` and `(Lit 1)` stand. The engine here merges and rebuilds what a failed run
-  staged too (defect 22 of the engine map's list), but a `RuleEvaluationException` from a run faults the scope
-  (architecture 2.12), which then refuses every call.
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
   layers. A container of function values counts as one of classes whatever the values hold, since a function value may

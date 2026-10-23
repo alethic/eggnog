@@ -74,6 +74,12 @@ namespace Eggnog
         public bool ObserverFailed { get; private set; }
 
         /// <summary>
+        /// Gets whether an iteration of the run's own scope failed as egglog's run fails (<see cref="FailRun"/>): its
+        /// exception propagates out of the run without faulting the scope.
+        /// </summary>
+        public bool RunFailed { get; private set; }
+
+        /// <summary>
         /// Gets the scope the run was called on.
         /// </summary>
         public Scope Top { get; }
@@ -179,7 +185,8 @@ namespace Eggnog
         /// <param name="rules">The rules.</param>
         /// <param name="inCase">Whether the scope is a case.</param>
         /// <returns>Whether the iteration changed the scope (its rules' writes or the rebuild).</returns>
-        /// <exception cref="RuleEvaluationException">An evaluation failure; the scope is faulted.</exception>
+        /// <exception cref="RuleEvaluationException">An evaluation failure: the run's own scope stays usable, and a case
+        /// of the run is faulted (<see cref="FailRun"/>).</exception>
         public bool RunIteration(Scope scope, IReadOnlyList<CompiledRule> rules, bool inCase)
         {
             BeforeStep(scope);
@@ -204,10 +211,38 @@ namespace Eggnog
             }
             catch (Relations.PanicException panic)
             {
-                throw scope.FaultWith(panic);
+                throw FailRun(scope, rules, panic);
             }
 
             return Account(scope, rules, lowered, iteration, Stopwatch.GetElapsedTime(started));
+        }
+
+        /// <summary>
+        /// Fails an iteration that recorded a failure, a primitive's or a merge's, which stopped its join and which the
+        /// engine merged and rebuilt before it threw, with its rules' progress committed: as egglog's failed run, which
+        /// keeps what the matches it reached wrote and after which the e-graph goes on (<c>(fail (run 1))</c>), the scope
+        /// the run was called on stays usable, whether or not it is a case. Its own mirrors are reconciled first, as
+        /// after any iteration (<see cref="Account"/>), for every rule of the iteration that deletes, since a failed
+        /// iteration reports no matches. A case a split step of the run made is faulted, as a failure in a split's case
+        /// fails the split, which then faults the scope the run was called on.
+        /// </summary>
+        /// <param name="scope">The scope the iteration ran in.</param>
+        /// <param name="rules">The iteration's rules, whose deletions merged; <c>null</c> for an iteration that deletes
+        /// nothing.</param>
+        /// <param name="panic">The engine's panic.</param>
+        /// <returns>The exception, to throw.</returns>
+        RuleEvaluationException FailRun(Scope scope, IReadOnlyList<CompiledRule>? rules, Relations.PanicException panic)
+        {
+            if (ReferenceEquals(scope, Top) == false)
+                return scope.FaultWith(panic);
+
+            RunFailed = true;
+            var failure = scope.FailWith(panic);
+            var called = scope.Runtime.TakeCallbackDeletions();
+            if ((rules is not null || called is not null) && scope.Tag is { } tag)
+                ReconcileMirrors(scope, rules ?? Array.Empty<CompiledRule>(), called, tag);
+
+            return failure;
         }
 
         /// <summary>

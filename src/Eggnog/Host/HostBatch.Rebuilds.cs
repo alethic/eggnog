@@ -278,11 +278,18 @@ namespace Eggnog
                 throw new InvalidOperationException(
                     $"Scope '{scope.Path}' cannot be written or run while a scope under it has a Write batch open; write it before or after the batch.");
 
-            // A flush that fails (a merge's panic faults the scope; the ids or the epochs ran out) leaves the batch
-            // nothing more to write: its later calls plan afresh, and are dropped.
+            // A flush whose merge fails, as egglog's command whose merge panics, wrote what it staged, and the batch goes
+            // on afresh, as egglog's later commands do. One that fails otherwise (the ids or the epochs ran out, a
+            // conflict) leaves the batch nothing more to write: its later calls plan afresh, and are dropped.
             try
             {
                 scope.Commit(this);
+            }
+            catch (RuleEvaluationException)
+            {
+                ClearPlan();
+                stopped = scope.IsStopped;
+                throw;
             }
             catch
             {

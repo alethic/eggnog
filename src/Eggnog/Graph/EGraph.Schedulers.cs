@@ -90,8 +90,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets a worklist over <paramref name="keys"/>: one a freed scheduled rule left, which every step left empty, or a
-        /// new one, since an engine table is never freed. Called under the definition lock.
+        /// Gets a worklist over <paramref name="keys"/>: one a freed scheduled rule left empty, or a new one, since an
+        /// engine table is never freed. Called under the definition lock.
         /// </summary>
         /// <param name="name">The name of a new worklist.</param>
         /// <param name="keys">The column types of the matches.</param>

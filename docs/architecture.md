@@ -306,8 +306,8 @@ commutative nor idempotent, and `Expression((old, new) => term)`, egglog's merge
 constants, and applications of functions and constructors, which the merge looks up or makes (`MergeFn::Function`), so
 that a merge of classes may make terms, as `(Join old new)` does. An expression is checked and lowered when its function
 is defined, and named by its rendering; a lookup with no row, or a primitive that throws or has no result, fails the
-merge as egglog's merge panics, which fails a rule's run or a host write's flush and faults the scope. A host batch
-works out an expression of primitives and constants itself, so its failure writes nothing and faults nothing; one that
+merge as egglog's merge panics, which fails a rule's run or a host write's flush, and what they wrote stands (section
+2.12). A host batch works out an expression of primitives and constants itself, so its failure fails only the fact; one that
 calls tables only the engine evaluates, after every write of the batch, so the batch stages each write as it comes, and
 flushes what it planned before a later read of the key, a later write of a table the expression reads, and the write
 itself after a merge of classes, as egglog's next command runs after the last one's flush. Each write folds into the value before it, in the order the writes come,
@@ -393,8 +393,8 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   `rust_rule_full`'s. Since a callback decides what it writes, its writes are checked when made, not before the run: a
   function whose merge is not a lattice only at the root, a deletion only where the scope may delete (a scope's own
   mirrors are then reconciled as for a rule that deletes), a subsumption only of a subsumable table, no analysis table
-  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule and faults the
-  scope, as egglog's callback returning `None` panics. A rule with a full callback has no licence unless it calls
+  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as
+  egglog's callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
   `ReadsOwnFacts`, since its reads are not atoms the licence sees. Callbacks run on the engine's threads, as primitives
   do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds every
   scheduler's query.
@@ -424,7 +424,7 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   child scope inherit its ancestors' progress (section 3.8).
 - `Naive()` makes a rule match in full every time instead of semi-naively.
 - A primitive or lambda that throws fails the rule: the run throws `RuleEvaluationException` naming the rule and the
-  bindings, and the scope is faulted (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
+  bindings, and the scope stays usable (section 2.12). A primitive may be partial, as egglog's `-?>` primitives are
   (`Primitive.IsPartial`): it has no result for some arguments. The built-ins are partial where egglog's are (checked
   `i64` arithmetic, division by zero, `log`, `sqrt`, `from-string`); `Primitive.CreatePartial` makes a user's. No result drops the match in a body let, a
   filter and a query; in a head and in a split's case assumptions the primitive's function throws, which fails the
@@ -475,7 +475,8 @@ back-off scheduler (release 1.0.0, for egglog 3.0.0), without the node limit of 
 own clone of the scheduler, with its own matches left and its own worklists, which are context-private tables
 (`FunctionConfig.ContextPrivate`): bookkeeping that descendants never read, that moves no `Version`, and that a scope
 may delete from where a rule may not. A child starts from what its parent held when the child was made, as egglog's
-`push` clones the e-graph with its schedulers: the matches its parent left wait in the child, whose queries continue
+`push` clones the e-graph with its schedulers: the matches its parent left wait in the child, as do those a failed step
+of the parent chose but did not apply (section 2.12), and the child's queries continue
 from its parent's progress (the query rules never seed a watermark from an ancestor's; the step sets the child's own).
 This is where egglog's defect 10 goes ([`history/egglog-engine-map.md`](history/egglog-engine-map.md)): egglog's clone
 and original share part of the buffers. Its defect 9 goes too: the matches offered hold classes as the scope's canonical
@@ -697,10 +698,24 @@ Extractors over a frozen scope may run concurrently, one per thread.
   engine state and local rules are released when it has no live children (transient query children included) and no
   call is in progress in its domain on another thread; whichever thread removes the last obstacle releases it.
   Disposing the root does nothing. So a frozen schema can be retired while queries beneath it finish.
-- A `RuleEvaluationException` from a run or a write faults the scope: `Failure` keeps the exception, and every later
-  call except `Dispose` throws `InvalidOperationException` with it as the inner exception. A faulted root makes the
-  graph unusable. There is no rollback. Lattice merges that throw while a call catches its scope up with an ancestor's
-  writes fault the scope too.
+- A `RuleEvaluationException` from a run or a write leaves the scope usable, as egglog's failed run or command leaves
+  its e-graph (`(fail (run 1))` goes on). There is no rollback. A failure stops the iteration's join, as egglog's panic
+  triggers an early stop (`egglog-bridge/src/lib.rs:1459`, `1508`): the batches of matches already formed still run, each
+  match keeping what it wrote before a call of its own failed, and the engine merges and rebuilds the iteration before
+  it throws (defect 22 of the engine map's list). The iteration counts as run, as egglog sets each rule's
+  `last_run_at` before it runs the rules (`egglog-bridge/src/lib.rs:1411-1417`), so a later run does not apply the
+  matches of a semi-naive rule that the join had not reached, in the failing rule or another; a naive rule matches in
+  full again. A scope's own mirrors are reconciled after a failed iteration as after any. A `RunWith` step that fails
+  keeps what egglog 3.0.0's keeps (defect 28): the matches a failed query found wait for the next step, and the matches
+  chosen but not applied stay in the worklist, which the next step's action rule applies and a child takes from its
+  parent, as egglog's `push` clones them. A failed
+  host write keeps what its calls staged before the failure (section 2.7); a flush that fails before a later call of a
+  batch fails that call, and the batch goes on.
+- A failure with no egglog counterpart faults the scope: a lattice merge that throws while a call catches its scope up
+  with an ancestor's writes, a failure in a case of a split step or a lift (which faults the case, and the scope the run
+  was called on), a scheduler that throws, and an exception the engine cannot undo in a child (section 3.8). `Failure`
+  keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as the inner
+  exception. A faulted root makes the graph unusable.
 - Refusals made before anything changes (`ArgumentException`, `FactConflictException`, a definition error) do not
   fault.
 - A disposed scope gives back its own state, but not what it drew from the graph:

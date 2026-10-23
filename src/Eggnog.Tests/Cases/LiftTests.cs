@@ -463,8 +463,9 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// A host-driven set with a faulted case: the lift reads a faulted case as any other, and lifts only what every
-        /// live case holds, never what the failed iteration would have derived; the parent is not faulted.
+        /// A host-driven set with a faulted case, here by a scheduler that throws: the lift reads a faulted case as any
+        /// other, and lifts only what every live case holds, never what the failed step would have derived; the parent is
+        /// not faulted.
         /// </summary>
         [Fact]
         public void ALiftOverAFaultedCaseLiftsOnlyWhatEveryCaseHolds()
@@ -474,17 +475,17 @@ namespace Eggnog.Tests.Cases
             {
                 var s = r.Var<string>("s");
                 r.When(t.Seen.Of(s));
-                r.Where(s, _ => throw new InvalidOperationException("boom"));
-                r.Then(t.Fact.Of("never"));
+                r.Then(t.Fact.Of(s));
             });
+            var scheduler = t.Graph.AddScheduler(new DelegateScheduler((_, _) => throw new InvalidOperationException("boom")));
 
             var parent = t.Root.CreateChild();
             using var cases = parent.OpenCases();
             var failing = cases.Add();
             var other = cases.Add();
-            failing.Assume(t.Fact.Of("x"), t.Seen.Of("s"));
+            failing.Assume(t.Fact.Of("x"), t.Seen.Of("never"));
             other.Assume(t.Fact.Of("x"), t.Fact.Of("never"));
-            Assert.Throws<RuleEvaluationException>(() => failing.Run(Schedule.Saturate(t.Rules)));
+            Assert.Throws<RuleEvaluationException>(() => failing.Run(Schedule.RunWith(scheduler, t.Rules)));
             Assert.True(failing.IsFaulted);
 
             var lifted = cases.Lift();

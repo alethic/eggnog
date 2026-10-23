@@ -206,7 +206,8 @@ namespace Eggnog.Tests.Definitions
 
             Assert.Throws<RuleEvaluationException>(() => child.Run(t.Rules));
 
-            Assert.True(child.IsFaulted);
+            Assert.False(child.IsFaulted);
+            Assert.True(child.AreEqual(child.Get(f.Of(1L)), t.A.Of()));
             Assert.False(t.Root.IsFaulted);
         }
 

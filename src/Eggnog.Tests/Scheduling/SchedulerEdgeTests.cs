@@ -49,6 +49,141 @@ namespace Eggnog.Tests.Scheduling
         }
 
         /// <summary>
+        /// A step whose query fails keeps the matches the query found, as egglog 3.0.0 keeps what its failed query
+        /// collected: the five bindings form one batch, which runs though x = 3 fails, and the next step offers the other
+        /// four, though the query's progress moved past them.
+        /// </summary>
+        [Fact]
+        public void AStepWhoseQueryFailsKeepsTheMatchesItFound()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            var s = graph.DefineRelation<long>("S");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("r", rule =>
+            {
+                var x = rule.Var<long>("x");
+                rule.When(r.Of(x));
+                rule.Where(x, x => x == 3 ? throw new InvalidOperationException("three") : true);
+                rule.Then(s.Of(x));
+            });
+            graph.Root.Write(w =>
+            {
+                for (var x = 1L; x <= 5; x++)
+                    w.Assume(r.Of(x));
+            });
+            var all = graph.AddScheduler(new DelegateScheduler((_, matches) =>
+            {
+                matches.ChooseAll();
+                return true;
+            }));
+
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.RunWith(all, rules)));
+            Assert.False(graph.Root.IsFaulted);
+            Assert.Equal(0, graph.Root.CountRows(s));
+
+            graph.Root.Run(Schedule.RunWith(all, rules));
+            Assert.False(graph.Root.Check(s.Of(3L)));
+            Assert.Equal(4, graph.Root.CountRows(s));
+        }
+
+        /// <summary>
+        /// A step whose action run fails leaves in the rule's worklist the match whose actions failed, as egglog 3.0.0's
+        /// <c>decided</c> table keeps it; once the scheduler is removed, that worklist is not given to another rule, whose
+        /// action rule would apply the row.
+        /// </summary>
+        [Fact]
+        public void AWorklistAFailedStepLeftRowsInIsNotReused()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            var output = graph.DefineRelation<long>("out");
+            var t = graph.DefineRelation<long>("T");
+            var u = graph.DefineRelation<long>("U");
+            var first = graph.DefineRuleset("first");
+            first.DefineRule("a", rule =>
+            {
+                var x = rule.Var<long>("x");
+                rule.When(r.Of(x));
+                rule.Then(output.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L))));
+            });
+            var second = graph.DefineRuleset("second");
+            second.DefineRule("b", rule =>
+            {
+                var y = rule.Var<long>("y");
+                rule.When(t.Of(y));
+                rule.Then(u.Of(y));
+            });
+            graph.Root.Write(w =>
+            {
+                for (var x = 1L; x <= 5; x++)
+                    w.Assume(r.Of(x));
+            });
+            var a = graph.AddScheduler(new DelegateScheduler((_, matches) =>
+            {
+                matches.ChooseAll();
+                return true;
+            }));
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.RunWith(a, first)));
+            Assert.Equal(4, graph.Root.CountRows(output));
+            Assert.True(graph.RemoveScheduler(a));
+
+            var b = graph.AddScheduler(new DelegateScheduler((_, matches) =>
+            {
+                matches.ChooseAll();
+                return true;
+            }));
+            graph.Root.Run(Schedule.RunWith(b, second));
+
+            Assert.Equal(0, graph.Root.CountRows(u));
+        }
+
+        /// <summary>
+        /// A child made after a failed step of its parent applies the matches the step chose but did not apply, as
+        /// egglog's <c>push</c> clones the <c>decided</c> table: the child's worklist is its own, so the step stages them
+        /// there first.
+        /// </summary>
+        [Fact]
+        public void AChildAppliesWhatAFailedStepOfItsParentChoseButDidNotApply()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("R");
+            var s = graph.DefineRelation<long>("S");
+            var failing = true;
+            var gate = Primitive.Create<long, long>("gate", x => failing && x == 3 ? throw new InvalidOperationException("three") : x);
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("r", rule =>
+            {
+                var x = rule.Var<long>("x");
+                rule.When(r.Of(x));
+                rule.Then(s.Of(gate.Of(x)));
+            });
+            graph.Root.Write(w =>
+            {
+                for (var x = 1L; x <= 5; x++)
+                    w.Assume(r.Of(x));
+            });
+            var all = graph.AddScheduler(new DelegateScheduler((_, matches) =>
+            {
+                matches.ChooseAll();
+                return true;
+            }));
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(Schedule.RunWith(all, rules)));
+            Assert.Equal(4, graph.Root.CountRows(s));
+
+            failing = false;
+            var child = graph.Root.CreateChild();
+            child.Run(Schedule.RunWith(all, rules));
+            Assert.True(child.Check(s.Of(3L)));
+            Assert.Equal(5, child.CountRows(s));
+            child.Dispose();
+
+            // The parent's own next step applies the row its worklist kept.
+            graph.Root.Run(Schedule.RunWith(all, rules));
+            Assert.True(graph.Root.Check(s.Of(3L)));
+        }
+
+        /// <summary>
         /// A child whose scheduler's query does not run again keeps its parent's progress as its own, older than the
         /// child, which the engine's invariants allow for it.
         /// </summary>

@@ -144,8 +144,11 @@ namespace Eggnog.Tests.Rules
         }
 
         [Fact]
-        public void AConflictingRuleWriteFaultsTheScope()
+        public void AConflictingRuleWriteFailsTheRunAndKeepsTheValue()
         {
+            // egglog at 5e655cae: (function g (String) i64 :no-merge) (set (g "k") 1) (rule () ((set (g "k") 2)))
+            // (fail (run 1)) (check (= (g "k") 1)) (run 1) (check (= (g "k") 1)): the conflict fails the run, the value
+            // stays, and the run's match is not applied again.
             var t = new NodeTheory();
             var g = t.Graph.DefineFunction<string, long>("g");
             t.Rules.DefineRule("conflict", r => r.Then(g.Of("k").Is(2L)));
@@ -155,14 +158,13 @@ namespace Eggnog.Tests.Rules
 
             Assert.Null(e.RuleName);
             Assert.Contains("Illegal merge attempted for function g", e.Message);
-            Assert.True(t.Root.IsFaulted);
-            Assert.Same(e, t.Root.Failure);
-            var again = Assert.Throws<InvalidOperationException>(() => t.Root.Run(t.Rules));
-            Assert.Same(e, again.InnerException);
-            Assert.Same(e, Assert.Throws<InvalidOperationException>(() => t.Root.Check(t.Num.Of(1L))).InnerException);
-            Assert.Same(e, Assert.Throws<InvalidOperationException>(() => t.Root.Assume(t.Num.Of(1L))).InnerException);
-            t.Root.Dispose();
-            Assert.False(t.Root.IsDisposed);
+            Assert.False(t.Root.IsFaulted);
+            Assert.Null(t.Root.Failure);
+            Assert.Equal(1L, t.Root.Get(g.Of("k")));
+            t.Root.Run(t.Rules);
+            Assert.Equal(1L, t.Root.Get(g.Of("k")));
+            t.Root.Assume(t.Num.Of(1L));
+            Assert.True(t.Root.Check(t.Num.Of(1L)));
         }
 
         [Fact]
@@ -185,7 +187,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("x=7", e.Bindings);
             Assert.Same(boom, e.InnerException);
             Assert.Contains("<lambda>", e.Message);
-            Assert.True(t.Root.IsFaulted);
+            Assert.False(t.Root.IsFaulted);
         }
 
         [Fact]
@@ -268,7 +270,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("plus one", e.RuleName);
             Assert.StartsWith("x=9223372036854775807 ", e.Bindings);
             Assert.IsType<OverflowException>(e.InnerException);
-            Assert.True(t.Root.IsFaulted);
+            Assert.False(t.Root.IsFaulted);
         }
 
         [Fact]

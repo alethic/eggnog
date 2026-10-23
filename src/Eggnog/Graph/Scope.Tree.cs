@@ -720,10 +720,22 @@ namespace Eggnog
         /// <returns>The exception, to throw.</returns>
         internal RuleEvaluationException FaultWith(Relations.PanicException panic)
         {
-            var failure = Runtime.TakeFailure();
-            var exception = new RuleEvaluationException(failure?.RuleName, failure?.Bindings, failure?.What ?? panic.PanicMessage, failure?.Exception ?? panic);
+            var exception = FailWith(panic);
             Fault(exception);
             return exception;
+        }
+
+        /// <summary>
+        /// Turns a failure the engine recorded on this scope into a <see cref="RuleEvaluationException"/>, as
+        /// <see cref="FaultWith"/> does, but leaves the scope usable: egglog's failed run or command, whose writes the
+        /// engine merged and rebuilt before it threw, after which egglog's e-graph goes on.
+        /// </summary>
+        /// <param name="panic">The engine's panic.</param>
+        /// <returns>The exception, to throw.</returns>
+        internal RuleEvaluationException FailWith(Relations.PanicException panic)
+        {
+            var failure = Runtime.TakeFailure();
+            return new RuleEvaluationException(failure?.RuleName, failure?.Bindings, failure?.What ?? panic.PanicMessage, failure?.Exception ?? panic);
         }
 
     }

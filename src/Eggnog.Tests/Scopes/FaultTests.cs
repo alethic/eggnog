@@ -16,7 +16,7 @@ namespace Eggnog.Tests.Scopes
     {
 
         [Fact]
-        public void AChildIsFaultedAfterAnEvaluationFailureAndOnlyDisposeWorks()
+        public void AChildStaysUsableAfterAFailedRun()
         {
             var t = new ScopeTheory();
             t.Rules.DefineRule("fails on bad", r =>
@@ -34,14 +34,16 @@ namespace Eggnog.Tests.Scopes
 
             var failure = Assert.Throws<RuleEvaluationException>(() => bad.Run(Schedule.Saturate(t.Rules)));
 
+            // As egglog's (fail (run 1)) in a push: the run fails, keeps what its other matches wrote, and the scope goes on.
             Assert.Equal("fails on bad", failure.RuleName);
-            Assert.True(bad.IsFaulted);
-            Assert.Same(failure, bad.Failure);
-            var refused = Assert.Throws<InvalidOperationException>(() => bad.Check(t.Fact.Of("good")));
-            Assert.Same(failure, refused.InnerException);
-            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => bad.Assume(t.Fact.Of("x"))).InnerException);
-            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => bad.Run(t.Rules)).InnerException);
-            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => bad.CreateChild()).InnerException);
+            Assert.False(bad.IsFaulted);
+            Assert.Null(bad.Failure);
+            Assert.True(bad.Check(t.Fact.Of("good")));
+            Assert.True(bad.Check(t.Seen.Of("good")));
+            bad.Assume(t.Fact.Of("x"));
+            bad.Run(t.Rules);
+            Assert.True(bad.Check(t.Seen.Of("x")));
+            bad.CreateChild().Dispose();
 
             // The parent and the sibling are unaffected.
             Assert.False(t.Root.IsFaulted);
@@ -56,7 +58,37 @@ namespace Eggnog.Tests.Scopes
         }
 
         [Fact]
-        public void AWritableParentStaysUsableAfterItsChildFaults()
+        public void ACaseTheHostRunsStaysUsableAfterAFailedRun()
+        {
+            // A case of a CaseSet is a scope the host runs, as it runs a child: its failed run leaves it usable, and the
+            // set still lifts what the case proved.
+            var t = new ScopeTheory();
+            t.Rules.DefineRule("fails on bad", r =>
+            {
+                var x = r.Var<string>("x");
+                r.When(t.Fact.Of(x));
+                r.Where(x, x => x == "bad" ? throw new InvalidOperationException("bad fact") : true);
+                r.Then(t.Seen.Of(x));
+            });
+            t.Root.Assume(t.Fact.Of("good"));
+            var parent = t.Root.CreateChild();
+            using var cases = parent.OpenCases();
+            var @case = cases.Add();
+            @case.Assume(t.Fact.Of("bad"));
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => @case.Run(Schedule.Saturate(t.Rules)));
+
+            Assert.Equal("fails on bad", failure.RuleName);
+            Assert.False(@case.IsFaulted);
+            Assert.True(@case.Check(t.Seen.Of("good")));
+            Assert.False(parent.IsFaulted);
+            cases.Lift();
+            Assert.True(parent.Check(t.Seen.Of("good")));
+            Assert.False(parent.Check(t.Seen.Of("bad")));
+        }
+
+        [Fact]
+        public void AWritableParentStaysUsableAfterItsChildsRunFails()
         {
             var t = new ScopeTheory();
             var function = t.Graph.DefineFunction<string, long>("plain");
@@ -70,8 +102,8 @@ namespace Eggnog.Tests.Scopes
             child.Assume(t.Fact.Of("a"));
 
             Assert.Throws<RuleEvaluationException>(() => child.Run(t.Rules));
-            Assert.True(child.IsFaulted);
-            Assert.NotNull(child.Failure);
+            Assert.False(child.IsFaulted);
+            Assert.True(child.Check(t.Fact.Of("a")));
             Assert.False(t.Root.IsFaulted);
             t.Root.Assume(t.Seen.Of("root"));
             Assert.True(t.Root.Check(t.Seen.Of("root")));

@@ -9,8 +9,9 @@ namespace Eggnog
 
         // The congruence check of merges. A union of the batch, or a constructor write that gives an existing key
         // another class, merges classes; the rebuild then merges every pair of rows whose keys become equal, and for a
-        // function without a lattice two such rows with different values are an engine panic, which would fault the
-        // scope. Phase 1 therefore simulates the closure the rebuild will compute: an overlay union-find over the cells
+        // function without a lattice two such rows with different values are an engine panic, which would fail the
+        // whole flush rather than the fact whose merge made them meet, as egglog's command does. Phase 1 therefore
+        // simulates the closure the rebuild will compute: an overlay union-find over the cells
         // of the batch (canonical or fresh), and a signature table of the rows whose keys a merge can change, stored and
         // planned. Two rows of a constructor that meet merge their outputs, which cascades; two rows of a function
         // without a lattice that meet with different values are a FactConflictException, before anything is staged.
@@ -478,7 +479,8 @@ namespace Eggnog
         /// the batch's own merges (its unions and its constructor writes), and then merges what met: a constructor's
         /// meeting rows union their classes for the next pass, and two rows of a function of a sort that meet must hold
         /// one class already, since its assert-equal merge panics on two, as egglog's does, before a later pass could
-        /// merge them. The batch refuses that, rather than let the panic fault the scope. O(passes × rows of the check),
+        /// merge them. The batch fails the fact that made them meet, as egglog's command panics, rather than let the
+        /// panic fail the whole flush. O(passes × rows of the check),
         /// and nothing unless such rows meet.
         /// </summary>
         /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>

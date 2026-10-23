@@ -115,8 +115,11 @@ Eggnog follows egglog at 5e655cae in its schedulers (`Schedule.RunWith`, [`archi
   its match size divided by zero. Upstream: `src/scheduler.rs:40-161`, `402-411`. Eggnog refuses such a rule before a
   run (`ScheduledRule.NoFreeVariables`).
 - [ ] **Scheduler state after an error** (#920). `step_rules_with_scheduler` restores its rulesets and schedulers on
-  every error path, and an unknown ruleset is an error. Upstream: `src/scheduler.rs:196-315`. Eggnog faults the scope
-  whose step fails, as for any evaluation failure.
+  every error path, and an unknown ruleset is an error. Upstream: `src/scheduler.rs:196-315`. At 5e655cae a failed
+  step loses every ruleset and scheduler (defect 28 of the engine map's list); Eggnog keeps each scope's scheduler
+  state in the scope, so a step whose rules fail leaves the scope usable with its state as the step left it, the
+  matches a failed query found included, as 3.0.0's restore does, and a scheduler that throws faults the scope. The
+  unknown ruleset is still to evaluate.
 
 ## Proofs
 

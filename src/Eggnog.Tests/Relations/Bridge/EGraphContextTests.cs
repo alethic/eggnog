@@ -96,8 +96,9 @@ namespace Eggnog.Relations.Tests
             Assert.Null(g.Root.Context.Database.Failure);
             Assert.Null(child.Context.Database.Failure);
 
-            // A run that records a failure commits no progress, so the match is found again.
-            Assert.Throws<PanicException>(() => child.RunRules(rule));
+            // A run that records a failure commits its progress, as egglog sets last_run_at before the run, so the match
+            // is not found again.
+            Assert.Equal(0, child.RunRules(rule).RuleSetReport.NumMatches("panics"));
             Assert.Equal(0, sibling.RunRules(rule).RuleSetReport.NumMatches("panics"));
         }
 
