@@ -196,12 +196,17 @@ A column holds either a class or a value.
   - egglog's higher-order container primitives apply one: `Primitives.UnstableVecMap` (`unstable-vec-map`, an element
     with no result dropped), `UnstableMultiSetMap`, `UnstableMultiSetFlatMap` (an element with no result kept),
     `UnstableMultiSetFilter` and `UnstableMultiSetFilterNot` (of a function into `Unit`, the elements it has a result
-    for and those it has none for) and `UnstableMultiSetReduce`. Each is pure, and each application runs where the call site's context allows the
-    function, as `unstable-app`'s. A multiset's elements go in cell order, egglog's representation order, so a
-    reduction folds as egglog's does; in a read, one element no write interned folds last, as egglog's `check` interns
-    it after the others, and two or more have no reduction, as with `MultiSetPick`. A map's result is a multiset of its
-    own sort, where egglog's copies the input's rebuild flag (decisions row 22). egglog's `-fill-index` and
-    `-clear-index`, actions for their effect, are not yet followed (roadmap, "Function values").
+    for and those it has none for) and `UnstableMultiSetReduce`. Each is pure, and each application runs where the
+    call site's context allows the function, as `unstable-app`'s. A multiset's elements go in cell order, egglog's
+    representation order, so a reduction folds as egglog's does; in a read, one element no write interned folds last,
+    as egglog's `check` interns it after the others, and two or more have no reduction, as with `MultiSetPick`. A
+    map's result is a multiset of its own sort, where egglog's copies the input's rebuild flag (decisions row 22).
+  - `UnstableMultiSetFillIndex` and `UnstableMultiSetClearIndex` are egglog's `-fill-index` and `-clear-index`, actions
+    for their effect (`Fact.Exists`) over a function value's function, keyed by the multiset and an element: the fill
+    sets each element's row to its count, in cell order, stopping at the first row there is, a full primitive that
+    runs in a naive rule's head or a host write; the clear deletes the rows, a write primitive. A primitive's function
+    value has no rows, for which both have no result, as egglog 3.0.0's, where the pin panics; one with partially
+    applied arguments is refused.
   - A function into `Unit` applies a function of `Unit` output, which has a result where it has a row, or a primitive
     of `Unit`: `Primitives.Fallible(filter)` is egglog's fallible form of a filter primitive, `<` of `bool-<`,
     `set-contains`, `multiset-contains-swapped`, `!=` and so on, with a result where the filter holds; egglog's other

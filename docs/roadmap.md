@@ -21,10 +21,6 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
-- **Function values.** egglog's `unstable-multiset-fill-index` and `-clear-index`, which return `Unit` and are used as
-  actions for their effect (`Fact.Exists`). The function values, `unstable-fn` and `unstable-app` (src/sort/fn.rs),
-  and `unstable-vec-map`, `unstable-multiset-map`, `-flat-map`, `-filter`, `-filter-not` and `-reduce` are followed
-  (architecture 2.2).
 - **Failed runs.** egglog's failed run keeps what its rules wrote and stays usable: every match runs, each keeps what
   it staged before its call failed, and `(fail (run 1))` goes on, as with
   `(rule ((R x)) ((Num x) (set (k x) x) (Lit (vec-get (vec-of 1) (- x 2)))))` over `(R 1) (R 2) (R 3)`, after which
