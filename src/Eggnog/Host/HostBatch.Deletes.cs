@@ -62,9 +62,9 @@ namespace Eggnog
                 PlanDelete(shape.Table!, shape.Arguments, nameof(term));
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -98,9 +98,9 @@ namespace Eggnog
                 PlanDelete(relation.Table, relation.Arguments, nameof(fact));
                 PlanFactUnions();
             }
-            catch
+            catch (Exception failure)
             {
-                UndoFact();
+                FailFact(failure);
                 throw;
             }
         }
@@ -138,6 +138,7 @@ namespace Eggnog
                 return;
 
             factRemovals = null;
+            factRemovalsApplied = factRemovalsApplied is { } applied ? [.. applied, .. held] : held;
             foreach (var (table, arguments) in held)
             {
                 var keys = PlanKeys(table, arguments, out var existing);
