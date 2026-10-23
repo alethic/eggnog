@@ -101,11 +101,11 @@ namespace Eggnog
                 var order = new ColumnType[cellWidth];
                 columns.CopyTo(order, 0);
                 order[width] = scope.Graph.Values.TypeOf<bool>();
-                cells.SortByContent(order);
+                cells.SortByContent(order, scope.ContainerView);
             }
             else
             {
-                cells.SortByContent(columns);
+                cells.SortByContent(columns, scope.ContainerView);
             }
 
             var rows = new List<(uint[] Cells, bool Subsumed)>(cells.Count);

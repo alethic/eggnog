@@ -961,6 +961,23 @@ When the child's own unions make a class lose (only losers are marked), the ance
 hidden and copied, canonicalized, into the child's layer. Hidden sets only grow, are sealed at the end of every merge,
 and are never read unsealed.
 
+**Containers in a child.** Every context shares the root's container environments, one per container type. Over them
+each child keeps container layers (`ContainerLayers`): per type, created on first use, an own environment and a
+grow-only set of the ancestor ids it shadows; an own entry's id is local to the child (from its id blocks) or shadowed
+there. Every read of a container by id or by content, in the engine and in the library, goes through the reading
+context's `ContainerView`. By id, the nearest level whose layer owns the id answers, and every other level is skipped
+untouched after a lock-free test; by content, the content is hashed once and each level with a layer of the type is
+probed, nearest first, a hit counting only where no level above it shadows its id; the root answers last. A frozen
+context's layers are read without locks, a writable one's and the root's under their shard locks. A scope caches its
+view (`Scope.ContainerView`). A pure primitive over classes, in a rule or a merge, a filter and a rule callback read
+through the view of the scope that owns the call, and a write primitive, a primitive over the tables and a failed call's
+bindings through the view of the execution state's context; the two differ only for a query on a frozen scope, which
+runs in a transient child of it that holds no layer, and DEBUG asserts that they read alike. In DEBUG a read of a
+container of classes through the root's view also asserts while an engine call of a child whose chain holds a layer
+runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. Nothing in the engine
+places a container in a layer: every layer is empty unless a test places one there, so a child reads the root's
+containers (decisions row 9).
+
 **Catch-up.** A writable ancestor may keep writing after its children exist. Each child keeps cursors into its
 ancestors' layers and journals, and at its next call (a write, a run, a read) catches up: it re-keys its union-find,
 absorbs the ancestor rows appended since its cursors that mention its own losers, and then rebuilds its own rows.
@@ -1016,7 +1033,9 @@ refuse. Subsumption is not a retraction: a sticky value change of the row's subs
 the rebuild loop checks it, and a stopped case is skipped by the lift and disposed.
 
 **What the root pays.** A few per-call, per-batch, per-probe and per-refinement branches, freeze-time and
-child-creation work, and one cheap path compression per merge that no result can observe. Nothing is added per scanned
+child-creation work (each child, a query's transient child and a case included, also allocates its empty container
+layers, one small object), one null test per container read through its view, one small object per extracted term tree,
+shared by its nodes, and one cheap path compression per merge that no result can observe. Nothing is added per scanned
 row, per staged row or per find, and the root's allocation probes pin this.
 
 ### 3.9 Cases and lift

@@ -36,7 +36,7 @@ namespace Eggnog.Relations
         /// <inheritdoc />
         public TermId Container(int sort, uint value, int container, ReadOnlySpan<TermId> elements)
         {
-            return ((ContainerSort)extractor.SortAt(sort)).Reconstruct(extractor.EGraph.ContainerValues, new Value(value), dag, elements);
+            return ((ContainerSort)extractor.SortAt(sort)).Reconstruct(extractor.Containers, new Value(value), dag, elements);
         }
 
     }

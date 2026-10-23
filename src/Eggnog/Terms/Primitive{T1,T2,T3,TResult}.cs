@@ -103,7 +103,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, Relations.ContainerView view, out object? value)
         {
             if (TryInvoke((T1)arguments[0], (T2)arguments[1], (T3)arguments[2], out var result))
             {

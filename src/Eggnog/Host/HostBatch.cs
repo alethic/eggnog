@@ -144,7 +144,7 @@ namespace Eggnog
                     }
 
                     // A container of classes: its classes usable and canonical, as a class constant's, and the container
-                    // interned at the root.
+                    // interned at a writable root, or elsewhere the one the scope sees.
                     if (type.HoldsClasses)
                         return type.EncodeCanonicalObject(shape.Constant!, scope, canonical ??= Canonical, Origin);
 
@@ -200,7 +200,7 @@ namespace Eggnog
 
             var text = new StringBuilder("(").Append(table.Name);
             for (var i = 0; i < keys.Length; i++)
-                text.Append(' ').Append(table.KeyArray[i].FormatCell(keys[i]));
+                text.Append(' ').Append(table.KeyArray[i].FormatCell(keys[i], scope.ContainerView));
 
             // egglog's lookup panics where the command runs, after its earlier calls.
             factPanicked = true;
@@ -262,7 +262,7 @@ namespace Eggnog
                     // A write primitive's unions are the batch's, as egglog's global action makes them, at the end of the
                     // fact.
                     found = primitive.IsWrite
-                        ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, out cell)
+                        ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, scope.ContainerView, out cell)
                         : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
                 }
             }

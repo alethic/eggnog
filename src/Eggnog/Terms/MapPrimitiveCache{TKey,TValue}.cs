@@ -34,8 +34,8 @@ namespace Eggnog
             "map-get",
             static (m, k) => TryGet(m, k, out var v) ? v : throw Primitive.NoResult("map-get"),
             TryGet,
-            static (map, _, _, mapCell, keyCell) =>
-                ((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out var valueCell) ? (true, valueCell) : (false, 0u));
+            static (map, _, _, mapCell, keyCell, view) =>
+                ((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, view, out var valueCell) ? (true, valueCell) : (false, 0u));
 
         /// <summary>
         /// <c>map-remove</c>.
@@ -55,8 +55,8 @@ namespace Eggnog
             "bool-map-contains",
             static (m, k) => m.ContainsKey(k),
             null,
-            static (map, key, result, mapCell, keyCell) =>
-                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out _))))
+            static (map, key, result, mapCell, keyCell, view) =>
+                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, view, out _))))
         {
             FilterName = "map-contains",
         };
@@ -68,8 +68,8 @@ namespace Eggnog
             "bool-map-not-contains",
             static (m, k) => m.ContainsKey(k) == false,
             null,
-            static (map, key, result, mapCell, keyCell) =>
-                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, out _) == false)))
+            static (map, key, result, mapCell, keyCell, view) =>
+                (true, ((ColumnType<bool>)result).Encode(((MapColumnType<TKey, TValue>)map).TryGetCell(mapCell, keyCell, view, out _) == false)))
         {
             FilterName = "map-not-contains",
         };

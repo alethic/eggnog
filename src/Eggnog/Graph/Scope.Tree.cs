@@ -472,6 +472,8 @@ namespace Eggnog
         /// <param name="child">The transient child.</param>
         internal void ReleaseTransient(ContextEngineScope child)
         {
+            // A transient child holds no container itself: its query reads containers as this scope does.
+            System.Diagnostics.Debug.Assert(child.Context.Context.ContainerLayers is not { IsEmpty: false }, "a transient child holds container layers");
             try
             {
                 child.Dispose();

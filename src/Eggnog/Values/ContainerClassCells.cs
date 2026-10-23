@@ -14,12 +14,14 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Appends the class cells a cell of <paramref name="type"/> names, depth first in the containers' order.
+        /// Appends the class cells a cell of <paramref name="type"/> names, depth first in the containers' order, each
+        /// container read through <paramref name="view"/>.
         /// </summary>
         /// <param name="type">The cell's column type.</param>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="classes">Receives the class cells.</param>
-        public static void AppendClasses(ColumnType type, uint cell, List<uint> classes)
+        public static void AppendClasses(ColumnType type, uint cell, Relations.ContainerView view, List<uint> classes)
         {
             if (type.Kind == ColumnKind.Sort)
             {
@@ -31,9 +33,9 @@ namespace Eggnog
                 return;
 
             var elements = new List<(ColumnType Type, uint Cell)>();
-            ((IContainerColumnType)type).AppendDistinctElements(cell, elements);
+            ((IContainerColumnType)type).AppendDistinctElements(cell, view, elements);
             foreach (var (elementType, elementCell) in elements)
-                AppendClasses(elementType, elementCell, classes);
+                AppendClasses(elementType, elementCell, view, classes);
         }
 
         /// <summary>
@@ -56,20 +58,22 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the content of a container of classes with each class canonical through <paramref name="find"/>, as a
-        /// key: two containers of one type have one key exactly when the rebuild would make them one container.
+        /// key: two containers of one type have one key exactly when the rebuild would make them one container. Each
+        /// container is read through <paramref name="view"/>.
         /// </summary>
         /// <param name="type">The container's column type, which holds classes.</param>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="find">The canonical cell of a class.</param>
         /// <returns>The key.</returns>
-        public static string CanonicalContent(ColumnType type, uint cell, Func<uint, uint> find) =>
-            type.Name + Part(type, cell, find);
+        public static string CanonicalContent(ColumnType type, uint cell, Relations.ContainerView view, Func<uint, uint> find) =>
+            type.Name + Part(type, cell, view, find);
 
         /// <summary>
         /// Gets a cell's canonical part of a key: a class's canonical cell, a container of classes' key as its rebuild
         /// would make it (<see cref="IContainerColumnType.CanonicalKey"/>), any other cell as it is.
         /// </summary>
-        static string Part(ColumnType type, uint cell, Func<uint, uint> find)
+        static string Part(ColumnType type, uint cell, Relations.ContainerView view, Func<uint, uint> find)
         {
             if (type.Kind == ColumnKind.Sort)
                 return "#" + find(cell).ToString(CultureInfo.InvariantCulture);
@@ -77,7 +81,7 @@ namespace Eggnog
             if (type.HoldsClasses == false)
                 return cell.ToString(CultureInfo.InvariantCulture);
 
-            return ((IContainerColumnType)type).CanonicalKey(cell, (elementType, elementCell) => Part(elementType, elementCell, find));
+            return ((IContainerColumnType)type).CanonicalKey(cell, view, (elementType, elementCell) => Part(elementType, elementCell, view, find));
         }
 
     }

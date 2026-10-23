@@ -259,7 +259,7 @@ namespace Eggnog
                 names[i] = operand.Kind switch
                 {
                     OperandKind.Register => program.Registers[operand.Index].Name,
-                    OperandKind.Constant => operand.Type.FormatCell(operand.Bits),
+                    OperandKind.Constant => operand.Type.FormatCell(operand.Bits, default),
                     _ => "#" + program.WrittenIdConstants[operand.Index],
                 };
             }

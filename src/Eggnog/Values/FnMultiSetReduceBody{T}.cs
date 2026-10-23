@@ -31,7 +31,7 @@ namespace Eggnog
         /// <inheritdoc />
         public override bool TryInvoke(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
-            var (elements, counts) = ((MultiSetColumnType<T>)parameters[2]).ElementCounts(arguments[2]);
+            var (elements, counts) = ((MultiSetColumnType<T>)parameters[2]).ElementCounts(arguments[2], tables.View);
             cell = arguments[1];
             var first = true;
             Span<uint> call = [arguments[0], 0, 0];
@@ -62,7 +62,7 @@ namespace Eggnog
         /// result (<see cref="MultiSetColumnType{T}.TryOrderByCell"/>, decisions row 22).</remarks>
         public override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value)
         {
-            if (((MultiSetColumnType<T>)parameters[2]).TryOrderByCell((MultiSet<T>)arguments[2], out var entries) == false)
+            if (((MultiSetColumnType<T>)parameters[2]).TryOrderByCell((MultiSet<T>)arguments[2], tables.View, out var entries) == false)
             {
                 value = null;
                 return false;

@@ -43,7 +43,7 @@ namespace Eggnog.Relations.Tests
 
         static uint NewId(Database db, CounterId ids) => (uint)db.IncrementCounter(ids);
 
-        static uint Intern(Database db, params uint[] values) => db.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(values), es));
+        static uint Intern(Database db, params uint[] values) => db.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(values), es));
 
         [Fact]
         public void ContainersAreCreatedOnceAndSharedWithExecutionStates()
@@ -51,8 +51,9 @@ namespace Eggnog.Relations.Tests
             var db = new Database(new ParallelHeuristics(3));
             var containers = db.Containers;
             Assert.Same(containers, db.Containers);
-            Assert.Same(containers, db.CreateExecutionState().Containers);
-            Assert.Same(containers, db.CreateExecutionState().Clone().Containers);
+            Assert.Same(containers, db.CreateExecutionState().Containers.Values);
+            Assert.Same(containers, db.CreateExecutionState().Clone().Containers.Values);
+            Assert.True(db.CreateExecutionState().Containers.IsRoot);
             Assert.Same(db.Parallelism, containers.Parallelism);
         }
 
@@ -344,8 +345,8 @@ namespace Eggnog.Relations.Tests
             {
                 var contents = Enumerable.Range(0, length).Select(_ => Pick(true)).ToArray();
                 var id = db.WithExecutionState(es => kind == 's'
-                    ? es.Containers.RegisterValue(new SetContainer(contents), es)
-                    : es.Containers.RegisterValue(new VecContainer(contents), es));
+                    ? es.Containers.GetOrInsert(new SetContainer(contents), es)
+                    : es.Containers.GetOrInsert(new VecContainer(contents), es));
                 interned.Add((kind, contents, id));
             }
 
@@ -445,7 +446,7 @@ namespace Eggnog.Relations.Tests
             var ids = db.AddCounter();
             db.Containers.RegisterType<VecContainer>(ids, new UnionContainerMerge(uf));
             var a = (uint)db.IncrementCounter(ids);
-            var v = db.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(a), es));
+            var v = db.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(a), es));
 
             var copy = db.Clone();
             Assert.True(copy.Containers.TryGetTypeId<VecContainer>(out _), "the clone lost the registered container types");
@@ -453,11 +454,11 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new VecContainer(a), found);
 
             // Interning the same container in the clone finds it rather than minting a second id for it.
-            var again = copy.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(a), es));
+            var again = copy.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(a), es));
             Assert.Equal(v, again);
 
             // Independent afterwards.
-            copy.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(a, a), es));
+            copy.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(a, a), es));
             Assert.Equal(1, db.Containers.GetEnvironment<VecContainer>().Count);
         }
 
@@ -478,8 +479,8 @@ namespace Eggnog.Relations.Tests
             db.Containers.RegisterType<VecContainer>(ids, new UnionContainerMerge(uf));
             var a = (uint)db.IncrementCounter(ids);
             var b = (uint)db.IncrementCounter(ids);
-            var va = db.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(a), es));
-            var vb = db.WithExecutionState(es => es.Containers.RegisterValue(new VecContainer(b), es));
+            var va = db.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(a), es));
+            var vb = db.WithExecutionState(es => es.Containers.GetOrInsert(new VecContainer(b), es));
             Stage(db, uf, R(a, b, 5));
             db.MergeAll(5);
 

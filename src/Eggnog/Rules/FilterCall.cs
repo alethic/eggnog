@@ -58,6 +58,7 @@ namespace Eggnog
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            Relations.ContainerView.EnterEngineCall(state);
             try
             {
                 bool found;
@@ -81,8 +82,9 @@ namespace Eggnog
                 }
                 else
                 {
-                    // The scope decodes classes; a filter over values pays nothing for it.
-                    var scope = overClasses ? ScopeRuntime.Of(graph, state).Owner : null;
+                    // The scope decodes classes, and the filter reads containers of classes through its view; a filter
+                    // over values pays nothing for it.
+                    var scope = overClasses ? ScopeRuntime.CallScope(graph, state) : null;
                     found = primitive.TryInvokeCore(args, parameters, boolean, scope, out cell);
                 }
 
@@ -103,6 +105,7 @@ namespace Eggnog
             }
             finally
             {
+                Relations.ContainerView.ExitEngineCall(state);
                 EngineCallMarker.Exit();
             }
         }

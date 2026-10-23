@@ -44,6 +44,13 @@ namespace Eggnog
         public PrimitiveAccess Context { get; }
 
         /// <summary>
+        /// Gets the containers the call reads through: its scope's container view (<see cref="Scope.ContainerView"/>),
+        /// or, for an engine call, the view of the context its execution state runs in
+        /// (<see cref="EnginePrimitiveTables"/>).
+        /// </summary>
+        public virtual Relations.ContainerView View => Scope.ContainerView;
+
+        /// <summary>
         /// Gets the first read or write refused, which fails the call whether or not the primitive caught it.
         /// </summary>
         public abstract Exception? Refusal { get; }

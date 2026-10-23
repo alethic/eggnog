@@ -29,6 +29,12 @@ namespace Eggnog
         readonly Relations.MapSort sort;
 
         /// <summary>
+        /// The order of entries by their keys' cells through the root's view (<see cref="KeyOrder"/>), made on first use,
+        /// so that ordering a map's entries at the root allocates no comparison.
+        /// </summary>
+        Comparison<(uint Key, uint Value)>? rootKeyOrder;
+
+        /// <summary>
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
@@ -104,14 +110,14 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a map a primitive returned in <paramref name="scope"/>: for a map that holds classes, its classes
-        /// usable there and the container interned at the root, or in a child the one the root holds; else as
-        /// <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root, or elsewhere the one the scope sees (its container
+        /// view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="map">The map.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The map holds classes, and a class is not usable in the scope, or
-        /// the scope cannot intern and the root holds no such map.</exception>
+        /// the scope cannot intern and sees no such map.</exception>
         internal override uint EncodeIn(Map<TKey, TValue> map, Scope? scope)
         {
             if (HoldsClasses == false)
@@ -154,7 +160,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(Map<TKey, TValue> map, out uint cell)
+        internal override bool TryEncodeExisting(Map<TKey, TValue> map, Relations.ContainerView view, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(map);
             cell = 0;
@@ -163,20 +169,20 @@ namespace Eggnog
             var i = 0;
             foreach (var (k, v) in map)
             {
-                if (key.TryEncodeExisting(k, out keys[i]) == false || value.TryEncodeExisting(v, out values[i]) == false)
+                if (key.TryEncodeExisting(k, view, out keys[i]) == false || value.TryEncodeExisting(v, view, out values[i]) == false)
                     return false;
 
                 i++;
             }
 
-            return env.TryGetId(Collect(map, keys, values), out cell);
+            return view.TryGetId(env, Collect(map, keys, values), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(Map<TKey, TValue> map, Scope scope, Func<uint, uint> find, out uint cell)
         {
             if (HoldsClasses == false)
-                return TryEncodeExisting(map, out cell);
+                return TryEncodeExisting(map, scope.ContainerView, out cell);
 
             ArgumentNullException.ThrowIfNull(map);
             cell = 0;
@@ -192,7 +198,7 @@ namespace Eggnog
                 i++;
             }
 
-            if (env.TryGetId(Collect(map, keys, values), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, Collect(map, keys, values), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -245,7 +251,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a map's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a map's cell, read through the scope's container view. Takes one lock of a container environment, and
+        /// more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -253,7 +260,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No map has the cell.</exception>
         internal override Map<TKey, TValue> Decode(uint cell, Scope? scope)
         {
-            var map = Read(cell);
+            var map = Read(cell, Scope.ViewOf(scope));
             var keys = new TKey[map.Count];
             var values = new TValue[map.Count];
             for (var i = 0; i < keys.Length; i++)
@@ -284,16 +291,20 @@ namespace Eggnog
         internal override string DebugValue(Map<TKey, TValue> map) => FormatValue(map);
 
         /// <summary>
-        /// Formats a map's cell as egglog prints it, its entries in key-cell order, the order its extracted term lists.
+        /// Formats a map's cell as egglog prints it, its entries in key-cell order, the order its extracted term lists; a
+        /// cell no map has in <paramref name="view"/> as <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var map = Read(cell);
+            if (view.TryGetContainer(env, cell, out var map) == false)
+                return FormatUnresolvedCell(cell);
+
             var text = "(map-empty)";
             for (var i = 0; i < map.Count; i++)
-                text = "(map-insert " + text + " " + key.FormatCell(map.Keys[i]) + " " + value.FormatCell(map.Values[i]) + ")";
+                text = "(map-insert " + text + " " + key.FormatCell(map.Keys[i], view) + " " + value.FormatCell(map.Values[i], view) + ")";
 
             return text;
         }
@@ -305,8 +316,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
@@ -314,13 +326,13 @@ namespace Eggnog
             if (rebuildKeys == false && rebuildValues == false)
                 return CompareValues(Decode(x, null), Decode(y, null));
 
-            var left = Entries(x);
-            var right = Entries(y);
+            var left = Entries(x, view);
+            var right = Entries(y, view);
             for (var i = 0; i < left.Length && i < right.Length; i++)
             {
-                var order = key.CompareCells(left[i].Key, right[i].Key);
+                var order = key.CompareCells(left[i].Key, right[i].Key, view);
                 if (order == 0)
-                    order = value.CompareCells(left[i].Value, right[i].Value);
+                    order = value.CompareCells(left[i].Value, right[i].Value, view);
 
                 if (order != 0)
                     return order;
@@ -332,19 +344,27 @@ namespace Eggnog
         /// <summary>
         /// Gets a map's entries' cells in key order, the content order of <see cref="CompareValues"/>.
         /// </summary>
-        (uint Key, uint Value)[] Entries(uint cell)
+        (uint Key, uint Value)[] Entries(uint cell, Relations.ContainerView view)
         {
-            var map = Read(cell);
+            var map = Read(cell, view);
             var entries = new (uint Key, uint Value)[map.Count];
             for (var i = 0; i < entries.Length; i++)
                 entries[i] = (map.Keys[i], map.Values[i]);
 
-            Array.Sort(entries, (a, b) => key.CompareCells(a.Key, b.Key));
+            Array.Sort(entries, view.IsRoot ? rootKeyOrder ??= KeyOrder(key, view) : KeyOrder(key, view));
             return entries;
         }
 
+        /// <summary>
+        /// Makes the order of entries by <paramref name="key"/>'s cells through <paramref name="view"/>, in a method of its
+        /// own so that only a call that makes one allocates its closure.
+        /// </summary>
+        static Comparison<(uint Key, uint Value)> KeyOrder(ColumnType<TKey> key, Relations.ContainerView view) =>
+            (a, b) => key.CompareCells(a.Key, b.Key, view);
+
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination) =>
+            AppendElements(cell, view, destination);
 
         /// <inheritdoc />
         public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
@@ -361,9 +381,9 @@ namespace Eggnog
             rebuildKeys || key is IContainerColumnType { RebuildsInOrder: true } || value is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var map = Read(cell);
+            var map = Read(cell, view);
             var content = new long[map.Count * 2];
             for (var i = 0; i < map.Count; i++)
             {
@@ -402,9 +422,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
-            var map = Read(cell);
+            var map = Read(cell, view);
             var entries = new SortedDictionary<string, string>(StringComparer.Ordinal);
             for (var i = 0; i < map.Count; i++)
                 entries[part(key, map.Keys[i])] = part(value, map.Values[i]);
@@ -421,11 +441,12 @@ namespace Eggnog
         /// </summary>
         /// <param name="cell">The map's cell.</param>
         /// <param name="keyCell">The key's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="valueCell">The value's cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the map has the key.</returns>
-        internal bool TryGetCell(uint cell, uint keyCell, out uint valueCell)
+        internal bool TryGetCell(uint cell, uint keyCell, Relations.ContainerView view, out uint valueCell)
         {
-            var map = Read(cell);
+            var map = Read(cell, view);
             var at = map.Keys.BinarySearch(keyCell);
             valueCell = at >= 0 ? map.Values[at] : 0;
             return at >= 0;
@@ -469,9 +490,9 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>Keys and values alternating, in key-cell order, as egglog's <c>inner_values</c> (map.rs:124-137).</remarks>
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            var map = Read(cell);
+            var map = Read(cell, view);
             for (var i = 0; i < map.Count; i++)
             {
                 destination.Add((key, map.Keys[i]));
@@ -481,15 +502,16 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>The map sort's name, as egglog's <c>serialized_name</c> (map.rs:173-175).</remarks>
-        public string SerializedName(uint cell) => Name;
+        public string SerializedName(uint cell, Relations.ContainerView view) => Name;
 
         /// <summary>
-        /// Reads the container of a cell.
+        /// Reads the container of a cell through <paramref name="view"/>, as every read of a map by its cell does, so that
+        /// a map of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No map has the cell.</exception>
-        Relations.MapContainer Read(uint cell)
+        Relations.MapContainer Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var map) == false)
+            if (view.TryGetContainer(env, cell, out var map) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return map;

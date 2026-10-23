@@ -33,7 +33,7 @@ namespace Eggnog
         {
             var output = (ColumnType<TResult>)((IFnColumnType)parameters[0]).Output;
             var elements = new List<(ColumnType Type, uint Cell)>();
-            ((IContainerColumnType)parameters[1]).AppendElements(arguments[1], elements);
+            ((IContainerColumnType)parameters[1]).AppendElements(arguments[1], tables.View, elements);
             var mapped = new List<TResult>(elements.Count);
             Span<uint> call = [arguments[0], 0];
             foreach (var (_, element) in elements)

@@ -5,7 +5,9 @@ namespace Eggnog
 
     /// <summary>
     /// A column type whose values are engine containers, interned in the graph's container environments: egglog's
-    /// container sorts as the library reads them, for the serializer and the cost model.
+    /// container sorts as the library reads them, for the serializer and the cost model. A member that reads a
+    /// container by its cell reads it through the container view it is given (<see cref="Relations.ContainerView"/>),
+    /// the containers of the scope the cell belongs to.
     /// </summary>
     internal interface IContainerColumnType
     {
@@ -15,9 +17,10 @@ namespace Eggnog
         /// container's order: egglog's <c>inner_values</c>. Reads the stored cells and never interns.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="destination">Receives the elements.</param>
         /// <exception cref="System.InvalidOperationException">No container of this type has the cell.</exception>
-        void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination);
+        void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination);
 
         /// <summary>
         /// Appends the parts of a constant of the type, each with its column type, as egglog's form of it lists them, the
@@ -43,17 +46,19 @@ namespace Eggnog
         /// order.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="part">An element's part of the key, given its column type and its cell.</param>
         /// <returns>The key.</returns>
-        string CanonicalKey(uint cell, System.Func<ColumnType, uint, string> part);
+        string CanonicalKey(uint cell, Relations.ContainerView view, System.Func<ColumnType, uint, string> part);
 
         /// <summary>
         /// Appends the distinct elements of the container in <paramref name="cell"/>, each with its column type: as
         /// <see cref="AppendElements"/>, except that a multiset's element comes once, whatever its count.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="destination">Receives the elements.</param>
-        void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination);
+        void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination);
 
         /// <summary>
         /// Gets whether the type's rebuild depends on the order in which its classes merge: a map whose keys are classes,
@@ -68,8 +73,9 @@ namespace Eggnog
         /// a multiset's elements and counts in cell order, element before count.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The content.</returns>
-        long[] Content(uint cell);
+        long[] Content(uint cell, Relations.ContainerView view);
 
         /// <summary>
         /// Rebuilds a content as the container's rebuild would, each element that names classes mapped through
@@ -86,8 +92,9 @@ namespace Eggnog
         /// <c>serialized_name</c>.
         /// </summary>
         /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The name.</returns>
-        string SerializedName(uint cell);
+        string SerializedName(uint cell, Relations.ContainerView view);
 
     }
 

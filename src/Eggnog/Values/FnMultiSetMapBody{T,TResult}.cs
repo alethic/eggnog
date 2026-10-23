@@ -36,7 +36,7 @@ namespace Eggnog
         public override bool TryInvoke(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
             var output = (ColumnType<TResult>)((IFnColumnType)parameters[0]).Output;
-            var (elements, counts) = ((MultiSetColumnType<T>)parameters[1]).ElementCounts(arguments[1]);
+            var (elements, counts) = ((MultiSetColumnType<T>)parameters[1]).ElementCounts(arguments[1], tables.View);
             var mapped = new List<KeyValuePair<TResult, long>>(elements.Length);
             Span<uint> call = [arguments[0], 0];
             for (var i = 0; i < elements.Length; i++)

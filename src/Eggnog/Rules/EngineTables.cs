@@ -358,7 +358,7 @@ namespace Eggnog
             try
             {
                 // A container of classes: its classes usable and canonical through the state, as a class is, and the
-                // container interned at the root, or in a child the one the root holds.
+                // container interned at a writable root, or elsewhere the one the scope sees.
                 if (type.HoldsClasses)
                     return type.EncodeCanonicalObject(value, Scope, State.Canonicalize, null);
 

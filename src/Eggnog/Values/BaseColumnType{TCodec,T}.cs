@@ -56,7 +56,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(T value, out uint cell)
+        internal override bool TryEncodeExisting(T value, Relations.ContainerView view, out uint cell)
         {
             if (value is null)
                 throw new ArgumentNullException(nameof(value));
@@ -89,8 +89,8 @@ namespace Eggnog
             if (order is not null)
                 return order.Compare(x, y);
 
-            var hasX = TryEncodeExisting(x, out var cellX);
-            var hasY = TryEncodeExisting(y, out var cellY);
+            var hasX = TryEncodeExisting(x, default, out var cellX);
+            var hasY = TryEncodeExisting(y, default, out var cellY);
             if (hasX && hasY)
                 return cellX.CompareTo(cellY);
 
@@ -107,7 +107,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;

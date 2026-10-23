@@ -127,8 +127,8 @@ namespace Eggnog.Relations.Tests
                 db.Containers.RegisterType<VecContainer>(ids, new UnionContainerMerge(uf, clock));
                 var a = (uint)db.IncrementCounter(ids);
                 var b = (uint)db.IncrementCounter(ids);
-                db.WithExecutionState(s => s.Containers.RegisterValue(new VecContainer(a), s));
-                db.WithExecutionState(s => s.Containers.RegisterValue(new VecContainer(b), s));
+                db.WithExecutionState(s => s.Containers.GetOrInsert(new VecContainer(a), s));
+                db.WithExecutionState(s => s.Containers.GetOrInsert(new VecContainer(b), s));
                 db.WithExecutionState(s => { s.StageInsert(uf, [a, b, 5]); return 0; }, 5);
                 db.MergeAll(5);
                 db.Counters.IncrementBy(clock, 10);

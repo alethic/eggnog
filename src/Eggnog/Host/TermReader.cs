@@ -62,7 +62,7 @@ namespace Eggnog
                     return true;
                 }
 
-                if (type.TryEncodeExistingObject(shape.Constant!, out cell) == false)
+                if (type.TryEncodeExistingObject(shape.Constant!, scope.ContainerView, out cell) == false)
                     unencoded = shape.Constant!;
 
                 return true;
@@ -85,7 +85,7 @@ namespace Eggnog
                     return true;
                 }
 
-                if (result.TryEncodeExistingObject(value!, out cell) == false)
+                if (result.TryEncodeExistingObject(value!, scope.ContainerView, out cell) == false)
                     unencoded = value!;
 
                 return true;
@@ -121,7 +121,7 @@ namespace Eggnog
                     if (type.HoldsClasses)
                         return type.TryEncodeCanonicalObject(shape.Constant!, scope, scope.Engine.Find, out cell);
 
-                    return type.TryEncodeExistingObject(shape.Constant!, out cell);
+                    return type.TryEncodeExistingObject(shape.Constant!, scope.ContainerView, out cell);
                 }
                 case TermShapeKind.Application:
                 {
@@ -174,7 +174,7 @@ namespace Eggnog
             if (result.HoldsClasses)
                 return result.TryEncodeCanonicalObject(value!, scope, scope.Engine.Find, out cell);
 
-            return result.TryEncodeExistingObject(value!, out cell);
+            return result.TryEncodeExistingObject(value!, scope.ContainerView, out cell);
         }
 
         /// <summary>
@@ -258,7 +258,7 @@ namespace Eggnog
                 }
                 else
                 {
-                    found = primitive.TryInvokeValue(arguments, parameters, out value);
+                    found = primitive.TryInvokeValue(arguments, parameters, scope.ContainerView, out value);
                 }
             }
             catch (Exception exception)

@@ -288,11 +288,11 @@ namespace Eggnog.Relations.Tests
                     throw new InvalidOperationException($"[vec-push] expected 2 values, got {args.Length}");
 
                 result = 0;
-                if (state.Containers.TryGetValue<VecContainer>(args[0], out var vec) == false)
+                if (state.Containers.TryGetContainer<VecContainer>(args[0], out var vec) == false)
                     return false;
 
                 uint[] pushed = [.. vec.Values, args[1]];
-                result = state.Containers.RegisterValue(new VecContainer(pushed), state);
+                result = state.Containers.GetOrInsert(new VecContainer(pushed), state);
                 return true;
             }));
         }
@@ -310,7 +310,7 @@ namespace Eggnog.Relations.Tests
                     throw new InvalidOperationException($"[vec-last] expected 1 value, got {args.Length}");
 
                 result = 0;
-                if (state.Containers.TryGetValue<VecContainer>(args[0], out var vec) == false || vec.Length == 0)
+                if (state.Containers.TryGetContainer<VecContainer>(args[0], out var vec) == false || vec.Length == 0)
                     return false;
 
                 result = vec.Values[^1];
@@ -470,7 +470,7 @@ namespace Eggnog.Relations.Tests
                     throw new InvalidOperationException($"match_singleton_k expected 1 arg, got {args.Length}");
 
                 result = 0;
-                if (state.Containers.TryGetValue<VecContainer>(args[0], out var container) == false || container.Length != 1)
+                if (state.Containers.TryGetContainer<VecContainer>(args[0], out var container) == false || container.Length != 1)
                     return false;
 
                 var entry = container.Values[0];

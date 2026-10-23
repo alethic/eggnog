@@ -94,7 +94,7 @@ namespace Eggnog.Relations.Tests
             var (v, s, v2) = db.WithExecutionState(es => (
                 values.RegisterValue(new VecContainer(4, 5), es),
                 values.RegisterValue(new SetContainer(5, 4), es),
-                es.Containers.RegisterValue(new VecContainer(4, 5), es)));
+                es.Containers.GetOrInsert(new VecContainer(4, 5), es)));
 
             // Both types draw from the one id counter, so their ids are disjoint.
             Assert.Equal(0u, v);

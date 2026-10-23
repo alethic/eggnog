@@ -399,7 +399,7 @@ namespace Eggnog
                     if (type.TryEncodeCanonicalObject(key, scope, canonical ??= Canonical, out cells[i]) == false)
                         return false;
                 }
-                else if (type.TryEncodeExistingObject(key, out cells[i]) == false)
+                else if (type.TryEncodeExistingObject(key, scope.ContainerView, out cells[i]) == false)
                 {
                     return false;
                 }

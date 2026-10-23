@@ -167,7 +167,7 @@ namespace Eggnog
         /// <summary>
         /// Orders the indexer lexicographically by the tuples' cells. O(n log n) compares; the cells do not move.
         /// </summary>
-        public void SortByCells() => Sort(null);
+        public void SortByCells() => Sort(null, default);
 
         /// <summary>
         /// Orders the indexer in content order: column by column, each by its column type's order (strings ordinal,
@@ -176,14 +176,16 @@ namespace Eggnog
         /// compares; the cells do not move.
         /// </summary>
         /// <param name="columns">The column types, one per cell of a tuple.</param>
+        /// <param name="view">The containers of the scope the cells belong to, through which a container's cell is
+        /// read.</param>
         /// <exception cref="ArgumentException">The number of column types is not <see cref="Width"/>.</exception>
-        public void SortByContent(IReadOnlyList<ColumnType> columns)
+        public void SortByContent(IReadOnlyList<ColumnType> columns, Relations.ContainerView view)
         {
             ArgumentNullException.ThrowIfNull(columns);
             if (columns.Count != Width)
                 throw new ArgumentException($"A tuple of this buffer has {Width} cells, not {columns.Count}.", nameof(columns));
 
-            Sort(columns);
+            Sort(columns, view);
         }
 
         /// <summary>
@@ -224,9 +226,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Sorts the indexer's order: by content when <paramref name="columns"/> is given, else by cells.
+        /// Sorts the indexer's order: by content when <paramref name="columns"/> is given, containers read through
+        /// <paramref name="view"/>, else by cells.
         /// </summary>
-        void Sort(IReadOnlyList<ColumnType>? columns)
+        void Sort(IReadOnlyList<ColumnType>? columns, Relations.ContainerView view)
         {
             lock (sync)
             {
@@ -236,7 +239,7 @@ namespace Eggnog
                     sorted[i] = i;
 
                 if (Width > 0 && count > 1)
-                    new Span<int>(sorted, 0, count).Sort(new TupleOrder(cells, Width, columns));
+                    new Span<int>(sorted, 0, count).Sort(new TupleOrder(cells, Width, columns, view));
 
                 order = sorted;
             }

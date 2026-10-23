@@ -77,12 +77,13 @@ namespace Eggnog
 
         /// <summary>
         /// Gets a multiset's distinct elements and counts in cell order, egglog's, where the scope knows it
-        /// (<see cref="MultiSetColumnType{T}.TryOrderByCell"/>); else in element order.
+        /// (<see cref="MultiSetColumnType{T}.TryOrderByCell"/>), read through the call's view
+        /// (<see cref="PrimitiveTables.View"/>); else in element order.
         /// </summary>
         static IEnumerable<KeyValuePair<T, long>> Ordered(ITables tables, MultiSet<T> multiset) =>
-            tables is PrimitiveTables { Scope: { } scope }
+            tables is PrimitiveTables { Scope: { } scope } primitiveTables
                 && scope.Graph.Values.TypeOf<MultiSet<T>>() is MultiSetColumnType<T> type
-                && type.TryOrderByCell(multiset, out var ordered)
+                && type.TryOrderByCell(multiset, primitiveTables.View, out var ordered)
                 ? ordered
                 : multiset.Counts;
 

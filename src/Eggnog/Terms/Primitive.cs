@@ -456,8 +456,9 @@ namespace Eggnog
         /// <param name="arguments">The argument cells.</param>
         /// <param name="parameters">The parameters' column types.</param>
         /// <param name="result">The result's column type.</param>
-        /// <param name="scope">The scope the call runs in, whose origin a class argument carries and in which a class
-        /// result must be usable; <c>null</c> where no argument or result is a class.</param>
+        /// <param name="scope">The scope the call runs in, whose origin a class argument carries, in which a class result
+        /// must be usable, and through whose container view a container argument of classes is read; <c>null</c> where
+        /// no argument or result is a class.</param>
         /// <returns>The result's cell.</returns>
         internal abstract uint InvokeCore(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Scope? scope);
 
@@ -479,10 +480,12 @@ namespace Eggnog
         /// </summary>
         /// <param name="arguments">The arguments, of the parameters' types.</param>
         /// <param name="parameters">The parameters' column types, which a primitive over cells needs.</param>
+        /// <param name="view">The containers of the scope read, in which a primitive over cells looks up its arguments'
+        /// cells.</param>
         /// <param name="value">The result, when there is one.</param>
         /// <returns>Whether there is a result: <c>false</c> for a partial primitive with none, and for a primitive over
         /// cells whose arguments have none.</returns>
-        internal abstract bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value);
+        internal abstract bool TryInvokeValue(object[] arguments, ColumnType[] parameters, Relations.ContainerView view, out object? value);
 
         /// <summary>
         /// Calls the primitive over its arguments' cells with the tables of the call site: a primitive over the tables
@@ -508,7 +511,7 @@ namespace Eggnog
         /// <param name="value">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
         internal virtual bool TryInvokeValueTables(object[] arguments, ColumnType[] parameters, PrimitiveTables tables, out object? value) =>
-            TryInvokeValue(arguments, parameters, out value);
+            TryInvokeValue(arguments, parameters, tables.View, out value);
 
         /// <summary>
         /// Gets what <c>Function</c> throws for a partial primitive's call that has no result.
@@ -552,10 +555,13 @@ namespace Eggnog
         /// <param name="parameters">The parameters' column types.</param>
         /// <param name="result">The result's column type.</param>
         /// <param name="union">Unions two class cells where the call runs.</param>
+        /// <param name="view">The containers of the context the call runs in, through which its container arguments are
+        /// read.</param>
         /// <param name="cell">The result's cell, when the result is <c>true</c>.</param>
         /// <returns>Whether there is a result.</returns>
         /// <exception cref="InvalidOperationException">The primitive does not write.</exception>
-        internal virtual bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union, out uint cell) =>
+        internal virtual bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union,
+            Relations.ContainerView view, out uint cell) =>
             throw new InvalidOperationException($"Primitive '{Name}' does not write the graph.");
 
         /// <summary>

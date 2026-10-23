@@ -103,7 +103,7 @@ namespace Eggnog
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the value has a cell already.</returns>
         internal virtual bool TryEncodeCanonical(T value, Scope scope, Func<uint, uint> find, out uint cell) =>
-            TryEncodeExisting(value, out cell);
+            TryEncodeExisting(value, scope.ContainerView, out cell);
 
         /// <summary>
         /// Gets a host's value as <paramref name="scope"/> sees it (<see cref="ColumnType.CanonicalObject"/>): each class
@@ -117,15 +117,18 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
-        /// graph's interning pools, which are permanent.
+        /// graph's interning pools, which are permanent. A container of classes is looked up in
+        /// <paramref name="view"/>, the containers of the scope read.
         /// </summary>
         /// <param name="value">The value.</param>
+        /// <param name="view">The containers of the scope read; the root's by default.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the value has a cell already.</returns>
-        internal abstract bool TryEncodeExisting(T value, out uint cell);
+        internal abstract bool TryEncodeExisting(T value, Relations.ContainerView view, out uint cell);
 
         /// <summary>
-        /// Decodes a cell: a value, or for a sort a class with <paramref name="scope"/>'s origin. Lock-free.
+        /// Decodes a cell: a value, or for a sort a class with <paramref name="scope"/>'s origin; a container of classes
+        /// read through the scope's container view (<see cref="Scope.ContainerView"/>), the root's without a scope.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call; needed for a sort.</param>
@@ -168,7 +171,7 @@ namespace Eggnog
         internal override uint EncodeObject(object value) => Encode(Cast(value));
 
         /// <inheritdoc />
-        internal override bool TryEncodeExistingObject(object value, out uint cell) => TryEncodeExisting(Cast(value), out cell);
+        internal override bool TryEncodeExistingObject(object value, Relations.ContainerView view, out uint cell) => TryEncodeExisting(Cast(value), view, out cell);
 
         /// <inheritdoc />
         internal override uint EncodeInObject(object value, Scope? scope) => EncodeIn(Cast(value), scope);
@@ -207,10 +210,14 @@ namespace Eggnog
         internal override string FormatObject(object value) => FormatValue(Cast(value));
 
         /// <inheritdoc />
-        internal override string FormatCell(uint cell) => FormatValue(Decode(cell, null));
+        /// <remarks>A type whose cells hold no containers decodes them without a scope; the container types override
+        /// it.</remarks>
+        internal override string FormatCell(uint cell, Relations.ContainerView view) => FormatValue(Decode(cell, null));
 
         /// <inheritdoc />
-        internal override int CompareCells(uint x, uint y) => x == y ? 0 : CompareValues(Decode(x, null), Decode(y, null));
+        /// <remarks>A type whose cells hold no containers decodes them without a scope; the container types override
+        /// it.</remarks>
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view) => x == y ? 0 : CompareValues(Decode(x, null), Decode(y, null));
 
         /// <summary>
         /// Casts a value to <typeparamref name="T"/>.

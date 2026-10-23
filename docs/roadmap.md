@@ -23,8 +23,10 @@ gates").
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
-  layers. A container of function values counts as one of classes whatever the values hold, since a function value may
-  hold classes whatever its sort's inputs (architecture 2.2), where egglog's counts by those inputs.
+  layers. Children read containers through container layers of their own (architecture 3.8, "Containers in a child"),
+  which the engine does not fill yet. A container of function values counts as one of classes whatever the values
+  hold, since a function value may hold classes whatever its sort's inputs (architecture 2.2), where egglog's counts by
+  those inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

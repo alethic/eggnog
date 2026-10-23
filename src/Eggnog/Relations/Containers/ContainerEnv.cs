@@ -35,10 +35,13 @@ namespace Eggnog.Relations
     /// as in egglog; lookups by id then return either.
     /// </para>
     /// <para>
-    /// Threading: <see cref="GetOrInsert"/>, <see cref="TryGetId"/>, <see cref="TryGetContainer"/> and
-    /// <see cref="ForEach{TVisitor}"/> may run on any number of threads at once (egglog's <c>&amp;self</c> methods, called
-    /// from parallel rule actions). Rebuilding needs exclusive access (egglog's <c>&amp;mut self</c>). Locks are always
-    /// taken hash-cons shard first, then a reverse-map or index shard, never the other way round.
+    /// Threading: <see cref="GetOrInsert"/>, <see cref="TryGetId(in TContainer, out uint)"/>,
+    /// <see cref="TryGetContainer"/> and <see cref="ForEach{TVisitor}"/> may run on any number of threads at once
+    /// (egglog's <c>&amp;self</c> methods, called from parallel rule actions). Rebuilding needs exclusive access
+    /// (egglog's <c>&amp;mut self</c>). Locks are always taken hash-cons shard first, then a reverse-map or index shard,
+    /// never the other way round. The unlocked probes (<see cref="TryGetIdUnlocked"/>,
+    /// <see cref="TryGetContainerUnlocked"/>) are for an environment nothing writes any more, a frozen child's layer
+    /// (<see cref="ContainerLayer{TContainer}"/>).
     /// </para>
     /// <para>
     /// Containers are immutable (<see cref="IContainerValue{TSelf}"/>), so a container read back may be kept, and a
@@ -170,9 +173,9 @@ namespace Eggnog.Relations
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
         /// ids; or the environment and the container hold e-class ids and the state belongs to a child context, which
-        /// may look such a container up (<see cref="TryGetId"/>) but not intern one; or they hold e-class ids, the
-        /// container is new and the state's database is frozen, whose descendants never re-run their eq-container
-        /// guard (<see cref="EqContainerGuard"/>).</exception>
+        /// may look such a container up (<see cref="TryGetId(in TContainer, out uint)"/>) but not intern one; or they
+        /// hold e-class ids, the container is new and the state's database is frozen, whose descendants never re-run
+        /// their eq-container guard (<see cref="EqContainerGuard"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
@@ -272,18 +275,7 @@ namespace Eggnog.Relations
             var hash = container.ComputeHash();
             var shard = toId[shardData.ShardOf(hash)];
             lock (shard)
-            {
-                var match = new ContainerContentMatch<TContainer>(container, hash);
-                var slot = shard.Find(hash, ref match);
-                if (slot >= 0)
-                {
-                    id = shard.EntryAt(slot).Id;
-                    return true;
-                }
-            }
-
-            id = 0;
-            return false;
+                return TryFindId(shard, container, hash, out id);
         }
 
         /// <summary>
@@ -301,18 +293,7 @@ namespace Eggnog.Relations
             var hash = FxHasher.Hash(id);
             var shard = byId[shardData.ShardOf(hash)];
             lock (shard)
-            {
-                var match = new ContainerIdMatch<TContainer>(id);
-                var slot = shard.Find(hash, ref match);
-                if (slot >= 0)
-                {
-                    container = shard.EntryAt(slot).Container;
-                    return true;
-                }
-            }
-
-            container = default;
-            return false;
+                return TryFindContainer(shard, hash, id, out container);
         }
 
         /// <summary>

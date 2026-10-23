@@ -17,11 +17,11 @@ namespace Eggnog
         /// </summary>
         public static readonly Primitive<Vec<TSort>, Vec<TSort>, Vec<TSort>> Union = new("vec-union", Write);
 
-        static (bool Found, uint Cell) Write(ColumnType vector, uint left, uint right, Action<uint, uint> union)
+        static (bool Found, uint Cell) Write(ColumnType vector, uint left, uint right, Action<uint, uint> union, Relations.ContainerView view)
         {
             var type = (VecColumnType<TSort>)vector;
-            var a = type.ElementCells(left);
-            var b = type.ElementCells(right);
+            var a = type.ElementCells(left, view);
+            var b = type.ElementCells(right, view);
             if (a.Length != b.Length)
                 return (false, 0);
 

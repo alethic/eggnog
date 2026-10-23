@@ -31,8 +31,8 @@ namespace Eggnog
         /// </summary>
         public static readonly Primitive<MultiSet<T>, T> Pick = new(
             "multiset-pick",
-            static (type, cell) => ((MultiSetColumnType<T>)type).TryPick(cell, out var picked) ? (true, picked) : (false, 0u),
-            static (type, value) => ((MultiSetColumnType<T>)type).TryPickValue(value, out var picked) ? (true, picked) : (false, default!));
+            static (type, cell, view) => ((MultiSetColumnType<T>)type).TryPick(cell, view, out var picked) ? (true, picked) : (false, 0u),
+            static (type, value, view) => ((MultiSetColumnType<T>)type).TryPickValue(value, view, out var picked) ? (true, picked) : (false, default!));
 
         /// <summary>
         /// <c>multiset-insert</c>.
@@ -75,7 +75,7 @@ namespace Eggnog
             "bool-multiset-contains",
             static (m, x) => m.Contains(x),
             null,
-            static (multiset, _, result, multisetCell, itemCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell))))
+            static (multiset, _, result, multisetCell, itemCell, view) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell, view))))
         {
             FilterName = "multiset-contains",
         };
@@ -87,7 +87,7 @@ namespace Eggnog
             "bool-multiset-not-contains",
             static (m, x) => m.Contains(x) == false,
             null,
-            static (multiset, _, result, multisetCell, itemCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell) == false)))
+            static (multiset, _, result, multisetCell, itemCell, view) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell, view) == false)))
         {
             FilterName = "multiset-not-contains",
         };
@@ -99,7 +99,7 @@ namespace Eggnog
             "bool-multiset-contains-swapped",
             static (x, m) => m.Contains(x),
             null,
-            static (_, multiset, result, itemCell, multisetCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell))))
+            static (_, multiset, result, itemCell, multisetCell, view) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell, view))))
         {
             FilterName = "multiset-contains-swapped",
         };
@@ -111,7 +111,7 @@ namespace Eggnog
             "bool-multiset-not-contains-swapped",
             static (x, m) => m.Contains(x) == false,
             null,
-            static (_, multiset, result, itemCell, multisetCell) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell) == false)))
+            static (_, multiset, result, itemCell, multisetCell, view) => (true, Encode(result, Occurs(multiset, multisetCell, itemCell, view) == false)))
         {
             FilterName = "multiset-not-contains-swapped",
         };
@@ -140,8 +140,8 @@ namespace Eggnog
         /// </summary>
         public static readonly Primitive<MultiSet<T>, T> PickMax = new(
             "multiset-pick-max",
-            static (type, cell) => ((MultiSetColumnType<T>)type).TryPickMax(cell, out var picked) ? (true, picked) : (false, 0u),
-            static (type, value) => ((MultiSetColumnType<T>)type).TryPickMaxValue(value, out var picked) ? (true, picked) : (false, default!));
+            static (type, cell, view) => ((MultiSetColumnType<T>)type).TryPickMax(cell, view, out var picked) ? (true, picked) : (false, 0u),
+            static (type, value, view) => ((MultiSetColumnType<T>)type).TryPickMaxValue(value, view, out var picked) ? (true, picked) : (false, default!));
 
         /// <summary>
         /// <c>multiset-count</c>: an element's count, 0 when it does not occur.
@@ -150,8 +150,8 @@ namespace Eggnog
             "multiset-count",
             static (m, x) => m.CountOf(x),
             null,
-            static (multiset, _, result, multisetCell, itemCell) =>
-                (true, ((ColumnType<long>)result).Encode(((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell))));
+            static (multiset, _, result, multisetCell, itemCell, view) =>
+                (true, ((ColumnType<long>)result).Encode(((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell, view))));
 
         /// <summary>
         /// <c>multiset-sum-multisets</c>: the sum of a multiset of multisets, each counted as often as it occurs.
@@ -178,8 +178,8 @@ namespace Eggnog
             return true;
         }
 
-        static bool Occurs(ColumnType multiset, uint multisetCell, uint itemCell) =>
-            ((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell) > 0;
+        static bool Occurs(ColumnType multiset, uint multisetCell, uint itemCell, Relations.ContainerView view) =>
+            ((MultiSetColumnType<T>)multiset).CountOfCell(multisetCell, itemCell, view) > 0;
 
         static uint Encode(ColumnType result, bool value) => ((ColumnType<bool>)result).Encode(value);
 

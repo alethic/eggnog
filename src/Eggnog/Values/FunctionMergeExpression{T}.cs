@@ -138,7 +138,7 @@ namespace Eggnog
 
                     var result = TypeOf(graph, null, term.ClrType);
                     if (shape.Primitive!.IsWrite)
-                        return shape.Primitive.TryInvokeWrite(arguments, parameters, result, union, out var written)
+                        return shape.Primitive.TryInvokeWrite(arguments, parameters, result, union, scope.ContainerView, out var written)
                             ? written
                             : throw Primitive.NoResult(shape.Primitive.Name);
 

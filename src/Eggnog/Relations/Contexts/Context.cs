@@ -17,7 +17,10 @@ namespace Eggnog.Relations
     /// <para>
     /// Each context owns one <see cref="Relations.Database"/>. The root's is egglog's, unchanged. A child's has its own
     /// catalog, notification list, pending queues and size estimate, and shares the store's counters, external
-    /// functions, dependency graph and container environments with the root by reference.
+    /// functions, dependency graph and container environments with the root by reference. Over those environments a
+    /// child keeps container layers of its own (<see cref="ContainerLayers"/>), which it and its descendants read
+    /// containers through (<see cref="ContainerView"/>); the engine places nothing in them, so a child reads the root's
+    /// containers.
     /// </para>
     /// <para>
     /// Lifecycle. <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its thread
@@ -79,6 +82,11 @@ namespace Eggnog.Relations
         /// The child's layering; <c>null</c> at the root.
         /// </summary>
         readonly ContextTables? tables;
+
+        /// <summary>
+        /// The child's container layers, read through its container view; <c>null</c> at the root.
+        /// </summary>
+        readonly ContainerLayers? containerLayers;
 
         /// <summary>
         /// The context's find: the root's union-find, or the parent's find extended with <see cref="overlay"/>.
@@ -255,6 +263,9 @@ namespace Eggnog.Relations
             // No layer yet; cursors at the ancestors' current versions, the leading frozen ancestors settled.
             tables = new ContextTables(store.Schema, this);
             database.AttachLayers(tables);
+
+            // No container layer yet either; the child reads containers through its own and its ancestors' layers.
+            containerLayers = new ContainerLayers(parent.containerLayers, idBlocks, parallelism);
             dirtyCursor = store.ContainerDirtyLog.End;
 
             // Read after every cursor is initialized (the union-find cursor and the row cursors above), so anything the
@@ -301,6 +312,13 @@ namespace Eggnog.Relations
         /// Gets the child's layering: its layers, hidden sets, views and cursors; <c>null</c> at the root.
         /// </summary>
         public ContextTables? Tables => tables;
+
+        /// <summary>
+        /// Gets the child's container layers: per container type, the containers it holds itself and the ancestor ids it
+        /// shadows, which its container view reads over its ancestors' (<see cref="ContainerView"/>); <c>null</c> at the
+        /// root.
+        /// </summary>
+        public ContainerLayers? ContainerLayers => containerLayers;
 
         /// <summary>
         /// Gets the gate counting the context's live descendants.

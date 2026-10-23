@@ -27,8 +27,8 @@ namespace Eggnog
         public static bool TryInvoke(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
             // The classes the value holds are canonical: the root rebuilds its container, and a child may not merge away a
-            // class a container holds (decisions row 9).
-            var (target, partial) = ((IFnColumnType)parameters[0]).DecodeCells(arguments[0]);
+            // class a container holds (decisions row 9). The container is read where the call runs.
+            var (target, partial) = ((IFnColumnType)parameters[0]).DecodeCells(arguments[0], tables.View);
             var cells = new uint[partial.Length + arguments.Length - 1];
             partial.CopyTo(cells, 0);
             arguments[1..].CopyTo(cells.AsSpan(partial.Length));
@@ -60,7 +60,7 @@ namespace Eggnog
                             throw new InvalidOperationException(
                                 $"primitive '{primitive.Name}' unions classes that containers hold, which only the root rebuilds, so only the root may compute it.");
 
-                        return primitive.TryInvokeWrite(cells, target.Parameters, result, tables.UnionCells, out cell);
+                        return primitive.TryInvokeWrite(cells, target.Parameters, result, tables.UnionCells, tables.View, out cell);
                     }
 
                     if (primitive.UsesTables == false)
@@ -117,7 +117,7 @@ namespace Eggnog
                         throw target.NotValidIn(context);
 
                     if (primitive.UsesTables == false)
-                        return primitive.TryInvokeValue(all, target.Parameters, out value);
+                        return primitive.TryInvokeValue(all, target.Parameters, tables.View, out value);
 
                     var gate = tables.Gate;
                     tables.Gate = primitive;

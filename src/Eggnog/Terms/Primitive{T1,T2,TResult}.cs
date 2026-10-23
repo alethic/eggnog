@@ -15,10 +15,10 @@ namespace Eggnog
 
         readonly PartialFunc<T1, T2, TResult>? partial;
         readonly Func<uint, uint, uint>? cells;
-        readonly Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)>? containerCells;
-        readonly Func<ColumnType, T1, T2, (bool Found, TResult Value)>? values;
+        readonly Func<ColumnType, ColumnType, ColumnType, uint, uint, Relations.ContainerView, (bool Found, uint Cell)>? containerCells;
+        readonly Func<ColumnType, T1, T2, Relations.ContainerView, (bool Found, TResult Value)>? values;
         readonly Func<uint, uint, bool>? cellPredicate;
-        readonly Func<ColumnType, uint, uint, Action<uint, uint>, (bool Found, uint Cell)>? write;
+        readonly Func<ColumnType, uint, uint, Action<uint, uint>, Relations.ContainerView, (bool Found, uint Cell)>? write;
 
         /// <summary>
         /// Initializes a new instance of a total primitive.
@@ -53,13 +53,14 @@ namespace Eggnog
         /// <param name="name">The name it renders as.</param>
         /// <param name="function">The function over values, which throws where there is no result.</param>
         /// <param name="partial">The partial function over values; <c>null</c> for a total primitive.</param>
-        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types:
-        /// whether there is a result, and its cell.</param>
+        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types
+        /// and the containers of the scope the call runs in, which it reads the cells through: whether there is a result,
+        /// and its cell.</param>
         internal Primitive(
             string name,
             Func<T1, T2, TResult> function,
             PartialFunc<T1, T2, TResult>? partial,
-            Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)> containerCells)
+            Func<ColumnType, ColumnType, ColumnType, uint, uint, Relations.ContainerView, (bool Found, uint Cell)> containerCells)
             : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, partial is not null)
         {
             Function = function;
@@ -73,14 +74,14 @@ namespace Eggnog
         /// function throws: it needs the graph's cells.
         /// </summary>
         /// <param name="name">The name it renders as.</param>
-        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types:
-        /// whether there is a result, and its cell.</param>
-        /// <param name="values">The function over values a read calls, given the first parameter's column type, which
-        /// may find no result where the values' cells would decide it.</param>
+        /// <param name="containerCells">The function over the cells, given the parameters' and the result's column types
+        /// and the containers of the scope the call runs in: whether there is a result, and its cell.</param>
+        /// <param name="values">The function over values a read calls, given the first parameter's column type and the
+        /// containers of the scope read, which may find no result where the values' cells would decide it.</param>
         internal Primitive(
             string name,
-            Func<ColumnType, ColumnType, ColumnType, uint, uint, (bool Found, uint Cell)> containerCells,
-            Func<ColumnType, T1, T2, (bool Found, TResult Value)> values)
+            Func<ColumnType, ColumnType, ColumnType, uint, uint, Relations.ContainerView, (bool Found, uint Cell)> containerCells,
+            Func<ColumnType, T1, T2, Relations.ContainerView, (bool Found, TResult Value)> values)
             : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, true)
         {
             Function = (_, _) => throw new InvalidOperationException(
@@ -127,9 +128,9 @@ namespace Eggnog
         /// the graph.
         /// </summary>
         /// <param name="name">The name it renders as.</param>
-        /// <param name="write">The function over the cells, given the first parameter's column type and the union:
-        /// whether there is a result, and its cell.</param>
-        internal Primitive(string name, Func<ColumnType, uint, uint, Action<uint, uint>, (bool Found, uint Cell)> write)
+        /// <param name="write">The function over the cells, given the first parameter's column type, the union and the
+        /// containers of the context the call runs in: whether there is a result, and its cell.</param>
+        internal Primitive(string name, Func<ColumnType, uint, uint, Action<uint, uint>, Relations.ContainerView, (bool Found, uint Cell)> write)
             : base(name, new[] { typeof(T1), typeof(T2) }, typeof(TResult), false, true, PrimitiveAccess.Write)
         {
             Function = (_, _) => throw Writes(name);
@@ -147,13 +148,14 @@ namespace Eggnog
         internal override bool IsWrite => write is not null;
 
         /// <inheritdoc />
-        internal override bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union, out uint cell)
+        internal override bool TryInvokeWrite(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, Action<uint, uint> union,
+            Relations.ContainerView view, out uint cell)
         {
             if (write is null)
-                return base.TryInvokeWrite(arguments, parameters, result, union, out cell);
+                return base.TryInvokeWrite(arguments, parameters, result, union, view, out cell);
 
             bool found;
-            (found, cell) = write(parameters[0], arguments[0], arguments[1], union);
+            (found, cell) = write(parameters[0], arguments[0], arguments[1], union, view);
             return found;
         }
 
@@ -208,7 +210,7 @@ namespace Eggnog
 
             if (containerCells is not null)
             {
-                var (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1]);
+                var (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1], Scope.ViewOf(scope));
                 return found ? cell : throw NoResult(Name);
             }
 
@@ -239,7 +241,7 @@ namespace Eggnog
             if (containerCells is not null)
             {
                 bool found;
-                (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1]);
+                (found, cell) = containerCells(parameters[0], parameters[1], result, arguments[0], arguments[1], Scope.ViewOf(scope));
                 return found;
             }
 
@@ -262,7 +264,7 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, Relations.ContainerView view, out object? value)
         {
             if (write is not null)
                 throw Writes(Name);
@@ -272,8 +274,8 @@ namespace Eggnog
                 // The result is one of the arguments, chosen by cell: the argument itself, a class with its origin. A
                 // value without a cell would intern after every value there is, above every cell its type has, as egglog's
                 // check interns it; two such values would compare by the order egglog interns them, which is unknown.
-                var hasA = parameters[0].TryEncodeExistingObject(arguments[0], out var a);
-                var hasB = parameters[1].TryEncodeExistingObject(arguments[1], out var b);
+                var hasA = parameters[0].TryEncodeExistingObject(arguments[0], view, out var a);
+                var hasB = parameters[1].TryEncodeExistingObject(arguments[1], view, out var b);
                 if (hasA || hasB)
                 {
                     var chosen = cells(hasA ? a : uint.MaxValue, hasB ? b : uint.MaxValue);
@@ -287,13 +289,13 @@ namespace Eggnog
 
             if (values is not null)
             {
-                var (found, picked) = values(parameters[0], (T1)arguments[0], (T2)arguments[1]);
+                var (found, picked) = values(parameters[0], (T1)arguments[0], (T2)arguments[1], view);
                 value = found ? picked : null;
                 return found;
             }
 
             // Two values never interned are compared as values; a class always has its cell.
-            if (cellPredicate is not null && parameters[0].TryEncodeExistingObject(arguments[0], out var x) && parameters[1].TryEncodeExistingObject(arguments[1], out var y))
+            if (cellPredicate is not null && parameters[0].TryEncodeExistingObject(arguments[0], view, out var x) && parameters[1].TryEncodeExistingObject(arguments[1], view, out var y))
             {
                 value = cellPredicate(x, y);
                 return true;

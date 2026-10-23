@@ -109,6 +109,23 @@ namespace Eggnog.Relations
         public abstract bool AnyContainerMentions(uint value);
 
         /// <summary>
+        /// Gets whether a container of this environment has id <paramref name="id"/>: the type-erased lookup by id that
+        /// asks whether an id is a container's at all (<see cref="ContainerView.IsContainerId"/>). Thread-safe; one lock
+        /// and one probe.
+        /// </summary>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if a container has it.</returns>
+        public abstract bool ContainsId(uint id);
+
+        /// <summary>
+        /// <see cref="ContainsId"/> without the shard lock, for an environment nothing writes any more, a frozen child's
+        /// layer (<see cref="ContainerLayer{TContainer}"/>). One probe.
+        /// </summary>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if a container has it.</returns>
+        internal abstract bool ContainsIdUnlocked(uint id);
+
+        /// <summary>
         /// Creates an independent copy that shares the (immutable) containers and the merge function. egglog's
         /// <c>dyn_clone</c>. Requires that nothing changes the environment meanwhile.
         /// </summary>

@@ -74,9 +74,12 @@ namespace Eggnog
             var runtime = ScopeRuntime.Of(graph, state);
             RuleCallbackContext? context = null;
             EngineCallMarker.Enter();
+            Relations.ContainerView.EnterEngineCall(state);
             try
             {
+                // The callback decodes its match, containers of classes included, through the scope's view.
                 var scope = runtime.Owner ?? throw new InvalidOperationException("A rule callback ran in a context with no scope.");
+                ScopeRuntime.AssertReadsAsState(scope, state);
                 context = definition.Full
                     ? new FullRuleCallbackContext(this, state, scope, args)
                     : new RuleCallbackContext(this, state, scope, args);
@@ -100,6 +103,7 @@ namespace Eggnog
             finally
             {
                 context?.End();
+                Relations.ContainerView.ExitEngineCall(state);
                 EngineCallMarker.Exit();
             }
         }
@@ -112,15 +116,16 @@ namespace Eggnog
         bool Fail(ScopeRuntime runtime, Relations.ExecutionState state, ReadOnlySpan<uint> args, Exception exception)
         {
             var what = $"rule '{ruleName}': its callback threw {exception.GetType().Name}: {exception.Message}";
-            runtime.TryRecord(new EvaluationFailure(ruleName, what, Bindings(args), exception));
+            runtime.TryRecord(new EvaluationFailure(ruleName, what, Bindings(args, state.Containers), exception));
             state.ReportFailure($"rule '{ruleName}': its callback threw {exception.GetType().Name}");
             return false;
         }
 
         /// <summary>
-        /// Renders the variables' values for <see cref="RuleEvaluationException.Bindings"/>.
+        /// Renders the variables' values for <see cref="RuleEvaluationException.Bindings"/>, containers read through
+        /// <paramref name="view"/>, the containers of the context the rule ran in.
         /// </summary>
-        string Bindings(ReadOnlySpan<uint> args)
+        string Bindings(ReadOnlySpan<uint> args, Relations.ContainerView view)
         {
             var bindings = new StringBuilder();
             for (var i = 0; i < args.Length && i < Types.Length; i++)
@@ -131,7 +136,7 @@ namespace Eggnog
                 string value;
                 try
                 {
-                    value = Types[i].FormatCell(args[i]);
+                    value = Types[i].FormatCell(args[i], view);
                 }
                 catch (Exception)
                 {

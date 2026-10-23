@@ -364,8 +364,9 @@ namespace Eggnog.Relations
         /// <c>get_container_value</c>. At the root the type is registered first if needed (as one holding ids); a child
         /// needs it registered already, since registration is a definition of the e-graph
         /// (<see cref="EGraph.RegisterContainerType{TContainer}"/>). Container ids are global, minted on the store's
-        /// shared counter, never local. In a child an eq-sort container (one that holds ids) cannot be interned; a
-        /// container over base values can.
+        /// shared counter, never local. It interns through the context's container view
+        /// (<see cref="ContainerView.GetOrInsert"/>): in a child an eq-sort container (one that holds ids) cannot be
+        /// interned; a container over base values can.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="container">The container; it must not change afterwards.</param>
@@ -385,7 +386,7 @@ namespace Eggnog.Relations
 
             var database = context.Database;
             var state = database.CreateEngineState(owner.Store.ReadClock());
-            var id = database.Containers.RegisterValue(container, state);
+            var id = state.Containers.GetOrInsert(container, state);
             state.Flush();
             database.RecordFailure(state);
             return new Value(id);

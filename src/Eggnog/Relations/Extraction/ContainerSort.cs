@@ -5,7 +5,8 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// A container sort: its values are container ids (interned in the e-graph's <see cref="ContainerValues"/>) whose
+    /// A container sort: its values are container ids (interned in the e-graph's <see cref="ContainerValues"/>, read
+    /// through the view of the context extracted from, <see cref="ContainerView"/>) whose
     /// elements are values of inner sorts. egglog's <c>ContainerSort</c> (src/prelude.rs:853-950). Extraction costs a
     /// container as its own cost plus the costs of its elements, and rebuilds it from its elements' terms.
     /// </summary>
@@ -43,23 +44,23 @@ namespace Eggnog.Relations
         /// Appends the elements of the container <paramref name="value"/>, each with its sort, in the container's order:
         /// egglog's <c>inner_values</c>. Every sort appended must be one of <see cref="InnerSorts"/>.
         /// </summary>
-        /// <param name="containers">The container environments of the e-graph.</param>
+        /// <param name="containers">The containers of the context extracted from (<see cref="ContainerView"/>).</param>
         /// <param name="value">The container's id.</param>
         /// <param name="destination">Receives the elements.</param>
         /// <exception cref="InvalidOperationException">No container of this sort has the id.</exception>
-        public abstract void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination);
+        public abstract void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination);
 
         /// <summary>
         /// Adds the container <paramref name="value"/> to <paramref name="dag"/>, given the terms of its elements in the
         /// order <see cref="AppendInnerValues"/> lists them: egglog's <c>reconstruct_termdag_container</c>
         /// (<c>(vec-of e...)</c>, <c>(set-of e...)</c>, nested <c>(map-insert ...)</c>, and so on).
         /// </summary>
-        /// <param name="containers">The container environments of the e-graph.</param>
+        /// <param name="containers">The containers of the context extracted from (<see cref="ContainerView"/>).</param>
         /// <param name="value">The container's id.</param>
         /// <param name="dag">The term DAG.</param>
         /// <param name="elements">The terms of the elements.</param>
         /// <returns>The container's term.</returns>
-        public abstract TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements);
+        public abstract TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements);
 
         /// <inheritdoc />
         internal override bool FitsColumn(EGraph egraph, ColumnTy type) => type.IsId;

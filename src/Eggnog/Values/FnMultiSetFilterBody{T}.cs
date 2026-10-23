@@ -41,7 +41,7 @@ namespace Eggnog
             var output = ((IFnColumnType)parameters[0]).Output;
             var multisets = (MultiSetColumnType<T>)parameters[1];
             var element = (ColumnType<T>)multisets.ElementTypes[0];
-            var (elements, counts) = multisets.ElementCounts(arguments[1]);
+            var (elements, counts) = multisets.ElementCounts(arguments[1], tables.View);
             var kept = new List<KeyValuePair<T, long>>(elements.Length);
             Span<uint> call = [arguments[0], 0];
             for (var i = 0; i < elements.Length; i++)
