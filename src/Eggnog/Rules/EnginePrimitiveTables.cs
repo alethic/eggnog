@@ -27,10 +27,18 @@ namespace Eggnog
             : base(scope, context, primitive)
         {
             tables = new EngineTables(scope, state, actions, "A primitive");
+            ScopeRuntime.AssertReadsAsState(scope, state);
         }
 
         /// <inheritdoc />
         public override Exception? Refusal => tables.Refusal;
+
+        /// <inheritdoc />
+        /// <remarks>The view of the context the call's execution state runs in
+        /// (<see cref="Relations.ExecutionState.Containers"/>), which for a query on a frozen scope is the transient child
+        /// the query runs in; taken from the state on each read, a few field loads, and refused once the call has
+        /// returned.</remarks>
+        public override Relations.ContainerView View => tables.State.Containers;
 
         /// <summary>
         /// Ends the call: the tables answer nothing after.

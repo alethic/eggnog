@@ -292,7 +292,7 @@ namespace Eggnog
                 return cell;
 
             contents ??= new Dictionary<string, uint>(System.StringComparer.Ordinal);
-            var content = ContainerClassCells.CanonicalContent(column, cell, find);
+            var content = ContainerClassCells.CanonicalContent(column, cell, scope.ContainerView, find);
             if (contents.TryGetValue(content, out var standIn) == false)
             {
                 // Stand-ins count down from the top of the id space, which a column of containers holds only so.
@@ -319,7 +319,7 @@ namespace Eggnog
 
                 // A key that is a container is placed again when a class it holds merges.
                 classes.Clear();
-                ContainerClassCells.AppendClasses(columns[i], key[i], classes);
+                ContainerClassCells.AppendClasses(columns[i], key[i], scope.ContainerView, classes);
                 foreach (var cell in classes)
                 {
                     UsesOf(Representative(cell)).Add(index);
@@ -337,7 +337,7 @@ namespace Eggnog
             if (table is FunctionHandle { Merge: not null } && table.Output!.InvolvesClasses)
             {
                 classes.Clear();
-                ContainerClassCells.AppendClasses(table.Output, output, classes);
+                ContainerClassCells.AppendClasses(table.Output, output, scope.ContainerView, classes);
                 foreach (var cell in classes)
                     (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
             }
@@ -589,8 +589,8 @@ namespace Eggnog
 
                 var container = (IContainerColumnType)type;
                 var elements = new List<(ColumnType Type, uint Cell)>();
-                container.AppendDistinctElements(cell, elements);
-                result.Add((type, cell, container.Content(cell)));
+                container.AppendDistinctElements(cell, scope.ContainerView, elements);
+                result.Add((type, cell, container.Content(cell, scope.ContainerView)));
                 foreach (var element in elements)
                     if (element.Type.HoldsClasses)
                         pending.Push(element);

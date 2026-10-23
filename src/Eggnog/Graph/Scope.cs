@@ -65,6 +65,7 @@ namespace Eggnog
             guard = new ScopeGuard();
             var engine = new ContextEngineScope(graph, graph.Engine.Root);
             Engine = engine;
+            ContainerView = Relations.ContainerView.Of(engine.Context.Context.Database);
             Runtime = engine.Runtime;
             Runtime.Owner = this;
         }
@@ -90,6 +91,7 @@ namespace Eggnog
             Origin = new ScopeOrigin(Graph, parent.Origin, path, false);
             this.guard = guard;
             Engine = engine;
+            ContainerView = Relations.ContainerView.Of(engine.Context.Context.Database);
             Runtime = engine.Runtime;
             Runtime.Owner = this;
 
@@ -203,6 +205,21 @@ namespace Eggnog
         /// Gets the engine side of the scope.
         /// </summary>
         internal ContextEngineScope Engine { get; }
+
+        /// <summary>
+        /// Gets the containers the scope sees: its context's container view, made once with the scope, through which the
+        /// scope's reads, writes and primitives decode, compare and look up containers of classes. The root's view at the
+        /// root, which costs one null test over the root's environments.
+        /// </summary>
+        internal Relations.ContainerView ContainerView { get; }
+
+        /// <summary>
+        /// Gets the container view of <paramref name="scope"/>, or the root's for none: what a container type reads its
+        /// cells through when a call that may carry no scope serves one, such as a decode.
+        /// </summary>
+        /// <param name="scope">The scope, or <c>null</c>.</param>
+        /// <returns>The view.</returns>
+        internal static Relations.ContainerView ViewOf(Scope? scope) => scope is null ? default : scope.ContainerView;
 
         /// <summary>
         /// Gets the buffers external functions write during this scope's engine calls: the scope's context's value of the

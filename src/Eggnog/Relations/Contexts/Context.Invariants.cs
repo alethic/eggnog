@@ -33,7 +33,9 @@ namespace Eggnog.Relations
         /// Composition: the union-find part (<see cref="CheckUnionFindInvariants"/>: the union-find's classes, journal,
         /// cursor and local ids, the frozen prefix and the gate), then, in a child, the tables part
         /// (<see cref="ContextTables.CheckInvariants"/>: what the context holds and hides, and local ids in ancestor
-        /// layers) and the eq-container part (<see cref="CheckEqContainerElements"/>), and at every level the executor
+        /// layers), the container-layers part (<see cref="ContainerLayers.CheckInvariants"/>: each layer's own
+        /// environment, the ids it may own, and a frozen layer unchanged) and the eq-container part
+        /// (<see cref="CheckEqContainerElements"/>), and at every level the executor
         /// part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as the
         /// executor reads them). The root's rows are checked canonical where the root settles, at
         /// <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds (<see cref="CheckRootSettled"/>):
@@ -65,10 +67,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without
-        /// throwing: the union-find part, the tables part, the executor part and, with <paramref name="eqContainers"/>,
-        /// the eq-container part (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
-        /// (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part itself. The caller holds the domain
-        /// of a context that is not frozen, and the context is clean.
+        /// throwing: the union-find part, the tables part, the container-layers part, the executor part and, with
+        /// <paramref name="eqContainers"/>, the eq-container part (<see cref="CheckEqContainerElements"/>). The bridge
+        /// composes its own checker from it (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part
+        /// itself. The caller holds the domain of a context that is not frozen, and the context is clean.
         /// </summary>
         /// <param name="violations">Receives one line per violation.</param>
         /// <param name="eqContainers">Whether to include the eq-container part.</param>
@@ -76,6 +78,7 @@ namespace Eggnog.Relations
         {
             CheckUnionFindInvariants(violations);
             tables?.CheckInvariants(violations);
+            containerLayers?.CheckInvariants(violations);
             if (eqContainers)
                 CheckEqContainerElements(violations);
 

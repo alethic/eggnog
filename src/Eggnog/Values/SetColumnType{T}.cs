@@ -24,6 +24,12 @@ namespace Eggnog
         readonly Relations.SetSort sort;
 
         /// <summary>
+        /// The order of elements' cells through the root's view (<see cref="CellOrder"/>), made on first use, so that
+        /// ordering a set's elements at the root allocates no comparison.
+        /// </summary>
+        Comparison<uint>? rootCellOrder;
+
+        /// <summary>
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
@@ -92,13 +98,14 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a set a primitive returned in <paramref name="scope"/>: for a set of classes, its classes usable there
-        /// and the container interned at the root, or in a child the one the root holds; else as <see cref="Encode"/>.
+        /// and the container interned at a writable root, or elsewhere the one the scope sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The set.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The set holds classes, and a class is not usable in the scope, or
-        /// the scope cannot intern and the root holds no such set.</exception>
+        /// the scope cannot intern and sees no such set.</exception>
         internal override uint EncodeIn(Set<T> value, Scope? scope)
         {
             if (rebuild == false)
@@ -128,23 +135,23 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(Set<T> value, out uint cell)
+        internal override bool TryEncodeExisting(Set<T> value, Relations.ContainerView view, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
             var cells = new uint[value.Count];
             for (var i = 0; i < cells.Length; i++)
-                if (element.TryEncodeExisting(value[i], out cells[i]) == false)
+                if (element.TryEncodeExisting(value[i], view, out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(Collect(value, cells), out cell);
+            return view.TryGetId(env, Collect(value, cells), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(Set<T> value, Scope scope, Func<uint, uint> find, out uint cell)
         {
             if (rebuild == false)
-                return TryEncodeExisting(value, out cell);
+                return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
@@ -153,7 +160,7 @@ namespace Eggnog
                 if (element.TryEncodeCanonical(value[i], scope, find, out cells[i]) == false)
                     return false;
 
-            if (env.TryGetId(Collect(value, cells), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, Collect(value, cells), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -191,7 +198,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a set's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a set's cell, read through the scope's container view. Takes one lock of a container environment, and
+        /// more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -199,7 +207,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No set has the cell.</exception>
         internal override Set<T> Decode(uint cell, Scope? scope)
         {
-            var set = Read(cell);
+            var set = Read(cell, Scope.ViewOf(scope));
             var items = new T[set.Count];
             for (var i = 0; i < items.Length; i++)
                 items[i] = element.Decode(set.Elements[i], scope);
@@ -225,16 +233,20 @@ namespace Eggnog
         internal override string DebugValue(Set<T> value) => FormatValue(value);
 
         /// <summary>
-        /// Formats a set's cell as egglog prints it, its elements in cell order, the order its extracted term lists.
+        /// Formats a set's cell as egglog prints it, its elements in cell order, the order its extracted term lists; a cell
+        /// no set has in <paramref name="view"/> as <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var set = Read(cell);
+            if (view.TryGetContainer(env, cell, out var set) == false)
+                return FormatUnresolvedCell(cell);
+
             var parts = new string[set.Count];
             for (var i = 0; i < parts.Length; i++)
-                parts[i] = element.FormatCell(set.Elements[i]);
+                parts[i] = element.FormatCell(set.Elements[i], view);
 
             return parts.Length == 0 ? "(set-of)" : "(set-of " + string.Join(" ", parts) + ")";
         }
@@ -256,8 +268,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
@@ -265,11 +278,11 @@ namespace Eggnog
             if (rebuild == false)
                 return CompareValues(Decode(x, null), Decode(y, null));
 
-            var left = Ordered(x);
-            var right = Ordered(y);
+            var left = Ordered(x, view);
+            var right = Ordered(y, view);
             for (var i = 0; i < left.Length && i < right.Length; i++)
             {
-                var order = element.CompareCells(left[i], right[i]);
+                var order = element.CompareCells(left[i], right[i], view);
                 if (order != 0)
                     return order;
             }
@@ -280,12 +293,19 @@ namespace Eggnog
         /// <summary>
         /// Gets a set's elements' cells in element order, the content order of <see cref="CompareValues"/>.
         /// </summary>
-        uint[] Ordered(uint cell)
+        uint[] Ordered(uint cell, Relations.ContainerView view)
         {
-            var cells = Read(cell).Elements.ToArray();
-            Array.Sort(cells, element.CompareCells);
+            var cells = Read(cell, view).Elements.ToArray();
+            Array.Sort(cells, view.IsRoot ? rootCellOrder ??= CellOrder(element, view) : CellOrder(element, view));
             return cells;
         }
+
+        /// <summary>
+        /// Makes the order of <paramref name="element"/>'s cells through <paramref name="view"/>, in a method of its own so
+        /// that only a call that makes one allocates its closure.
+        /// </summary>
+        static Comparison<uint> CellOrder(ColumnType<T> element, Relations.ContainerView view) =>
+            (a, b) => element.CompareCells(a, b, view);
 
         /// <inheritdoc />
         internal override bool ValuesEqual(Set<T> x, Set<T> y)
@@ -302,9 +322,9 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>In cell order, as egglog's <c>inner_values</c>.</remarks>
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            foreach (var item in Read(cell).Elements)
+            foreach (var item in Read(cell, view).Elements)
                 destination.Add((element, item));
         }
 
@@ -316,15 +336,16 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination) =>
+            AppendElements(cell, view, destination);
 
         /// <inheritdoc />
         public bool RebuildsInOrder => element is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var elements = Read(cell).Elements;
+            var elements = Read(cell, view).Elements;
             var content = new long[elements.Length];
             for (var i = 0; i < content.Length; i++)
                 content[i] = elements[i];
@@ -351,10 +372,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
             var parts = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var item in Read(cell).Elements)
+            foreach (var item in Read(cell, view).Elements)
                 parts.Add(part(element, item));
 
             return "{" + string.Join(" ", parts) + "}";
@@ -362,14 +383,15 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks><c>set-of</c>, as egglog's <c>serialized_name</c> (set.rs:145-147).</remarks>
-        public string SerializedName(uint cell) => "set-of";
+        public string SerializedName(uint cell, Relations.ContainerView view) => "set-of";
 
         /// <summary>
         /// Gets the number of elements of a set's cell, without decoding the set: <c>set-length</c> over cells.
         /// </summary>
         /// <param name="cell">The set's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The number of elements.</returns>
-        internal int CountOfCell(uint cell) => Read(cell).Count;
+        internal int CountOfCell(uint cell, Relations.ContainerView view) => Read(cell, view).Count;
 
         /// <summary>
         /// Gets whether a set's cell holds an element, by the element's cell, without decoding the set:
@@ -377,8 +399,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="cell">The set's cell.</param>
         /// <param name="elementCell">The element's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>Whether the set holds it.</returns>
-        internal bool ContainsCell(uint cell, uint elementCell) => Read(cell).Elements.BinarySearch(elementCell) >= 0;
+        internal bool ContainsCell(uint cell, uint elementCell, Relations.ContainerView view) => Read(cell, view).Elements.BinarySearch(elementCell) >= 0;
 
         /// <summary>
         /// Gets the element at an index of a set's cell in cell order: egglog's <c>set-get</c>, the <c>BTreeSet</c>'s
@@ -386,11 +409,12 @@ namespace Eggnog
         /// </summary>
         /// <param name="cell">The set's cell.</param>
         /// <param name="index">The index.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="item">The element's cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the index is in range.</returns>
-        internal bool TryGetAt(uint cell, long index, out uint item)
+        internal bool TryGetAt(uint cell, long index, Relations.ContainerView view, out uint item)
         {
-            var elements = Read(cell).Elements;
+            var elements = Read(cell, view).Elements;
             var found = index >= 0 && index < elements.Length;
             item = found ? elements[(int)index] : 0;
             return found;
@@ -404,15 +428,17 @@ namespace Eggnog
         /// </summary>
         /// <param name="value">The set.</param>
         /// <param name="index">The index.</param>
+        /// <param name="view">The containers of the scope read, in which an element that is a container of classes is
+        /// looked up.</param>
         /// <param name="item">The element, when the result is <c>true</c>.</param>
         /// <returns>Whether the element is determined.</returns>
-        internal bool TryGetAtValue(Set<T> value, long index, out T item)
+        internal bool TryGetAtValue(Set<T> value, long index, Relations.ContainerView view, out T item)
         {
             var interned = new List<(uint Cell, T Item)>();
             var fresh = new List<T>();
             foreach (var each in value)
             {
-                if (element.TryEncodeExisting(each, out var cell))
+                if (element.TryEncodeExisting(each, view, out var cell))
                     interned.Add((cell, each));
                 else
                     fresh.Add(each);
@@ -437,12 +463,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Reads the container of a cell.
+        /// Reads the container of a cell through <paramref name="view"/>, as every read of a set by its cell does, so that
+        /// a set of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No set has the cell.</exception>
-        Relations.SetContainer Read(uint cell)
+        Relations.SetContainer Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var set) == false)
+            if (view.TryGetContainer(env, cell, out var set) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return set;

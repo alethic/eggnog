@@ -38,7 +38,7 @@ namespace Eggnog
         internal override uint Encode(double value) => values.Get<Relations.DoubleCodec, double>(value).Rep;
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(double value, out uint cell)
+        internal override bool TryEncodeExisting(double value, Relations.ContainerView view, out uint cell)
         {
             var found = values.TryGetExisting<Relations.DoubleCodec, double>(value, out var boxed);
             cell = boxed.Rep;

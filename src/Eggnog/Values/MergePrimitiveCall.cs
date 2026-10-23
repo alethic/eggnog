@@ -55,15 +55,16 @@ namespace Eggnog
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            Relations.ContainerView.EnterEngineCall(state);
             var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
                 if (primitive.IsWrite)
                 {
                     // A write primitive in a merge, as egglog's (vec-union old new): its unions staged through the
-                    // merge's state, which the rebuild applies.
+                    // merge's state, which the rebuild applies, its containers read in the state's context.
                     var action = unionAction;
-                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), out result) == false)
+                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), state.Containers, out result) == false)
                         throw Primitive.NoResult(primitive.Name);
 
                     return true;
@@ -90,7 +91,7 @@ namespace Eggnog
                     }
                 }
 
-                result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.Of(graph, state).Owner : null);
+                result = primitive.InvokeCore(args, parameters, this.result, overClasses ? ScopeRuntime.CallScope(graph, state) : null);
                 return true;
             }
             catch (Exception exception)
@@ -106,6 +107,7 @@ namespace Eggnog
                 if (this.result.HoldsClasses)
                     ClassCanonicalizer.Exit(canonicalizer);
 
+                Relations.ContainerView.ExitEngineCall(state);
                 EngineCallMarker.Exit();
             }
         }

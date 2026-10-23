@@ -94,14 +94,15 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a pair a primitive returned in <paramref name="scope"/>: for a pair that holds classes, its classes
-        /// usable there and the container interned at the root, as egglog's primitive registers its container through the
-        /// execution state, or in a child the one the root holds; else as <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root, as egglog's primitive registers its container
+        /// through the execution state, or elsewhere the one the scope sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The pair.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The pair holds classes, and a class is not usable in the scope, or
-        /// the scope is a child and the root holds no such pair.</exception>
+        /// the scope cannot intern and sees no such pair.</exception>
         internal override uint EncodeIn(Pair<T1, T2> value, Scope? scope)
         {
             if (HoldsClasses == false)
@@ -136,21 +137,21 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(Pair<T1, T2> value, out uint cell)
+        internal override bool TryEncodeExisting(Pair<T1, T2> value, Relations.ContainerView view, out uint cell)
         {
             CheckElements(value);
             cell = 0;
-            if (first.TryEncodeExisting(value.First, out var a) == false || second.TryEncodeExisting(value.Second, out var b) == false)
+            if (first.TryEncodeExisting(value.First, view, out var a) == false || second.TryEncodeExisting(value.Second, view, out var b) == false)
                 return false;
 
-            return env.TryGetId(new Relations.PairContainer(rebuildFirst, rebuildSecond, a, b), out cell);
+            return view.TryGetId(env, new Relations.PairContainer(rebuildFirst, rebuildSecond, a, b), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(Pair<T1, T2> value, Scope scope, Func<uint, uint> find, out uint cell)
         {
             if (HoldsClasses == false)
-                return TryEncodeExisting(value, out cell);
+                return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             CheckElements(value);
             cell = 0;
@@ -158,7 +159,7 @@ namespace Eggnog
                 || second.TryEncodeCanonical(value.Second, scope, find, out var b) == false)
                 return false;
 
-            if (env.TryGetId(new Relations.PairContainer(rebuildFirst, rebuildSecond, a, b), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, new Relations.PairContainer(rebuildFirst, rebuildSecond, a, b), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -166,7 +167,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a pair's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a pair's cell, read through the scope's container view. Takes one lock of a container environment, and
+        /// more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -174,7 +176,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No pair has the cell.</exception>
         internal override Pair<T1, T2> Decode(uint cell, Scope? scope)
         {
-            var pair = Read(cell);
+            var pair = Read(cell, Scope.ViewOf(scope));
             return new(first.Decode(pair.First, scope), second.Decode(pair.Second, scope));
         }
 
@@ -191,14 +193,17 @@ namespace Eggnog
 
         /// <summary>
         /// Formats a pair's cell as <see cref="FormatValue"/> formats the pair, through its elements' cells, so that a pair
-        /// of classes formats without a scope.
+        /// of classes formats without a scope; a cell no pair has in <paramref name="view"/> as <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var pair = Read(cell);
-            return "(pair " + first.FormatCell(pair.First) + " " + second.FormatCell(pair.Second) + ")";
+            if (view.TryGetContainer(env, cell, out var pair) == false)
+                return FormatUnresolvedCell(cell);
+
+            return "(pair " + first.FormatCell(pair.First, view) + " " + second.FormatCell(pair.Second, view) + ")";
         }
 
         /// <summary>
@@ -220,16 +225,17 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
 
-            var left = Read(x);
-            var right = Read(y);
-            var order = first.CompareCells(left.First, right.First);
-            return order != 0 ? order : second.CompareCells(left.Second, right.Second);
+            var left = Read(x, view);
+            var right = Read(y, view);
+            var order = first.CompareCells(left.First, right.First, view);
+            return order != 0 ? order : second.CompareCells(left.Second, right.Second, view);
         }
 
         /// <inheritdoc />
@@ -237,15 +243,16 @@ namespace Eggnog
             first.ValuesEqual(x.First, y.First) && second.ValuesEqual(x.Second, y.Second);
 
         /// <inheritdoc />
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            var pair = Read(cell);
+            var pair = Read(cell, view);
             destination.Add((first, pair.First));
             destination.Add((second, pair.Second));
         }
 
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination) =>
+            AppendElements(cell, view, destination);
 
         /// <inheritdoc />
         public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
@@ -260,9 +267,9 @@ namespace Eggnog
             first is IContainerColumnType { RebuildsInOrder: true } || second is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var pair = Read(cell);
+            var pair = Read(cell, view);
             return [pair.First, pair.Second];
         }
 
@@ -271,23 +278,24 @@ namespace Eggnog
             [rebuildFirst ? find((uint)content[0]) : content[0], rebuildSecond ? find((uint)content[1]) : content[1]];
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
-            var pair = Read(cell);
+            var pair = Read(cell, view);
             return "(" + part(first, pair.First) + " " + part(second, pair.Second) + ")";
         }
 
         /// <inheritdoc />
         /// <remarks>The pair sort's name, as egglog's <c>serialized_name</c> (pair.rs:146-148).</remarks>
-        public string SerializedName(uint cell) => Name;
+        public string SerializedName(uint cell, Relations.ContainerView view) => Name;
 
         /// <summary>
-        /// Reads the container of a cell.
+        /// Reads the container of a cell through <paramref name="view"/>, as every read of a pair by its cell does, so that
+        /// a pair of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No pair has the cell.</exception>
-        Relations.PairContainer Read(uint cell)
+        Relations.PairContainer Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var pair) == false)
+            if (view.TryGetContainer(env, cell, out var pair) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return pair;

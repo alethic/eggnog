@@ -24,6 +24,12 @@ namespace Eggnog
         readonly Relations.MultiSetSort sort;
 
         /// <summary>
+        /// The order of entries by their elements' cells through the root's view (<see cref="EntryOrder"/>), made on first
+        /// use, so that ordering a multiset's entries at the root allocates no comparison.
+        /// </summary>
+        Comparison<(uint Cell, long Count)>? rootEntryOrder;
+
+        /// <summary>
         /// Initializes a new instance.
         /// </summary>
         /// <param name="name">The type's name.</param>
@@ -91,14 +97,14 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a multiset a primitive returned in <paramref name="scope"/>: for a multiset of classes, its classes
-        /// usable there and the container interned at the root, or in a child the one the root holds; else as
-        /// <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root, or elsewhere the one the scope sees (its container
+        /// view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The multiset.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The multiset holds classes, and a class is not usable in the scope,
-        /// or the scope cannot intern and the root holds no such multiset.</exception>
+        /// or the scope cannot intern and sees no such multiset.</exception>
         internal override uint EncodeIn(MultiSet<T> value, Scope? scope)
         {
             if (rebuild == false)
@@ -130,24 +136,24 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(MultiSet<T> value, out uint cell)
+        internal override bool TryEncodeExisting(MultiSet<T> value, Relations.ContainerView view, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
             var (items, counts) = Split(value);
             var cells = new uint[items.Length];
             for (var i = 0; i < cells.Length; i++)
-                if (element.TryEncodeExisting(items[i], out cells[i]) == false)
+                if (element.TryEncodeExisting(items[i], view, out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(Collect(value, cells, counts), out cell);
+            return view.TryGetId(env, Collect(value, cells, counts), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(MultiSet<T> value, Scope scope, Func<uint, uint> find, out uint cell)
         {
             if (rebuild == false)
-                return TryEncodeExisting(value, out cell);
+                return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
@@ -157,7 +163,7 @@ namespace Eggnog
                 if (element.TryEncodeCanonical(items[i], scope, find, out cells[i]) == false)
                     return false;
 
-            if (env.TryGetId(Collect(value, cells, counts), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, Collect(value, cells, counts), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -193,7 +199,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a multiset's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a multiset's cell, read through the scope's container view. Takes one lock of a container environment,
+        /// and more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -201,7 +208,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
         internal override MultiSet<T> Decode(uint cell, Scope? scope)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, Scope.ViewOf(scope));
             var entries = new KeyValuePair<T, long>[multiset.Elements.Length];
             for (var i = 0; i < entries.Length; i++)
                 entries[i] = new(element.Decode(multiset.Elements[i], scope), multiset.Counts[i]);
@@ -229,17 +236,20 @@ namespace Eggnog
 
         /// <summary>
         /// Formats a multiset's cell as egglog prints it, its elements in cell order, the order its extracted term
-        /// lists.
+        /// lists; a cell no multiset has in <paramref name="view"/> as <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var multiset = Read(cell);
+            if (view.TryGetContainer(env, cell, out var multiset) == false)
+                return FormatUnresolvedCell(cell);
+
             var parts = new List<string>();
             for (var i = 0; i < multiset.Elements.Length; i++)
             {
-                var part = element.FormatCell(multiset.Elements[i]);
+                var part = element.FormatCell(multiset.Elements[i], view);
                 for (var k = 0L; k < multiset.Counts[i]; k++)
                     parts.Add(part);
             }
@@ -264,8 +274,9 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
@@ -273,13 +284,13 @@ namespace Eggnog
             if (rebuild == false)
                 return CompareValues(Decode(x, null), Decode(y, null));
 
-            var left = Ordered(x);
-            var right = Ordered(y);
+            var left = Ordered(x, view);
+            var right = Ordered(y, view);
             int i = 0, j = 0;
             long a = 0, b = 0;
             while (i < left.Length && j < right.Length)
             {
-                var order = element.CompareCells(left[i].Cell, right[j].Cell);
+                var order = element.CompareCells(left[i].Cell, right[j].Cell, view);
                 if (order != 0)
                     return order;
 
@@ -304,16 +315,23 @@ namespace Eggnog
         /// Gets a multiset's elements' cells with their counts in element order, the content order of
         /// <see cref="CompareValues"/>.
         /// </summary>
-        (uint Cell, long Count)[] Ordered(uint cell)
+        (uint Cell, long Count)[] Ordered(uint cell, Relations.ContainerView view)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             var entries = new (uint Cell, long Count)[multiset.Elements.Length];
             for (var i = 0; i < entries.Length; i++)
                 entries[i] = (multiset.Elements[i], multiset.Counts[i]);
 
-            Array.Sort(entries, (p, q) => element.CompareCells(p.Cell, q.Cell));
+            Array.Sort(entries, view.IsRoot ? rootEntryOrder ??= EntryOrder(element, view) : EntryOrder(element, view));
             return entries;
         }
+
+        /// <summary>
+        /// Makes the order of entries by <paramref name="element"/>'s cells through <paramref name="view"/>, in a method of
+        /// its own so that only a call that makes one allocates its closure.
+        /// </summary>
+        static Comparison<(uint Cell, long Count)> EntryOrder(ColumnType<T> element, Relations.ContainerView view) =>
+            (p, q) => element.CompareCells(p.Cell, q.Cell, view);
 
         /// <inheritdoc />
         internal override bool ValuesEqual(MultiSet<T> x, MultiSet<T> y)
@@ -338,9 +356,9 @@ namespace Eggnog
         /// <inheritdoc />
         /// <remarks>Each element repeated by its count, in cell order, as egglog's <c>inner_values</c>
         /// (multiset.rs:114-126).</remarks>
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             for (var i = 0; i < multiset.Elements.Length; i++)
                 for (var k = 0L; k < multiset.Counts[i]; k++)
                     destination.Add((element, multiset.Elements[i]));
@@ -354,9 +372,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            foreach (var element in Read(cell).Elements)
+            foreach (var element in Read(cell, view).Elements)
                 destination.Add((this.element, element));
         }
 
@@ -364,9 +382,9 @@ namespace Eggnog
         public bool RebuildsInOrder => element is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             var content = new long[multiset.Elements.Length * 2];
             for (var i = 0; i < multiset.Elements.Length; i++)
             {
@@ -403,9 +421,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             var counts = new SortedDictionary<string, long>(StringComparer.Ordinal);
             for (var i = 0; i < multiset.Elements.Length; i++)
             {
@@ -422,7 +440,7 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks><c>multiset-of</c>, as egglog's <c>serialized_name</c> (multiset.rs:221-223).</remarks>
-        public string SerializedName(uint cell) => "multiset-of";
+        public string SerializedName(uint cell, Relations.ContainerView view) => "multiset-of";
 
         /// <summary>
         /// Gets how many times an element occurs in a multiset's cell, by the element's cell, without decoding the
@@ -430,10 +448,11 @@ namespace Eggnog
         /// </summary>
         /// <param name="cell">The multiset's cell.</param>
         /// <param name="elementCell">The element's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>Its count; 0 when it does not occur.</returns>
-        internal long CountOfCell(uint cell, uint elementCell)
+        internal long CountOfCell(uint cell, uint elementCell, Relations.ContainerView view)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             var at = multiset.Elements.BinarySearch(elementCell);
             return at >= 0 ? multiset.Counts[at] : 0;
         }
@@ -443,11 +462,12 @@ namespace Eggnog
         /// (multiset.rs:874-877).
         /// </summary>
         /// <param name="cell">The multiset's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="picked">The element's cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the multiset has an element.</returns>
-        internal bool TryPick(uint cell, out uint picked)
+        internal bool TryPick(uint cell, Relations.ContainerView view, out uint picked)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             picked = multiset.Elements.Length > 0 ? multiset.Elements[0] : 0;
             return multiset.Elements.Length > 0;
         }
@@ -457,11 +477,12 @@ namespace Eggnog
         /// last maximum: egglog's <c>multiset-pick-max</c> (multiset.rs:196-198).
         /// </summary>
         /// <param name="cell">The multiset's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <param name="picked">The element's cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the multiset has an element.</returns>
-        internal bool TryPickMax(uint cell, out uint picked)
+        internal bool TryPickMax(uint cell, Relations.ContainerView view, out uint picked)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             picked = 0;
             var best = -1;
             for (var i = 0; i < multiset.Elements.Length; i++)
@@ -482,11 +503,13 @@ namespace Eggnog
         /// interns them, and there is no result.
         /// </summary>
         /// <param name="value">The multiset.</param>
+        /// <param name="view">The containers of the scope read, in which an element that is a container of classes is
+        /// looked up.</param>
         /// <param name="picked">The element, when the result is <c>true</c>.</param>
         /// <returns>Whether the element is determined.</returns>
-        internal bool TryPickValue(MultiSet<T> value, out T picked)
+        internal bool TryPickValue(MultiSet<T> value, Relations.ContainerView view, out T picked)
         {
-            var (interned, fresh) = Classify(value, static _ => true);
+            var (interned, fresh) = Classify(value, static _ => true, view);
             if (interned.Count > 0)
             {
                 picked = interned[0].Item;
@@ -502,15 +525,17 @@ namespace Eggnog
         /// cell when there is one, and no result when there are two.
         /// </summary>
         /// <param name="value">The multiset.</param>
+        /// <param name="view">The containers of the scope read, in which an element that is a container of classes is
+        /// looked up.</param>
         /// <param name="picked">The element, when the result is <c>true</c>.</param>
         /// <returns>Whether the element is determined.</returns>
-        internal bool TryPickMaxValue(MultiSet<T> value, out T picked)
+        internal bool TryPickMaxValue(MultiSet<T> value, Relations.ContainerView view, out T picked)
         {
             var max = 0L;
             foreach (var (_, count) in value.Counts)
                 max = Math.Max(max, count);
 
-            var (interned, fresh) = Classify(value, count => count == max);
+            var (interned, fresh) = Classify(value, count => count == max, view);
             if (fresh.Count > 0)
                 return TryOne(fresh, out picked);
 
@@ -525,10 +550,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Splits a multiset's distinct elements, of the counts <paramref name="keep"/> accepts, into those with a cell,
-        /// in cell order, and those without.
+        /// Splits a multiset's distinct elements, of the counts <paramref name="keep"/> accepts, into those with a cell in
+        /// <paramref name="view"/>, in cell order, and those without.
         /// </summary>
-        (List<(uint Cell, T Item)> Interned, List<T> Fresh) Classify(MultiSet<T> value, Func<long, bool> keep)
+        (List<(uint Cell, T Item)> Interned, List<T> Fresh) Classify(MultiSet<T> value, Func<long, bool> keep, Relations.ContainerView view)
         {
             var interned = new List<(uint Cell, T Item)>();
             var fresh = new List<T>();
@@ -537,7 +562,7 @@ namespace Eggnog
                 if (keep(count) == false)
                     continue;
 
-                if (element.TryEncodeExisting(item, out var cell))
+                if (element.TryEncodeExisting(item, view, out var cell))
                     interned.Add((cell, item));
                 else
                     fresh.Add(item);
@@ -583,20 +608,22 @@ namespace Eggnog
         /// Gets the cells of a multiset's distinct elements, in cell order, without decoding them.
         /// </summary>
         /// <param name="cell">The multiset's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The cells.</returns>
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
-        internal uint[] ElementCells(uint cell) => Read(cell).Elements.ToArray();
+        internal uint[] ElementCells(uint cell, Relations.ContainerView view) => Read(cell, view).Elements.ToArray();
 
         /// <summary>
         /// Gets a multiset's distinct elements' cells, in cell order, the order egglog's <c>BTreeMap</c> keeps them in, and
         /// their counts: what a higher-order primitive iterates (<see cref="FnMultiSetMapBody{T, TResult}"/>).
         /// </summary>
         /// <param name="cell">The multiset's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The elements' cells and their counts.</returns>
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
-        internal (uint[] Elements, long[] Counts) ElementCounts(uint cell)
+        internal (uint[] Elements, long[] Counts) ElementCounts(uint cell, Relations.ContainerView view)
         {
-            var multiset = Read(cell);
+            var multiset = Read(cell, view);
             return (multiset.Elements.ToArray(), multiset.Counts.ToArray());
         }
 
@@ -607,16 +634,18 @@ namespace Eggnog
         /// interned have no order, since egglog's <c>check</c> sets theirs by interning them in turn.
         /// </summary>
         /// <param name="value">The multiset.</param>
+        /// <param name="view">The containers of the scope read, in which an element that is a container of classes is
+        /// looked up.</param>
         /// <param name="ordered">The elements and their counts in that order, when there is one.</param>
         /// <returns>Whether there is an order.</returns>
-        internal bool TryOrderByCell(MultiSet<T> value, out List<KeyValuePair<T, long>> ordered)
+        internal bool TryOrderByCell(MultiSet<T> value, Relations.ContainerView view, out List<KeyValuePair<T, long>> ordered)
         {
             var interned = new List<(uint Cell, KeyValuePair<T, long> Entry)>();
             KeyValuePair<T, long>? fresh = null;
             ordered = [];
             foreach (var entry in value.Counts)
             {
-                if (element.TryEncodeExisting(entry.Key, out var cell))
+                if (element.TryEncodeExisting(entry.Key, view, out var cell))
                     interned.Add((cell, entry));
                 else if (fresh is null)
                     fresh = entry;
@@ -635,12 +664,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Reads the container of a cell.
+        /// Reads the container of a cell through <paramref name="view"/>, as every read of a multiset by its cell does, so
+        /// that a multiset of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No multiset has the cell.</exception>
-        Relations.MultiSetContainer Read(uint cell)
+        Relations.MultiSetContainer Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var multiset) == false)
+            if (view.TryGetContainer(env, cell, out var multiset) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return multiset;

@@ -44,9 +44,9 @@ namespace Eggnog.Relations
         public override IReadOnlyList<Sort> InnerSorts => inner;
 
         /// <inheritdoc />
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<PairContainer>(value.Rep, out var pair) == false)
+            if (containers.TryGetContainer<PairContainer>(value.Rep, out var pair) == false)
                 throw new InvalidOperationException($"No pair of sort {Name} has id {value}.");
 
             destination.Add(new SortedValue(First, new Value(pair.First)));
@@ -54,7 +54,7 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             if (elements.Length != 2)
                 throw new ArgumentException($"A pair has two elements, not {elements.Length}.", nameof(elements));

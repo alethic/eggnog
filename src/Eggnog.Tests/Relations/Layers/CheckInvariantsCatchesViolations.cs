@@ -207,7 +207,7 @@ namespace Eggnog.Relations.Tests
             child.CheckInvariants();
 
             var version = containers.EqVersion;
-            root.Database.WithExecutionState(state => state.Containers.RegisterValue(new VecContainer(y), state));
+            root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(y), state));
             containers.GetEnvironment<VecContainer>().EqVersionCounter!.Value = version;
             Assert.True(child.IsClean);
             AssertViolates(child, "eq-sort containers");

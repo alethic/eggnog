@@ -40,7 +40,7 @@ namespace Eggnog.Tests.Host
             var expected = new[] { "z", "y", "b", "c", "a", "bc", "d", "e", "g", "f", "h", "i", "k", "l", "j", "kyl" };
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }
@@ -67,7 +67,7 @@ namespace Eggnog.Tests.Host
             var expected = new[] { "b", "a", "c", "e", "d", "f", "i", "g", "j" };
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }
@@ -96,7 +96,7 @@ namespace Eggnog.Tests.Host
             var expected = new[] { "b", "a", "c", "d", "e", "g", "f", "h", "j", "i", "k" };
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }
@@ -128,7 +128,7 @@ namespace Eggnog.Tests.Host
             var expected = new[] { "b", "a", "c", "g", "e", "d", "h", "i", "j" };
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }
@@ -160,7 +160,7 @@ namespace Eggnog.Tests.Host
                     b.When(((Term<string>)"q").Is("q"), r.Of("z", "z"));
                     b.Then(q.Of("z", "c"));
                 }));
-            Assert.False(graph.Values.TypeOf<string>().TryEncodeExisting("q", out _));
+            Assert.False(graph.Values.TypeOf<string>().TryEncodeExisting("q", default, out _));
         }
 
         [Fact]
@@ -264,7 +264,7 @@ namespace Eggnog.Tests.Host
             var strings = graph.Values.TypeOf<string>();
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }
@@ -290,7 +290,7 @@ namespace Eggnog.Tests.Host
             var expected = new[] { "zz", "a", "b", "qq", "c" };
             for (var i = 0; i < expected.Length; i++)
             {
-                Assert.True(strings.TryEncodeExisting(expected[i], out var cell), expected[i]);
+                Assert.True(strings.TryEncodeExisting(expected[i], default, out var cell), expected[i]);
                 Assert.Equal((uint)i, cell);
             }
         }

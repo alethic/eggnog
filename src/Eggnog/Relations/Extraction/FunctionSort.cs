@@ -61,9 +61,9 @@ namespace Eggnog.Relations
         }
 
         /// <inheritdoc />
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<FunctionContainer>(value.Rep, out var fn) == false)
+            if (containers.TryGetContainer<FunctionContainer>(value.Rep, out var fn) == false)
                 throw new InvalidOperationException($"No function value of sort {Name} has id {value}.");
 
             var sorts = target(fn.Target).Partial;
@@ -75,9 +75,9 @@ namespace Eggnog.Relations
         /// <inheritdoc />
         /// <remarks>egglog's <c>reconstruct_termdag_container</c> (fn.rs:225-238): the name's literal, then the
         /// arguments.</remarks>
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
-            if (containers.TryGetValue<FunctionContainer>(value.Rep, out var fn) == false)
+            if (containers.TryGetContainer<FunctionContainer>(value.Rep, out var fn) == false)
                 throw new InvalidOperationException($"No function value of sort {Name} has id {value}.");
 
             var name = target(fn.Target).Name;

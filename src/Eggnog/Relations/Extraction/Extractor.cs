@@ -82,6 +82,12 @@ namespace Eggnog.Relations
         /// </summary>
         readonly LayeredUnionFind? finder;
 
+        /// <summary>
+        /// The containers of the context extracted from (<see cref="Context"/>), through which a container's elements are
+        /// read and its term rebuilt.
+        /// </summary>
+        readonly ContainerView containers;
+
         readonly CostModel costs;
         readonly ExtractionOptions options;
         readonly bool onDemand;
@@ -140,6 +146,7 @@ namespace Eggnog.Relations
             egraph = schema.EGraph;
             layers = host?.Context.Tables;
             finder = layers is null ? null : host!.Context.UnionFind;
+            containers = ContainerView.Of((host ?? egraph.Root).Context.Database);
 
             sorts = new List<Sort>();
             sortIndex = new Dictionary<Sort, int>(ReferenceEqualityComparer.Instance);
@@ -358,6 +365,12 @@ namespace Eggnog.Relations
         /// Gets the context the extractor reads: the one it was created over, or the e-graph's root.
         /// </summary>
         public EGraphContext Context => host ?? egraph.Root;
+
+        /// <summary>
+        /// Gets the containers of the context extracted from: its container view, through which a container's elements
+        /// are read and its term rebuilt.
+        /// </summary>
+        internal ContainerView Containers => containers;
 
         /// <summary>
         /// Gets the cost model.

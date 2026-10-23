@@ -129,8 +129,8 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a function value a primitive returned in <paramref name="scope"/>: for one that holds classes, its
-        /// classes usable there and the container interned at the root, or in a child the one the root holds; else as
-        /// <see cref="Encode"/>.
+        /// classes usable there and the container interned at a writable root, or elsewhere the one the scope sees (its
+        /// container view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="scope">The scope the call runs in.</param>
@@ -182,17 +182,17 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(TFn value, out uint cell)
+        internal override bool TryEncodeExisting(TFn value, Relations.ContainerView view, out uint cell)
         {
             var (content, target) = Content(value);
             cell = 0;
             var arguments = content.ArgumentArray;
             var cells = new uint[arguments.Length];
             for (var i = 0; i < cells.Length; i++)
-                if (target.Partial[i].TryEncodeExistingObject(arguments[i], out cells[i]) == false)
+                if (target.Partial[i].TryEncodeExistingObject(arguments[i], view, out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(new Relations.FunctionContainer(target.Id, MaskOf(content, target), cells), out cell);
+            return view.TryGetId(env, new Relations.FunctionContainer(target.Id, MaskOf(content, target), cells), out cell);
         }
 
         /// <inheritdoc />
@@ -201,7 +201,7 @@ namespace Eggnog
             var (content, target) = Content(value);
             var mask = MaskOf(content, target);
             if (mask == 0)
-                return TryEncodeExisting(value, out cell);
+                return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             cell = 0;
             var arguments = content.ArgumentArray;
@@ -210,7 +210,7 @@ namespace Eggnog
                 if (target.Partial[i].TryEncodeCanonicalObject(arguments[i], scope, find, out cells[i]) == false)
                     return false;
 
-            if (env.TryGetId(new Relations.FunctionContainer(target.Id, mask, cells), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, new Relations.FunctionContainer(target.Id, mask, cells), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -218,7 +218,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a function value's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a function value's cell, read through the scope's container view. Takes one lock of a container
+        /// environment, and more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -226,7 +227,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No function value has the cell.</exception>
         internal override TFn Decode(uint cell, Scope? scope)
         {
-            var (fn, target) = Read(cell);
+            var (fn, target) = Read(cell, Scope.ViewOf(scope));
             var cells = fn.Arguments;
             var arguments = new object[cells.Length];
             for (var i = 0; i < arguments.Length; i++)
@@ -239,11 +240,12 @@ namespace Eggnog
         /// Decodes the container of a cell: the target and the arguments' cells.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The target and the arguments' cells.</returns>
         /// <exception cref="InvalidOperationException">No function value has the cell.</exception>
-        public (FnTarget Target, uint[] Arguments) DecodeCells(uint cell)
+        public (FnTarget Target, uint[] Arguments) DecodeCells(uint cell, Relations.ContainerView view)
         {
-            var (fn, target) = Read(cell);
+            var (fn, target) = Read(cell, view);
             return (target, fn.Arguments.ToArray());
         }
 
@@ -275,17 +277,22 @@ namespace Eggnog
 
         /// <summary>
         /// Formats a function value's cell as <see cref="FormatValue"/> formats the value, through its arguments' cells, so
-        /// that a value of classes formats without a scope.
+        /// that a value of classes formats without a scope; a cell no function value has in <paramref name="view"/> as
+        /// <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var (fn, target) = Read(cell);
+            if (view.TryGetContainer(env, cell, out var fn) == false)
+                return FormatUnresolvedCell(cell);
+
+            var target = targets[fn.Target];
             var text = "(unstable-fn " + Relations.LiteralText.String(target.Name);
             var cells = fn.Arguments;
             for (var i = 0; i < cells.Length; i++)
-                text += " " + target.Partial[i].FormatCell(cells[i]);
+                text += " " + target.Partial[i].FormatCell(cells[i], view);
 
             return text + ")";
         }
@@ -315,19 +322,20 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
 
-            var (left, leftTarget) = Read(x);
-            var (right, rightTarget) = Read(y);
+            var (left, leftTarget) = Read(x, view);
+            var (right, rightTarget) = Read(y, view);
             var order = CompareTargets(leftTarget, rightTarget);
             var a = left.Arguments;
             var b = right.Arguments;
             for (var i = 0; order == 0 && i < a.Length; i++)
-                order = leftTarget.Partial[i].CompareCells(a[i], b[i]);
+                order = leftTarget.Partial[i].CompareCells(a[i], b[i], view);
 
             return order;
         }
@@ -348,16 +356,17 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            var (fn, target) = Read(cell);
+            var (fn, target) = Read(cell, view);
             var cells = fn.Arguments;
             for (var i = 0; i < cells.Length; i++)
                 destination.Add((target.Partial[i], cells[i]));
         }
 
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination) =>
+            AppendElements(cell, view, destination);
 
         /// <inheritdoc />
         /// <remarks>The partially applied arguments: egglog resolves the name's literal to its function before it interns
@@ -385,9 +394,9 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>The target's id and the rebuild flags, then the arguments' cells.</remarks>
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var (fn, _) = Read(cell);
+            var (fn, _) = Read(cell, view);
             var cells = fn.Arguments;
             var content = new long[cells.Length + 2];
             content[0] = fn.Target;
@@ -411,9 +420,9 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
-            var (fn, target) = Read(cell);
+            var (fn, target) = Read(cell, view);
             var cells = fn.Arguments;
             var key = "(fn" + target.Id;
             for (var i = 0; i < cells.Length; i++)
@@ -424,7 +433,7 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks>The function's name, as egglog's <c>serialized_name</c> (fn.rs:178-183).</remarks>
-        public string SerializedName(uint cell) => Read(cell).Target.Name;
+        public string SerializedName(uint cell, Relations.ContainerView view) => Read(cell, view).Target.Name;
 
         /// <summary>
         /// Gets a value's content and its target resolved for this type.
@@ -457,12 +466,13 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Reads the container of a cell and its target.
+        /// Reads the container of a cell and its target through <paramref name="view"/>, as every read of a function value
+        /// by its cell does, so that a value of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No function value has the cell.</exception>
-        (Relations.FunctionContainer Fn, FnTarget Target) Read(uint cell)
+        (Relations.FunctionContainer Fn, FnTarget Target) Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var fn) == false)
+            if (view.TryGetContainer(env, cell, out var fn) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return (fn, targets[fn.Target]);

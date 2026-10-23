@@ -37,9 +37,9 @@ namespace Eggnog.Relations
         public override IReadOnlyList<Sort> InnerSorts => inner;
 
         /// <inheritdoc />
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<VecContainer>(value.Rep, out var vec) == false)
+            if (containers.TryGetContainer<VecContainer>(value.Rep, out var vec) == false)
                 throw new InvalidOperationException($"No vector of sort {Name} has id {value}.");
 
             foreach (var element in vec.Values)
@@ -48,7 +48,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>reconstruct_termdag</c> (vec.rs:175-187).</remarks>
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             return elements.IsEmpty ? dag.App("vec-empty") : dag.App("vec-of", elements);
         }

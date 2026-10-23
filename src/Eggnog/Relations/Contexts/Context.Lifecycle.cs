@@ -145,6 +145,7 @@ namespace Eggnog.Relations
                     store.ContainerDirtyLog.Clear();
 
                 tables!.Release();
+                containerLayers!.Release();
                 overlay!.Release();
                 journal!.Release();
                 Volatile.Write(ref host, null);
@@ -331,7 +332,8 @@ namespace Eggnog.Relations
         /// a child's overlay stops changing, each sorted-writes table compacts where its gate allows and builds its
         /// rebuild index), the indexes of <paramref name="warmup"/> are built, the index catalogs refresh serially from
         /// now on, and staging into any table throws. Then it builds every view: a child folds every hidden set into
-        /// its views' frozen parts (<see cref="ContextTables.Freeze"/>), the root freezes its root views
+        /// its views' frozen parts (<see cref="ContextTables.Freeze"/>) and freezes its container layers
+        /// (<see cref="ContainerLayers.Freeze"/>), read without locks from then on, and the root freezes its root views
         /// (<see cref="LayeredSchema.FreezeRoot"/>). It flattens a child's chain of union-find levels into one map for
         /// the children created from now on; gives each live child subtree a thread domain of its own, so children of a
         /// frozen context may run concurrently; and publishes the frozen flag last, which orders every structure a
@@ -400,6 +402,7 @@ namespace Eggnog.Relations
                     if (tables is { } t)
                     {
                         t.Freeze();
+                        containerLayers!.Freeze();
                         flattened = FlattenedUnionFind.Build(finder);
                         Volatile.Write(ref finderForChildren, LayeredUnionFind.Flattened(store.RootUnionFind.UnionFind, flattened));
                     }

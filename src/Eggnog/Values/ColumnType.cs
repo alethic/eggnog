@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Eggnog
 {
@@ -96,12 +97,14 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the cell of a value that is inline or interned already, without interning: a read never grows the
-        /// graph's interning pools, which are permanent.
+        /// graph's interning pools, which are permanent. A container of classes is looked up in
+        /// <paramref name="view"/>, the containers of the scope read.
         /// </summary>
         /// <param name="value">The value, of <see cref="ClrType"/>.</param>
+        /// <param name="view">The containers of the scope read; the root's by default.</param>
         /// <param name="cell">The cell, when the result is <c>true</c>.</param>
         /// <returns>Whether the value has a cell already.</returns>
-        internal abstract bool TryEncodeExistingObject(object value, out uint cell);
+        internal abstract bool TryEncodeExistingObject(object value, Relations.ContainerView view, out uint cell);
 
         /// <summary>
         /// Encodes a non-null value a primitive returned in <paramref name="scope"/>, as the typed
@@ -135,8 +138,9 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a host's value in <paramref name="scope"/>: each class it holds usable there and canonical through
-        /// <paramref name="find"/>, and a container of classes interned at the root; any other value as
-        /// <see cref="EncodeObject"/> does.
+        /// <paramref name="find"/>, and a container of classes interned at a writable root, or elsewhere the one the scope
+        /// sees (its container view, <see cref="Scope.ContainerView"/>); any other value as <see cref="EncodeObject"/>
+        /// does.
         /// </summary>
         /// <param name="value">The value, of <see cref="ClrType"/>.</param>
         /// <param name="scope">The scope written.</param>
@@ -145,8 +149,8 @@ namespace Eggnog
         /// none.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
-        /// <exception cref="InvalidOperationException">The value holds classes, the scope is not a writable root, and the
-        /// root holds no such container (<see cref="UninternedContainerException"/>).</exception>
+        /// <exception cref="InvalidOperationException">The value holds classes, the scope is not a writable root, and it
+        /// sees no such container (<see cref="UninternedContainerException"/>).</exception>
         internal abstract uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch);
 
         /// <summary>
@@ -210,19 +214,32 @@ namespace Eggnog
         internal abstract string FormatDebug(object value);
 
         /// <summary>
-        /// Formats a cell: its decoded value's literal, or <c>#17</c> for a class.
+        /// Formats a cell: its decoded value's literal, or <c>#17</c> for a class, a container read through
+        /// <paramref name="view"/>, and a container's cell that no container of the type has in the view as a class's,
+        /// <c>#17</c> (<see cref="FormatUnresolvedCell"/>), so that a message naming the cell still forms.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to; the root's by default.</param>
         /// <returns>The literal.</returns>
-        internal abstract string FormatCell(uint cell);
+        internal abstract string FormatCell(uint cell, Relations.ContainerView view);
 
         /// <summary>
-        /// Compares two cells in content order (see <see cref="ColumnType{T}.Compare"/>).
+        /// Formats a container's cell that no container of its type has in the view it is read through as a class's cell
+        /// formats, <c>#17</c>: what a container type's <see cref="FormatCell"/> falls back to.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>The text.</returns>
+        private protected static string FormatUnresolvedCell(uint cell) => "#" + cell.ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Compares two cells in content order (see <see cref="ColumnType{T}.Compare"/>), containers read through
+        /// <paramref name="view"/>.
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to; the root's by default.</param>
         /// <returns>The order.</returns>
-        internal abstract int CompareCells(uint x, uint y);
+        internal abstract int CompareCells(uint x, uint y, Relations.ContainerView view);
 
         /// <summary>
         /// Gets whether values of the type can be kept in <see cref="ElementOrder{T}"/> order, as the elements of a

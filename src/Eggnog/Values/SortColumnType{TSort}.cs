@@ -72,7 +72,7 @@ namespace Eggnog
             TSort.FromId(new ClassId(find(ClassChecks.Require(scope, value.Id, nameof(value))), scope.Origin));
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(TSort value, out uint cell)
+        internal override bool TryEncodeExisting(TSort value, Relations.ContainerView view, out uint cell)
         {
             var id = value.Id;
             cell = id.Cell;
@@ -95,10 +95,10 @@ namespace Eggnog
         internal override int CompareValues(TSort x, TSort y) => x.Id.Cell.CompareTo(y.Id.Cell);
 
         /// <inheritdoc />
-        internal override string FormatCell(uint cell) => "#" + cell.ToString(CultureInfo.InvariantCulture);
+        internal override string FormatCell(uint cell, Relations.ContainerView view) => "#" + cell.ToString(CultureInfo.InvariantCulture);
 
         /// <inheritdoc />
-        internal override int CompareCells(uint x, uint y) => x.CompareTo(y);
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view) => x.CompareTo(y);
 
         /// <inheritdoc />
         internal override ClassId ClassOf(object value) => ((TSort)value).Id;

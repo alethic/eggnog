@@ -152,8 +152,9 @@ namespace Eggnog
             element = variable;
             elementType = typeof(T);
 
-            // A split's set holds values (RuleCompiler refuses classes), which decode outside any scope.
-            countOf = static (type, cell) => ((SetColumnType<T>)type).CountOfCell(cell);
+            // A split's set holds values (RuleCompiler refuses classes), which decode outside any scope and read the
+            // same through every container view.
+            countOf = static (type, cell) => ((SetColumnType<T>)type).CountOfCell(cell, default);
             elementAt = static (type, cell, index) => ((ColumnType<Set<T>>)type).Decode(cell, null)[index];
 
             return variable;

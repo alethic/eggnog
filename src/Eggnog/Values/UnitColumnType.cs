@@ -40,7 +40,7 @@ namespace Eggnog
         internal override uint Encode(ValueTuple value) => Unit;
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(ValueTuple value, out uint cell)
+        internal override bool TryEncodeExisting(ValueTuple value, Relations.ContainerView view, out uint cell)
         {
             cell = Unit;
             return true;

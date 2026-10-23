@@ -85,7 +85,7 @@ namespace Eggnog
             if (engine.CanonicalizeColumns(matches.Cells, matches.Width, program.SortColumns))
                 matches.Deduplicate();
 
-            matches.SortByContent(program.Columns);
+            matches.SortByContent(program.Columns, owner.ContainerView);
             var setType = program.Columns[program.SetColumn];
             for (var i = 0; i < matches.Count; i++)
             {

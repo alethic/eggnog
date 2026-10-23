@@ -56,7 +56,7 @@ namespace Eggnog
             "bool-set-contains",
             static (s, v) => s.Contains(v),
             null,
-            static (set, _, result, setCell, itemCell) => (true, Encode(result, Holds(set, setCell, itemCell))))
+            static (set, _, result, setCell, itemCell, view) => (true, Encode(result, Holds(set, setCell, itemCell, view))))
         {
             FilterName = "set-contains",
         };
@@ -68,7 +68,7 @@ namespace Eggnog
             "bool-set-not-contains",
             static (s, v) => s.Contains(v) == false,
             null,
-            static (set, _, result, setCell, itemCell) => (true, Encode(result, Holds(set, setCell, itemCell) == false)))
+            static (set, _, result, setCell, itemCell, view) => (true, Encode(result, Holds(set, setCell, itemCell, view) == false)))
         {
             FilterName = "set-not-contains",
         };
@@ -93,11 +93,11 @@ namespace Eggnog
         /// </summary>
         public static readonly Primitive<Set<T>, long, T> Get = new(
             "set-get",
-            static (set, index, _, setCell, indexCell) =>
-                ((SetColumnType<T>)set).TryGetAt(setCell, ((ColumnType<long>)index).Decode(indexCell, null), out var item) ? (true, item) : (false, 0u),
-            static (set, value, index) => ((SetColumnType<T>)set).TryGetAtValue(value, index, out var item) ? (true, item) : (false, default!));
+            static (set, index, _, setCell, indexCell, view) =>
+                ((SetColumnType<T>)set).TryGetAt(setCell, ((ColumnType<long>)index).Decode(indexCell, null), view, out var item) ? (true, item) : (false, 0u),
+            static (set, value, index, view) => ((SetColumnType<T>)set).TryGetAtValue(value, index, view, out var item) ? (true, item) : (false, default!));
 
-        static bool Holds(ColumnType set, uint setCell, uint itemCell) => ((SetColumnType<T>)set).ContainsCell(setCell, itemCell);
+        static bool Holds(ColumnType set, uint setCell, uint itemCell, Relations.ContainerView view) => ((SetColumnType<T>)set).ContainsCell(setCell, itemCell, view);
 
         static uint Encode(ColumnType result, bool value) => ((ColumnType<bool>)result).Encode(value);
 

@@ -34,7 +34,7 @@ namespace Eggnog.Relations.Tests
         /// Interns <paramref name="container"/> through <paramref name="context"/>'s database.
         /// </summary>
         static uint Intern(Context context, VecContainer container) =>
-            context.Database.WithExecutionState(state => state.Containers.RegisterValue(container, state));
+            context.Database.WithExecutionState(state => state.Containers.GetOrInsert(container, state));
 
         /// <summary>
         /// The root rebuilds a container in place while it has a live child: the container's id goes to the dirty log,

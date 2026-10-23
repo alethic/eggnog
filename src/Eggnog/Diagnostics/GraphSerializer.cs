@@ -159,14 +159,15 @@ namespace Eggnog
             if (type is IContainerColumnType container)
             {
                 // egglog's container: its elements, serialized in turn, are its children, and its operator is its
-                // serialized name (src/serialize.rs:342-371). The stored cells are read; nothing is interned.
+                // serialized name (src/serialize.rs:342-371). The stored cells are read through the scope's container
+                // view; nothing is interned.
                 var elements = new List<(ColumnType Type, uint Cell)>();
-                container.AppendElements(cell, elements);
+                container.AppendElements(cell, scope.ContainerView, elements);
                 var children = new List<string>(elements.Count);
                 foreach (var (elementType, elementCell) in elements)
                     children.Add(SerializeValue(elementType, elementCell, ClassOf(elementType, elementCell)));
 
-                AddNode(new SerializedNode(nodeId, container.SerializedName(cell), classId, 1, children.AsReadOnly(), false));
+                AddNode(new SerializedNode(nodeId, container.SerializedName(cell, scope.ContainerView), classId, 1, children.AsReadOnly(), false));
             }
             else
             {

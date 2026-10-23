@@ -80,6 +80,7 @@ namespace Eggnog
         public override bool TryInvoke(Relations.ExecutionState state, ReadOnlySpan<uint> args, out uint result)
         {
             EngineCallMarker.Enter();
+            Relations.ContainerView.EnterEngineCall(state);
             var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
             try
             {
@@ -115,9 +116,10 @@ namespace Eggnog
                 }
                 else if (primitive.IsWrite)
                 {
-                    // egglog's write primitive in an action: its unions staged through the run's state, as a head's.
+                    // egglog's write primitive in an action: its unions staged through the run's state, as a head's, its
+                    // containers read in the state's context.
                     var action = unionAction;
-                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), out result) == false)
+                    if (primitive.TryInvokeWrite(args, parameters, this.result, (x, y) => action.Union(state, x, y), state.Containers, out result) == false)
                         throw Primitive.NoResult(primitive.Name);
                 }
                 else
@@ -157,15 +159,18 @@ namespace Eggnog
                 if (this.result.HoldsClasses)
                     ClassCanonicalizer.Exit(canonicalizer);
 
+                Relations.ContainerView.ExitEngineCall(state);
                 EngineCallMarker.Exit();
             }
         }
 
         /// <summary>
-        /// Gets the scope a call runs in, which decodes and checks classes; only when a class crosses the call, so that a
-        /// call over values pays nothing for it.
+        /// Gets the scope a call runs in, which decodes and checks classes, and through whose container view the call reads
+        /// containers of classes (<see cref="ScopeRuntime.CallScope"/>); only when a class crosses the call, so that a
+        /// call over values pays nothing for it. For a query on a frozen scope it is that scope, whose view reads as the
+        /// transient child's the state runs in does, since a transient child holds no container itself.
         /// </summary>
-        Scope? ScopeOf(Relations.ExecutionState state) => overClasses ? ScopeRuntime.Of(graph, state).Owner : null;
+        Scope? ScopeOf(Relations.ExecutionState state) => overClasses ? ScopeRuntime.CallScope(graph, state) : null;
 
         /// <summary>
         /// Records a primitive's failure in the scope's runtime and reports it to the engine, which stops the engine call
@@ -183,6 +188,7 @@ namespace Eggnog
             string[] argumentNames, ReadOnlySpan<uint> args, Exception exception)
         {
             var bindings = new StringBuilder();
+            var view = state.Containers;
             for (var i = 0; i < args.Length && i < parameters.Length; i++)
             {
                 if (i > 0)
@@ -191,7 +197,7 @@ namespace Eggnog
                 string value;
                 try
                 {
-                    value = Binding(parameters[i], args[i]);
+                    value = Binding(parameters[i], args[i], view);
                 }
                 catch (Exception)
                 {
@@ -213,13 +219,15 @@ namespace Eggnog
         /// </summary>
         /// <param name="type">The argument's column type.</param>
         /// <param name="cell">The argument's cell.</param>
+        /// <param name="view">The containers of the context the call ran in, which a container's cell is read
+        /// through.</param>
         /// <returns>The rendering.</returns>
-        static string Binding(ColumnType type, uint cell)
+        static string Binding(ColumnType type, uint cell, Relations.ContainerView view)
         {
             if (type.ClrType.IsGenericType && type.ClrType.GetGenericTypeDefinition() == typeof(Set<>) && type.InvolvesClasses == false)
                 return type.DecodeObject(cell, null).ToString() ?? string.Empty;
 
-            return type.FormatCell(cell);
+            return type.FormatCell(cell, view);
         }
 
     }

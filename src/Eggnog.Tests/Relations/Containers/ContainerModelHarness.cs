@@ -109,8 +109,8 @@ namespace Eggnog.Relations.Tests
             var find = UnionFind;
             var contents = kind == 'b' ? elements : elements.Select(find.FindNaive).ToArray();
             var id = db.WithExecutionState(es => kind == 's'
-                ? es.Containers.RegisterValue(new SetContainer(contents), es)
-                : es.Containers.RegisterValue(new VecContainer(kind == 'v', contents), es));
+                ? es.Containers.GetOrInsert(new SetContainer(contents), es)
+                : es.Containers.GetOrInsert(new VecContainer(kind == 'v', contents), es));
             if (id >= minted)
                 minted = id + 1;
 

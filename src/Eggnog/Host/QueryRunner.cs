@@ -71,7 +71,7 @@ namespace Eggnog
                             matches.Deduplicate();
 
                         if (sort)
-                            matches.SortByContent(query.Columns);
+                            matches.SortByContent(query.Columns, scope.ContainerView);
 
                         return matches;
                     }

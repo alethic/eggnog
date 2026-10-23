@@ -46,9 +46,9 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>inner_values</c> (map.rs:124-137).</remarks>
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<MapContainer>(value.Rep, out var map) == false)
+            if (containers.TryGetContainer<MapContainer>(value.Rep, out var map) == false)
                 throw new InvalidOperationException($"No map of sort {Name} has id {value}.");
 
             for (var i = 0; i < map.Count; i++)
@@ -60,7 +60,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>reconstruct_termdag</c> (map.rs:157-171): <c>(map-insert … (map-empty) k v)</c>.</remarks>
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             if (elements.Length % 2 != 0)
                 throw new ArgumentException($"A map's elements come in pairs, not {elements.Length}.", nameof(elements));

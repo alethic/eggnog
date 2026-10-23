@@ -36,9 +36,9 @@ namespace Eggnog.Relations
         public override IReadOnlyList<Sort> InnerSorts => inner;
 
         /// <inheritdoc />
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<SetContainer>(value.Rep, out var set) == false)
+            if (containers.TryGetContainer<SetContainer>(value.Rep, out var set) == false)
                 throw new InvalidOperationException($"No set of sort {Name} has id {value}.");
 
             foreach (var element in set.Elements)
@@ -47,7 +47,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>reconstruct_termdag</c> (set.rs:135-143): <c>set-of</c>, even when empty.</remarks>
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             return dag.App("set-of", elements);
         }

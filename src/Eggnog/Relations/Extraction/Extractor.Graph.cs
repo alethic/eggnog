@@ -360,7 +360,7 @@ namespace Eggnog.Relations
 
             var containerSort = (ContainerSort)sorts[sort];
             elementScratch.Clear();
-            containerSort.AppendInnerValues(egraph.ContainerValues, new Value(value), elementScratch);
+            containerSort.AppendInnerValues(containers, new Value(value), elementScratch);
 
             // Copy the elements out of the scratch list before recursing, which reuses it.
             var elemStart = elemLength;

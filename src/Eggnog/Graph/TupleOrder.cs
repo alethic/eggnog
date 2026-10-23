@@ -19,6 +19,7 @@ namespace Eggnog
         readonly uint[] cells;
         readonly int width;
         readonly IReadOnlyList<ColumnType>? columns;
+        readonly Relations.ContainerView view;
 
         /// <summary>
         /// Initializes an order over the tuples stored row-major in <paramref name="cells"/>.
@@ -26,11 +27,14 @@ namespace Eggnog
         /// <param name="cells">The cells, <paramref name="width"/> per tuple.</param>
         /// <param name="width">The number of cells per tuple.</param>
         /// <param name="columns">The column types for content order; <c>null</c> to compare cells.</param>
-        public TupleOrder(uint[] cells, int width, IReadOnlyList<ColumnType>? columns)
+        /// <param name="view">The containers of the scope the cells belong to, through which content order reads a
+        /// container's cell.</param>
+        public TupleOrder(uint[] cells, int width, IReadOnlyList<ColumnType>? columns, Relations.ContainerView view)
         {
             this.cells = cells;
             this.width = width;
             this.columns = columns;
+            this.view = view;
         }
 
         /// <summary>
@@ -54,7 +58,7 @@ namespace Eggnog
                 if (left == right)
                     continue;
 
-                var order = columns[column].CompareCells(left, right);
+                var order = columns[column].CompareCells(left, right, view);
                 return order != 0 ? order : left.CompareTo(right);
             }
 

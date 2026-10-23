@@ -86,14 +86,15 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a vector a primitive returned in <paramref name="scope"/>: for a vector of classes, its classes
-        /// usable there and the container interned at the root, as egglog's primitive registers its container through the
-        /// execution state, or in a child the one the root holds; else as <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root, as egglog's primitive registers its container
+        /// through the execution state, or elsewhere the one the scope sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The vector.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The vector holds classes, and a class is not usable in the scope,
-        /// or the scope is a child and the root holds no such vector.</exception>
+        /// or the scope cannot intern and sees no such vector.</exception>
         internal override uint EncodeIn(Vec<T> value, Scope? scope)
         {
             if (holdsClasses == false)
@@ -136,23 +137,23 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryEncodeExisting(Vec<T> value, out uint cell)
+        internal override bool TryEncodeExisting(Vec<T> value, Relations.ContainerView view, out uint cell)
         {
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
             Span<uint> cells = value.Count <= 64 ? stackalloc uint[value.Count] : new uint[value.Count];
             for (var i = 0; i < cells.Length; i++)
-                if (element.TryEncodeExisting(value[i], out cells[i]) == false)
+                if (element.TryEncodeExisting(value[i], view, out cells[i]) == false)
                     return false;
 
-            return env.TryGetId(new Relations.VecContainer(holdsClasses, cells), out cell);
+            return view.TryGetId(env, new Relations.VecContainer(holdsClasses, cells), out cell);
         }
 
         /// <inheritdoc />
         internal override bool TryEncodeCanonical(Vec<T> value, Scope scope, Func<uint, uint> find, out uint cell)
         {
             if (holdsClasses == false)
-                return TryEncodeExisting(value, out cell);
+                return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             ArgumentNullException.ThrowIfNull(value);
             cell = 0;
@@ -161,7 +162,7 @@ namespace Eggnog
                 if (element.TryEncodeCanonical(value[i], scope, find, out cells[i]) == false)
                     return false;
 
-            if (env.TryGetId(new Relations.VecContainer(true, cells), out var id) == false)
+            if (scope.ContainerView.TryGetId(env, new Relations.VecContainer(true, cells), out var id) == false)
                 return false;
 
             cell = find(id);
@@ -169,7 +170,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Decodes a vector's cell. Takes one lock of the container environment, and more for nested containers.
+        /// Decodes a vector's cell, read through the scope's container view. Takes one lock of a container environment,
+        /// and more for nested containers.
         /// </summary>
         /// <param name="cell">The cell.</param>
         /// <param name="scope">The scope serving the call.</param>
@@ -177,7 +179,7 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">No vector has the cell.</exception>
         internal override Vec<T> Decode(uint cell, Scope? scope)
         {
-            var vec = Read(cell);
+            var vec = Read(cell, Scope.ViewOf(scope));
             var items = new T[vec.Length];
             for (var i = 0; i < items.Length; i++)
                 items[i] = element.Decode(vec.Values[i], scope);
@@ -207,19 +209,22 @@ namespace Eggnog
 
         /// <summary>
         /// Formats a vector's cell as <see cref="FormatValue"/> formats the vector, through its elements' cells, so that a
-        /// vector of classes formats without a scope.
+        /// vector of classes formats without a scope; a cell no vector has in <paramref name="view"/> as <c>#17</c>.
         /// </summary>
         /// <param name="cell">The cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The literal.</returns>
-        internal override string FormatCell(uint cell)
+        internal override string FormatCell(uint cell, Relations.ContainerView view)
         {
-            var vec = Read(cell);
+            if (view.TryGetContainer(env, cell, out var vec) == false)
+                return FormatUnresolvedCell(cell);
+
             if (vec.Length == 0)
                 return "(vec-empty)";
 
             var parts = new string[vec.Length];
             for (var i = 0; i < parts.Length; i++)
-                parts[i] = element.FormatCell(vec.Values[i]);
+                parts[i] = element.FormatCell(vec.Values[i], view);
 
             return "(vec-of " + string.Join(" ", parts) + ")";
         }
@@ -248,17 +253,18 @@ namespace Eggnog
         /// </summary>
         /// <param name="x">One cell.</param>
         /// <param name="y">The other cell.</param>
+        /// <param name="view">The containers of the scope the cells belong to.</param>
         /// <returns>The order.</returns>
-        internal override int CompareCells(uint x, uint y)
+        internal override int CompareCells(uint x, uint y, Relations.ContainerView view)
         {
             if (x == y)
                 return 0;
 
-            var left = Read(x);
-            var right = Read(y);
+            var left = Read(x, view);
+            var right = Read(y, view);
             for (var i = 0; i < left.Length && i < right.Length; i++)
             {
-                var order = element.CompareCells(left.Values[i], right.Values[i]);
+                var order = element.CompareCells(left.Values[i], right.Values[i], view);
                 if (order != 0)
                     return order;
             }
@@ -280,14 +286,15 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public void AppendElements(uint cell, List<(ColumnType Type, uint Cell)> destination)
+        public void AppendElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination)
         {
-            foreach (var value in Read(cell).Values)
+            foreach (var value in Read(cell, view).Values)
                 destination.Add((element, value));
         }
 
         /// <inheritdoc />
-        public void AppendDistinctElements(uint cell, List<(ColumnType Type, uint Cell)> destination) => AppendElements(cell, destination);
+        public void AppendDistinctElements(uint cell, Relations.ContainerView view, List<(ColumnType Type, uint Cell)> destination) =>
+            AppendElements(cell, view, destination);
 
         /// <inheritdoc />
         public void AppendLiteralParts(object value, List<(ColumnType Type, object Value)> destination)
@@ -300,9 +307,9 @@ namespace Eggnog
         public bool RebuildsInOrder => element is IContainerColumnType { RebuildsInOrder: true };
 
         /// <inheritdoc />
-        public long[] Content(uint cell)
+        public long[] Content(uint cell, Relations.ContainerView view)
         {
-            var values = Read(cell).Values;
+            var values = Read(cell, view).Values;
             var content = new long[values.Length];
             for (var i = 0; i < content.Length; i++)
                 content[i] = values[i];
@@ -324,10 +331,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public string CanonicalKey(uint cell, Func<ColumnType, uint, string> part)
+        public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
         {
             var parts = new List<string>();
-            foreach (var element in Read(cell).Values)
+            foreach (var element in Read(cell, view).Values)
                 parts.Add(part(this.element, element));
 
             return "[" + string.Join(" ", parts) + "]";
@@ -335,23 +342,25 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <remarks><c>vec-of</c>, as egglog's <c>serialized_name</c> (vec.rs:189-191).</remarks>
-        public string SerializedName(uint cell) => "vec-of";
+        public string SerializedName(uint cell, Relations.ContainerView view) => "vec-of";
 
         /// <summary>
         /// Gets the cells of a vector's elements, in order, without decoding them.
         /// </summary>
         /// <param name="cell">The vector's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
         /// <returns>The cells.</returns>
         /// <exception cref="InvalidOperationException">No vector has the cell.</exception>
-        internal uint[] ElementCells(uint cell) => Read(cell).Values.ToArray();
+        internal uint[] ElementCells(uint cell, Relations.ContainerView view) => Read(cell, view).Values.ToArray();
 
         /// <summary>
-        /// Reads the container of a cell.
+        /// Reads the container of a cell through <paramref name="view"/>, as every read of a vector by its cell does, so
+        /// that a vector of classes a child holds itself is read where the child holds it.
         /// </summary>
         /// <exception cref="InvalidOperationException">No vector has the cell.</exception>
-        Relations.VecContainer Read(uint cell)
+        Relations.VecContainer Read(uint cell, Relations.ContainerView view)
         {
-            if (env.TryGetContainer(cell, out var vec) == false)
+            if (view.TryGetContainer(env, cell, out var vec) == false)
                 throw new InvalidOperationException($"No {Name} has cell {cell}.");
 
             return vec;

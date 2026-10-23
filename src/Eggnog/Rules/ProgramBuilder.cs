@@ -1222,7 +1222,8 @@ namespace Eggnog
         /// </summary>
         uint Placeholder(ColumnType type, object value)
         {
-            if (type.TryEncodeExistingObject(value, out var cell))
+            // A rule's constant holds no classes (decisions row 9), so the root's container view finds it in any scope.
+            if (type.TryEncodeExistingObject(value, default, out var cell))
                 return cell;
 
             placeholders ??= new Dictionary<(ColumnType, object), uint>();
@@ -1496,7 +1497,7 @@ namespace Eggnog
         /// </summary>
         string Literal(Operand operand) => operand.Kind switch
         {
-            OperandKind.Constant => operand.Type.FormatCell(operand.Bits),
+            OperandKind.Constant => operand.Type.FormatCell(operand.Bits, default),
             OperandKind.IdConstant => "#" + idCells[operand.Index].ToString(CultureInfo.InvariantCulture),
             _ => rawNames[operand.Index],
         };

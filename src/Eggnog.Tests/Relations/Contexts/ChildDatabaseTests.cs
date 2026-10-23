@@ -323,13 +323,13 @@ namespace Eggnog.Relations.Tests
             var child = root.CreateChild();
             Assert.Same(root.Database.Containers, child.Database.Containers);
 
-            var container = child.Database.WithExecutionState(s => s.Containers.RegisterValue(new VecContainer(1, 2, 3), s));
+            var container = child.Database.WithExecutionState(s => s.Containers.GetOrInsert(new VecContainer(1, 2, 3), s));
             Assert.False(child.IsLocalId(container));
             var term = child.NewId();
             Assert.True(child.IsLocalId(term));
 
             // The same container interned at the root is the same id: it is global.
-            Assert.Equal(container, root.Database.WithExecutionState(s => s.Containers.RegisterValue(new VecContainer(1, 2, 3), s)));
+            Assert.Equal(container, root.Database.WithExecutionState(s => s.Containers.GetOrInsert(new VecContainer(1, 2, 3), s)));
         }
 
         /// <summary>

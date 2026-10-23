@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 namespace Eggnog
@@ -39,6 +40,34 @@ namespace Eggnog
 
             return graph.Root.Runtime;
         }
+
+        /// <summary>
+        /// Gets the scope an engine call over classes runs in, the <see cref="Owner"/> of <see cref="Of"/>'s runtime:
+        /// it decodes and checks the call's classes, and a pure primitive, in a rule or a merge, or a filter reads
+        /// containers of classes through its view (<see cref="Scope.ContainerView"/>). For a query on a frozen scope it
+        /// is that scope, not the transient child the state runs in, whose view reads alike since a transient child
+        /// holds no container layer (<see cref="AssertReadsAsState"/>).
+        /// </summary>
+        /// <param name="graph">The graph.</param>
+        /// <param name="state">The execution state the engine passed to the external function.</param>
+        /// <returns>The scope, or <c>null</c> for a runtime that belongs to none.</returns>
+        public static Scope? CallScope(EGraph graph, Relations.ExecutionState state)
+        {
+            var scope = Of(graph, state).Owner;
+            AssertReadsAsState(scope, state);
+            return scope;
+        }
+
+        /// <summary>
+        /// Asserts in DEBUG that <paramref name="scope"/>, the scope an engine call runs in, reads containers as the call's
+        /// execution state does (<see cref="Relations.ContainerView.AgreesWith(Relations.ExecutionState)"/>), so that a
+        /// call reading through the scope's view reads what one through the state's would. Nothing in a release build.
+        /// </summary>
+        /// <param name="scope">The scope, or <c>null</c>.</param>
+        /// <param name="state">The engine call's execution state.</param>
+        [Conditional("DEBUG")]
+        public static void AssertReadsAsState(Scope? scope, Relations.ExecutionState state) =>
+            Debug.Assert(scope is null || scope.ContainerView.AgreesWith(state), "an engine call's container view and its scope's disagree");
 
         /// <summary>
         /// Gets or sets the scope this runtime belongs to.

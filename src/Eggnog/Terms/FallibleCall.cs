@@ -37,10 +37,10 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, out object? value)
+        internal override bool TryInvokeValue(object[] arguments, ColumnType[] parameters, Relations.ContainerView view, out object? value)
         {
             value = default(ValueTuple);
-            return filter.TryInvokeValue(arguments, parameters, out var held) && (bool)held!;
+            return filter.TryInvokeValue(arguments, parameters, view, out var held) && (bool)held!;
         }
 
     }

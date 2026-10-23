@@ -19,14 +19,15 @@ namespace Eggnog.Relations
     internal sealed class ExtractedTerm
     {
 
-        readonly EGraph egraph;
+        readonly ExtractedTermSource source;
         readonly ExtractedTerm[] children;
         readonly FunctionId function;
 
         /// <summary>
         /// Initializes a new instance.
         /// </summary>
-        /// <param name="egraph">The e-graph the term was extracted from, which can print its values.</param>
+        /// <param name="source">What the term was extracted from: the e-graph, which can print its values, and the
+        /// context's containers, which rebuild its containers' terms; one per extraction, shared by its nodes.</param>
         /// <param name="kind">What the term is.</param>
         /// <param name="sort">The term's sort.</param>
         /// <param name="value">The term's value.</param>
@@ -35,7 +36,7 @@ namespace Eggnog.Relations
         /// <param name="cost">The term's cost.</param>
         /// <param name="children">The children; owned by the new instance.</param>
         internal ExtractedTerm(
-            EGraph egraph,
+            ExtractedTermSource source,
             ExtractedTermKind kind,
             Sort sort,
             Value value,
@@ -44,7 +45,7 @@ namespace Eggnog.Relations
             ulong cost,
             ExtractedTerm[] children)
         {
-            this.egraph = egraph;
+            this.source = source;
             this.children = children;
             this.function = function;
             Kind = kind;
@@ -178,8 +179,8 @@ namespace Eggnog.Relations
                 memo[term] = term.Kind switch
                 {
                     ExtractedTermKind.Node => dag.App(term.Name, span),
-                    ExtractedTermKind.Base => term.Sort.ReconstructBase(egraph.BaseValues, term.Value, dag),
-                    _ => ((ContainerSort)term.Sort).Reconstruct(egraph.ContainerValues, term.Value, dag, span),
+                    ExtractedTermKind.Base => term.Sort.ReconstructBase(term.source.EGraph.BaseValues, term.Value, dag),
+                    _ => ((ContainerSort)term.Sort).Reconstruct(term.source.Containers, term.Value, dag, span),
                 };
             }
 

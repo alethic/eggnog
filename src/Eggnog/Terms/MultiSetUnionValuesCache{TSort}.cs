@@ -17,9 +17,9 @@ namespace Eggnog
         /// </summary>
         public static readonly Primitive<MultiSet<TSort>, TSort> UnionValues = new("multiset-union-values", Write);
 
-        static (bool Found, uint Cell) Write(ColumnType multiset, uint cell, Action<uint, uint> union)
+        static (bool Found, uint Cell) Write(ColumnType multiset, uint cell, Action<uint, uint> union, Relations.ContainerView view)
         {
-            var elements = ((MultiSetColumnType<TSort>)multiset).ElementCells(cell);
+            var elements = ((MultiSetColumnType<TSort>)multiset).ElementCells(cell, view);
             if (elements.Length == 0)
                 return (false, 0);
 

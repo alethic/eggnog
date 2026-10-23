@@ -38,9 +38,9 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>inner_values</c> (multiset.rs:114-126): each element repeated by its count.</remarks>
-        public override void AppendInnerValues(ContainerValues containers, Value value, List<SortedValue> destination)
+        public override void AppendInnerValues(ContainerView containers, Value value, List<SortedValue> destination)
         {
-            if (containers.TryGetValue<MultiSetContainer>(value.Rep, out var multiset) == false)
+            if (containers.TryGetContainer<MultiSetContainer>(value.Rep, out var multiset) == false)
                 throw new InvalidOperationException($"No multiset of sort {Name} has id {value}.");
 
             for (var i = 0; i < multiset.Elements.Length; i++)
@@ -50,7 +50,7 @@ namespace Eggnog.Relations
 
         /// <inheritdoc />
         /// <remarks>egglog's <c>reconstruct_termdag</c> (multiset.rs:211-219).</remarks>
-        public override TermId Reconstruct(ContainerValues containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
+        public override TermId Reconstruct(ContainerView containers, Value value, TermDag dag, ReadOnlySpan<TermId> elements)
         {
             return dag.App("multiset-of", elements);
         }
