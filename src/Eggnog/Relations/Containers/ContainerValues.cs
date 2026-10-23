@@ -31,9 +31,12 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Threading: <see cref="RegisterValue{TContainer}"/>, <see cref="TryGetValue{TContainer}"/>,
-    /// <see cref="ForEach{TContainer, TVisitor}"/> and the environment lookups may run on any number of threads at once
-    /// (egglog's <c>&amp;self</c>); <see cref="RegisterType{TContainer}"/>, <see cref="RebuildAll"/> and
-    /// <see cref="Clone"/> need exclusive access (<c>&amp;mut self</c>).
+    /// <see cref="ForEach{TContainer, TVisitor}"/>, <see cref="AnyEqContainerMentions"/> and the environment lookups may
+    /// run on any number of threads at once (egglog's <c>&amp;self</c>), and so may
+    /// <see cref="RegisterType{TContainer}"/>, which egglog's needs <c>&amp;mut self</c> for: registrations take a
+    /// private lock, one at a time, and publish the environments and the slot table copy-on-write, so a reader on
+    /// another thread (a child of a frozen root, say) sees a type registered whole or not at all.
+    /// <see cref="RebuildAll"/> and <see cref="Clone"/> need exclusive access (<c>&amp;mut self</c>).
     /// </para>
     /// </remarks>
     internal sealed class ContainerValues
@@ -41,10 +44,23 @@ namespace Eggnog.Relations
 
         readonly ParallelHeuristics parallelism;
         readonly SubsetTracker subsetTracker;
-        readonly DenseIdMap<ContainerTypeId, ContainerEnvBase> envs;
+
+        /// <summary>
+        /// Serializes <see cref="RegisterType{TContainer}"/>.
+        /// </summary>
+        readonly object sync = new();
+
+        /// <summary>
+        /// The environments by type id. Never written after publication: registration publishes a grown copy with a
+        /// volatile write, before <see cref="bySlot"/>, so a reader on another thread reads the field once and keeps
+        /// that map.
+        /// </summary>
+        DenseIdMap<ContainerTypeId, ContainerEnvBase> envs;
 
         /// <summary>
         /// The type id of each registered type plus one, by process-wide slot; zero for a type not registered here.
+        /// Never written after publication: registration publishes a grown copy with a volatile write, after
+        /// <see cref="envs"/>, so a reader that finds a type here finds its environment there. Clones share it.
         /// </summary>
         int[] bySlot;
 
@@ -78,19 +94,25 @@ namespace Eggnog.Relations
         {
             parallelism = source.parallelism;
             subsetTracker = source.subsetTracker.Clone();
-            envs = new DenseIdMap<ContainerTypeId, ContainerEnvBase>(source.envs.IdCount);
             eqVersion.Value = source.EqVersion;
-            foreach (var (id, env) in source.envs)
+
+            // Under the source's registration lock, so the environments and the slot table are of one moment.
+            lock (source.sync)
             {
-                var copy = env.Clone();
-                if (copy.HoldsIds)
-                    copy.EqVersionCounter = eqVersion;
+                var sourceEnvs = source.envs;
+                envs = new DenseIdMap<ContainerTypeId, ContainerEnvBase>(sourceEnvs.IdCount);
+                foreach (var (id, env) in sourceEnvs)
+                {
+                    var copy = env.Clone();
+                    if (copy.HoldsIds)
+                        copy.EqVersionCounter = eqVersion;
 
-                envs.Insert(id, copy);
+                    envs.Insert(id, copy);
+                }
+
+                bySlot = source.bySlot;
+                hasEqContainers = source.hasEqContainers;
             }
-
-            bySlot = (int[])source.bySlot.Clone();
-            hasEqContainers = source.hasEqContainers;
         }
 
         /// <summary>
@@ -99,9 +121,9 @@ namespace Eggnog.Relations
         public ParallelHeuristics Parallelism => parallelism;
 
         /// <summary>
-        /// Gets the number of registered container types; their ids are <c>[0, TypeCount)</c>.
+        /// Gets the number of registered container types; their ids are <c>[0, TypeCount)</c>. One volatile read.
         /// </summary>
-        public int TypeCount => envs.IdCount;
+        public int TypeCount => Volatile.Read(ref envs).IdCount;
 
         /// <summary>
         /// Gets whether any registered container type holds e-class ids: the quick test of the eq-container guard
@@ -132,7 +154,7 @@ namespace Eggnog.Relations
             if (hasEqContainers == false)
                 return false;
 
-            foreach (var (_, env) in envs)
+            foreach (var (_, env) in Volatile.Read(ref envs))
                 if (env.HoldsIds && env.AnyContainerMentions(id))
                     return true;
 
@@ -143,7 +165,9 @@ namespace Eggnog.Relations
         /// Registers the container type <typeparamref name="TContainer"/>, whose fresh ids come from
         /// <paramref name="idCounter"/> and whose colliding ids <paramref name="merge"/> resolves, and returns its id.
         /// egglog's <c>register_type</c> (mod.rs:242-256). Registering a type again returns its id and keeps its
-        /// environment, counter and merge function. Requires exclusive access.
+        /// environment, counter and merge function. Thread-safe, where egglog's needs <c>&amp;mut self</c>:
+        /// registrations take a private lock, one at a time, and publish the new environment copy-on-write, so lookups,
+        /// interning and enumeration on other threads go on meanwhile and see the type whole or not at all.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="idCounter">The counter fresh container ids come from (the bridge's e-class id counter).</param>
@@ -159,37 +183,52 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(merge);
 
-            if (TryGetTypeId<TContainer>(out var existing))
+            lock (sync)
             {
-                // A type registered over base values and now over an eq sort: one environment, as egglog's.
-                if (holdsIds && envs[existing].HoldsIds == false)
+                var current = envs;
+                if (TryGetTypeId<TContainer>(out var existing))
                 {
-                    envs[existing].MarkHoldsIds(eqVersion);
+                    // A type registered over base values and now over an eq sort: one environment, as egglog's. The
+                    // environment publishes its own flag (MarkHoldsIds), and hasEqContainers follows it, so a reader that
+                    // sees hasEqContainers set sees the environment's flag set too.
+                    var registered = current[existing];
+                    if (holdsIds && registered.HoldsIds == false)
+                    {
+                        registered.MarkHoldsIds(eqVersion);
+                        hasEqContainers = true;
+                    }
+
+                    return existing;
+                }
+
+                var id = current.NextId;
+                var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism, holdsIds);
+                if (holdsIds)
+                {
+                    env.EqVersionCounter = eqVersion;
                     hasEqContainers = true;
                 }
 
-                return existing;
+                var grownEnvs = current.Clone();
+                grownEnvs.Insert(id, env);
+
+                var slot = ContainerTypeSlot<TContainer>.Index;
+                var table = bySlot;
+                var grownBySlot = new int[Math.Max(table.Length, slot + 1)];
+                Array.Copy(table, grownBySlot, table.Length);
+                grownBySlot[slot] = id.Index + 1;
+
+                // Release: a reader that sees either copy sees the fully built environment in it. The environments go
+                // first, so a reader that finds the type by its slot finds its environment by its id.
+                Volatile.Write(ref envs, grownEnvs);
+                Volatile.Write(ref bySlot, grownBySlot);
+                return id;
             }
-
-            var id = envs.NextId;
-            var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism, holdsIds);
-            if (holdsIds)
-            {
-                env.EqVersionCounter = eqVersion;
-                hasEqContainers = true;
-            }
-
-            var slot = ContainerTypeSlot<TContainer>.Index;
-            if (slot >= bySlot.Length)
-                Array.Resize(ref bySlot, Math.Max(slot + 1, bySlot.Length * 2));
-
-            envs.Insert(id, env);
-            bySlot[slot] = id.Index + 1;
-            return id;
         }
 
         /// <summary>
-        /// Gets the id of the container type <typeparamref name="TContainer"/>, if registered. O(1).
+        /// Gets the id of the container type <typeparamref name="TContainer"/>, if registered. O(1): one volatile read of
+        /// the slot table and one array load.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="id">The id.</param>
@@ -199,7 +238,7 @@ namespace Eggnog.Relations
             where TContainer : struct, IContainerValue<TContainer>
         {
             var slot = ContainerTypeSlot<TContainer>.Index;
-            var table = bySlot;
+            var table = Volatile.Read(ref bySlot);
             if ((uint)slot < (uint)table.Length && table[slot] != 0)
             {
                 id = new ContainerTypeId(table[slot] - 1);
@@ -212,7 +251,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the environment of <typeparamref name="TContainer"/>, if registered. egglog's <c>get</c>
-        /// (mod.rs:129-133). O(1); hot paths should look the environment up once and keep it.
+        /// (mod.rs:129-133). O(1), with one volatile read; hot paths should look the environment up once and keep it.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="env">The environment.</param>
@@ -222,6 +261,8 @@ namespace Eggnog.Relations
         {
             if (TryGetTypeId<TContainer>(out var id))
             {
+                // A plain read: it follows the volatile read of the slot table, and registration publishes the
+                // environments before the slot table, so the map read here holds the type.
                 env = Unsafe.As<ContainerEnv<TContainer>>(envs[id]);
                 return true;
             }
@@ -246,12 +287,12 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the environment with id <paramref name="id"/>.
+        /// Gets the environment with id <paramref name="id"/>. One volatile read.
         /// </summary>
         /// <param name="id">The type id.</param>
         /// <returns>The environment.</returns>
         /// <exception cref="KeyNotFoundException">No such type.</exception>
-        public ContainerEnvBase GetEnvironment(ContainerTypeId id) => envs[id];
+        public ContainerEnvBase GetEnvironment(ContainerTypeId id) => Volatile.Read(ref envs)[id];
 
         /// <summary>
         /// Interns <paramref name="container"/> and returns its id. egglog's <c>register_val</c> (mod.rs:154-163).

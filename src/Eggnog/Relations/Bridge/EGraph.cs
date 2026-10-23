@@ -46,11 +46,12 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Threading. Definitions (<see cref="AddTable"/>, <see cref="NewRule"/>, <see cref="NewPanic"/>,
-    /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>) may be made from any thread (a table,
-    /// once the root is frozen or while no other thread uses it): they publish copy-on-write. A context and every
-    /// descendant created under it while it is not frozen form one thread domain; children of a frozen context may run
-    /// concurrently (<see cref="ConcurrentChildren"/>, within <see cref="ParallelismBudget"/>). The parallelism of a
-    /// single operation is inside the database's operations.
+    /// <see cref="RegisterExternalFunction"/>, <see cref="NewLocalSlot{T}"/>,
+    /// <see cref="RegisterContainerType{TContainer}"/>) may be made from any thread (a table or a container type, once
+    /// the root is frozen or while no other thread uses it): they publish copy-on-write. A context and every descendant
+    /// created under it while it is not frozen form one thread domain; children of a frozen context may run concurrently
+    /// (<see cref="ConcurrentChildren"/>, within <see cref="ParallelismBudget"/>). The parallelism of a single operation
+    /// is inside the database's operations.
     /// </para>
     /// </remarks>
     internal sealed partial class EGraph

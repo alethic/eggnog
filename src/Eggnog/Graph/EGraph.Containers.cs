@@ -20,9 +20,12 @@ namespace Eggnog
         /// <remarks>
         /// Registered on first use, not with the graph, so that a graph holds the environments of the container types
         /// it uses only (the built-in sets' it registers with itself); the container rebuild of each pass walks only the
-        /// types that hold ids. Once the root is frozen, children may run on other threads while this registers; they
-        /// read the container set only to look for containers that hold ids, which this is not. A container type that
-        /// holds ids must not register so: children of a frozen root read such types while they rebuild.
+        /// types that hold ids. Once the root is frozen, children may run on other threads while this registers: the
+        /// engine publishes its container set copy-on-write
+        /// (<see cref="Relations.ContainerValues.RegisterType{TContainer}"/>), so a child that looks environments up or
+        /// enumerates them sees the new type whole or not at all; and this type holds no ids, which is all a child looks
+        /// for when it enumerates them. A container type that holds ids must not register so: children of a frozen root
+        /// read such types while they rebuild.
         /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <returns>The environment.</returns>
