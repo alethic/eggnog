@@ -55,8 +55,12 @@ namespace Eggnog.Relations
         /// <summary>
         /// Registers the container type <typeparamref name="TContainer"/> as one that holds no e-class ids, or gets it,
         /// and returns its environment, whose <see cref="ContainerEnv{TContainer}.GetOrInsertShared"/> interns without
-        /// an execution state from <see cref="Counters"/>. Registration changes the database's container set, so the
-        /// caller holds the e-graph's definition lock and the root's domain while it is writable.
+        /// an execution state from <see cref="Counters"/>. Registration is thread-safe
+        /// (<see cref="ContainerValues.RegisterType{TContainer}"/>), so threads that race here get one environment, but
+        /// it must not run while the containers rebuild, which needs them to itself
+        /// (<see cref="ContainerValues.RebuildAll"/>): so the caller holds the root's domain while the root is writable,
+        /// the only time they rebuild. The library's callers also hold their graph's definition lock, which keeps the
+        /// library's own cache of environments in step with the engine's.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <returns>The environment.</returns>

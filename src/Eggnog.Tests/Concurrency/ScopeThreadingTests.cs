@@ -17,8 +17,9 @@ namespace Eggnog.Tests.Concurrency
     /// <summary>
     /// Thread domains of scopes under load: a domain is shared by a writable scope and its children and reassigned when
     /// a scope freezes; a second thread fails fast; frozen scopes are read, queried and extracted from many threads in
-    /// transient query children; releases wait for the last call; and runs meet definitions made on other threads.
-    /// Every test runs on dedicated threads, never on pool threads that could run a task inline.
+    /// transient query children; releases wait for the last call; and runs meet definitions made on other threads,
+    /// container types among them. Every test runs on dedicated threads, never on pool threads that could run a task
+    /// inline.
     /// </summary>
     public sealed class ScopeThreadingTests
     {
@@ -831,6 +832,91 @@ namespace Eggnog.Tests.Concurrency
             var report = run.Result;
             Assert.Equal(RunStopReason.Completed, report.StopReason);
             Assert.True(child!.Check(t.Seen.Of("a")));
+        }
+
+        /// <summary>
+        /// Container types of values register while children of a frozen root run on other threads: each child unions
+        /// two classes, which enumerates the engine's container environments (the batch's check that no container of
+        /// classes holds the class it displaces, and the eq-container guard of its rebuild), and reads a set of
+        /// classes. The engine publishes its container set copy-on-write, so every child's union and read come out as
+        /// on one thread, and every type registered is there afterwards, holding no ids. This checks the library's path
+        /// (<see cref="EGraph.ValueContainers{TContainer}"/>) end to end, but would rarely catch a container set that
+        /// readers could see half registered: the library reaches only the engine's six container types, too few
+        /// registrations to overlap the children's reads for more than a moment in each graph.
+        /// <see cref="Relations.Tests.ContainerValuesConcurrencyTests"/> are the regression tests for that.
+        /// </summary>
+        [Fact]
+        public void ContainerTypesOfValuesRegisterWhileChildrenOfAFrozenRootRun()
+        {
+            const int Children = 4;
+            const int Graphs = 20;
+            for (var g = 0; g < Graphs; g++)
+            {
+                var graph = new EGraph();
+                graph.DefineSort<Node>("Math");
+                var num = graph.DefineConstructor<long, Node>("Num");
+                graph.Values.RegisterSet<Node>();
+                var s = graph.DefineFunction<Set<Node>>("s");
+                var root = graph.Root;
+                root.Assume(s.Of().Is(Primitives.SetOf<Node>().Of(num.Of(0L))));
+                var zero = root.Make(num.Of(0L));
+                root.Freeze();
+
+                var stop = 0;
+                var rounds = new int[Children];
+                var errors = new Exception?[Children];
+                var children = new Thread[Children];
+                for (var c = 0; c < Children; c++)
+                {
+                    var id = c;
+                    children[c] = Spawn(() =>
+                    {
+                        do
+                        {
+                            using var child = root.CreateChild();
+                            var a = child.Make(num.Of(1L + id));
+                            var b = child.Make(num.Of(100L + id));
+                            child.Union(a, b);
+                            if (child.AreEqual(a, b) == false)
+                                throw new InvalidOperationException($"child {id}'s union did not hold");
+
+                            if (child.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                                throw new InvalidOperationException($"child {id} read {child.Get(s.Of())}");
+
+                            Interlocked.Increment(ref rounds[id]);
+                        }
+                        while (Volatile.Read(ref stop) == 0);
+                    }, errors, id);
+                }
+
+                try
+                {
+                    // Once every child has run, so the registrations meet running children.
+                    Assert.True(SpinWait.SpinUntil(() => Enumerable.Range(0, Children).All(i => Volatile.Read(ref rounds[i]) > 0), Patience));
+                    graph.Values.RegisterVec<long>();
+                    graph.Values.RegisterPair<long, long>();
+                    graph.Values.RegisterMap<long, long>();
+                    graph.Values.RegisterMultiSet<long>();
+                    graph.Values.RegisterFn<long, long>();
+                }
+                finally
+                {
+                    Volatile.Write(ref stop, 1);
+                    foreach (var child in children)
+                        Assert.True(child.Join(Patience));
+                }
+
+                Assert.All(errors, Assert.Null);
+                var containers = graph.Engine.ContainerValues;
+                Assert.Equal(6, containers.TypeCount);
+                Assert.True(containers.GetEnvironment<Relations.SetContainer>().HoldsIds);
+                Assert.False(containers.GetEnvironment<Relations.VecContainer>().HoldsIds);
+                Assert.False(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+                Assert.False(containers.GetEnvironment<Relations.MapContainer>().HoldsIds);
+                Assert.False(containers.GetEnvironment<Relations.MultiSetContainer>().HoldsIds);
+                Assert.False(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
+                containers.CheckInvariants();
+            }
         }
 
     }

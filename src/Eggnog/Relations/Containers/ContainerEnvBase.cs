@@ -27,7 +27,7 @@ namespace Eggnog.Relations
         private protected ContainerEnvBase(ContainerTypeId typeId, bool holdsIds)
         {
             TypeId = typeId;
-            HoldsIds = holdsIds;
+            this.holdsIds = holdsIds;
         }
 
         /// <summary>
@@ -37,12 +37,19 @@ namespace Eggnog.Relations
         StrongBox<long>? eqVersion;
 
         /// <summary>
+        /// Whether the containers hold e-class ids (<see cref="HoldsIds"/>). Volatile: <see cref="MarkHoldsIds"/> sets it
+        /// while other threads may read it.
+        /// </summary>
+        volatile bool holdsIds;
+
+        /// <summary>
         /// Gets whether the containers hold e-class ids: eq-sort containers, which a child context may look up but not
         /// intern, and whose elements a child may not displace (<see cref="EqContainerGuard"/>), because children never
         /// rebuild containers. Containers over base values are registered with <c>holdsIds: false</c> and are allowed
-        /// everywhere.
+        /// everywhere. One volatile read: a type registered over base values may come to hold ids
+        /// (<see cref="MarkHoldsIds"/>) while other threads intern or look containers up.
         /// </summary>
-        public bool HoldsIds { get; private set; }
+        public bool HoldsIds => holdsIds;
 
         /// <summary>
         /// Gets or sets the counter this environment increments each time it gains a container whose content it did not
@@ -119,13 +126,17 @@ namespace Eggnog.Relations
         /// Makes the environment one that holds e-class ids, counting new contents on <paramref name="version"/>: for a
         /// container type registered over base values first and later over an eq sort, as egglog keeps both in one
         /// environment, telling them apart by <c>do_rebuild</c> (<see cref="IContainerValue{TSelf}.HoldsIds"/>). Its
-        /// containers so far hold no ids, so no child holds a displacement of theirs. Requires exclusive access.
+        /// containers so far hold no ids, so no child holds a displacement of theirs. Called by
+        /// <see cref="ContainerValues.RegisterType{TContainer}"/> under its lock; other threads may read
+        /// <see cref="HoldsIds"/> meanwhile.
         /// </summary>
         /// <param name="version">The eq-container version of the <see cref="ContainerValues"/> holding it.</param>
         internal void MarkHoldsIds(StrongBox<long> version)
         {
-            HoldsIds = true;
+            // The version first: the volatile write of the flag publishes it, so a thread that reads the flag set
+            // counts new contents on the version.
             eqVersion = version;
+            holdsIds = true;
         }
 
         /// <summary>
