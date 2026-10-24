@@ -290,7 +290,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Finds the first parent id that every live case's output stands for: a member of the seed's output whose
-        /// canonical id in each other live case is that case's output.
+        /// canonical id in each other live case is that case's output. A member of a block the round withheld
+        /// (<see cref="containerMerged"/>) is passed over: the row would rest on an equality of containers the parent
+        /// does not hold, and the reasoning of the id-output and constructor rows relies on the meet's equalities being
+        /// lifted with them. One count test when the round withheld nothing.
         /// </summary>
         bool TryCommonParentId(int seed, out uint member)
         {
@@ -298,6 +301,9 @@ namespace Eggnog.Relations
             var members = maps[seed].Members(in seedOutput);
             foreach (var m in members)
             {
+                if (containerMerged.Count > 0 && containerMerged.Contains(m))
+                    continue;
+
                 var all = true;
                 for (var j = 0; j < live.Count && all; j++)
                     if (j != seed && finders[j].Find(m) != outputs[j])

@@ -131,17 +131,19 @@ A column holds either a class or a value.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
   - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
     that decodes no values.
-  - Only a writable root makes one. A child, and a read of a frozen root, use those the root holds, and one the root
-    lacks matches nothing there. A write that needs one is refused.
-  - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge
-    the child's rebuild derives faults the child, as the engine's eq-container guard refuses it (decisions row 9).
+  - Only a writable root makes one. A child uses those its view holds, its own rebuilt copies included, and a read of
+    a frozen root those the root holds; one they lack matches nothing there. A write that needs one is refused.
+  - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge a
+    rule or the child's rebuild derives is not: the child rebuilds the containers it reaches in its container layers,
+    as egglog rebuilds the copy its push makes (decisions row 9; section 3.8, "The container pass").
   - egglog's `vec-union` is `Primitives.VecUnion`, a write primitive as egglog's: it unions two vectors' classes
     element by element and returns the first, with no result for two lengths.
     - It runs in a head or a host write, for its effect alone or as a value written, and in a merge such as
       `(vec-union old new)`, which a host batch simulates with its own unions. A rule's body, a query and a read
       refuse it, as egglog's query does.
     - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
-    - Only the root runs it, since the classes it unions are held by the vectors.
+    - Only the root runs it, as the library merges classes that containers hold only at the root outside a rule
+      (decisions row 9).
     - egglog's bare action, `(vec-union a b)` on its own, is `Fact.Exists(Primitives.VecUnion<Node>().Of(a, b))`
       in a head or a host write, run for its effect alone; the union may also be the value of a write.
   - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
@@ -974,9 +976,39 @@ through the view of the scope that owns the call, and a write primitive, a primi
 bindings through the view of the execution state's context; the two differ only for a query on a frozen scope, which
 runs in a transient child of it that holds no layer, and DEBUG asserts that they read alike. In DEBUG a read of a
 container of classes through the root's view also asserts while an engine call of a child whose chain holds a layer
-runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. Nothing in the engine
-places a container in a layer: every layer is empty unless a test places one there, so a child reads the root's
-containers (decisions row 9).
+runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. A child interns no
+container of classes; what fills its layers is its container pass (decisions row 9).
+
+**The container pass.** Each pass of a child's rebuild starts with its container pass (`ContainerLayers.RebuildPass`),
+egglog's `rebuild_containers` over the child's view, before its tables' pass, as egglog's rebuild loop runs containers
+first. Its delta is the journal's rows since the container mark (`ContainerLayers.ContainerMark`), which it moves to the
+end. For each container type that holds ids:
+
+- Phase A claims what holds one of the delta's own losers, or is one: every container that a level below lists for
+  it in its element index and that the child sees. A claim shadows the id and places a copy of every entry under it,
+  read from the nearest level that owns the id, in the child's layer, merging with an equal content already there
+  (`ContainerLayers.Claim`). Every insert or rename into a layer goes through this ownership rule: an own entry's id is
+  shadowed there. An imported displacement needs no claim, since the ancestor that made it rebuilt its own view.
+- Phase B rebuilds the layer's own environment: incrementally, over the delta's ids, what its element index lists for
+  them and the claims, when egglog's test for an incremental rebuild holds (more than 1000 containers), and in full
+  otherwise, serially. It runs egglog's rebuild loops, which are generic over an insert policy
+  (`IContainerInsertPolicy`): the root's (`RootInsertPolicy`) is egglog's `insert_owned` and compiles to the loops
+  without a policy; the child's (`LayeredInsertPolicy`) merges a rebuilt content with an equal one wherever its view
+  holds it, the smaller id winning, claiming the other id when it wins, and renames an entry in place only to an id
+  the layer owns. Every id a pass claims is rebuilt in that pass.
+
+The unions the merges stage are merged before the tables' pass, so that it rewrites, and hides and copies, the rows
+naming the containers merged away. The ids of the containers the pass changed in place, with the Dirty ids of the
+unsettled ancestors' container logs that no level up to the child shadows, are closed upward over the view, egglog's
+`expand_dirty_id_closure`: the containers of the child's layers that hold a dirty id are dirty, and, from an id the pass
+found, so are the containers below that the child sees and that hold one, which are re-stamped but not claimed. The
+child's own rows naming a dirty id are re-stamped; the visible ancestor rows naming one the pass found are hidden and
+copied with the pass's epoch (`HideReason.Refreshed`), so the child's semi-naive evaluation sees their new meaning;
+and, while the child has live descendants, the ids it found join its container log's Dirty stream. The child keeps the
+contents it rebuilt, and no ancestor sees them, so egglog's pop holds. A child is clean only once its container pass has
+consumed its journal. Cost: nothing without a registered type that holds ids, or without a displacement since the last
+pass; otherwise O(own losers × depth × types) element-index probes, plus O(size) per revisited container, or the
+layer's size for a full rebuild, plus the closure's index fan-out and the rows re-stamped.
 
 **Container logs.** Each level has a container log (`ContainerLog`): the store's for the root, owned by its
 container environments, and each child's in its container layers. A log records only while its level has live
@@ -986,22 +1018,34 @@ log. Its Added stream records every container of classes that appears in the lev
 by a rebuild or renamed, as (type, id, content hash). Each environment buffers its entries per hash-cons shard under
 the shard lock the recording path already holds, so interning and the parallel rebuild take no second lock, and sets
 a pending flag; a reader drains the buffers into the stream before it reads. Its Dirty stream records the ids the
-root's container rebuild changed in place. Each child keeps, in its cursor into every unsettled ancestor, a position in
-both streams. The first pass of its rebuild re-stamps the own rows that name a Dirty id, and the eq-container guard
-checks the child's own displacements against the containers that appeared at the root since its Added cursor, before
-the rebuild's loop as well as after each pass. A child with a displacement or a container layer is not clean while
-such containers wait. A frozen level records nothing: it interns no container of classes and never rebuilds. A root
-without descendants pays one test of its log's active flag where a container of classes appears. A log keeps its
-entries until that clear, even once every live cursor has passed them: while a level has live descendants, its log
-grows by one 16-byte entry per container of classes that appears at the level and one id per container its rebuild
-changes in place.
+level's container rebuild changed in place: the root's, or a child's container pass, closed over its view. Each child
+keeps, in its cursor into every unsettled ancestor, a position in both streams. The first pass of its rebuild closes
+the Dirty ids its view sees over its own layers and re-stamps its own rows that name one. Before the rebuild's loop the
+eq-container guard reads the Added entries that appeared at every unsettled ancestor since the child's cursor. An entry
+under an id that a level in between shadows is left to that level's own guard. An entry under an id the child claimed
+itself is content the ancestor renamed or reinserted onto it, which the child's shadow hides: the guard keeps it and
+checks it after the loop. An entry that is the only one under its id at its ancestor is the container the child claimed,
+rebuilt in place there or claimed there too: the child's copy, which follows the child's own rebuild history and so may
+differ for a map whose keys collapse, stands for it, and the child is refused only if its view holds nothing under the
+id's canonical id. An entry that shares its id, as one renamed onto it does, refuses the child and faults it unless the
+child's view holds the entry's content, rebuilt against the child's union-find, under the id's canonical id; a child
+does not yet adopt other content. Any other entry that holds, or is, an id the child displaced and its container pass
+already handled, or whose content the child's layer holds under another id, refuses the child and faults it, since its
+pass does not reconcile a container a writable ancestor gains later; a displacement not handled yet reaches the
+container in the next pass. A child with a displacement or a container layer is not clean while such containers wait,
+nor while the guard keeps entries to check after the loop. A frozen level records nothing: it interns no container of
+classes and never rebuilds. A root without descendants pays one test of its log's active flag where a container of
+classes appears. A log keeps its entries until that clear, even once every live cursor has passed them: while a level
+has live descendants, its log grows by one 16-byte entry per container of classes that appears at the level and one id
+per container its rebuild changes in place.
 
 **Catch-up.** A writable ancestor may keep writing after its children exist. Each child keeps cursors into its
 ancestors' layers and journals, and at its next call (a write, a run, a read) catches up: it re-keys its union-find,
 absorbs the ancestor rows appended since its cursors that mention its own losers, and then rebuilds its own rows.
 `Context.Rebuild` is the one rebuild loop at every level: egglog's passes at the root; in a child, the catch-up in the
-first pass, then per pass the rewrite of its own rows, the hide-and-copy of ancestor rows that name its new losers, and
-the merge. Before the root is first shared (a child created from it, or a freeze), it settles: the rows written since
+first pass, then per pass the container pass and the merge of its unions, the rewrite of its own rows, the
+hide-and-copy of ancestor rows that name its new losers or a container its container pass changed in place, and the
+merge. Before the root is first shared (a child created from it, or a freeze), it settles: the rows written since
 its last rebuild are canonicalized.
 
 **Freeze and thread domains.** `Freeze` requires a frozen parent (or none). It rebuilds, compacts, builds rebuild and
@@ -1066,8 +1110,10 @@ row, per staged row or per find, and the root's allocation probes pin this.
   up to date, drops contradictory cases, takes the live case with the fewest groups as the seed, stages the meet of the
   partitions (the unions every case agrees on) and the facts of every table in the lift spec (`LiftSpec`), and flushes
   them into the parent at one epoch. To be complete, it also looks up ancestor rows by each merged class's winner, since
-  with loser-only marking those rows are never copied into a case. A memo (`LiftSignature`) makes a lift over cases
-  and a parent that have not changed return at once.
+  with loser-only marking those rows are never copied into a case. An equality of container ids in the parent's view
+  is withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal, which the
+  parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A memo
+  (`LiftSignature`) makes a lift over cases and a parent that have not changed return at once.
 - `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
 - `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
   live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case
@@ -1169,6 +1215,7 @@ documentation).
 | Database (`Relations/Differential`) | random tables, merges, unions, rebuilds, rule sets, clones, layered semi-naive steps | a reference model of tables, union-find and joins |
 | Bridge (`Relations/BridgeDifferential`) | random bridge programs, egglog test programs rewritten by hand, programs that panic | three ways: semi-naive bridge, naive bridge, and a naive reference oracle |
 | Contexts (`Relations/Contexts`) | random storage programs over context trees (writes, unions, retractions, rebuilds, freeze, dispose, ancestors writing after children exist) | a reference context that replays every assertion of the chain into a naive e-graph; a reference union-find context |
+| Containers in contexts (`Relations/Contexts`) | random vectors and sets of classes and of containers, with rows naming them, at a root; batches of row writes and unions in a child and a grandchild | a fresh root replaying the batches, the copy egglog's push makes, exactly: every id's class, every container by id and by content, the containers the view holds (each content once), every row; and a naive partition closed under congruence of the containers and of a constructor |
 | Rules in contexts (`Relations/Colors`) | random rule programs over context trees | an operational reference of rules in contexts, in lockstep; the *context = copy* property (a context's saturated view equals a fresh root that replays the chain's writes); seeded against unseeded watermarks |
 | Lift (`Relations/Cases`) | random parents and cases (unions, rows, lattice values, terms, rule runs, vacuous cases) | the specification: after a lift the parent holds exactly what held in every live case, no more and no less |
 | Rule layer (`Differential`) | random rule-layer programs with host writes, runs and queries | three ways: semi-naive, naive twins, and a reference interpreter |

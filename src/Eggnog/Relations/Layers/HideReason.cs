@@ -32,6 +32,13 @@ namespace Eggnog.Relations
         /// </summary>
         Restamped,
 
+        /// <summary>
+        /// The row names a container the context's container pass changed in place, and every id it names is canonical
+        /// in the context: a copy stamped with the pass's epoch replaces it, so the context's semi-naive evaluation
+        /// sees the row's new meaning as new (<see cref="ContextTables.RebuildPass"/>).
+        /// </summary>
+        Refreshed,
+
     }
 
 }

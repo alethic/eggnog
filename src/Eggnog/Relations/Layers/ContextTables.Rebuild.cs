@@ -32,10 +32,10 @@ namespace Eggnog.Relations
         uint[]? copyScratch;
 
         /// <summary>
-        /// One rebuild pass of the child at <paramref name="epoch"/>: rewrites the context's own rows that name an id
-        /// displaced since the last pass, hides and copies canonically the ancestor rows that name one of its own new
-        /// losers, then merges. In the first pass of a rebuild these steps follow the catch-up
-        /// (<see cref="Context.Rebuild"/>).
+        /// One rebuild pass of the child's tables at <paramref name="epoch"/>: rewrites the context's own rows that
+        /// name an id displaced since the last pass, hides and copies canonically the ancestor rows that name one of
+        /// its own new losers or one of <paramref name="restamp"/>, then merges. Each pass of a rebuild runs it after
+        /// the container step, and the first pass after the catch-up as well (<see cref="Context.Rebuild"/>).
         /// </summary>
         /// <remarks>
         /// <para>
@@ -52,12 +52,17 @@ namespace Eggnog.Relations
         /// </para>
         /// <para>
         /// Hide and copy, for losers only (a union hides and copies the ancestor rows that name its loser, never those
-        /// that name its winner):
-        /// for every shared table with rebuild columns and every ancestor layer the context sees, the rows its rebuild
-        /// index lists under an own loser (<see cref="SortedWritesTable.SharedRebuildIndex"/>,
-        /// <see cref="LayerStatistics.AncestorRowsExamined"/>), live and hidden at no level between, are copied
-        /// canonically and hidden (<see cref="HideReason.Mentions"/>). Imports need no such step: the ancestor rows
-        /// naming them are already invisible at the parent. Never a scan: O(depth × own losers) probes plus their uses.
+        /// that name its winner): for every shared table with rebuild columns and every ancestor layer the context
+        /// sees, the rows its rebuild index lists under an own loser
+        /// (<see cref="SortedWritesTable.SharedRebuildIndex"/>, <see cref="LayerStatistics.AncestorRowsExamined"/>),
+        /// live and hidden at no level between, are copied canonically and hidden (<see cref="HideReason.Mentions"/>).
+        /// Imports need no such step: the ancestor rows naming them are already invisible at the parent. The rows the
+        /// index lists under an id of <paramref name="restamp"/>, a container the context's container pass changed in
+        /// place, join the same gather, so each row is copied once, and are copied with the pass's epoch: their meaning
+        /// in the context changed while their cells did not, and the copy re-stamps them for the context's semi-naive
+        /// evaluation, as egglog's <c>refresh_rows_for_values</c> re-stamps rows at the root
+        /// (<see cref="HideReason.Refreshed"/>, or <see cref="HideReason.Mentions"/> when the row names an own loser
+        /// too). Never a scan: O(depth × (own losers + re-stamped ids)) probes plus their uses.
         /// </para>
         /// <para>
         /// Merge: <see cref="Database.MergeAll"/>, which merges the catch-up's copies, the rewrites and the
@@ -66,10 +71,12 @@ namespace Eggnog.Relations
         /// </para>
         /// </remarks>
         /// <param name="epoch">The pass's epoch.</param>
+        /// <param name="restamp">The ids of containers the context's container pass changed in place, not local to the
+        /// context (<see cref="ContainerPassSummary.Restamp"/>); empty for none.</param>
         /// <returns>Whether the pass changed anything: the merge changed rows or staged writes, or a row was hidden.</returns>
         /// <exception cref="InvalidOperationException">A copy would create the layer of a table whose merge is not a
         /// lattice merge, which only the root may write; the context is then faulted.</exception>
-        internal bool RebuildPass(uint epoch)
+        internal bool RebuildPass(uint epoch, ReadOnlySpan<uint> restamp)
         {
             if (owner.IsContradicted)
                 return false;
@@ -99,11 +106,12 @@ namespace Eggnog.Relations
                     owner.Database.RunWithTakenOut(schema.UnionFind, own, new RebuildTableOperation(schema.UnionFind, owner.UnionFindTable, epoch));
             }
 
-            // Hide and copy the ancestor rows that name an own loser.
+            // Hide and copy the ancestor rows that name an own loser or a container the container pass changed in
+            // place.
             ExecutionState? state = null;
             PendingHides();
-            if (ownLosers.Count > 0)
-                CopyRowsMentioningLosers(ref state, CollectionsMarshal.AsSpan(ownLosers), epoch);
+            if (ownLosers.Count > 0 || restamp.IsEmpty == false)
+                CopyRowsMentioningLosers(ref state, CollectionsMarshal.AsSpan(ownLosers), restamp, epoch);
 
             if (state is not null)
             {
@@ -119,10 +127,13 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The hide-and-copy step of <see cref="RebuildPass"/>: stages a canonical copy of every visible ancestor row
-        /// that names one of <paramref name="ownLosers"/>, and records it for hiding.
+        /// that names one of <paramref name="ownLosers"/> or of <paramref name="restamp"/>, and records it for hiding,
+        /// as <see cref="HideReason.Mentions"/> when the row names an id that is not canonical in the context and as
+        /// <see cref="HideReason.Refreshed"/> otherwise.
         /// </summary>
-        void CopyRowsMentioningLosers(ref ExecutionState? state, ReadOnlySpan<uint> ownLosers, uint epoch)
+        void CopyRowsMentioningLosers(ref ExecutionState? state, ReadOnlySpan<uint> ownLosers, ReadOnlySpan<uint> restamp, uint epoch)
         {
+            var find = owner.UnionFind;
             foreach (var table in schema.FunctionTables)
             {
                 if (schema[table] is not { IsContextPrivate: false } s || s.RebuildColumns.Length == 0)
@@ -137,6 +148,9 @@ namespace Eggnog.Relations
                     foreach (var loser in ownLosers)
                         gather.AddValue(loser);
 
+                    foreach (var id in restamp)
+                        gather.AddValue(id);
+
                     var count = gather.SortUnique();
                     statistics.AncestorRowsExamined += count;
                     var rows = gather.Rows;
@@ -145,10 +159,29 @@ namespace Eggnog.Relations
                     for (var i = 0; i < count; i++)
                     {
                         var r = rows[i];
-                        if (data[r * arity] == Value.StaleRep || HiddenBetween(table, j, r))
+                        var offset = r * arity;
+                        if (data[offset] == Value.StaleRep || HiddenBetween(table, j, r))
                             continue;
 
-                        StageCopy(ref state, s, layer, j, r, HideReason.Mentions, true, epoch);
+                        var reason = HideReason.Refreshed;
+                        if (restamp.IsEmpty == false)
+                        {
+                            foreach (var column in s.RebuildColumns)
+                            {
+                                var cell = data[offset + column.Rep];
+                                if (find.Find(cell) != cell)
+                                {
+                                    reason = HideReason.Mentions;
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            reason = HideReason.Mentions;
+                        }
+
+                        StageCopy(ref state, s, layer, j, r, reason, true, epoch);
                     }
 
                     gather.Release();

@@ -26,7 +26,10 @@ namespace Eggnog.Relations
     /// listed table over parent ids, that holds in every live case is written once the rounds settle, through the
     /// seed's own rows and the winner probe of its group roots. The probe is needed because only losers are marked: an
     /// ancestor row that mentions a merged class's winner is never copied into the case, so the lift looks such rows up
-    /// by each winner.
+    /// by each winner. Except: an equality of container ids, which the cases reach by rebuilding the containers'
+    /// contents equal, is withheld, since the parent would hold two containers apart under one class; and so is a row
+    /// of an id output, or a constructor's equality with its output, that only such an equality would let the parent
+    /// express (<c>Lifter.Equalities.cs</c>).
     /// </para>
     /// <para>
     /// Memo. The caller keeps the <see cref="LiftSignature"/> of the last lift that settled: the versions it read and the
@@ -139,7 +142,7 @@ namespace Eggnog.Relations
 
                     var seed = ChooseSeed();
                     writes.Clear();
-                    LiftEqualities(seed, report);
+                    LiftEqualities(parent, seed, report);
                     LiftFacts(parent, seed, options, report);
                     if (writes.IsEmpty)
                         break;
@@ -191,6 +194,7 @@ namespace Eggnog.Relations
                 live.Clear();
                 maps.Clear();
                 blocks.Clear();
+                containerMerged.Clear();
                 Array.Clear(finders);
             }
         }

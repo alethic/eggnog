@@ -231,10 +231,11 @@ namespace Eggnog
             for (var i = 0; i < arguments.Length; i++)
                 arguments[i] = PlanTermCore(shape.Arguments[i]);
 
-            // A write primitive unions classes that containers hold, which a child never rebuilds (decisions row 9).
+            // A write primitive unions classes that containers hold, which the library does only at the root (decisions
+            // row 9).
             if (primitive.IsWrite && scope.IsRoot == false)
                 throw new InvalidOperationException(
-                    $"primitive '{primitive.Name}' unions classes that containers hold, which only the root rebuilds, so only the root may compute it.");
+                    $"primitive '{primitive.Name}' unions classes that containers hold, which the library does only at the root, so only the root may compute it.");
 
             bool found;
             uint cell;

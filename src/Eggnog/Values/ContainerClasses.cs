@@ -12,9 +12,9 @@ namespace Eggnog
         /// <summary>
         /// Interns a container of classes for <paramref name="scope"/>: at a writable root, as egglog's primitive
         /// registers its container through the execution state; in a child, or a frozen root, the container the scope
-        /// sees, looked up through its container view (<see cref="Scope.ContainerView"/>), since a child context may look
-        /// such a container up but not intern it, children never rebuilding containers (decisions row 9), and a frozen
-        /// context is read-only.
+        /// sees, looked up through its container view (<see cref="Scope.ContainerView"/>), its copies of the containers
+        /// its rebuild claimed included, since a child context may look such a container up but not intern it
+        /// (decisions row 9), and a frozen context is read-only.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="env">The container type's environment, which holds ids.</param>

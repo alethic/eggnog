@@ -70,8 +70,9 @@ namespace Eggnog.Relations
         /// <returns>What changed; nothing when no registered container type holds e-class ids, whose containers never
         /// change.</returns>
         /// <exception cref="System.Collections.Generic.KeyNotFoundException">No such table, or it is taken out.</exception>
-        /// <exception cref="InvalidOperationException">This is a child context's database: children never rebuild
-        /// containers; or the database is frozen.</exception>
+        /// <exception cref="InvalidOperationException">This is a child context's database, whose context rebuilds its
+        /// containers in its container layers (<see cref="ContainerLayers.RebuildPass"/>); or the database is
+        /// frozen.</exception>
         public ContainerRebuildSummary RebuildContainers(TableId unionFind, uint? timestamp = null)
         {
             ThrowIfChildRebuild(nameof(RebuildContainers));

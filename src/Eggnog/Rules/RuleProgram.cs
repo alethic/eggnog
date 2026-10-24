@@ -113,8 +113,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the first write primitive the head computes (<see cref="Primitive.IsWrite"/>), egglog's
-        /// <c>vec-union</c>, which unions classes that containers hold, which only the root rebuilds, so that the program
-        /// runs only there; <c>null</c> when there is none.
+        /// <c>vec-union</c>, which unions classes that containers hold, which the library does only at the root
+        /// (decisions row 9), so that the program runs only there; <c>null</c> when there is none.
         /// </summary>
         public Primitive? WritePrimitive { get; }
 

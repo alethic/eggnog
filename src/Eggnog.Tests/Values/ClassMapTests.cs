@@ -66,6 +66,39 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
+        public void KeysThatBecomeOneInAChildCollapseThereOnly()
+        {
+            // Probe dirty-parent-row.egg, its second block, which egglog at 5e655cae runs clean: a map made before the
+            // push, (map-insert (map-insert (map-empty) (c1) 10) (c2) 20), held by (p $m); in the push (union (c1)
+            // (c2)), here a rule's, collapses its keys, (check (= (map-length $m) 1)); after the pop it has two again.
+            var t = new Theory();
+            var m = t.Graph.DefineFunction<Map<Node, long>>("m");
+            var p = t.Graph.DefineConstructor<Map<Node, long>, Node>("p");
+            var go = t.Graph.DefineRelation("go");
+            var merge = t.Graph.DefineRuleset("merge");
+            merge.DefineRule("merge", r =>
+            {
+                r.When(go.Of());
+                r.Then(t.Num.Of(1L).Is(t.Num.Of(2L)));
+            });
+            t.Root.Assume(m.Of().Is(t.Insert(t.Insert(t.Empty, 1L, 10L), 2L, 20L)));
+            var held = t.Root.Make(p.Of(m.Of()));
+            t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(go.Of());
+                child.Run(Schedule.Saturate(Schedule.Run(merge)));
+                Assert.True(child.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(1L)));
+                Assert.True(child.Check(Primitives.MapGet<Node, long>().Of(m.Of(), t.Num.Of(1L)).Is(20L)));
+                Assert.Equal(Map.Of((child.Find(child.Make(t.Num.Of(1L))), 20L)), child.Get(m.Of()));
+                Assert.True(child.Check(p.Of(m.Of()).Is(held)));
+            }
+
+            Assert.True(t.Root.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(2L)));
+        }
+
+        [Fact]
         public void TheLaterKeyInCellOrderIsKept()
         {
             // (map-insert (map-insert (map-empty) (Num 2) 20) (Num 1) 10): (Num 2) has the smaller cell, so (Num 1)'s 10 is

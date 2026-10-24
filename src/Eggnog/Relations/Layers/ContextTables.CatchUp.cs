@@ -40,8 +40,8 @@ namespace Eggnog.Relations
         /// displacement or a container layer, its container log holds Added entries past the context's cursor, drained
         /// or still pending (<see cref="ContainerLog.HasAddedSince"/>), which the eq-container guard has not checked
         /// (<see cref="EqContainerGuard"/>). A context with neither learns of such a container only through a later
-        /// displacement of its own, which the guard checks against every container the root holds. O(unsettled
-        /// ancestors).
+        /// displacement of its own, whose container pass claims every container that holds it
+        /// (<see cref="ContainerLayers.RebuildPass"/>). O(unsettled ancestors).
         /// </summary>
         public bool NeedsCatchUp
         {
@@ -84,18 +84,17 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Moves the context's Added cursor into the container log of every ancestor that is not settled to the log's
-        /// end, draining the log first, and appends to <paramref name="rootEntries"/>, when given, the root's entries it
-        /// moved past: what the eq-container guard checks the context's displacements against
-        /// (<see cref="EqContainerGuard"/>). The entries of the ancestors in between are moved past unread: the engine
-        /// places nothing in their layers, and the guard checks the root's containers only. The cursors are committed
-        /// at once, since what the guard checked stays checked, so a guard run before the rebuild loop leaves the
-        /// context clean without a pass. Domain thread only; it changes nothing a reader of the context sees, so it may
-        /// run inside a callback.
+        /// end, draining the log first, and appends to <paramref name="entries"/>, when given, every entry it moved
+        /// past with the depth of its ancestor: what the eq-container guard checks against the context
+        /// (<see cref="EqContainerGuard"/>). The cursors are committed at once, since what the guard checked stays
+        /// checked, so a guard run before the rebuild loop leaves the context clean without a pass. Domain thread only;
+        /// it changes nothing a reader of the context sees, so it may run inside a callback.
         /// </summary>
-        /// <param name="rootEntries">Receives the root's new entries, in the order drained; <c>null</c> to skip
-        /// them.</param>
-        internal void ConsumeAdded(List<ContainerLogEntry>? rootEntries)
+        /// <param name="entries">Receives the new entries, ancestor by ancestor in the order drained; <c>null</c> to
+        /// skip them.</param>
+        internal void ConsumeAdded(List<(int Depth, ContainerLogEntry Entry)>? entries)
         {
+            List<ContainerLogEntry>? read = entries is null ? null : new List<ContainerLogEntry>();
             for (var a = settled; a < depth; a++)
             {
                 var cursor = cursors[a]!;
@@ -104,31 +103,40 @@ namespace Eggnog.Relations
                     continue;
 
                 log.Drain();
-                cursor.Added = log.ReadAdded(cursor.Added, a == 0 ? rootEntries : null);
+                read?.Clear();
+                cursor.Added = log.ReadAdded(cursor.Added, read);
+                if (read is not null)
+                    foreach (var entry in read)
+                        entries!.Add((a, entry));
             }
         }
 
         /// <summary>
         /// Returns the Dirty ids the container logs of the ancestors that are not settled gained since the context's
-        /// cursors, and records each log's end as pending, which <see cref="CommitCursors"/> publishes after the rebuild
-        /// loop: the ids of containers rebuilt in place, which name new contents in the rows of the context's own
-        /// layers (<see cref="Context.RefreshDirtyContainerIds"/>). Only the root's container rebuild appends Dirty ids.
-        /// Run by the first pass of <see cref="Context.Rebuild"/>; O(unsettled ancestors) plus the ids read.
+        /// cursors, and records each log's end as pending, which <see cref="CommitCursors"/> publishes after the
+        /// rebuild loop: the ids of containers an ancestor's rebuild changed in place, whose new meaning the rows of
+        /// the context's own layers that name them must show, closed by the context's container pass over its view
+        /// (<see cref="Context.RebuildContainerLayers"/>). An id that a level above its ancestor, up to the context,
+        /// shadows is left out: the context sees that level's container under it, not the ancestor's. Run by the first
+        /// pass of <see cref="Context.Rebuild"/>; O(unsettled ancestors) plus the ids read, each tested against the
+        /// shadowed ids of the levels above its ancestor.
         /// </summary>
         /// <returns>The ids, ancestor by ancestor; empty when there are none.</returns>
         internal uint[] ReadDirty()
         {
-            uint[]? result = null;
+            List<uint>? result = null;
+            var layers = owner.ContainerLayers!;
             for (var a = settled; a < depth; a++)
             {
                 var cursor = cursors[a]!;
                 var ids = chain[a].ContainerLog.ReadDirty(cursor.Dirty, out var end);
                 cursor.SetPendingDirty(end);
-                if (ids.Length > 0)
-                    result = result is null ? ids : [.. result, .. ids];
+                foreach (var id in ids)
+                    if (layers.ShadowedAboveDepth(a, id) == false)
+                        (result ??= new List<uint>()).Add(id);
             }
 
-            return result ?? Array.Empty<uint>();
+            return result?.ToArray() ?? Array.Empty<uint>();
         }
 
         /// <summary>
@@ -233,10 +241,10 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Moves every cursor to what the last catch-up read, after the rebuild loop, while no ancestor can change (they
-        /// are frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor, its
-        /// container log's positions with it: the ancestor's freeze drained its log, which never grows again, and the
-        /// loop read it to the end (the guard after each pass, the first pass's refresh).
+        /// Moves every cursor to what the last catch-up read, after the rebuild loop, while no ancestor can change
+        /// (they are frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor,
+        /// its container log's positions with it: the ancestor's freeze drained its log, which never grows again, and
+        /// the rebuild read it to the end (the guard before the loop, the first pass's Dirty read).
         /// </summary>
         /// <returns>Whether any cursor moved: the context's views must then be rebuilt, since an ancestor's hides may have
         /// changed even where none of its layers grew.</returns>

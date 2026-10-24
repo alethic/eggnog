@@ -22,16 +22,17 @@ namespace Eggnog.Relations.Tests
     /// and checks.
     /// </para>
     /// <para>
-    /// The other push/pop programs of <c>ext/egglog/tests</c> are not translated. <c>container-rebuild.egg</c>,
-    /// <c>container-fail.egg</c> and the eq-container half of <c>vec.egg</c> intern or rebuild <c>Vec</c> containers of
-    /// e-classes inside a push: they wait on eq-sort containers in children, which children refuse (a child cannot
-    /// intern one, and a child union that displaces an element of one is refused), and would be translated with
-    /// <see cref="VecContainer"/> once children have them. The rest are out of scope: the <c>UnstableFn</c> half of
-    /// <c>vec.egg</c>, <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need function values (a
-    /// container that names a function, called from inside a rule), which the library does not offer, and the last two
-    /// also rulesets of egglog's frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue #113) only
-    /// exercise egglog's type checker choosing between two <c>Map</c> sorts, which has no counterpart here, and have no
-    /// <c>check</c>, so there is nothing to compare.
+    /// Of the eq-container half of <c>vec.egg</c>, the block that rebuilds vectors in a push is translated
+    /// (<see cref="VecRebuilding"/>), since a child rebuilds the containers its own unions displace an element of, in
+    /// its container layers. The other push/pop programs of <c>ext/egglog/tests</c> are not translated.
+    /// <c>container-rebuild.egg</c>, <c>container-fail.egg</c> and the rest of that half intern <c>Vec</c> containers
+    /// of e-classes inside a push, or union them there with <c>vec-union</c>: they wait on children interning eq-sort
+    /// containers, which children refuse, and would be translated with <see cref="VecContainer"/> once they do. The
+    /// rest are out of scope: the <c>UnstableFn</c> half of <c>vec.egg</c>, <c>python_array_optimize.egg</c> and
+    /// <c>stresstest_large_expr.egg</c> need function values (a container that names a function, called from inside a
+    /// rule), which the library does not offer, and the last two also rulesets of egglog's frontend; the last two
+    /// blocks of <c>tricky-type-checking.egg</c> (issue #113) only exercise egglog's type checker choosing between two
+    /// <c>Map</c> sorts, which has no counterpart here, and have no <c>check</c>, so there is nothing to compare.
     /// </para>
     /// </remarks>
     public class EggPushPopTests
@@ -511,6 +512,52 @@ namespace Eggnog.Relations.Tests
             // (check (= (type $fog) (Hom $B $B)))
             Assert.True(p.Equal(p.TryTerm(type, fog), p.TryTerm(hom, ob2, ob2)));
             return all;
+        }
+
+        /// <summary>
+        /// <c>ext/egglog/tests/vec.egg</c>, its "Test rebuilding" block: two vectors of e-classes made at the root, which a
+        /// union in a push makes equal there only.
+        /// </summary>
+        /// <remarks>
+        /// <code>
+        /// (sort X)
+        /// (sort VX (Vec X))
+        /// (constructor a () X)
+        /// (constructor b () X)
+        /// (let $p (vec-of (a)))
+        /// (let $q (vec-of (b)))
+        /// (check (!= $p $q))
+        /// (push)
+        /// (union (a) (b))
+        /// (check (= $p $q))
+        /// (pop)
+        /// </code>
+        /// egglog runs the block clean. The child's union displaces <c>(b)</c>, which <c>$q</c> holds, so the child
+        /// rebuilds <c>$q</c> in its container layers to <c>(vec-of (a))</c>, <c>$p</c>'s contents, and the two merge
+        /// there; after the pop they are apart again, as the file's next block, which unions them with <c>vec-union</c> in
+        /// a push, needs.
+        /// </remarks>
+        [Fact]
+        public void VecRebuilding()
+        {
+            var p = new EggPushPopProgram();
+            var g = p.EGraph;
+            g.RegisterContainerType<VecContainer>();
+            var a = p.Constructor("a");
+            var b = p.Constructor("b");
+            var pv = g.GetContainerValue(new VecContainer(p.Term(a).Rep));
+            var q = g.GetContainerValue(new VecContainer(p.Term(b).Rep));
+            Assert.False(p.Equal(pv, q));
+
+            p.Push();
+            p.Union(p.Term(a), p.Term(b));
+            Assert.True(p.Equal(pv, q));
+            Assert.Equal(1, p.Size(a));
+            Assert.Equal(1, p.Size(b));
+            p.Pop();
+
+            Assert.False(p.Equal(pv, q));
+            g.Root.CheckInvariants();
         }
 
         /// <summary>

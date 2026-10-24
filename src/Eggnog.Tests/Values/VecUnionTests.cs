@@ -172,7 +172,8 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void OnlyTheRootUnionsVectors()
         {
-            // The classes vec-union unions are held by the vectors, which only the root rebuilds (decisions row 9).
+            // The classes vec-union unions are held by the vectors; the library unions them only at the root (decisions
+            // row 9).
             var t = new Theory();
             var u = t.Graph.DefineFunction<Vec<Node>>("u");
             var rules = t.Graph.DefineRuleset("rules");

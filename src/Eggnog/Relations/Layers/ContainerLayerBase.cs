@@ -67,6 +67,20 @@ namespace Eggnog.Relations
         /// <param name="violations">Receives one line per violation.</param>
         public abstract void CheckInvariants(ContainerLayers owner, List<string> violations);
 
+        /// <summary>
+        /// Adds to <paramref name="violations"/>, each starting with <c>container view:</c>, every entry of the layer's
+        /// own environment whose id or contents are not canonical in the context, and every one whose content a level
+        /// below shows the context under another id: what a clean context's container pass leaves
+        /// (<see cref="ContainerLayers.CheckInvariants"/>). The entries are read under the environment's shard locks
+        /// and checked after. Requires that nothing changes the layer meanwhile.
+        /// </summary>
+        /// <param name="owner">The layers of the context the layer belongs to.</param>
+        /// <param name="root">The root's environment of the layer's type.</param>
+        /// <param name="rebuilder">The context's union-find canonicalizer.</param>
+        /// <param name="find">The context's union-find.</param>
+        /// <param name="violations">Receives one line per violation.</param>
+        public abstract void CheckView(ContainerLayers owner, ContainerEnvBase root, Rebuilder rebuilder, LayeredUnionFind find, List<string> violations);
+
     }
 
 }

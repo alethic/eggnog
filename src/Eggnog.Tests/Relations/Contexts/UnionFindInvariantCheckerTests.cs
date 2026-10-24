@@ -139,8 +139,8 @@ namespace Eggnog.Relations.Tests
         [Fact]
         public void AMissingJournalRowIsReported()
         {
-            // Drop the last journal row behind the context's back, keeping it clean: the journal then misses a
-            // displaced id.
+            // Drop the last journal row behind the context's back, keeping it clean (its rebuild and container pass
+            // marks moved back with the count): the journal then misses a displaced id.
             var (_, _, child, _) = Setup();
             var journal = child.Journal!;
             var count = journal.Count;
@@ -149,6 +149,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(Field<RawHashTable<IdEntry>>(journal, "rowOf").Remove(FxHasher.Hash(last), ref match, out _));
             SetField(journal, "count", count - 1);
             SetField(child, "journalMark", count - 1);
+            child.ContainerLayers!.ContainerMark = count - 1;
             Assert.True(child.IsClean);
             AssertViolation(child, "journal:");
         }

@@ -220,8 +220,8 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void AChildMergesNoClassAFunctionValueHolds()
         {
-            // The root holds (unstable-fn "score" (Num 1)), whose container only the root rebuilds; a child may not merge
-            // (Num 1) away, so the class the value holds stays canonical there, and a rule reads its row.
+            // The root holds (unstable-fn "score" (Num 1)); the library lets a child merge no class a container holds
+            // away, so the class the value holds stays canonical there, and a rule reads its row.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -255,8 +255,8 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void AWritePrimitiveAppliesOnlyAtTheRoot()
         {
-            // (let $fv (unstable-fn "vec-union" (vec-of (Num 1)))) (unstable-app $fv (vec-of (Num 2))) unions (Num 1) and
-            // (Num 2), which containers hold; only the root rebuilds them, as when vec-union is called.
+            // (let $fv (unstable-fn "vec-union" (vec-of (Num 1)))) (unstable-app $fv (vec-of (Num 2))) unions (Num 1)
+            // and (Num 2), which containers hold; the library does that only at the root, as when vec-union is called.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");

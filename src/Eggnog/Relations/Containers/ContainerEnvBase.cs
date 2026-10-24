@@ -22,7 +22,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="typeId">The environment's id in its <see cref="ContainerValues"/>.</param>
         /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers), which a child context
-        /// may look up but not intern; <c>false</c> for containers over base values only.</param>
+        /// may look up and rebuild in its own layers but not intern; <c>false</c> for containers over base values
+        /// only.</param>
         private protected ContainerEnvBase(ContainerTypeId typeId, bool holdsIds)
         {
             TypeId = typeId;
@@ -37,10 +38,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether the containers hold e-class ids: eq-sort containers, which a child context may look up but not
-        /// intern, and whose elements a child may not displace (<see cref="EqContainerGuard"/>), because children never
-        /// rebuild containers. Containers over base values are registered with <c>holdsIds: false</c> and are allowed
-        /// everywhere. One volatile read: a type registered over base values may come to hold ids
-        /// (<see cref="MarkHoldsIds"/>) while other threads intern or look containers up.
+        /// intern, and which a child that displaces one of their elements rebuilds in its own container layers
+        /// (<see cref="ContainerLayers.RebuildPass"/>). Containers over base values are registered with <c>holdsIds:
+        /// false</c>, are allowed everywhere and never rebuild. One volatile read: a type registered over base values
+        /// may come to hold ids (<see cref="MarkHoldsIds"/>) while other threads intern or look containers up.
         /// </summary>
         public bool HoldsIds => holdsIds;
 
@@ -93,8 +94,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some container of this environment holds <paramref name="value"/>, through the exact element
-        /// index: the question the eq-container guard asks of each id a child displaced
-        /// (<see cref="EqContainerGuard"/>). Thread-safe; one probe.
+        /// index (<see cref="ContainerValues.AnyEqContainerMentions"/>). Thread-safe; one probe.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns><c>true</c> if a container holds it.</returns>
@@ -130,6 +130,60 @@ namespace Eggnog.Relations
         /// debugging; O(size), allocates. Requires that nothing changes the environment meanwhile.
         /// </summary>
         public abstract void CheckInvariants();
+
+        /// <summary>
+        /// Runs one child context's container pass over this type, this being the root's environment of it:
+        /// <see cref="ContainerLayers.RebuildType{TContainer}"/>, reached through the type-erased environment, as a
+        /// rebuild reaches each type. Domain thread of the child only.
+        /// </summary>
+        /// <param name="layers">The child's container layers, in their pass.</param>
+        /// <param name="delta">The ids the child's journal gained since its last container pass.</param>
+        /// <param name="ownLosers">Those of them the child displaced itself, not local to it.</param>
+        /// <param name="summary">Receives the changes and the dirty ids.</param>
+        internal abstract void RebuildLayer(ContainerLayers layers, ReadOnlySpan<uint> delta, ReadOnlySpan<uint> ownLosers, ContainerRebuildSummary summary);
+
+        /// <summary>
+        /// Gets the id under which <paramref name="other"/>, an environment of the same container type, holds a
+        /// container equal to the one this environment stores under <paramref name="id"/> with content hash
+        /// <paramref name="hash"/> (the entry a <see cref="ContainerLogEntry"/> names), under both environments' shard
+        /// locks in turn: what a child's eq-container guard asks of an entry an ancestor's container log gained and the
+        /// child's own layer (<see cref="EqContainerGuard"/>). Thread-safe.
+        /// </summary>
+        /// <param name="id">The entry's id.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="other">The environment to look the entry's container up in.</param>
+        /// <param name="otherId">The id <paramref name="other"/> holds it under, or zero.</param>
+        /// <returns><c>false</c> when no such entry is stored any more, or <paramref name="other"/> holds no equal
+        /// container.</returns>
+        internal abstract bool TryFindEqual(uint id, ulong hash, ContainerEnvBase other, out uint otherId);
+
+        /// <summary>
+        /// Gets whether the view of the child context whose layers are <paramref name="layers"/> holds what the entry
+        /// this environment, an ancestor's, stores under <paramref name="id"/> with content hash <paramref name="hash"/>
+        /// (the entry a <see cref="ContainerLogEntry"/> names) stands for there. What a child's eq-container guard asks,
+        /// after the rebuild's passes, of an entry an ancestor's container log gained under an id the child claimed
+        /// (<see cref="EqContainerGuard.CheckClaimedIds"/>). Under the shard locks of this environment and of each level
+        /// the lookup probes, in turn.
+        /// </summary>
+        /// <remarks>
+        /// An entry that is the only one under its id here is the content the child claimed, as the ancestor rebuilt it
+        /// in place or claimed it itself: a rename onto the id leaves the id's own content beside it, which a level puts
+        /// in its layer before anything else goes under the id. The child's copy follows the child's own rebuild
+        /// history, so it stands for the entry whatever its content, and the view need only hold a container under
+        /// <paramref name="id"/> rebuilt: for a container whose rebuild depends on its elements' order, a map whose keys
+        /// collapse, the two histories may end in different contents. An entry that shares its id stands for its
+        /// content rebuilt against <paramref name="rebuilder"/>, the child's union-find canonicalizer, which the view
+        /// must hold under <paramref name="id"/> rebuilt; for such a map that comparison may also refuse a copy that a
+        /// fresh root would hold.
+        /// </remarks>
+        /// <param name="id">The entry's id.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="root">The root's environment of this environment's type.</param>
+        /// <param name="layers">The child's container layers.</param>
+        /// <param name="rebuilder">The child's union-find canonicalizer.</param>
+        /// <returns><c>false</c> if the entry is stored and the child's view does not hold what it stands for;
+        /// <c>true</c> otherwise, also when no such entry is stored any more.</returns>
+        internal abstract bool ViewHoldsRebuilt(uint id, ulong hash, ContainerEnvBase root, ContainerLayers layers, Rebuilder rebuilder);
 
         /// <summary>
         /// Moves the Added entries this environment buffered for <see cref="Log"/> to <paramref name="destination"/>,

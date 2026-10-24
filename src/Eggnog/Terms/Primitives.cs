@@ -238,8 +238,9 @@ namespace Eggnog
         /// or a host write, for its effect alone (<see cref="Fact.Exists"/>, egglog's <c>(vec-union a b)</c>) or as a value
         /// written, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a rule's body, a query or a
         /// read. Its unions take effect after the fact or the rule's iteration, as egglog's after
-        /// the command. It runs only at the root: the classes it unions are held by vectors, which only the root rebuilds
-        /// (decisions row 9). Its <c>Function</c> and <c>TryInvoke</c> throw <see cref="InvalidOperationException"/>.
+        /// the command. It runs only at the root: the classes it unions are held by vectors, and the library unions such
+        /// classes only there (decisions row 9). Its <c>Function</c> and <c>TryInvoke</c> throw
+        /// <see cref="InvalidOperationException"/>.
         /// </summary>
         /// <typeparam name="TSort">The sort of the elements.</typeparam>
         /// <returns>The primitive.</returns>

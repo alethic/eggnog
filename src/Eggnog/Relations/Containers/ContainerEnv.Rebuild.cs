@@ -46,8 +46,8 @@ namespace Eggnog.Relations
         /// The provider's rows in <paramref name="recent"/> are scanned for <paramref name="searchColumn"/> (for the
         /// union-find, column 0: the ids that stopped being canonical); each such id and the containers the element
         /// index lists for it are revisited, in that order without repeats. Each revisited container is taken out of
-        /// every structure, rebuilt (contents and id) and inserted back, merging with an equal container if there is one
-        /// (<see cref="ReinsertIncremental"/>).
+        /// every structure, rebuilt (contents and id) and inserted back, merging with an equal container if there is
+        /// one (<see cref="ReinsertIncremental{TPolicy}"/>).
         /// </para>
         /// <para>
         /// egglog takes out and reinserts one container at a time. Here every revisited container is taken out before
@@ -73,13 +73,42 @@ namespace Eggnog.Relations
 
             var summary = new ContainerRebuildSummary();
             var ids = scratchIds ??= new OrderedValueSet();
-            var taken = scratchEntries ??= new List<ContainerEntry<TContainer>>();
             ids.Clear();
-            taken.Clear();
 
             var collector = new DisplacedIdCollector(valIndex, ids);
             table.ForEachColumn(recent, searchColumn, ref collector);
-            foreach (var id in ids.AsSpan())
+            RebuildIds(ids.AsSpan(), rebuilder, state, default(RootInsertPolicy<TContainer>), summary);
+            ids.Clear();
+            return summary;
+        }
+
+        /// <summary>
+        /// Rebuilds the containers stored under <paramref name="ids"/>, in that order: each is taken out of every
+        /// structure, rebuilt (contents and id) and put back through <paramref name="policy"/>
+        /// (<see cref="ReinsertIncremental{TPolicy}"/>). The body of egglog's <c>apply_rebuild_incremental</c>
+        /// (mod.rs:464-519) after its scan, given the ids to revisit: the root's incremental rebuild gathers them from
+        /// the union-find's recent rows (<see cref="ApplyRebuildIncremental"/>), and a child's container pass from its
+        /// journal's delta and its claims (<see cref="ContainerLayers.RebuildPass"/>). Serial, as egglog's is. Requires
+        /// exclusive access.
+        /// </summary>
+        /// <remarks>
+        /// Every revisited container is taken out before any is put back (see <see cref="ApplyRebuildIncremental"/>).
+        /// The policy may claim ids into the environment meanwhile (a child's), which never touches the containers
+        /// taken out. Cost: O(revisited containers × size), plus one index update per value removed or added.
+        /// </remarks>
+        /// <typeparam name="TPolicy">The insert policy.</typeparam>
+        /// <param name="ids">The ids to revisit, without repeats; an id under which nothing is stored is
+        /// skipped.</param>
+        /// <param name="rebuilder">The rebuilder.</param>
+        /// <param name="state">The state merge functions run in.</param>
+        /// <param name="policy">How the rebuilt containers are put back.</param>
+        /// <param name="summary">Receives the changes.</param>
+        internal void RebuildIds<TPolicy>(ReadOnlySpan<uint> ids, Rebuilder rebuilder, ExecutionState state, TPolicy policy, ContainerRebuildSummary summary)
+            where TPolicy : struct, IContainerInsertPolicy<TContainer>
+        {
+            var taken = scratchEntries ??= new List<ContainerEntry<TContainer>>();
+            taken.Clear();
+            foreach (var id in ids)
                 TakeAll(id, taken);
 
             foreach (ref var entry in CollectionsMarshal.AsSpan(taken))
@@ -87,19 +116,31 @@ namespace Eggnog.Relations
                 var oldId = entry.Id;
                 var rebuiltId = rebuilder.RebuildValue(oldId);
                 if (entry.Container.TryRebuild(rebuilder, out var rebuilt))
-                    ReinsertIncremental(rebuilt, rebuilt.ComputeHash(), oldId, rebuiltId, true, state, summary);
+                    ReinsertIncremental(rebuilt, rebuilt.ComputeHash(), oldId, rebuiltId, true, state, summary, policy);
                 else
-                    ReinsertIncremental(entry.Container, entry.Hash, oldId, rebuiltId, false, state, summary);
+                    ReinsertIncremental(entry.Container, entry.Hash, oldId, rebuiltId, false, state, summary, policy);
             }
 
-            ids.Clear();
             taken.Clear();
-            return summary;
         }
 
         /// <summary>
-        /// Inserts back a container an incremental rebuild took out and rebuilt, and records what changed. egglog's
-        /// <c>reinsert_incremental</c> (mod.rs:441-462).
+        /// Inserts back a container an incremental rebuild took out and rebuilt, and records what changed, as the root
+        /// does: <see cref="ReinsertIncremental{TPolicy}"/> with <see cref="RootInsertPolicy{TContainer}"/>.
+        /// </summary>
+        /// <param name="container">The rebuilt container.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="oldId">Its id before the rebuild.</param>
+        /// <param name="rebuiltId">Its id rebuilt.</param>
+        /// <param name="containerChanged">Whether the contents changed.</param>
+        /// <param name="state">The state merge functions run in.</param>
+        /// <param name="summary">Receives the changes.</param>
+        internal void ReinsertIncremental(in TContainer container, ulong hash, uint oldId, uint rebuiltId, bool containerChanged, ExecutionState state, ContainerRebuildSummary summary) =>
+            ReinsertIncremental(container, hash, oldId, rebuiltId, containerChanged, state, summary, default(RootInsertPolicy<TContainer>));
+
+        /// <summary>
+        /// Inserts back a container an incremental rebuild took out and rebuilt, through <paramref name="policy"/>, and
+        /// records what changed. egglog's <c>reinsert_incremental</c> (mod.rs:441-462).
         /// </summary>
         /// <remarks>
         /// A change of contents or id is a change. The id is dirty only when the contents changed, the id did not, and
@@ -108,6 +149,7 @@ namespace Eggnog.Relations
         /// container must already be out of every structure (<see cref="TakeAll"/>), which is where egglog drops its
         /// reverse-map entry for a changed id.
         /// </remarks>
+        /// <typeparam name="TPolicy">The insert policy.</typeparam>
         /// <param name="container">The rebuilt container.</param>
         /// <param name="hash">Its content hash.</param>
         /// <param name="oldId">Its id before the rebuild.</param>
@@ -115,12 +157,14 @@ namespace Eggnog.Relations
         /// <param name="containerChanged">Whether the contents changed.</param>
         /// <param name="state">The state merge functions run in.</param>
         /// <param name="summary">Receives the changes.</param>
-        internal void ReinsertIncremental(in TContainer container, ulong hash, uint oldId, uint rebuiltId, bool containerChanged, ExecutionState state, ContainerRebuildSummary summary)
+        /// <param name="policy">How the container is put back.</param>
+        internal void ReinsertIncremental<TPolicy>(in TContainer container, ulong hash, uint oldId, uint rebuiltId, bool containerChanged, ExecutionState state, ContainerRebuildSummary summary, TPolicy policy)
+            where TPolicy : struct, IContainerInsertPolicy<TContainer>
         {
             if (containerChanged || rebuiltId != oldId)
                 summary.NoteChange();
 
-            var actual = InsertOwned(container, hash, rebuiltId, state);
+            var actual = policy.Insert(this, container, hash, rebuiltId, state);
             if (containerChanged && rebuiltId == oldId && actual == oldId)
                 summary.NoteDirtyId(oldId);
         }
@@ -175,11 +219,12 @@ namespace Eggnog.Relations
         /// environments (more than one), so there any two containers go parallel (mod.rs:526).
         /// </para>
         /// <para>
-        /// Serially, each hash-cons shard is walked once (<see cref="ContainerRebuildPredicate{TContainer}"/>): an entry
-        /// whose contents changed is taken out of every structure and queued; an entry whose id alone changed is renamed
-        /// in place, moving its reverse-map entry and its index occurrences (egglog leaves the index stale here,
-        /// mod.rs:553-558). The queued containers are then inserted back, merging where they collide; a container whose
-        /// id did not change and survived its merge is dirty.
+        /// Serially, each hash-cons shard is walked once
+        /// (<see cref="ContainerRebuildPredicate{TContainer, TPolicy}"/>): an entry whose contents changed is taken out
+        /// of every structure and queued; an entry whose id alone changed is renamed in place, moving its reverse-map
+        /// entry and its index occurrences (egglog leaves the index stale here, mod.rs:553-558). The queued containers
+        /// are then inserted back, merging where they collide; a container whose id did not change and survived its
+        /// merge is dirty (<see cref="RebuildAllSerial{TPolicy}"/>).
         /// </para>
         /// <para>
         /// Cost: O(total size of all containers), plus index updates for the changed ones.
@@ -197,6 +242,31 @@ namespace Eggnog.Relations
                 return ApplyRebuildNonincrementalParallel(rebuilder, state);
 
             var summary = new ContainerRebuildSummary();
+            RebuildAllSerial(rebuilder, state, default(RootInsertPolicy<TContainer>), summary);
+            return summary;
+        }
+
+        /// <summary>
+        /// Rebuilds every container serially, putting the changed ones back through <paramref name="policy"/>: the
+        /// serial arm of egglog's <c>apply_rebuild_nonincremental</c> (mod.rs:521-571), which the root's full rebuild
+        /// runs (<see cref="ApplyRebuildNonincremental"/>), and a child's container pass over its layer's own
+        /// environment whenever its rebuild is not incremental (<see cref="ContainerLayers.RebuildPass"/>), never in
+        /// parallel. Requires exclusive access.
+        /// </summary>
+        /// <remarks>
+        /// Each hash-cons shard is walked once under its lock
+        /// (<see cref="ContainerRebuildPredicate{TContainer, TPolicy}"/>), and the queued containers are put back after
+        /// the walk, outside every lock, so the policy may take locks of its own (a child's claims). A container whose
+        /// id did not change and survived its insert is dirty.
+        /// </remarks>
+        /// <typeparam name="TPolicy">The insert policy.</typeparam>
+        /// <param name="rebuilder">The rebuilder.</param>
+        /// <param name="state">The state merge functions run in.</param>
+        /// <param name="policy">How the changed containers are put back.</param>
+        /// <param name="summary">Receives the changes.</param>
+        internal void RebuildAllSerial<TPolicy>(Rebuilder rebuilder, ExecutionState state, TPolicy policy, ContainerRebuildSummary summary)
+            where TPolicy : struct, IContainerInsertPolicy<TContainer>
+        {
             var queue = scratchReinserts ??= new List<ContainerReinsert<TContainer>>();
             queue.Clear();
             var outbox = new List<ContainerReinsert<TContainer>>?[] { queue };
@@ -204,7 +274,7 @@ namespace Eggnog.Relations
             {
                 lock (shard)
                 {
-                    var predicate = new ContainerRebuildPredicate<TContainer>(this, rebuilder, outbox, 0, 1);
+                    var predicate = new ContainerRebuildPredicate<TContainer, TPolicy>(this, rebuilder, policy, outbox, 0, 1);
                     shard.Retain(ref predicate);
                     if (predicate.Changed)
                         summary.NoteChange();
@@ -213,7 +283,7 @@ namespace Eggnog.Relations
 
             foreach (var item in CollectionsMarshal.AsSpan(queue))
             {
-                var actual = InsertOwned(item.Container, item.Hash, item.Id, state);
+                var actual = policy.Insert(this, item.Container, item.Hash, item.Id, state);
 
                 // Refresh only when the rebuild changed a container's meaning in place. If the id changed, the ordinary
                 // table rebuild already gives the parent rows a fresh timestamp (mod.rs:563-568).
@@ -222,7 +292,6 @@ namespace Eggnog.Relations
             }
 
             queue.Clear();
-            return summary;
         }
 
         /// <summary>
