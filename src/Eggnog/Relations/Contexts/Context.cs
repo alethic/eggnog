@@ -19,8 +19,8 @@ namespace Eggnog.Relations
     /// catalog, notification list, pending queues and size estimate, and shares the store's counters, external
     /// functions, dependency graph and container environments with the root by reference. Over those environments a
     /// child keeps container layers of its own (<see cref="ContainerLayers"/>), which it and its descendants read
-    /// containers through (<see cref="ContainerView"/>); the engine places nothing in them, so a child reads the root's
-    /// containers.
+    /// containers through (<see cref="ContainerView"/>): the copies of its ancestors' containers of classes that its
+    /// rebuild claimed and rebuilt, where its own unions displaced an id they hold.
     /// </para>
     /// <para>
     /// Lifecycle. <see cref="CreateChild"/> makes a child; children of a context that is not frozen share its thread
@@ -48,10 +48,11 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Rebuild. <see cref="Rebuild"/> is the one rebuild loop of every level: egglog's passes at the root; in a child,
-    /// catch-up with its ancestors (union-find re-key, ancestor appends, container refresh) in the first pass, then per
-    /// pass the rewrite of its own rows, the hide-and-copy of ancestor rows naming its own losers (losers only) and the
-    /// merge. Before the root is shared (a child created from it, or a freeze) it settles the rows written since its
-    /// last rebuild (<see cref="Settle"/>).
+    /// catch-up with its ancestors (union-find re-key, ancestor appends, the ancestors' dirty container ids) in the
+    /// first pass, then per pass its container pass over its container layers, the rewrite of its own rows, the
+    /// hide-and-copy of ancestor rows naming its own losers (losers only) or a container its pass changed in place, and
+    /// the merge. Before the root is shared (a child created from it, or a freeze) it settles the rows written since
+    /// its last rebuild (<see cref="Settle"/>).
     /// </para>
     /// </remarks>
     internal sealed partial class Context : IDisposable
@@ -142,12 +143,6 @@ namespace Eggnog.Relations
 
         long importedDisplacements;
         long rekeyedMembers;
-
-        /// <summary>
-        /// The journal rows the eq-container guard has checked against every container the root holds; the containers
-        /// the root gains later the guard reads from the root's container log, through the cursor into it.
-        /// </summary>
-        int eqCheckedRows;
 
         /// <summary>
         /// The thread domain; reassigned (on the domain's own thread) when an ancestor freezes, so read volatile.
@@ -241,13 +236,13 @@ namespace Eggnog.Relations
             domain = parent.IsFrozen ? new ThreadAffinityGuard() : parent.Domain;
 
             // No layer yet; cursors at the ancestors' current versions and at the end of their container logs (which
-            // CreateChild activated), the leading frozen ancestors settled. The journal is empty, so the eq-container
-            // guard starts current.
+            // CreateChild activated), the leading frozen ancestors settled.
             tables = new ContextTables(store.Schema, this);
             database.AttachLayers(tables);
 
-            // No container layer yet either; the child reads containers through its own and its ancestors' layers.
-            containerLayers = new ContainerLayers(parent.containerLayers, idBlocks, parallelism);
+            // No container layer yet either; the child reads containers through its own and its ancestors' layers, and
+            // its container pass fills its own.
+            containerLayers = new ContainerLayers(this, parent.containerLayers, idBlocks, parallelism);
 
             // Read after every cursor is initialized (the union-find cursor and the row cursors above), so anything the
             // parent wrote at an earlier epoch is already part of the child's starting view.
@@ -395,11 +390,15 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in
-        /// egglog. A child is not clean while an ancestor that is not settled changed since it last caught up
+        /// egglog. A child is not clean while its container pass has not consumed its journal
+        /// (<see cref="ContainerLayers.ContainerMark"/>), which a rebuild cut short by the clock can leave behind, or
+        /// while an ancestor that is not settled changed since it last caught up
         /// (<see cref="ContextTables.NeedsCatchUp"/>), which includes, while the child has a displacement or a
         /// container layer, an eq-sort container in the ancestor's container log that its eq-container guard has not
         /// read (<see cref="Relations.ContainerLog"/>): such a container is reconciled only by a rebuild, which refuses
-        /// the child if the container names one of its losers.
+        /// the child if the container concerns it (<see cref="EqContainerGuard"/>); nor while the guard keeps such
+        /// containers under ids the child claimed, which the rebuild checks after its passes
+        /// (<see cref="ContainerLayers.HasEntriesOnClaimedIds"/>).
         /// </remarks>
         public bool IsClean
         {
@@ -415,6 +414,8 @@ namespace Eggnog.Relations
                     return journalMark == DisplacedCount;
 
                 return journalMark == journal!.Count
+                    && containerLayers!.ContainerMark == journalMark
+                    && containerLayers.HasEntriesOnClaimedIds == false
                     && database.Catalog.Notifications.IsEmpty
                     && unionFindCursor == parent.DisplacedCount
                     && tables!.NeedsCatchUp == false
@@ -425,9 +426,10 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the context's views show what it sees now: <see cref="IsClean"/> without its term for writes
         /// staged and not merged, at every level of the chain. Staged writes are invisible until merged (as at a root),
-        /// so they never make a view stale; a pending own rebuild, or an ancestor change not caught up with (an eq-sort
-        /// container its eq-container guard has not checked included), do. What rule building, planning and a rule run
-        /// in a child require (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
+        /// so they never make a view stale; a pending own rebuild (of its rows or its container layers), or an ancestor
+        /// change not caught up with (an eq-sort container its eq-container guard has not checked, or keeps to check
+        /// after the rebuild's passes, included), do. What rule building, planning and a rule run in a child require
+        /// (<see cref="ThrowIfViewNotCurrent"/>). O(unfrozen ancestors).
         /// </summary>
         internal bool IsViewCurrent
         {
@@ -443,6 +445,8 @@ namespace Eggnog.Relations
                     return journalMark == DisplacedCount;
 
                 return journalMark == journal!.Count
+                    && containerLayers!.ContainerMark == journalMark
+                    && containerLayers.HasEntriesOnClaimedIds == false
                     && unionFindCursor == parent.DisplacedCount
                     && tables!.NeedsCatchUp == false
                     && parent.IsViewCurrent;

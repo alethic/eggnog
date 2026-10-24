@@ -115,6 +115,33 @@ namespace Eggnog.Relations
                 Context.Report(violations, $"container layers: type {TypeId} held {frozenCount} containers when the context froze and holds {Own.Count} now");
         }
 
+        /// <inheritdoc />
+        public override void CheckView(ContainerLayers owner, ContainerEnvBase root, Rebuilder rebuilder, LayeredUnionFind find, List<string> violations)
+        {
+            ArgumentNullException.ThrowIfNull(owner);
+            ArgumentNullException.ThrowIfNull(root);
+            ArgumentNullException.ThrowIfNull(rebuilder);
+            ArgumentNullException.ThrowIfNull(find);
+            ArgumentNullException.ThrowIfNull(violations);
+
+            var entries = new List<ContainerEntry<TContainer>>();
+            var collector = new ContainerEntryCollector<TContainer>(entries);
+            Own.ForEach(ref collector);
+            var env = (ContainerEnv<TContainer>)root;
+            foreach (var entry in entries)
+            {
+                var id = entry.Id;
+                if (find.Find(id) != id)
+                    Context.Report(violations, $"container view: type {TypeId} holds a container under {id}, which is {find.Find(id)} in the context");
+
+                if (entry.Container.TryRebuild(rebuilder, out var rebuilt))
+                    Context.Report(violations, $"container view: type {TypeId} holds {entry.Container} under {id}, whose contents are {rebuilt} in the context");
+
+                if (owner.TryGetIdBelow(env, entry.Container, entry.Hash, out var below))
+                    Context.Report(violations, $"container view: type {TypeId} holds {entry.Container} under {id}, and the context sees it at a level below under {below} too");
+            }
+        }
+
     }
 
 }

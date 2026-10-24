@@ -19,8 +19,9 @@ namespace Eggnog.Relations
     /// and misses the new id after a rebuild renames a container without changing its contents (mod.rs:553-558,
     /// 618-623). Here every removal of a container from the hash-cons removes its occurrences and every rename moves
     /// them, so an id is listed under a value exactly when a live container with that id holds the value. Colored
-    /// contexts rely on that: a child's eq-container guard asks whether any live container holds an id the child
-    /// displaced (<see cref="ContainsElement"/>, <see cref="EqContainerGuard"/>).
+    /// contexts rely on that: a child's container pass claims, through each level's index, every container its view
+    /// holds that holds an id the child displaced, and closes its dirty ids over the holders it lists
+    /// (<see cref="ContainerLayers.RebuildPass"/>).
     /// </para>
     /// <para>
     /// Each value maps to a multiset of ids counted by occurrence (<see cref="ValueIndexEntry"/>), so removals undo
@@ -74,9 +75,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether some live container holds <paramref name="element"/> (the index is exact): the probe of the
-        /// eq-container guard of a child context's rebuild (<see cref="EqContainerGuard"/>). One lock and one
-        /// expected-O(1) probe.
+        /// Gets whether some live container holds <paramref name="element"/> (the index is exact): the probe of
+        /// <see cref="ContainerValues.AnyEqContainerMentions"/>. One lock and one expected-O(1) probe.
         /// </summary>
         /// <param name="element">The value.</param>
         /// <returns><c>true</c> if a container holds it.</returns>

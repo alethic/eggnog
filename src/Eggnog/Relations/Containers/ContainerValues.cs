@@ -126,8 +126,9 @@ namespace Eggnog.Relations
         public int TypeCount => Volatile.Read(ref envs).IdCount;
 
         /// <summary>
-        /// Gets whether any registered container type holds e-class ids: the quick test of the eq-container guard
-        /// (<see cref="EqContainerGuard"/>), which a child's rebuild runs only when it holds. One volatile read.
+        /// Gets whether any registered container type holds e-class ids: the quick test of a child's container pass
+        /// (<see cref="ContainerLayers.RebuildPass"/>) and its eq-container guard (<see cref="EqContainerGuard"/>),
+        /// which run only when it holds. One volatile read.
         /// </summary>
         public bool HasEqContainers => hasEqContainers;
 
@@ -142,10 +143,10 @@ namespace Eggnog.Relations
         public ContainerLog Log => log;
 
         /// <summary>
-        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/>: a child that
-        /// displaced such an id would need the container rebuilt in the child, which children never do, so the child's
-        /// eq-container guard refuses it (<see cref="EqContainerGuard"/>). O(types) probes of exact element indexes;
-        /// thread-safe.
+        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/> in these
+        /// environments: what the library asks of the class a host merge in a child would displace, which it refuses
+        /// (decisions row 9), although the child's container pass would rebuild its copy of the container
+        /// (<see cref="ContainerLayers.RebuildPass"/>). O(types) probes of exact element indexes; thread-safe.
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns><c>true</c> if an eq-sort container holds it.</returns>

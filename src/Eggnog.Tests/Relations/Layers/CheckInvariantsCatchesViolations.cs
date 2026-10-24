@@ -8,8 +8,8 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The tables part of the context checker, its eq-container part and its container-log part catch violations: each
-    /// test corrupts one invariant deliberately, through internal members no correct operation uses that way, and
+    /// The tables part of the context checker, its container-layers part and its container-log part catch violations:
+    /// each test corrupts one invariant deliberately, through internal members no correct operation uses that way, and
     /// asserts that <see cref="Context.CheckInvariants"/> reports it under the checker's label for that invariant.
     /// </summary>
     public class CheckInvariantsCatchesViolations
@@ -55,6 +55,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// Interns <paramref name="container"/> at the root.
+        /// </summary>
+        static uint Intern(Context root, VecContainer container) =>
+            root.Database.WithExecutionState(state => state.Containers.GetOrInsert(container, state));
+
+        /// <summary>
         /// An own row names an id the context displaced, and the context was marked rebuilt without rewriting it: a
         /// clean context's visible rows name canonical ids only.
         /// </summary>
@@ -66,6 +72,7 @@ namespace Eggnog.Relations.Tests
             Insert(child, f, b, 5, 0);
             child.Union(a, b);
             child.JournalMark = child.Journal!.Count;
+            child.ContainerLayers!.ContainerMark = child.JournalMark;
             Assert.True(child.IsClean);
             AssertViolates(child, "canonical ids");
         }
@@ -202,8 +209,10 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// An eq-sort container holds an id the child displaced, and the child's Added cursor into the root's container
-        /// log was moved past the container's entry behind the guard's back, so the guard never saw the container.
+        /// An eq-sort container the root interned after the child displaced one of its elements holds the child's
+        /// loser, and the child's Added cursor into the root's container log was moved past the container's entry
+        /// behind the guard's back, so the guard never saw the container: the child's view holds a container naming an
+        /// id that is not canonical in it.
         /// </summary>
         [Fact]
         public void AnEqContainerHoldingAnOwnLoserIsReported()
@@ -224,7 +233,98 @@ namespace Eggnog.Relations.Tests
             store.ContainerLog.Drain();
             child.Tables!.CursorAt(0)!.Added = store.ContainerLog.AddedCount;
             Assert.True(child.IsClean);
-            AssertViolates(child, "eq-sort containers");
+            Assert.Contains($"holds {y}, which is not canonical in the context", AssertViolates(child, "container view"));
+        }
+
+        /// <summary>
+        /// The child's layer holds a container whose contents are not canonical in the child: its container pass
+        /// claimed and rebuilt the root's <c>v = [w]</c> when it displaced <c>w</c>, and a test then placed <c>[w]</c>
+        /// under another root id, which no pass rebuilt.
+        /// </summary>
+        [Fact]
+        public void AStaleContainerInALayerBreaksTheContainerView()
+        {
+            var (store, env) = SetupContainers();
+            var root = store.Root;
+            var x = root.NewId();
+            var w = root.NewId();
+            var y = root.NewId();
+            Intern(root, new VecContainer(w));
+            var u = Intern(root, new VecContainer(y));
+            root.Freeze();
+            var child = root.CreateChild();
+            child.Union(x, w);
+            child.Rebuild();
+            child.CheckInvariants();
+
+            child.ContainerLayers!.Place(env, new VecContainer(w), u);
+            Assert.True(child.IsClean);
+            Assert.Contains($"under {u}, whose contents are", AssertViolates(child, "container view"));
+        }
+
+        /// <summary>
+        /// The child's view holds one content under two ids: a test placed the root's <c>[a]</c>, which the root holds
+        /// under <c>v1</c>, in the child's layer under the root's <c>v2</c>.
+        /// </summary>
+        [Fact]
+        public void AContentSeenUnderTwoIdsBreaksTheContainerView()
+        {
+            var (store, env) = SetupContainers();
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var v1 = Intern(root, new VecContainer(a));
+            var v2 = Intern(root, new VecContainer(b));
+            root.Freeze();
+            var child = root.CreateChild();
+            child.ContainerLayers!.Place(env, new VecContainer(a), v2);
+            Assert.True(child.IsClean);
+            Assert.Contains($"sees it at a level below under {v1} too", AssertViolates(child, "container view"));
+        }
+
+        /// <summary>
+        /// The child sees a root container under an id it displaced: it unioned the ids of two root containers and was
+        /// marked rebuilt without its container pass, which would have claimed the loser's container.
+        /// </summary>
+        [Fact]
+        public void ARootContainerUnderAnOwnLoserBreaksTheContainerView()
+        {
+            var (store, _) = SetupContainers();
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var v1 = Intern(root, new VecContainer(a));
+            var v2 = Intern(root, new VecContainer(b));
+            root.Freeze();
+            var child = root.CreateChild();
+            child.Union(v1, v2);
+            child.JournalMark = child.Journal!.Count;
+            child.ContainerLayers!.ContainerMark = child.JournalMark;
+            Assert.True(child.IsClean);
+            Assert.Contains($"under {v2}, which is not canonical in the context", AssertViolates(child, "container view"));
+        }
+
+        /// <summary>
+        /// The child's container pass has not consumed its journal: the container mark lies behind the journal's rows,
+        /// which a rebuild cut short leaves, so the child is not clean.
+        /// </summary>
+        [Fact]
+        public void AContainerMarkBehindTheJournalLeavesTheChildUnclean()
+        {
+            var (store, _) = SetupContainers();
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var child = root.CreateChild();
+            child.Union(a, b);
+            child.Rebuild();
+            Assert.True(child.IsClean);
+            child.ContainerLayers!.ContainerMark = 0;
+            Assert.False(child.IsClean);
+            Assert.False(child.IsViewCurrent);
+            child.Rebuild();
+            Assert.Equal(child.Journal!.Count, child.ContainerLayers.ContainerMark);
+            Assert.True(child.IsClean);
         }
 
         /// <summary>
@@ -364,6 +464,7 @@ namespace Eggnog.Relations.Tests
             var child = root.CreateChild();
             child.Union(a, b);
             child.JournalMark = child.Journal!.Count;
+            child.ContainerLayers!.ContainerMark = child.JournalMark;
             Assert.True(child.IsClean);
             AssertViolates(child, "canonical ids");
         }

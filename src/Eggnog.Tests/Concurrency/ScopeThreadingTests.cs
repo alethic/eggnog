@@ -837,12 +837,12 @@ namespace Eggnog.Tests.Concurrency
         /// <summary>
         /// Container types of values register while children of a frozen root run on other threads: each child unions
         /// two classes, which enumerates the engine's container environments (the batch's check that no container of
-        /// classes holds the class it displaces, and the eq-container guard of its rebuild), and reads a set of
-        /// classes. The engine publishes its container set copy-on-write, so every child's union and read come out as
-        /// on one thread, and every type registered is there afterwards, holding no ids. This checks the library's path
-        /// (<see cref="EGraph.ValueContainers{TContainer}"/>) end to end, but would rarely catch a container set that
-        /// readers could see half registered: the library reaches only the engine's six container types, too few
-        /// registrations to overlap the children's reads for more than a moment in each graph.
+        /// classes holds the class it displaces, and in DEBUG builds its rebuild's check of its view of containers),
+        /// and reads a set of classes. The engine publishes its container set copy-on-write, so every child's union and
+        /// read come out as on one thread, and every type registered is there afterwards, holding no ids. This checks
+        /// the library's path (<see cref="EGraph.ValueContainers{TContainer}"/>) end to end, but would rarely catch a
+        /// container set that readers could see half registered: the library reaches only the engine's six container
+        /// types, too few registrations to overlap the children's reads for more than a moment in each graph.
         /// <see cref="Relations.Tests.ContainerValuesConcurrencyTests"/> are the regression tests for that.
         /// </summary>
         [Fact]

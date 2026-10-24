@@ -7,8 +7,8 @@ namespace Eggnog.Relations.Tests
 
     /// <summary>
     /// The rebuilds a context's runs and flushes trigger: a run's first rebuild pass reuses the run's timestamp, as
-    /// egglog's rebuild after a run does, a flush's rebuild runs at the next epoch, and a child never rebuilds
-    /// containers.
+    /// egglog's rebuild after a run does, a flush's rebuild runs at the next epoch, and a child rebuilds only the
+    /// containers its own unions reach, in its container layers.
     /// </summary>
     public class ContextRebuildTests
     {
@@ -89,14 +89,16 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child never rebuilds containers: its rebuild reconciles only rows, and its database refuses the container
-        /// rebuild; the root rebuilds them.
+        /// A child rebuilds only the containers its own unions reach, in its container layers: a union of ids no
+        /// container holds rebuilds none, one of an id a container holds rebuilds the child's copy of it, and the
+        /// child's database refuses egglog's container rebuild either way; the root rebuilds its own.
         /// </summary>
         [Fact]
-        public void ContainersAreNeverRebuiltInAChild()
+        public void AChildRebuildsOnlyTheContainersItsUnionsReach()
         {
             var g = new ContextGraph();
             g.EGraph.RegisterContainerType<VecContainer>();
+            var k = g.Root.FreshId();
             var w = g.Root.FreshId();
             var container = g.EGraph.GetContainerValue(new VecContainer(w.Rep));
             var a = g.Root.FreshId();
@@ -112,7 +114,21 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(0, VecContainer.TryRebuildCalls);
             Assert.Equal(a, child.Find(b));
             Assert.Throws<InvalidOperationException>(() => child.Context.Database.RebuildContainers(g.EGraph.UnionFindTable));
+            Assert.True(child.Context.ContainerLayers!.IsEmpty);
             child.CheckInvariants();
+
+            // w loses to k: the child rebuilds its copy of [w], and the root keeps its own.
+            using var holder = g.Root.CreateChild();
+            VecContainer.TryRebuildCalls = 0;
+            holder.StageUnion(k, w);
+            holder.FlushUpdates();
+            Assert.True(VecContainer.TryRebuildCalls > 0);
+            var env = g.EGraph.ContainerValues.GetEnvironment<VecContainer>();
+            Assert.True(ContainerView.Of(holder.Context.Database).TryGetContainer(env, container.Rep, out var rebuilt));
+            Assert.Equal(new VecContainer(k.Rep), rebuilt);
+            Assert.True(env.TryGetContainer(container.Rep, out var original));
+            Assert.Equal(new VecContainer(w.Rep), original);
+            holder.CheckInvariants();
 
             // The root does rebuild its containers when an element loses a union.
             var g2 = new ContextGraph();

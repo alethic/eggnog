@@ -329,6 +329,67 @@ namespace Eggnog.Relations.Tests
             Assert.False(g.Root.IsFaulted);
         }
 
+        /// <summary>
+        /// Two cases make two sets of classes equal by different pairings (probes <c>adv-lift-case1.egg</c> and
+        /// <c>adv-lift-parent.egg</c>, run on egglog at <c>5e655cae</c>). The parent holds <c>S1 = {a, b}</c> and <c>S2
+        /// = {c, d}</c>; one case assumes <c>a = c</c> and <c>b = d</c>, the other <c>a = d</c> and <c>b = c</c>, and
+        /// each writes <c>F(k) = S1</c> to an assert-eq function. In both, the case's container pass rebuilds <c>S2</c>
+        /// to <c>S1</c>'s contents and merges it into <c>S1</c>, but no equality of classes holds in both: the lift
+        /// withholds <c>S1 = S2</c>, which would equate two sets the parent keeps apart, and with it <c>F(k) = S1</c>,
+        /// whose only common parent id rests on that equality. So the parent's own <c>F(k) = S2</c>, written after the
+        /// lift or before the cases, stands without a conflict: egglog panics given the lifted row without the equality
+        /// (<c>Illegal merge attempted for function F</c>, adv-lift-parent.egg), and takes the write alone
+        /// (adv-lift-case1.egg, its last block).
+        /// </summary>
+        /// <param name="writeFirst">Whether the parent writes <c>F(k) = S2</c> before the cases are opened.</param>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ARowRestingOnAWithheldContainerEqualityIsNotLifted(bool writeFirst)
+        {
+            var (g, ids) = Setup(5);
+            var (a, b, c, d, k) = (ids[0], ids[1], ids[2], ids[3], ids[4]);
+            g.EGraph.RegisterContainerType<SetContainer>();
+            var s1 = g.EGraph.GetContainerValue(new SetContainer(a.Rep, b.Rep));
+            var s2 = g.EGraph.GetContainerValue(new SetContainer(c.Rep, d.Rep));
+            var f = Pick(g, MergeFn.AssertEq);
+            if (writeFirst)
+            {
+                g.Root.StageRow(f, [k, s2]);
+                g.Root.FlushUpdates();
+            }
+
+            using (var set = new CaseSet(g.Root))
+            {
+                foreach (var (x, y, z, u) in new[] { (a, c, b, d), (a, d, b, c) })
+                {
+                    var @case = set.AddCase();
+                    @case.StageUnion(x, y);
+                    @case.StageUnion(z, u);
+                    @case.FlushUpdates();
+                    @case.StageRow(f, [k, s1]);
+                    @case.FlushUpdates();
+                    Assert.False(@case.TakeFailure(out var failure), failure);
+                    Assert.Equal(s1, @case.Find(s2));
+                    Assert.Equal(s1, @case.LookupId(f, [k]));
+                }
+
+                var thrown = Record.Exception(() => set.Lift(new LiftSpec(new LiftTable(f, LiftTableKind.Function)), LiftOptions.Default));
+                Assert.True(thrown is null, $"{thrown?.GetType().Name}: {thrown?.Message}");
+            }
+
+            Assert.NotEqual(g.Root.Find(s1), g.Root.Find(s2));
+            Assert.NotEqual(g.Root.Find(a), g.Root.Find(c));
+            Assert.NotEqual(g.Root.Find(a), g.Root.Find(d));
+            Assert.Equal(writeFirst ? s2 : null, g.Root.LookupId(f, [k]));
+
+            g.Root.StageRow(f, [k, s2]);
+            g.Root.FlushUpdates();
+            Assert.False(g.EGraph.TryTakePanic(out var message), message);
+            Assert.Equal(s2, g.Root.LookupId(f, [k]));
+            g.Root.CheckInvariants();
+        }
+
     }
 
 }

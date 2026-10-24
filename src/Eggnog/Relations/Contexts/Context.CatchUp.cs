@@ -81,29 +81,61 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The container part of a child's catch-up: re-stamps, at <paramref name="epoch"/>, the rows of the child's
-        /// own layers that name a container the root rebuilt in place since the child last looked, from the Dirty
-        /// streams of the unsettled ancestors' container logs (<see cref="ContextTables.ReadDirty"/>), so the child's
-        /// semi-naive evaluation sees them as new, as egglog's <c>refresh_rows_for_values</c> does at the root. Root rows
-        /// are re-stamped by the root itself and arrive as appends; ancestors in between refresh their own rows in their
-        /// own rebuilds.
+        /// The container step of each pass of a child's rebuild, before its tables' pass: the container pass over its
+        /// container layers (<see cref="ContainerLayers.RebuildPass"/>), then, when the pass changed something, the
+        /// merge of the unions it staged, so that the tables' pass that follows rewrites the rows naming the containers
+        /// merged away, as egglog's rebuild loop merges the container rebuild's unions before the tables rebuild
+        /// (egglog-bridge/src/lib.rs:666-668); then the re-stamp, at <paramref name="epoch"/>, of the rows of the
+        /// child's own layers that name a dirty container, so the child's semi-naive evaluation sees them as new, as
+        /// egglog's <c>refresh_rows_for_values</c> does at the root; and, while the child has live descendants, the
+        /// dirty ids the pass found join the Dirty stream of its container log.
         /// </summary>
         /// <remarks>
-        /// Runs <see cref="RefreshTableOperation"/> through <see cref="Relations.Database.RunOnTables{TOperation}"/>, which
-        /// notifies every layer that re-staged rows, so the pass's merge applies them. The cursors' Dirty positions are
-        /// committed with the rest after the loop (<see cref="ContextTables.CommitCursors"/>). Cost: nothing when no log
-        /// has grown; otherwise one rebuild-index probe per dirty id and own layer, plus the rows found.
+        /// <para>
+        /// The dirty ids are the containers the pass rebuilt in place, and <paramref name="inherited"/>, the ones the
+        /// unsettled ancestors rebuilt in place since the child last looked, which the first pass reads from their
+        /// container logs (<see cref="ContextTables.ReadDirty"/>), closed over the child's view. Rows of an ancestor
+        /// that name an inherited id were re-stamped by that ancestor and arrive as appends; those that name an id the
+        /// pass found are re-stamped by the tables' pass, which hides and copies them
+        /// (<see cref="HideReason.Refreshed"/>).
+        /// </para>
+        /// <para>
+        /// The re-stamp runs <see cref="RefreshTableOperation"/> through
+        /// <see cref="Relations.Database.RunOnTables{TOperation}"/>, which notifies every layer that re-staged rows, so
+        /// the tables' pass's merge applies them. The cursors' Dirty positions are committed with the rest after the
+        /// loop (<see cref="ContextTables.CommitCursors"/>). Cost: the container pass's, plus one rebuild-index probe
+        /// per dirty id and own layer, plus the rows found; nothing more when no container concerns the pass.
+        /// </para>
         /// </remarks>
-        /// <param name="epoch">The pass's epoch, which the re-staged rows get.</param>
-        /// <returns>Whether any row was re-staged.</returns>
-        bool RefreshDirtyContainerIds(uint epoch)
+        /// <param name="epoch">The pass's epoch.</param>
+        /// <param name="inherited">The ancestors' dirty ids, in the first pass; otherwise <c>null</c>.</param>
+        /// <param name="pass">Set when the step changed something.</param>
+        /// <returns>The non-local dirty ids the pass found, whose ancestor rows the tables' pass re-stamps; valid until
+        /// the next container pass.</returns>
+        ReadOnlySpan<uint> RebuildContainerLayers(uint epoch, uint[]? inherited, ref bool pass)
         {
-            var dirty = tables!.ReadDirty();
-            if (dirty.Length == 0)
-                return false;
+            if (contradicted)
+                return default;
+
+            var summary = containerLayers!.RebuildPass(epoch, inherited);
+            if (summary.Changed)
+            {
+                database.MergeAll(epoch);
+                pass = true;
+            }
+
+            if (summary.DirtyCount == 0)
+                return default;
 
             var own = tables!.OwnRebuildTables();
-            return own.Length > 0 && database.RunOnTables(own, new RefreshTableOperation(dirty, epoch));
+            if (own.Length > 0)
+                pass |= database.RunOnTables(own, new RefreshTableOperation(summary.Dirty.ToArray(), epoch));
+
+            var log = containerLayers.Log;
+            if (log.Active)
+                log.AppendDirty(summary.Found);
+
+            return summary.Restamp;
         }
 
     }

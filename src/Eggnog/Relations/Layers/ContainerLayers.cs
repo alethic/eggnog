@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -46,19 +47,39 @@ namespace Eggnog.Relations
     /// <para>
     /// Log. The context's container log (<see cref="Log"/>) records, while the context has live descendants, every
     /// container of classes that appears in one of its layers' own environments, which those descendants read through
-    /// their cursors into it, as they read the root's from the store's (<see cref="Store.ContainerLog"/>).
+    /// their cursors into it, as they read the root's from the store's (<see cref="Store.ContainerLog"/>), and the ids
+    /// of the containers its passes rebuilt in place.
     /// </para>
     /// <para>
-    /// The engine places nothing in a context's layers: every layer is empty unless a test placed a container there
-    /// (<see cref="Place{TContainer}"/>), so a child reads the root's containers.
+    /// Rebuild. What fills the layers is the context's container pass (<see cref="RebuildPass"/>), one per pass of its
+    /// rebuild: it claims the ancestor containers that hold the context's own new losers, copying them into its layers
+    /// under their ids, which it then shadows (<see cref="Claim{TContainer}"/>), and rebuilds what its layers hold
+    /// against its union-find, merging contents that become equal anywhere in its view, as egglog rebuilds the
+    /// containers of the copy its push makes. The context interns nothing: every id its layers hold is an ancestor's,
+    /// claimed.
     /// </para>
     /// </remarks>
     internal sealed partial class ContainerLayers
     {
 
+        readonly Context owner;
         readonly ContainerLayers? parent;
         readonly IdBlockAllocator idBlocks;
         readonly ParallelHeuristics parallelism;
+
+        /// <summary>
+        /// How far the container pass has consumed the context's journal: the rows past it are the next pass's delta.
+        /// Domain thread only.
+        /// </summary>
+        int containerMark;
+
+        /// <summary>
+        /// The Added entries of the unsettled ancestors' container logs, with each one's ancestor depth, that lie under
+        /// an id the context's layer of the entry's type shadows: kept by the eq-container guard before the rebuild loop
+        /// and checked after it (<see cref="EqContainerGuard.CheckClaimedIds"/>); <c>null</c> until the guard first
+        /// keeps one. Domain thread only.
+        /// </summary>
+        List<(int Depth, ContainerLogEntry Entry)>? entriesOnClaimedIds;
 
         /// <summary>
         /// The layers by container type id; an index past the end, or a <c>null</c> slot, means no layer. Never written
@@ -74,22 +95,64 @@ namespace Eggnog.Relations
         /// <summary>
         /// Initializes the empty layers of a child context.
         /// </summary>
+        /// <param name="owner">The child context; its journal, union-find and database are read by the container
+        /// pass.</param>
         /// <param name="parent">The parent's layers; <c>null</c> when the parent is the root.</param>
         /// <param name="idBlocks">The child's id blocks, which decide what is local to it.</param>
         /// <param name="parallelism">The child's parallelism, which fixes the shard count of its own environments.</param>
-        public ContainerLayers(ContainerLayers? parent, IdBlockAllocator idBlocks, ParallelHeuristics parallelism)
+        public ContainerLayers(Context owner, ContainerLayers? parent, IdBlockAllocator idBlocks, ParallelHeuristics parallelism)
         {
+            ArgumentNullException.ThrowIfNull(owner);
             ArgumentNullException.ThrowIfNull(idBlocks);
             ArgumentNullException.ThrowIfNull(parallelism);
+            this.owner = owner;
             this.parent = parent;
             this.idBlocks = idBlocks;
             this.parallelism = parallelism;
         }
 
         /// <summary>
+        /// Gets the child context the layers belong to.
+        /// </summary>
+        public Context Owner => owner;
+
+        /// <summary>
         /// Gets the parent's layers, or <c>null</c> when the parent is the root.
         /// </summary>
         public ContainerLayers? Parent => parent;
+
+        /// <summary>
+        /// Gets how far the container pass has consumed the context's journal (<see cref="RebuildPass"/>): the context
+        /// is clean only when this is the journal's row count. Only the pass moves it; the setter is a test hook, for
+        /// the invariant tests that mark a context rebuilt behind its rebuild's back. Domain thread only.
+        /// </summary>
+        public int ContainerMark
+        {
+            get => containerMark;
+            internal set => containerMark = value;
+        }
+
+        /// <summary>
+        /// Gets whether the eq-container guard keeps Added entries under ids the context claimed that it has not checked
+        /// yet (<see cref="EqContainerGuard.CheckClaimedIds"/>): the context is not clean meanwhile. Domain thread only.
+        /// </summary>
+        public bool HasEntriesOnClaimedIds => entriesOnClaimedIds is { Count: > 0 };
+
+        /// <summary>
+        /// Gets the Added entries under ids the context claimed that the eq-container guard keeps, with each one's
+        /// ancestor depth, in the order kept; <c>null</c> until it first keeps one. Domain thread only.
+        /// </summary>
+        internal List<(int Depth, ContainerLogEntry Entry)>? EntriesOnClaimedIds => entriesOnClaimedIds;
+
+        /// <summary>
+        /// Keeps <paramref name="entry"/>, an Added entry of the container log of the ancestor at depth
+        /// <paramref name="depth"/> under an id the context claimed, for the eq-container guard to check after the
+        /// rebuild's passes. Domain thread only.
+        /// </summary>
+        /// <param name="depth">The ancestor's depth.</param>
+        /// <param name="entry">The entry.</param>
+        internal void KeepEntryOnClaimedId(int depth, ContainerLogEntry entry) =>
+            (entriesOnClaimedIds ??= new List<(int Depth, ContainerLogEntry Entry)>()).Add((depth, entry));
 
         /// <summary>
         /// Gets the context's container log: every own environment of its layers records into it, while it is active,
@@ -218,10 +281,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Places <paramref name="container"/> under <paramref name="id"/> in the context's layer of its type, shadowing
-        /// the id when it is not local to the context, so that the context and its descendants read the container under
-        /// the id, and no ancestor's entry under it. A test hook: nothing in the engine places containers in a layer;
-        /// tests do, to read a child's view of containers it holds itself. Domain thread only.
+        /// Places <paramref name="container"/> under <paramref name="id"/> in the context's layer of its type,
+        /// shadowing the id when it is not local to the context, so that the context and its descendants read the
+        /// container under the id, and no ancestor's entry under it. A test hook: the engine fills a layer only through
+        /// its container pass (<see cref="RebuildPass"/>); tests place containers directly, to read a child's view of
+        /// containers it holds itself. Domain thread only.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="root">The root's environment of the type.</param>

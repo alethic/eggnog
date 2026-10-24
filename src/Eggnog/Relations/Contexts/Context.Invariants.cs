@@ -33,12 +33,12 @@ namespace Eggnog.Relations
         /// Composition: the union-find part (<see cref="CheckUnionFindInvariants"/>: the union-find's classes, journal,
         /// cursor and local ids, the frozen prefix and the gate), then, in a child, the tables part
         /// (<see cref="ContextTables.CheckInvariants"/>: what the context holds and hides, and local ids in ancestor
-        /// layers), the container-layers part (<see cref="ContainerLayers.CheckInvariants"/>: each layer's own
-        /// environment, the ids it may own, and a frozen layer unchanged) and the eq-container part
-        /// (<see cref="CheckEqContainerElements"/>), and at every level the container-log part
-        /// (<see cref="Relations.ContainerLog.CheckInvariants"/>: an inactive log empty, a frozen one not grown) and the
-        /// executor part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as
-        /// the executor reads them). The root's rows are checked canonical where the root settles, at
+        /// layers) and the container-layers part (<see cref="ContainerLayers.CheckInvariants"/>: each layer's own
+        /// environment, the ids it may own, a frozen layer unchanged, and the context's view of containers canonical
+        /// with each content once), and at every level the container-log part
+        /// (<see cref="Relations.ContainerLog.CheckInvariants"/>: an inactive log empty, a frozen one not grown) and
+        /// the executor part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and
+        /// keys as the executor reads them). The root's rows are checked canonical where the root settles, at
         /// <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds (<see cref="CheckRootSettled"/>):
         /// elsewhere a raw root write may leave a stale row until the next rebuild, as in egglog. Cost: linear in the
         /// context's overlay and journal, its parent's displacements since its creation, its ancestors' overlays,
@@ -61,30 +61,24 @@ namespace Eggnog.Relations
                 throw new InvalidOperationException("Invariants are checked on a clean context; call Rebuild() first.");
 
             var violations = new List<string>();
-            CollectInvariantViolations(violations, eqContainers: true);
+            CollectInvariantViolations(violations);
             if (violations.Count > 0)
                 throw new InvalidOperationException($"The context at depth {Depth} violates {violations.Count} invariant(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
         }
 
         /// <summary>
         /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without
-        /// throwing: the union-find part, the tables part, the container-layers part, the container-log part, the
-        /// executor part and, with <paramref name="eqContainers"/>, the eq-container part
-        /// (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
-        /// (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part itself. The caller holds the domain
-        /// of a context that is not frozen, and the context is clean.
+        /// throwing: the union-find part, the tables part, the container-layers part, the container-log part and the
+        /// executor part. The bridge composes its own checker from it (<c>EGraphContext.CheckInvariants</c>). The
+        /// caller holds the domain of a context that is not frozen, and the context is clean.
         /// </summary>
         /// <param name="violations">Receives one line per violation.</param>
-        /// <param name="eqContainers">Whether to include the eq-container part.</param>
-        internal void CollectInvariantViolations(List<string> violations, bool eqContainers)
+        internal void CollectInvariantViolations(List<string> violations)
         {
             CheckUnionFindInvariants(violations);
             tables?.CheckInvariants(violations);
             containerLayers?.CheckInvariants(violations);
             ContainerLog.CheckInvariants(Depth, violations);
-            if (eqContainers)
-                CheckEqContainerElements(violations);
-
             ExecutorInvariants.Check(this, violations);
         }
 
@@ -129,23 +123,6 @@ namespace Eggnog.Relations
 
             if (violations.Count > 0)
                 throw new InvalidOperationException($"The root is not settled; {violations.Count} violation(s):{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
-        }
-
-        /// <summary>
-        /// Adds to <paramref name="violations"/> every own displacement of a child that an eq-sort container holds (the
-        /// storage half of the bridge's eq-container check), each starting with <c>eq-sort containers:</c>: what the
-        /// eq-container guard refuses. Nothing at the root or without a container type holding ids. O(journal ×
-        /// container types) probes.
-        /// </summary>
-        /// <param name="violations">Receives one line per violation.</param>
-        internal void CheckEqContainerElements(List<string> violations)
-        {
-            if (parent is null || database.Containers is not { HasEqContainers: true } values)
-                return;
-
-            foreach (var id in journal!.Ids)
-                if (IsOwnDisplacement(id) && values.AnyEqContainerMentions(id))
-                    Report(violations, $"eq-sort containers: the context displaced {id}, which an eq-sort container holds");
         }
 
         /// <summary>

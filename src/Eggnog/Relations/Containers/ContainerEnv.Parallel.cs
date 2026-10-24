@@ -17,11 +17,11 @@ namespace Eggnog.Relations
         /// <remarks>
         /// <para>
         /// Phase one walks each shard on its own task with the same per-entry step as the serial rebuild
-        /// (<see cref="ContainerRebuildPredicate{TContainer}"/>); a changed container goes to the outbox list of its
-        /// source shard and destination shard. Phase two runs one task per destination shard, each with its own clone of
-        /// <paramref name="state"/> (flushed when the task ends), and inserts that shard's queued containers, merging
-        /// with equal ones. Only one task touches a hash-cons shard in either phase; the reverse map and the element
-        /// index are shared and take their shard locks.
+        /// (<see cref="ContainerRebuildPredicate{TContainer, TPolicy}"/>, the root's); a changed container goes to the
+        /// outbox list of its source shard and destination shard. Phase two runs one task per destination shard, each
+        /// with its own clone of <paramref name="state"/> (flushed when the task ends), and inserts that shard's queued
+        /// containers, merging with equal ones. Only one task touches a hash-cons shard in either phase; the reverse
+        /// map and the element index are shared and take their shard locks.
         /// </para>
         /// <para>
         /// egglog's per-destination <c>SegQueue</c>s fill in whatever order the tasks run. Here each source writes its
@@ -51,7 +51,7 @@ namespace Eggnog.Relations
                     var shard = toId[source];
                     lock (shard)
                     {
-                        var predicate = new ContainerRebuildPredicate<TContainer>(this, rebuilder, outbox, source * shards, shards);
+                        var predicate = new ContainerRebuildPredicate<TContainer, RootInsertPolicy<TContainer>>(this, rebuilder, default, outbox, source * shards, shards);
                         shard.Retain(ref predicate);
                         changed[source] = predicate.Changed;
                     }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading;
 
 namespace Eggnog.Relations
 {
@@ -105,6 +106,42 @@ namespace Eggnog.Relations
             for (var level = this; level != below && level is not null; level = level.parent)
                 if (level.LayerAt(type) is { } layer && layer.Shadowed.Contains(id))
                     return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets whether a level deeper than the ancestor at depth <paramref name="depth"/>, up to and including this
+        /// context, shadows <paramref name="id"/> in a layer of any type: the ancestor's entries under the id are then
+        /// hidden from this context, and so is what the ancestor's container log says of the id. Lock-free; one shadow
+        /// test per layer of those levels.
+        /// </summary>
+        /// <param name="depth">The ancestor's depth, below this context's.</param>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if a level in between, or this one, shadows the id.</returns>
+        internal bool ShadowedAboveDepth(int depth, uint id) => ShadowedDownTo(this, owner.Depth, depth, id);
+
+        /// <summary>
+        /// <see cref="ShadowedAboveDepth"/> without this context's own level: whether a level strictly between the
+        /// ancestor at depth <paramref name="depth"/> and this context shadows <paramref name="id"/> in a layer of any
+        /// type, which hides the ancestor's entries under the id from this context, and makes what the ancestor's
+        /// container log says of them that level's business. Lock-free.
+        /// </summary>
+        /// <param name="depth">The ancestor's depth, below this context's.</param>
+        /// <param name="id">The id.</param>
+        /// <returns><c>true</c> if a level in between shadows the id.</returns>
+        internal bool ShadowedBetweenDepth(int depth, uint id) => parent is not null && ShadowedDownTo(parent, owner.Depth - 1, depth, id);
+
+        /// <summary>
+        /// Gets whether <paramref name="level"/>, at depth <paramref name="levelDepth"/>, or a level below it deeper
+        /// than <paramref name="depth"/>, shadows <paramref name="id"/> in a layer of any type.
+        /// </summary>
+        static bool ShadowedDownTo(ContainerLayers? level, int levelDepth, int depth, uint id)
+        {
+            for (var d = levelDepth; d > depth && level is not null; d--, level = level.parent)
+                foreach (var slot in Volatile.Read(ref level.slots))
+                    if (slot is not null && slot.Shadowed.Contains(id))
+                        return true;
 
             return false;
         }

@@ -136,9 +136,9 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// A writer registers sixteen types, alternately holding ids and not, while four readers look every type up by
         /// its slot, its id and its environment, intern containers of the types registered so far and read them back,
-        /// and enumerate the environments (<see cref="ContainerValues.AnyEqContainerMentions"/>, which children's
-        /// eq-container guards run): a reader sees each type whole or not at all, and the environments' arrays grow
-        /// under the enumerations several times a trial.
+        /// and enumerate the environments (<see cref="ContainerValues.AnyEqContainerMentions"/>, which the library's
+        /// check of a child's host merge runs, <c>HostBatch.CheckChildMerge</c>): a reader sees each type whole or not
+        /// at all, and the environments' arrays grow under the enumerations several times a trial.
         /// </summary>
         [Fact]
         public void RegistrationRacesSafelyWithLookupsEnumerationAndInterning()

@@ -47,7 +47,7 @@ namespace Eggnog
         /// primitive's no result drops the match; <c>false</c> for a head computation, where it fails the rule.</param>
         /// <param name="context">The call site's context, egglog's: what a primitive over the tables may do here.</param>
         /// <param name="joins">Whether the let's result is compared with a value the body binds otherwise, an atom's
-        /// column or an earlier let's: a container of classes the scope cannot make, and the root does not hold, then
+        /// column or an earlier let's: a container of classes the scope cannot make, and its view does not hold, then
         /// drops the match, since it equals no cell.</param>
         public PrimitiveCall(EGraph graph, string ruleName, Primitive primitive, ColumnType[] parameters, ColumnType result, string[] argumentNames,
             bool inBody, PrimitiveAccess context, bool joins = false)
@@ -143,7 +143,7 @@ namespace Eggnog
             }
             catch (UninternedContainerException) when (joins)
             {
-                // A container of classes this scope cannot make and the root does not hold equals no cell it is compared
+                // A container of classes this scope cannot make and its view does not hold equals no cell it is compared
                 // with, as egglog's newly interned one is in no row.
                 result = 0;
                 return false;

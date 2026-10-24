@@ -16,7 +16,7 @@ namespace Eggnog
             new($"Rule '{rule.Rule.Name}' writes '{function.Name}', whose merge '{function.Merge!.Name}' is not a lattice, so only the root may run it, and {why}.");
 
         static InvalidOperationException RootOnly(CompiledRule rule, Primitive primitive, string why) =>
-            new($"Rule '{rule.Rule.Name}' computes '{primitive.Name}', which unions classes that containers hold, and only the root rebuilds containers (decisions row 9), so only the root may run it, and {why}.");
+            new($"Rule '{rule.Rule.Name}' computes '{primitive.Name}', which unions classes that containers hold, which the library does only at the root (decisions row 9), so only the root may run it, and {why}.");
 
         /// <summary>
         /// Runs a schedule in this scope.

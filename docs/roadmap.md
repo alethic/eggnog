@@ -22,11 +22,14 @@ gates").
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
-  makes one, and a child uses those the root holds (decisions row 9), since a child would have to rebuild it in its
-  layers. Children read containers through container layers of their own (architecture 3.8, "Containers in a child"),
-  which the engine does not fill yet. A container of function values counts as one of classes whatever the values
-  hold, since a function value may hold classes whatever its sort's inputs (architecture 2.2), where egglog's counts by
-  those inputs.
+  makes one, and a child uses those its view holds (decisions row 9). A child rebuilds, in its container layers, the
+  containers of classes its own unions displace an element of, and merges those that become equal, as egglog rebuilds
+  the copy its push makes (architecture 3.8, "The container pass"). Left: a child interns none; a child under a
+  writable ancestor is refused when a container that ancestor gains later concerns it, which its rebuild does not
+  reconcile; and the library refuses a host merge in a child that displaces a class a container holds, and a write
+  primitive below the root. A container of function values counts as one of classes whatever the values hold, since a
+  function value may hold classes whatever its sort's inputs (architecture 2.2), where egglog's counts by those
+  inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

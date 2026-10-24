@@ -26,8 +26,9 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The function is not valid in the call site's context.</exception>
         public static bool TryInvoke(ReadOnlySpan<uint> arguments, ColumnType[] parameters, ColumnType result, PrimitiveTables tables, out uint cell)
         {
-            // The classes the value holds are canonical: the root rebuilds its container, and a child may not merge away a
-            // class a container holds (decisions row 9). The container is read where the call runs.
+            // The classes the value holds are canonical where the call runs: the root rebuilds its container, and a
+            // child its copy, when its own merges displace a class the container holds (decisions row 9). The container
+            // is read where the call runs, through its view.
             var (target, partial) = ((IFnColumnType)parameters[0]).DecodeCells(arguments[0], tables.View);
             var cells = new uint[partial.Length + arguments.Length - 1];
             partial.CopyTo(cells, 0);
@@ -54,11 +55,11 @@ namespace Eggnog
 
                     if (primitive.IsWrite)
                     {
-                        // As a write primitive called directly: it unions classes that containers hold, which a child never
-                        // rebuilds (decisions row 9).
+                        // As a write primitive called directly: it unions classes that containers hold, which the
+                        // library does only at the root (decisions row 9).
                         if (tables.Scope.IsRoot == false)
                             throw new InvalidOperationException(
-                                $"primitive '{primitive.Name}' unions classes that containers hold, which only the root rebuilds, so only the root may compute it.");
+                                $"primitive '{primitive.Name}' unions classes that containers hold, which the library does only at the root, so only the root may compute it.");
 
                         return primitive.TryInvokeWrite(cells, target.Parameters, result, tables.UnionCells, tables.View, out cell);
                     }

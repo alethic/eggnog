@@ -79,6 +79,16 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Forgets every change and dirty id, keeping the storage: a child's container passes reuse one summary
+        /// (<see cref="ContainerLayers.RebuildPass"/>).
+        /// </summary>
+        internal void Clear()
+        {
+            dirtyIds.Clear();
+            changed = false;
+        }
+
+        /// <summary>
         /// Folds <paramref name="other"/> into this summary: the changes combine and its dirty ids are appended. egglog's
         /// <c>extend</c>.
         /// </summary>

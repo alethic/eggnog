@@ -95,10 +95,11 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Below the root, refuses a merge that would displace a class a container of classes holds: a child never
-        /// rebuilds containers, so the engine's eq-container guard would fault it (decisions row 9). The engine keeps the
-        /// smaller cell of two classes it merges, so the larger is the one displaced. A merge the rebuild derives, such as
-        /// two rows of a constructor meeting, is not foreseen here and still faults the child.
+        /// Below the root, refuses a merge that would displace a class a container of classes holds: the library merges
+        /// such a class only at the root, although the engine rebuilds a child's copies of the containers a merge
+        /// reaches (decisions row 9). The engine keeps the smaller cell of two classes it merges, so the larger is the
+        /// one displaced. A merge the rebuild derives, such as two rows of a constructor meeting, is not foreseen here,
+        /// and the child's rebuild rebuilds the containers it reaches.
         /// </summary>
         /// <exception cref="InvalidOperationException">The merge displaces a class a container holds.</exception>
         void CheckChildMerge(uint a, uint b)
@@ -115,7 +116,7 @@ namespace Eggnog
             var (kept, displaced) = x < y ? (x, y) : (y, x);
             if (graph.Engine.ContainerValues.AnyEqContainerMentions(displaced))
                 throw new InvalidOperationException(
-                    $"This merge in '{scope.Path}' displaces class #{displaced}, which a container of classes holds; a child never rebuilds containers, so only the root may merge it (decisions row 9).");
+                    $"This merge in '{scope.Path}' displaces class #{displaced}, which a container of classes holds; the library merges such a class only at the root, so only the root may merge it (decisions row 9).");
 
             childMerges[displaced] = kept;
         }
