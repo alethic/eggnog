@@ -5,8 +5,9 @@ namespace Eggnog.Relations
 
     /// <summary>
     /// How far a child context has read one ancestor: the version of every layer of the ancestor when the child last
-    /// caught up with it, and the ancestor's change stamp then. A child keeps one per ancestor that is not settled (not
-    /// a frozen ancestor it has read in full); the union-find has its own cursor.
+    /// caught up with it, the ancestor's change stamp then, and its positions in the two streams of the ancestor's
+    /// container log (<see cref="ContainerLog"/>). A child keeps one per ancestor that is not settled (not a frozen
+    /// ancestor it has read in full); the union-find has its own cursor.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -15,9 +16,11 @@ namespace Eggnog.Relations
     /// <c>[RowsOrDefault(t).Minor, layer.Version.Minor)</c> while the generation is unchanged.
     /// </para>
     /// <para>
-    /// A catch-up records what it read as pending (<see cref="SetPendingRows"/>, <see cref="SetPendingStamp"/>) and
-    /// <see cref="CommitPending"/> publishes it after the rebuild loop, while the ancestor cannot change (it is frozen, or
-    /// shares the child's thread domain). Owner's domain thread only.
+    /// A catch-up records what it read as pending (<see cref="SetPendingRows"/>, <see cref="SetPendingStamp"/>,
+    /// <see cref="SetPendingDirty"/>) and <see cref="CommitPending"/> publishes it after the rebuild loop, while the
+    /// ancestor cannot change (it is frozen, or shares the child's thread domain). The Added position moves where the
+    /// eq-container guard reads the Added stream (<see cref="Added"/>), which is consumed once checked, before the loop
+    /// as well as after each pass. Owner's domain thread only.
     /// </para>
     /// </remarks>
     internal sealed class AncestorCursor
@@ -25,26 +28,44 @@ namespace Eggnog.Relations
 
         TableVersion[] rows;
         long stamp;
+        int dirty;
         TableVersion[]? pendingRows;
         long pendingStamp;
         bool hasPendingStamp;
+        int pendingDirty = -1;
 
         /// <summary>
-        /// Initializes a cursor at <paramref name="rows"/> and <paramref name="stamp"/>.
+        /// Initializes a cursor at <paramref name="rows"/> and <paramref name="stamp"/>, and at
+        /// <paramref name="added"/> and <paramref name="dirty"/> in the ancestor's container log.
         /// </summary>
         /// <param name="rows">The ancestor's layer versions by table index; owned by the cursor.</param>
         /// <param name="stamp">The ancestor's change stamp.</param>
-        public AncestorCursor(TableVersion[] rows, long stamp)
+        /// <param name="added">The ancestor's container log's Added count, after a drain.</param>
+        /// <param name="dirty">Its Dirty count.</param>
+        public AncestorCursor(TableVersion[] rows, long stamp, int added, int dirty)
         {
             ArgumentNullException.ThrowIfNull(rows);
             this.rows = rows;
             this.stamp = stamp;
+            Added = added;
+            this.dirty = dirty;
         }
 
         /// <summary>
         /// Gets the ancestor's change stamp when the child last caught up with it.
         /// </summary>
         public long Stamp => stamp;
+
+        /// <summary>
+        /// Gets or sets the number of Added entries of the ancestor's container log the child has consumed: the
+        /// eq-container guard moves it past what it checked (<see cref="ContextTables.ConsumeAdded"/>).
+        /// </summary>
+        public int Added { get; set; }
+
+        /// <summary>
+        /// Gets the number of Dirty ids of the ancestor's container log the child has refreshed its rows for.
+        /// </summary>
+        public int Dirty => dirty;
 
         /// <summary>
         /// Gets the number of tables the cursor records.
@@ -87,11 +108,24 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Publishes what <see cref="SetPendingRows"/> and <see cref="SetPendingStamp"/> recorded.
+        /// Records the Dirty count of the ancestor's container log that a catch-up read up to.
         /// </summary>
-        /// <returns>Whether the cursor moved.</returns>
+        /// <param name="value">The count.</param>
+        public void SetPendingDirty(int value) => pendingDirty = value;
+
+        /// <summary>
+        /// Publishes what <see cref="SetPendingRows"/>, <see cref="SetPendingStamp"/> and <see cref="SetPendingDirty"/>
+        /// recorded.
+        /// </summary>
+        /// <returns>Whether the rows or the stamp moved: a Dirty position changes no view.</returns>
         public bool CommitPending()
         {
+            if (pendingDirty >= 0)
+            {
+                dirty = pendingDirty;
+                pendingDirty = -1;
+            }
+
             var moved = false;
             if (pendingRows is { } pending)
             {

@@ -70,9 +70,9 @@ namespace Eggnog.Relations
         volatile bool hasEqContainers;
 
         /// <summary>
-        /// The eq-container version (<see cref="EqVersion"/>), shared with every environment that holds e-class ids.
+        /// The container log (<see cref="Log"/>), given to every environment that holds e-class ids.
         /// </summary>
-        readonly StrongBox<long> eqVersion = new();
+        readonly ContainerLog log = new();
 
         /// <summary>
         /// Initializes an instance with no container types. egglog's <c>ContainerValues::new</c>.
@@ -94,7 +94,6 @@ namespace Eggnog.Relations
         {
             parallelism = source.parallelism;
             subsetTracker = source.subsetTracker.Clone();
-            eqVersion.Value = source.EqVersion;
 
             // Under the source's registration lock, so the environments and the slot table are of one moment.
             lock (source.sync)
@@ -103,9 +102,10 @@ namespace Eggnog.Relations
                 envs = new DenseIdMap<ContainerTypeId, ContainerEnvBase>(sourceEnvs.IdCount);
                 foreach (var (id, env) in sourceEnvs)
                 {
+                    // The copy records into the copy's own log, inactive: no context reads it.
                     var copy = env.Clone();
                     if (copy.HoldsIds)
-                        copy.EqVersionCounter = eqVersion;
+                        log.Attach(copy);
 
                     envs.Insert(id, copy);
                 }
@@ -132,14 +132,14 @@ namespace Eggnog.Relations
         public bool HasEqContainers => hasEqContainers;
 
         /// <summary>
-        /// Gets the eq-container version: it moves each time an environment that holds e-class ids gains a container
-        /// whose content it did not hold before (a new intern at the root, or a content a root container rebuild
-        /// produced). A child context records the version its eq-container guard last checked its own displacements
-        /// against, and is not clean while the version has moved since (<see cref="Context.IsClean"/>): a new content
-        /// may name an id the child displaced, which only a container rebuild in the child could reconcile, and
-        /// children never rebuild containers. One volatile read.
+        /// Gets the container log of these environments: every environment that holds e-class ids records into it each
+        /// container of classes that appears in it (a new intern, a content a container rebuild produced, a rename)
+        /// while the log is active, and the container rebuild appends the ids it changed in place
+        /// (<see cref="Database.RebuildPass"/>). A store's root's is the store's (<see cref="Store.ContainerLog"/>),
+        /// active while the root has live descendants, which read it to learn of new containers of classes
+        /// (<see cref="EqContainerGuard"/>); anywhere else it is never activated.
         /// </summary>
-        public long EqVersion => Volatile.Read(ref eqVersion.Value);
+        public ContainerLog Log => log;
 
         /// <summary>
         /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/>: a child that
@@ -194,7 +194,7 @@ namespace Eggnog.Relations
                     var registered = current[existing];
                     if (holdsIds && registered.HoldsIds == false)
                     {
-                        registered.MarkHoldsIds(eqVersion);
+                        registered.MarkHoldsIds(log);
                         hasEqContainers = true;
                     }
 
@@ -205,7 +205,7 @@ namespace Eggnog.Relations
                 var env = new ContainerEnv<TContainer>(id, merge, idCounter, parallelism, holdsIds);
                 if (holdsIds)
                 {
-                    env.EqVersionCounter = eqVersion;
+                    log.Attach(env);
                     hasEqContainers = true;
                 }
 

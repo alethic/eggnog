@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -35,18 +36,99 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some ancestor that is not settled changed since the context last caught up with it: its change
-        /// stamp moved (the root's is its database's <see cref="Database.ChangeStamp"/>). O(unsettled ancestors).
+        /// stamp moved (the root's is its database's <see cref="Database.ChangeStamp"/>), or, while the context has a
+        /// displacement or a container layer, its container log holds Added entries past the context's cursor, drained
+        /// or still pending (<see cref="ContainerLog.HasAddedSince"/>), which the eq-container guard has not checked
+        /// (<see cref="EqContainerGuard"/>). A context with neither learns of such a container only through a later
+        /// displacement of its own, which the guard checks against every container the root holds. O(unsettled
+        /// ancestors).
         /// </summary>
         public bool NeedsCatchUp
         {
             get
             {
+                if (settled == depth)
+                    return false;
+
+                var containers = owner.Journal is { Count: > 0 } || owner.ContainerLayers is { IsEmpty: false };
                 for (var a = settled; a < depth; a++)
-                    if (chain[a].Database.ChangeStamp != cursors[a]!.Stamp)
+                {
+                    var cursor = cursors[a]!;
+                    if (chain[a].Database.ChangeStamp != cursor.Stamp)
+                        return true;
+
+                    if (containers && chain[a].ContainerLog.HasAddedSince(cursor.Added))
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the container log of some ancestor that is not settled holds Added entries past the context's
+        /// cursor into it, drained or still pending: what <see cref="ConsumeAdded"/> would move past. O(unsettled
+        /// ancestors), two volatile reads each.
+        /// </summary>
+        internal bool HasNewAddedEntries
+        {
+            get
+            {
+                for (var a = settled; a < depth; a++)
+                    if (chain[a].ContainerLog.HasAddedSince(cursors[a]!.Added))
                         return true;
 
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Moves the context's Added cursor into the container log of every ancestor that is not settled to the log's
+        /// end, draining the log first, and appends to <paramref name="rootEntries"/>, when given, the root's entries it
+        /// moved past: what the eq-container guard checks the context's displacements against
+        /// (<see cref="EqContainerGuard"/>). The entries of the ancestors in between are moved past unread: the engine
+        /// places nothing in their layers, and the guard checks the root's containers only. The cursors are committed
+        /// at once, since what the guard checked stays checked, so a guard run before the rebuild loop leaves the
+        /// context clean without a pass. Domain thread only; it changes nothing a reader of the context sees, so it may
+        /// run inside a callback.
+        /// </summary>
+        /// <param name="rootEntries">Receives the root's new entries, in the order drained; <c>null</c> to skip
+        /// them.</param>
+        internal void ConsumeAdded(List<ContainerLogEntry>? rootEntries)
+        {
+            for (var a = settled; a < depth; a++)
+            {
+                var cursor = cursors[a]!;
+                var log = chain[a].ContainerLog;
+                if (log.HasAddedSince(cursor.Added) == false)
+                    continue;
+
+                log.Drain();
+                cursor.Added = log.ReadAdded(cursor.Added, a == 0 ? rootEntries : null);
+            }
+        }
+
+        /// <summary>
+        /// Returns the Dirty ids the container logs of the ancestors that are not settled gained since the context's
+        /// cursors, and records each log's end as pending, which <see cref="CommitCursors"/> publishes after the rebuild
+        /// loop: the ids of containers rebuilt in place, which name new contents in the rows of the context's own
+        /// layers (<see cref="Context.RefreshDirtyContainerIds"/>). Only the root's container rebuild appends Dirty ids.
+        /// Run by the first pass of <see cref="Context.Rebuild"/>; O(unsettled ancestors) plus the ids read.
+        /// </summary>
+        /// <returns>The ids, ancestor by ancestor; empty when there are none.</returns>
+        internal uint[] ReadDirty()
+        {
+            uint[]? result = null;
+            for (var a = settled; a < depth; a++)
+            {
+                var cursor = cursors[a]!;
+                var ids = chain[a].ContainerLog.ReadDirty(cursor.Dirty, out var end);
+                cursor.SetPendingDirty(end);
+                if (ids.Length > 0)
+                    result = result is null ? ids : [.. result, .. ids];
+            }
+
+            return result ?? Array.Empty<uint>();
         }
 
         /// <summary>
@@ -152,7 +234,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Moves every cursor to what the last catch-up read, after the rebuild loop, while no ancestor can change (they
-        /// are frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor.
+        /// are frozen or share the domain); a frozen ancestor read in full becomes settled and drops its cursor, its
+        /// container log's positions with it: the ancestor's freeze drained its log, which never grows again, and the
+        /// loop read it to the end (the guard after each pass, the first pass's refresh).
         /// </summary>
         /// <returns>Whether any cursor moved: the context's views must then be rebuilt, since an ancestor's hides may have
         /// changed even where none of its layers grew.</returns>
@@ -260,7 +344,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Takes the creation cursors: the leading frozen ancestors are settled (the context starts from their final
-        /// state), and every other ancestor gets a cursor at its current layer versions and change stamp. Called by the
+        /// state), and every other ancestor gets a cursor at its current layer versions and change stamp, and at the end
+        /// of its container log, drained first, which <see cref="Context.CreateChild"/> activated. Called by the
         /// constructor, before <see cref="Context.CreatedAt"/> is read.
         /// </summary>
         void InitializeCursors()
@@ -277,8 +362,11 @@ namespace Eggnog.Relations
                     if (table.Index < count && schema[table] is { IsContextPrivate: false })
                         rows[table.Index] = AncestorLayer(a, table)?.Version ?? default;
 
-                // The cursor replaces its array when it commits and never writes this one, so it can be shared.
-                cursors[a] = new AncestorCursor(rows, chain[a].Database.ChangeStamp);
+                // The cursor replaces its array when it commits and never writes this one, so it can be shared. The log
+                // is drained first, so what the ancestor buffered before the context existed counts as read.
+                var log = chain[a].ContainerLog;
+                log.Drain();
+                cursors[a] = new AncestorCursor(rows, chain[a].Database.ChangeStamp, log.AddedCount, log.DirtyCount);
                 creationRows[a] = rows;
             }
         }

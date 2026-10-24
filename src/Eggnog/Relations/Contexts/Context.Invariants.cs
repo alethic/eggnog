@@ -35,9 +35,10 @@ namespace Eggnog.Relations
         /// (<see cref="ContextTables.CheckInvariants"/>: what the context holds and hides, and local ids in ancestor
         /// layers), the container-layers part (<see cref="ContainerLayers.CheckInvariants"/>: each layer's own
         /// environment, the ids it may own, and a frozen layer unchanged) and the eq-container part
-        /// (<see cref="CheckEqContainerElements"/>), and at every level the executor
-        /// part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as the
-        /// executor reads them). The root's rows are checked canonical where the root settles, at
+        /// (<see cref="CheckEqContainerElements"/>), and at every level the container-log part
+        /// (<see cref="Relations.ContainerLog.CheckInvariants"/>: an inactive log empty, a frozen one not grown) and the
+        /// executor part (<see cref="ExecutorInvariants.Check"/>: views, frozen catalogs, sort order, stamps and keys as
+        /// the executor reads them). The root's rows are checked canonical where the root settles, at
         /// <see cref="CreateChild"/> and <see cref="Freeze"/>, in DEBUG builds (<see cref="CheckRootSettled"/>):
         /// elsewhere a raw root write may leave a stale row until the next rebuild, as in egglog. Cost: linear in the
         /// context's overlay and journal, its parent's displacements since its creation, its ancestors' overlays,
@@ -67,10 +68,11 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Adds every violation <see cref="CheckInvariants"/> reports to <paramref name="violations"/>, without
-        /// throwing: the union-find part, the tables part, the container-layers part, the executor part and, with
-        /// <paramref name="eqContainers"/>, the eq-container part (<see cref="CheckEqContainerElements"/>). The bridge
-        /// composes its own checker from it (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part
-        /// itself. The caller holds the domain of a context that is not frozen, and the context is clean.
+        /// throwing: the union-find part, the tables part, the container-layers part, the container-log part, the
+        /// executor part and, with <paramref name="eqContainers"/>, the eq-container part
+        /// (<see cref="CheckEqContainerElements"/>). The bridge composes its own checker from it
+        /// (<c>EGraphContext.CheckInvariants</c>), reporting the eq-container part itself. The caller holds the domain
+        /// of a context that is not frozen, and the context is clean.
         /// </summary>
         /// <param name="violations">Receives one line per violation.</param>
         /// <param name="eqContainers">Whether to include the eq-container part.</param>
@@ -79,6 +81,7 @@ namespace Eggnog.Relations
             CheckUnionFindInvariants(violations);
             tables?.CheckInvariants(violations);
             containerLayers?.CheckInvariants(violations);
+            ContainerLog.CheckInvariants(Depth, violations);
             if (eqContainers)
                 CheckEqContainerElements(violations);
 
@@ -137,7 +140,7 @@ namespace Eggnog.Relations
         /// <param name="violations">Receives one line per violation.</param>
         internal void CheckEqContainerElements(List<string> violations)
         {
-            if (containers is not { HasEqContainers: true } values)
+            if (parent is null || database.Containers is not { HasEqContainers: true } values)
                 return;
 
             foreach (var id in journal!.Ids)

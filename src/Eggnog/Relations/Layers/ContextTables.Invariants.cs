@@ -38,8 +38,8 @@ namespace Eggnog.Relations
         /// <item><description>keys below a hide: no row with a hidden row's key is visible below its layer, which the
         /// point lookups rely on;</description></item>
         /// <item><description>generations and cursors: every hidden set is of its layer's generation, every cursor
-        /// equals its ancestor's layer versions and change stamp, and the settled ancestors are
-        /// frozen;</description></item>
+        /// equals its ancestor's layer versions and change stamp and lies within its ancestor's container log, and the
+        /// settled ancestors are frozen;</description></item>
         /// <item><description>local ids: no ancestor layer's rebuild index lists an id of the context's
         /// blocks.</description></item>
         /// </list>
@@ -295,7 +295,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Cursors and generations: the settled ancestors are frozen, and every cursor equals its ancestor's layer
-        /// versions and change stamp, as after every rebuild.
+        /// versions and change stamp, as after every rebuild, and is at most the counts of its ancestor's container
+        /// log. Its Added position may lag: new entries do not make a context with no displacement and no container
+        /// layer unclean (<see cref="NeedsCatchUp"/>), so it consumes them only at its next rebuild.
         /// </summary>
         void CheckCursors(List<string> violations)
         {
@@ -313,6 +315,11 @@ namespace Eggnog.Relations
 
                 if (cursor.Stamp != chain[a].Database.ChangeStamp)
                     Context.Report(violations, $"cursors: the cursor into depth {a} is at stamp {cursor.Stamp}, the ancestor at {chain[a].Database.ChangeStamp}");
+
+                // The ancestor's container log is active while the context lives, so it was never cleared under it.
+                var log = chain[a].ContainerLog;
+                if (cursor.Added > log.AddedCount || cursor.Dirty > log.DirtyCount)
+                    Context.Report(violations, $"cursors: the cursor into the container log at depth {a} is at {cursor.Added} Added entries and {cursor.Dirty} Dirty ids, the log holds {log.AddedCount} and {log.DirtyCount}");
 
                 foreach (var table in schema.FunctionTables)
                 {

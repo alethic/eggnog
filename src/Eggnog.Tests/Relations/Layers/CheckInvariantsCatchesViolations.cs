@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// The tables part of the context checker, and its eq-container part, catch violations: each test corrupts one
-    /// invariant deliberately, through internal members no correct operation uses that way, and asserts that
-    /// <see cref="Context.CheckInvariants"/> reports it under the checker's label for that invariant.
+    /// The tables part of the context checker, its eq-container part and its container-log part catch violations: each
+    /// test corrupts one invariant deliberately, through internal members no correct operation uses that way, and
+    /// asserts that <see cref="Context.CheckInvariants"/> reports it under the checker's label for that invariant.
     /// </summary>
     public class CheckInvariantsCatchesViolations
     {
@@ -33,12 +33,25 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Asserts that the checker throws naming <paramref name="invariant"/>.
+        /// Asserts that the checker throws naming <paramref name="invariant"/>, and returns its message.
         /// </summary>
-        static void AssertViolates(Context context, string invariant)
+        static string AssertViolates(Context context, string invariant)
         {
             var e = Assert.Throws<InvalidOperationException>(context.CheckInvariants);
             Assert.Contains(invariant + ":", e.Message);
+            return e.Message;
+        }
+
+        /// <summary>
+        /// Builds a store with the vector type registered at the root, as holding e-class ids, and returns its root
+        /// environment.
+        /// </summary>
+        static (Store Store, ContainerEnv<VecContainer> Env) SetupContainers()
+        {
+            var store = new Store(ParallelHeuristics.Serial);
+            var containers = store.Root.Database.Containers;
+            containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter));
+            return (store, containers.GetEnvironment<VecContainer>());
         }
 
         /// <summary>
@@ -189,8 +202,8 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// An eq-sort container holds an id the child displaced, and the store's eq-container version was put back, so
-        /// the child's guard never saw the container.
+        /// An eq-sort container holds an id the child displaced, and the child's Added cursor into the root's container
+        /// log was moved past the container's entry behind the guard's back, so the guard never saw the container.
         /// </summary>
         [Fact]
         public void AnEqContainerHoldingAnOwnLoserIsReported()
@@ -206,11 +219,77 @@ namespace Eggnog.Relations.Tests
             child.Rebuild();
             child.CheckInvariants();
 
-            var version = containers.EqVersion;
             root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(y), state));
-            containers.GetEnvironment<VecContainer>().EqVersionCounter!.Value = version;
+            Assert.False(child.IsClean);
+            store.ContainerLog.Drain();
+            child.Tables!.CursorAt(0)!.Added = store.ContainerLog.AddedCount;
             Assert.True(child.IsClean);
             AssertViolates(child, "eq-sort containers");
+        }
+
+        /// <summary>
+        /// A cursor whose Added position lies past the end of its ancestor's container log: only a clear could leave one
+        /// there, and the log is not cleared while the context lives.
+        /// </summary>
+        [Fact]
+        public void ACursorPastItsAncestorsContainerLogBreaksCursors()
+        {
+            var (store, _, _, _) = Setup(freeze: false);
+            var child = store.Root.CreateChild();
+            child.CheckInvariants();
+            child.Tables!.CursorAt(0)!.Added = store.ContainerLog.AddedCount + 1;
+            Assert.True(child.IsClean);
+            Assert.Contains("the cursor into the container log at depth 0", AssertViolates(child, "cursors"));
+        }
+
+        /// <summary>
+        /// A container of classes recorded in a frozen level's container log, through the library's root intern, which
+        /// trusts its caller to keep the root writable: a frozen level's log never grows, neither in its buffers nor,
+        /// once drained, in its Added list.
+        /// </summary>
+        [Fact]
+        public void AFrozenLevelsLogThatGrowsBreaksTheContainerLog()
+        {
+            var (store, env) = SetupContainers();
+            var root = store.Root;
+            var w = root.NewId();
+            var child = root.CreateChild();
+            root.Freeze();
+            Assert.True(store.ContainerLog.Active);
+            root.CheckInvariants();
+
+            env.GetOrInsertAtRoot(new VecContainer(w, w), store.Counters);
+            Assert.True(store.ContainerLog.Pending);
+            Assert.True(root.IsClean);
+            Assert.Contains("when its level froze", AssertViolates(root, "container log"));
+            store.ContainerLog.Drain();
+            Assert.Equal(1, store.ContainerLog.AddedCount);
+            Assert.Contains("when its level froze", AssertViolates(root, "container log"));
+            child.Dispose();
+        }
+
+        /// <summary>
+        /// A root environment that buffered an entry for the root's container log is attached to a child's log behind
+        /// the root log's back: the root's log drains an environment that records into another log, and the child's,
+        /// inactive since the child has no descendant, holds the entry.
+        /// </summary>
+        [Fact]
+        public void AnEnvironmentMovedToAnotherLogBreaksTheContainerLog()
+        {
+            var (store, env) = SetupContainers();
+            var root = store.Root;
+            var w = root.NewId();
+            var child = root.CreateChild();
+            root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(w), state));
+            Assert.True(store.ContainerLog.Pending);
+            root.CheckInvariants();
+            child.CheckInvariants();
+
+            child.ContainerLog.Attach(env);
+            Assert.False(child.ContainerLog.Active);
+            Assert.True(child.IsClean);
+            Assert.Contains("records into another log", AssertViolates(root, "container log"));
+            Assert.Contains("is inactive but holds", AssertViolates(child, "container log"));
         }
 
         /// <summary>
