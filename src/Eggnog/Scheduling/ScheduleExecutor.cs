@@ -396,7 +396,7 @@ namespace Eggnog
             for (var i = 0; i < rules.Count; i++)
             {
                 var program = rules[i].Program;
-                var refused = ((program.RootOnlyWrite is not null || program.WritePrimitive is not null) && scope.IsRoot == false)
+                var refused = (program.RootOnlyWrite is not null && scope.IsRoot == false)
                     || (program.Deletes.Length > 0 && (canDelete ??= scope.Engine.CanDelete) == false);
                 if (refused)
                 {

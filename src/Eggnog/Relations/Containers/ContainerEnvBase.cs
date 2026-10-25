@@ -94,7 +94,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some container of this environment holds <paramref name="value"/>, through the exact element
-        /// index (<see cref="ContainerValues.AnyEqContainerMentions"/>). Thread-safe; one probe.
+        /// index: what a child's container pass asks of each level below it before it makes its first storage
+        /// (<see cref="ContainerLayers.RebuildPass"/>). Thread-safe; one probe.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns><c>true</c> if a container holds it.</returns>

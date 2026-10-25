@@ -362,6 +362,25 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Adds to <paramref name="output"/> the ids of the containers of the type <paramref name="root"/> holds that
+        /// hold one of <paramref name="values"/> in the context's view: those its own layer of the type lists in its
+        /// element index, whose ids it owns, and those <see cref="AddVisibleHoldersBelow"/> finds below. The lookup a host
+        /// batch below the root makes of the containers its merges may rebuild (<see cref="ContainerView.AddHolders"/>).
+        /// Type-erased; it writes only <paramref name="holders"/> and <paramref name="output"/>. Thread-safe.
+        /// </summary>
+        /// <param name="root">The root's environment of the type.</param>
+        /// <param name="values">The values.</param>
+        /// <param name="holders">Scratch: one level's holders; cleared.</param>
+        /// <param name="output">Receives the ids not already in it.</param>
+        internal void AddVisibleHolders(ContainerEnvBase root, ReadOnlySpan<uint> values, OrderedValueSet holders, OrderedValueSet output)
+        {
+            if (LayerAt(root.TypeId) is { IsEmpty: false } layer)
+                layer.OwnBase.ExtendContainersContaining(values, output);
+
+            AddVisibleHoldersBelow(root, values, holders, output);
+        }
+
+        /// <summary>
+        /// Adds to <paramref name="output"/> the ids of the containers of the type <paramref name="root"/> holds that
         /// hold one of <paramref name="values"/> at a level below the context, the root included, and that the context
         /// sees: listed by that level's element index, under an id no level above it, up to and including the
         /// context, shadows. Phase A's lookup of an own loser's holders, the dirty closure's of a found id's, and the

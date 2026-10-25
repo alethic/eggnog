@@ -111,6 +111,60 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
+        public void ElementsThatBecomeOneInAChildBecomeOneElementThereOnly()
+        {
+            // Probe set-child.egg, which egglog at 5e655cae runs clean: the program of
+            // ElementsThatBecomeOneBecomeOneElementAndGetReadsCellOrder, with g of (set-of (Num 3) (Num 4)) 10 and of
+            // (set-of (Num 3)) 20, and (union (Num 1) (Num 2)) in a push, where (extract $x) is (S (set-of (Num 2))),
+            // (s) has two elements, (set-get (s) 1) is (Num 1) and none is at 2, and (fail (union (Num 3) (Num 4)))
+            // panics as g's rows would meet; in a second push the same union by a rule; after the pops (extract $x) is
+            // (S (set-of (Num 2) (Num 1))) and (s) has three. The first union is the child's host merge, which the batch
+            // checks against the sets of the child's view.
+            var t = new Theory();
+            var g = t.Graph.DefineFunction<Set<Node>, long>("g");
+            var go = t.Graph.DefineRelation("go");
+            var merge = t.Graph.DefineRuleset("merge");
+            merge.DefineRule("merge", r =>
+            {
+                r.When(go.Of());
+                r.Then(t.Num.Of(1L).Is(t.Num.Of(2L)));
+            });
+            t.Root.Assume(t.Sets.Of().Is(t.Of(3L, 2L, 1L)));
+            var x = t.Root.Make(t.S.Of(t.Of(2L, 1L)));
+            t.Root.Assume(g.Of(t.Of(3L, 4L)).Is(10L), g.Of(t.Of(3L)).Is(20L));
+            var get = Primitives.Get<Node>();
+            t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Union(child.Make(t.Num.Of(1L)), child.Make(t.Num.Of(2L)));
+                Assert.Equal("(S (set-of (Num 2)))", child.Extract(x).ToString());
+                Assert.True(child.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(2L)));
+                Assert.True(child.Check(get.Of(t.Sets.Of(), 0L).Is(t.Num.Of(3L))));
+                Assert.True(child.Check(get.Of(t.Sets.Of(), 1L).Is(t.Num.Of(1L))));
+                Assert.False(child.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
+                Assert.True(child.Check(t.Sets.Of().Is(t.Of(3L, 1L))));
+                Assert.True(child.Check(t.S.Of(t.Of(2L)).Is(x)));
+                Assert.Throws<FactConflictException>(() => child.Union(child.Make(t.Num.Of(3L)), child.Make(t.Num.Of(4L))));
+                Assert.False(child.IsFaulted);
+                Assert.Equal(2, child.CountRows(g));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(go.Of());
+                child.Run(merge);
+                Assert.True(child.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(2L)));
+                Assert.True(child.Check(t.S.Of(t.Of(1L)).Is(x)));
+            }
+
+            Assert.Equal("(S (set-of (Num 2) (Num 1)))", t.Root.Extract(x).ToString());
+            Assert.True(t.Root.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(3L)));
+            Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
+        }
+
+        [Fact]
         public void AConstantSetOfStaleClassesHoldsTheirClass()
         {
             var t = new Theory();

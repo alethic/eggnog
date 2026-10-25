@@ -53,16 +53,10 @@ namespace Eggnog
                     if (Primitive.Allows(context, primitive.Access) == false)
                         throw target.NotValidIn(context);
 
+                    // A write primitive, as one called directly: its unions are the call site's, in any scope, and its
+                    // containers are read where the call runs, through its view.
                     if (primitive.IsWrite)
-                    {
-                        // As a write primitive called directly: it unions classes that containers hold, which the
-                        // library does only at the root (decisions row 9).
-                        if (tables.Scope.IsRoot == false)
-                            throw new InvalidOperationException(
-                                $"primitive '{primitive.Name}' unions classes that containers hold, which the library does only at the root, so only the root may compute it.");
-
                         return primitive.TryInvokeWrite(cells, target.Parameters, result, tables.UnionCells, tables.View, out cell);
-                    }
 
                     if (primitive.UsesTables == false)
                         return primitive.TryInvokeCore(cells, target.Parameters, result, tables.Scope, out cell);

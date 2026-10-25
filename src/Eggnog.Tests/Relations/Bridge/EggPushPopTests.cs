@@ -22,17 +22,19 @@ namespace Eggnog.Relations.Tests
     /// and checks.
     /// </para>
     /// <para>
-    /// Of the eq-container half of <c>vec.egg</c>, the block that rebuilds vectors in a push is translated
-    /// (<see cref="VecRebuilding"/>), since a child rebuilds the containers its own unions displace an element of, in
-    /// its container layers. The other push/pop programs of <c>ext/egglog/tests</c> are not translated.
-    /// <c>container-rebuild.egg</c>, <c>container-fail.egg</c> and the rest of that half intern <c>Vec</c> containers
-    /// of e-classes inside a push, or union them there with <c>vec-union</c>: they wait on children interning eq-sort
-    /// containers, which children refuse, and would be translated with <see cref="VecContainer"/> once they do. The
-    /// rest are out of scope: the <c>UnstableFn</c> half of <c>vec.egg</c>, <c>python_array_optimize.egg</c> and
-    /// <c>stresstest_large_expr.egg</c> need function values (a container that names a function, called from inside a
-    /// rule), which the library does not offer, and the last two also rulesets of egglog's frontend; the last two
-    /// blocks of <c>tricky-type-checking.egg</c> (issue #113) only exercise egglog's type checker choosing between two
-    /// <c>Map</c> sorts, which has no counterpart here, and have no <c>check</c>, so there is nothing to compare.
+    /// Of the eq-container half of <c>vec.egg</c>, the block that rebuilds vectors in a push and the one that unions
+    /// them there with <c>vec-union</c> are translated (<see cref="VecRebuilding"/>, <see cref="VecUnion"/>), since a
+    /// child rebuilds the containers its own unions displace an element of, in its container layers. Its block that
+    /// merges with <c>vec-union</c> in a push, <c>ff</c>'s, is not: only the root writes a function whose merge is not
+    /// a lattice (decisions row 2). The other push/pop programs of <c>ext/egglog/tests</c> are not translated.
+    /// <c>container-rebuild.egg</c> and <c>container-fail.egg</c> intern <c>Vec</c> containers of e-classes inside a
+    /// push: they wait on children interning eq-sort containers, which children refuse, and would be translated with
+    /// <see cref="VecContainer"/> once they do. The rest are out of scope: the <c>UnstableFn</c> half of
+    /// <c>vec.egg</c>, <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need function values (a
+    /// container that names a function, called from inside a rule), which the library does not offer, and the last
+    /// two also rulesets of egglog's frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue #113)
+    /// only exercise egglog's type checker choosing between two <c>Map</c> sorts, which has no counterpart here, and
+    /// have no <c>check</c>, so there is nothing to compare.
     /// </para>
     /// </remarks>
     public class EggPushPopTests
@@ -557,6 +559,53 @@ namespace Eggnog.Relations.Tests
             p.Pop();
 
             Assert.False(p.Equal(pv, q));
+            g.Root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// <c>ext/egglog/tests/vec.egg</c>, its "Test union" block, which follows <see cref="VecRebuilding"/>'s: the
+        /// write primitive <c>vec-union</c>, run in a push as a global action, unions the two vectors' elements there
+        /// only.
+        /// </summary>
+        /// <remarks>
+        /// <code>
+        /// (push)
+        /// (vec-union $p $q)
+        /// (check (= $p $q))
+        /// (check (= (a) (b)))
+        /// (pop)
+        /// </code>
+        /// egglog runs the block clean. The action reads both vectors through the child's view and stages the union of
+        /// <c>(a)</c> and <c>(b)</c> into the child (<see cref="EggPushPopProgram.VecUnion"/>); the flush rebuilds, and
+        /// the child's container pass rebuilds <c>$q</c>, which holds the displaced <c>(b)</c>, to <c>$p</c>'s contents,
+        /// so the two merge there. After the pop they are apart again. The file's next two commands are not translated:
+        /// <c>(fail (vec-union (vec-of (a)) (vec-of (b) (a))))</c> runs at the root, and the <c>ff</c> block merges with
+        /// <c>vec-union</c>, a merge that is not a lattice, which only the root writes (decisions row 2), so a child
+        /// refuses it.
+        /// </remarks>
+        [Fact]
+        public void VecUnion()
+        {
+            var p = new EggPushPopProgram();
+            var g = p.EGraph;
+            g.RegisterContainerType<VecContainer>();
+            var a = p.Constructor("a");
+            var b = p.Constructor("b");
+            var pv = g.GetContainerValue(new VecContainer(p.Term(a).Rep));
+            var q = g.GetContainerValue(new VecContainer(p.Term(b).Rep));
+            Assert.False(p.Equal(pv, q));
+
+            p.Push();
+            Assert.True(p.VecUnion(pv, q));
+            Assert.True(p.Equal(pv, q));
+            Assert.True(p.Equal(p.TryTerm(a), p.TryTerm(b)));
+            Assert.Equal(1, p.Size(a));
+            Assert.Equal(1, p.Size(b));
+            p.Current.CheckInvariants();
+            p.Pop();
+
+            Assert.False(p.Equal(pv, q));
+            Assert.False(p.Equal(p.TryTerm(a), p.TryTerm(b)));
             g.Root.CheckInvariants();
         }
 

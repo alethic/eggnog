@@ -23,14 +23,13 @@ gates").
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
 - **Containers of classes in children.** egglog makes an eq-sort container in any command; here only a writable root
   makes one, and a child uses those its view holds (decisions row 9). A child rebuilds, in its container layers, the
-  containers of classes its own unions displace an element of, and merges those that become equal, as egglog rebuilds
-  the copy its push makes (architecture 3.8, "The container pass"), and catches up with the containers its writable
-  ancestors gain after it exists, claiming, merging and adopting them as a fresh root replaying the same commands holds
-  them, but for a map whose keys collapse, which follows the history of the level that holds it (architecture 3.8,
-  "Catch-up"). Left: a child interns none; and the library refuses a host merge in a child that displaces a class a
-  container holds, and a write primitive below the root. A container of function values counts as one of classes
-  whatever the values hold, since a function value may hold classes whatever its sort's inputs (architecture 2.2), where
-  egglog's counts by those inputs.
+  containers of classes its own unions displace an element of, whether a host write, a rule or a write primitive made
+  the union, and merges those that become equal, as egglog rebuilds the copy its push makes (architecture 3.8, "The
+  container pass"), and catches up with the containers its writable ancestors gain after it exists, claiming, merging
+  and adopting them as a fresh root replaying the same commands holds them, but for a map whose keys collapse, which
+  follows the history of the level that holds it (architecture 3.8, "Catch-up"). Left: a child interns none. A container
+  of function values counts as one of classes whatever the values hold, since a function value may hold classes whatever
+  its sort's inputs (architecture 2.2), where egglog's counts by those inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

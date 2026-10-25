@@ -10,7 +10,8 @@ namespace Eggnog.Tests.Values
 
     /// <summary>
     /// Maps and multisets of classes, egglog's eq-sort containers: keys that become one collapse, the later in key-cell
-    /// order kept, and elements that become one add their counts, as egglog's rebuild at 5e655cae makes them.
+    /// order kept, and elements that become one add their counts, as egglog's rebuild at 5e655cae makes them, at the root
+    /// and in a child's copies, as egglog's push makes them.
     /// </summary>
     public sealed class ClassMapTests
     {
@@ -98,6 +99,46 @@ namespace Eggnog.Tests.Values
             Assert.True(t.Root.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(2L)));
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void KeysThatBecomeOneInAChildsHostMergeCollapseAndCountsAddThereOnly(bool frozen)
+        {
+            // Probe map-child.egg, which egglog at 5e655cae runs clean: the program of
+            // KeysThatBecomeOneCollapseAndCountsAdd with (union (Num 1) (Num 2)) in a push, where (m) is (map-insert
+            // (map-empty) (Num 1) 20) and (s) (multiset-of (Num 1) (Num 1) (Num 1)); after the pop (m) has two keys and
+            // (s) counts (Num 2) twice. Here the union is the child's host merge, which displaces (Num 2), a key of the
+            // map and an element of the multiset.
+            var t = new Theory();
+            var m = t.Graph.DefineFunction<Map<Node, long>>("m");
+            var s = t.Graph.DefineFunction<MultiSet<Node>>("s");
+            t.Root.Assume(
+                m.Of().Is(t.Insert(t.Insert(t.Empty, 1L, 10L), 2L, 20L)),
+                s.Of().Is(Primitives.MultiSetOf<Node>().Of(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(2L))));
+            var (one, two) = (t.Make(1L), t.Make(2L));
+            if (frozen)
+                t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Union(one, two);
+                Assert.False(child.IsFaulted);
+                Assert.True(child.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(1L)));
+                Assert.True(child.Check(Primitives.MapGet<Node, long>().Of(m.Of(), t.Num.Of(1L)).Is(20L)));
+                Assert.True(child.Check(Primitives.MultiSetLength<Node>().Of(s.Of()).Is(3L)));
+                Assert.True(child.Check(Primitives.MultiSetCount<Node>().Of(s.Of(), t.Num.Of(2L)).Is(3L)));
+                Assert.True(child.Check(m.Of().Is(t.Insert(t.Empty, 1L, 20L))));
+                Assert.True(child.Check(s.Of().Is(Primitives.MultiSetOf<Node>().Of(t.Num.Of(1L), t.Num.Of(1L), t.Num.Of(1L)))));
+                Assert.Equal(Map.Of((one, 20L)), child.Get(m.Of()));
+                Assert.Equal(MultiSet.Of(one, one, one), child.Get(s.Of()));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.True(t.Root.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(2L)));
+            Assert.True(t.Root.Check(Primitives.MultiSetCount<Node>().Of(s.Of(), t.Num.Of(2L)).Is(2L)));
+            Assert.False(t.Root.AreEqual(one, two));
+        }
+
         [Fact]
         public void TheLaterKeyInCellOrderIsKept()
         {
@@ -169,6 +210,39 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
+        public void AChildsMergeThatCollapsesTwoKeysConflictsAsTheRootsDoes()
+        {
+            // Probe map-child-conflict.egg: the program of AMergeThatCollapsesTwoKeysConflicts with each union in a
+            // push of its own, where egglog at 5e655cae panics as at its root, which (fail ...) catches; g and h keep
+            // their two rows each. The child's batch checks the merge against the maps and multisets of its view and
+            // refuses it, as the root's does, before anything is written.
+            var t = new Theory();
+            var g = t.Graph.DefineFunction<Map<Node, long>, long>("g");
+            var h = t.Graph.DefineFunction<MultiSet<Node>, long>("h");
+            var of = Primitives.MultiSetOf<Node>();
+            t.Root.Assume(
+                g.Of(t.Insert(t.Insert(t.Empty, 1L, 1L), 2L, 1L)).Is(10L),
+                g.Of(t.Insert(t.Empty, 1L, 1L)).Is(20L));
+            t.Root.Assume(h.Of(of.Of(t.Num.Of(3L), t.Num.Of(4L))).Is(1L), h.Of(of.Of(t.Num.Of(4L), t.Num.Of(4L))).Is(2L));
+            var (one, two, three, four) = (t.Make(1L), t.Make(2L), t.Make(3L), t.Make(4L));
+            t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                Assert.Throws<FactConflictException>(() => child.Union(one, two));
+                Assert.Throws<FactConflictException>(() => child.Union(three, four));
+                Assert.False(child.IsFaulted);
+                Assert.False(child.AreEqual(one, two));
+                Assert.False(child.AreEqual(three, four));
+                Assert.Equal(2, child.CountRows(g));
+                Assert.Equal(2, child.CountRows(h));
+            }
+
+            Assert.Equal(2, t.Root.CountRows(g));
+            Assert.Equal(2, t.Root.CountRows(h));
+        }
+
+        [Fact]
         public void AConstantMapOfStaleClassesCollapses()
         {
             var t = new Theory();
@@ -202,6 +276,73 @@ namespace Eggnog.Tests.Values
             t.Root.Assume(Fact.Exists(Primitives.MultiSetUnionValues<Node>().Of(of.Of(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L)))));
             Assert.True(t.Root.AreEqual(t.Make(1L), t.Make(2L)));
             Assert.True(t.Root.AreEqual(t.Make(3L), t.Make(2L)));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void MultisetUnionValuesUnionsItsElementsInAChild(bool frozen)
+        {
+            // Probe multiset-union-values.egg, which egglog at 5e655cae runs clean: web-demo/multiset.egg's block,
+            // (push) (multiset-union-values $xs) (check (= (Num 1) (Num 2))) (pop), over $xs = (multiset-of (Num 1)
+            // (Num 2) (Num 3)), and h of (multiset-of (Num 1) (Num 1) (Num 1)) 5 and of $xs 1 under max: in a push run for
+            // its effect alone, the three are one, $xs counts (Num 1) three times and is the other multiset, so h has
+            // one row, 5; in a push as the value of (set (first) ...) it is (Num 1); and in a push by a rule's head too.
+            // After each pop they are apart and h has two rows. An empty multiset has no result.
+            var t = new Theory();
+            var xs = t.Graph.DefineFunction<MultiSet<Node>>("xs");
+            var none = t.Graph.DefineFunction<MultiSet<Node>>("none");
+            var first = t.Graph.DefineFunction<Node>("first");
+            var h = t.Graph.DefineFunction<MultiSet<Node>, long>("h", ValueLattice.Max<long>());
+            var of = Primitives.MultiSetOf<Node>();
+            var union = Primitives.MultiSetUnionValues<Node>();
+            var rules = t.Graph.DefineRuleset("rules");
+            rules.DefineRule("union", r =>
+            {
+                var x = r.Var<MultiSet<Node>>("x");
+                r.When(x.Is(xs.Of()));
+                r.Then(first.Of().Is(union.Of(x)));
+            });
+            t.Root.Assume(xs.Of().Is(of.Of(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L))), none.Of().Is(of.Of()));
+            t.Root.Assume(h.Of(of.Of(t.Num.Of(1L), t.Num.Of(1L), t.Num.Of(1L))).Is(5L), h.Of(xs.Of()).Is(1L));
+            var (one, two, three) = (t.Make(1L), t.Make(2L), t.Make(3L));
+            if (frozen)
+                t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(Fact.Exists(union.Of(xs.Of())));
+                Assert.True(child.AreEqual(one, two));
+                Assert.True(child.AreEqual(three, two));
+                Assert.True(child.Check(Primitives.MultiSetCount<Node>().Of(xs.Of(), t.Num.Of(1L)).Is(3L)));
+                Assert.True(child.Check(xs.Of().Is(of.Of(t.Num.Of(1L), t.Num.Of(1L), t.Num.Of(1L)))));
+                Assert.Equal(5L, child.Get(h.Of(xs.Of())));
+                Assert.Equal(1, child.CountRows(h));
+                Assert.Throws<RuleEvaluationException>(() => child.Assume(first.Of().Is(union.Of(none.Of()))));
+                Assert.False(child.IsFaulted);
+                child.Engine.Context.CheckInvariants();
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(first.Of().Is(union.Of(xs.Of())));
+                Assert.True(child.AreEqual(child.Get(first.Of()), one));
+                Assert.True(child.AreEqual(three, two));
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Run(rules);
+                Assert.True(child.AreEqual(child.Get(first.Of()), one));
+                Assert.True(child.AreEqual(three, one));
+                Assert.Equal(5L, child.Get(h.Of(xs.Of())));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(t.Root.AreEqual(one, two));
+            Assert.Equal(1L, t.Root.Get(h.Of(xs.Of())));
+            Assert.Equal(2, t.Root.CountRows(h));
+            Assert.False(t.Root.TryGet(first.Of(), out _));
         }
 
         sealed class Passes
@@ -247,7 +388,9 @@ namespace Eggnog.Tests.Values
 
             public Map<Node, long> M => Map.Of((K1, 1L), (K2, 2L), (K3, 3L));
 
-            public void Merge() => Root.Write(w =>
+            public void Merge() => MergeIn(Root);
+
+            public void MergeIn(Scope scope) => scope.Write(w =>
             {
                 w.Union(K1, K3);
                 w.Union(A, B);
@@ -281,6 +424,43 @@ namespace Eggnog.Tests.Values
             apart.Root.Assume(apart.F.Of(apart.M).Is(100L), apart.F.Of(Map.Of((apart.K3, 3L))).Is(200L));
             apart.Merge();
             Assert.Equal(2, apart.Root.CountRows(apart.F));
+        }
+
+        [Fact]
+        public void AMapCollapsesPassByPassInAChildAndItsRowsMeetAsThePassesMakeThem()
+        {
+            // Probes map-passes.egg and map-passes-conflict.egg, which put the merge of Passes in a push, one
+            // action as a rule's head and, in the first, also two commands: egglog at 5e655cae makes M {(Num 1): 2}
+            // there either way and keeps f(M) = 100 apart from f({#4: 3}) = 200, (print-size f) 2, and panics on f(M) =
+            // 100 meeting f({#3: 2}) = 200, "Illegal merge attempted for function f"; after the pop M has its three
+            // keys. Here the merge is the child's batch, whose check replays the passes of the child's rebuild over the
+            // maps of its view.
+            var t = new Passes();
+            var m = t.Graph.DefineFunction<Map<Node, long>>("m");
+            t.Root.Assume(m.Of().Is(t.M));
+            t.Root.Assume(t.F.Of(t.M).Is(100L), t.F.Of(Map.Of((t.K3, 3L))).Is(200L));
+            t.Root.Freeze();
+
+            using (var child = t.Root.CreateChild())
+            {
+                t.MergeIn(child);
+                Assert.Equal(Map.Of((child.Find(t.K1), 2L)), child.Get(m.Of()));
+                Assert.Equal(2, child.CountRows(t.F));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.Equal(t.M, t.Root.Get(m.Of()));
+
+            var conflict = new Passes();
+            conflict.Root.Assume(conflict.F.Of(conflict.M).Is(100L), conflict.F.Of(Map.Of((conflict.K2, 2L))).Is(200L));
+            conflict.Root.Freeze();
+            using (var child = conflict.Root.CreateChild())
+            {
+                Assert.Throws<FactConflictException>(() => conflict.MergeIn(child));
+                Assert.False(child.IsFaulted);
+                Assert.False(child.AreEqual(conflict.A, conflict.B));
+                Assert.Equal(2, child.CountRows(conflict.F));
+            }
         }
 
         [Fact]

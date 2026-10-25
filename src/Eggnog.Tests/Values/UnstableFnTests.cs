@@ -218,10 +218,13 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AChildMergesNoClassAFunctionValueHolds()
+        public void AChildMergesAClassAFunctionValueHoldsAndRebuildsTheValue()
         {
-            // The root holds (unstable-fn "score" (Num 1)); the library lets a child merge no class a container holds
-            // away, so the class the value holds stays canonical there, and a rule reads its row.
+            // Probe fn-child-merge.egg, which egglog at 5e655cae runs clean: (Num 2), (Num 1), (set (score (Num 1) 1)
+            // 5) and (set (fv) (unstable-fn "score" (Num 1))); in a push (union (Num 1) (Num 2)) displaces (Num 1),
+            // which the value holds, so (fv) is (unstable-fn "score" (Num 2)) there, (unstable-app (fv) 1) still 5, and a
+            // naive rule's (set (out 0) (unstable-app f 1)) writes 5; after the pop the classes are apart and (out 0) has
+            // no value. The child's host merge rebuilds the child's copy of the value.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -244,19 +247,37 @@ namespace Eggnog.Tests.Values
             });
             root.Freeze();
 
-            using var child = root.CreateChild();
-            var merge = Assert.Throws<InvalidOperationException>(() => child.Union(one, two));
-            Assert.Contains("a container of classes holds", merge.Message, StringComparison.Ordinal);
-            Assert.True(child.Check(app.Of(fv.Of(), 1L).Is(5L)));
-            child.Run(rules);
-            Assert.True(child.Check(output.Of(0L).Is(5L)));
+            using (var child = root.CreateChild())
+            {
+                child.Union(one, two);
+                Assert.False(child.IsFaulted);
+                Assert.True(child.AreEqual(one, two));
+                Assert.True(child.Check(fv.Of().Is(Primitives.UnstableFn<long, long>(score).Of(num.Of(2L)))));
+                Assert.True(child.AreEqual((Node)child.Get(fv.Of()).Arguments[0], two));
+                Assert.True(child.Check(score.Of(num.Of(2L), 1L).Is(5L)));
+                Assert.True(child.Check(app.Of(fv.Of(), 1L).Is(5L)));
+                child.Run(rules);
+                Assert.True(child.Check(output.Of(0L).Is(5L)));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.AreEqual(one, two));
+            Assert.True(root.Check(app.Of(fv.Of(), 1L).Is(5L)));
+            Assert.False(root.TryGet(output.Of(0L), out _));
+            Assert.False(root.Check(score.Of(num.Of(2L), 1L).Is(5L)));
         }
 
-        [Fact]
-        public void AWritePrimitiveAppliesOnlyAtTheRoot()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void AWritePrimitiveAppliesInAChild(bool frozen)
         {
-            // (let $fv (unstable-fn "vec-union" (vec-of (Num 1)))) (unstable-app $fv (vec-of (Num 2))) unions (Num 1)
-            // and (Num 2), which containers hold; the library does that only at the root, as when vec-union is called.
+            // Probe fn-write-primitive-child.egg, which egglog at 5e655cae runs clean: (set (fv) (unstable-fn
+            // "vec-union" (vec-of (Num 1)))) and (set (out 0) (unstable-app (fv) (vec-of (Num 2)))) union (Num 1) and
+            // (Num 2) at the root; (out 1) is (vec-of (Num 3)) and (out 3) (vec-of (Num 4)). In a push (set (out 2)
+            // (unstable-app (fv) (out 1))) unions (Num 1) and (Num 3), which the vectors hold, so (out 2) is (vec-of
+            // (Num 1)) and (out 1) is (out 0); and a rule's (set (out 4) (unstable-app f v)) over (out 3) unions (Num 4)
+            // too. After the pop the classes and vectors are apart. Here the push is a child, the write its host write.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var num = graph.DefineConstructor<long, Node>("Num");
@@ -266,17 +287,105 @@ namespace Eggnog.Tests.Values
             var app = Primitives.UnstableApp<Vec<Node>, Vec<Node>>();
             var fv = graph.DefineFunction<UnstableFn<Vec<Node>, Vec<Node>>>("fv");
             var output = graph.DefineFunction<long, Vec<Node>>("out");
+            var go = graph.DefineRelation("go");
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("apply", r =>
+            {
+                var f = r.Var<UnstableFn<Vec<Node>, Vec<Node>>>("f");
+                var v = r.Var<Vec<Node>>("v");
+                r.When(go.Of(), f.Is(fv.Of()), v.Is(output.Of(3L)));
+                r.Then(output.Of(4L).Is(app.Of(f, v)));
+            });
             var root = graph.Root;
             root.Assume(fv.Of().Is(Primitives.UnstableFn<Vec<Node>, Vec<Node>>(Primitives.VecUnion<Node>()).Of(of.Of(num.Of(1L)))));
             root.Assume(output.Of(0L).Is(app.Of(fv.Of(), of.Of(num.Of(2L)))));
             Assert.True(root.Check(num.Of(1L).Is(num.Of(2L))));
 
-            root.Assume(output.Of(1L).Is(of.Of(num.Of(3L))));
+            root.Assume(output.Of(1L).Is(of.Of(num.Of(3L))), output.Of(3L).Is(of.Of(num.Of(4L))));
+            if (frozen)
+                root.Freeze();
+
+            using (var child = root.CreateChild())
+            {
+                child.Assume(output.Of(2L).Is(app.Of(fv.Of(), output.Of(1L))));
+                Assert.False(child.IsFaulted);
+                Assert.True(child.Check(num.Of(1L).Is(num.Of(3L))));
+                Assert.True(child.Check(output.Of(2L).Is(of.Of(num.Of(1L)))));
+                Assert.True(child.Check(output.Of(1L).Is(output.Of(0L))));
+
+                child.Assume(go.Of());
+                child.Run(rules);
+                Assert.True(child.Check(num.Of(4L).Is(num.Of(1L))));
+                Assert.True(child.Check(output.Of(4L).Is(output.Of(3L))));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.Check(num.Of(1L).Is(num.Of(3L))));
+            Assert.False(root.Check(num.Of(1L).Is(num.Of(4L))));
+            Assert.False(root.Check(output.Of(1L).Is(output.Of(0L))));
+            Assert.False(root.TryGet(output.Of(2L), out _));
+        }
+
+        /// <summary>
+        /// A child's union in which a function value holding the class that loses rebuilds to the value a row of a
+        /// function with a merge that is not a lattice (<see cref="FunctionMerge"/>) is keyed by is refused exactly when
+        /// the row's value is the one that loses its id, the other value interned first; where the row's value was
+        /// interned first it keeps its id, the other merges into it, the row stands, and the union goes through. Probe
+        /// root-only-fn-smaller-id.egg, which egglog at 5e655cae runs clean: (A) and (B), then
+        /// (set (rf (unstable-fn "score" (A))) 1) and (set (hf 1) (unstable-fn "score" (B))) in either order; in a push
+        /// (union (A) (B)) rebuilds (hf 1) to the row's value and leaves (rf (hf 1)) at 1, and the pop restores (hf 1).
+        /// egglog's push accepts both, where the library writes such a function only at the root (decisions row 2).
+        /// </summary>
+        [Theory]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        public void AChildsMergeOfAClassAFunctionValueHoldsIsRefusedOnlyWhereItsRebuildMergesARowsValueAway(bool rowFirst, bool refused)
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var score = graph.DefineFunction<Node, long, long>("score");
+            graph.Values.RegisterFn<long, long>();
+            var fn = Primitives.UnstableFn<long, long>(score);
+            var hf = graph.DefineFunction<long, UnstableFn<long, long>>("hf");
+            var rf = graph.DefineFunction<UnstableFn<long, long>, long>("rf", FunctionMerge.Of<long>("sum", (x, y) => checked(x + y)));
+            var root = graph.Root;
+            var na = root.Make(a.Of());
+            var nb = root.Make(b.Of());
+            var held = hf.Of(1L).Is(fn.Of(b.Of()));
+            var row = rf.Of(fn.Of(a.Of())).Is(1L);
+            if (rowFirst)
+                root.Assume(row, held);
+            else
+                root.Assume(held, row);
+
             root.Freeze();
-            using var child = root.CreateChild();
-            var refused = Assert.ThrowsAny<Exception>(() => child.Assume(output.Of(2L).Is(app.Of(fv.Of(), output.Of(1L)))));
-            Assert.Contains("only the root may compute it", refused.ToString(), StringComparison.Ordinal);
-            Assert.False(child.Check(num.Of(1L).Is(num.Of(3L))));
+            using (var child = root.CreateChild())
+            {
+                if (refused)
+                {
+                    var e = Assert.Throws<InvalidOperationException>(() => child.Union(na, nb));
+                    Assert.Contains("'rf' has the merge 'sum'", e.Message, StringComparison.Ordinal);
+                    Assert.Contains("only the root may write it", e.Message, StringComparison.Ordinal);
+                    Assert.False(child.IsFaulted);
+                    Assert.False(child.AreEqual(na, nb));
+                    Assert.True(child.Check(held));
+                }
+                else
+                {
+                    Assert.True(child.Union(na, nb));
+                    Assert.False(child.IsFaulted);
+                    Assert.True(child.Check(hf.Of(1L).Is(fn.Of(a.Of())), rf.Of(hf.Of(1L)).Is(1L)));
+                }
+
+                Assert.True(child.Check(row));
+                Assert.Equal(1, child.CountRows(rf));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.AreEqual(na, nb));
+            Assert.True(root.Check(held, row));
         }
 
         [Fact]

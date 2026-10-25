@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Eggnog
 {
@@ -22,8 +23,37 @@ namespace Eggnog
         // whose keys a merge can change (those functions, and the constructors whose outputs can reach their keys or
         // the classes they hold): an O(rows of those tables) scan, once per flushed part of a batch that merges, and
         // again when a fact fails after it (UndoFact). Two rows of a function of a sort that meet are checked at the end
-        // of the planning instead (CheckClassOutputs), since whether their classes are one when the rebuild compares
-        // them depends on the rebuild's passes.
+        // of each fact instead (CheckClassOutputs), since whether their classes are one when the rebuild compares them
+        // depends on the rebuild's passes: a replay of the passes over the rows of the check, O(passes × rows) at the
+        // end of every fact that changes the check once some rows meet, and, below the root, once a class that loses is
+        // held by a container of a kind that a row of a function whose merge only the root writes holds (below).
+        //
+        // The check is the same in every scope. A container of classes is read through the scope's container view, so
+        // in a child its contents are those of the child's own copy where the child's container pass claimed and
+        // rebuilt one; and that pass rebuilds a child's containers, and merges those that become equal, as the root's
+        // rebuild does (architecture 3.8, "The container pass"), so the rows a merge in a child makes meet are those
+        // the replay of the passes finds.
+        //
+        // Below the root, a merge is refused, the batch's own or one the closure or the replay derives, exactly when the
+        // child's rebuild would write a row of a function whose merge only the root writes, which the engine refuses
+        // and faults the child for: the rebuild rewrites a row that names a cell that loses, by its key or its value,
+        // and re-stamps one that names a container rebuilt in place, by hide and copy. Such a container holds a cell
+        // that loses, so either way some class or container the row names, or that a container it names holds, at any
+        // depth, loses: a class in a merge of classes, a container in the container pass's merge of two that became
+        // equal, the smaller id kept. Those cells are noted with the row (rootOnlyKeys, rootOnlyContainers). The closure
+        // refuses a merge whose class that loses is such a class; the replay of the passes refuses one in which such a
+        // class or container loses. Only a container that holds a cell that loses changes its content, and the view
+        // holds one container of each layout and content (a layout is an environment and the rebuild flags its
+        // containers carry, by which the engine tells them apart before their cells); so a container such a row names,
+        // or holds, meets another only once a container of its layout holds a cell that loses. The containers it holds
+        // are of the layouts of the types such rows hold (rootOnlyTypes), and a cell that loses is at first a class, so
+        // that first happens when a class that loses is held by a container of one of their environments. The closure
+        // notes when one is (rootOnlyHeld), and from then the replay runs below the root at the end of each fact that
+        // changes the check, its containers joined, pass by pass, by those of the view that hold a cell the passes so
+        // far made lose and share a layout with one of those types, which the child's container pass claims and
+        // rebuilds and which may merge with one such a row names and keep the smaller id (AddHolders). A replay that
+        // runs below the root because rows meet is joined by them too, since a merge only it finds may make a class
+        // lose that such a container holds.
 
         List<(TableHandle Table, uint[] Key, uint Output, bool Stored)>? mergeRows;
         HashSet<TableHandle>? congruent;
@@ -32,11 +62,14 @@ namespace Eggnog
         Dictionary<uint, List<int>>? uses;
         Queue<(uint A, uint B)>? merges;
         Dictionary<uint, TableHandle>? rootOnlyKeys;
+        Dictionary<uint, TableHandle>? rootOnlyContainers;
+        List<ColumnType>? rootOnlyTypes;
+        HashSet<TableHandle>? rootOnlyTables;
+        bool rootOnlyHeld;
         Dictionary<uint, uint>? smallest;
         List<(int First, int Second)>? classOutputs;
         Dictionary<uint, uint>? direct;
         Dictionary<string, uint>? contents;
-        Dictionary<uint, uint>? childMerges;
         bool rowsRebuildInOrder;
         bool passSensitive;
         List<(uint A, uint B)>? factUnions;
@@ -58,11 +91,14 @@ namespace Eggnog
             uses = null;
             merges = null;
             rootOnlyKeys = null;
+            rootOnlyContainers = null;
+            rootOnlyTypes = null;
+            rootOnlyTables = null;
+            rootOnlyHeld = false;
             smallest = null;
             classOutputs = null;
             direct = null;
             contents = null;
-            childMerges = null;
             rowsRebuildInOrder = false;
             passSensitive = false;
             mergeCheckDecided = false;
@@ -80,7 +116,6 @@ namespace Eggnog
         void NoteMerge(uint a, uint b)
         {
             mergedClasses = true;
-            CheckChildMerge(a, b);
             if (StartMergeCheck() == false)
                 return;
 
@@ -92,33 +127,6 @@ namespace Eggnog
 
             merges!.Enqueue((a, b));
             Close();
-        }
-
-        /// <summary>
-        /// Below the root, refuses a merge that would displace a class a container of classes holds: the library merges
-        /// such a class only at the root, although the engine rebuilds a child's copies of the containers a merge
-        /// reaches (decisions row 9). The engine keeps the smaller cell of two classes it merges, so the larger is the
-        /// one displaced. A merge the rebuild derives, such as two rows of a constructor meeting, is not foreseen here,
-        /// and the child's rebuild rebuilds the containers it reaches.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">The merge displaces a class a container holds.</exception>
-        void CheckChildMerge(uint a, uint b)
-        {
-            if (scope.IsRoot || graph.Engine.ContainerValues.HasEqContainers == false)
-                return;
-
-            childMerges ??= new Dictionary<uint, uint>();
-            var x = Find(childMerges, a);
-            var y = Find(childMerges, b);
-            if (x == y)
-                return;
-
-            var (kept, displaced) = x < y ? (x, y) : (y, x);
-            if (graph.Engine.ContainerValues.AnyEqContainerMentions(displaced))
-                throw new InvalidOperationException(
-                    $"This merge in '{scope.Path}' displaces class #{displaced}, which a container of classes holds; the library merges such a class only at the root, so only the root may merge it (decisions row 9).");
-
-            childMerges[displaced] = kept;
         }
 
         /// <summary>
@@ -335,16 +343,69 @@ namespace Eggnog
             if (RebuildsInOrder(table))
                 rowsRebuildInOrder = true;
 
-            // Below the root, a merge of a class a row of such a function outputs would rewrite the row too.
-            if (table is FunctionHandle { Merge: not null } && table.Output!.InvolvesClasses)
+            // Below the root, a merge of a class a row of such a function outputs would rewrite the row too, and so would
+            // the container pass's merge of a container the row names or holds into another; the types of the
+            // containers the function's columns hold are noted once it has a row, for the replay's holders.
+            if (table is FunctionHandle { Merge: not null })
             {
-                classes.Clear();
-                ContainerClassCells.AppendClasses(table.Output, output, scope.ContainerView, classes);
-                foreach (var cell in classes)
-                    (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+                if (table.Output!.InvolvesClasses)
+                {
+                    classes.Clear();
+                    ContainerClassCells.AppendClasses(table.Output, output, scope.ContainerView, classes);
+                    foreach (var cell in classes)
+                        (rootOnlyKeys ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table);
+                }
+
+                for (var i = 0; i < key.Length; i++)
+                    AddRootOnlyContainers(columns[i], key[i], table);
+
+                AddRootOnlyContainers(table.Output, output, table);
+                if ((rootOnlyTables ??= new HashSet<TableHandle>(ReferenceEqualityComparer.Instance)).Add(table))
+                    foreach (var column in table.Columns)
+                        AddRootOnlyTypes(column);
             }
 
             Place(index);
+        }
+
+        /// <summary>
+        /// Notes <paramref name="cell"/>, of a row of <paramref name="table"/>, a function whose merge only the root
+        /// writes, when it is a container of classes, and the containers of classes it holds, at any depth, for the
+        /// refusal below the root (<see cref="CheckRootOnly"/>).
+        /// </summary>
+        void AddRootOnlyContainers(ColumnType type, uint cell, TableHandle table)
+        {
+            if (type.Kind == ColumnKind.Sort || type.HoldsClasses == false)
+                return;
+
+            // A container noted already was walked then.
+            if ((rootOnlyContainers ??= new Dictionary<uint, TableHandle>()).TryAdd(cell, table) == false)
+                return;
+
+            var elements = new List<(ColumnType Type, uint Cell)>();
+            ((IContainerColumnType)type).AppendDistinctElements(cell, scope.ContainerView, elements);
+            foreach (var (elementType, elementCell) in elements)
+                AddRootOnlyContainers(elementType, elementCell, table);
+        }
+
+        /// <summary>
+        /// Notes <paramref name="type"/>, a column of a function whose merge only the root writes, when it is a container
+        /// of classes, and the types of the containers of classes it holds, at any depth, for the replay's holders
+        /// (<see cref="AddHolders"/>).
+        /// </summary>
+        void AddRootOnlyTypes(ColumnType type)
+        {
+            if (type.Kind == ColumnKind.Sort || type.HoldsClasses == false)
+                return;
+
+            rootOnlyTypes ??= new List<ColumnType>();
+            foreach (var noted in rootOnlyTypes)
+                if (ReferenceEquals(noted, type))
+                    return;
+
+            rootOnlyTypes.Add(type);
+            foreach (var element in ((IContainerColumnType)type).ElementTypes)
+                AddRootOnlyTypes(element);
         }
 
         /// <summary>
@@ -423,7 +484,7 @@ namespace Eggnog
         /// <exception cref="FactConflictException">A merge would give a function without a lattice two values for one
         /// key.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a merge would rewrite a row of a
-        /// function whose merge is not a lattice.</exception>
+        /// function whose merge is not a lattice (<see cref="CheckRootOnly"/>).</exception>
         void Close()
         {
             while (merges!.Count > 0)
@@ -443,16 +504,16 @@ namespace Eggnog
                 }
 
                 // Set only below the root, from the stored rows indexed before the first merge.
-                if (rootOnlyKeys is not null)
+                if (rootOnlyKeys is not null || rootOnlyContainers is not null)
                 {
                     var low = Smallest(x);
                     var high = Smallest(y);
                     if (low > high)
                         (low, high) = (high, low);
 
-                    if (rootOnlyKeys.TryGetValue(high, out var keyed))
-                        throw new InvalidOperationException(
-                            $"'{keyed.Name}' has the merge '{((FunctionHandle)keyed).Merge!.Name}', which is not a lattice, so only the root may write it, and this merge of classes in '{scope.Path}' would rewrite one of its rows.");
+                    CheckRootOnly(high);
+                    if (rootOnlyHeld == false && rootOnlyContainers is not null)
+                        rootOnlyHeld = AnyRootOnlyHolder(high);
 
                     smallest ??= new Dictionary<uint, uint>();
                     smallest.Remove(x);
@@ -468,36 +529,122 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Below the root, refuses a merge in which <paramref name="displaced"/> loses, the smallest cell of a class or a
+        /// container's id, when a row of a function whose merge only the root writes names it, by its key or its value,
+        /// or holds it, at any depth, in a container they name: the child's rebuild would rewrite the row, or re-stamp it
+        /// for a container rebuilt in place.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The merge would rewrite such a row.</exception>
+        void CheckRootOnly(uint displaced)
+        {
+            TableHandle? row = null;
+            if (rootOnlyKeys is not null && rootOnlyKeys.TryGetValue(displaced, out var keyed))
+                row = keyed;
+            else if (rootOnlyContainers is not null && rootOnlyContainers.TryGetValue(displaced, out var held))
+                row = held;
+
+            if (row is not null)
+                throw new InvalidOperationException(
+                    $"'{row.Name}' has the merge '{((FunctionHandle)row).Merge!.Name}', which is not a lattice, so only the root may write it, and this merge of classes in '{scope.Path}' would rewrite one of its rows.");
+        }
+
+        /// <summary>
+        /// Gets whether a container the scope's view sees, of the environment of one of the types the rows of functions
+        /// whose merge only the root writes hold (<see cref="rootOnlyTypes"/>), holds <paramref name="displaced"/>, a
+        /// class that loses: what must come first for the child's container pass to merge a container such a row names,
+        /// or holds, with another (<see cref="ReplaysRootOnlyRows"/>). Below the root only. One element-index probe per
+        /// level of the view for each such environment, and a shadow test per level above a holder.
+        /// </summary>
+        bool AnyRootOnlyHolder(uint displaced)
+        {
+            if (rootOnlyTypes is null)
+                return false;
+
+            var view = scope.ContainerView;
+            var scratch = new Relations.OrderedValueSet();
+            var holders = new Relations.OrderedValueSet();
+            var probed = new HashSet<Relations.ContainerEnvBase>(ReferenceEqualityComparer.Instance);
+            ReadOnlySpan<uint> element = [displaced];
+            foreach (var type in rootOnlyTypes)
+            {
+                var env = ((IContainerColumnType)type).Environment;
+                if (probed.Add(env) == false)
+                    continue;
+
+                view.AddHolders(env, element, scratch, holders);
+                if (holders.IsEmpty == false)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Gets the smallest cell of a representative's class: the cell the engine keeps when the class merges.
         /// </summary>
         uint Smallest(uint representative) =>
             smallest is not null && smallest.TryGetValue(representative, out var cell) ? cell : representative;
 
         /// <summary>
-        /// Checks, at the end of the planning, the rows of a function of a sort that the batch's merges make meet, as the
-        /// rebuild will: once the closure says some do (<see cref="Meet"/>), this replays the rebuild's passes over the
-        /// rows of the check. Each pass compares every row under the union-find the earlier passes left, starting from
-        /// the batch's own merges (its unions and its constructor writes), and then merges what met: a constructor's
-        /// meeting rows union their classes for the next pass, and two rows of a function of a sort that meet must hold
-        /// one class already, since its assert-equal merge panics on two, as egglog's does, before a later pass could
-        /// merge them. The batch fails the fact that made them meet, as egglog's command panics, rather than let the
-        /// panic fail the whole flush. O(passes × rows of the check),
-        /// and nothing unless such rows meet.
+        /// Checks, at the end of a fact and of the planning, the rows of a function of a sort that the batch's merges
+        /// make meet, as the rebuild will: once the closure says some do (<see cref="Meet"/>), this replays the
+        /// rebuild's passes over the rows of the check. Each pass compares every row under the union-find the earlier
+        /// passes left, starting from the batch's own merges (its unions and its constructor writes), and then merges
+        /// what met: a constructor's meeting rows union their classes for the next pass, and two rows of a function of
+        /// a sort that meet must hold one class already, since its assert-equal merge panics on two, as egglog's does,
+        /// before a later pass could merge them. The batch fails the fact that made them meet, as egglog's command
+        /// panics, rather than let the panic fail the whole flush. Below the root, it also refuses a merge in which a
+        /// class or a container that a row of a function whose merge only the root writes names, or holds, loses
+        /// (<see cref="CheckRootOnly"/>), and runs too once a class that loses is held by a container of a kind such a
+        /// row holds (<see cref="ReplaysRootOnlyRows"/>); there the containers of the view that hold a cell that loses
+        /// join the replay in the pass after the one the cell lost in (<see cref="AddHolders"/>). Containers merge as
+        /// the engine's do, those of one layout whose contents are equal (<see cref="MergeContainers"/>).
+        /// O(passes × (rows of the check + containers)), with, below the root, one element-index probe per level of the
+        /// view for each cell that loses and each environment of the kinds such rows hold; nothing unless such rows
+        /// meet, or such a class is held. The batch runs it at the end of each fact that changes the check
+        /// (<see cref="CheckFactClassOutputs"/>).
         /// </summary>
         /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
+        /// rewrite a row of a function whose merge is not a lattice (<see cref="CheckRootOnly"/>).</exception>
         void CheckClassOutputs()
         {
-            if (classOutputs is null && rowsRebuildInOrder == false)
+            if (classOutputs is null && rowsRebuildInOrder == false && ReplaysRootOnlyRows == false)
                 return;
 
             var finder = new Dictionary<uint, uint>(direct!);
             var containers = RowContainers();
+
+            // Below the root, where a row of such a function names a container, the cells each pass makes lose, starting
+            // with the batch's own merges, whose holders join the containers the next pass rebuilds, whatever made the
+            // replay run: a merge only the replay finds may make a class lose that such a container holds.
+            HashSet<uint>? listed = null;
+            List<uint>? displaced = null;
+            if (rootOnlyContainers is not null)
+            {
+                listed = new HashSet<uint>();
+                foreach (var (_, cell, _) in containers)
+                    listed.Add(cell);
+
+                displaced = new List<uint>(direct!.Keys);
+            }
+
             while (true)
             {
+                if (displaced is { Count: > 0 })
+                {
+                    AddHolders(displaced, containers, listed!);
+                    displaced.Clear();
+                }
+
                 // Each pass rebuilds the containers first, against the union-find as the pass starts, and merges those
                 // that became equal before the tables compare their rows; a container of containers so merges a pass
                 // after the containers it holds, as the engine's and egglog's do.
-                var mergedContainers = MergeContainers(containers, finder);
+                var mergedContainers = MergeContainers(containers, finder, displaced);
+                if (displaced is not null)
+                    foreach (var cell in displaced)
+                        CheckRootOnly(cell);
+
                 var placed = new Dictionary<string, int>(System.StringComparer.Ordinal);
                 var found = new List<(uint, uint)>();
                 for (var i = 0; i < mergeRows!.Count; i++)
@@ -545,8 +692,74 @@ namespace Eggnog
                 {
                     var x = Find(finder, a);
                     var y = Find(finder, b);
-                    if (x != y)
-                        finder[Math.Max(x, y)] = Math.Min(x, y);
+                    if (x == y)
+                        continue;
+
+                    // Below the root, a merge only the replay finds, of the classes of two rows of a constructor keyed by
+                    // a map of classes that meet, is refused as the closure's merges are (Close). Each class's cell in
+                    // the replay is its smallest, so the larger of the two loses.
+                    if (rootOnlyKeys is not null || rootOnlyContainers is not null)
+                        CheckRootOnly(Math.Max(x, y));
+
+                    finder[Math.Max(x, y)] = Math.Min(x, y);
+                    displaced?.Add(Math.Max(x, y));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the replay of the passes runs below the root for the rows of functions whose merge only the root
+        /// writes (<see cref="CheckClassOutputs"/>): such a row names a container of classes, or holds one, and a class
+        /// that loses in the closure is held by a container of the environment of a type such rows hold
+        /// (<see cref="AnyRootOnlyHolder"/>). Until then no container of a layout of those types changes in the child's
+        /// container pass, so none such a row names or holds meets another, and the closure's refusal is the whole one;
+        /// rows keyed by maps of classes, whose merges only the replay finds, make it run anyway.
+        /// </summary>
+        bool ReplaysRootOnlyRows => rootOnlyHeld;
+
+        /// <summary>
+        /// Adds to the replay's <paramref name="containers"/> those of the view that hold one of
+        /// <paramref name="displaced"/>, the cells the replay's last pass, or the batch's own merges, made lose, and share
+        /// a layout with one of the types the rows of functions whose merge only the root writes hold
+        /// (<see cref="rootOnlyTypes"/>, <see cref="IContainerColumnType.SharesLayout"/>): the containers the child's
+        /// container pass claims and rebuilds in the next pass, which may become equal to one such a row names, or holds,
+        /// and merge with it, the smaller id kept. Each is added once, under the first such type, since its environment
+        /// is the kind's and its own type is not known, with its content as the view holds it, which the replay reads and
+        /// rebuilds by the layout alone. Below the root only. One element-index probe per cell and level of the view for
+        /// each environment of those types.
+        /// </summary>
+        void AddHolders(List<uint> displaced, List<(ColumnType Type, uint Cell, long[] Content)> containers, HashSet<uint> listed)
+        {
+            if (rootOnlyTypes is null)
+                return;
+
+            var view = scope.ContainerView;
+            var scratch = new Relations.OrderedValueSet();
+            var holders = new Relations.OrderedValueSet();
+            var probed = new HashSet<Relations.ContainerEnvBase>(ReferenceEqualityComparer.Instance);
+            foreach (var type in rootOnlyTypes)
+            {
+                var env = ((IContainerColumnType)type).Environment;
+                if (probed.Add(env) == false)
+                    continue;
+
+                holders.Clear();
+                view.AddHolders(env, CollectionsMarshal.AsSpan(displaced), scratch, holders);
+                foreach (var holder in holders.AsSpan())
+                {
+                    if (listed.Contains(holder))
+                        continue;
+
+                    foreach (var other in rootOnlyTypes)
+                    {
+                        var container = (IContainerColumnType)other;
+                        if (ReferenceEquals(container.Environment, env) && container.SharesLayout(holder, view))
+                        {
+                            listed.Add(holder);
+                            containers.Add((other, holder, container.Content(holder, view)));
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -565,8 +778,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the containers of classes the rows of the check hold, those inside them too, each with its type and its
-        /// content as stored (<see cref="IContainerColumnType.Content"/>), which each pass of the replay rebuilds.
+        /// Gets the containers of classes the rows of the check hold, those inside them too, each once, with a type that
+        /// names it and its content as stored (<see cref="IContainerColumnType.Content"/>), which each pass of the replay
+        /// rebuilds. Every type that names a container shares its layout, so any one reads and rebuilds it as the engine
+        /// does.
         /// </summary>
         List<(ColumnType Type, uint Cell, long[] Content)> RowContainers()
         {
@@ -604,11 +819,14 @@ namespace Eggnog
 
         /// <summary>
         /// Rebuilds the containers' contents against <paramref name="finder"/> as it stands, as a pass of the engine's
-        /// rebuild rebuilds what the passes before left, then merges in it those of one type whose contents are now
-        /// equal, before the pass rebuilds the tables.
+        /// rebuild rebuilds what the passes before left, then merges in it those of one layout whose contents are now
+        /// equal, before the pass rebuilds the tables: the engine's containers of one environment and one set of rebuild
+        /// flags (<see cref="IContainerColumnType.RebuildFlags"/>), which column types of one kind share whatever their
+        /// elements' types, such as a pair of a class and an <c>i32</c> and one of a class and an <c>i64</c>, whose cells
+        /// are alike. The id that loses each merge is added to <paramref name="displaced"/>, when given.
         /// </summary>
         /// <returns>Whether two containers merged.</returns>
-        static bool MergeContainers(List<(ColumnType Type, uint Cell, long[] Content)> containers, Dictionary<uint, uint> finder)
+        static bool MergeContainers(List<(ColumnType Type, uint Cell, long[] Content)> containers, Dictionary<uint, uint> finder, List<uint>? displaced)
         {
             if (containers.Count == 0)
                 return false;
@@ -619,9 +837,10 @@ namespace Eggnog
             for (var i = 0; i < containers.Count; i++)
             {
                 var (type, cell, content) = containers[i];
-                var rebuilt = ((IContainerColumnType)type).Rebuild(content, element => Find(finder, element));
+                var container = (IContainerColumnType)type;
+                var rebuilt = container.Rebuild(content, element => Find(finder, element));
                 containers[i] = (type, cell, rebuilt);
-                contents.Add((type.Name + ":" + string.Join(",", rebuilt), cell));
+                contents.Add((container.Environment.TypeId.Rep + "/" + container.RebuildFlags + ":" + string.Join(",", rebuilt), cell));
             }
 
             var first = new Dictionary<string, uint>(System.StringComparer.Ordinal);
@@ -640,6 +859,7 @@ namespace Eggnog
                     continue;
 
                 finder[Math.Max(x, y)] = Math.Min(x, y);
+                displaced?.Add(Math.Max(x, y));
                 merged = true;
             }
 

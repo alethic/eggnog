@@ -169,29 +169,156 @@ namespace Eggnog.Tests.Values
             Assert.True(other.Merged);
         }
 
-        [Fact]
-        public void OnlyTheRootUnionsVectors()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void AChildUnionsVectors(bool frozen)
         {
-            // The classes vec-union unions are held by the vectors; the library unions them only at the root (decisions
-            // row 9).
+            // Probe vec-union-child.egg, which egglog at 5e655cae runs clean: lines 45-62 of vec.egg, each block in a
+            // push of its own: (set (u) (vec-union (p) (q))), the bare (vec-union (p) (q)) and a rule's (set (u)
+            // (vec-union x y)) each make (a) and (b) one there and (p) and (q) with them; two lengths have no union; and
+            // ff, which merges with vec-union, unions them too. After each pop they are apart. A child does each, but
+            // for ff: only the root writes a function whose merge is not a lattice (decisions row 2), so a child refuses
+            // the write before anything is written. The vector of two the root holds, as a child makes none.
             var t = new Theory();
             var u = t.Graph.DefineFunction<Vec<Node>>("u");
+            var two = t.Graph.DefineFunction<Vec<Node>>("two");
+            var ff = t.Graph.DefineFunction<Vec<Node>>("ff", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecUnion<Node>().Of(old, @new)));
+            var union = Primitives.VecUnion<Node>();
             var rules = t.Graph.DefineRuleset("rules");
             rules.DefineRule("union", r =>
             {
                 var (x, y) = r.Vars<Vec<Node>, Vec<Node>>("x", "y");
                 r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
-                r.Then(u.Of().Is(Primitives.VecUnion<Node>().Of(x, y)));
+                r.Then(u.Of().Is(union.Of(x, y)));
             });
-            t.Root.Freeze();
-            var child = t.Root.CreateChild();
+            t.Root.Assume(two.Of().Is(Primitives.VecOf<Node>().Of(t.B.Of(), t.A.Of())));
+            var (a, b) = (t.Root.Make(t.A.Of()), t.Root.Make(t.B.Of()));
+            if (frozen)
+                t.Root.Freeze();
 
-            var write = Assert.Throws<InvalidOperationException>(() => child.Assume(u.Of().Is(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of()))));
-            Assert.Contains("only the root may compute it", write.Message, StringComparison.Ordinal);
-            var run = Assert.Throws<InvalidOperationException>(() => child.Run(Schedule.Run(rules)));
-            Assert.Contains("only the root may run it", run.Message, StringComparison.Ordinal);
-            Assert.False(child.IsFaulted);
-            Assert.False(child.AreEqual(child.Make(t.A.Of()), child.Make(t.B.Of())));
+            bool Merged(Scope scope) => scope.AreEqual(a, b);
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(u.Of().Is(union.Of(t.P.Of(), t.Q.Of())));
+                Assert.True(Merged(child));
+                Assert.True(child.Check(t.P.Of().Is(t.Q.Of())));
+                Assert.True(child.Check(u.Of().Is(t.P.Of())));
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(Merged(t.Root));
+            Assert.False(t.Root.Check(t.P.Of().Is(t.Q.Of())));
+            using (var child = t.Root.CreateChild())
+            {
+                child.Assume(Fact.Exists(union.Of(t.P.Of(), t.Q.Of())));
+                Assert.True(Merged(child));
+                Assert.True(child.Check(t.P.Of().Is(t.Q.Of())));
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Run(Schedule.Run(rules));
+                Assert.True(Merged(child));
+                Assert.True(child.Check(u.Of().Is(t.Q.Of())));
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                Assert.Throws<RuleEvaluationException>(() => child.Assume(Fact.Exists(union.Of(t.P.Of(), two.Of()))));
+                Assert.False(Merged(child));
+                var merge = Assert.Throws<InvalidOperationException>(() => child.Assume(ff.Of().Is(t.P.Of())));
+                Assert.Contains("only the root may write it", merge.Message, StringComparison.Ordinal);
+                Assert.False(child.IsFaulted);
+                Assert.Equal(0, child.CountRows(ff));
+            }
+
+            Assert.False(Merged(t.Root));
+            Assert.False(t.Root.Check(t.P.Of().Is(t.Q.Of())));
+            Assert.Equal(0, t.Root.CountRows(u));
+        }
+
+        [Fact]
+        public void ARuleDefinedDuringAChildsRunUnionsVectorsThere()
+        {
+            // Probe vec-union-later-rule.egg, which egglog at 5e655cae runs clean: in a push (run rules 1) of a ruleset
+            // whose one rule writes (seen), then (rule ((= x (p)) (= y (q))) ((vec-union x y)) :ruleset rules) and (run
+            // rules 1), which makes (a) and (b) one there, and (p) and (q) with them; after the pop they are apart. Here
+            // the rule is defined by a run observer after the child's first iteration, and takes part in its second.
+            var t = new Theory();
+            var seen = t.Graph.DefineRelation("seen");
+            var rules = t.Graph.DefineRuleset("rules");
+            rules.DefineRule("seen", r =>
+            {
+                r.When(r.Var<Vec<Node>>("x").Is(t.P.Of()));
+                r.Then(seen.Of());
+            });
+            var (a, b) = (t.Root.Make(t.A.Of()), t.Root.Make(t.B.Of()));
+            t.Root.Freeze();
+            var defined = false;
+            void Observe(RunStep step)
+            {
+                if (step.Kind != RunStepKind.Iteration || defined)
+                    return;
+
+                defined = true;
+                Assert.False(step.Scope.AreEqual(a, b));
+                rules.DefineRule("union", r =>
+                {
+                    var (x, y) = r.Vars<Vec<Node>, Vec<Node>>("x", "y");
+                    r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
+                    r.Then(Fact.Exists(Primitives.VecUnion<Node>().Of(x, y)));
+                });
+            }
+
+            using (var child = t.Root.CreateChild())
+            {
+                child.Run(Schedule.Repeat(2, Schedule.Run(rules)), new RunOptions { Observer = Observe });
+                Assert.True(defined);
+                Assert.True(child.AreEqual(a, b));
+                Assert.True(child.Check(t.P.Of().Is(t.Q.Of())));
+            }
+
+            Assert.False(t.Root.AreEqual(a, b));
+        }
+
+        [Fact]
+        public void ASplitsCasesUnionVectors()
+        {
+            // A split whose in-case ruleset runs vec-union: each case is a child of the root, where the rule unions (a)
+            // and (b), which the vectors hold, and the case's rebuild makes (p) and (q) one there; the lift carries (a)
+            // = (b), which every case proves, to the root, whose rebuild then makes the vectors one. egglog has no split,
+            // so the expected values are those of a fresh root running the rule's union itself (replay).
+            foreach (var replay in new[] { false, true })
+            {
+                var t = new Theory();
+                var choice = t.Graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
+                var split = t.Graph.DefineSplit("pick", s =>
+                {
+                    var (k, d) = s.Vars<string, Set<long>>("k", "d");
+                    s.When(d.Is(choice.Of(k)));
+                    s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                    var v = s.Cases("v", d);
+                    s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                });
+                var unions = t.Graph.DefineRuleset("unions");
+                unions.DefineRule("union", r =>
+                {
+                    var (x, y) = r.Vars<Vec<Node>, Vec<Node>>("x", "y");
+                    r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
+                    r.Then(Fact.Exists(Primitives.VecUnion<Node>().Of(x, y)));
+                });
+                t.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+
+                t.Root.Run(replay ? Schedule.Run(unions) : Schedule.Split(split, Schedule.Run(unions)));
+
+                Assert.False(t.Root.IsFaulted);
+                Assert.True(t.Merged);
+                Assert.True(t.Root.Check(t.P.Of().Is(t.Q.Of())));
+                Assert.Empty(t.Root.Children);
+                t.Root.Engine.Context.CheckInvariants();
+            }
         }
 
         [Fact]

@@ -38,6 +38,13 @@ namespace Eggnog
         IReadOnlyList<ColumnType> ElementTypes { get; }
 
         /// <summary>
+        /// Gets the root's container environment the type's containers are interned in, which it shares with every
+        /// column type of the same container kind (every vector type, say), its containers of classes apart from those
+        /// of values by <see cref="Relations.IContainerValue{TSelf}.HoldsIds"/>.
+        /// </summary>
+        Relations.ContainerEnvBase Environment { get; }
+
+        /// <summary>
         /// Gets a key of the container in <paramref name="cell"/> as its rebuild would make it, each element given by
         /// <paramref name="part"/>: two containers of the type have one key exactly when, their elements so, they are
         /// one container. A vector and a pair list their elements in order; a set keeps one of elements whose parts are
@@ -86,6 +93,29 @@ namespace Eggnog
         /// <param name="find">The cell an element's cell is now.</param>
         /// <returns>The rebuilt content, in that layout.</returns>
         long[] Rebuild(long[] content, System.Func<uint, uint> find);
+
+        /// <summary>
+        /// Gets whether the container in <paramref name="cell"/>, one of the type's environment, rebuilds the parts the
+        /// type's containers rebuild: a vector's, a set's or a multiset's elements, a map's keys or values, a pair's first
+        /// or second, as the type's own flags say, a function value's as its own do. The environment is shared by every
+        /// type of the kind, and the engine tells two of its containers apart by those flags and then by their cells
+        /// alone, so <see cref="Content"/> and <see cref="Rebuild"/> read and rebuild such a container as the engine does,
+        /// whichever type made it.
+        /// </summary>
+        /// <param name="cell">The container's cell.</param>
+        /// <param name="view">The containers of the scope the cell belongs to.</param>
+        /// <returns><c>false</c> if the view holds no container of the environment under the cell, or one whose flags
+        /// are not the type's.</returns>
+        bool SharesLayout(uint cell, Relations.ContainerView view);
+
+        /// <summary>
+        /// Gets the flags the type's containers carry in its environment, one bit per part they rebuild: a vector's, a
+        /// set's or a multiset's elements; a map's keys, then its values; a pair's first, then its second; none for a
+        /// function value, whose content carries its arguments' own (<see cref="Content"/>). Two types of one environment
+        /// with the same flags share a layout (<see cref="SharesLayout"/>): the engine makes a container of one and a
+        /// container of the other of equal cells one container.
+        /// </summary>
+        int RebuildFlags { get; }
 
         /// <summary>
         /// Gets the name a serialized e-graph gives the container in <paramref name="cell"/>: egglog's

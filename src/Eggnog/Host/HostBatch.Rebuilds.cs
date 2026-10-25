@@ -8,15 +8,17 @@ namespace Eggnog
     {
 
         // egglog rebuilds after every command, and its next command sees the merged classes and rows; the batch flushes
-        // once, at its end, and plans each fact against the engine as its earlier facts' writes leave it, merged by their
-        // lattices but before their merges of classes and before the merge expressions only the engine evaluates. A fact
-        // that needs what those make (a read of a function whose keys are classes, a computation over classes, a write of
-        // a function that holds classes or whose merge is not a lattice, a deletion keyed by classes, a primitive over the
-        // tables, a table such an expression reads, a read of a key such an expression merges) is planned after the batch
-        // flushes and rebuilds what it planned before it (Rebuild), as egglog's next command runs after the last one's
-        // rebuild. The flushed part then stays written whatever the batch's later calls do. Within a fact, its own merges
-        // come after its writes, as egglog's do in its command, so a check of a write considers only the merges of the
-        // facts before it (mergedBeforeFact).
+        // once, at its end, and plans each fact against the engine as its earlier facts' writes leave it, merged by
+        // their lattices but before their merges of classes and before the merge expressions only the engine evaluates.
+        // A fact that needs what those make (a read of a function whose keys are classes, a computation over classes, a
+        // write of a function that holds classes or whose merge is not a lattice, a deletion keyed by classes, a
+        // primitive over the tables, a table such an expression reads, a read of a key such an expression merges, and
+        // below the root a constant container of classes that the child's view does not hold yet, which its container
+        // pass may make by rebuilding its copy of a container the merges reach) is planned after the batch flushes and
+        // rebuilds what it planned before it (Rebuild), as egglog's next command runs after the last one's rebuild. The
+        // flushed part then stays written whatever the batch's later calls do. Within a fact, its own merges come after
+        // its writes, as egglog's do in its command, so a check of a write considers only the merges of the facts
+        // before it (mergedBeforeFact).
 
         /// <summary>
         /// Whether the facts before the one being planned merged classes.
@@ -175,13 +177,25 @@ namespace Eggnog
         /// <summary>
         /// Gets whether a term needs the facts before it rebuilt: a read of a function whose keys are classes after a
         /// merge of classes, or of a function a merge only the engine evaluates wrote; a constructor term of a table a
-        /// merge expression reads, which it may make; a computation over classes after a merge of classes; or a primitive
-        /// over the tables, a function value's application among them, which reads and writes what it chooses.
+        /// merge expression reads, which it may make; a computation over classes after a merge of classes; below the
+        /// root, after a merge of classes, a constant container of classes that the view does not hold yet
+        /// (<see cref="InView"/>); or a primitive over the tables, a function value's application among them, which reads
+        /// and writes what it chooses.
         /// </summary>
         bool Needs(TermShape shape)
         {
             switch (shape.Kind)
             {
+                case TermShapeKind.Constant:
+                {
+                    // A child makes no container of classes: after a merge of classes, a constant's content may be one
+                    // the child sees only once its container pass has rebuilt its copy of a container the merge reaches.
+                    // A writable root makes the container, which its rebuild then merges with the rebuilt one.
+                    if (mergedBeforeFact && scope.IsRoot == false && InView(shape) == false)
+                        return true;
+
+                    break;
+                }
                 case TermShapeKind.Application:
                 {
                     var table = shape.Table!;
@@ -211,6 +225,21 @@ namespace Eggnog
             }
 
             return Needs(shape.Arguments);
+        }
+
+        /// <summary>
+        /// Gets whether a constant needs no container of classes the scope's view lacks: it holds no classes, or the view
+        /// holds its container, as the cells it names are, which the rebuild after the flush rebuilds with the rest of
+        /// the view. A container the view lacks may be one the container pass makes, or one no scope below the root may
+        /// make, which the fact then refuses. One lookup by content per level of the view.
+        /// </summary>
+        bool InView(TermShape shape)
+        {
+            var type = TypeOf(shape);
+            if (type.HoldsClasses == false || (type is IFnColumnType function && function.HoldsClassesIn(shape.Constant!) == false))
+                return true;
+
+            return type.TryEncodeExistingObject(shape.Constant!, scope.ContainerView, out _);
         }
 
         /// <summary>

@@ -409,7 +409,9 @@ namespace Eggnog
         /// failed command, and the batch goes on. A call needs the earlier calls rebuilt when, after a merge of classes, it reads a function
         /// whose keys are classes, computes over classes, writes a function that holds classes, or one with a merge that
         /// is not a lattice whose keys are classes or whose merge compares classes or calls tables, or deletes a row keyed
-        /// by classes; when it calls a primitive over the tables, or reads a key or writes a table that an earlier call's
+        /// by classes, or, below the root, holds a constant container of classes the scope does not see yet, which it may
+        /// see only once its rebuild has rebuilt its copy of a container the merge reaches; when it calls a primitive over
+        /// the tables, or reads a key or writes a table that an earlier call's
         /// merge expression merges or reads, and that merge only the engine evaluates; after a merge expression that
         /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
         /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds

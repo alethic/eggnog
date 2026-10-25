@@ -231,12 +231,6 @@ namespace Eggnog
             for (var i = 0; i < arguments.Length; i++)
                 arguments[i] = PlanTermCore(shape.Arguments[i]);
 
-            // A write primitive unions classes that containers hold, which the library does only at the root (decisions
-            // row 9).
-            if (primitive.IsWrite && scope.IsRoot == false)
-                throw new InvalidOperationException(
-                    $"primitive '{primitive.Name}' unions classes that containers hold, which the library does only at the root, so only the root may compute it.");
-
             bool found;
             uint cell;
             EngineCallMarker.Enter();
@@ -261,7 +255,8 @@ namespace Eggnog
                 else
                 {
                     // A write primitive's unions are the batch's, as egglog's global action makes them, at the end of the
-                    // fact.
+                    // fact, in any scope: it reads its containers through the scope's view, and a child's container pass
+                    // rebuilds the containers its unions reach, as the root's rebuild does (decisions row 9).
                     found = primitive.IsWrite
                         ? primitive.TryInvokeWrite(arguments, parameters, result, collectUnion ??= CollectUnion, scope.ContainerView, out cell)
                         : primitive.TryInvokeCore(arguments, parameters, result, scope, out cell);
@@ -1074,8 +1069,8 @@ namespace Eggnog
         /// </summary>
         /// <exception cref="FactConflictException">A union would give a function without a lattice two values for one
         /// key.</exception>
-        /// <exception cref="InvalidOperationException">The scope is a child, and a union would displace a class a
-        /// container of classes holds.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and a union would rewrite a row of a
+        /// function whose merge is not a lattice.</exception>
         void PlanFactUnions()
         {
             try

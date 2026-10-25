@@ -76,7 +76,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether some live container holds <paramref name="element"/> (the index is exact): the probe of
-        /// <see cref="ContainerValues.AnyEqContainerMentions"/>. One lock and one expected-O(1) probe.
+        /// <see cref="ContainerEnvBase.AnyContainerMentions"/>. One lock and one expected-O(1) probe.
         /// </summary>
         /// <param name="element">The value.</param>
         /// <returns><c>true</c> if a container holds it.</returns>

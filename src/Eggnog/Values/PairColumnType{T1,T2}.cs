@@ -65,6 +65,9 @@ namespace Eggnog
         public IReadOnlyList<ColumnType> ElementTypes => [first, second];
 
         /// <inheritdoc />
+        public Relations.ContainerEnvBase Environment => env;
+
+        /// <inheritdoc />
         internal override bool IsOrdered => first.IsOrdered && second.IsOrdered;
 
         /// <inheritdoc />
@@ -276,6 +279,13 @@ namespace Eggnog
         /// <inheritdoc />
         public long[] Rebuild(long[] content, Func<uint, uint> find) =>
             [rebuildFirst ? find((uint)content[0]) : content[0], rebuildSecond ? find((uint)content[1]) : content[1]];
+
+        /// <inheritdoc />
+        public bool SharesLayout(uint cell, Relations.ContainerView view) =>
+            view.TryGetContainer(env, cell, out var pair) && pair.RebuildFirst == rebuildFirst && pair.RebuildSecond == rebuildSecond;
+
+        /// <inheritdoc />
+        public int RebuildFlags => (rebuildFirst ? 1 : 0) | (rebuildSecond ? 2 : 0);
 
         /// <inheritdoc />
         public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
