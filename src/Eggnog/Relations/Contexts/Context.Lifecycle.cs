@@ -47,8 +47,6 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is faulted or contradicted; its parent (or an ancestor
         /// that is not frozen) was stopped by a contradiction; it is at depth <see cref="MaxDepth"/>; the call comes from
         /// inside another operation of the same thread domain; or the domain is held by another thread.</exception>
-        /// <exception cref="NotSupportedException">An eq-sort container an unsettled ancestor gained concerns the
-        /// context (<see cref="EqContainerGuard"/>); it is faulted.</exception>
         public Context CreateChild(ContextOptions? options = null)
         {
             ThrowIfDisposed();
@@ -170,13 +168,16 @@ namespace Eggnog.Relations
         /// <para>
         /// In a child the first pass catches up: it re-keys the union-find over the parent's new displacements
         /// (<see cref="CatchUpUnionFind"/>), absorbs the rows the unsettled ancestors appended since its cursors
-        /// (<see cref="ContextTables.CatchUpRows"/>), and reads the ids of the containers they rebuilt in place from
-        /// the Dirty streams of their container logs (<see cref="ContextTables.ReadDirty"/>). Every pass then runs the
-        /// container step (<see cref="RebuildContainerLayers"/>): the container pass claims and rebuilds, in the
-        /// child's container layers, the containers of classes its displacements since the last pass concern; the
-        /// unions their merges staged are merged; and the own rows naming a dirty container are re-stamped. Then it
-        /// rewrites the own rows that name an id displaced since the last pass, hides and copies the ancestor rows that
-        /// name the child's own new losers or a container its pass changed in place, and merges
+        /// (<see cref="ContextTables.CatchUpRows"/>), reads the ids of the containers they rebuilt in place from the
+        /// Dirty streams of their container logs (<see cref="ContextTables.ReadDirty"/>), and catches up with the
+        /// containers of classes they gained (<see cref="ContainerLayers.CatchUp"/>): it settles each that equals one
+        /// the child holds under another id, merging the unions that stages at once, and queues for the pass the ids
+        /// to claim and the contents to adopt. Every pass then runs the container step
+        /// (<see cref="RebuildContainerLayers"/>): the container pass claims and rebuilds, in the child's container
+        /// layers, the containers of classes its displacements since the last pass concern, and what the catch-up
+        /// queued; the unions their merges staged are merged; and the own rows naming a dirty container are
+        /// re-stamped. Then it rewrites the own rows that name an id displaced since the last pass, hides and copies the
+        /// ancestor rows that name the child's own new losers or a container its pass changed in place, and merges
         /// (<see cref="ContextTables.RebuildPass"/>): containers first, as egglog's rebuild loop runs them
         /// (egglog-bridge/src/lib.rs:666-681). A contradiction that stops the child ends the loop at once.
         /// </para>
@@ -193,10 +194,10 @@ namespace Eggnog.Relations
         /// Before any pass, a child refuses to catch up with a parent that a contradiction stopped: such a parent is
         /// never clean again. A child that stops on contradictions stops too; any other child is refused, unfaulted
         /// (<see cref="StopIfParentStopped"/>). And when the container log of an unsettled ancestor gained an eq-sort
-        /// container since the child's guard last read it, the guard runs, even when nothing else is to be done: it
-        /// refuses the child when such a container concerns it (<see cref="EqContainerGuard"/>). One under an id the
-        /// child claimed it keeps, and checks after the loop's end, once the passes have rebuilt the child's copy, unless
-        /// a contradiction stopped the child (<see cref="EqContainerGuard.CheckClaimedIds"/>).
+        /// container since the child last read it, the pre-loop scan runs, even when nothing else is to be done: it
+        /// consumes the containers that do not concern the child and keeps the others for the first pass's catch-up
+        /// (<see cref="ContainerLayers.ScanAdds"/>), so a child that no new container concerns stays clean and takes no
+        /// epoch.
         /// </para>
         /// </remarks>
         /// <returns>Whether any pass changed anything; <c>false</c> for a frozen, contradicted or clean context.</returns>
@@ -205,8 +206,6 @@ namespace Eggnog.Relations
         /// its parent (or an ancestor that is not frozen) was stopped by a contradiction and it does not stop on
         /// contradictions; or it (or a parent that is not frozen) has work to do and the call comes from inside a write
         /// batch's action or a visitor of the same domain, where a rebuild with nothing to do is allowed.</exception>
-        /// <exception cref="NotSupportedException">An eq-sort container an unsettled ancestor gained since the child
-        /// last caught up concerns the child (<see cref="EqContainerGuard"/>); the child is faulted.</exception>
         /// <exception cref="OverflowException">The store's clock has run out (<see cref="Store.ReadClock"/>); the
         /// context is not faulted.</exception>
         public bool Rebuild()
@@ -228,10 +227,10 @@ namespace Eggnog.Relations
             if (contradicted)
                 return false;
 
-            // An unsettled ancestor's container log gained an eq-sort container since the guard last read it; the guard
+            // An unsettled ancestor's container log gained an eq-sort container since the child last read it; the scan
             // changes nothing a reader sees, so it runs even inside a callback, before the clean test it is part of.
-            if (parent is not null && EqContainerGuard.IsBehind(this))
-                CheckEqContainers();
+            if (parent is not null && tables!.HasNewAddedEntries)
+                containerLayers!.ScanAdds();
 
             if (parent is null ? journalMark == DisplacedCount && database.Catalog.Notifications.IsEmpty : IsClean)
                 return false;
@@ -270,10 +269,19 @@ namespace Eggnog.Relations
                     uint[]? inherited = null;
                     if (first && parent is not null)
                     {
+                        var importFrom = unionFindCursor;
                         pass |= CatchUpUnionFind(epoch) != journal!.Count;
                         caughtUp |= tables!.CatchUpRows(epoch);
                         pass |= caughtUp;
                         inherited = tables.ReadDirty();
+
+                        // The containers of classes the ancestors gained: collisions settle now, and their unions merge
+                        // before the container pass, which claims and adopts what the catch-up queued.
+                        if (contradicted == false && containerLayers!.CatchUp(epoch, parent.DisplacedIds.Slice(importFrom, unionFindCursor - importFrom)))
+                        {
+                            database.MergeAll(epoch);
+                            pass = true;
+                        }
                     }
 
                     if (parent is null)
@@ -305,8 +313,6 @@ namespace Eggnog.Relations
 
             journalMark = DisplacedCount;
             EndPasses(caughtUp);
-            if (parent is not null && contradicted == false)
-                CheckEqContainersOnClaimedIds();
 
 #if DEBUG
             // A contradiction stopped the merge with writes pending: the context answers only IsContradictory.
@@ -522,46 +528,6 @@ namespace Eggnog.Relations
             }
 
             throw new InvalidOperationException("The parent context was stopped by a contradiction and answers only IsContradictory, so this context cannot catch up with it; dispose it.");
-        }
-
-        /// <summary>
-        /// Runs the eq-container guard before the rebuild loop when it is behind (<see cref="EqContainerGuard"/>): an
-        /// unsettled ancestor's container log gained containers since the guard last read it. A refusal faults the
-        /// child: its view would hold, through the new container, an id it displaced or a second entry for a content it
-        /// holds, which its container pass does not reconcile.
-        /// </summary>
-        /// <exception cref="NotSupportedException">A container an ancestor gained concerns the child.</exception>
-        void CheckEqContainers()
-        {
-            try
-            {
-                EqContainerGuard.Check(this);
-            }
-            catch
-            {
-                Fault();
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Runs the eq-container guard's check of the containers it kept, before the loop, under ids the child claimed
-        /// (<see cref="EqContainerGuard.CheckClaimedIds"/>), once the rebuild's passes have rebuilt the child's copies.
-        /// A refusal faults the child: an ancestor put a container on such an id that the child's view does not hold,
-        /// and the child does not yet adopt it.
-        /// </summary>
-        /// <exception cref="NotSupportedException">The child's view lacks such a container.</exception>
-        void CheckEqContainersOnClaimedIds()
-        {
-            try
-            {
-                EqContainerGuard.CheckClaimedIds(this);
-            }
-            catch
-            {
-                Fault();
-                throw;
-            }
         }
 
         /// <summary>

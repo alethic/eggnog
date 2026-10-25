@@ -28,7 +28,8 @@ namespace Eggnog.Relations
         /// <remarks>
         /// <paramref name="holdsIds"/> says whether the containers hold e-class ids. Such eq-sort containers cannot be
         /// interned in a child context (interning one there throws <see cref="InvalidOperationException"/>); a child
-        /// rebuilds, in its container layers, those its own displacements reach (<see cref="ContainerLayers"/>).
+        /// rebuilds, in its container layers, those its own displacements reach, and those its writable ancestors gain
+        /// later that concern it (<see cref="ContainerLayers"/>).
         /// Containers over base values register with <c>holdsIds: false</c> and work in every context.
         /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>

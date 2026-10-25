@@ -26,18 +26,22 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Initializes the program of <paramref name="seed"/>. Every fifth seed is large: 1300 vectors, nearly all of
         /// them holding the last class, which the first union of the child displaces, so the child claims more than
-        /// 1000 of them and its later rebuilds take egglog's incremental path.
+        /// 1000 of them and its later rebuilds take egglog's incremental path. A small program is never large: 3 to 6
+        /// classes, 3 to 8 vectors and up to 4 sets, each of one or two elements, so that unions make containers equal
+        /// often.
         /// </summary>
         /// <param name="seed">The seed.</param>
-        public ContainerPassProgram(int seed)
+        /// <param name="small">Whether the world is small.</param>
+        public ContainerPassProgram(int seed, bool small = false)
         {
             Seed = seed;
+            Small = small;
             var random = new Random(seed);
             var writes = new Random(seed ^ 0x77e5);
-            Large = seed % 5 == 0;
-            Classes = Large ? random.Next(20, 40) : random.Next(5, 16);
-            VectorCount = Large ? 1300 : random.Next(3, 30);
-            SetCount = Large ? 40 : random.Next(0, 12);
+            Large = small == false && seed % 5 == 0;
+            Classes = small ? random.Next(3, 7) : Large ? random.Next(20, 40) : random.Next(5, 16);
+            VectorCount = small ? random.Next(3, 9) : Large ? 1300 : random.Next(3, 30);
+            SetCount = small ? random.Next(0, 5) : Large ? 40 : random.Next(0, 12);
             FreezeRoot = random.Next(2) == 0;
             FreezeChild = random.Next(2) == 0;
             Writes = writes.Next(3) == 0;
@@ -63,6 +67,11 @@ namespace Eggnog.Relations.Tests
         /// Gets whether the program is large: 1300 vectors, nearly all holding the last class.
         /// </summary>
         public bool Large { get; }
+
+        /// <summary>
+        /// Gets whether the program is small: a few classes, and a few containers of one or two elements.
+        /// </summary>
+        public bool Small { get; }
 
         /// <summary>
         /// Gets the number of classes, the root's first ids.
@@ -111,7 +120,7 @@ namespace Eggnog.Relations.Tests
         public string Describe()
         {
             var text = new StringBuilder();
-            text.AppendLine($"seed {Seed}: {Classes} classes, {VectorCount} vectors, {SetCount} sets; root {(FreezeRoot ? "frozen" : "writable")}; child {(FreezeChild ? "frozen" : "writable")} under the grandchild");
+            text.AppendLine($"seed {Seed}{(Small ? " (small)" : "")}: {Classes} classes, {VectorCount} vectors, {SetCount} sets; root {(FreezeRoot ? "frozen" : "writable")}; child {(FreezeChild ? "frozen" : "writable")} under the grandchild");
             foreach (var batch in ChildBatches)
                 text.AppendLine($"  child: {Describe(batch)}");
 

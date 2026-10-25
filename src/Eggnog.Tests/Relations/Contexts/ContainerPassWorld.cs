@@ -45,11 +45,13 @@ namespace Eggnog.Relations.Tests
                 classes.Add(id);
             }
 
-            // A large program's vectors nearly all hold the last class, the hub its child displaces first.
+            // A large program's vectors nearly all hold the last class, the hub its child displaces first; a small
+            // program's containers hold one or two elements.
             var hub = classes[^1];
+            var longest = program.Small ? 2 : 3;
             for (var i = 0; i < program.VectorCount; i++)
             {
-                var length = random.Next(1, 4);
+                var length = random.Next(1, longest + 1);
                 var elements = new uint[length];
                 for (var j = 0; j < length; j++)
                     elements[j] = VectorIds.Count > 0 && random.Next(program.Large ? 20 : 4) == 0 ? VectorIds[random.Next(VectorIds.Count)] : classes[random.Next(classes.Count)];
@@ -63,7 +65,7 @@ namespace Eggnog.Relations.Tests
 
             for (var i = 0; i < program.SetCount; i++)
             {
-                var length = random.Next(1, 4);
+                var length = random.Next(1, longest + 1);
                 var elements = new uint[length];
                 for (var j = 0; j < length; j++)
                     elements[j] = VectorIds.Count > 0 && random.Next(3) == 0 ? VectorIds[random.Next(VectorIds.Count)] : classes[random.Next(classes.Count)];
@@ -179,9 +181,12 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// Interns <paramref name="container"/> at the root.
+        /// Interns <paramref name="container"/> at the root: the world's own containers, and those a program of
+        /// <see cref="AncestorContainerDifferentialTests"/> interns later.
         /// </summary>
-        uint Intern<TContainer>(TContainer container)
+        /// <param name="container">The container.</param>
+        /// <returns>Its id.</returns>
+        internal uint Intern<TContainer>(TContainer container)
             where TContainer : struct, IContainerValue<TContainer>
         {
             return Store.Root.Database.WithExecutionState(state => state.Containers.GetOrInsert(container, state));

@@ -197,6 +197,15 @@ namespace Eggnog.Relations
         internal bool IsOwnDisplacement(uint id) => parentFinder is { } p && p.Find(id) == id;
 
         /// <summary>
+        /// Gets the canonical id of <paramref name="id"/> in the parent: what a child's catch-up asks of the
+        /// displacements it imported, to tell content an ancestor renamed onto an id from a content it rebuilt in place
+        /// there (<see cref="ContainerLayers.CatchUp"/>). A child only; O(depth) probes.
+        /// </summary>
+        /// <param name="id">The id.</param>
+        /// <returns>Its canonical id in the parent.</returns>
+        internal uint FindInParent(uint id) => parentFinder!.Find(id);
+
+        /// <summary>
         /// Visits the merges this child made over its parent's ids: for every class of its overlay, each member that is
         /// not local to the child, paired with the class's canonical id; a class's canonical is visited paired with
         /// itself when it is a parent id. Deterministic: slot order, then insertion order.

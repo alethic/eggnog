@@ -234,8 +234,9 @@ namespace Eggnog.Relations.Tests
         /// Enumerates the containers of the type <paramref name="root"/> holds that <paramref name="context"/>'s view
         /// holds: every entry of the own environment of each level's layer of the type, from the context down, and of
         /// the root's environment, under an id no level above it, up to the context, shadows.
+        /// <see cref="AncestorContainerDifferentialTests"/> enumerates the view the same way.
         /// </summary>
-        static List<(TContainer Container, uint Id)> VisibleEntries<TContainer>(Context context, ContainerEnv<TContainer> root)
+        internal static List<(TContainer Container, uint Id)> VisibleEntries<TContainer>(Context context, ContainerEnv<TContainer> root)
             where TContainer : struct, IContainerValue<TContainer>
         {
             var levels = new List<ContainerLayers>();
@@ -268,7 +269,7 @@ namespace Eggnog.Relations.Tests
         /// Gets the visible rows of <paramref name="table"/> in <paramref name="context"/>, without their timestamps,
         /// sorted.
         /// </summary>
-        static List<string> Visible(Context context, TableId table)
+        internal static List<string> Visible(Context context, TableId table)
         {
             var width = context.Store.Schema[table]!.SortColumn;
             return ScanVisible(context.GetView(table))

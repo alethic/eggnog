@@ -19,6 +19,11 @@ namespace Eggnog.Relations.Tests
     /// a parallel root and the renames of a parallel rebuild are each logged once; and containers of values are never
     /// logged, so they leave children clean.
     /// </summary>
+    /// <remarks>
+    /// egglog has no writable root under a live <c>(push)</c>, so where a child claims a container that a writable root
+    /// interned after the child's union, the view expected is that of a fresh root replaying the same commands in the
+    /// same order, which interns the vector canonical, as <c>[x]</c>, under the same id.
+    /// </remarks>
     public class ContainerLogTests
     {
 
@@ -201,14 +206,14 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// Children created under a writable root that then freezes read what the root's log holds, the tail the freeze
         /// drained, before they settle the root and drop their cursors: a child whose losers the tail's containers do not
-        /// name settles clean, and one whose loser a container of the tail names is refused, which only the tail can
-        /// do, since its journal was checked before that container existed. The root's log stays active, and grows no
-        /// more, until both children go.
+        /// name settles clean, and one whose loser a container of the tail names claims that container, which only the
+        /// tail can tell it of, since its journal was handled before that container existed. The root's log stays
+        /// active, and grows no more, until both children go.
         /// </summary>
         [Fact]
         public void AFrozenAncestorsTailIsReadBeforeItSettles()
         {
-            var (store, _) = Setup();
+            var (store, env) = Setup();
             var f = store.AddTable(MaxFunction(1), name: "f");
             var root = store.Root;
             var x = root.NewId();
@@ -216,24 +221,24 @@ namespace Eggnog.Relations.Tests
             var z = root.NewId();
             var w = root.NewId();
             var child = root.CreateChild();
-            var refused = root.CreateChild();
+            var claiming = root.CreateChild();
             child.Union(x, y);
             child.Rebuild();
-            refused.Union(x, w);
-            refused.Rebuild();
+            claiming.Union(x, w);
+            claiming.Rebuild();
 
             // The root interns three containers, the last naming the second child's loser, and writes a row, then
             // freezes, which drains its log.
             Intern(root, new VecContainer(z));
             Intern(root, new VecContainer(z, z));
-            Intern(root, new VecContainer(w));
+            var held = Intern(root, new VecContainer(w));
             Insert(root, f, z, 1, 0);
             root.Freeze();
             var log = store.ContainerLog;
             Assert.False(log.Pending);
             Assert.Equal(3, log.AddedCount);
             Assert.False(child.IsClean);
-            Assert.False(refused.IsClean);
+            Assert.False(claiming.IsClean);
 
             child.Rebuild();
             Assert.True(child.IsClean);
@@ -241,12 +246,18 @@ namespace Eggnog.Relations.Tests
             Assert.Null(child.Tables.CursorAt(0));
             Assert.True(log.Active);
             Assert.Equal(3, log.AddedCount);
+            Assert.True(child.ContainerLayers!.IsEmpty);
             child.CheckInvariants();
             root.CheckInvariants();
 
-            Assert.Throws<NotSupportedException>(() => refused.Rebuild());
-            Assert.True(refused.IsFaulted);
-            refused.Dispose();
+            claiming.Rebuild();
+            Assert.False(claiming.IsFaulted);
+            Assert.True(claiming.IsClean);
+            Assert.Equal(1, claiming.Tables!.SettledDepth);
+            Assert.True(ContainerView.Of(claiming.Database).TryGetContainer(env, held, out var copy));
+            Assert.Equal(new VecContainer(x), copy);
+            claiming.CheckInvariants();
+            claiming.Dispose();
             Assert.True(log.Active);
             Assert.Equal(3, log.AddedCount);
 
@@ -287,8 +298,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// A cursor past the end of a log, which only a clear could leave, reads nothing and comes back at the end, in
-        /// both streams; a child whose Added cursor is past the end is clean, and its guard moves the cursor back to the
-        /// end, reading what comes later.
+        /// both streams; a child whose Added cursor is past the end is clean, and its pre-loop scan moves the cursor
+        /// back to the end, reading what comes later.
         /// </summary>
         [Fact]
         public void ACursorPastTheEndReadsNothing()
@@ -309,7 +320,7 @@ namespace Eggnog.Relations.Tests
             Assert.Empty(log.ReadDirty(3, out end));
             Assert.Equal(0, end);
 
-            var (store, _) = Setup();
+            var (store, env) = Setup();
             var root = store.Root;
             var x = root.NewId();
             var y = root.NewId();
@@ -322,28 +333,32 @@ namespace Eggnog.Relations.Tests
             Assert.True(child.IsClean);
 
             // A container the root interns now lies before the cursor: pending, so the child rebuilds, reads nothing
-            // and comes back at the end. The next one, naming the child's loser, lies past it and is refused.
+            // and comes back at the end. The next one, naming the child's loser, lies past it and is claimed.
             Intern(root, new VecContainer(z));
             Assert.False(child.IsClean);
             Assert.False(child.Rebuild());
             Assert.Equal(1, cursor.Added);
             Assert.True(child.IsClean);
-            Intern(root, new VecContainer(y));
+            var u = Intern(root, new VecContainer(y));
             Assert.False(child.IsClean);
-            Assert.Throws<NotSupportedException>(() => child.Rebuild());
-            Assert.True(child.IsFaulted);
+            Assert.True(child.Rebuild());
+            Assert.Equal(2, cursor.Added);
+            Assert.False(child.IsFaulted);
+            Assert.True(ContainerView.Of(child.Database).TryGetContainer(env, u, out var copy));
+            Assert.Equal(new VecContainer(x), copy);
+            child.CheckInvariants();
             child.Dispose();
         }
 
         /// <summary>
         /// A grandchild reads the root's log through its own cursor into the root: once its parent, with no
         /// displacement, has consumed a new container unread, the grandchild whose loser the container names is still
-        /// unclean and is refused, while its parent stays clean and unfaulted.
+        /// unclean and claims the container, while its parent stays clean, holding no layer.
         /// </summary>
         [Fact]
         public void AGrandchildReadsTheRootsLogThroughItsOwnCursor()
         {
-            var (store, _) = Setup();
+            var (store, env) = Setup();
             var root = store.Root;
             var x = root.NewId();
             var y = root.NewId();
@@ -353,17 +368,23 @@ namespace Eggnog.Relations.Tests
             leaf.Rebuild();
             Assert.True(leaf.IsClean);
 
-            Intern(root, new VecContainer(y));
+            var u = Intern(root, new VecContainer(y));
             Assert.False(middle.Rebuild());
             Assert.Equal(1, middle.Tables!.CursorAt(0)!.Added);
             Assert.Equal(0, leaf.Tables!.CursorAt(0)!.Added);
             Assert.True(middle.IsClean);
             Assert.False(leaf.IsClean);
 
-            Assert.Throws<NotSupportedException>(() => leaf.Rebuild());
-            Assert.True(leaf.IsFaulted);
+            Assert.True(leaf.Rebuild());
+            Assert.False(leaf.IsFaulted);
+            Assert.Equal(1, leaf.Tables.CursorAt(0)!.Added);
+            Assert.True(ContainerView.Of(leaf.Database).TryGetContainer(env, u, out var copy));
+            Assert.Equal(new VecContainer(x), copy);
+            Assert.True(ContainerView.Of(middle.Database).TryGetContainer(env, u, out var original));
+            Assert.Equal(new VecContainer(y), original);
             Assert.True(middle.IsClean);
-            Assert.False(middle.IsFaulted);
+            Assert.True(middle.ContainerLayers!.IsEmpty);
+            leaf.CheckInvariants();
             leaf.Dispose();
             middle.CheckInvariants();
         }

@@ -19,8 +19,9 @@ namespace Eggnog.Relations
     /// A catch-up records what it read as pending (<see cref="SetPendingRows"/>, <see cref="SetPendingStamp"/>,
     /// <see cref="SetPendingDirty"/>) and <see cref="CommitPending"/> publishes it after the rebuild loop, while the
     /// ancestor cannot change (it is frozen, or shares the child's thread domain). The Added position moves where the
-    /// eq-container guard reads the Added stream (<see cref="Added"/>), which is consumed once read, before the rebuild
-    /// loop. Owner's domain thread only.
+    /// pre-loop scan of the child's rebuild reads the Added stream (<see cref="Added"/>), which is consumed once read,
+    /// before the rebuild loop: what the scan keeps for the catch-up waits in the child's container layers. Owner's
+    /// domain thread only.
     /// </para>
     /// </remarks>
     internal sealed class AncestorCursor
@@ -57,8 +58,8 @@ namespace Eggnog.Relations
         public long Stamp => stamp;
 
         /// <summary>
-        /// Gets or sets the number of Added entries of the ancestor's container log the child has consumed: the
-        /// eq-container guard moves it past what it read (<see cref="ContextTables.ConsumeAdded"/>).
+        /// Gets or sets the number of Added entries of the ancestor's container log the child has consumed: the pre-loop
+        /// scan of its rebuild moves it past what it read (<see cref="ContextTables.CommitAdded"/>).
         /// </summary>
         public int Added { get; set; }
 

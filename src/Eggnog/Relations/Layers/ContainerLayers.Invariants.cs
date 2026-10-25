@@ -13,9 +13,9 @@ namespace Eggnog.Relations
         /// environment is consistent, holds entries only under ids local to the context or shadowed by the layer,
         /// shadows no local id, and, once the context is frozen, holds what it held at the freeze
         /// (<see cref="ContainerLayerBase.CheckInvariants"/>); each layer sits in the slot of its type, frozen with the
-        /// context; the container mark lies within the journal; and the context's view of containers of classes is
-        /// canonical, with each content once (<see cref="CheckView"/>). Requires that nothing changes the layers
-        /// meanwhile, and a clean context.
+        /// context; the container mark lies within the journal, and nothing waits for the catch-up
+        /// (<see cref="HasPending"/>); and the context's view of containers of classes is canonical, with each content
+        /// once (<see cref="CheckView"/>). Requires that nothing changes the layers meanwhile, and a clean context.
         /// </summary>
         /// <param name="violations">Receives one line per violation.</param>
         public void CheckInvariants(List<string> violations)
@@ -39,6 +39,9 @@ namespace Eggnog.Relations
 
             if (owner.Journal is { } journal && containerMark > journal.Count)
                 Context.Report(violations, $"container layers: the container mark {containerMark} is beyond the journal's {journal.Count} rows");
+
+            if (pending is { Count: > 0 } kept)
+                Context.Report(violations, $"container layers: the context is clean but {kept.Count} entries of its ancestors' container logs wait for its catch-up");
 
             CheckView(violations);
         }

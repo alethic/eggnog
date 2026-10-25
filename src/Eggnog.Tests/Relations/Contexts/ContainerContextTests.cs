@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Xunit;
@@ -12,10 +13,10 @@ namespace Eggnog.Relations.Tests
     /// Tests for containers under colored contexts, storage part: the Dirty stream of the root's container log, through
     /// which children re-stamp their own rows naming a container the root rebuilt in place, cleared when the root's
     /// last descendant goes; a child's rebuild of the containers its own unions displace an element of, in its
-    /// container layers; the eq guard, which refuses a child that a container its writable root or parent gains later
-    /// concerns, which the child's rebuild does not reconcile, a container put on an id the child claimed beside the
-    /// content there that its copy does not hold included, and lets pass one the child's next container pass claims or
-    /// its copy stands for, a map's whose keys collapse in another order included; the
+    /// container layers; its catch-up with the containers its writable root or parent gains later, which it claims
+    /// when they hold its losers, merges with its own copies when they are equal, and adopts when they land on an id
+    /// it claimed, while its copy stands for a container it claimed that the ancestor rebuilds in place, a map whose
+    /// keys collapse in another order included, each compared with a fresh root replaying the same commands; the
     /// refusal to intern an eq-sort container in a child; and a child's database refusing egglog's container rebuild.
     /// </summary>
     public class ContainerContextTests
@@ -145,16 +146,21 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The eq guard against containers that appear afterwards: the root (not frozen) interns an eq-sort container
-        /// naming an id the child displaced in an earlier rebuild. The child is not clean from then on, even though no
-        /// row changed; its next rebuild's guard checks the new container's elements against the displacements its
-        /// container pass handled, and refuses it (faulted), where a copy would have unioned the containers.
+        /// A container that appears afterwards: the root (not frozen) interns an eq-sort container naming an id the
+        /// child displaced in an earlier rebuild. The child is not clean from then on, even though no row changed; its
+        /// next rebuild's pre-loop scan keeps the container, whose element is not canonical in the child, and the
+        /// catch-up of its first pass claims it, so that its container pass rebuilds the copy: the child sees
+        /// <c>[x]</c> under the root's new id, and the root keeps <c>[y]</c>. A fresh root replaying the union and then
+        /// the intern holds <c>[x]</c> under that id, since a frontend interns contents canonical: egglog's binary at
+        /// the engine's pin evaluates <c>(vec-of (Y))</c> to <c>(vec-of (X))</c> after <c>(union (X) (Y))</c> (probe
+        /// <c>intern-after-union.egg</c>).
         /// </summary>
         [Fact]
-        public void AContainerInternedAfterTheDisplacementIsCheckedAgainstIt()
+        public void AContainerInternedAfterTheDisplacementIsClaimed()
         {
             var (store, _) = Setup();
             var root = store.Root;
+            var env = root.Database.Containers.GetEnvironment<VecContainer>();
             var x = root.NewId();
             var y = root.NewId();
             var child = root.CreateChild();
@@ -162,43 +168,67 @@ namespace Eggnog.Relations.Tests
             child.Rebuild();
             Assert.True(child.IsClean);
 
-            Intern(root, new VecContainer(y));
+            var u = Intern(root, new VecContainer(y));
             Assert.False(child.IsClean);
             Assert.Throws<InvalidOperationException>(() => child.Find(x));
-            Assert.Throws<NotSupportedException>(() => child.Rebuild());
-            Assert.True(child.IsFaulted);
+            Assert.True(child.Rebuild());
+            Assert.False(child.IsFaulted);
+            Assert.True(child.IsClean);
+            var view = ContainerView.Of(child.Database);
+            Assert.True(view.TryGetContainer(env, u, out var copy));
+            Assert.Equal(new VecContainer(x), copy);
+            Assert.True(view.TryGetId(env, new VecContainer(x), out var id));
+            Assert.Equal(u, id);
+            Assert.False(view.TryGetId(env, new VecContainer(y), out _));
+            Assert.True(child.ContainerLayers!.LayerAt(env.TypeId)!.Shadowed.Contains(u));
+            child.CheckInvariants();
+            Assert.True(env.TryGetContainer(u, out var original));
+            Assert.Equal(new VecContainer(y), original);
             child.Dispose();
         }
 
         /// <summary>
-        /// A container the root's own container rebuild produces is new content as well: the root unions z into y, the
-        /// vector [z] becomes [y], and y is a loser of the child, which is refused.
+        /// A container the root's own container rebuild produces is new content as well: the root unions z into y, its
+        /// vector <c>[z]</c> becomes <c>[y]</c> in place, and y is a loser of the child, so the child's catch-up claims
+        /// it and its copy becomes <c>[x]</c>, as a fresh root replaying the two unions holds; the root keeps
+        /// <c>[y]</c>.
         /// </summary>
         [Fact]
-        public void AContainerTheRootsRebuildProducesIsCheckedToo()
+        public void AContainerTheRootsRebuildProducesIsClaimedToo()
         {
             var (store, _) = Setup();
             var root = store.Root;
+            var env = root.Database.Containers.GetEnvironment<VecContainer>();
             var x = root.NewId();
             var y = root.NewId();
             var z = root.NewId();
-            Intern(root, new VecContainer(z));
+            var v = Intern(root, new VecContainer(z));
             var child = root.CreateChild();
             child.Union(x, y);
             child.Rebuild();
 
             root.Union(y, z);
-            Assert.Throws<NotSupportedException>(() => child.Rebuild());
-            Assert.True(child.IsFaulted);
+            Assert.True(child.Rebuild());
+            Assert.False(child.IsFaulted);
+            Assert.Equal(x, child.Find(z));
+            var view = ContainerView.Of(child.Database);
+            Assert.True(view.TryGetContainer(env, v, out var copy));
+            Assert.Equal(new VecContainer(x), copy);
+            Assert.True(view.TryGetId(env, new VecContainer(x), out var id));
+            Assert.Equal(v, id);
+            Assert.False(view.TryGetId(env, new VecContainer(y), out _));
+            child.CheckInvariants();
+            Assert.True(env.TryGetContainer(v, out var rebuilt));
+            Assert.Equal(new VecContainer(y), rebuilt);
         }
 
         /// <summary>
-        /// A new container that names none of a child's losers costs it one guard run: the child is not clean until it
-        /// rebuilds, and that rebuild runs no pass and takes no epoch. A child with no displacement is not even made
-        /// unclean.
+        /// A new container that names none of a child's losers costs it one pre-loop scan: the child is not clean
+        /// until it rebuilds, and that rebuild consumes the container, runs no pass and takes no epoch
+        /// (<see cref="ContainerLayers.ScanAdds"/>). A child with no displacement is not even made unclean.
         /// </summary>
         [Fact]
-        public void AContainerNamingNoLoserOnlyRerunsTheGuard()
+        public void AContainerNamingNoLoserOnlyCostsOneScan()
         {
             var (store, _) = Setup();
             var root = store.Root;
@@ -223,8 +253,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// The root (not frozen) interns a container that holds an id the child displaced and has not rebuilt since:
-        /// the guard lets it pass, since the child's container pass has not handled that displacement yet, and the
-        /// pass claims the new container and rebuilds it, as it would one the root held before.
+        /// the child's pre-loop scan keeps it, its element not canonical in the child, and the child's pass claims the
+        /// new container and rebuilds it, as it would one the root held before, since the displacement is in the pass's
+        /// delta.
         /// </summary>
         [Fact]
         public void AContainerTheRootInternsBeforeTheChildsPassIsClaimedByIt()
@@ -238,7 +269,7 @@ namespace Eggnog.Relations.Tests
             child.Union(k, w);
 
             var u = Intern(root, new VecContainer(w));
-            Assert.True(EqContainerGuard.IsBehind(child));
+            Assert.True(child.Tables!.HasNewAddedEntries);
             child.Rebuild();
             Assert.False(child.IsFaulted);
             var view = ContainerView.Of(child.Database);
@@ -252,13 +283,14 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The root (not frozen) interns, after the child's container pass rebuilt a claimed copy, a container equal to
-        /// the copy under another id: the child's view would hold [k] twice, under the claimed v and under the root's
-        /// new u, and a child does not yet merge such a container with its own, so its next rebuild refuses it
-        /// (faulted). A root that had made the child's union would have returned v for [k].
+        /// A collision: the root (not frozen) interns, after the child's container pass rebuilt a claimed copy, a
+        /// container equal to the copy under another id: the child's view would hold [k] twice, under the claimed v
+        /// and under the root's new u. The child's catch-up settles it at once: the smaller v wins, the child claims u,
+        /// whose placement merges into v, and u is merged into v. A fresh root replaying the union and then the intern
+        /// returns v for [k], and never mints u; the child holds that, with u merged away.
         /// </summary>
         [Fact]
-        public void AContainerTheRootInternsEqualToAClaimedCopyIsRefused()
+        public void AContainerTheRootInternsEqualToAClaimedCopyMergesWithIt()
         {
             var (store, _) = Setup();
             var root = store.Root;
@@ -275,23 +307,29 @@ namespace Eggnog.Relations.Tests
             var u = Intern(root, new VecContainer(k));
             Assert.NotEqual(v, u);
             Assert.False(child.IsClean);
-            var refused = Assert.Throws<NotSupportedException>(() => child.Rebuild());
-            Assert.Contains("does not yet merge", refused.Message);
-            Assert.True(child.IsFaulted);
+            Assert.True(child.Rebuild());
+            Assert.False(child.IsFaulted);
+            Assert.Equal(v, child.Find(u));
+            var view = ContainerView.Of(child.Database);
+            Assert.True(view.TryGetId(env, new VecContainer(k), out var id));
+            Assert.Equal(v, id);
+            Assert.True(view.TryGetContainer(env, v, out var held));
+            Assert.Equal(new VecContainer(k), held);
+            Assert.False(view.TryGetContainer(env, u, out _));
+            child.CheckInvariants();
             child.Dispose();
         }
 
         /// <summary>
         /// The root (not frozen) puts content on an id the child claimed: it unions the ids of the vectors [w] and [a],
         /// so its rebuild renames [a] onto the smaller, y, which the child claimed when its union displaced w, and
-        /// whose copy it holds as [k]. The guard keeps the root's entry under y, beside [w] there, and after the
-        /// rebuild's passes finds that the child's view does not hold [a] under y: the child's shadow hides the root's
-        /// [a], and its copy is [k]. A child does not yet adopt such content, so the rebuild refuses it (faulted), where
-        /// a fresh root replaying the chain holds both under y
+        /// whose copy it holds as [k]. The child's shadow hides the root's [a] under y; its catch-up finds that z, a
+        /// displacement it imports, is y in the parent, so content arrived under y, and adopts it: the child's layer
+        /// holds [k] and [a] under y, and z is merged into y, as a fresh root replaying the chain holds them
         /// (<see cref="TheFreshRootCopyOfTheRenameHoldsBothContents"/>).
         /// </summary>
         [Fact]
-        public void AContainerTheRootRenamesOntoAClaimedIdIsRefused()
+        public void AContainerTheRootRenamesOntoAClaimedIdIsAdopted()
         {
             var (store, _) = Setup();
             var root = store.Root;
@@ -313,19 +351,29 @@ namespace Eggnog.Relations.Tests
             Assert.True(env.TryGetId(new VecContainer(a), out var renamed));
             Assert.Equal(y, renamed);
 
-            // The guard keeps the root's entry under the claimed y; the rebuild checks it after its passes.
-            EqContainerGuard.Check(child);
-            Assert.True(child.ContainerLayers.HasEntriesOnClaimedIds);
+            // The pre-loop scan keeps the root's entry under the claimed y for the catch-up.
+            child.ContainerLayers.ScanAdds();
+            Assert.True(child.ContainerLayers.HasPending);
             Assert.False(child.IsClean);
-            var refused = Assert.Throws<NotSupportedException>(() => child.Rebuild());
-            Assert.Contains("does not yet adopt", refused.Message);
-            Assert.True(child.IsFaulted);
+            Assert.True(child.Rebuild());
+            Assert.False(child.IsFaulted);
+            Assert.False(child.ContainerLayers.HasPending);
+            Assert.Equal(y, child.Find(z));
+            var view = ContainerView.Of(child.Database);
+            Assert.True(view.TryGetId(env, new VecContainer(k), out var ofK));
+            Assert.Equal(y, ofK);
+            Assert.True(view.TryGetId(env, new VecContainer(a), out var ofA));
+            Assert.Equal(y, ofA);
+            Assert.False(view.TryGetId(env, new VecContainer(w), out _));
+            var own = ((ContainerLayer<VecContainer>)child.ContainerLayers.LayerAt(env.TypeId)!).Own;
+            Assert.Equal(2, own.CollectById(y, new List<ContainerEntry<VecContainer>>(), locked: true));
+            child.CheckInvariants();
             child.Dispose();
         }
 
         /// <summary>
-        /// The copy the guard compares with in <see cref="AContainerTheRootRenamesOntoAClaimedIdIsRefused"/>: the same
-        /// chain replayed in a fresh root holds [k] and [a] under one id, y.
+        /// The copy <see cref="AContainerTheRootRenamesOntoAClaimedIdIsAdopted"/> compares with: the same chain replayed
+        /// in a fresh root holds [k] and [a] under one id, y.
         /// </summary>
         [Fact]
         public void TheFreshRootCopyOfTheRenameHoldsBothContents()
@@ -350,10 +398,11 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// The root (not frozen) rebuilds in place a container the child claimed: its union of a and w, an element the
-        /// child displaced into k, makes its [w] under y [a], which its container log records under y. The guard keeps
-        /// that entry, since the child claimed y, and after the rebuild's passes finds it the only content under y at
-        /// the root, which the child's copy stands for: the child imports the root's union, under which a is k there,
-        /// and its copy [k] is the entry's content rebuilt. The child is not refused and keeps its copy.
+        /// child displaced into k, makes its [w] under y [a], which its container log records under y. The child's
+        /// pre-loop scan keeps that entry, since the child claimed y, and its catch-up finds that no displacement it
+        /// imports is y in the parent: the entry is the content the child copied, rebuilt in place, which the child's
+        /// copy stands for. The child imports the root's union, under which a is k there, and keeps its copy [k], the
+        /// entry's content rebuilt, alone under y, as a fresh root replaying the two unions holds it.
         /// </summary>
         [Fact]
         public void AClaimedContainerTheRootRebuildsInPlaceIsHeldByTheChildsCopy()
@@ -375,11 +424,11 @@ namespace Eggnog.Relations.Tests
             Assert.True(env.TryGetContainer(y, out var rebuilt));
             Assert.Equal(new VecContainer(a), rebuilt);
 
-            EqContainerGuard.Check(child);
-            Assert.True(child.ContainerLayers.HasEntriesOnClaimedIds);
+            child.ContainerLayers.ScanAdds();
+            Assert.True(child.ContainerLayers.HasPending);
             child.Rebuild();
             Assert.False(child.IsFaulted);
-            Assert.False(child.ContainerLayers.HasEntriesOnClaimedIds);
+            Assert.False(child.ContainerLayers.HasPending);
             Assert.True(child.IsClean);
             Assert.Equal(k, child.Find(a));
             var view = ContainerView.Of(child.Database);
@@ -387,18 +436,21 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new VecContainer(k), copy);
             Assert.True(view.TryGetId(env, new VecContainer(k), out var id));
             Assert.Equal(y, id);
+            var own = ((ContainerLayer<VecContainer>)child.ContainerLayers.LayerAt(env.TypeId)!).Own;
+            Assert.Equal(1, own.CollectById(y, new List<ContainerEntry<VecContainer>>(), locked: true));
             child.CheckInvariants();
         }
 
         /// <summary>
-        /// The guard reads a writable parent's container log as it reads the root's: under a frozen root, a grandchild
-        /// claims h, the root's [u], when it displaces u into k, and holds the copy [k]; then its writable parent's
-        /// union of k and m claims h4, the root's [m], and rebuilds it to [k], which the parent's container log
-        /// records. The grandchild's view would hold [k] under h and under h4, so its next rebuild refuses it
-        /// (faulted).
+        /// The catch-up reads a writable parent's container log as it reads the root's: under a frozen root, a
+        /// grandchild claims h, the root's [u], when it displaces u into k, and holds the copy [k]; then its writable
+        /// parent's union of k and m claims h4, the root's [m], and rebuilds it to [k], which the parent's container
+        /// log records. The grandchild's view would hold [k] under h and under h4, a collision its catch-up settles:
+        /// the smaller h wins, the grandchild claims h4 from its parent, whose placement merges into h, and h4 is
+        /// merged into h, as a fresh root replaying the grandchild's union and then the parent's holds [k] under h.
         /// </summary>
         [Fact]
-        public void AContainerAWritableParentRebuildsEqualToAGrandchildsCopyIsRefused()
+        public void AContainerAWritableParentRebuildsEqualToAGrandchildsCopyMergesWithIt()
         {
             var (store, _) = Setup();
             var root = store.Root;
@@ -422,18 +474,27 @@ namespace Eggnog.Relations.Tests
             Assert.True(ContainerView.Of(parent.Database).TryGetContainer(env, h4, out var rebuilt));
             Assert.Equal(new VecContainer(k), rebuilt);
             Assert.False(grandchild.IsClean);
-            var refused = Assert.Throws<NotSupportedException>(() => grandchild.Rebuild());
-            Assert.Contains("does not yet merge", refused.Message);
-            Assert.True(grandchild.IsFaulted);
+            Assert.True(grandchild.Rebuild());
+            Assert.False(grandchild.IsFaulted);
+            Assert.Equal(h, grandchild.Find(h4));
+            var view = ContainerView.Of(grandchild.Database);
+            Assert.True(view.TryGetId(env, new VecContainer(k), out var id));
+            Assert.Equal(h, id);
+            Assert.True(view.TryGetContainer(env, h, out var held));
+            Assert.Equal(new VecContainer(k), held);
+            Assert.False(view.TryGetContainer(env, h4, out _));
+            Assert.True(grandchild.ContainerLayers!.LayerAt(env.TypeId)!.Shadowed.Contains(h4));
+            grandchild.CheckInvariants();
             grandchild.Dispose();
             parent.CheckInvariants();
         }
 
         /// <summary>
         /// A writable parent claims, after its child did, a container the child claimed: both displace u, the
-        /// element of the root's h, into k. The parent's container log records its copy [k] under h; the child's guard
-        /// keeps that entry, since the child claimed h, and after the rebuild's passes finds it the only content under h
-        /// in the parent's layer, which its own copy stands for. The child is not refused and keeps its copy.
+        /// element of the root's h, into k. The parent's container log records its copy under h; the child's
+        /// pre-loop scan keeps those entries, since the child claimed h, and its catch-up finds that no displacement it
+        /// imports is h in the parent: the parent's entry is its own copy of the content the child copied, which the
+        /// child's copy stands for. The child keeps its copy, and holds nothing else under h.
         /// </summary>
         [Fact]
         public void AChildKeepsItsCopyOfAContainerItsWritableParentClaimsLater()
@@ -454,13 +515,15 @@ namespace Eggnog.Relations.Tests
             parent.Rebuild();
             Assert.True(parent.ContainerLayers!.LayerAt(env.TypeId)!.Shadowed.Contains(h));
 
-            EqContainerGuard.Check(child);
-            Assert.True(child.ContainerLayers!.HasEntriesOnClaimedIds);
+            child.ContainerLayers!.ScanAdds();
+            Assert.True(child.ContainerLayers.HasPending);
             child.Rebuild();
             Assert.False(child.IsFaulted);
             Assert.True(child.IsClean);
             Assert.True(ContainerView.Of(child.Database).TryGetContainer(env, h, out var copy));
             Assert.Equal(new VecContainer(k), copy);
+            var own = ((ContainerLayer<VecContainer>)child.ContainerLayers.LayerAt(env.TypeId)!).Own;
+            Assert.Equal(1, own.CollectById(h, new List<ContainerEntry<VecContainer>>(), locked: true));
             child.CheckInvariants();
             parent.CheckInvariants();
         }
@@ -486,10 +549,11 @@ namespace Eggnog.Relations.Tests
         /// The root (not frozen) rebuilds in place a map keyed by classes that the child claimed, its keys collapsing in
         /// another order than the child's: the child's union of a and d makes its copy of x {a: 4, b: 2}, a map keeping
         /// the later of the keys that become one; then the root's union of a and b makes its x {a: 2, d: 4}. The root's
-        /// map rebuilt against the child's union-find is {a: 4}, which the child's view does not hold, but the entry is
-        /// the only content under x at the root, which the child's copy stands for: the child is not refused, and its
-        /// copy, which imports the root's union, is {a: 2}, as a fresh root replaying the two unions, each with its
-        /// rebuild, holds under x.
+        /// map rebuilt against the child's union-find is {a: 4}, which the child's view does not hold, but no
+        /// displacement the child imports is x in the parent: the entry is the content the child copied, rebuilt in
+        /// place, which the child's copy stands for, so the child adopts nothing. Its copy, which imports the root's
+        /// union, is {a: 2}, alone under x, as a fresh root replaying the two unions, each with its rebuild, holds
+        /// under x.
         /// </summary>
         [Fact]
         public void AClaimedMapTheRootRebuildsInPlaceIsHeldByTheChildsCopy()
@@ -507,13 +571,15 @@ namespace Eggnog.Relations.Tests
             Assert.True(env.TryGetContainer(x, out var rebuilt));
             Assert.Equal(new Relations.MapContainer(true, false, [a, d], [2, 4]), rebuilt);
 
-            EqContainerGuard.Check(child);
-            Assert.True(child.ContainerLayers!.HasEntriesOnClaimedIds);
+            child.ContainerLayers!.ScanAdds();
+            Assert.True(child.ContainerLayers.HasPending);
             child.Rebuild();
             Assert.False(child.IsFaulted);
             Assert.True(child.IsClean);
             Assert.True(ContainerView.Of(child.Database).TryGetContainer(env, x, out var held));
             Assert.Equal(new Relations.MapContainer(true, false, [a], [2]), held);
+            var own = ((ContainerLayer<Relations.MapContainer>)child.ContainerLayers.LayerAt(env.TypeId)!).Own;
+            Assert.Equal(1, own.CollectById(x, new List<ContainerEntry<Relations.MapContainer>>(), locked: true));
             child.CheckInvariants();
             child.Dispose();
 
@@ -530,8 +596,9 @@ namespace Eggnog.Relations.Tests
         /// <see cref="AClaimedMapTheRootRebuildsInPlaceIsHeldByTheChildsCopy"/> under a frozen root and a writable
         /// parent, a case split's shape: the grandchild's union of a and d makes its copy of x {a: 4, b: 2}, then its
         /// writable parent's union of a and b claims x and rebuilds its copy to {a: 2, d: 4}, which the parent's
-        /// container log records. That entry is the only content under x in the parent's layer, which the grandchild's
-        /// copy stands for: the grandchild is not refused, and its copy becomes {a: 2}.
+        /// container log records. No displacement the grandchild imports is x in the parent: the parent's entry is its
+        /// own copy of the content the grandchild copied, which the grandchild's copy stands for, so it adopts nothing,
+        /// and its copy becomes {a: 2}, alone under x.
         /// </summary>
         [Fact]
         public void AGrandchildKeepsItsCopyOfAMapItsWritableParentRebuildsLater()
@@ -558,6 +625,8 @@ namespace Eggnog.Relations.Tests
             Assert.True(grandchild.IsClean);
             Assert.True(ContainerView.Of(grandchild.Database).TryGetContainer(env, x, out var held));
             Assert.Equal(new Relations.MapContainer(true, false, [a], [2]), held);
+            var own = ((ContainerLayer<Relations.MapContainer>)grandchild.ContainerLayers!.LayerAt(env.TypeId)!).Own;
+            Assert.Equal(1, own.CollectById(x, new List<ContainerEntry<Relations.MapContainer>>(), locked: true));
             grandchild.CheckInvariants();
             parent.CheckInvariants();
             grandchild.Dispose();
@@ -599,7 +668,7 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// An imported displacement of a held id needs no claim: the root rebuilt its container, and the child reads the
-        /// rebuilt one. The guard moves past the root's new containers unread, since the child has neither a
+        /// rebuilt one. The pre-loop scan moves past the root's new containers unread, since the child has neither a
         /// displacement nor a container layer when it runs.
         /// </summary>
         [Fact]
@@ -615,6 +684,8 @@ namespace Eggnog.Relations.Tests
             child.Rebuild();
             Assert.Equal(x, child.Find(w));
             Assert.False(child.IsFaulted);
+            Assert.False(child.ContainerLayers!.HasPending);
+            Assert.True(child.ContainerLayers.IsEmpty);
         }
 
         /// <summary>
@@ -665,22 +736,23 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child may not hold a view in which an eq-sort container names one of its own losers. A container the
-        /// (writable) root interns after the child's rebuild, naming the child's loser, is checked at the child's next
-        /// rebuild, which refuses the child (<see cref="NotSupportedException"/>, faulted) unless the two containers
-        /// are equal in it: in a fresh root replaying the chain, the containers [x] and [y] become equal once x and y
-        /// are, and their ids are unioned.
+        /// A child may not hold a view in which an eq-sort container names one of its own losers. The (writable) root
+        /// interns, after the child's rebuild, [x] and [y], naming the child's loser y, and writes rows naming them: the
+        /// child's catch-up claims [y], whose copy rebuilds to [x] and meets the root's [x], so the smaller id wins and
+        /// the two container ids are one in the child, with their rows met, as in a fresh root replaying the chain
+        /// (<see cref="TheFreshRootCopyOfThatChainEquatesTheContainers"/>).
         /// </summary>
         [Fact]
-        public void AnEqContainerInternedByTheRootAfterAChildDisplacedItsElementIsRefused()
+        public void AnEqContainerInternedByTheRootAfterAChildDisplacedItsElementIsMerged()
         {
             var (store, f) = ContainerSetup();
             var root = store.Root;
+            var env = root.Database.Containers.GetEnvironment<VecContainer>();
             var x = root.NewId();
             var y = root.NewId();
             var child = root.CreateChild();
 
-            // y loses to x in the child; no container holds y yet, so the guard lets it pass.
+            // y loses to x in the child; no container holds y yet.
             child.Union(x, y);
             child.Rebuild();
             Assert.Equal(x, child.Find(y));
@@ -691,23 +763,22 @@ namespace Eggnog.Relations.Tests
             Insert(root, f, kx, 1, 0);
             Insert(root, f, ky, 2, 0);
 
-            // Sound: the child is refused (NotSupportedException, faulted), or the two containers are equal in it.
-            Exception? refused = null;
-            try
-            {
-                child.Rebuild();
-            }
-            catch (NotSupportedException e)
-            {
-                refused = e;
-            }
-
-            if (refused is null)
-                Assert.True(child.AreEqual(kx, ky), $"the child equates {x} and {y} but keeps the containers [{x}] (id {kx}) and [{y}] (id {ky}) apart, and was not refused");
+            Assert.True(child.Rebuild());
+            Assert.False(child.IsFaulted);
+            Assert.True(child.AreEqual(kx, ky));
+            Assert.Equal(kx, child.Find(ky));
+            Assert.True(ContainerView.Of(child.Database).TryGetId(env, new VecContainer(x), out var id));
+            Assert.Equal(kx, id);
+            Assert.False(ContainerView.Of(child.Database).TryGetContainer(env, ky, out _));
+            Assert.Equal(2u, Row(child, f, kx)![1]);
+            Assert.Null(Row(child, f, ky));
+            child.CheckInvariants();
+            Assert.False(root.AreEqual(kx, ky));
         }
 
         /// <summary>
-        /// The copy the eq guard compares with: the same chain replayed in a fresh root unions the two container ids.
+        /// The copy <see cref="AnEqContainerInternedByTheRootAfterAChildDisplacedItsElementIsMerged"/> compares with: the
+        /// same chain replayed in a fresh root unions the two container ids and meets their rows.
         /// </summary>
         [Fact]
         public void TheFreshRootCopyOfThatChainEquatesTheContainers()
@@ -723,6 +794,8 @@ namespace Eggnog.Relations.Tests
             root.Union(x, y);
             root.Rebuild();
             Assert.True(root.AreEqual(kx, ky));
+            Assert.Equal(kx, root.Find(ky));
+            Assert.Equal(2u, Row(root, f, kx)![1]);
         }
 
     }

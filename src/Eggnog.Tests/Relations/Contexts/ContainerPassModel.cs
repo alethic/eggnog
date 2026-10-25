@@ -22,12 +22,13 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Initializes the model of <paramref name="world"/> as built: its containers, its rows of <c>c</c>, and no
-        /// union yet.
+        /// union yet, with room for <paramref name="extraIds"/> ids minted later (<see cref="AddContainer"/>).
         /// </summary>
         /// <param name="world">The world.</param>
-        public ContainerPassModel(ContainerPassWorld world)
+        /// <param name="extraIds">How many ids past the world's largest the model may meet.</param>
+        public ContainerPassModel(ContainerPassWorld world, int extraIds = 0)
         {
-            partition = new PartitionReference((int)world.MaxId + 1);
+            partition = new PartitionReference((int)world.MaxId + 1 + extraIds);
             for (var i = 0; i < world.VectorIds.Count; i++)
                 containers.Add(('v', world.VectorContents[i], world.VectorIds[i]));
 
@@ -53,6 +54,13 @@ namespace Eggnog.Relations.Tests
         /// Records the row <c>c(<paramref name="key"/>) = <paramref name="value"/></c>.
         /// </summary>
         public void WriteConstructor(uint key, uint value) => constructorRows.Add((key, value));
+
+        /// <summary>
+        /// Records a container interned after the world was built: of kind <paramref name="kind"/> (<c>v</c> a vector,
+        /// <c>s</c> a set), holding <paramref name="contents"/>, under <paramref name="id"/>, which must lie within the
+        /// room the model was made with.
+        /// </summary>
+        public void AddContainer(char kind, uint[] contents, uint id) => containers.Add((kind, contents, id));
 
         /// <summary>
         /// Closes the partition under congruence of the containers and of <c>c</c>, to a fixpoint.
