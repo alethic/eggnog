@@ -1095,6 +1095,77 @@ namespace Eggnog.Tests.Values
             Assert.Equal(9L, root.Get(h.Of(va)));
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AChildCatchesUpWithVectorsItsWritableRootMakesAcrossFailedRuns(bool replay)
+        {
+            // Catch-up across failed runs, under a writable root that makes vectors while a child and a
+            // grandchild live. First the root makes (vec-of (A)) and (vec-of (B)) before the child's run, whose rule
+            // unions (A) and (B) and then fails: the child had no displacement when it caught up, so it consumed the new
+            // vectors unread, and the failed run's rebuild, which the failure does not stop, claims (vec-of (B)) for the
+            // union's loser and merges it with (vec-of (A)). Then the root makes (vec-of (A) (A)) and (vec-of (B) (B)),
+            // the latter holding the child's loser: the child's next run catches up first, claiming it, so the two
+            // merge and f's rows meet, and that run fails too. Neither failure faults the child, and the grandchild
+            // sees the same. egglog has no writable root under a live push, so the expected values are those of a
+            // fresh root running the same commands in the same order (replay), as a root does here: there
+            // (vec-of (B) (B)) is (vec-of (A) (A)) once (A) and (B) are one, and f's rows meet at 5.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var lit = graph.DefineConstructor<long, Node>("Lit");
+            graph.Values.RegisterVec<Node>();
+            var f = graph.DefineFunction<Vec<Node>, long>("f", ValueLattice.Max<long>());
+            var go = graph.DefineRelation("go");
+            var stop = graph.DefineRelation("stop");
+            var merge = graph.DefineRuleset("merge");
+            merge.DefineRule("u", r =>
+            {
+                r.When(go.Of());
+                r.Then(a.Of().Is(b.Of()), Fact.Exists(lit.Of(Primitives.Divide.Of(10L, 0L))));
+            });
+            var fail = graph.DefineRuleset("fail");
+            fail.DefineRule("fail", r =>
+            {
+                r.When(stop.Of());
+                r.Then(Fact.Exists(lit.Of(Primitives.Divide.Of(20L, 0L))));
+            });
+            var va = Primitives.VecOf<Node>().Of(a.Of());
+            var vb = Primitives.VecOf<Node>().Of(b.Of());
+            var vaa = Primitives.VecOf<Node>().Of(a.Of(), a.Of());
+            var vbb = Primitives.VecOf<Node>().Of(b.Of(), b.Of());
+            var root = graph.Root;
+            var child = replay ? root : root.CreateChild();
+            var grandchild = replay ? root : child.CreateChild();
+
+            root.Assume(f.Of(va).Is(1L), f.Of(vb).Is(2L));
+            child.Assume(go.Of());
+            Assert.Throws<RuleEvaluationException>(() => child.Run(Schedule.Run(merge)));
+            root.Assume(f.Of(vaa).Is(3L), f.Of(vbb).Is(5L));
+            child.Assume(stop.Of());
+            Assert.Throws<RuleEvaluationException>(() => child.Run(Schedule.Run(fail)));
+
+            Assert.False(child.IsFaulted);
+            Assert.True(child.Engine.Context.IsClean);
+            child.Engine.Context.CheckInvariants();
+            Assert.True(child.Check(va.Is(vb)));
+            Assert.Equal(2L, child.Get(f.Of(va)));
+            Assert.True(child.Check(vaa.Is(vbb)));
+            Assert.Equal(5L, child.Get(f.Of(vaa)));
+            Assert.True(grandchild.Check(vaa.Is(vbb)));
+            Assert.Equal(5L, grandchild.Get(f.Of(vbb)));
+            grandchild.Engine.Context.CheckInvariants();
+            if (replay)
+                return;
+
+            grandchild.Dispose();
+            child.Dispose();
+            Assert.False(root.Check(va.Is(vb)));
+            Assert.False(root.Check(vaa.Is(vbb)));
+            Assert.Equal(3L, root.Get(f.Of(vaa)));
+        }
+
         [Fact]
         public void ContainersOfClassesAreNeverUnionedAndHaveNoRuleConstants()
         {

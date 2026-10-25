@@ -143,47 +143,30 @@ namespace Eggnog.Relations
         internal abstract void RebuildLayer(ContainerLayers layers, ReadOnlySpan<uint> delta, ReadOnlySpan<uint> ownLosers, ContainerRebuildSummary summary);
 
         /// <summary>
-        /// Gets the id under which <paramref name="other"/>, an environment of the same container type, holds a
-        /// container equal to the one this environment stores under <paramref name="id"/> with content hash
-        /// <paramref name="hash"/> (the entry a <see cref="ContainerLogEntry"/> names), under both environments' shard
-        /// locks in turn: what a child's eq-container guard asks of an entry an ancestor's container log gained and the
-        /// child's own layer (<see cref="EqContainerGuard"/>). Thread-safe.
+        /// Classifies <paramref name="entry"/>, an Added entry of the container log of the ancestor at depth
+        /// <paramref name="depth"/> of the child context whose layers are <paramref name="layers"/>, this being the
+        /// root's environment of the entry's type: <see cref="ContainerLayers.ClassifyAdded{TContainer}"/>, reached
+        /// through the type-erased environment, as a rebuild reaches each type. Changes nothing. Domain thread of the
+        /// child only.
         /// </summary>
-        /// <param name="id">The entry's id.</param>
-        /// <param name="hash">Its content hash.</param>
-        /// <param name="other">The environment to look the entry's container up in.</param>
-        /// <param name="otherId">The id <paramref name="other"/> holds it under, or zero.</param>
-        /// <returns><c>false</c> when no such entry is stored any more, or <paramref name="other"/> holds no equal
-        /// container.</returns>
-        internal abstract bool TryFindEqual(uint id, ulong hash, ContainerEnvBase other, out uint otherId);
+        /// <param name="layers">The child's container layers.</param>
+        /// <param name="depth">The ancestor's depth.</param>
+        /// <param name="entry">The entry.</param>
+        /// <param name="rebuilder">The child's union-find canonicalizer.</param>
+        /// <returns>The entry's class.</returns>
+        internal abstract ContainerCatchUpClass ClassifyAdded(ContainerLayers layers, int depth, ContainerLogEntry entry, Rebuilder rebuilder);
 
         /// <summary>
-        /// Gets whether the view of the child context whose layers are <paramref name="layers"/> holds what the entry
-        /// this environment, an ancestor's, stores under <paramref name="id"/> with content hash <paramref name="hash"/>
-        /// (the entry a <see cref="ContainerLogEntry"/> names) stands for there. What a child's eq-container guard asks,
-        /// after the rebuild's passes, of an entry an ancestor's container log gained under an id the child claimed
-        /// (<see cref="EqContainerGuard.CheckClaimedIds"/>). Under the shard locks of this environment and of each level
-        /// the lookup probes, in turn.
+        /// Settles <paramref name="entry"/>, an Added entry of the ancestor at depth <paramref name="depth"/> whose
+        /// content the child's layer of its type holds under another id, this being the root's environment of the
+        /// entry's type: <see cref="ContainerLayers.SettleCollision{TContainer}"/>, type-erased. Domain thread of the
+        /// child only, in the first pass of its rebuild.
         /// </summary>
-        /// <remarks>
-        /// An entry that is the only one under its id here is the content the child claimed, as the ancestor rebuilt it
-        /// in place or claimed it itself: a rename onto the id leaves the id's own content beside it, which a level puts
-        /// in its layer before anything else goes under the id. The child's copy follows the child's own rebuild
-        /// history, so it stands for the entry whatever its content, and the view need only hold a container under
-        /// <paramref name="id"/> rebuilt: for a container whose rebuild depends on its elements' order, a map whose keys
-        /// collapse, the two histories may end in different contents. An entry that shares its id stands for its
-        /// content rebuilt against <paramref name="rebuilder"/>, the child's union-find canonicalizer, which the view
-        /// must hold under <paramref name="id"/> rebuilt; for such a map that comparison may also refuse a copy that a
-        /// fresh root would hold.
-        /// </remarks>
-        /// <param name="id">The entry's id.</param>
-        /// <param name="hash">Its content hash.</param>
-        /// <param name="root">The root's environment of this environment's type.</param>
         /// <param name="layers">The child's container layers.</param>
-        /// <param name="rebuilder">The child's union-find canonicalizer.</param>
-        /// <returns><c>false</c> if the entry is stored and the child's view does not hold what it stands for;
-        /// <c>true</c> otherwise, also when no such entry is stored any more.</returns>
-        internal abstract bool ViewHoldsRebuilt(uint id, ulong hash, ContainerEnvBase root, ContainerLayers layers, Rebuilder rebuilder);
+        /// <param name="depth">The ancestor's depth.</param>
+        /// <param name="entry">The entry.</param>
+        /// <param name="state">The state the merge stages its union in.</param>
+        internal abstract void SettleCollision(ContainerLayers layers, int depth, ContainerLogEntry entry, ExecutionState state);
 
         /// <summary>
         /// Moves the Added entries this environment buffered for <see cref="Log"/> to <paramref name="destination"/>,
@@ -204,17 +187,6 @@ namespace Eggnog.Relations
         /// under each shard's lock. For the invariant checker.
         /// </summary>
         internal abstract int BufferedLogEntries { get; }
-
-        /// <summary>
-        /// Appends to <paramref name="values"/> the values of the container stored under <paramref name="id"/> with
-        /// content hash <paramref name="hash"/>, the entry a <see cref="ContainerLogEntry"/> names, under the reverse
-        /// map's shard lock. Thread-safe; one probe sequence.
-        /// </summary>
-        /// <param name="id">The container's id.</param>
-        /// <param name="hash">Its content hash.</param>
-        /// <param name="values">Receives the values, once per occurrence.</param>
-        /// <returns><c>false</c>, appending nothing, when no such entry is stored any more.</returns>
-        internal abstract bool TryCollectValues(uint id, ulong hash, List<uint> values);
 
         /// <summary>
         /// Makes the environment one that holds e-class ids, recording into <paramref name="log"/> from then on: for a

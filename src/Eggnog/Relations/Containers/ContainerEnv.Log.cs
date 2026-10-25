@@ -100,25 +100,6 @@ namespace Eggnog.Relations
             }
         }
 
-        /// <inheritdoc />
-        internal override bool TryCollectValues(uint id, ulong hash, List<uint> values)
-        {
-            var entries = new List<ContainerEntry<TContainer>>(1);
-            CollectById(id, entries, locked: true);
-            var found = false;
-            foreach (var entry in entries)
-            {
-                if (entry.Hash != hash)
-                    continue;
-
-                var collector = new ContainerElementCollector(values);
-                entry.Container.ForEachValue(ref collector);
-                found = true;
-            }
-
-            return found;
-        }
-
     }
 
 }

@@ -58,6 +58,18 @@ namespace Eggnog.Relations
     /// containers of the copy its push makes. The context interns nothing: every id its layers hold is an ancestor's,
     /// claimed.
     /// </para>
+    /// <para>
+    /// Catch-up. A writable ancestor may gain containers of classes after the context exists. Before the rebuild's
+    /// loop the context reads them from the ancestors' container logs and keeps those that concern it
+    /// (<see cref="ScanAdds"/>); its first pass then claims those it sees under an id or with an element not canonical
+    /// in it, merges at once those whose content its layers hold under another id, and adopts content an ancestor put
+    /// on an id it shadows (<see cref="CatchUp"/>). Containers whose rebuild does not depend on the order of their
+    /// unions it then holds as a fresh root replaying the same commands in the same order would. A map whose keys
+    /// collapse follows the history of the level that holds it, the context's for a copy it claimed and the
+    /// ancestor's otherwise, so it may depart from the replay: such a map may end elsewhere, the context imports the
+    /// merges of container ids the ancestor's history makes, and an id may hold two contents where the replay holds
+    /// one (decisions row 9).
+    /// </para>
     /// </remarks>
     internal sealed partial class ContainerLayers
     {
@@ -74,12 +86,11 @@ namespace Eggnog.Relations
         int containerMark;
 
         /// <summary>
-        /// The Added entries of the unsettled ancestors' container logs, with each one's ancestor depth, that lie under
-        /// an id the context's layer of the entry's type shadows: kept by the eq-container guard before the rebuild loop
-        /// and checked after it (<see cref="EqContainerGuard.CheckClaimedIds"/>); <c>null</c> until the guard first
-        /// keeps one. Domain thread only.
+        /// The Added entries of the unsettled ancestors' container logs, with each one's ancestor depth, that the
+        /// pre-loop scan kept for the rebuild's catch-up (<see cref="ScanAdds"/>, <see cref="CatchUp"/>), sorted;
+        /// <c>null</c> when none is kept. Domain thread only.
         /// </summary>
-        List<(int Depth, ContainerLogEntry Entry)>? entriesOnClaimedIds;
+        List<(int Depth, ContainerLogEntry Entry)>? pending;
 
         /// <summary>
         /// The layers by container type id; an index past the end, or a <c>null</c> slot, means no layer. Never written
@@ -133,26 +144,16 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets whether the eq-container guard keeps Added entries under ids the context claimed that it has not checked
-        /// yet (<see cref="EqContainerGuard.CheckClaimedIds"/>): the context is not clean meanwhile. Domain thread only.
+        /// Gets whether the pre-loop scan kept Added entries of the ancestors' container logs that the rebuild's
+        /// catch-up has not handled yet (<see cref="ScanAdds"/>): the context is not clean meanwhile. Domain thread
+        /// only.
         /// </summary>
-        public bool HasEntriesOnClaimedIds => entriesOnClaimedIds is { Count: > 0 };
+        public bool HasPending => pending is { Count: > 0 };
 
         /// <summary>
-        /// Gets the Added entries under ids the context claimed that the eq-container guard keeps, with each one's
-        /// ancestor depth, in the order kept; <c>null</c> until it first keeps one. Domain thread only.
+        /// Gets the number of Added entries the pre-loop scan kept for the catch-up. A test hook. Domain thread only.
         /// </summary>
-        internal List<(int Depth, ContainerLogEntry Entry)>? EntriesOnClaimedIds => entriesOnClaimedIds;
-
-        /// <summary>
-        /// Keeps <paramref name="entry"/>, an Added entry of the container log of the ancestor at depth
-        /// <paramref name="depth"/> under an id the context claimed, for the eq-container guard to check after the
-        /// rebuild's passes. Domain thread only.
-        /// </summary>
-        /// <param name="depth">The ancestor's depth.</param>
-        /// <param name="entry">The entry.</param>
-        internal void KeepEntryOnClaimedId(int depth, ContainerLogEntry entry) =>
-            (entriesOnClaimedIds ??= new List<(int Depth, ContainerLogEntry Entry)>()).Add((depth, entry));
+        internal int PendingCount => pending?.Count ?? 0;
 
         /// <summary>
         /// Gets the context's container log: every own environment of its layers records into it, while it is active,

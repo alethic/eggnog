@@ -37,12 +37,15 @@ namespace Eggnog.Relations
         /// For each container type that holds ids (<see cref="RebuildType{TContainer}"/>): phase A claims, for each own
         /// loser of the delta that is not local, the loser itself when it is a container id the context sees at a level
         /// below, and every container a level below lists for it in its element index that the context sees
-        /// (<see cref="Claim{TContainer}"/>). An imported displacement needs none: the ancestor that displaced it
-        /// rebuilt its own view first. Phase B rebuilds the layer's own environment: incrementally, over the delta's
-        /// ids, the containers its element index lists for them and the claimed ids, when egglog's test for an
-        /// incremental rebuild holds (<see cref="ContainerEnv{TContainer}.IsIncremental"/>, more than 1000 containers),
-        /// and otherwise in full, serially; each rebuilt container goes back through
-        /// <see cref="LayeredInsertPolicy{TContainer}"/>, and every id an insert claims is rebuilt in the same pass.
+        /// (<see cref="Claim{TContainer}"/>), and, in the first pass, the ids the catch-up queued: ancestor containers
+        /// the context sees under an id or with an element not canonical in it (<see cref="CatchUp"/>). An imported
+        /// displacement needs none: the ancestor that displaced it rebuilt its own view first. Phase B rebuilds the
+        /// layer's own environment: incrementally, over the delta's ids, the containers its element index lists for
+        /// them and the claimed ids, when egglog's test for an incremental rebuild holds
+        /// (<see cref="ContainerEnv{TContainer}.IsIncremental"/>, more than 1000 containers), and otherwise in full,
+        /// serially; each rebuilt container goes back through <see cref="LayeredInsertPolicy{TContainer}"/>. Then it
+        /// adopts the contents the catch-up found arrived under an id the context claimed, rebuilt, under the id's
+        /// canonical id (<see cref="Insert{TContainer}"/>); and every id an insert claims is rebuilt in the same pass.
         /// </para>
         /// <para>
         /// The dirty ids are closed upward over the view: the containers rebuilt in place, and
@@ -56,7 +59,8 @@ namespace Eggnog.Relations
         /// The merges stage their unions through one execution state at <paramref name="epoch"/>, made when the pass
         /// first claims an id or rebuilds a layer and flushed at the end: the rebuild merges them when the pass changed
         /// something. Nothing happens, and nothing is allocated, when no registered type holds ids or nothing is new to
-        /// the pass (<see cref="ContainerPassSummary.Empty"/>); the mark still moves. The pass's storage is made by the
+        /// the pass, neither a delta, inherited dirty ids nor work the catch-up queued
+        /// (<see cref="ContainerPassSummary.Empty"/>); the mark still moves. The pass's storage is made by the
         /// first pass that may have work, one with a layer, inherited dirty ids or an own loser that a container below
         /// holds or is (<see cref="AnyLoserHeldBelow"/>), and reused until the context freezes or is disposed
         /// (<see cref="ContainerPassScratch"/>). Cost: O(own losers × depth × types) element-index probes, plus O(size)
@@ -74,7 +78,8 @@ namespace Eggnog.Relations
             containerMark = end;
 
             var values = owner.Database.Containers;
-            if (values.HasEqContainers == false || (from == end && inherited.IsEmpty))
+            var catchUp = scratch is { HasCatchUpWork: true };
+            if (values.HasEqContainers == false || (from == end && inherited.IsEmpty && catchUp == false))
                 return ContainerPassSummary.Empty;
 
             // Without layers or inherited dirty ids, only an own loser that a container below holds, or is, gives the
@@ -97,7 +102,7 @@ namespace Eggnog.Relations
             var rebuild = work.Rebuild;
             rebuild.Clear();
             work.Claims = 0;
-            if (ownLosers.Count > 0 || (delta.IsEmpty == false && IsEmpty == false))
+            if (ownLosers.Count > 0 || (delta.IsEmpty == false && IsEmpty == false) || catchUp)
             {
                 work.Epoch = epoch;
                 work.State = null;
@@ -118,6 +123,7 @@ namespace Eggnog.Relations
 
                 work.State = null;
                 work.Rebuilder = null;
+                work.ClearCatchUp();
             }
 
             if (rebuild.Changed || work.Claims > 0)
@@ -128,10 +134,11 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// The pass over one container type (<see cref="RebuildPass"/>): phase A's claims, then phase B's rebuild of
-        /// the context's layer of the type, then the rebuild of every id phase B claimed, until it claims none. Reached
-        /// through the root's environment of the type (<see cref="ContainerEnvBase.RebuildLayer"/>). The pass's
-        /// execution state and canonicalizer are made here, when the type first needs them.
+        /// The pass over one container type (<see cref="RebuildPass"/>): phase A's claims, the catch-up's of the type
+        /// included, then phase B's rebuild of the context's layer of the type and the catch-up's adoptions of the type,
+        /// then the rebuild of every id phase B claimed, until it claims none. Reached through the root's environment
+        /// of the type (<see cref="ContainerEnvBase.RebuildLayer"/>). The pass's execution state and canonicalizer are
+        /// made here, when the type first needs them.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="root">The root's environment of the type.</param>
@@ -170,7 +177,20 @@ namespace Eggnog.Relations
                 }
             }
 
-            if (layer is null || layer.IsEmpty || (delta.IsEmpty && claimed.Count == 0))
+            // The catch-up's candidates: ancestor containers the context sees, under an id or with an element not
+            // canonical in it. One the pass owns already, by a claim of this pass or of the catch-up, is rebuilt too.
+            foreach (var entry in CollectionsMarshal.AsSpan(work.CatchUpClaims))
+            {
+                if (entry.Type != root.TypeId)
+                    continue;
+
+                layer ??= GetOrCreateLayer(root);
+                if (EnsureOwnable(root, layer, entry.Id, PassState()) == false)
+                    claimed.Add(entry.Id);
+            }
+
+            var adopt = work.Adoptions.Count > 0 && HasAdoptions(root.TypeId);
+            if (layer is null || ((layer.IsEmpty || (delta.IsEmpty && claimed.Count == 0)) && adopt == false))
             {
                 claimed.Clear();
                 return;
@@ -202,6 +222,10 @@ namespace Eggnog.Relations
                 claimed.Clear();
                 own.RebuildAllSerial(rebuilder, passState, policy, summary);
             }
+
+            // The contents the catch-up found arrived under an id the context shadows, rebuilt and inserted.
+            if (adopt)
+                AdoptEntries(root, layer, rebuilder, passState, summary);
 
             // What the inserts claimed, copied from below as it was there, is rebuilt in this pass too.
             while (claimed.Count > 0)

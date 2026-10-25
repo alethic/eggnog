@@ -162,55 +162,43 @@ namespace Eggnog.Relations
             layers.RebuildType(this, delta, ownLosers, summary);
 
         /// <inheritdoc />
-        internal override bool TryFindEqual(uint id, ulong hash, ContainerEnvBase other, out uint otherId)
-        {
-            ArgumentNullException.ThrowIfNull(other);
-            Debug.Assert(other is ContainerEnv<TContainer>, "an environment of another container type");
-
-            var entries = new List<ContainerEntry<TContainer>>(1);
-            CollectById(id, entries, locked: true);
-            foreach (var entry in entries)
-                if (entry.Hash == hash)
-                    return Unsafe.As<ContainerEnv<TContainer>>(other).TryGetId(entry.Container, hash, out otherId);
-
-            otherId = 0;
-            return false;
-        }
+        internal override ContainerCatchUpClass ClassifyAdded(ContainerLayers layers, int depth, ContainerLogEntry entry, Rebuilder rebuilder) =>
+            layers.ClassifyAdded(this, depth, entry, rebuilder);
 
         /// <inheritdoc />
-        internal override bool ViewHoldsRebuilt(uint id, ulong hash, ContainerEnvBase root, ContainerLayers layers, Rebuilder rebuilder)
+        internal override void SettleCollision(ContainerLayers layers, int depth, ContainerLogEntry entry, ExecutionState state) =>
+            layers.SettleCollision(this, depth, entry, state);
+
+        /// <summary>
+        /// Takes the entry of <paramref name="container"/>, whose content hash is <paramref name="hash"/>, out of the
+        /// hash-cons, the reverse map and the element index, merging nothing and recording nothing: what a child's
+        /// catch-up does to its layer's own entry of a content an ancestor gained under a smaller id, which the child
+        /// then sees there (<see cref="ContainerLayers.SettleCollision{TContainer}"/>). Thread-safe.
+        /// </summary>
+        /// <param name="container">The container.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="id">The id it was stored under, or zero.</param>
+        /// <returns><c>false</c> if the environment holds no equal container.</returns>
+        internal bool RemoveContent(in TContainer container, ulong hash, out uint id)
         {
-            ArgumentNullException.ThrowIfNull(root);
-            ArgumentNullException.ThrowIfNull(layers);
-            ArgumentNullException.ThrowIfNull(rebuilder);
-            Debug.Assert(root is ContainerEnv<TContainer>, "an environment of another container type");
+            Debug.Assert(hash == container.ComputeHash(), "the content hash is stale");
 
-            var entries = new List<ContainerEntry<TContainer>>(2);
-            CollectById(id, entries, locked: true);
-            var rootEnv = Unsafe.As<ContainerEnv<TContainer>>(root);
-            var canonical = rebuilder.RebuildValue(id);
-            foreach (var entry in entries)
+            var shard = toId[shardData.ShardOf(hash)];
+            lock (shard)
             {
-                if (entry.Hash != hash)
-                    continue;
-
-                // The id's only content here is the one the child claimed, rebuilt in place (a rename onto the id leaves
-                // the id's own content beside it): the child's copy, which follows its own rebuild history, stands for
-                // it. Its content is not compared, since a map whose keys collapse in another order differs.
-                if (entries.Count == 1)
-                    return layers.TryGetContainer(rootEnv, canonical, out _);
-
-                var container = entry.Container;
-                var contentHash = hash;
-                if (container.TryRebuild(rebuilder, out var rebuilt))
+                var match = new ContainerContentMatch<TContainer>(container, hash);
+                if (shard.Remove(hash, ref match, out var gone) == false)
                 {
-                    container = rebuilt;
-                    contentHash = rebuilt.ComputeHash();
+                    id = 0;
+                    return false;
                 }
 
-                return layers.TryGetId(rootEnv, container, contentHash, out var seen) && seen == canonical;
+                id = gone.Id;
+                var removed = RemoveById(gone.Container, gone.Hash, id);
+                Debug.Assert(removed, "a hash-cons entry has no reverse-map entry");
             }
 
+            Unindex(container, id);
             return true;
         }
 

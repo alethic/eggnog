@@ -6,9 +6,10 @@ namespace Eggnog.Relations
     /// <summary>
     /// The working storage of one child context's container passes (<see cref="ContainerLayers.RebuildPass"/>): made by
     /// the first pass that may have work while a registered type holds ids, one over inherited dirty ids, or over a
-    /// delta while the context has a layer or one of the delta's own losers is held by, or is, a container below; and
-    /// reused by every pass after it until the context freezes or is disposed, so a child whose own losers no container
-    /// concerns allocates none of it. Domain thread only.
+    /// delta while the context has a layer or one of the delta's own losers is held by, or is, a container below, or
+    /// by a catch-up with ancestor entries to classify (<see cref="ContainerLayers.CatchUp"/>); and reused by every
+    /// pass after it until the context freezes or is disposed, so a child whose own losers no container concerns, and
+    /// that no ancestor's new container concerns, allocates none of it. Domain thread only.
     /// </summary>
     /// <remarks>
     /// A pass makes its execution state and its union-find canonicalizer only when it first needs them, to claim an id
@@ -65,6 +66,23 @@ namespace Eggnog.Relations
         public List<uint> Claimed { get; } = new();
 
         /// <summary>
+        /// Gets the ids, with their types, that the first pass's catch-up found the context sees under a container not
+        /// canonical in it (<see cref="ContainerLayers.CatchUp"/>): the pass's phase A claims them.
+        /// </summary>
+        public List<ContainerLogEntry> CatchUpClaims { get; } = new();
+
+        /// <summary>
+        /// Gets the ancestor entries, with their ancestors' depths, that the first pass's catch-up found content arrived
+        /// under an id the context shadows: the pass's phase B adopts them.
+        /// </summary>
+        public List<(int Depth, ContainerLogEntry Entry)> Adoptions { get; } = new();
+
+        /// <summary>
+        /// Gets whether the catch-up queued ids to claim or entries to adopt for the pass.
+        /// </summary>
+        public bool HasCatchUpWork => CatchUpClaims.Count > 0 || Adoptions.Count > 0;
+
+        /// <summary>
         /// The number of ids the current pass claimed.
         /// </summary>
         public int Claims;
@@ -83,6 +101,15 @@ namespace Eggnog.Relations
         /// The context's union-find canonicalizer for the current pass, made on first use, or <c>null</c>.
         /// </summary>
         public Rebuilder? Rebuilder;
+
+        /// <summary>
+        /// Forgets what the catch-up queued for the pass.
+        /// </summary>
+        public void ClearCatchUp()
+        {
+            CatchUpClaims.Clear();
+            Adoptions.Clear();
+        }
 
     }
 

@@ -127,8 +127,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether any registered container type holds e-class ids: the quick test of a child's container pass
-        /// (<see cref="ContainerLayers.RebuildPass"/>) and its eq-container guard (<see cref="EqContainerGuard"/>),
-        /// which run only when it holds. One volatile read.
+        /// (<see cref="ContainerLayers.RebuildPass"/>) and its catch-up with its ancestors' containers
+        /// (<see cref="ContainerLayers.ScanAdds"/>, <see cref="ContainerLayers.CatchUp"/>), which run only when it
+        /// holds. One volatile read.
         /// </summary>
         public bool HasEqContainers => hasEqContainers;
 
@@ -138,7 +139,7 @@ namespace Eggnog.Relations
         /// while the log is active, and the container rebuild appends the ids it changed in place
         /// (<see cref="Database.RebuildPass"/>). A store's root's is the store's (<see cref="Store.ContainerLog"/>),
         /// active while the root has live descendants, which read it to learn of new containers of classes
-        /// (<see cref="EqContainerGuard"/>); anywhere else it is never activated.
+        /// (<see cref="ContainerLayers.ScanAdds"/>); anywhere else it is never activated.
         /// </summary>
         public ContainerLog Log => log;
 

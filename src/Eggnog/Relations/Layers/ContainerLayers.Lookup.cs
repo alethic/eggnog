@@ -122,17 +122,6 @@ namespace Eggnog.Relations
         internal bool ShadowedAboveDepth(int depth, uint id) => ShadowedDownTo(this, owner.Depth, depth, id);
 
         /// <summary>
-        /// <see cref="ShadowedAboveDepth"/> without this context's own level: whether a level strictly between the
-        /// ancestor at depth <paramref name="depth"/> and this context shadows <paramref name="id"/> in a layer of any
-        /// type, which hides the ancestor's entries under the id from this context, and makes what the ancestor's
-        /// container log says of them that level's business. Lock-free.
-        /// </summary>
-        /// <param name="depth">The ancestor's depth, below this context's.</param>
-        /// <param name="id">The id.</param>
-        /// <returns><c>true</c> if a level in between shadows the id.</returns>
-        internal bool ShadowedBetweenDepth(int depth, uint id) => parent is not null && ShadowedDownTo(parent, owner.Depth - 1, depth, id);
-
-        /// <summary>
         /// Gets whether <paramref name="level"/>, at depth <paramref name="levelDepth"/>, or a level below it deeper
         /// than <paramref name="depth"/>, shadows <paramref name="id"/> in a layer of any type.
         /// </summary>

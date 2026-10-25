@@ -211,8 +211,8 @@ namespace Eggnog.Relations.Tests
         /// <summary>
         /// An eq-sort container the root interned after the child displaced one of its elements holds the child's
         /// loser, and the child's Added cursor into the root's container log was moved past the container's entry
-        /// behind the guard's back, so the guard never saw the container: the child's view holds a container naming an
-        /// id that is not canonical in it.
+        /// behind the pre-loop scan's back, so the child's catch-up never claimed the container: the child's view holds
+        /// a container naming an id that is not canonical in it.
         /// </summary>
         [Fact]
         public void AnEqContainerHoldingAnOwnLoserIsReported()

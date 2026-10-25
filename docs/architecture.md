@@ -977,7 +977,7 @@ bindings through the view of the execution state's context; the two differ only 
 runs in a transient child of it that holds no layer, and DEBUG asserts that they read alike. In DEBUG a read of a
 container of classes through the root's view also asserts while an engine call of a child whose chain holds a layer
 runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. A child interns no
-container of classes; what fills its layers is its container pass (decisions row 9).
+container of classes; what fills its layers is its container pass, with its catch-up (decisions row 9).
 
 **The container pass.** Each pass of a child's rebuild starts with its container pass (`ContainerLayers.RebuildPass`),
 egglog's `rebuild_containers` over the child's view, before its tables' pass, as egglog's rebuild loop runs containers
@@ -985,17 +985,20 @@ first. Its delta is the journal's rows since the container mark (`ContainerLayer
 end. For each container type that holds ids:
 
 - Phase A claims what holds one of the delta's own losers, or is one: every container that a level below lists for
-  it in its element index and that the child sees. A claim shadows the id and places a copy of every entry under it,
-  read from the nearest level that owns the id, in the child's layer, merging with an equal content already there
-  (`ContainerLayers.Claim`). Every insert or rename into a layer goes through this ownership rule: an own entry's id is
-  shadowed there. An imported displacement needs no claim, since the ancestor that made it rebuilt its own view.
+  it in its element index and that the child sees, and the ancestor containers the first pass's catch-up found the
+  child sees under an id or with an element not canonical in it. A claim shadows the id and places a copy of every
+  entry under it, read from the nearest level that owns the id, in the child's layer, merging with an equal content
+  already there (`ContainerLayers.Claim`). Every insert or rename into a layer goes through this ownership rule: an own
+  entry's id is shadowed there. An imported displacement needs no claim, since the ancestor that made it rebuilt its own
+  view.
 - Phase B rebuilds the layer's own environment: incrementally, over the delta's ids, what its element index lists for
   them and the claims, when egglog's test for an incremental rebuild holds (more than 1000 containers), and in full
   otherwise, serially. It runs egglog's rebuild loops, which are generic over an insert policy
   (`IContainerInsertPolicy`): the root's (`RootInsertPolicy`) is egglog's `insert_owned` and compiles to the loops
   without a policy; the child's (`LayeredInsertPolicy`) merges a rebuilt content with an equal one wherever its view
   holds it, the smaller id winning, claiming the other id when it wins, and renames an entry in place only to an id
-  the layer owns. Every id a pass claims is rebuilt in that pass.
+  the layer owns. After the rebuild it adopts the contents the catch-up found arrived under an id the child claimed.
+  Every id a pass claims is rebuilt in that pass.
 
 The unions the merges stage are merged before the tables' pass, so that it rewrites, and hides and copies, the rows
 naming the containers merged away. The ids of the containers the pass changed in place, with the Dirty ids of the
@@ -1006,9 +1009,10 @@ child's own rows naming a dirty id are re-stamped; the visible ancestor rows nam
 copied with the pass's epoch (`HideReason.Refreshed`), so the child's semi-naive evaluation sees their new meaning;
 and, while the child has live descendants, the ids it found join its container log's Dirty stream. The child keeps the
 contents it rebuilt, and no ancestor sees them, so egglog's pop holds. A child is clean only once its container pass has
-consumed its journal. Cost: nothing without a registered type that holds ids, or without a displacement since the last
-pass; otherwise O(own losers × depth × types) element-index probes, plus O(size) per revisited container, or the
-layer's size for a full rebuild, plus the closure's index fan-out and the rows re-stamped.
+consumed its journal and its catch-up has handled what the pre-loop scan kept. Cost: nothing without a registered type
+that holds ids, or without a displacement since the last pass, an inherited Dirty id or work the catch-up queued;
+otherwise O(own losers × depth × types) element-index probes, plus O(size) per revisited container, or the layer's size
+for a full rebuild, plus the closure's index fan-out and the rows re-stamped.
 
 **Container logs.** Each level has a container log (`ContainerLog`): the store's for the root, owned by its
 container environments, and each child's in its container layers. A log records only while its level has live
@@ -1020,33 +1024,74 @@ the shard lock the recording path already holds, so interning and the parallel r
 a pending flag; a reader drains the buffers into the stream before it reads. Its Dirty stream records the ids the
 level's container rebuild changed in place: the root's, or a child's container pass, closed over its view. Each child
 keeps, in its cursor into every unsettled ancestor, a position in both streams. The first pass of its rebuild closes
-the Dirty ids its view sees over its own layers and re-stamps its own rows that name one. Before the rebuild's loop the
-eq-container guard reads the Added entries that appeared at every unsettled ancestor since the child's cursor. An entry
-under an id that a level in between shadows is left to that level's own guard. An entry under an id the child claimed
-itself is content the ancestor renamed or reinserted onto it, which the child's shadow hides: the guard keeps it and
-checks it after the loop. An entry that is the only one under its id at its ancestor is the container the child claimed,
-rebuilt in place there or claimed there too: the child's copy, which follows the child's own rebuild history and so may
-differ for a map whose keys collapse, stands for it, and the child is refused only if its view holds nothing under the
-id's canonical id. An entry that shares its id, as one renamed onto it does, refuses the child and faults it unless the
-child's view holds the entry's content, rebuilt against the child's union-find, under the id's canonical id; a child
-does not yet adopt other content. Any other entry that holds, or is, an id the child displaced and its container pass
-already handled, or whose content the child's layer holds under another id, refuses the child and faults it, since its
-pass does not reconcile a container a writable ancestor gains later; a displacement not handled yet reaches the
-container in the next pass. A child with a displacement or a container layer is not clean while such containers wait,
-nor while the guard keeps entries to check after the loop. A frozen level records nothing: it interns no container of
-classes and never rebuilds. A root without descendants pays one test of its log's active flag where a container of
+the Dirty ids its view sees over its own layers and re-stamps its own rows that name one; a child is not clean while an
+unsettled ancestor's Dirty stream lies past its cursor, since a level's catch-up may rebuild a container in place
+without a displacement or a row change. Before the rebuild's loop, the pre-loop scan reads the Added entries that
+appeared at every unsettled ancestor since the child's cursor and keeps those that concern the child for the catch-up
+("Catch-up" below). A child with a displacement or a container layer is not clean while such containers wait unread, nor
+while the scan keeps entries for the catch-up. A frozen level records nothing: it interns no container of classes and
+never rebuilds. A root without descendants pays one test of its log's active flag where a container of
 classes appears. A log keeps its entries until that clear, even once every live cursor has passed them: while a level
 has live descendants, its log grows by one 16-byte entry per container of classes that appears at the level and one id
 per container its rebuild changes in place.
 
 **Catch-up.** A writable ancestor may keep writing after its children exist. Each child keeps cursors into its
 ancestors' layers and journals, and at its next call (a write, a run, a read) catches up: it re-keys its union-find,
-absorbs the ancestor rows appended since its cursors that mention its own losers, and then rebuilds its own rows.
-`Context.Rebuild` is the one rebuild loop at every level: egglog's passes at the root; in a child, the catch-up in the
-first pass, then per pass the container pass and the merge of its unions, the rewrite of its own rows, the
-hide-and-copy of ancestor rows that name its new losers or a container its container pass changed in place, and the
-merge. Before the root is first shared (a child created from it, or a freeze), it settles: the rows written since
-its last rebuild are canonicalized.
+absorbs the ancestor rows appended since its cursors that mention its own losers, catches up with the containers of
+classes its ancestors gained, and then rebuilds its own rows. `Context.Rebuild` is the one rebuild loop at every level:
+egglog's passes at the root; in a child, the catch-up in the first pass, then per pass the container pass and the merge
+of its unions, the rewrite of its own rows, the hide-and-copy of ancestor rows that name its new losers or a container
+its container pass changed in place, and the merge. Before the root is first shared (a child created from it, or a
+freeze), it settles: the rows written since its last rebuild are canonicalized.
+
+The containers of classes come in two steps. Before the loop, the pre-loop scan (`ContainerLayers.ScanAdds`) drains
+every unsettled ancestor log with something new; a child with neither a displacement nor a container layer moves its
+cursors to the end unread, since only a later displacement of its own can make such a container concern it, and that
+displacement's pass finds the container through the element indexes. Otherwise the scan sorts the entries by ancestor,
+type, id and content hash, classifies each (`ContainerCatchUpClass`), consumes those that do not concern the child,
+keeps the others, and commits its cursors. It stages nothing and changes no view, so it may run inside a callback, and a
+child that no new container concerns stays clean and takes no epoch. Then the first pass's catch-up
+(`ContainerLayers.CatchUp`) classifies the kept entries again, against the caught-up union-find. The ancestors' Dirty
+ids need no classifying: a level that rebuilds a container in place under the id it keeps records the new content in an
+Added entry too.
+
+- An entry under an id that a level strictly between the ancestor and the child shadows is left to that level, which
+  catches up with it itself and logs what it does, which the child reads from that level's log.
+- An entry the child sees whose id or one of whose elements is not canonical in the child is claimed in the pass's
+  phase A, so that phase B rebuilds the copy.
+- An entry the child sees, canonical, whose content the child's layer holds under another id is a collision, settled at
+  once: the two ids merge, the smaller winning, and when the ancestor's id wins the layer's entry is taken out, since the
+  child sees the content there, while when the layer's wins the child claims the ancestor's id, whose placement merges
+  into it. The unions merge before the pass.
+- An entry under an id the child claimed is content the ancestor put on that id, which the child's shadow hides. When a
+  displacement the child imports in this catch-up is that id in the parent, and the child does not shadow the displaced
+  id, content arrived under the id, renamed or reinserted there after the displaced id lost to it, and the child adopts
+  it: phase B rebuilds it against the child's union-find and inserts it under the id's canonical id, merging with an
+  equal content the view holds. A level in between that shadows the displaced id holds no copy of its content under the
+  id, since it would have claimed the id to put one there, and the entry would be hidden above: it merged the id into
+  that of an equal content, so that no displacement is the id in the parent, or dropped its copy, the same content
+  being visible under the id below it, which then only the adoption keeps in the child's view. When the child shadows
+  the displaced id, as it does every container id it displaced itself, its own copy of the content follows the
+  displacement onto the id, and the ancestor's version is left alone; so is an entry the ancestor rebuilt in place under
+  the id, a content the child copied, which the child's copy stands for. For containers whose rebuild does not depend on
+  the order of their unions, adopting either would give the same view.
+- Any other entry is consumed.
+
+For containers whose rebuild does not depend on the order of the unions, the result is what a fresh root replaying the
+same commands in the same order holds, which egglog cannot be asked, since it has no writable parent under a live push.
+A map whose keys collapse depends on that order, and so does a container that holds one, and each copy follows the
+history of the level that holds it: the child's for a copy it claimed, the ancestor's for one it sees there. So for such
+a map a child may depart from the replay (decisions row 9): a content the ancestor rebuilds in place under an id the
+child claimed, or a copy an intermediate level claims later, may end elsewhere; when content arrives under a claimed id
+in the catch-up that brings such a rebuild, both are adopted, and the id holds the two; when the child claims an id
+after the ancestor merged into it another id the child had claimed, the claim copies the ancestor's version of that id's
+content beside the child's own; and the child imports the merges of container ids that the ancestor's rebuilds derive
+from its own history, so it may equate ids, and hold two contents under one, where the replay keeps them apart. An
+Added entry stands for every content under its id with its content hash, usually one, though two contents that share an
+id after a rename may share the hash too. Cost: nothing when no log moved; per new entry a shadow test per level above
+its ancestor, one probe sequence there, and per content a rebuild and one probe of the child's layer; and, when an
+entry is to be adopted, one find in the parent per displacement imported and a shadow test for each one that is the
+entry's id in the parent.
 
 **Freeze and thread domains.** `Freeze` requires a frozen parent (or none). It rebuilds, compacts, builds rebuild and
 plan indexes, seals staging, compresses or flattens the union-find, builds every view, and publishes. A context that is
@@ -1216,6 +1261,7 @@ documentation).
 | Bridge (`Relations/BridgeDifferential`) | random bridge programs, egglog test programs rewritten by hand, programs that panic | three ways: semi-naive bridge, naive bridge, and a naive reference oracle |
 | Contexts (`Relations/Contexts`) | random storage programs over context trees (writes, unions, retractions, rebuilds, freeze, dispose, ancestors writing after children exist) | a reference context that replays every assertion of the chain into a naive e-graph; a reference union-find context |
 | Containers in contexts (`Relations/Contexts`) | random vectors and sets of classes and of containers, with rows naming them, at a root; batches of row writes and unions in a child and a grandchild | a fresh root replaying the batches, the copy egglog's push makes, exactly: every id's class, every container by id and by content, the containers the view holds (each content once), every row; and a naive partition closed under congruence of the containers and of a constructor |
+| Containers under writing ancestors (`Relations/Contexts`) | the same worlds, with a writable root, or a writable parent of a frozen root, that interns containers (the root), unions classes and container ids and writes rows while a child and a grandchild live, interleaved with their own unions and writes, some left waiting for their container pass while the ancestor writes; and small worlds, a few classes and containers of one or two elements, whose ancestor also repeats its descendants' unions, checked after every step that is not deferred | for each descendant, a fresh root replaying the steps it sees in order, exactly, several contents under one id where a rename put them there; and the naive partition |
 | Rules in contexts (`Relations/Colors`) | random rule programs over context trees | an operational reference of rules in contexts, in lockstep; the *context = copy* property (a context's saturated view equals a fresh root that replays the chain's writes); seeded against unseeded watermarks |
 | Lift (`Relations/Cases`) | random parents and cases (unions, rows, lattice values, terms, rule runs, vacuous cases) | the specification: after a lift the parent holds exactly what held in every live case, no more and no less |
 | Rule layer (`Differential`) | random rule-layer programs with host writes, runs and queries | three ways: semi-naive, naive twins, and a reference interpreter |
