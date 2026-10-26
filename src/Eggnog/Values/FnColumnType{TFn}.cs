@@ -85,6 +85,9 @@ namespace Eggnog
         public IReadOnlyList<ColumnType> ElementTypes => Volatile.Read(ref partialTypes);
 
         /// <inheritdoc />
+        public Relations.ContainerEnvBase Environment => env;
+
+        /// <inheritdoc />
         internal override bool IsOrdered => true;
 
         /// <inheritdoc />
@@ -418,6 +421,13 @@ namespace Eggnog
 
             return rebuilt;
         }
+
+        /// <inheritdoc />
+        /// <remarks>Any function value: its content carries its target and its arguments' flags.</remarks>
+        public bool SharesLayout(uint cell, Relations.ContainerView view) => view.TryGetContainer(env, cell, out _);
+
+        /// <inheritdoc />
+        public int RebuildFlags => 0;
 
         /// <inheritdoc />
         public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)

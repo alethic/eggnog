@@ -143,6 +143,33 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// A top-level <c>(vec-union x y)</c>, egglog's write primitive run as a global action (its
+        /// <c>WritePrim::apply</c>, src/sort/vec.rs:315-339): reads both vectors through the current context's container
+        /// view and, when their lengths agree, unions their elements pair by pair through the e-graph's union action on
+        /// the context's execution state; then flushes, which rebuilds, as egglog's command does.
+        /// </summary>
+        /// <returns>Whether there is a result: <c>false</c> for two lengths, or an id that names no vector, as egglog's
+        /// <c>None</c>; nothing is unioned then.</returns>
+        public bool VecUnion(Value x, Value y)
+        {
+            var union = EGraph.ActionRegistry.UnionAction;
+            var found = Current.WithExecutionState(state =>
+            {
+                if (state.Containers.TryGetContainer<VecContainer>(x.Rep, out var left) == false
+                    || state.Containers.TryGetContainer<VecContainer>(y.Rep, out var right) == false
+                    || left.Length != right.Length)
+                    return false;
+
+                for (var i = 0; i < left.Length; i++)
+                    union.Union(state, left.Values[i], right.Values[i]);
+
+                return true;
+            });
+            Current.FlushUpdates();
+            return found;
+        }
+
+        /// <summary>
         /// Looks a term up in the current context without inserting it: <c>null</c> when an argument is missing or no
         /// row has the key. What a <c>check</c> of a term matches.
         /// </summary>

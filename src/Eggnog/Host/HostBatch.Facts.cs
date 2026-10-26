@@ -114,12 +114,16 @@ namespace Eggnog
         /// <summary>
         /// Compares, at the end of a fact, the rows of a function of a sort that the batch's merges make meet, as egglog's
         /// rebuild after the command does (<see cref="CheckClassOutputs"/>): a conflict fails the fact that made it, as
-        /// egglog's command panics. Only when the fact changed the check and rows meet.
+        /// egglog's command panics. Only when the fact changed the check and rows meet, or, below the root, a class that
+        /// loses is held by a container of a kind that a row of a function whose merge is not a lattice holds
+        /// (<see cref="ReplaysRootOnlyRows"/>).
         /// </summary>
         /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
+        /// rewrite a row of a function whose merge is not a lattice.</exception>
         void CheckFactClassOutputs()
         {
-            if ((classOutputs is not null || rowsRebuildInOrder) && FactTouchedMergeCheck)
+            if ((classOutputs is not null || rowsRebuildInOrder || ReplaysRootOnlyRows) && FactTouchedMergeCheck)
                 CheckClassOutputs();
         }
 

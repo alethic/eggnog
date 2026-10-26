@@ -31,12 +31,12 @@ namespace Eggnog.Relations
     /// </para>
     /// <para>
     /// Threading: <see cref="RegisterValue{TContainer}"/>, <see cref="TryGetValue{TContainer}"/>,
-    /// <see cref="ForEach{TContainer, TVisitor}"/>, <see cref="AnyEqContainerMentions"/> and the environment lookups may
-    /// run on any number of threads at once (egglog's <c>&amp;self</c>), and so may
-    /// <see cref="RegisterType{TContainer}"/>, which egglog's needs <c>&amp;mut self</c> for: registrations take a
-    /// private lock, one at a time, and publish the environments and the slot table copy-on-write, so a reader on
-    /// another thread (a child of a frozen root, say) sees a type registered whole or not at all.
-    /// <see cref="RebuildAll"/> and <see cref="Clone"/> need exclusive access (<c>&amp;mut self</c>).
+    /// <see cref="ForEach{TContainer, TVisitor}"/> and the environment lookups may run on any number of threads at once
+    /// (egglog's <c>&amp;self</c>), and so may <see cref="RegisterType{TContainer}"/>, which egglog's needs
+    /// <c>&amp;mut self</c> for: registrations take a private lock, one at a time, and publish the environments and the
+    /// slot table copy-on-write, so a reader on another thread (a child of a frozen root, say) sees a type registered
+    /// whole or not at all. <see cref="RebuildAll"/> and <see cref="Clone"/> need exclusive access
+    /// (<c>&amp;mut self</c>).
     /// </para>
     /// </remarks>
     internal sealed class ContainerValues
@@ -142,26 +142,6 @@ namespace Eggnog.Relations
         /// (<see cref="ContainerLayers.ScanAdds"/>); anywhere else it is never activated.
         /// </summary>
         public ContainerLog Log => log;
-
-        /// <summary>
-        /// Gets whether some container of a type that holds e-class ids holds <paramref name="id"/> in these
-        /// environments: what the library asks of the class a host merge in a child would displace, which it refuses
-        /// (decisions row 9), although the child's container pass would rebuild its copy of the container
-        /// (<see cref="ContainerLayers.RebuildPass"/>). O(types) probes of exact element indexes; thread-safe.
-        /// </summary>
-        /// <param name="id">The id.</param>
-        /// <returns><c>true</c> if an eq-sort container holds it.</returns>
-        public bool AnyEqContainerMentions(uint id)
-        {
-            if (hasEqContainers == false)
-                return false;
-
-            foreach (var (_, env) in Volatile.Read(ref envs))
-                if (env.HoldsIds && env.AnyContainerMentions(id))
-                    return true;
-
-            return false;
-        }
 
         /// <summary>
         /// Registers the container type <typeparamref name="TContainer"/>, whose fresh ids come from

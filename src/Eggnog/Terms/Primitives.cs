@@ -237,10 +237,11 @@ namespace Eggnog
         /// no result for two lengths (vec.rs:140-148, 285-340). A write primitive, as egglog's: it runs in a rule's head
         /// or a host write, for its effect alone (<see cref="Fact.Exists"/>, egglog's <c>(vec-union a b)</c>) or as a value
         /// written, and in a merge expression, such as <c>(vec-union old new)</c>, and not in a rule's body, a query or a
-        /// read. Its unions take effect after the fact or the rule's iteration, as egglog's after
-        /// the command. It runs only at the root: the classes it unions are held by vectors, and the library unions such
-        /// classes only there (decisions row 9). Its <c>Function</c> and <c>TryInvoke</c> throw
-        /// <see cref="InvalidOperationException"/>.
+        /// read. Its unions take effect after the fact or the rule's iteration, as egglog's after the command. It runs in
+        /// a child as at the root, as egglog's in a push: there it reads the vectors the child sees, and the child's
+        /// rebuild rebuilds the containers of classes its unions reach (decisions row 9); a merge expression runs only at
+        /// the root, since only the root writes a function whose merge is not a lattice (decisions row 2). Its
+        /// <c>Function</c> and <c>TryInvoke</c> throw <see cref="InvalidOperationException"/>.
         /// </summary>
         /// <typeparam name="TSort">The sort of the elements.</typeparam>
         /// <returns>The primitive.</returns>
@@ -475,8 +476,8 @@ namespace Eggnog
         /// <c>multiset-union-values</c>: unions every element of a multiset of classes with its first, the element of
         /// least cell, and returns that; no result for an empty multiset (multiset.rs:198-208, 785-832). A write
         /// primitive, as <see cref="VecUnion{TSort}"/> is: it runs in a rule's head or a host write, for its effect alone
-        /// (<see cref="Fact.Exists"/>) or as a value written, and in a merge expression, only at the root, its unions
-        /// taking effect after the fact or the rule's iteration.
+        /// (<see cref="Fact.Exists"/>) or as a value written, in a child as at the root, and in a merge expression, which
+        /// runs only at the root; its unions take effect after the fact or the rule's iteration.
         /// </summary>
         /// <typeparam name="TSort">The sort of the elements.</typeparam>
         /// <returns>The primitive.</returns>

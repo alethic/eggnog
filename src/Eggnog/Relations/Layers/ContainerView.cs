@@ -242,6 +242,27 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Adds to <paramref name="holders"/> the ids of the containers of the type of <paramref name="root"/> that the
+        /// view sees and that hold one of <paramref name="elements"/>: at the root, those its exact element index lists;
+        /// in a child, those its own layer's lists, and those each level below, the root included, lists under an id no
+        /// level above it, up to the child, shadows (<see cref="ContainerLayers.AddVisibleHolders"/>), the containers the
+        /// child's container pass claims and rebuilds when such an element is one of its losers. One element-index probe
+        /// per element and level with a layer of the type, and the root's, and a shadow test per level above a holder.
+        /// Thread-safe.
+        /// </summary>
+        /// <param name="root">The root's environment of the type.</param>
+        /// <param name="elements">The elements, classes' cells or containers' ids.</param>
+        /// <param name="scratch">Scratch storage; cleared.</param>
+        /// <param name="holders">Receives the ids not already in it.</param>
+        public void AddHolders(ContainerEnvBase root, ReadOnlySpan<uint> elements, OrderedValueSet scratch, OrderedValueSet holders)
+        {
+            if (layers is null)
+                root.ExtendContainersContaining(elements, holders);
+            else
+                layers.AddVisibleHolders(root, elements, scratch, holders);
+        }
+
+        /// <summary>
         /// Gets whether this view reads every container as the view of <paramref name="state"/>
         /// (<see cref="Of(ExecutionState)"/>) does: the same layers, or a context with no layer over the other's, as a
         /// transient child's for a query over the frozen scope that owns it. The state's layers are found through its

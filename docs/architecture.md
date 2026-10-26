@@ -126,6 +126,10 @@ A column holds either a class or a value.
   - Two containers become one when their classes merge, as egglog's rebuild makes them. A set keeps one element of
     elements that become one, a map whose keys become one keeps the later key's value in key-cell order, and a
     multiset adds the counts of elements that become one.
+  - Containers of one kind that rebuild the same parts are one container for the same cells, whatever column types
+    made them, as egglog's of one container type are whatever their sorts: a `Pair<Node, int>` and a `Pair<Node, long>`
+    of the same class and number are one, and so are a `Map<Node, bool>` and a `Map<Node, long>` mapping a class to
+    `true` and to 1. They become one with others of their layout, and a host batch's check merges them so.
   - Classes order by cell as a set's and a multiset's elements and a map's keys, as egglog's `BTreeSet` and `BTreeMap`
     order them.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
@@ -133,17 +137,24 @@ A column holds either a class or a value.
     that decodes no values.
   - Only a writable root makes one. A child uses those its view holds, its own rebuilt copies included, and a read of
     a frozen root those the root holds; one they lack matches nothing there. A write that needs one is refused.
-  - A host merge in a child that displaces a class one of them holds is refused before anything is written. A merge a
-    rule or the child's rebuild derives is not: the child rebuilds the containers it reaches in its container layers,
-    as egglog rebuilds the copy its push makes (decisions row 9; section 3.8, "The container pass").
+  - A child merges classes they hold as the root does: a merge in a child, a host write's, a rule's, a write primitive's
+    or one the child's rebuild derives, rebuilds the containers it reaches in the child's container layers, as egglog
+    rebuilds the copy its push makes (decisions row 9; section 3.8, "The container pass"). A child's host batch checks
+    the rows its merges make meet against the containers of its view, those copies included, as the root's batch does.
+    Below the root, a host merge is refused before anything is written exactly when the child's rebuild would rewrite a
+    row of a function whose merge is not a lattice: when a class such a row names, or holds in a container at any depth,
+    loses, or such a container loses its id, merged into one of the view that its rebuild made equal and that has the
+    smaller id (section 2.3).
   - egglog's `vec-union` is `Primitives.VecUnion`, a write primitive as egglog's: it unions two vectors' classes
     element by element and returns the first, with no result for two lengths.
     - It runs in a head or a host write, for its effect alone or as a value written, and in a merge such as
       `(vec-union old new)`, which a host batch simulates with its own unions. A rule's body, a query and a read
       refuse it, as egglog's query does.
     - Its unions take effect after the fact or the rule's iteration, as egglog's after the command.
-    - Only the root runs it, as the library merges classes that containers hold only at the root outside a rule
-      (decisions row 9).
+    - It runs in a child as at the root, as egglog's in a push, in the child's rules, host writes, function values'
+      applications and a split's cases, its unions the child's (decisions row 9); a merge such as
+      `(vec-union old new)` runs only at the root, which alone writes a function whose merge is not a lattice
+      (section 2.3).
     - egglog's bare action, `(vec-union a b)` on its own, is `Fact.Exists(Primitives.VecUnion<Node>().Of(a, b))`
       in a head or a host write, run for its effect alone; the union may also be the value of a write.
   - egglog's `multiset-union-values` is `Primitives.MultiSetUnionValues`, a write primitive in the same way: it unions
@@ -178,7 +189,8 @@ A column holds either a class or a value.
     `(unstable-fn "name" args)`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`,
     `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive
     is a target at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
-  - A write primitive such as `vec-union` runs through a function value only at the root, as when it is called.
+  - A write primitive such as `vec-union` runs through a function value where it runs when it is called, a child
+    included.
   - The target's parameters must end with the sort's inputs and its result be the sort's output, as egglog's type
     checker requires. A relation is no target: egglog's relation outputs a sort of its own that no function sort names.
   - `Primitives.UnstableApp<…>()` is egglog's `unstable-app`. It applies the value to the inputs where the call site's
@@ -323,8 +335,21 @@ rows with `DegreeOfParallelism` above 1) folds each key's incoming rows before m
 egglog's does, so its order is not the serial one, which a batch's own reads assume.
 
 Only the root writes such a function (decision 2 of [`engine/decisions.md`](engine/decisions.md)). Below it the library
-refuses, before anything is written: a host write of one; a host merge of classes in which a class that keys one of its
-rows would be the larger, whose rows the engine would rewrite; a rule local to a child that writes one, and a split rule
+refuses, before anything is written: a host write of one; a host merge (a union, a constructor write that gives a term
+another class, a write primitive's union, or one the batch's congruence check derives) exactly when the scope's rebuild
+would write one of its rows, which the engine refuses: when a class that keys one of its rows or is its value, or that a
+container of classes keying or held by one of its rows holds, at any depth, would be the larger, whose rows the rebuild
+rewrites; or when such a container would lose its id, which the scope's container pass gives up when it rebuilds another
+container of the view, one holding a class or a container the merges displace, to the same content and keeps that one's
+smaller id, so that the row is rewritten, or re-stamped for a container it holds that changed. The batch's replay of the
+rebuild's passes finds these: it rebuilds, pass by pass, the containers its rows hold and those of the view that hold
+what the passes so far displaced and share a layout with a type such rows hold, found through each level's element index
+(`ContainerView.AddHolders`, `IContainerColumnType.SharesLayout`), and merges those of one layout that became equal, the
+smaller id kept, as the engine does whatever column types made them (section 2.2). Since no container such a row names
+or holds changes before a class that loses is held by a container of a kind the row holds, the replay runs below the
+root from that merge on, at the end of each fact that changes the batch's congruence check, O(passes × rows of the
+check) each time. A merge whose rebuilt containers meet none that such a row names, or meet one that keeps its smaller
+id, leaves the row as it is and is not refused. Also refused: a rule local to a child that writes one, and a split rule
 that assumes one; and a run in which a rule that writes one would run below the root, in a child or in a split's cases.
 No rule, query or split rule reads one in another scope (`In`), since its mirror would be written below the root; a host
 read may. Two cases depend on the data, so only the engine refuses them, with its `InvalidOperationException`: a rule's
@@ -531,23 +556,25 @@ rules at once. To decide that, run again without the rule's ruleset, on a fresh 
 A scope is written through `Assume(facts)`, `Make(term)` (returns the term's class), `Union(a, b)`, `Subsume(term)` and
 `Subsume(rows)`, and `Delete(application)` and `Delete(rows)` (section 2.5), which a `ScopeWriter` does not offer: a
 deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
-`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails keeps what it staged
-before it failed, as egglog's failed command does, since its actions run as a rule whose staged writes outlive the
-panic: the terms its calls made, and the writes, deletions and unions its primitives made, but not its own write (a
-failure of those primitive effects drops them and the fact's own write, where egglog keeps the write). A refusal
-egglog's type checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then
-stops, as egglog's program stops at an error, and the facts before stand; a `Write` callback may catch the failure and
-go on. A batch
-is planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives
-and reads function values as egglog's top-level actions do (a read sees the batch's earlier writes, merged by the
-function's lattice, as egglog's next command sees the last; the batch stages its unions after its writes, so a call that
-needs what a union makes, such as a read of a function whose keys are classes, comes after the batch flushes and
-rebuilds its earlier calls, as egglog's next command comes after the last one's rebuild), resolves existing terms, mints
-ids for new ones, keeps only the rows, subsumptions and unions that do not already hold, and checks every conflict a
-function without a lattice would see, including conflicts a union in the batch would cause through congruence. A fact
-that throws, for a function read with no value, a primitive with no result or that throws, or a conflict, fails without
-faulting the scope. The batch is then staged and flushed: merged, rebuilt, and visible when the call returns. A batch
-whose facts all hold already stages nothing, so it moves neither the scope's `Version` nor any extractor.
+`ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails keeps what it staged before
+it failed, as egglog's failed command does, since its actions run as a rule whose staged writes outlive the panic: the
+terms its calls made, and the writes, deletions and unions its primitives made, but not its own write (a failure of
+those primitive effects drops them and the fact's own write, where egglog keeps the write). A refusal egglog's type
+checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then stops, as egglog's
+program stops at an error, and the facts before stand; a `Write` callback may catch the failure and go on. A batch is
+planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives and
+reads function values as egglog's top-level actions do (a read sees the batch's earlier writes, merged by the function's
+lattice, as egglog's next command sees the last; the batch stages its unions after its writes, so a call that needs what
+a union makes, such as a read of a function whose keys are classes, or in a child a constant container of classes its
+view does not hold yet, which its container pass may make by rebuilding its copy of a container the union reaches,
+comes after the batch flushes and rebuilds its earlier calls, as egglog's next command comes after the last one's
+rebuild), resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not
+already hold, and checks every conflict a function without a lattice would see, including conflicts a union in the
+batch would cause through congruence, and below the root every merge that would rewrite a row of a function whose merge
+is not a lattice (section 2.3). A fact that throws, for a function read with no value, a primitive with no result
+or that throws, or a conflict, fails without faulting the scope. The batch is then staged and flushed: merged, rebuilt,
+and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
+`Version` nor any extractor.
 
 Reads never fail for want of a rebuild: `Check(facts)`, `Get(term)`, `TryGet(term, out value)`, `Find(class)`,
 `AreEqual(a, b)`, `CountRows(table)` and `Rows(table)`. They see subsumed rows, as egglog's `check` and lookups do, and
@@ -977,7 +1004,11 @@ bindings through the view of the execution state's context; the two differ only 
 runs in a transient child of it that holds no layer, and DEBUG asserts that they read alike. In DEBUG a read of a
 container of classes through the root's view also asserts while an engine call of a child whose chain holds a layer
 runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. A child interns no
-container of classes; what fills its layers is its container pass, with its catch-up (decisions row 9).
+container of classes; what fills its layers is its container pass, with its catch-up (decisions row 9), over the
+displacements of its own unions, whatever made them: a host write's union or constructor write, a rule's, a write
+primitive's such as `vec-union`'s, or a merge its rebuild derives. A child's host batch reads the holders the pass would
+claim, through the same element indexes and shadow tests (`ContainerView.AddHolders`), to refuse a merge whose pass
+would rewrite a row of a function whose merge is not a lattice before anything is written (section 2.3).
 
 **The container pass.** Each pass of a child's rebuild starts with its container pass (`ContainerLayers.RebuildPass`),
 egglog's `rebuild_containers` over the child's view, before its tables' pass, as egglog's rebuild loop runs containers

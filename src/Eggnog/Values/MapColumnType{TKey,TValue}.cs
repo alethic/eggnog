@@ -70,6 +70,9 @@ namespace Eggnog
         public IReadOnlyList<ColumnType> ElementTypes => [key, value];
 
         /// <inheritdoc />
+        public Relations.ContainerEnvBase Environment => env;
+
+        /// <inheritdoc />
         internal override bool IsOrdered => key.IsOrdered && value.IsOrdered;
 
         /// <inheritdoc />
@@ -420,6 +423,13 @@ namespace Eggnog
 
             return rebuilt;
         }
+
+        /// <inheritdoc />
+        public bool SharesLayout(uint cell, Relations.ContainerView view) =>
+            view.TryGetContainer(env, cell, out var map) && map.RebuildKeys == rebuildKeys && map.RebuildValues == rebuildValues;
+
+        /// <inheritdoc />
+        public int RebuildFlags => (rebuildKeys ? 1 : 0) | (rebuildValues ? 2 : 0);
 
         /// <inheritdoc />
         public string CanonicalKey(uint cell, Relations.ContainerView view, Func<ColumnType, uint, string> part)
