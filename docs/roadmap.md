@@ -27,7 +27,8 @@ gates").
   the union, and merges those that become equal, as egglog rebuilds the copy its push makes (architecture 3.8, "The
   container pass"), and catches up with the containers its writable ancestors gain after it exists, claiming, merging
   and adopting them as a fresh root replaying the same commands holds them, but for a map whose keys collapse, which
-  follows the history of the level that holds it (architecture 3.8, "Catch-up"). Left: a child interns none. A container
+  follows the history of the level that holds it (architecture 3.8, "Catch-up"). Container types of classes register
+  while the root is frozen too, as egglog declares a sort inside a `(push)`. Left: a child interns none. A container
   of function values counts as one of classes whatever the values hold, since a function value may hold classes whatever
   its sort's inputs (architecture 2.2), where egglog's counts by those inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of

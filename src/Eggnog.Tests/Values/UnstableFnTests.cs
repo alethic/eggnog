@@ -197,8 +197,79 @@ namespace Eggnog.Tests.Values
             Assert.Contains("only the root interns", made.Message, StringComparison.Ordinal);
             Assert.False(child.IsFaulted);
 
-            // A function sort registers while the root is frozen, its values never holding classes.
+            // A function sort registers while the root is frozen too, into the environment that holds ids.
             graph.Values.RegisterFn<string, long>();
+            Assert.True(graph.Engine.ContainerValues.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
+        }
+
+        /// <summary>
+        /// The first function sort registers while the root is frozen and a child of it lives, as egglog declares
+        /// <c>(sort IntFn (UnstableFn (i64) i64))</c> inside a <c>(push)</c>: its environment holds ids, as egglog's
+        /// function sorts' do, so the containers of classes the graph had none of before exist from then on, and the
+        /// child's container pass, which walks every type that holds ids, walks it from its next pass. Function values
+        /// of values still intern from any scope into the graph's one pool: the child and a sibling made later make one
+        /// value of one cell. The expectation is egglog's at 5e655cae running probe late-fn.egg, which exits clean:
+        /// (Num 1), then twice a push that declares the sort and (function h () IntFn :no-merge), sets (h) to
+        /// (unstable-fn "+" 5) and checks (= (unstable-app (h) 1) 6). A function value of a class registered so is still
+        /// one the child cannot make, as any container of classes (decisions row 9).
+        /// </summary>
+        [Fact]
+        public void AFunctionSortRegisteredWhileTheRootIsFrozenHoldsIds()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var add = graph.DefineConstructor<Node, Node, Node>("Add");
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            root.Freeze();
+            var containers = graph.Engine.ContainerValues;
+            Assert.False(containers.HasEqContainers);
+            Function<UnstableFn<long, long>> h;
+            int functions;
+
+            using (var child = root.CreateChild())
+            {
+                graph.Values.RegisterFn<long, long>();
+                Assert.True(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
+                Assert.True(containers.HasEqContainers);
+
+                h = graph.DefineFunction<UnstableFn<long, long>>("h");
+                child.Union(one, two);
+                var before = graph.Values.InternedCount;
+                child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                Assert.True(child.Check(Primitives.UnstableApp<long, long>().Of(h.Of(), 1L).Is(6L)));
+                Assert.True(child.AreEqual(one, two));
+                child.Engine.Context.CheckInvariants();
+
+                // The child's function value went into the graph's pool, not into the child's own containers.
+                var interned = graph.Values.InternedCount;
+                Assert.True(interned > before);
+                functions = containers.GetEnvironment<Relations.FunctionContainer>().Count;
+
+                using (var sibling = root.CreateChild())
+                {
+                    sibling.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                    Assert.True(sibling.Check(Primitives.UnstableApp<long, long>().Of(h.Of(), 1L).Is(6L)));
+                    Assert.Equal(interned, graph.Values.InternedCount);
+                    Assert.False(sibling.AreEqual(one, two));
+                }
+
+                graph.Values.RegisterFn<Node, Node>();
+                var g = graph.DefineFunction<UnstableFn<Node, Node>>("g");
+                var made = Assert.Throws<RuleEvaluationException>(() => child.Assume(g.Of().Is(Primitives.UnstableFn<Node, Node>(add).Of(num.Of(1L)))));
+                Assert.Contains("only the root interns", made.Message, StringComparison.Ordinal);
+                Assert.False(child.IsFaulted);
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.AreEqual(one, two));
+            Assert.Equal(0, root.CountRows(h));
+
+            // The function value outlives the scopes that made it, in the graph's pool.
+            Assert.Equal(functions, containers.GetEnvironment<Relations.FunctionContainer>().Count);
+            containers.CheckInvariants();
         }
 
         [Fact]

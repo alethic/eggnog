@@ -201,14 +201,15 @@ namespace Eggnog
         /// egglog's eq-sort container: rebuilt when its classes merge, elements that become one becoming one element,
         /// never unioned, and made only at the root (decisions row 9). The graph registers <c>Set&lt;String&gt;</c>,
         /// <c>Set&lt;i64&gt;</c> and <c>Set&lt;i32&gt;</c> itself; the first set type that holds classes is an engine
-        /// definition, which registers only while the root is writable and enters the root's domain.
+        /// definition, which while the root is writable enters the root's domain, and registers while the root is frozen
+        /// too, as egglog declares a sort inside a <c>(push)</c>.
         /// </summary>
         /// <typeparam name="T">The element type; registered, and comparable.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">The element type is unknown or not comparable, or the name is
         /// taken.</exception>
-        /// <exception cref="InvalidOperationException">The first set type that holds classes is registered while the
-        /// root is frozen or another thread is using it.</exception>
+        /// <exception cref="InvalidOperationException">The first set type that holds classes is registered while another
+        /// thread is using the writable root.</exception>
         public ColumnType<Set<T>> RegisterSet<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
@@ -245,15 +246,16 @@ namespace Eggnog
         /// <c>(pair a b)</c> and costs what its elements cost, as egglog's containers do. An element may be a value, a
         /// class of a sort, or a container of them. A pair that holds classes is egglog's eq-sort container: rebuilt
         /// when its classes merge, never unioned, and made only at the root (decisions row 9). The first pair type
-        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
-        /// first that holds classes registers only while the root is writable.
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and so
+        /// does the first that holds classes; either registers while the root is frozen too, as egglog declares a sort
+        /// inside a <c>(push)</c>.
         /// </summary>
         /// <typeparam name="T1">The type of the first element; registered.</typeparam>
         /// <typeparam name="T2">The type of the second element; registered.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">An element type is unknown, or the name is taken.</exception>
-        /// <exception cref="InvalidOperationException">The first pair type is registered while another thread is using
-        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The first pair type, or the first that holds classes, is
+        /// registered while another thread is using the writable root.</exception>
         public ColumnType<Pair<T1, T2>> RegisterPair<T1, T2>()
             where T1 : notnull
             where T2 : notnull
@@ -293,13 +295,14 @@ namespace Eggnog
         /// containers of values included, classes of a sort, or containers of them. A vector that holds classes is
         /// egglog's eq-sort container: rebuilt when its classes merge, never unioned, and made only at the root (decisions
         /// row 9). The first vector type registered is an engine definition: while the root is writable, that call enters
-        /// the root's domain, and the first that holds classes registers only while the root is writable.
+        /// the root's domain, and so does the first that holds classes; either registers while the root is frozen too, as
+        /// egglog declares a sort inside a <c>(push)</c>.
         /// </summary>
         /// <typeparam name="T">The element type; registered.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">The element type is unknown, or the name is taken.</exception>
-        /// <exception cref="InvalidOperationException">The first vector type is registered while another thread is using
-        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The first vector type, or the first that holds classes, is
+        /// registered while another thread is using the writable root.</exception>
         public ColumnType<Vec<T>> RegisterVec<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
@@ -335,16 +338,16 @@ namespace Eggnog
         /// <see cref="Map{TKey, TValue}"/> enumerates in key order. A map that holds classes is egglog's eq-sort
         /// container: rebuilt when its classes merge, keys that become one collapsing as egglog's do, never unioned, and
         /// made only at the root (decisions row 9). The first map type registered is an engine definition: while the root
-        /// is writable, that call enters the root's domain, and the first that holds classes registers only while the
-        /// root is writable.
+        /// is writable, that call enters the root's domain, and so does the first that holds classes; either registers
+        /// while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>.
         /// </summary>
         /// <typeparam name="TKey">The key type; registered, and comparable.</typeparam>
         /// <typeparam name="TValue">The value type; registered.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">A type is unknown, the key type is not comparable, or the name is
         /// taken.</exception>
-        /// <exception cref="InvalidOperationException">The first map type is registered while another thread is using
-        /// the writable root, or the first that holds classes while the root is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The first map type, or the first that holds classes, is
+        /// registered while another thread is using the writable root.</exception>
         public ColumnType<Map<TKey, TValue>> RegisterMap<TKey, TValue>()
             where TKey : notnull
             where TValue : notnull
@@ -385,15 +388,16 @@ namespace Eggnog
         /// comparable, or classes, which order by cell, as a <see cref="MultiSet{T}"/> enumerates in element order. A
         /// multiset of classes is egglog's eq-sort container: rebuilt when its classes merge, elements that become one
         /// adding their counts, never unioned, and made only at the root (decisions row 9). The first multiset type
-        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and the
-        /// first that holds classes registers only while the root is writable.
+        /// registered is an engine definition: while the root is writable, that call enters the root's domain, and so
+        /// does the first that holds classes; either registers while the root is frozen too, as egglog declares a sort
+        /// inside a <c>(push)</c>.
         /// </summary>
         /// <typeparam name="T">The element type; registered, and comparable.</typeparam>
         /// <returns>The column type.</returns>
         /// <exception cref="ArgumentException">The element type is unknown or not comparable, or the name is
         /// taken.</exception>
-        /// <exception cref="InvalidOperationException">The first multiset type is registered while another thread is
-        /// using the writable root, or the first that holds classes while the root is frozen.</exception>
+        /// <exception cref="InvalidOperationException">The first multiset type, or the first that holds classes, is
+        /// registered while another thread is using the writable root.</exception>
         public ColumnType<MultiSet<T>> RegisterMultiSet<T>() where T : notnull
         {
             EngineCallMarker.ThrowIfActive();
@@ -427,7 +431,8 @@ namespace Eggnog
         /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
         /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
         /// function sort registered is an engine definition: while the root is writable, that call enters the root's
-        /// domain; registered while the root is frozen, function values never hold classes.
+        /// domain, and it registers while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>; a
+        /// value that holds classes is a container of classes whenever its sort was registered.
         /// </summary>
         /// <typeparam name="TResult">The type of the output; registered.</typeparam>
         /// <returns>The column type.</returns>
@@ -451,7 +456,8 @@ namespace Eggnog
         /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
         /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
         /// function sort registered is an engine definition: while the root is writable, that call enters the root's
-        /// domain; registered while the root is frozen, function values never hold classes.
+        /// domain, and it registers while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>; a
+        /// value that holds classes is a container of classes whenever its sort was registered.
         /// </summary>
         /// <typeparam name="T1">The type of input 1; registered.</typeparam>
         /// <typeparam name="TResult">The type of the output; registered.</typeparam>
@@ -478,7 +484,8 @@ namespace Eggnog
         /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
         /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
         /// function sort registered is an engine definition: while the root is writable, that call enters the root's
-        /// domain; registered while the root is frozen, function values never hold classes.
+        /// domain, and it registers while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>; a
+        /// value that holds classes is a container of classes whenever its sort was registered.
         /// </summary>
         /// <typeparam name="T1">The type of input 1; registered.</typeparam>
         /// <typeparam name="T2">The type of input 2; registered.</typeparam>
@@ -508,7 +515,8 @@ namespace Eggnog
         /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
         /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
         /// function sort registered is an engine definition: while the root is writable, that call enters the root's
-        /// domain; registered while the root is frozen, function values never hold classes.
+        /// domain, and it registers while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>; a
+        /// value that holds classes is a container of classes whenever its sort was registered.
         /// </summary>
         /// <typeparam name="T1">The type of input 1; registered.</typeparam>
         /// <typeparam name="T2">The type of input 2; registered.</typeparam>
@@ -541,7 +549,8 @@ namespace Eggnog
         /// registered: a function value, interned as a container, its partially applied arguments rebuilt when their
         /// classes merge, never unioned, and made only at the root when it holds classes (decisions row 9). The first
         /// function sort registered is an engine definition: while the root is writable, that call enters the root's
-        /// domain; registered while the root is frozen, function values never hold classes.
+        /// domain, and it registers while the root is frozen too, as egglog declares a sort inside a <c>(push)</c>; a
+        /// value that holds classes is a container of classes whenever its sort was registered.
         /// </summary>
         /// <typeparam name="T1">The type of input 1; registered.</typeparam>
         /// <typeparam name="T2">The type of input 2; registered.</typeparam>
@@ -578,10 +587,9 @@ namespace Eggnog
             where TFn : struct, IFnValue
         {
             // Outside the store's lock, as RegisterPair registers its environment: a value's partially applied arguments
-            // may be classes whatever the sort's inputs, so the environment holds ids while the root is writable.
-            var env = graph.Root.IsFrozen
-                ? graph.ValueContainers<Relations.FunctionContainer>()
-                : graph.ClassContainers<Relations.FunctionContainer>();
+            // may be classes whatever the sort's inputs, so the environment holds ids, as egglog's function sorts' do,
+            // whether the root is writable or frozen.
+            var env = graph.ClassContainers<Relations.FunctionContainer>();
             lock (sync)
             {
                 if (TryGetType<TFn>(out var existing))

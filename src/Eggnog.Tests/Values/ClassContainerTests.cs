@@ -438,10 +438,100 @@ namespace Eggnog.Tests.Values
             var made = Assert.Throws<RuleEvaluationException>(() => child.Assume(g.Of(2L).Is(of.Of(num.Of(1L), num.Of(1L)))));
             Assert.Contains("only the root interns", made.Message, StringComparison.Ordinal);
             Assert.False(child.IsFaulted);
+        }
 
-            // And a container type of classes registers only while the root is writable.
-            var frozen = Assert.Throws<InvalidOperationException>(() => graph.Values.RegisterPair<Node, Node>());
-            Assert.Contains("root is frozen", frozen.Message, StringComparison.Ordinal);
+        /// <summary>
+        /// A pair type of classes registers while the root is frozen and a child of it lives, as egglog declares
+        /// <c>(sort MathPair (Pair Math Math))</c> inside a <c>(push)</c>: the pairs' environment, which held the pairs of
+        /// values the root and the child made, comes to hold ids, and the child's container pass walks it from then on.
+        /// The expectation is egglog's at 5e655cae running probe late-pair.egg, which exits clean: (sort IntPair
+        /// (Pair i64 i64)), (set (q) (pair 1 2)), (Num 1) and (Num 2); in a push, (sort MathPair (Pair Math Math)) and
+        /// (union (Num 1) (Num 2)), after which (q) is still (pair 1 2) and the two are equal; after the pop they are not.
+        /// The child also makes a pair of values after the type came to hold ids, which interns anywhere.
+        /// </summary>
+        [Fact]
+        public void APairTypeOfClassesRegistersWhileTheRootIsFrozen()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterPair<long, long>();
+            var q = graph.DefineFunction<Pair<long, long>>("q");
+            var r = graph.DefineFunction<Pair<long, long>>("r");
+            var root = graph.Root;
+            root.Assume(q.Of().Is(Primitives.PairOf<long, long>().Of(1L, 2L)));
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            root.Freeze();
+            var containers = graph.Engine.ContainerValues;
+            Assert.False(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+
+            using (var child = root.CreateChild())
+            {
+                child.Assume(r.Of().Is(Primitives.PairOf<long, long>().Of(3L, 4L)));
+                var pairs = graph.Values.RegisterPair<Node, Node>();
+                Assert.Equal("Pair<Math, Math>", pairs.Name);
+                Assert.True(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+                Assert.True(containers.HasEqContainers);
+
+                child.Union(one, two);
+                Assert.True(child.AreEqual(one, two));
+                Assert.Equal(new Pair<long, long>(1L, 2L), child.Get(q.Of()));
+                Assert.Equal(new Pair<long, long>(3L, 4L), child.Get(r.Of()));
+                child.Assume(r.Of().Is(Primitives.PairOf<long, long>().Of(3L, 4L)));
+                Assert.False(child.IsFaulted);
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.AreEqual(one, two));
+            Assert.Equal(new Pair<long, long>(1L, 2L), root.Get(q.Of()));
+            containers.CheckInvariants();
+            root.Engine.Context.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A pair type of classes registers from no rule's filter, in a child of a frozen root as anywhere else: a
+        /// registration is a call into the graph, which a primitive, filter, lattice, cost function or scheduler may not
+        /// make, so it throws there, the rule still fires, and the pairs' environment holds no ids until a registration
+        /// outside the run.
+        /// </summary>
+        [Fact]
+        public void APairTypeOfClassesRegistersFromNoFilterOfAChildsRule()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            graph.Values.RegisterPair<long, long>();
+            var seed = graph.DefineRelation<long>("seed");
+            var done = graph.DefineRelation<long>("done");
+            var rules = graph.DefineRuleset("rules");
+            var refusals = new List<Exception>();
+            rules.DefineRule("register", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(seed.Of(x));
+                r.Where(x, _ =>
+                {
+                    refusals.Add(Assert.Throws<InvalidOperationException>(() => graph.Values.RegisterPair<Node, Node>()));
+                    return true;
+                });
+                r.Then(done.Of(x));
+            });
+            var root = graph.Root;
+            root.Freeze();
+            var containers = graph.Engine.ContainerValues;
+
+            using (var child = root.CreateChild())
+            {
+                child.Assume(seed.Of(1L));
+                child.Run(Schedule.Run(rules));
+                Assert.True(child.Check(done.Of(1L)));
+            }
+
+            var refusal = Assert.Single(refusals);
+            Assert.Equal("Not allowed from a primitive, lattice, filter, cost function or scheduler", refusal.Message);
+            Assert.False(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+            graph.Values.RegisterPair<Node, Node>();
+            Assert.True(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
         }
 
         [Fact]
