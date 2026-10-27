@@ -843,7 +843,9 @@ namespace Eggnog.Tests.Concurrency
         /// the library's path (<see cref="EGraph.ValueContainers{TContainer}"/>) end to end, but would rarely catch a
         /// container set that readers could see half registered: the library reaches only the engine's six container
         /// types, too few registrations to overlap the children's reads for more than a moment in each graph.
-        /// <see cref="Relations.Tests.ContainerValuesConcurrencyTests"/> are the regression tests for that.
+        /// <see cref="Relations.Tests.ContainerValuesConcurrencyTests"/> are the regression tests for that. A function
+        /// sort's environment holds ids however it registers, so the test of container types of classes registers the
+        /// function sorts.
         /// </summary>
         [Fact]
         public void ContainerTypesOfValuesRegisterWhileChildrenOfAFrozenRootRun()
@@ -897,7 +899,6 @@ namespace Eggnog.Tests.Concurrency
                     graph.Values.RegisterPair<long, long>();
                     graph.Values.RegisterMap<long, long>();
                     graph.Values.RegisterMultiSet<long>();
-                    graph.Values.RegisterFn<long, long>();
                 }
                 finally
                 {
@@ -908,14 +909,221 @@ namespace Eggnog.Tests.Concurrency
 
                 Assert.All(errors, Assert.Null);
                 var containers = graph.Engine.ContainerValues;
-                Assert.Equal(6, containers.TypeCount);
+                Assert.Equal(5, containers.TypeCount);
                 Assert.True(containers.GetEnvironment<Relations.SetContainer>().HoldsIds);
                 Assert.False(containers.GetEnvironment<Relations.VecContainer>().HoldsIds);
                 Assert.False(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
                 Assert.False(containers.GetEnvironment<Relations.MapContainer>().HoldsIds);
                 Assert.False(containers.GetEnvironment<Relations.MultiSetContainer>().HoldsIds);
-                Assert.False(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
                 containers.CheckInvariants();
+            }
+        }
+
+        /// <summary>
+        /// Container types of classes register while children of a frozen root run on other threads, as egglog declares
+        /// a container sort inside a <c>(push)</c>: vectors, pairs, maps and multisets whose environments held only the
+        /// containers of values the root and the children made come to hold ids, a set of pairs of classes and two
+        /// function sorts register into environments that hold them already or come to. Two threads, released together,
+        /// register the same types at once, one in reverse order. Meanwhile each child interns vectors, pairs, maps and
+        /// multisets of values into those environments, by host writes and through a rule's <c>vec-of</c>, unions a class
+        /// a set of classes holds with one of smaller id, so that its container pass claims and rebuilds the set, reads
+        /// everything back and checks its invariants; and another thread freezes a child after its union and runs a
+        /// grandchild of it on a further thread, which runs the rule and reads the union and the rebuilt set through the
+        /// frozen child, whose view the grandchild leaves as it was. Every child reads what egglog does at 5e655cae
+        /// running probe late-stress.egg, which exits clean: a set of (Num 1) under (Num 0), and in a push that
+        /// declares the same container sorts of classes, writes the containers of values and runs
+        /// (union (Num 0) (Num 1)), the set reads (set-of (Num 0)) and each container of values as written; after the
+        /// pop, the set is (set-of (Num 1)) and the classes differ. The grandchild reads what probe late-nested.egg
+        /// does, which exits clean: a rule from (seed x) sets (made x) to (vec-of x 5); in a push that unions (Num 0) and
+        /// (Num 1) and runs it on (seed 7), a nested push declares container sorts of classes and runs it on (seed 8),
+        /// and reads both vectors, the union and (set-of (Num 0)); after its pop the outer push still reads the union and
+        /// the set and has no (made 8). Afterwards every environment holds ids, and the root, its containers and a child
+        /// made after the registrations keep their invariants.
+        /// </summary>
+        [Fact]
+        public void ContainerTypesOfClassesRegisterWhileChildrenOfAFrozenRootRun()
+        {
+            const int Children = 4;
+            const int Nester = Children;
+            const int Registrars = 2;
+            const int Graphs = 10;
+            for (var g = 0; g < Graphs; g++)
+            {
+                var graph = new EGraph();
+                graph.DefineSort<Node>("Math");
+                var num = graph.DefineConstructor<long, Node>("Num");
+                graph.Values.RegisterSet<Node>();
+                graph.Values.RegisterVec<long>();
+                graph.Values.RegisterPair<long, long>();
+                graph.Values.RegisterMap<long, long>();
+                graph.Values.RegisterMultiSet<long>();
+                var s = graph.DefineFunction<Set<Node>>("s");
+                var vec = graph.DefineFunction<long, Vec<long>>("vec");
+                var pair = graph.DefineFunction<long, Pair<long, long>>("pr");
+                var map = graph.DefineFunction<long, Map<long, long>>("map");
+                var bag = graph.DefineFunction<long, MultiSet<long>>("bag");
+                var seed = graph.DefineRelation<long>("seed");
+                var made = graph.DefineFunction<long, Vec<long>>("made");
+                var rules = graph.DefineRuleset("rules");
+                rules.DefineRule("make", r =>
+                {
+                    var x = r.Var<long>("x");
+                    r.When(seed.Of(x));
+                    r.Then(made.Of(x).Is(Primitives.VecOf<long>().Of(x, 5L)));
+                });
+                var root = graph.Root;
+                var zero = root.Make(num.Of(0L));
+                root.Assume(s.Of().Is(Primitives.SetOf<Node>().Of(num.Of(1L))));
+                var one = root.Make(num.Of(1L));
+                root.Freeze();
+                var containers = graph.Engine.ContainerValues;
+                Assert.False(containers.GetEnvironment<Relations.VecContainer>().HoldsIds);
+
+                // Interns containers of values by host writes and through the rule, merges the classes and reads back.
+                void Exercise(Scope scope, string name, long key)
+                {
+                    scope.Assume(vec.Of(key).Is(Vec.Of(key, 1L)));
+                    scope.Assume(pair.Of(key).Is(new Pair<long, long>(key, 2L)));
+                    scope.Assume(map.Of(key).Is(Map.Of((key, 3L))));
+                    scope.Assume(bag.Of(key).Is(MultiSet.Of(key, key)));
+                    scope.Assume(seed.Of(key));
+                    scope.Run(Schedule.Run(rules));
+                    scope.Union(zero, one);
+                    if (scope.AreEqual(zero, one) == false)
+                        throw new InvalidOperationException($"{name}'s union did not hold");
+
+                    if (scope.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                        throw new InvalidOperationException($"{name} read {scope.Get(s.Of())}");
+
+                    if (scope.Get(vec.Of(key)).Equals(Vec.Of(key, 1L)) == false
+                        || scope.Get(pair.Of(key)).Equals(new Pair<long, long>(key, 2L)) == false
+                        || scope.Get(map.Of(key)).Equals(Map.Of((key, 3L))) == false
+                        || scope.Get(bag.Of(key)).Equals(MultiSet.Of(key, key)) == false
+                        || scope.Get(made.Of(key)).Equals(Vec.Of(key, 5L)) == false)
+                        throw new InvalidOperationException($"{name} read back another container of values");
+
+                    scope.Engine.Context.CheckInvariants();
+                }
+
+                var stop = 0;
+                var rounds = new int[Children + 1];
+                var errors = new Exception?[Children + 1 + Registrars];
+                var workers = new Thread[Children + 1];
+                for (var c = 0; c < Children; c++)
+                {
+                    var id = c;
+                    workers[c] = Spawn(() =>
+                    {
+                        var round = 0L;
+                        do
+                        {
+                            using var child = root.CreateChild();
+                            Exercise(child, $"child {id}", id * 1_000_000L + round++);
+                            Interlocked.Increment(ref rounds[id]);
+                        }
+                        while (Volatile.Read(ref stop) == 0);
+                    }, errors, id);
+                }
+
+                workers[Nester] = Spawn(() =>
+                {
+                    var round = 0L;
+                    do
+                    {
+                        using var middle = root.CreateChild();
+                        var key = Nester * 1_000_000L + round++;
+                        Exercise(middle, "the frozen child", key);
+                        middle.Freeze();
+
+                        // The grandchild runs on a thread of its own, under the child frozen on this one.
+                        var nested = new Exception?[1];
+                        var grandchild = Spawn(() =>
+                        {
+                            using var scope = middle.CreateChild();
+                            Exercise(scope, "the grandchild", key + 500_000L);
+                            if (scope.Get(made.Of(key)).Equals(Vec.Of(key, 5L)) == false)
+                                throw new InvalidOperationException("the grandchild read another vector of its parent's");
+                        }, nested, 0);
+                        if (grandchild.Join(Patience) == false)
+                            throw new TimeoutException("the grandchild did not finish");
+
+                        if (nested[0] is { } failure)
+                            throw new InvalidOperationException("the grandchild failed", failure);
+
+                        if (middle.Check(seed.Of(key + 500_000L)) || middle.AreEqual(zero, one) == false
+                            || middle.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                            throw new InvalidOperationException("the grandchild changed its frozen parent's view");
+
+                        middle.Engine.Context.CheckInvariants();
+                        Interlocked.Increment(ref rounds[Nester]);
+                    }
+                    while (Volatile.Read(ref stop) == 0);
+                }, errors, Nester);
+
+                // Both registrars wait on the one signal, which is never disposed, and register the same types.
+                var go = new ManualResetEventSlim();
+                Action[] registrations =
+                [
+                    () => graph.Values.RegisterVec<Node>(),
+                    () => graph.Values.RegisterPair<Node, Node>(),
+                    () => graph.Values.RegisterMap<Node, long>(),
+                    () => graph.Values.RegisterMultiSet<Node>(),
+                    () => graph.Values.RegisterFn<long, long>(),
+                    () => graph.Values.RegisterFn<Node, Node>(),
+                ];
+                var registrars = new Thread[Registrars];
+                for (var i = 0; i < Registrars; i++)
+                {
+                    var reversed = i % 2 == 1;
+                    registrars[i] = Spawn(() =>
+                    {
+                        go.Wait();
+                        foreach (var register in reversed ? Enumerable.Reverse(registrations) : registrations)
+                            register();
+
+                        graph.Values.RegisterSet<Pair<Node, Node>>();
+                    }, errors, Children + 1 + i);
+                }
+
+                try
+                {
+                    // Once every child has run, so the registrations meet running children; a failed child ends the
+                    // wait, and its exception is the one reported.
+                    var ran = SpinWait.SpinUntil(() =>
+                        errors.Any(e => e is not null) || Enumerable.Range(0, rounds.Length).All(i => Volatile.Read(ref rounds[i]) > 0),
+                        Patience);
+                    Assert.All(errors, Assert.Null);
+                    Assert.True(ran);
+                    go.Set();
+                    foreach (var registrar in registrars)
+                        Assert.True(registrar.Join(Patience));
+                }
+                finally
+                {
+                    go.Set();
+                    Volatile.Write(ref stop, 1);
+                    foreach (var thread in workers.Concat(registrars))
+                        Assert.True(thread.Join(Patience));
+                }
+
+                Assert.All(errors, Assert.Null);
+                Assert.Equal(6, containers.TypeCount);
+                Assert.True(containers.GetEnvironment<Relations.SetContainer>().HoldsIds);
+                Assert.True(containers.GetEnvironment<Relations.VecContainer>().HoldsIds);
+                Assert.True(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+                Assert.True(containers.GetEnvironment<Relations.MapContainer>().HoldsIds);
+                Assert.True(containers.GetEnvironment<Relations.MultiSetContainer>().HoldsIds);
+                Assert.True(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
+                Assert.False(root.AreEqual(zero, one));
+                Assert.Equal(Set.Of(one), root.Get(s.Of()));
+                containers.CheckInvariants();
+                root.Engine.Context.CheckInvariants();
+
+                // A child made after the registrations reads and rebuilds as the others did.
+                using var last = root.CreateChild();
+                last.Union(zero, one);
+                Assert.Equal(Set.Of(zero), last.Get(s.Of()));
+                last.Engine.Context.CheckInvariants();
             }
         }
 

@@ -137,6 +137,8 @@ A column holds either a class or a value.
     that decodes no values.
   - Only a writable root makes one. A child uses those its view holds, its own rebuilt copies included, and a read of
     a frozen root those the root holds; one they lack matches nothing there. A write that needs one is refused.
+  - Their types register while the root is frozen and its children run, as well as at a writable root, as egglog
+    declares a container sort inside a `(push)` (section 3.8, "The container pass").
   - A child merges classes they hold as the root does: a merge in a child, a host write's, a rule's, a write primitive's
     or one the child's rebuild derives, rebuilds the containers it reaches in the child's container layers, as egglog
     rebuilds the copy its push makes (decisions row 9; section 3.8, "The container pass"). A child's host batch checks
@@ -199,9 +201,9 @@ A column holds either a class or a value.
     where its access is allowed. Anywhere else the application fails, egglog's panic: in a rule, it needs `Naive()`
     to read a function.
   - Its cell is a container id. Its arguments may hold classes whatever the sort's inputs, so a value that holds
-    classes is a container of classes, as above, rebuilt when they merge and made only at a writable root; a type
-    registered while the root is frozen makes values of values only. A nested function value is rebuilt when it holds
-    classes, where egglog's `rebuild_contents` decides by its sort's inputs. For the same reason the type counts as one
+    classes is a container of classes, as above, rebuilt when they merge and made only at a writable root, whenever
+    its type was registered, while the root was frozen too. A nested function value is rebuilt when it holds classes,
+    where egglog's `rebuild_contents` decides by its sort's inputs. For the same reason the type counts as one
     of classes, so a set, a vector, a pair, a map or a multiset of function values is a container of classes, made only
     at a writable root, and rebuilds the values it holds, which egglog's leaves stale when the sort's inputs hold no
     classes (roadmap, "Containers of classes in children").
@@ -1044,6 +1046,15 @@ consumed its journal and its catch-up has handled what the pre-loop scan kept. C
 that holds ids, or without a displacement since the last pass, an inherited Dirty id or work the catch-up queued;
 otherwise O(own losers × depth × types) element-index probes, plus O(size) per revisited container, or the layer's size
 for a full rebuild, plus the closure's index fan-out and the rows re-stamped.
+
+A container type may be registered, or a type of values made to hold ids, while the root is frozen and its children
+run on other threads, as egglog declares a container sort inside a `(push)`: that changes a definition, not the
+root's state, so it takes no domain. The root's container environments publish a new type copy-on-write, and the flag
+of one that comes to hold ids with a volatile write after giving it the root's container log, under a writer lock
+(`ContainerValues.RegisterType`). A child's container pass, pre-loop scan and catch-up look the types up on each
+pass, and its layers make a type's layer on first use whatever its id, so such a type joins every live child's passes
+from their next one. It holds no container of classes until a writable root interns one, which a frozen root never
+does: what children interned into it holds values only, and a frozen root's container log never grows.
 
 **Container logs.** Each level has a container log (`ContainerLog`): the store's for the root, owned by its
 container environments, and each child's in its container layers. A log records only while its level has live

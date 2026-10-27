@@ -13,8 +13,9 @@ namespace Eggnog.Tests.Concurrency
     /// <summary>
     /// Threads at the root: the root is one thread domain, so a call from a second thread while another holds it fails
     /// fast; a rule defined from another thread during a run joins the run's next iteration, while a table definition
-    /// throws as long as another thread uses the unfrozen root; and user delegates the engine invokes (primitives,
-    /// lattice merges, filters and cost functions, on the calling thread or on pool threads) may not call into a graph.
+    /// and a container type's registration throw as long as another thread uses the unfrozen root; and user delegates
+    /// the engine invokes (primitives, lattice merges, filters and cost functions, on the calling thread or on pool
+    /// threads) may not call into a graph.
     /// </summary>
     [Collection(Relations.Tests.ThreadPoolProbeCollection.Name)]
     public sealed class RootThreadingTests
@@ -94,6 +95,65 @@ namespace Eggnog.Tests.Concurrency
             run.Finish();
             Assert.Equal(count, run.Graph.Tables.Count);
             run.Graph.DefineFunction<long, long>("late");
+        }
+
+        /// <summary>
+        /// A container type of classes registers only while no other thread uses the writable root, as a table does: its
+        /// first registration, a type of classes or a type of values made to hold ids, takes the root's domain while the
+        /// root is writable, so a pair type of classes, whose environment holds pairs of values, and a function sort
+        /// throw while a run holds the root on another thread, and register once it is done. The run blocks in its
+        /// filter until the test releases it, which it does whatever the test found.
+        /// </summary>
+        [Fact]
+        public void AContainerTypeOfClassesRegisteredFromAnotherThreadDuringARunThrows()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            graph.Values.RegisterPair<long, long>();
+            var seed = graph.DefineRelation<long>("seed");
+            var done = graph.DefineRelation<long>("done");
+            var rules = graph.DefineRuleset("blocking");
+            var started = new ManualResetEventSlim();
+            var release = new ManualResetEventSlim();
+            rules.DefineRule("block once", r =>
+            {
+                var x = r.Var<long>("x");
+                r.When(seed.Of(x));
+                r.Where(x, _ =>
+                {
+                    started.Set();
+                    release.Wait();
+                    return true;
+                });
+                r.Then(done.Of(x));
+            });
+            graph.Root.Assume(seed.Of(1L));
+
+            var run = DedicatedThread.Run(() => graph.Root.Run(rules));
+            try
+            {
+                Assert.True(started.Wait(TimeSpan.FromSeconds(30)));
+                var pairs = Assert.Throws<InvalidOperationException>(() => graph.Values.RegisterPair<Node, Node>());
+                Assert.Contains("in use on another thread", pairs.Message);
+                var fns = Assert.Throws<InvalidOperationException>(() => graph.Values.RegisterFn<long, long>());
+                Assert.Contains("in use on another thread", fns.Message);
+            }
+            finally
+            {
+                release.Set();
+            }
+
+            Assert.Equal(RunStopReason.Completed, run.GetAwaiter().GetResult().StopReason);
+            var containers = graph.Engine.ContainerValues;
+            Assert.False(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+            Assert.False(containers.TryGetEnvironment<Relations.FunctionContainer>(out _));
+            Assert.False(containers.HasEqContainers);
+
+            graph.Values.RegisterPair<Node, Node>();
+            graph.Values.RegisterFn<long, long>();
+            Assert.True(containers.GetEnvironment<Relations.PairContainer>().HoldsIds);
+            Assert.True(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
+            containers.CheckInvariants();
         }
 
         [Fact]
