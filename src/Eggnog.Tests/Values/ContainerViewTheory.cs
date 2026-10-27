@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Values
                 Fold.Of(Num.Of(1L), Num.Of(3L)).Is(Num.Of(3L)),
                 Fold.Of(Num.Of(2L), Num.Of(3L)).Is(Num.Of(2L)),
 
-                // The multisets of classes the copy's filter and flat-map make, which a child cannot intern itself.
+                // The multisets of classes the copy's filter and flat-map make, which the root holds too.
                 Empty.Of().Is(of.Of()),
                 Even.Of().Is(of.Of(Num.Of(2L))),
                 Flat.Of().Is(of.Of(Num.Of(1L), Num.Of(3L), Num.Of(3L), Num.Of(3L))),

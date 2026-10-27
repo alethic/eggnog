@@ -188,9 +188,10 @@ namespace Eggnog
             {
                 case TermShapeKind.Constant:
                 {
-                    // A child makes no container of classes: after a merge of classes, a constant's content may be one
-                    // the child sees only once its container pass has rebuilt its copy of a container the merge reaches.
-                    // A writable root makes the container, which its rebuild then merges with the rebuilt one.
+                    // After a merge of classes, a constant's content may be one the child sees only once its container
+                    // pass has rebuilt its copy of a container the merge reaches: interning it before would give the
+                    // content a second id of the child's own, where egglog's next command finds the rebuilt one. A
+                    // writable root makes the container, which its rebuild then merges with the rebuilt one.
                     if (mergedBeforeFact && scope.IsRoot == false && InView(shape) == false)
                         return true;
 

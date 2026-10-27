@@ -19,8 +19,9 @@ namespace Eggnog.Relations.Tests
     /// place are re-stamped, its own by refresh and the ancestors' by hide and copy, closed over the containers that
     /// hold it, and its descendants learn of them from its container log. Claimed containers collide and merge as one
     /// hash-cons does, incrementally over a layer of more than 1000 containers and in full over a smaller one. Siblings
-    /// under a frozen root pass concurrently, and a frozen child's claims are read from any thread. The probes the
-    /// expected values come from ran on egglog's binary at the engine's pin, <c>5e655cae</c>.
+    /// under a frozen root pass concurrently, and a frozen child's claims are read from any thread. Containers a child
+    /// interned rebuild and merge in its pass as claimed ones do. The probes the expected values come from ran on
+    /// egglog's binary at the engine's pin, <c>5e655cae</c>.
     /// </summary>
     public class ContainerPassTests
     {
@@ -130,6 +131,113 @@ namespace Eggnog.Relations.Tests
             Assert.True(env.TryGetContainer(vb, out var rootB));
             Assert.Equal(new VecContainer(b), rootB);
             Assert.Equal([(vb, 2u), (va, 1u)], Rows(root, f).OrderBy(r => r.Key == vb ? 0 : 1).ToList());
+        }
+
+        /// <summary>
+        /// Containers a child of a frozen root interned rebuild in its pass as claimed ones do: the child interns
+        /// <c>[w]</c> under <c>L</c> and <c>[L]</c> under <c>H</c>, both local to it, beside the root's <c>Y = [k]</c>;
+        /// its union of <c>k</c> and <c>w</c> rebuilds <c>[w]</c> to <c>[k]</c>, which meets <c>Y</c>, the smaller id,
+        /// so <c>L</c> merges into it, and the next pass rebuilds <c>[L]</c> to <c>[Y]</c> in place under <c>H</c>, as
+        /// egglog rebuilds a container of containers a pass after the containers it holds. A fresh root replaying the
+        /// interns and the union holds the same, with its own ids for what the child interned.
+        /// </summary>
+        [Fact]
+        public void ContainersAChildInternedRebuildAndMergeIntoTheRootsInItsPass()
+        {
+            var (store, _, env) = Setup();
+            var root = store.Root;
+            var k = root.NewId();
+            var w = root.NewId();
+            var y = Intern(root, k);
+            root.Freeze();
+
+            var child = root.CreateChild();
+            var l = child.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(w), state));
+            var h = child.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(l), state));
+            Assert.True(child.IsLocalId(l));
+            Assert.True(child.IsLocalId(h));
+            Assert.True(y < l);
+            child.Union(k, w);
+            Assert.True(child.Rebuild());
+            Assert.Equal(y, child.Find(l));
+            Assert.Null(ById(child, env, l));
+            Assert.Equal(y, ByContent(child, env, k));
+            Assert.Null(ByContent(child, env, w));
+            Assert.Equal(new VecContainer(y), ById(child, env, h));
+            Assert.Equal(h, ByContent(child, env, y));
+            AssertOneContentPerId(child, env);
+            child.CheckInvariants();
+            child.Dispose();
+            Assert.Equal(1, env.Count);
+
+            // A fresh root replaying the interns and the union.
+            var (fresh, _, freshEnv) = Setup();
+            var replay = fresh.Root;
+            var rk = replay.NewId();
+            var rw = replay.NewId();
+            var ry = Intern(replay, rk);
+            var rl = Intern(replay, rw);
+            var rh = Intern(replay, rl);
+            replay.Union(rk, rw);
+            replay.Rebuild();
+            Assert.Equal(ry, replay.Find(rl));
+            Assert.True(freshEnv.TryGetId(new VecContainer(rk), out var id));
+            Assert.Equal(ry, id);
+            Assert.True(freshEnv.TryGetId(new VecContainer(ry), out var holder));
+            Assert.Equal(rh, holder);
+            Assert.Equal(2, freshEnv.Count);
+        }
+
+        /// <summary>
+        /// A container a child interned whose own id loses to an ancestor's container id, an id-only change of the
+        /// child's full rebuild: the child interns <c>[a]</c> under <c>M</c>, local to it, and unions <c>M</c> with the
+        /// root's <c>Z = [b]</c>, the smaller id. The rebuild may not rename the entry in place to <c>Z</c>, which the
+        /// child's layer does not own, so it inserts it through the layer's policy, which claims <c>Z</c> first: the
+        /// child's layer then holds both <c>[b]</c> and <c>[a]</c> under <c>Z</c>, as a fresh root replaying the intern
+        /// and the union holds both under it, egglog's rename of one container's id to another's. The root keeps
+        /// <c>[b]</c> alone.
+        /// </summary>
+        [Fact]
+        public void AnInternedContainerWhoseIdLosesToAnAncestorsIdIsInsertedUnderAClaim()
+        {
+            var (store, _, env) = Setup();
+            var root = store.Root;
+            var a = root.NewId();
+            var b = root.NewId();
+            var z = Intern(root, b);
+            root.Freeze();
+
+            var child = root.CreateChild();
+            var m = child.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(a), state));
+            child.Union(m, z);
+            Assert.True(child.Rebuild());
+            Assert.Equal(z, child.Find(m));
+            var layer = (ContainerLayer<VecContainer>)child.ContainerLayers!.LayerAt(env.TypeId)!;
+            Assert.True(layer.Shadowed.Contains(z));
+            var under = new List<ContainerEntry<VecContainer>>();
+            layer.Own.CollectById(z, under, locked: true);
+            Assert.Equal([new VecContainer(a), new VecContainer(b)], under.Select(e => e.Container).OrderBy(c => c.ToString(), StringComparer.Ordinal));
+            Assert.Equal(z, ByContent(child, env, a));
+            Assert.Equal(z, ByContent(child, env, b));
+            Assert.Equal(0, layer.Own.CollectById(m, new List<ContainerEntry<VecContainer>>(), locked: true));
+            child.CheckInvariants();
+            child.Dispose();
+            Assert.True(env.TryGetContainer(z, out var kept));
+            Assert.Equal(new VecContainer(b), kept);
+            Assert.Equal(1, env.Count);
+
+            // A fresh root replaying the intern and the union.
+            var (fresh, _, freshEnv) = Setup();
+            var replay = fresh.Root;
+            var ra = replay.NewId();
+            var rb = replay.NewId();
+            var rz = Intern(replay, rb);
+            var rm = Intern(replay, ra);
+            replay.Union(rm, rz);
+            replay.Rebuild();
+            var replayed = new List<ContainerEntry<VecContainer>>();
+            freshEnv.CollectById(rz, replayed, locked: true);
+            Assert.Equal([new VecContainer(ra), new VecContainer(rb)], replayed.Select(e => e.Container).OrderBy(c => c.ToString(), StringComparer.Ordinal));
         }
 
         /// <summary>

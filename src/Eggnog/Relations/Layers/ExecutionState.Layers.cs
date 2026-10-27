@@ -72,8 +72,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Increments <paramref name="counter"/> on the store's shared counters, never redirected to a child context's
-        /// id blocks: for ids that must not be local to any context. Interned container ids are minted here, so a
-        /// container interned in a child is the same id everywhere.
+        /// id blocks: for ids that must not be local to any context. The ids of containers interned in the root's
+        /// environments are minted here, so a container of values interned in a child is the same id everywhere.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>

@@ -144,7 +144,7 @@ namespace Eggnog
                     }
 
                     // A container of classes: its classes usable and canonical, as a class constant's, and the container
-                    // interned at a writable root, or elsewhere the one the scope sees.
+                    // interned at a writable root or child, or in a frozen scope the one it sees.
                     if (type.HoldsClasses)
                         return type.EncodeCanonicalObject(shape.Constant!, scope, canonical ??= Canonical, Origin);
 

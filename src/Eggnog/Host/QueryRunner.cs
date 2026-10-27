@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace Eggnog
 {
@@ -100,11 +101,31 @@ namespace Eggnog
             var transient = scope.CreateTransient();
             try
             {
-                return Collect(transient, query, stopAtFirst);
+                var matches = Collect(transient, query, stopAtFirst);
+                AssertNoTransientIds(transient, query, matches);
+                return matches;
             }
             finally
             {
                 scope.ReleaseTransient(transient);
+            }
+        }
+
+        /// <summary>
+        /// Asserts that no cell the query collected in <paramref name="transient"/> is an id local to it. A transient
+        /// keeps no container layers and writes nothing, so a cell naming a class or container it minted would name one
+        /// that releasing it drops. Only the columns whose types involve classes are checked: a base value's cell may
+        /// equal a block id.
+        /// </summary>
+        [Conditional("DEBUG")]
+        static void AssertNoTransientIds(ContextEngineScope transient, CompiledQuery query, TupleBuffer matches)
+        {
+            for (var row = 0; row < matches.Count; row++)
+            {
+                var cells = matches[row];
+                foreach (var column in query.SortColumns)
+                    Debug.Assert(transient.Context.IsLocalId(new Relations.Value(cells[column])) == false,
+                        "A query on a frozen scope returned a cell local to its transient child.");
             }
         }
 

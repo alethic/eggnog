@@ -171,13 +171,16 @@ namespace Eggnog.Relations
         /// (<see cref="ContextTables.CatchUpRows"/>), reads the ids of the containers they rebuilt in place from the
         /// Dirty streams of their container logs (<see cref="ContextTables.ReadDirty"/>), and catches up with the
         /// containers of classes they gained (<see cref="ContainerLayers.CatchUp"/>): it settles each that equals one
-        /// the child holds under another id, merging the unions that stages at once, and queues for the pass the ids
-        /// to claim and the contents to adopt. Every pass then runs the container step
+        /// the child holds under another id, merging the unions that stages into the union-find at once, and queues
+        /// for the pass the ids to claim and the contents to adopt. Every pass then runs the container step
         /// (<see cref="RebuildContainerLayers"/>): the container pass claims and rebuilds, in the child's container
         /// layers, the containers of classes its displacements since the last pass concern, and what the catch-up
-        /// queued; the unions their merges staged are merged; and the own rows naming a dirty container are
-        /// re-stamped. Then it rewrites the own rows that name an id displaced since the last pass, hides and copies the
-        /// ancestor rows that name the child's own new losers or a container its pass changed in place, and merges
+        /// queued; the unions their merges staged are merged into the union-find, and nothing else is merged before
+        /// the tables' pass; and the own rows naming a dirty container are re-stamped. In the first pass, when the
+        /// catch-up staged copies of ancestor rows, the step repeats until a container pass changes nothing, so that
+        /// nested containers the ancestors made are merged with the child's equal ones before the copies merge. Then
+        /// it rewrites the own rows that name an id displaced since the last pass, hides and copies the ancestor rows
+        /// that name the child's own new losers or a container its pass changed in place, and merges
         /// (<see cref="ContextTables.RebuildPass"/>): containers first, as egglog's rebuild loop runs them
         /// (egglog-bridge/src/lib.rs:666-681). A contradiction that stops the child ends the loop at once.
         /// </para>
@@ -276,10 +279,11 @@ namespace Eggnog.Relations
                         inherited = tables.ReadDirty();
 
                         // The containers of classes the ancestors gained: collisions settle now, and their unions merge
-                        // before the container pass, which claims and adopts what the catch-up queued.
+                        // before the container pass, which claims and adopts what the catch-up queued. Only the
+                        // union-find merges here (see RebuildContainerLayers).
                         if (contradicted == false && containerLayers!.CatchUp(epoch, parent.DisplacedIds.Slice(importFrom, unionFindCursor - importFrom)))
                         {
-                            database.MergeAll(epoch);
+                            database.MergeTable(store.UnionFindTable, epoch);
                             pass = true;
                         }
                     }
@@ -290,7 +294,8 @@ namespace Eggnog.Relations
                     }
                     else
                     {
-                        var restamp = RebuildContainerLayers(epoch, inherited, ref pass);
+                        // A first pass whose catch-up staged row copies settles its containers before they merge.
+                        var restamp = RebuildContainerLayers(epoch, inherited, first && caughtUp, ref pass);
                         pass |= tables!.RebuildPass(epoch, restamp);
                     }
                 }

@@ -141,8 +141,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether <paramref name="id"/> was minted in this context: it lies in one of the context's id blocks.
-        /// Exact for every id the context minted, since every term mint in a child goes through its blocks; container
-        /// ids are minted on the shared counter and are never local. Lock-free, O(log blocks).
+        /// Exact for every id the context minted, since every term mint in a child goes through its blocks, and so does
+        /// the id of every container of classes it interns in its container layers; a container of values is interned
+        /// on the shared counter and is never local. Lock-free, O(log blocks).
         /// </summary>
         /// <param name="id">The id.</param>
         /// <returns><c>true</c> if the id is local to this context.</returns>

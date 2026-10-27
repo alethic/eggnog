@@ -135,8 +135,12 @@ A column holds either a class or a value.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
   - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
     that decodes no values.
-  - Only a writable root makes one. A child uses those its view holds, its own rebuilt copies included, and a read of
-    a frozen root those the root holds; one they lack matches nothing there. A write that needs one is refused.
+  - A writable root makes one in the graph's environment of its type. A writable child uses one its view holds, its
+    own rebuilt copies included, and otherwise makes one in its own container layers, under an id local to it, which
+    its ancestors and siblings never see and which goes when it is disposed, as egglog's push interns in its copy
+    (decisions row 9; section 3.8, "Interning in a child"). A frozen scope, and a query on one, which runs in a
+    transient child but interns for the frozen scope, uses those its view holds; one it lacks matches nothing there,
+    and a write that needs one is refused.
   - Their types register while the root is frozen and its children run, as well as at a writable root, as egglog
     declares a container sort inside a `(push)` (section 3.8, "The container pass").
   - A child merges classes they hold as the root does: a merge in a child, a host write's, a rule's, a write primitive's
@@ -257,8 +261,10 @@ child databases share their root's base-value registry and container environment
 `ColumnType<T>.Encode` takes no scope (a container of values is interned without an execution state, from the shared
 id counter). So a
 value has the same cell in every scope, sibling and case, which is what lets joins and not-equal tests compare raw
-cells across scopes and lifts. What a scope interned stays after the scope is disposed. These operations intern, in
-any scope:
+cells across scopes and lifts. What a scope interned stays after the scope is disposed. A container of classes a child
+makes is the exception: it lives in the child's own container layers, under a cell local to the child, goes with the
+child, and is not counted in `InternedCount` (section 3.8, "Interning in a child"). These operations intern, in any
+scope:
 
 | Operation | What it interns |
 |---|---|
@@ -947,7 +953,9 @@ base values by reference. It answers schema questions from the store's schema an
 so rules are built, planned and run in a child exactly as at the root. Because the registry and the container
 environments are shared, a value a child interns has one cell in every context and stays after the child is
 disposed, as egglog's push and pop leave interned values behind; a container over base values interned from a child
-takes its id from the shared counter, not from the child's blocks, so it is never local to the child. A disposed
+takes its id from the shared counter, not from the child's blocks, so it is never local to the child. A container of
+classes a child interns is the exception: it goes into the child's own container layers ("Interning in a child"
+below). A disposed
 child frees its own layers, overlay, journal and cursors once it has no live children; nothing else.
 
 **Ids and time.** The store has one id counter and one clock. The root mints ids directly; a child mints from blocks
@@ -1005,12 +1013,34 @@ through the view of the scope that owns the call, and a write primitive, a primi
 bindings through the view of the execution state's context; the two differ only for a query on a frozen scope, which
 runs in a transient child of it that holds no layer, and DEBUG asserts that they read alike. In DEBUG a read of a
 container of classes through the root's view also asserts while an engine call of a child whose chain holds a layer
-runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. A child interns no
-container of classes; what fills its layers is its container pass, with its catch-up (decisions row 9), over the
-displacements of its own unions, whatever made them: a host write's union or constructor write, a rule's, a write
-primitive's such as `vec-union`'s, or a merge its rebuild derives. A child's host batch reads the holders the pass would
-claim, through the same element indexes and shadow tests (`ContainerView.AddHolders`), to refuse a merge whose pass
-would rewrite a row of a function whose merge is not a lattice before anything is written (section 2.3).
+runs. A container's cell that its view does not resolve formats as `#17`, as a class's does. What fills a child's
+layers is what it interns ("Interning in a child" below) and its container pass, with its catch-up (decisions row 9),
+over the displacements of its own unions, whatever made them: a host write's union or constructor write, a rule's, a
+write primitive's such as `vec-union`'s, or a merge its rebuild derives. A child's host batch reads the holders the pass
+would claim, through the same element indexes and shadow tests (`ContainerView.AddHolders`), to refuse a merge whose
+pass would rewrite a row of a function whose merge is not a lattice before anything is written (section 2.3).
+
+**Interning in a child.** A writable child interns a container of classes as egglog interns in the copy its push makes
+(`ContainerLayers.GetOrInsert`): it looks the content up through its view, and on a miss its own layer of the type, made
+on first use, probes again under the content's shard lock, mints an id from the child's id blocks and inserts it,
+recording the entry in the child's container log while the child has live descendants, so the child's rule tasks that
+race to intern one content agree on one id and only the winner mints. Rule actions and external functions reach it
+through their execution state (`ContainerEnv.GetOrInsert` redirects a child's state there, one field test at the root),
+the bridge's `EGraphContext.GetContainerValue` through the child's view, and the library's encodes through the scope's
+(`ContainerClasses.Intern`). The id is local to the child, so the layer owns it, no ancestor or sibling sees the
+container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a row naming
+a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was created, so
+the local id is larger than every id that existed then, and a container that existed before the child wins any later
+merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's blocks was reserved
+may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up merges the two, the
+smaller id winning ("Catch-up" below), so the child matches a fresh root replaying the same commands up to the ids of
+what it interned.
+The child's container pass rebuilds what it interned as it rebuilds what it claimed. A frozen context interns no new
+container of classes, nor does a query on a frozen scope, which interns for the frozen scope though it runs in a
+transient child; a transient child keeps no layer, and in DEBUG the query asserts that no cell it returns is an id
+local to the transient. Interning is immediate and never rolled back, as in egglog. The bridge
+registers a container type from a child as from the root; registration takes the container environments' writer lock, so
+children of a frozen root, each on its own thread domain, may register at once.
 
 **The container pass.** Each pass of a child's rebuild starts with its container pass (`ContainerLayers.RebuildPass`),
 egglog's `rebuild_containers` over the child's view, before its tables' pass, as egglog's rebuild loop runs containers
@@ -1033,8 +1063,19 @@ end. For each container type that holds ids:
   the layer owns. After the rebuild it adopts the contents the catch-up found arrived under an id the child claimed.
   Every id a pass claims is rebuilt in that pass.
 
-The unions the merges stage are merged before the tables' pass, so that it rewrites, and hides and copies, the rows
-naming the containers merged away. The ids of the containers the pass changed in place, with the Dirty ids of the
+The unions the merges stage are merged into the union-find before the tables' pass, so that it rewrites, and hides and
+copies, the rows naming the containers merged away. Only the union-find merges then: the first pass's catch-up has
+staged copies of ancestor rows, one kept as it is beside an own row with its key, and merged after a container union
+such a copy would land under the winner while the own row, which only the tables' pass rewrites, still names the loser,
+two rows with one key that a function without a merge refuses; the tables' pass merges the copies with the
+rewrites. When the first pass's catch-up staged such copies, its container step repeats, at the pass's epoch, until a
+container pass changes nothing (`Context.RebuildContainerLayers`): the ancestor content the copies name was made against
+the ancestor's union-find, and a nested container of it, a vector of vectors or a set of pairs, rebuilds equal to one
+the child holds only in the container pass after the one that merges its inner container, whose loser that pass's
+delta brings; one container pass would leave the outer ids apart while the tables' pass met the copy with the own row.
+Every other pass runs one container pass, as egglog's rebuild loop does at the root, so a child whose own unions
+collapse rows before the nested containers they name are equal refuses them as egglog does, except in a first pass
+that repeats. The ids of the containers the pass changed in place, with the Dirty ids of the
 unsettled ancestors' container logs that no level up to the child shadows, are closed upward over the view, egglog's
 `expand_dirty_id_closure`: the containers of the child's layers that hold a dirty id are dirty, and, from an id the pass
 found, so are the containers below that the child sees and that hold one, which are re-stamped but not claimed. The
@@ -1053,8 +1094,9 @@ root's state, so it takes no domain. The root's container environments publish a
 of one that comes to hold ids with a volatile write after giving it the root's container log, under a writer lock
 (`ContainerValues.RegisterType`). A child's container pass, pre-loop scan and catch-up look the types up on each
 pass, and its layers make a type's layer on first use whatever its id, so such a type joins every live child's passes
-from their next one. It holds no container of classes until a writable root interns one, which a frozen root never
-does: what children interned into it holds values only, and a frozen root's container log never grows.
+from their next one. It holds no container of classes itself, since a frozen root interns none: what children interned
+into it holds values only, the containers of classes they make live in their own layers, and a frozen root's container
+log never grows.
 
 **Container logs.** Each level has a container log (`ContainerLog`): the store's for the root, owned by its
 container environments, and each child's in its container layers. A log records only while its level has live
@@ -1101,10 +1143,14 @@ Added entry too.
   catches up with it itself and logs what it does, which the child reads from that level's log.
 - An entry the child sees whose id or one of whose elements is not canonical in the child is claimed in the pass's
   phase A, so that phase B rebuilds the copy.
-- An entry the child sees, canonical, whose content the child's layer holds under another id is a collision, settled at
-  once: the two ids merge, the smaller winning, and when the ancestor's id wins the layer's entry is taken out, since the
-  child sees the content there, while when the layer's wins the child claims the ancestor's id, whose placement merges
-  into it. The unions merge before the pass.
+- An entry the child sees, canonical, whose content the child's layer holds under another id, claimed or interned by
+  the child, is a collision, settled at once: the two ids merge, the smaller winning, as in egglog's one hash-cons, and
+  when the ancestor's id wins the layer's entry is taken out, since the child sees the content there, while when the
+  layer's wins the child claims the ancestor's id, whose placement merges into it. The unions merge into the union-find
+  before the pass, and the rows naming the losing id are rewritten by the tables' pass. A level strictly between the
+  ancestor and the child that holds the content under a third id settled the same collision in its own catch-up, which
+  runs first, as every writable level up to the parent rebuilds before the child: the child then imports that level's
+  union, or finds the ancestor's entry hidden above.
 - An entry under an id the child claimed is content the ancestor put on that id, which the child's shadow hides. When a
   displacement the child imports in this catch-up is that id in the parent, and the child does not shadow the displaced
   id, content arrived under the id, renamed or reinserted there after the displaced id lost to it, and the child adopts
@@ -1120,7 +1166,8 @@ Added entry too.
 - Any other entry is consumed.
 
 For containers whose rebuild does not depend on the order of the unions, the result is what a fresh root replaying the
-same commands in the same order holds, which egglog cannot be asked, since it has no writable parent under a live push.
+same commands in the same order holds, up to the ids of what the child interned, which egglog cannot be asked, since it
+has no writable parent under a live push.
 A map whose keys collapse depends on that order, and so does a container that holds one, and each copy follows the
 history of the level that holds it: the child's for a copy it claimed, the ancestor's for one it sees there. So for such
 a map a child may depart from the replay (decisions row 9): a content the ancestor rebuilds in place under an id the
@@ -1199,8 +1246,10 @@ row, per staged row or per find, and the root's allocation probes pin this.
   them into the parent at one epoch. To be complete, it also looks up ancestor rows by each merged class's winner, since
   with loser-only marking those rows are never copied into a case. An equality of container ids in the parent's view
   is withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal, which the
-  parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A memo
-  (`LiftSignature`) makes a lift over cases and a parent that have not changed return at once.
+  parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of
+  classes a case interned has an id local to the case, which stands for no parent id, so a row that names one is
+  dropped, as a row naming a class the case made is. A memo (`LiftSignature`) makes a lift over cases and a parent
+  that have not changed return at once.
 - `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
 - `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
   live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case

@@ -14,17 +14,18 @@ namespace Eggnog.Relations.Tests
     /// (<see cref="ContainerLayers.ScanAdds"/>, <see cref="ContainerLayers.CatchUp"/>), storage part. A container an
     /// ancestor gains that equals one the child holds under another id merges into the smaller id, in either order of
     /// the two ids, under a writable root and under a writable parent of a frozen root, over a layer small enough for a
-    /// full rebuild and one large enough for egglog's incremental one; a container the root interns naming the child's
-    /// loser is claimed, and its copy meets the child's own; content an ancestor renames onto an id the child
-    /// claimed is adopted, a map's included, while the child's copy stands for a content the ancestor rebuilds in place
-    /// there, beside an adopted one too, and for a map's content the ancestor merges onto the id from another id the
-    /// child claimed, whether the child merged the two before or not; a claim after such a merge copies the ancestor's
-    /// version of the map too, a departure pinned; content renamed onto an id local to a writable parent is adopted; an
-    /// entry under an id a level in between shadows is left to that level, while content renamed onto an id the
-    /// grandchild claimed from an id only the level in between claimed is adopted, a vector's and a set's, whose later
-    /// congruence it then decides; two contents under one id that share their content hash are both adopted; and the
-    /// entries the pre-loop scan keeps survive a rebuild that runs out of epochs, are handled by a freeze and dropped
-    /// by a dispose.
+    /// full rebuild and one large enough for egglog's incremental one, and so does one the child interned itself; a
+    /// container the root interns naming the child's loser is claimed, and its copy meets the child's own; content an
+    /// ancestor renames onto an id the child claimed is adopted, a map's included, while the child's copy stands for a
+    /// content the ancestor rebuilds in place there, beside an adopted one too, and for a map's content the ancestor
+    /// merges onto the id from another id the child claimed, whether the child merged the two before or not; a claim
+    /// after such a merge copies the ancestor's version of the map too, a departure pinned; content renamed onto an id
+    /// local to a writable parent is adopted; an entry under an id a level in between shadows is left to that level,
+    /// while content renamed onto an id the grandchild claimed from an id only the level in between claimed is adopted,
+    /// a vector's and a set's, whose later congruence it then decides; two contents under one id that share their
+    /// content hash are both adopted; the catch-up's row copies merge only after the own rows are rewritten for its
+    /// container unions; and the entries the pre-loop scan keeps survive a rebuild that runs out of epochs, are
+    /// handled by a freeze and dropped by a dispose.
     /// </summary>
     /// <remarks>
     /// egglog has no writable parent under a live <c>(push)</c>, so the expected views come from a fresh root that
@@ -314,6 +315,191 @@ namespace Eggnog.Relations.Tests
                 ancestor.CheckInvariants();
                 ancestor.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Collision (ii) for a content the child interned itself: the child interns <c>[k]</c>, which its view does
+        /// not hold, under <c>L</c>, local to it, and writes <c>f(L) = 2</c>; then a writable ancestor, the root or a
+        /// writable parent of a frozen root, gains <c>[k]</c> too, under <c>X</c>. When <paramref name="ancestorWins"/>,
+        /// <c>X = [m]</c> existed at the root before the child, so it is the smaller id, and the ancestor's union of
+        /// <c>k</c> and <c>m</c> rebuilds it to <c>[k]</c> (the root in place, the parent in a copy it claims);
+        /// otherwise the ancestor interns <c>[k]</c> after the child did, under a larger id, the root's from the shared
+        /// counter or the parent's from its own blocks. The child's catch-up settles the collision at once, the smaller
+        /// id winning as in egglog's one hash-cons: its entry is taken out when <c>X</c> wins, and <c>X</c> is claimed
+        /// into <c>L</c> when <c>L</c> does; the loser is merged into the winner, under which the child reads
+        /// <c>[k]</c> and its row. The ancestor never sees <c>L</c>. A fresh root replaying the child's intern and row and
+        /// then the ancestor's command holds <c>[k]</c> once, under the id that existed first, with the row.
+        /// </summary>
+        /// <param name="ancestorWins">Whether the ancestor's <c>X</c> is the smaller id.</param>
+        /// <param name="intermediate">Whether the ancestor is a writable parent of a frozen root, rather than a
+        /// writable root.</param>
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public void AContentTheChildInternedMeetsAnEqualOneItsWritableAncestorGainsLater(bool ancestorWins, bool intermediate)
+        {
+            var (store, f, env) = Setup();
+            var root = store.Root;
+            var k = root.NewId();
+            var m = root.NewId();
+            var x = ancestorWins ? Intern(root, m) : 0u;
+            Context ancestor;
+            if (intermediate)
+            {
+                root.Freeze();
+                ancestor = root.CreateChild();
+            }
+            else
+            {
+                ancestor = root;
+            }
+
+            var child = ancestor.CreateChild();
+            var l = child.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(k), state));
+            Assert.True(child.IsLocalId(l));
+            Insert(child, f, l, 2, 0);
+            child.Rebuild();
+            Assert.Equal(l, ByContent(child, env, k));
+            Assert.Null(ByContent(ancestor, env, k));
+
+            if (ancestorWins)
+            {
+                ancestor.Union(k, m);
+            }
+            else
+            {
+                x = ancestor.Database.WithExecutionState(state => state.Containers.GetOrInsert(new VecContainer(k), state));
+                Assert.True(x > l);
+            }
+
+            ancestor.Rebuild();
+            Assert.Equal(new VecContainer(k), ById(ancestor, env, x));
+            Assert.Equal(ancestorWins, x < l);
+
+            Assert.True(child.Rebuild());
+            child.CheckInvariants();
+            var (winner, loser) = ancestorWins ? (x, l) : (l, x);
+            Assert.False(child.IsFaulted);
+            Assert.False(child.ContainerLayers!.HasPending);
+            Assert.Equal(winner, child.Find(loser));
+            Assert.Equal(new VecContainer(k), ById(child, env, winner));
+            Assert.Null(ById(child, env, loser));
+            Assert.Equal(winner, ByContent(child, env, k));
+            Assert.Equal(2u, Row(child, f, winner)![1]);
+            Assert.Null(Row(child, f, loser));
+            AssertOneContentPerId(child, env);
+
+            // The ancestor holds what it held: it never sees the child's container.
+            Assert.Null(ById(ancestor, env, l));
+            Assert.Equal(x, ByContent(ancestor, env, k));
+            Assert.Null(Row(ancestor, f, x));
+
+            // A fresh root replaying the child's intern and row, then the ancestor's command.
+            var (fresh, freshF, freshEnv) = Setup();
+            var replay = fresh.Root;
+            var rk = replay.NewId();
+            var rm = replay.NewId();
+            var rx = ancestorWins ? Intern(replay, rm) : 0u;
+            var rl = Intern(replay, rk);
+            Insert(replay, freshF, rl, 2, 0);
+            replay.Rebuild();
+            if (ancestorWins)
+                replay.Union(rk, rm);
+            else
+                Assert.Equal(rl, Intern(replay, rk));
+
+            replay.Rebuild();
+            var first = ancestorWins ? rx : rl;
+            Assert.True(freshEnv.TryGetId(new VecContainer(rk), out var id));
+            Assert.Equal(first, id);
+            Assert.Equal(first, replay.Find(rl));
+            Assert.Equal(2u, Row(replay, freshF, first)![1]);
+            Assert.Equal(1, freshEnv.Count);
+
+            child.Dispose();
+            if (intermediate)
+            {
+                ancestor.CheckInvariants();
+                ancestor.Dispose();
+            }
+
+            root.CheckInvariants();
+        }
+
+        /// <summary>
+        /// The container unions of a catch-up merge before the catch-up's row copies do: the root holds
+        /// <c>A = [n1, n2]</c> and <c>C = [n4, n5]</c>, and <c>g(0) = A</c>, <c>g(1) = C</c> in a function without a
+        /// merge. The child merges n2 and n5, which rebuilds its copy of C to <c>[n4, n2]</c> and re-stamps its own row
+        /// <c>g(1) = C</c>; the root then merges n1 and n4 and rebuilds C to <c>[n1, n5]</c> in place, re-stamping its
+        /// row, which the child's catch-up copies as it is beside its own. The child's container pass rebuilds its copy
+        /// to <c>[n1, n2]</c>, which A holds, so C merges into the smaller A; the tables' pass then rewrites the child's
+        /// own row under A, and the copy merges with it, both naming A. Merged with the container union, before the
+        /// rewrite, the copy would meet the own row still naming C, which the function refuses. A fresh root replaying
+        /// the two unions holds C merged into A and <c>g(1) = A</c>.
+        /// </summary>
+        [Fact]
+        public void TheCatchUpsRowCopiesMergeAfterTheOwnRowsAreRewrittenForItsContainerUnions()
+        {
+            var (store, _, env) = Setup();
+            var g = store.AddTable(new SortedWritesTable(1, 3, C(2), [C(1)], new AssertEqualMerge(C(1), "g"), ParallelHeuristics.Serial), name: "g");
+            var root = store.Root;
+            var n = Enumerable.Range(0, 6).Select(_ => root.NewId()).ToArray();
+            var a = Intern(root, n[1], n[2]);
+            var c = Intern(root, n[4], n[5]);
+            Insert(root, g, 0, a, 0);
+            Insert(root, g, 1, c, 0);
+            root.Rebuild();
+            Assert.True(a < c);
+
+            var child = root.CreateChild();
+            child.Union(n[2], n[5]);
+            child.Rebuild();
+            Assert.Equal(new VecContainer(n[4], n[2]), ById(child, env, c));
+            Assert.Equal(c, Row(child, g, 1)![1]);
+
+            root.Union(n[1], n[4]);
+            root.Rebuild();
+            Assert.Equal(new VecContainer(n[1], n[5]), ById(root, env, c));
+
+            Assert.True(child.Rebuild());
+            Assert.Null(child.Database.TakeFailure());
+            Assert.False(child.IsFaulted);
+            child.CheckInvariants();
+            Assert.Equal(a, child.Find(c));
+            Assert.Equal(new VecContainer(n[1], n[2]), ById(child, env, a));
+            Assert.Null(ById(child, env, c));
+            Assert.Equal(a, Row(child, g, 0)![1]);
+            Assert.Equal(a, Row(child, g, 1)![1]);
+
+            // The root holds what it held.
+            Assert.Equal(c, Row(root, g, 1)![1]);
+            Assert.Equal(c, root.Find(c));
+
+            // A fresh root replaying the child's union, then the root's.
+            var (fresh, _, freshEnv) = Setup();
+            var freshG = fresh.AddTable(new SortedWritesTable(1, 3, C(2), [C(1)], new AssertEqualMerge(C(1), "g"), ParallelHeuristics.Serial), name: "g");
+            var replay = fresh.Root;
+            var rn = Enumerable.Range(0, 6).Select(_ => replay.NewId()).ToArray();
+            var ra = Intern(replay, rn[1], rn[2]);
+            var rc = Intern(replay, rn[4], rn[5]);
+            Insert(replay, freshG, 0, ra, 0);
+            Insert(replay, freshG, 1, rc, 0);
+            replay.Rebuild();
+            replay.Union(rn[2], rn[5]);
+            replay.Rebuild();
+            replay.Union(rn[1], rn[4]);
+            replay.Rebuild();
+            Assert.Null(replay.Database.TakeFailure());
+            Assert.Equal(ra, replay.Find(rc));
+            Assert.Equal(ra, Row(replay, freshG, 1)![1]);
+            Assert.True(freshEnv.TryGetId(new VecContainer(rn[1], rn[2]), out var id));
+            Assert.Equal(ra, id);
+            Assert.Equal(1, freshEnv.Count);
+
+            child.Dispose();
+            root.CheckInvariants();
         }
 
         /// <summary>

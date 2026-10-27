@@ -9,11 +9,12 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// A child's container layers and the view that reads them (<see cref="ContainerLayers"/>, <see cref="ContainerView"/>):
-    /// containers a test places in a layer (<see cref="ContainerLayers.Place{TContainer}"/>) resolve by id and by content
-    /// in the child and its descendants, an ancestor's entry under a shadowed id hidden; ids may be shared; a read by id
-    /// skips every level that cannot own the id without touching it; a frozen context's layers never change and are read
-    /// without locks, while a writable one's are read under their shard locks.
+    /// A child's container layers and the view that reads them (<see cref="ContainerLayers"/>,
+    /// <see cref="ContainerView"/>): containers a test places in a layer
+    /// (<see cref="ContainerLayers.Place{TContainer}"/>) resolve by id and by content in the child and its descendants,
+    /// an ancestor's entry under a shadowed id hidden; ids may be shared; a read by id skips every level that cannot
+    /// own the id without touching it; a frozen context's layers never change and are read without locks, while a
+    /// writable one's are read under their shard locks; equal containers a child interns at once get one id.
     /// </summary>
     public class ContainerLayersTests
     {
@@ -406,6 +407,65 @@ namespace Eggnog.Relations.Tests
             });
         }
 #endif
+
+        /// <summary>
+        /// A child's rule tasks interning equal containers at once, as a parallel run's actions do
+        /// (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>): each content gets one id, local to the child, from
+        /// every thread, its own layer holds each once, and the layer's ids are minted only for contents that won, so
+        /// the child's layer and its invariants are as a serial run's would leave them. The child is one of a writable
+        /// root that runs in parallel, so its layer's own environment has several shards; the threads start together
+        /// and run to completion, so nothing waits on a bound.
+        /// </summary>
+        [Fact]
+        public void EqualContainersInternedAtOnceInOneChildGetOneId()
+        {
+            var store = new Store(new ParallelHeuristics(4));
+            var values = store.Root.Database.Containers;
+            values.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter));
+            var env = values.GetEnvironment<VecContainer>();
+            var root = store.Root;
+            var elements = new uint[64];
+            for (var i = 0; i < elements.Length; i++)
+                elements[i] = root.NewId();
+
+            var child = root.CreateChild();
+            var layers = child.ContainerLayers!;
+            const int Threads = 8;
+            var ids = new uint[Threads][];
+            Parallel.For(0, Threads, new ParallelOptions { MaxDegreeOfParallelism = Threads }, t =>
+            {
+                var mine = new uint[elements.Length];
+                for (var i = 0; i < elements.Length; i++)
+                {
+                    // Each thread walks the contents in its own order.
+                    var e = (i + t * 13) % elements.Length;
+                    mine[e] = layers.GetOrInsert(env, new VecContainer(elements[e], elements[(e + 1) % elements.Length]));
+                }
+
+                ids[t] = mine;
+            });
+
+            var own = layers.LayerAt(env.TypeId)!.OwnBase;
+            Assert.Equal(elements.Length, own.Count);
+            Assert.Equal(0, env.Count);
+            Assert.Equal(elements.Length, child.IdBlocks!.Minted);
+
+            var distinct = new HashSet<uint>();
+            for (var i = 0; i < elements.Length; i++)
+            {
+                for (var t = 1; t < Threads; t++)
+                    Assert.Equal(ids[0][i], ids[t][i]);
+
+                Assert.True(child.IsLocalId(ids[0][i]));
+                Assert.True(distinct.Add(ids[0][i]));
+                Assert.Equal(new VecContainer(elements[i], elements[(i + 1) % elements.Length]), ById(ContainerView.Of(child.Database), env, ids[0][i]));
+            }
+
+            child.Rebuild();
+            child.CheckInvariants();
+            child.Dispose();
+            root.CheckInvariants();
+        }
 
         [Fact]
         public void TheShadowedIdsGrowAndAreReadFromAnyThread()

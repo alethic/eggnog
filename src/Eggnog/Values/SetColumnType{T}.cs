@@ -5,13 +5,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Set{T}"/>: egglog's <c>Set</c> sort (src/sort/set.rs). A set's cell is the id of its
-    /// <see cref="Relations.SetContainer"/>, whose elements are in cell order as egglog's <c>BTreeSet</c>, interned in the
-    /// graph's container environment with an id from the graph's id counter; the engine column is an id column. A set of
-    /// values is never rebuilt and its id never merges, so equal sets have equal cells in every scope, and the library
-    /// treats it as a value. A set of classes, or of containers of them, is egglog's eq-sort container
+    /// The column type of <see cref="Set{T}"/>: egglog's <c>Set</c> sort (src/sort/set.rs). A set's cell is the id of
+    /// its <see cref="Relations.SetContainer"/>, whose elements are in cell order as egglog's <c>BTreeSet</c>, interned
+    /// in the graph's container environment with an id from the graph's id counter; the engine column is an id column.
+    /// A set of values is never rebuilt and its id never merges, so equal sets have equal cells in every scope, and the
+    /// library treats it as a value. A set of classes, or of containers of them, is egglog's eq-sort container
     /// (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, elements that become one becoming one element, and
-    /// interned only at the root (decisions row 9).
+    /// interned at a writable root in the graph's environment and in a writable child in its own containers, under an
+    /// id local to it (decisions row 9).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal sealed class SetColumnType<T> : ColumnType<Set<T>>, IContainerColumnType where T : notnull
@@ -100,15 +101,16 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Encodes a set a primitive returned in <paramref name="scope"/>: for a set of classes, its classes usable there
-        /// and the container interned at a writable root, or elsewhere the one the scope sees (its container view,
+        /// Encodes a set a primitive returned in <paramref name="scope"/>: for a set of classes, its classes usable
+        /// there and the container interned at a writable root or a writable child, which makes it in its own
+        /// containers when its view does not hold it, or in a frozen scope the one it sees (its container view,
         /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The set.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The set holds classes, and a class is not usable in the scope, or
-        /// the scope cannot intern and sees no such set.</exception>
+        /// the scope is frozen and sees no such set.</exception>
         internal override uint EncodeIn(Set<T> value, Scope? scope)
         {
             if (rebuild == false)

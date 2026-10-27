@@ -361,28 +361,27 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Interns <paramref name="container"/> in this context and returns its id: egglog's
-        /// <c>get_container_value</c>. At the root the type is registered first if needed (as one holding ids); a child
-        /// needs it registered already, since registration is a definition of the e-graph
-        /// (<see cref="EGraph.RegisterContainerType{TContainer}"/>). Container ids are global, minted on the store's
-        /// shared counter, never local. It interns through the context's container view
-        /// (<see cref="ContainerView.GetOrInsert"/>): in a child an eq-sort container (one that holds ids) cannot be
-        /// interned; a container over base values can.
+        /// <c>get_container_value</c>. The type is registered first if needed, as one holding ids, in a child as at the
+        /// root, as egglog declares a container sort inside a <c>(push)</c>: registration is thread-safe
+        /// (<see cref="ContainerValues.RegisterType{TContainer}"/>), so children of a frozen root, each on its own
+        /// thread domain, may register at once. It interns through the context's container view
+        /// (<see cref="ContainerView.GetOrInsert{TContainer}(in TContainer, ExecutionState)"/>): a container over base
+        /// values in the root's environment, under an id minted on the store's shared counter and so the same in every
+        /// context; an eq-sort container (one that holds ids) at the root in its environment, and in a child, when its
+        /// view does not hold it, in its own container layers under an id local to it
+        /// (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>).
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <returns>The container's id.</returns>
-        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped; it is a child and the
-        /// type is not registered; or it is a child and the type holds ids.</exception>
+        /// <exception cref="InvalidOperationException">The context is frozen, faulted or stopped.</exception>
         internal Value GetContainerValue<TContainer>(in TContainer container)
             where TContainer : struct, IContainerValue<TContainer>
         {
             context.ThrowIfNotWritable();
             using var scope = context.Domain.Enter();
             context.ThrowIfNotWritable();
-            if (parent is null)
-                owner.EnsureContainerType<TContainer>();
-            else if (owner.ContainerValues.TryGetTypeId<TContainer>(out _) == false)
-                throw new InvalidOperationException($"The container type {typeof(TContainer).Name} must be registered with the e-graph before a child interns one.");
+            owner.EnsureContainerType<TContainer>();
 
             var database = context.Database;
             var state = database.CreateEngineState(owner.Store.ReadClock());

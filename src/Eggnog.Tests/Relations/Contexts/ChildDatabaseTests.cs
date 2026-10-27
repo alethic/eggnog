@@ -310,15 +310,17 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A container a child interns gets its id from the shared counter, not the child's blocks: container ids are
-        /// global, so the root interning the same container finds the same id.
+        /// A container over base values a child interns gets its id from the shared counter, not the child's blocks: such
+        /// container ids are global, so the root interning the same container finds the same id. A container of classes
+        /// a writable child interns in its own layers, under an id local to it.
         /// </summary>
         [Fact]
         public void ContainerIdsAreMintedOnTheSharedCounterInAChild()
         {
             var store = new Store();
             var root = store.Root;
-            // A container over base values (holdsIds: false), which a child may intern; one that holds ids it may not.
+            // A container over base values (holdsIds: false), which every context interns in the root's environment; one
+            // that holds ids a writable child interns in its own layers.
             root.Database.Containers.RegisterType<VecContainer>(store.IdCounter, new UnionContainerMerge(store.UnionFindTable, store.ClockCounter), holdsIds: false);
             var child = root.CreateChild();
             Assert.Same(root.Database.Containers, child.Database.Containers);

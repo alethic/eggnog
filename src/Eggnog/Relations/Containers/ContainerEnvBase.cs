@@ -22,8 +22,8 @@ namespace Eggnog.Relations
         /// </summary>
         /// <param name="typeId">The environment's id in its <see cref="ContainerValues"/>.</param>
         /// <param name="holdsIds">Whether the containers hold e-class ids (eq-sort containers), which a child context
-        /// may look up and rebuild in its own layers but not intern; <c>false</c> for containers over base values
-        /// only.</param>
+        /// interns and rebuilds in its own layers (<see cref="ContainerLayers"/>); <c>false</c> for containers over
+        /// base values only.</param>
         private protected ContainerEnvBase(ContainerTypeId typeId, bool holdsIds)
         {
             TypeId = typeId;
@@ -37,8 +37,9 @@ namespace Eggnog.Relations
         volatile bool holdsIds;
 
         /// <summary>
-        /// Gets whether the containers hold e-class ids: eq-sort containers, which a child context may look up but not
-        /// intern, and which a child that displaces one of their elements rebuilds in its own container layers
+        /// Gets whether the containers hold e-class ids: eq-sort containers, which a child context interns in its own
+        /// container layers when its view does not hold them (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>),
+        /// and which a child that displaces one of their elements rebuilds there
         /// (<see cref="ContainerLayers.RebuildPass"/>). Containers over base values are registered with <c>holdsIds:
         /// false</c>, are allowed everywhere and never rebuild. One volatile read: a type registered over base values
         /// may come to hold ids (<see cref="MarkHoldsIds"/>) while other threads intern or look containers up.

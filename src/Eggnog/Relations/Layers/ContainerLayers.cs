@@ -51,24 +51,35 @@ namespace Eggnog.Relations
     /// of the containers its passes rebuilt in place.
     /// </para>
     /// <para>
-    /// Rebuild. What fills the layers is the context's container pass (<see cref="RebuildPass"/>), one per pass of its
-    /// rebuild: it claims the ancestor containers that hold the context's own new losers, copying them into its layers
-    /// under their ids, which it then shadows (<see cref="Claim{TContainer}"/>), and rebuilds what its layers hold
-    /// against its union-find, merging contents that become equal anywhere in its view, as egglog rebuilds the
-    /// containers of the copy its push makes. The context interns nothing: every id its layers hold is an ancestor's,
-    /// claimed.
+    /// Interning. A writable context interns a container of classes its view does not hold in its own layer of the
+    /// type, under an id minted from its id blocks (<see cref="GetOrInsert{TContainer}"/>), as egglog interns in the
+    /// copy its push makes: rule actions, external functions and the library's encodes reach it. The ancestors never
+    /// see such a container, and a frozen context interns none. The context's id blocks are reserved on the shared
+    /// counter after it was created, so the local id is larger than every id that existed then, and a container that
+    /// existed before the context wins any later merge with it, as in egglog's push; a container a writable ancestor
+    /// makes after one of the context's blocks was reserved may have the larger id. Under a writable ancestor that
+    /// later gains an equal content, the smaller id wins (<see cref="SettleCollision{TContainer}"/>).
+    /// </para>
+    /// <para>
+    /// Rebuild. The context's container pass (<see cref="RebuildPass"/>), one per pass of its rebuild, or, in a first
+    /// pass whose catch-up copied ancestor rows, as many as it takes for one to change nothing, claims the ancestor
+    /// containers that hold the context's own new losers, copying them into its layers under their ids, which it then
+    /// shadows (<see cref="Claim{TContainer}"/>), and rebuilds what its layers hold, what it interned and what
+    /// it claimed, against its union-find, merging contents that become equal anywhere in its view, as egglog rebuilds
+    /// the containers of the copy its push makes. Every id its layers hold is local to it, interned there, or an
+    /// ancestor's, claimed.
     /// </para>
     /// <para>
     /// Catch-up. A writable ancestor may gain containers of classes after the context exists. Before the rebuild's
     /// loop the context reads them from the ancestors' container logs and keeps those that concern it
     /// (<see cref="ScanAdds"/>); its first pass then claims those it sees under an id or with an element not canonical
-    /// in it, merges at once those whose content its layers hold under another id, and adopts content an ancestor put
-    /// on an id it shadows (<see cref="CatchUp"/>). Containers whose rebuild does not depend on the order of their
-    /// unions it then holds as a fresh root replaying the same commands in the same order would. A map whose keys
-    /// collapse follows the history of the level that holds it, the context's for a copy it claimed and the
-    /// ancestor's otherwise, so it may depart from the replay: such a map may end elsewhere, the context imports the
-    /// merges of container ids the ancestor's history makes, and an id may hold two contents where the replay holds
-    /// one (decisions row 9).
+    /// in it, merges at once those whose content its layers hold under another id, claimed or interned, and adopts
+    /// content an ancestor put on an id it shadows (<see cref="CatchUp"/>). Containers whose rebuild does not depend
+    /// on the order of their unions it then holds as a fresh root replaying the same commands in the same order would,
+    /// up to the ids of what it interned. A map whose keys collapse follows the history of the level that holds it,
+    /// the context's for a copy it claimed and the ancestor's otherwise, so it may depart from the replay: such a map
+    /// may end elsewhere, the context imports the merges of container ids the ancestor's history makes, and an id may
+    /// hold two contents where the replay holds one (decisions row 9).
     /// </para>
     /// </remarks>
     internal sealed partial class ContainerLayers

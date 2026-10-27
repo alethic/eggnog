@@ -138,9 +138,9 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a host's value in <paramref name="scope"/>: each class it holds usable there and canonical through
-        /// <paramref name="find"/>, and a container of classes interned at a writable root, or elsewhere the one the scope
-        /// sees (its container view, <see cref="Scope.ContainerView"/>); any other value as <see cref="EncodeObject"/>
-        /// does.
+        /// <paramref name="find"/>, and a container of classes interned at a writable root, the one a writable child sees
+        /// through its container view (<see cref="Scope.ContainerView"/>) or else a new one in its own containers, and in
+        /// a frozen scope the one it sees; any other value as <see cref="EncodeObject"/> does.
         /// </summary>
         /// <param name="value">The value, of <see cref="ClrType"/>.</param>
         /// <param name="scope">The scope written.</param>
@@ -149,8 +149,8 @@ namespace Eggnog
         /// none.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="ArgumentException">A class is not usable in the scope.</exception>
-        /// <exception cref="InvalidOperationException">The value holds classes, the scope is not a writable root, and it
-        /// sees no such container (<see cref="UninternedContainerException"/>).</exception>
+        /// <exception cref="InvalidOperationException">The value holds classes, the scope is frozen, and it sees no such
+        /// container (<see cref="UninternedContainerException"/>).</exception>
         internal abstract uint EncodeCanonicalObject(object value, Scope scope, Func<uint, uint> find, ScopeOrigin? openBatch);
 
         /// <summary>

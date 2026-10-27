@@ -19,8 +19,8 @@ namespace Eggnog.Relations
     /// <para>
     /// Threads. <see cref="ContainerLayers"/> creates the layer on first use, and the own environment with it, from the
     /// root environment's merge function and counter and the context's parallelism, and publishes it with an interlocked
-    /// compare-exchange; the context's rule tasks may then insert into it concurrently under its shard locks. Once the context is frozen nothing writes the layer,
-    /// and readers on any thread read it without locks.
+    /// compare-exchange; the context's rule tasks may then intern into it concurrently under its shard locks. Once the
+    /// context is frozen nothing writes the layer, and readers on any thread read it without locks.
     /// </para>
     /// </remarks>
     /// <typeparam name="TContainer">The container type.</typeparam>
@@ -46,8 +46,8 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the layer's own environment: the containers the context holds itself, under its local ids and the ids it
-        /// shadows.
+        /// Gets the layer's own environment: the containers the context holds itself, those it interned under its local
+        /// ids and those it claimed under the ids it shadows.
         /// </summary>
         public ContainerEnv<TContainer> Own { get; }
 

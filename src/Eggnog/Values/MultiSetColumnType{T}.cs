@@ -7,11 +7,12 @@ namespace Eggnog
     /// <summary>
     /// The column type of <see cref="MultiSet{T}"/>: egglog's <c>MultiSet</c> sort (src/sort/multiset.rs). A multiset's
     /// cell is the id of its <see cref="Relations.MultiSetContainer"/>, whose elements are in cell order as egglog's
-    /// <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's id counter; the engine
-    /// column is an id column. A multiset of values is never rebuilt and its id never merges, so equal multisets have equal
-    /// cells in every scope, and the library treats it as a value. A multiset of classes, or of containers of them, is
-    /// egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, elements that become equal
-    /// adding their counts, and interned only at the root (decisions row 9).
+    /// <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's id counter; the
+    /// engine column is an id column. A multiset of values is never rebuilt and its id never merges, so equal multisets
+    /// have equal cells in every scope, and the library treats it as a value. A multiset of classes, or of containers
+    /// of them, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, elements
+    /// that become equal adding their counts, and interned at a writable root in the graph's environment and in a
+    /// writable child in its own containers, under an id local to it (decisions row 9).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal sealed class MultiSetColumnType<T> : ColumnType<MultiSet<T>>, IContainerColumnType where T : notnull
@@ -100,14 +101,15 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a multiset a primitive returned in <paramref name="scope"/>: for a multiset of classes, its classes
-        /// usable there and the container interned at a writable root, or elsewhere the one the scope sees (its container
-        /// view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root or a writable child, which makes it in its own
+        /// containers when its view does not hold it, or in a frozen scope the one it sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The multiset.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The multiset holds classes, and a class is not usable in the scope,
-        /// or the scope cannot intern and sees no such multiset.</exception>
+        /// or the scope is frozen and sees no such multiset.</exception>
         internal override uint EncodeIn(MultiSet<T> value, Scope? scope)
         {
             if (rebuild == false)

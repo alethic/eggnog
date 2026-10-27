@@ -330,7 +330,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Increments <paramref name="counter"/> on the shared counters, never redirected to id blocks: for ids that
-        /// must not be local to any context, such as globally interned container ids.
+        /// must not be local to any context, such as the ids of containers interned in the root's environments.
         /// </summary>
         /// <param name="counter">The counter.</param>
         /// <returns>The value before the increment.</returns>
