@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Threading;
 
 using Xunit;
 
@@ -6,10 +8,10 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Containers on the bridge's paths. Registration passes whether a container type holds ids; a child cannot intern
-    /// an eq-sort container (a container of e-classes), and rebuilds, in its own container layers, the ones its own
-    /// unions displace an element of; containers over base values work in every context. Named apart from the storage
-    /// <c>ContainerContextTests</c>.
+    /// Containers on the bridge's paths. Registration passes whether a container type holds ids, and a child registers
+    /// as the root does; a child interns an eq-sort container (a container of e-classes) in its own container layers,
+    /// and rebuilds there those it interned and the ones its own unions displace an element of; containers over base
+    /// values work in every context. Named apart from the storage <c>ContainerContextTests</c>.
     /// </summary>
     public class BridgeContainerContextTests
     {
@@ -37,29 +39,99 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// On the bridge's path, interning an eq-sort container in a child throws before anything changes, and the
-        /// child stays usable; a container over base values interns in a child with the id the root gives it.
+        /// On the bridge's path, a child interns an eq-sort container its view does not hold in its own container
+        /// layer, under an id local to it, which a row of the child may name and which the frozen root and a sibling
+        /// never see, as egglog's push interns in its copy; a container over base values interns in a child with the id
+        /// the root gives it.
         /// </summary>
         [Fact]
-        public void AChildInternsBaseContainersButNotEqContainers()
+        public void AChildInternsEqContainersInItsLayersAndBaseContainersGlobally()
         {
             var g = new ContextGraph();
             g.EGraph.RegisterContainerType<VecContainer>();
             g.EGraph.RegisterContainerType<SetContainer>(holdsIds: false);
             g.Root.Freeze();
+            var env = g.EGraph.ContainerValues.GetEnvironment<VecContainer>();
 
             using var child = g.Root.CreateChild();
-            Assert.Throws<InvalidOperationException>(() => child.GetContainerValue(new VecContainer(child.FreshId().Rep)));
+            var x = child.FreshId();
+            var vec = child.GetContainerValue(new VecContainer(x.Rep));
             Assert.False(child.IsFaulted);
+            Assert.True(child.Context.IsLocalId(vec.Rep));
+            Assert.Equal(vec, child.GetContainerValue(new VecContainer(x.Rep)));
+            Assert.Equal(0, env.Count);
+            g.Assert(child, g.Mark, vec);
 
             var set = child.GetContainerValue(new SetContainer(3, 4));
             using var sibling = g.Root.CreateChild();
             Assert.Equal(set, sibling.GetContainerValue(new SetContainer(4, 3)));
             Assert.False(child.Context.IsLocalId(set.Rep));
+            Assert.False(ContainerView.Of(sibling.Context.Database).TryGetContainer(env, vec.Rep, out _));
             g.Assert(child, g.Mark, set);
             child.FlushUpdates();
-            Assert.Equal([$"{set.Rep}"], ContextGraph.Keys(child, g.Mark));
+            Assert.Equal(new[] { $"{vec.Rep}", $"{set.Rep}" }.Order(), ContextGraph.Keys(child, g.Mark).Order());
             child.CheckInvariants();
+        }
+
+        /// <summary>
+        /// Two children of a frozen root, each on its own thread domain, intern through the bridge a container of a
+        /// type nobody registered, at once: each registers it as it interns, as egglog declares a container sort inside
+        /// a <c>(push)</c>, and registration, which takes the container environments' writer lock, gives the type one
+        /// environment that holds ids. Each child holds its container in its own layer, under an id local to it, and
+        /// the root's environment holds none.
+        /// </summary>
+        [Fact]
+        public void ChildrenOfAFrozenRootRegisterAContainerTypeAtOnce()
+        {
+            for (var round = 0; round < 20; round++)
+            {
+                var g = new ContextGraph();
+                g.Root.Freeze();
+                var children = new[] { g.Root.CreateChild(), g.Root.CreateChild() };
+                var ids = new Value[children.Length];
+                var errors = new Exception?[children.Length];
+                var go = new ManualResetEventSlim();
+                var threads = new Thread[children.Length];
+                for (var i = 0; i < threads.Length; i++)
+                {
+                    var index = i;
+                    threads[i] = new Thread(() =>
+                    {
+                        try
+                        {
+                            var child = children[index];
+                            var x = child.FreshId();
+                            go.Wait();
+                            ids[index] = child.GetContainerValue(new VecContainer(x.Rep));
+                        }
+                        catch (Exception e)
+                        {
+                            errors[index] = e;
+                        }
+                    });
+                    threads[i].Start();
+                }
+
+                go.Set();
+                foreach (var thread in threads)
+                    thread.Join();
+
+                Assert.All(errors, Assert.Null);
+                var values = g.EGraph.ContainerValues;
+                Assert.Equal(1, values.TypeCount);
+                var env = values.GetEnvironment<VecContainer>();
+                Assert.True(env.HoldsIds);
+                Assert.Equal(0, env.Count);
+                for (var i = 0; i < children.Length; i++)
+                {
+                    Assert.True(children[i].Context.IsLocalId(ids[i].Rep));
+                    Assert.True(ContainerView.Of(children[i].Context.Database).TryGetContainer(env, ids[i].Rep, out _));
+                    children[i].CheckInvariants();
+                    children[i].Dispose();
+                }
+
+                values.CheckInvariants();
+            }
         }
 
         /// <summary>

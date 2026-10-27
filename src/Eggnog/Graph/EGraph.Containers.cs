@@ -76,8 +76,9 @@ namespace Eggnog
         /// root's container log (<see cref="Relations.ContainerValues.RegisterType{TContainer}"/>), so a child's
         /// container pass and catch-up, which look the types up on each pass, see the type whole, as one that holds ids
         /// or not, and its layers make the type's layer on first use whatever the type's id. An environment registered
-        /// or made to hold ids while the root is frozen holds no container of classes until the root interns one, which
-        /// a frozen root never does: its containers so far, interned from any scope, hold values only.
+        /// or made to hold ids while the root is frozen holds no container of classes itself, since a frozen root interns
+        /// none: its containers so far, interned from any scope, hold values only, and the containers of classes its
+        /// children make live in their own container layers.
         /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <returns>The environment.</returns>

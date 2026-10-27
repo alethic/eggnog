@@ -5,13 +5,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Vec{T}"/>: egglog's <c>Vec</c> sort (src/sort/vec.rs). A vector's cell is the id of
-    /// its <see cref="Relations.VecContainer"/>, interned in the graph's container environment with an id from the graph's
-    /// id counter, as egglog's are; the engine column is an id column. A vector of values is never rebuilt and its id
-    /// never merges, so equal vectors have equal cells in every scope, and the library treats it as a value. A vector of
-    /// classes, or of containers of them, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt
-    /// against the union-find, its id merged with another's when their elements become equal, and interned only at the
-    /// root (decisions row 9).
+    /// The column type of <see cref="Vec{T}"/>: egglog's <c>Vec</c> sort (src/sort/vec.rs). A vector's cell is the id
+    /// of its <see cref="Relations.VecContainer"/>, interned in the graph's container environment with an id from the
+    /// graph's id counter, as egglog's are; the engine column is an id column. A vector of values is never rebuilt and
+    /// its id never merges, so equal vectors have equal cells in every scope, and the library treats it as a value. A
+    /// vector of classes, or of containers of them, is egglog's eq-sort container
+    /// (<see cref="ColumnType.HoldsClasses"/>): rebuilt against the union-find, its id merged with another's when their
+    /// elements become equal, and interned at a writable root in the graph's environment and in a writable child in its
+    /// own containers, under an id local to it (decisions row 9).
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     internal sealed class VecColumnType<T> : ColumnType<Vec<T>>, IContainerColumnType where T : notnull
@@ -90,14 +91,15 @@ namespace Eggnog
         /// <summary>
         /// Encodes a vector a primitive returned in <paramref name="scope"/>: for a vector of classes, its classes
         /// usable there and the container interned at a writable root, as egglog's primitive registers its container
-        /// through the execution state, or elsewhere the one the scope sees (its container view,
+        /// through the execution state, or a writable child, which makes it in its own containers when its view does
+        /// not hold it, as egglog's push does, or in a frozen scope the one it sees (its container view,
         /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The vector.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The vector holds classes, and a class is not usable in the scope,
-        /// or the scope cannot intern and sees no such vector.</exception>
+        /// or the scope is frozen and sees no such vector.</exception>
         internal override uint EncodeIn(Vec<T> value, Scope? scope)
         {
             if (holdsClasses == false)

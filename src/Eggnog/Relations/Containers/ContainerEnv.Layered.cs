@@ -128,6 +128,52 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// Returns the id of <paramref name="container"/>, whose content hash is <paramref name="hash"/>, in this
+        /// environment, a child context's layer's own (<see cref="ContainerLayer{TContainer}.Own"/>), interning it with
+        /// an id minted from <paramref name="ids"/>, the context's id blocks, when it is new here: what a writable child
+        /// does with a container of classes its view does not hold (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>),
+        /// as egglog's <c>get_or_insert</c> (core-relations/src/containers/mod.rs:366-409) interns in the copy its push
+        /// makes. Under the content's hash-cons shard lock it probes again, mints, inserts and records the entry in the
+        /// container log while the log is active, so the context's rule tasks that race to intern one content get one
+        /// id, and only the winner mints. Thread-safe.
+        /// </summary>
+        /// <remarks>
+        /// The id is local to the context (<see cref="IdBlockAllocator.Contains"/>), so the layer owns it by the
+        /// ownership rule, and no ancestor names it. Cost: as <see cref="GetOrInsert"/>, with the id taken from the
+        /// context's current block.
+        /// </remarks>
+        /// <param name="container">The container; it must not change afterwards.</param>
+        /// <param name="hash">Its content hash.</param>
+        /// <param name="ids">The context's id blocks.</param>
+        /// <returns>The container's id.</returns>
+        /// <exception cref="OverflowException">The store has no ids left for a new block.</exception>
+        internal uint GetOrInsertLocal(in TContainer container, ulong hash, IdBlockAllocator ids)
+        {
+            Debug.Assert(hash == container.ComputeHash(), "the content hash is stale");
+
+            var index = shardData.ShardOf(hash);
+            var shard = toId[index];
+            uint id;
+            lock (shard)
+            {
+                var match = new ContainerContentMatch<TContainer>(container, hash);
+                var slot = shard.FindOrFindInsertSlot(hash, ref match, default(ContainerContentHasher<TContainer>));
+                if (slot >= 0)
+                    return shard.EntryAt(slot).Id;
+
+                id = ids.Next();
+                var entry = new ContainerEntry<TContainer>(container, hash, id);
+                AddById(entry);
+                shard.InsertInSlot(hash, ~slot, entry);
+                if (HoldsIds && container.HoldsIds)
+                    LogAdded(index, id, hash);
+            }
+
+            Index(container, id);
+            return id;
+        }
+
+        /// <summary>
         /// Renames the entry of <paramref name="container"/>, whose content hash is <paramref name="hash"/>, to
         /// <paramref name="id"/> (<see cref="RenameEntry"/>), merging nothing: what a child's container pass does to an
         /// entry of its layer's own environment that an equal container's merge gave a smaller id it may own

@@ -5,14 +5,15 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Pair{T1, T2}"/>: egglog's <c>Pair</c> sort (src/sort/pair.rs). A pair's cell is the
-    /// id of its <see cref="Relations.PairContainer"/>, interned in the graph's container environment with an id from the
-    /// graph's id counter, as egglog's are; the engine column is an id column, as egglog's
-    /// <c>ContainerSortImpl::column_ty</c>. A pair of values is never rebuilt and its id never merges, so equal pairs have
-    /// equal cells in every scope, as any value's do, and the library treats it as a value. A pair with an element that is
-    /// a class, or holds classes, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): that element
-    /// rebuilt against the union-find, as egglog's <c>do_rebuild_first</c> and <c>do_rebuild_second</c> say, and the pair
-    /// interned only at the root (decisions row 9).
+    /// The column type of <see cref="Pair{T1, T2}"/>: egglog's <c>Pair</c> sort (src/sort/pair.rs). A pair's cell is
+    /// the id of its <see cref="Relations.PairContainer"/>, interned in the graph's container environment with an id
+    /// from the graph's id counter, as egglog's are; the engine column is an id column, as egglog's
+    /// <c>ContainerSortImpl::column_ty</c>. A pair of values is never rebuilt and its id never merges, so equal pairs
+    /// have equal cells in every scope, as any value's do, and the library treats it as a value. A pair with an element
+    /// that is a class, or holds classes, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): that
+    /// element rebuilt against the union-find, as egglog's <c>do_rebuild_first</c> and <c>do_rebuild_second</c> say,
+    /// and the pair interned at a writable root in the graph's environment and in a writable child in its own
+    /// containers, under an id local to it (decisions row 9).
     /// </summary>
     /// <typeparam name="T1">The type of the first element.</typeparam>
     /// <typeparam name="T2">The type of the second element.</typeparam>
@@ -98,14 +99,15 @@ namespace Eggnog
         /// <summary>
         /// Encodes a pair a primitive returned in <paramref name="scope"/>: for a pair that holds classes, its classes
         /// usable there and the container interned at a writable root, as egglog's primitive registers its container
-        /// through the execution state, or elsewhere the one the scope sees (its container view,
+        /// through the execution state, or a writable child, which makes it in its own containers when its view does
+        /// not hold it, as egglog's push does, or in a frozen scope the one it sees (its container view,
         /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The pair.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The pair holds classes, and a class is not usable in the scope, or
-        /// the scope cannot intern and sees no such pair.</exception>
+        /// the scope is frozen and sees no such pair.</exception>
         internal override uint EncodeIn(Pair<T1, T2> value, Scope? scope)
         {
             if (HoldsClasses == false)

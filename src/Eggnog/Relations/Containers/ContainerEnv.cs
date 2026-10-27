@@ -164,27 +164,31 @@ namespace Eggnog.Relations
         /// the id can look the container up; the element index is updated after the lock is released.
         /// </para>
         /// <para>
+        /// From a state of a child context, a container of classes in an environment that holds them goes to the
+        /// child's container layers instead (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>): the container the
+        /// child's view holds, or a new one in the child's own layer under an id local to it, as egglog interns in the
+        /// copy its push makes. The ancestors never see it.
+        /// </para>
+        /// <para>
         /// Cost: one content hash, one lock, one expected-O(1) probe; for a new container also an id increment, a
-        /// reverse-map insert and one index update per value.
+        /// reverse-map insert and one index update per value. In a child, the view's lookup by content first.
         /// </para>
         /// </remarks>
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <param name="state">The execution state, which mints the id; it must belong to a database.</param>
         /// <returns>The container's id.</returns>
         /// <exception cref="InvalidOperationException">The state belongs to no database, or the counter ran out of
-        /// ids; or the environment and the container hold e-class ids and the state belongs to a child context, which
-        /// may look such a container up (<see cref="TryGetId(in TContainer, out uint)"/>) but not intern one; or they
-        /// hold e-class ids, the container is new and the state's database is frozen: a frozen context is read-only,
-        /// and its container log, from which its descendants learn of new containers, never grows
-        /// (<see cref="ContainerLog"/>).</exception>
+        /// ids; or the environment and the container hold e-class ids, the container is new in the state's view and the
+        /// state's context is frozen: a frozen context is read-only, and its container log, from which its descendants
+        /// learn of new containers, never grows (<see cref="ContainerLog"/>).</exception>
         public uint GetOrInsert(in TContainer container, ExecutionState state)
         {
             ArgumentNullException.ThrowIfNull(state);
 
-            // A child interns no eq-sort container; it may only look one up. One field test at the root, which runs in
-            // no child.
+            // A child interns a container of classes in its own layers, over its view. One field test at the root, which
+            // runs in no child.
             if (state.InChildContext && HoldsIds && container.HoldsIds)
-                ThrowInternedInChild();
+                return state.Layers!.Owner.ContainerLayers!.GetOrInsert(this, container);
 
             return GetOrInsertCore(container, state, null);
         }
@@ -199,14 +203,15 @@ namespace Eggnog.Relations
         /// <param name="container">The container; it must not change afterwards.</param>
         /// <param name="counters">The store's counters, the one every execution state of the store mints from.</param>
         /// <returns>The container's id.</returns>
-        /// <exception cref="InvalidOperationException">The container holds e-class ids, whose interning needs the
-        /// root (<see cref="GetOrInsertAtRoot"/>).</exception>
+        /// <exception cref="InvalidOperationException">The container holds e-class ids, which the context interning it
+        /// interns over its view: a writable root through <see cref="GetOrInsertAtRoot"/>, a writable child in its
+        /// container layers (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>).</exception>
         /// <exception cref="OverflowException">The counter has no ids left.</exception>
         public uint GetOrInsertShared(in TContainer container, CounterSet counters)
         {
             ArgumentNullException.ThrowIfNull(counters);
             if (HoldsIds && container.HoldsIds)
-                throw new InvalidOperationException($"A container of {typeof(TContainer).Name} holds e-class ids, so it is interned at the root.");
+                throw new InvalidOperationException($"A container of {typeof(TContainer).Name} holds e-class ids, so it is interned over a context's view: at a writable root, or in a writable child's container layers.");
 
             return GetOrInsertCore(container, null, counters);
         }
@@ -389,22 +394,16 @@ namespace Eggnog.Relations
         /// <inheritdoc />
         public override bool AnyContainerMentions(uint value) => valIndex.ContainsElement(value);
 
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowInternedInChild()
-        {
-            throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a child context: a child may look eq-sort containers up but not intern them. Look it up with TryGetId, or intern it at the root.");
-        }
-
         /// <summary>
-        /// The refusal of <see cref="GetOrInsert"/> for a new container of classes from a state of a frozen database:
-        /// a frozen context is read-only, and its container log never grows, so a descendant that displaced one of the
-        /// container's elements would never learn of it. Under the hash-cons shard's lock, before anything is
-        /// inserted.
+        /// The refusal of <see cref="GetOrInsert"/> for a new container of classes from a state of a frozen context, at
+        /// the root under the hash-cons shard's lock and in a child before its layers are touched
+        /// (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>), before anything is inserted: a frozen context is
+        /// read-only, and its container log never grows, so a descendant that displaced one of the container's elements
+        /// would never learn of it.
         /// </summary>
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static void ThrowInternedInFrozen()
+        internal static void ThrowInternedInFrozen()
         {
             throw new InvalidOperationException($"A container of {typeof(TContainer).Name}, which holds e-class ids, cannot be interned in a frozen context: a frozen context is read-only, and its descendants, which learn of new containers from its container log, would never learn of this one. Look it up with TryGetId.");
         }
@@ -494,8 +493,10 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Mints a fresh id from the counter: egglog's <c>Value::from_usize(exec_state.inc_counter(counter))</c>. On the
-        /// store's shared counter, never a child context's id blocks: a container is interned globally, so its id must
-        /// not be local to the context that first interned it.
+        /// store's shared counter, never a child context's id blocks: an id minted here belongs to a root's environment,
+        /// whose containers every context sees, so it must not be local to the context that interned it. A child mints
+        /// the ids of the containers of classes it interns from its blocks instead
+        /// (<see cref="GetOrInsertLocal"/>).
         /// </summary>
         /// <param name="state">The interning state.</param>
         /// <returns>The id.</returns>

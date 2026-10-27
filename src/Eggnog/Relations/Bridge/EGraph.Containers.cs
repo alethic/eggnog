@@ -26,11 +26,12 @@ namespace Eggnog.Relations
         /// (lib.rs:238-257). Registering a type again does nothing.
         /// </summary>
         /// <remarks>
-        /// <paramref name="holdsIds"/> says whether the containers hold e-class ids. Such eq-sort containers cannot be
-        /// interned in a child context (interning one there throws <see cref="InvalidOperationException"/>); a child
-        /// rebuilds, in its container layers, those its own displacements reach, and those its writable ancestors gain
-        /// later that concern it (<see cref="ContainerLayers"/>).
-        /// Containers over base values register with <c>holdsIds: false</c> and work in every context.
+        /// <paramref name="holdsIds"/> says whether the containers hold e-class ids. A child context interns such
+        /// eq-sort containers in its own container layers, under ids local to it, and rebuilds there those it interned,
+        /// those its own displacements reach, and those its writable ancestors gain later that concern it
+        /// (<see cref="ContainerLayers"/>). Containers over base values register with <c>holdsIds: false</c> and are
+        /// interned in the root's environment from every context. Registration is thread-safe, so children of a frozen
+        /// root may register from their own thread domains (<see cref="EGraphContext.GetContainerValue{TContainer}"/>).
         /// </remarks>
         /// <typeparam name="TContainer">The container type.</typeparam>
         /// <param name="holdsIds">Whether the containers hold e-class ids.</param>
@@ -100,7 +101,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Interns <paramref name="container"/> at the root, registering its type first if needed (as one holding ids), and
         /// returns its id: a fresh id the first time its contents are seen. egglog's <c>get_container_value</c>
-        /// (lib.rs:231-236). Interning is immediate and global; a child interns through
+        /// (lib.rs:231-236). Interning is immediate, and visible to every context; a child interns through
         /// <see cref="EGraphContext.GetContainerValue{TContainer}"/>. The contents are not canonicalized.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>

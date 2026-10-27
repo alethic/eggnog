@@ -34,7 +34,7 @@ namespace Eggnog.Relations
     /// descendants: creating a child activates the log of every ancestor that is not frozen before the child takes its
     /// cursors, so they start at the end; disposing a context clears and deactivates the log of every ancestor whose
     /// gate reaches zero, since no cursor into it is left (<see cref="Context.Dispose"/>). A frozen level records
-    /// nothing: it interns no container of classes and never rebuilds, so its log keeps what its freeze drained
+    /// nothing: it interns no new container of classes and never rebuilds, so its log keeps what its freeze drained
     /// (<see cref="Freeze"/>). A root with no live descendant pays one volatile read of <see cref="Active"/> where a
     /// container of classes appears.
     /// </para>

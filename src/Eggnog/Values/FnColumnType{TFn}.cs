@@ -7,13 +7,14 @@ namespace Eggnog
 
     /// <summary>
     /// The column type of a function value (<see cref="UnstableFn{T1, TResult}"/> and its arities): egglog's
-    /// <c>UnstableFn</c> sort (src/sort/fn.rs). A value's cell is the id of its <see cref="Relations.FunctionContainer"/>,
-    /// interned in the graph's container environment with an id from the graph's id counter, as egglog's are; the engine
-    /// column is an id column. A value's partially applied arguments are of its target's types, not the sort's, so whether
-    /// a value holds classes is the value's: each argument of an e-class or eq-container sort is rebuilt against the
-    /// union-find, as egglog's <c>rebuild_contents</c> rebuilds it, and a value that holds classes is interned only at the
-    /// root (decisions row 9). The type itself counts as one that holds classes
-    /// (<see cref="ColumnType.HoldsClasses"/>), which every value of it may.
+    /// <c>UnstableFn</c> sort (src/sort/fn.rs). A value's cell is the id of its
+    /// <see cref="Relations.FunctionContainer"/>, interned in the graph's container environment with an id from the
+    /// graph's id counter, as egglog's are; the engine column is an id column. A value's partially applied arguments
+    /// are of its target's types, not the sort's, so whether a value holds classes is the value's: each argument of an
+    /// e-class or eq-container sort is rebuilt against the union-find, as egglog's <c>rebuild_contents</c> rebuilds it,
+    /// and a value that holds classes is interned at a writable root in the graph's environment and in a writable child
+    /// in its own containers, under an id local to it (decisions row 9). The type itself counts as one that holds
+    /// classes (<see cref="ColumnType.HoldsClasses"/>), which every value of it may.
     /// </summary>
     /// <typeparam name="TFn">The value's CLR type.</typeparam>
     internal sealed class FnColumnType<TFn> : ColumnType<TFn>, IContainerColumnType, IFnColumnType
@@ -132,8 +133,9 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a function value a primitive returned in <paramref name="scope"/>: for one that holds classes, its
-        /// classes usable there and the container interned at a writable root, or elsewhere the one the scope sees (its
-        /// container view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
+        /// classes usable there and the container interned at a writable root or a writable child, which makes it in
+        /// its own containers when its view does not hold it, or in a frozen scope the one it sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="scope">The scope the call runs in.</param>

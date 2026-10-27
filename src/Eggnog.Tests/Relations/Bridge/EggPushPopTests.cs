@@ -26,10 +26,10 @@ namespace Eggnog.Relations.Tests
     /// them there with <c>vec-union</c> are translated (<see cref="VecRebuilding"/>, <see cref="VecUnion"/>), since a
     /// child rebuilds the containers its own unions displace an element of, in its container layers. Its block that
     /// merges with <c>vec-union</c> in a push, <c>ff</c>'s, is not: only the root writes a function whose merge is not
-    /// a lattice (decisions row 2). The other push/pop programs of <c>ext/egglog/tests</c> are not translated.
-    /// <c>container-rebuild.egg</c> and <c>container-fail.egg</c> intern <c>Vec</c> containers of e-classes inside a
-    /// push: they wait on children interning eq-sort containers, which children refuse, and would be translated with
-    /// <see cref="VecContainer"/> once they do. The rest are out of scope: the <c>UnstableFn</c> half of
+    /// a lattice (decisions row 2). The other push/pop programs of <c>ext/egglog/tests</c> are not translated here.
+    /// <c>container-rebuild.egg</c> and <c>container-fail.egg</c>, which intern <c>Vec</c> containers of e-classes inside
+    /// a push, are ported at the library's level, where a child interns them in its container layers
+    /// (<c>Eggnog.Tests.Values.ClassContainerTests</c>). The rest are out of scope: the <c>UnstableFn</c> half of
     /// <c>vec.egg</c>, <c>python_array_optimize.egg</c> and <c>stresstest_large_expr.egg</c> need function values (a
     /// container that names a function, called from inside a rule), which the library does not offer, and the last
     /// two also rulesets of egglog's frontend; the last two blocks of <c>tricky-type-checking.egg</c> (issue #113)

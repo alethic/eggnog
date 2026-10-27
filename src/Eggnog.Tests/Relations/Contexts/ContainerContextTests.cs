@@ -16,8 +16,8 @@ namespace Eggnog.Relations.Tests
     /// container layers; its catch-up with the containers its writable root or parent gains later, which it claims
     /// when they hold its losers, merges with its own copies when they are equal, and adopts when they land on an id
     /// it claimed, while its copy stands for a container it claimed that the ancestor rebuilds in place, a map whose
-    /// keys collapse in another order included, each compared with a fresh root replaying the same commands; the
-    /// refusal to intern an eq-sort container in a child; and a child's database refusing egglog's container rebuild.
+    /// keys collapse in another order included, each compared with a fresh root replaying the same commands; a child
+    /// interning an eq-sort container in its own layers; and a child's database refusing egglog's container rebuild.
     /// </summary>
     public class ContainerContextTests
     {
@@ -654,7 +654,8 @@ namespace Eggnog.Relations.Tests
             var drained = log.AddedCount;
             Assert.Equal(1, drained);
             Assert.Equal(v, Intern(root, new VecContainer(w)));
-            Assert.Throws<InvalidOperationException>(() => Intern(root, new VecContainer(w, w)));
+            var refused = Assert.Throws<InvalidOperationException>(() => Intern(root, new VecContainer(w, w)));
+            Assert.Contains("cannot be interned in a frozen context", refused.Message, StringComparison.Ordinal);
             Assert.False(log.Pending);
             Assert.Equal(drained, log.AddedCount);
             Assert.False(root.Database.Containers.GetEnvironment<VecContainer>().TryGetId(new VecContainer(w, w), out _));
@@ -689,27 +690,51 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A child may look an eq-sort container up but not intern one; containers over base values it may intern, on
-        /// the shared counter, so their ids are global.
+        /// A child interns an eq-sort container its view does not hold in its own container layer, under an id local to
+        /// it that no ancestor or sibling sees, and one its view holds it finds there, as egglog's push interns in its
+        /// copy; a frozen child interns none. Containers over base values it interns in the root's environment, on the
+        /// shared counter, so their ids are global.
         /// </summary>
         [Fact]
-        public void AChildInternsOnlyBaseValueContainers()
+        public void AChildInternsEqContainersInItsLayersAndBaseValueContainersGlobally()
         {
             var (store, _) = Setup();
             var root = store.Root;
+            var env = root.Database.Containers.GetEnvironment<VecContainer>();
             var w = root.NewId();
             var v = Intern(root, new VecContainer(w));
             var child = root.CreateChild();
-            Assert.Throws<InvalidOperationException>(() => Intern(child, new VecContainer(w)));
-            Assert.Throws<InvalidOperationException>(() => Intern(child, new VecContainer(w, w)));
-            Assert.True(child.Database.Containers.GetEnvironment<VecContainer>().TryGetId(new VecContainer(w), out var found));
-            Assert.Equal(v, found);
+            Assert.Equal(v, Intern(child, new VecContainer(w)));
+            Assert.True(child.ContainerLayers!.IsEmpty);
+
+            var ww = Intern(child, new VecContainer(w, w));
+            Assert.True(child.IsLocalId(ww));
+            Assert.Equal(ww, Intern(child, new VecContainer(w, w)));
+            Assert.Equal(1, child.ContainerLayers.LayerAt(env.TypeId)!.OwnBase.Count);
+            Assert.True(ContainerView.Of(child.Database).TryGetContainer(env, ww, out var made));
+            Assert.Equal(new VecContainer(w, w), made);
+            Assert.False(env.TryGetId(new VecContainer(w, w), out _));
+            Assert.Equal(1, env.Count);
+
+            var sibling = root.CreateChild();
+            Assert.False(ContainerView.Of(sibling.Database).TryGetId(env, new VecContainer(w, w), out _));
+            child.CheckInvariants();
+
+            // A frozen child finds what it holds, and makes nothing.
+            sibling.Dispose();
+            root.Freeze();
+            child.Freeze();
+            Assert.Equal(ww, Intern(child, new VecContainer(w, w)));
+            var refused = Assert.Throws<InvalidOperationException>(() => Intern(child, new VecContainer(w, w, w)));
+            Assert.Contains("cannot be interned in a frozen context", refused.Message, StringComparison.Ordinal);
+            Assert.Equal(1, child.ContainerLayers.LayerAt(env.TypeId)!.OwnBase.Count);
 
             var (baseStore, _) = Setup(holdsIds: false);
             var baseChild = baseStore.Root.CreateChild();
             var id = Intern(baseChild, new VecContainer(false, 1, 2));
             Assert.False(baseChild.IsLocalId(id));
             Assert.Equal(id, Intern(baseStore.Root, new VecContainer(false, 1, 2)));
+            Assert.True(baseChild.ContainerLayers!.IsEmpty);
             Assert.False(baseStore.Root.Database.Containers.HasEqContainers);
             Assert.True(store.Root.Database.Containers.HasEqContainers);
         }

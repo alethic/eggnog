@@ -193,9 +193,10 @@ namespace Eggnog
             if (type.Store is not null && ReferenceEquals(type.Store, graph.Values) == false)
                 throw Error($"column type {type.Name} belongs to another graph");
 
-            // A case interns no container of classes (decisions row 9).
+            // A split's assumptions hold no constant container of classes, though a case's own rules and writes make
+            // one in the case's containers (decisions row 9).
             if (type.HoldsClasses)
-                throw Error($"a constant {type.Name} holds classes, which a case cannot make; a split's assumptions hold values and classes only");
+                throw Error($"a constant {type.Name} holds classes, which a split's assumptions do not make; a split's assumptions hold values and classes only");
 
             if (type.Kind != ColumnKind.Sort)
                 return;

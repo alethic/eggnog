@@ -5,13 +5,14 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The column type of <see cref="Map{TKey, TValue}"/>: egglog's <c>Map</c> sort (src/sort/map.rs). A map's cell is the
-    /// id of its <see cref="Relations.MapContainer"/>, whose entries are in key-cell order as egglog's <c>BTreeMap</c>,
-    /// interned in the graph's container environment with an id from the graph's id counter; the engine column is an id
-    /// column. A map of values is never rebuilt and its id never merges, so equal maps have equal cells in every scope,
-    /// and the library treats it as a value. A map whose keys or values are classes, or hold them, is egglog's eq-sort
-    /// container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, keys that become equal collapsing, the
-    /// later in key-cell order kept, and interned only at the root (decisions row 9).
+    /// The column type of <see cref="Map{TKey, TValue}"/>: egglog's <c>Map</c> sort (src/sort/map.rs). A map's cell is
+    /// the id of its <see cref="Relations.MapContainer"/>, whose entries are in key-cell order as egglog's
+    /// <c>BTreeMap</c>, interned in the graph's container environment with an id from the graph's id counter; the
+    /// engine column is an id column. A map of values is never rebuilt and its id never merges, so equal maps have
+    /// equal cells in every scope, and the library treats it as a value. A map whose keys or values are classes, or
+    /// hold them, is egglog's eq-sort container (<see cref="ColumnType.HoldsClasses"/>): rebuilt as egglog's, keys that
+    /// become equal collapsing, the later in key-cell order kept, and interned at a writable root in the graph's
+    /// environment and in a writable child in its own containers, under an id local to it (decisions row 9).
     /// </summary>
     /// <typeparam name="TKey">The key type.</typeparam>
     /// <typeparam name="TValue">The value type.</typeparam>
@@ -113,14 +114,15 @@ namespace Eggnog
 
         /// <summary>
         /// Encodes a map a primitive returned in <paramref name="scope"/>: for a map that holds classes, its classes
-        /// usable there and the container interned at a writable root, or elsewhere the one the scope sees (its container
-        /// view, <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
+        /// usable there and the container interned at a writable root or a writable child, which makes it in its own
+        /// containers when its view does not hold it, or in a frozen scope the one it sees (its container view,
+        /// <see cref="Scope.ContainerView"/>); else as <see cref="Encode"/>.
         /// </summary>
         /// <param name="map">The map.</param>
         /// <param name="scope">The scope the call runs in.</param>
         /// <returns>The cell.</returns>
         /// <exception cref="InvalidOperationException">The map holds classes, and a class is not usable in the scope, or
-        /// the scope cannot intern and sees no such map.</exception>
+        /// the scope is frozen and sees no such map.</exception>
         internal override uint EncodeIn(Map<TKey, TValue> map, Scope? scope)
         {
             if (HoldsClasses == false)

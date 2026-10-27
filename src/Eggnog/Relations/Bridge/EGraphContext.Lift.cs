@@ -101,7 +101,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether <paramref name="id"/> was minted in this child: it lies in one of the child's id blocks. Every
-        /// term mint in a child is local; container ids are minted on the store's shared counter and never are.
+        /// term mint in a child is local, and so is the id of a container of classes the child interns; a container of
+        /// values is interned on the store's shared counter and never is.
         /// Lock-free, O(log blocks).
         /// </summary>
         /// <param name="id">The id.</param>

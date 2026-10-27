@@ -169,8 +169,16 @@ namespace Eggnog.Tests.Values
             Assert.True(root.AreEqual(root.Get(applied.Of()), add.Of(num.Of(2L), num.Of(3L))));
         }
 
+        /// <summary>
+        /// A child of a frozen root makes function values of values, which intern in the graph's pool, and function
+        /// values of classes, which it uses when its view holds them and otherwise interns in its own containers, as
+        /// egglog's push interns in its copy. The expectation is egglog's at 5e655cae running probe
+        /// child-fn-of-class.egg, which exits clean: (set (g 1) (unstable-fn "Add" (Num 1))); in a push (g 2) of the
+        /// same value is (g 1), and (g 3) = (unstable-fn "Add" (Num 2)) applies to (Num 5) as (Add (Num 2) (Num 5));
+        /// after the pop g has no (g 3).
+        /// </summary>
         [Fact]
-        public void AChildMakesFunctionValuesOfValuesButNoneOfNewClasses()
+        public void AChildMakesFunctionValuesOfValuesAndOfClasses()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
@@ -180,22 +188,34 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterFn<Node, Node>();
             var f = graph.DefineFunction<long, UnstableFn<long, long>>("f");
             var g = graph.DefineFunction<long, UnstableFn<Node, Node>>("g");
+            var applied = graph.DefineFunction<Node>("applied");
             var addTo = Primitives.UnstableFn<Node, Node>(add);
             var root = graph.Root;
             root.Assume(g.Of(1L).Is(addTo.Of(num.Of(1L))));
             root.Freeze();
-            using var child = root.CreateChild();
+            var interned = graph.Values.InternedCount;
 
-            // A value of values, the child makes.
-            child.Assume(f.Of(1L).Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
-            Assert.True(child.Check(Primitives.UnstableApp<long, long>().Of(f.Of(1L), 1L).Is(6L)));
+            using (var child = root.CreateChild())
+            {
+                // A value of values, the child makes in the graph's pool.
+                child.Assume(f.Of(1L).Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                Assert.True(child.Check(Primitives.UnstableApp<long, long>().Of(f.Of(1L), 1L).Is(6L)));
+                interned = graph.Values.InternedCount;
 
-            // One of classes the root holds, it uses; a new one, it does not make.
-            child.Assume(g.Of(2L).Is(addTo.Of(num.Of(1L))));
-            Assert.True(child.Check(g.Of(2L).Is(g.Of(1L))));
-            var made = Assert.Throws<RuleEvaluationException>(() => child.Assume(g.Of(3L).Is(addTo.Of(num.Of(2L)))));
-            Assert.Contains("only the root interns", made.Message, StringComparison.Ordinal);
-            Assert.False(child.IsFaulted);
+                // One of classes the root holds, it uses; a new one, it makes in its own containers.
+                child.Assume(g.Of(2L).Is(addTo.Of(num.Of(1L))));
+                Assert.True(child.Check(g.Of(2L).Is(g.Of(1L))));
+                child.Assume(g.Of(3L).Is(addTo.Of(num.Of(2L))));
+                child.Assume(applied.Of().Is(Primitives.UnstableApp<Node, Node>().Of(g.Of(3L), num.Of(5L))));
+                Assert.True(child.AreEqual(child.Get(applied.Of()), add.Of(num.Of(2L), num.Of(5L))));
+                Assert.False(child.Check(g.Of(3L).Is(g.Of(1L))));
+                Assert.False(child.IsFaulted);
+                Assert.Equal(interned, graph.Values.InternedCount);
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.TryGet(g.Of(3L), out _));
+            Assert.Equal(interned, graph.Values.InternedCount);
 
             // A function sort registers while the root is frozen too, into the environment that holds ids.
             graph.Values.RegisterFn<string, long>();
@@ -210,8 +230,8 @@ namespace Eggnog.Tests.Values
         /// of values still intern from any scope into the graph's one pool: the child and a sibling made later make one
         /// value of one cell. The expectation is egglog's at 5e655cae running probe late-fn.egg, which exits clean:
         /// (Num 1), then twice a push that declares the sort and (function h () IntFn :no-merge), sets (h) to
-        /// (unstable-fn "+" 5) and checks (= (unstable-app (h) 1) 6). A function value of a class registered so is still
-        /// one the child cannot make, as any container of classes (decisions row 9).
+        /// (unstable-fn "+" 5) and checks (= (unstable-app (h) 1) 6). A function value of a class the child then makes
+        /// in its own containers, as egglog's push makes one in its copy.
         /// </summary>
         [Fact]
         public void AFunctionSortRegisteredWhileTheRootIsFrozenHoldsIds()
@@ -256,11 +276,13 @@ namespace Eggnog.Tests.Values
                     Assert.False(sibling.AreEqual(one, two));
                 }
 
+                // A function value of a class the child makes in its own containers, which the graph's pool never sees.
                 graph.Values.RegisterFn<Node, Node>();
                 var g = graph.DefineFunction<UnstableFn<Node, Node>>("g");
-                var made = Assert.Throws<RuleEvaluationException>(() => child.Assume(g.Of().Is(Primitives.UnstableFn<Node, Node>(add).Of(num.Of(1L)))));
-                Assert.Contains("only the root interns", made.Message, StringComparison.Ordinal);
+                child.Assume(g.Of().Is(Primitives.UnstableFn<Node, Node>(add).Of(num.Of(1L))));
+                Assert.True(child.AreEqual((Node)child.Get(g.Of()).Arguments[0], one));
                 Assert.False(child.IsFaulted);
+                Assert.Equal(functions, containers.GetEnvironment<Relations.FunctionContainer>().Count);
                 child.Engine.Context.CheckInvariants();
             }
 
@@ -270,6 +292,58 @@ namespace Eggnog.Tests.Values
             // The function value outlives the scopes that made it, in the graph's pool.
             Assert.Equal(functions, containers.GetEnvironment<Relations.FunctionContainer>().Count);
             containers.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A function sort of classes registered while the root is frozen, and a value of it a child makes by partially
+        /// applying a class and then displaces that class in: the value, which the child interned in its own
+        /// containers, is rebuilt there by the child's container pass, and applies to the class that won. The
+        /// expectation is egglog's at 5e655cae running probe late-fn-class.egg, which exits clean: (Num 1) and (Num 2);
+        /// in a push it declares (sort MathFn (UnstableFn (Math) Math)) and (function g () MathFn :no-merge), sets (g)
+        /// to (unstable-fn "Add" (Num 2)), whose application to (Num 5) is (Add (Num 2) (Num 5)), then (union (Num 1)
+        /// (Num 2)), after which (g) is (unstable-fn "Add" (Num 1)), and its application is (Add (Num 1) (Num 5)),
+        /// equal to the first; after the pop the classes are apart.
+        /// </summary>
+        [Fact]
+        public void AFunctionValueOfAClassAChildMakesAfterTheFreezeIsRebuiltWhenTheClassIsDisplaced()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var add = graph.DefineConstructor<Node, Node, Node>("Add");
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            root.Freeze();
+            var containers = graph.Engine.ContainerValues;
+
+            using (var child = root.CreateChild())
+            {
+                graph.Values.RegisterFn<Node, Node>();
+                var g = graph.DefineFunction<UnstableFn<Node, Node>>("g");
+                var before = graph.DefineFunction<Node>("before");
+                var after = graph.DefineFunction<Node>("after");
+                var app = Primitives.UnstableApp<Node, Node>();
+                var addTo = Primitives.UnstableFn<Node, Node>(add);
+                child.Assume(g.Of().Is(addTo.Of(num.Of(2L))));
+                child.Assume(before.Of().Is(app.Of(g.Of(), num.Of(5L))));
+                Assert.True(child.AreEqual(child.Get(before.Of()), add.Of(num.Of(2L), num.Of(5L))));
+                Assert.Equal(0, containers.GetEnvironment<Relations.FunctionContainer>().Count);
+
+                child.Union(one, two);
+                Assert.True(child.AreEqual((Node)child.Get(g.Of()).Arguments[0], one));
+                Assert.True(child.Check(g.Of().Is(addTo.Of(num.Of(1L)))));
+                child.Assume(after.Of().Is(app.Of(g.Of(), num.Of(5L))));
+                Assert.True(child.AreEqual(child.Get(after.Of()), add.Of(num.Of(1L), num.Of(5L))));
+                Assert.True(child.AreEqual(child.Get(after.Of()), child.Get(before.Of())));
+                Assert.False(child.IsFaulted);
+                Assert.Equal(0, containers.GetEnvironment<Relations.FunctionContainer>().Count);
+                child.Engine.Context.CheckInvariants();
+            }
+
+            Assert.False(root.AreEqual(one, two));
+            containers.CheckInvariants();
+            root.Engine.Context.CheckInvariants();
         }
 
         [Fact]

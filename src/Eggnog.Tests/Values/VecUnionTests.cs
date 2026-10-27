@@ -179,7 +179,8 @@ namespace Eggnog.Tests.Values
             // (vec-union x y)) each make (a) and (b) one there and (p) and (q) with them; two lengths have no union; and
             // ff, which merges with vec-union, unions them too. After each pop they are apart. A child does each, but
             // for ff: only the root writes a function whose merge is not a lattice (decisions row 2), so a child refuses
-            // the write before anything is written. The vector of two the root holds, as a child makes none.
+            // the write before anything is written. The vector of two is the root's, made before the children, as egglog's
+            // (two) is set before the pushes.
             var t = new Theory();
             var u = t.Graph.DefineFunction<Vec<Node>>("u");
             var two = t.Graph.DefineFunction<Vec<Node>>("two");

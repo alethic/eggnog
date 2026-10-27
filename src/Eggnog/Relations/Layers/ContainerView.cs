@@ -202,9 +202,11 @@ namespace Eggnog.Relations
         /// <summary>
         /// Returns the id of <paramref name="container"/>, interning it if it is new: egglog's <c>register_val</c>
         /// (core-relations/src/containers/mod.rs:154-163), which rule actions and external functions call through
-        /// their execution state. It interns in the root's environment of the type
-        /// (<see cref="ContainerEnv{TContainer}.GetOrInsert"/>), from any context: a container of values everywhere, and
-        /// one of classes at a writable root; a child, and a frozen context, are refused one of classes there.
+        /// their execution state. It interns through the root's environment of the type
+        /// (<see cref="ContainerEnv{TContainer}.GetOrInsert"/>), from any context: a container of values in that
+        /// environment everywhere; one of classes there at a writable root, and in the state's container layers in a
+        /// writable child (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>), the context whose view this is when
+        /// the view is the state's (<see cref="Of(ExecutionState)"/>); a frozen context is refused a new one of classes.
         /// Thread-safe.
         /// </summary>
         /// <typeparam name="TContainer">The container type.</typeparam>
@@ -217,6 +219,29 @@ namespace Eggnog.Relations
             where TContainer : struct, IContainerValue<TContainer>
         {
             return RequireValues().GetEnvironment<TContainer>().GetOrInsert(container, state);
+        }
+
+        /// <summary>
+        /// Returns the id of <paramref name="container"/>, a container of classes, in a child's view, interning it in
+        /// the child's own container layer of its type when the view does not hold it
+        /// (<see cref="ContainerLayers.GetOrInsert{TContainer}"/>): what the library's encode of a container of classes
+        /// does in a writable child, which has no execution state at hand. The root interns through its environment
+        /// instead (<see cref="ContainerEnv{TContainer}.GetOrInsertAtRoot"/>). Thread-safe.
+        /// </summary>
+        /// <typeparam name="TContainer">The container type.</typeparam>
+        /// <param name="root">The root's environment of the type, which holds ids.</param>
+        /// <param name="container">The container; it must not change afterwards.</param>
+        /// <returns>The container's id in the view.</returns>
+        /// <exception cref="InvalidOperationException">The view is the root's, or the container is new in the view and
+        /// the child is frozen.</exception>
+        /// <exception cref="OverflowException">The store has no ids left for a new block.</exception>
+        public uint GetOrInsert<TContainer>(ContainerEnv<TContainer> root, in TContainer container)
+            where TContainer : struct, IContainerValue<TContainer>
+        {
+            if (layers is null)
+                throw new InvalidOperationException("The root's container view interns through the root's environment, with the store's counters.");
+
+            return layers.GetOrInsert(root, container);
         }
 
         /// <summary>
