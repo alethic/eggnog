@@ -49,8 +49,9 @@ namespace Eggnog.Benchmarks.Library
         /// <summary>
         /// Declares the theory and adds the seed expressions, as the file does before its <c>(run 11)</c>.
         /// </summary>
-        /// <param name="degreeOfParallelism">The graph's degree of parallelism: egglog's <c>-j</c>.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="degreeOfParallelism"/> is less than 1.</exception>
+        /// <param name="degreeOfParallelism">The graph's degree of parallelism: egglog's <c>-j</c>, 0 for every
+        /// processor.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="degreeOfParallelism"/> is negative.</exception>
         public MathMicrobenchmarkProgram(int degreeOfParallelism)
         {
             graph = new EGraph(new EGraphOptions { DegreeOfParallelism = degreeOfParallelism });

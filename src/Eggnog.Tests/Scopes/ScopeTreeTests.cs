@@ -159,7 +159,18 @@ namespace Eggnog.Tests.Scopes
             var four = t.Root.CreateChild(options: new ScopeOptions { DegreeOfParallelism = 4 });
             Assert.Equal(1, serial.Engine.Context.Parallelism.DegreeOfParallelism);
             Assert.Equal(4, four.Engine.Context.Parallelism.DegreeOfParallelism);
-            Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.CreateChild(options: new ScopeOptions { DegreeOfParallelism = 0 }));
+            var all = t.Root.CreateChild(options: new ScopeOptions { DegreeOfParallelism = 0 });
+            Assert.Equal(Math.Max(1, Environment.ProcessorCount), all.Engine.Context.Parallelism.DegreeOfParallelism);
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.CreateChild(options: new ScopeOptions { DegreeOfParallelism = -1 }));
+        }
+
+        [Fact]
+        public void ADegreeOfParallelismOfZeroIsEveryProcessor()
+        {
+            var t = new ScopeTheory(new EGraphOptions { DegreeOfParallelism = 0 });
+            Assert.Equal(Math.Max(1, Environment.ProcessorCount), t.Root.Engine.Context.Parallelism.DegreeOfParallelism);
+            Assert.Equal(Math.Max(1, Environment.ProcessorCount), t.Root.CreateChild().Engine.Context.Parallelism.DegreeOfParallelism);
+            Assert.Throws<ArgumentOutOfRangeException>(() => new EGraph(new EGraphOptions { DegreeOfParallelism = -1 }));
         }
 
         [Fact]
