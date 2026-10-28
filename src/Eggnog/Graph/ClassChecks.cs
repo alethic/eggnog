@@ -81,6 +81,58 @@ namespace Eggnog
         }
 
         /// <summary>
+        /// Gets the message of the first check a class constant held in <paramref name="graph"/> fails before any scope is
+        /// asked of it, or <c>null</c> when it passes: it names a class, and the class belongs to the graph.
+        /// </summary>
+        /// <param name="graph">The graph the constant is held in.</param>
+        /// <param name="value">The constant.</param>
+        /// <returns>The message, or <c>null</c>.</returns>
+        public static string? CheckConstant(EGraph graph, ClassId value)
+        {
+            if (value.Origin is not { } origin)
+                return "a class constant is default(ClassId), which names no class";
+
+            if (ReferenceEquals(origin.Graph, graph) == false)
+                return $"class {value} belongs to another graph";
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the message of the first check a class constant held by a rule owned by <paramref name="owner"/> fails, or
+        /// <c>null</c> when it passes: <see cref="CheckConstant"/>, then that a batch origin committed and that the rule
+        /// may hold it (<see cref="AllowedInRule"/>). A rule of the root, such as a global rule, a split rule or a merge,
+        /// has no owner.
+        /// </summary>
+        /// <param name="owner">The rule's owner scope; <c>null</c> for a rule of the root.</param>
+        /// <param name="graph">The graph the constant is held in.</param>
+        /// <param name="value">The constant.</param>
+        /// <param name="rootOnly">What the message of a constant from a scope that is not the root says after the scope
+        /// when <paramref name="owner"/> is <c>null</c>: that the rule may hold only classes from the root.</param>
+        /// <returns>The message, or <c>null</c>.</returns>
+        public static string? CheckRuleConstant(Scope? owner, EGraph graph, ClassId value, string rootOnly)
+        {
+            if (CheckConstant(graph, value) is { } error)
+                return error;
+
+            var origin = value.Origin!;
+            if (origin.IsBatch && origin.Committed == false)
+                return $"class {value} was made by a Write batch that did not commit";
+
+            if (AllowedInRule(owner, origin))
+                return null;
+
+            var scope = origin.IsBatch ? origin.Parent! : origin;
+            if (scope.Disposed)
+                return $"class {value} came from scope '{scope.Path}', which is disposed";
+
+            if (owner is null)
+                return $"class {value} came from scope '{scope.Path}'; {rootOnly}";
+
+            return $"class {value} came from scope '{scope.Path}', which is not '{owner.Path}' or an ancestor of it";
+        }
+
+        /// <summary>
         /// Gets whether a rule owned by <paramref name="owner"/> (<c>null</c>: a global rule) may hold a class constant of
         /// <paramref name="origin"/>: global rules hold only classes from the root, local rules classes from
         /// their owner or its ancestors. A batch origin stands for its scope; it must have committed. A disposed

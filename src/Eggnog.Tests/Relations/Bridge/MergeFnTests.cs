@@ -233,6 +233,55 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(new Value(20), egraph.LookupId(doubled, [a]));
         }
 
+        /// <summary>
+        /// An id constant yields its class as the last rebuild left it canonical, as egglog's read of a global yields the
+        /// class the rebuild keeps canonical in the global's table; one that keeps the old value yields it when the values
+        /// agree, as egglog's function node does (egglog PR 287), and one that does not yields the class then too.
+        /// </summary>
+        [Fact]
+        public void AnIdConstantYieldsItsCanonicalClassUnlessTheValuesAgree()
+        {
+            var egraph = NewEGraph();
+            var x = egraph.FreshId();
+            var y = egraph.FreshId();
+            var g = egraph.FreshId();
+            var f = egraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, ColumnTy.Id],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.IdConst(g, true),
+                Name = "f",
+            });
+            var h = egraph.AddTable(new FunctionConfig
+            {
+                Schema = [ColumnTy.Id, ColumnTy.Id],
+                Default = DefaultVal.Fail,
+                Merge = MergeFn.IdConst(g, false),
+                Name = "h",
+            });
+            var a = egraph.FreshId();
+            var b = egraph.FreshId();
+            var c = egraph.FreshId();
+
+            egraph.AddValues([(f, [a, x])]);
+            egraph.AddValues([(f, [a, y])]);
+            Assert.Equal(g, egraph.LookupId(f, [a]));
+
+            egraph.AddValues([(f, [b, y])]);
+            egraph.AddValues([(f, [b, y])]);
+            Assert.Equal(y, egraph.LookupId(f, [b]));
+
+            egraph.AddValues([(h, [b, y])]);
+            egraph.AddValues([(h, [b, y])]);
+            Assert.Equal(g, egraph.LookupId(h, [b]));
+
+            // g loses a union to the smaller x: the merge yields x.
+            Union(egraph, x, g);
+            egraph.AddValues([(f, [c, y])]);
+            egraph.AddValues([(f, [c, a])]);
+            Assert.Equal(x, egraph.LookupId(f, [c]));
+        }
+
         [Fact]
         public void AChangedMergeTakesTheIncomingTimestampAndAnUnchangedOneKeepsItsOwn()
         {
@@ -397,6 +446,8 @@ namespace Eggnog.Relations.Tests
             Assert.False(MergeFn.Old.IsLattice);
             Assert.False(MergeFn.New.IsLattice);
             Assert.False(MergeFn.Const(new Value(1)).IsLattice);
+            Assert.False(MergeFn.IdConst(new Value(1), true).IsLattice);
+            Assert.Throws<InvalidOperationException>(() => MergeFn.IdConst(new Value(1), true).AsLattice());
 
             var min = MergeFn.Primitive(prim, MergeFn.Old, MergeFn.New);
             Assert.False(min.IsLattice);
@@ -437,6 +488,7 @@ namespace Eggnog.Relations.Tests
             var merge = MergeFn.Primitive(new ExternalFunctionId(2), MergeFn.Const(new Value(1)), MergeFn.Function(new FunctionId(0), MergeFn.Old, MergeFn.New));
             Assert.Equal("(f2 (const 1) (fn0 old new))", merge.ToString());
             Assert.Equal("union", MergeFn.UnionId.ToString());
+            Assert.Equal("(id 4)", MergeFn.IdConst(new Value(4), true).ToString());
             Assert.Equal("assert-eq", MergeFn.AssertEq.ToString());
             Assert.Throws<ArgumentNullException>(() => MergeFn.Primitive(new ExternalFunctionId(0), MergeFn.Old, null!));
         }

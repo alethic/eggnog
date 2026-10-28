@@ -1168,33 +1168,15 @@ namespace Eggnog
             if (type.Kind == ColumnKind.Sort)
             {
                 var id = type.ClassOf(shape.Constant!);
-                var origin = id.Origin;
-                if (origin is null)
-                    throw Error("a class constant is default(ClassId), which names no class");
-
-                if (ReferenceEquals(origin.Graph, graph) == false)
-                    throw Error($"class {id} belongs to another graph");
 
                 // A query's constants are checked at each call, against the scope it runs in.
-                if (query)
-                    return IdConstant(id, origin, type);
+                var refusal = query
+                    ? ClassChecks.CheckConstant(graph, id)
+                    : ClassChecks.CheckRuleConstant(owner, graph, id, "a global rule may hold only classes from the root; define the rule on that scope");
+                if (refusal is not null)
+                    throw Error(refusal);
 
-                if (origin.IsBatch && origin.Committed == false)
-                    throw Error($"class {id} was made by a Write batch that did not commit");
-
-                var scope = origin.IsBatch ? origin.Parent! : origin;
-                if (ClassChecks.AllowedInRule(owner, origin) == false)
-                {
-                    if (scope.Disposed)
-                        throw Error($"class {id} came from scope '{scope.Path}', which is disposed");
-
-                    if (owner is null)
-                        throw Error($"class {id} came from scope '{scope.Path}'; a global rule may hold only classes from the root; define the rule on that scope");
-
-                    throw Error($"class {id} came from scope '{scope.Path}', which is not '{owner.Path}' or an ancestor of it");
-                }
-
-                return IdConstant(id, origin, type);
+                return IdConstant(id, id.Origin!, type);
             }
 
             try

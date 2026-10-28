@@ -147,6 +147,9 @@ namespace Eggnog.Relations
             if (containerRebuild.DirtyCount > 0 && containers!.Log.Active)
                 containers.Log.AppendDirty(containerRebuild.DirtyIds);
 
+            // The rows of egglog's lowered globals are rebuilt with the others, so the merges of the pass read the
+            // class constants as the pass makes them canonical (Bridge/Database.ClassConstants.cs).
+            RefreshClassConstants(unionFind);
             var tableRebuild = ApplyRebuild(unionFind, tables, next);
             var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, next);
             return tableRebuild || refreshed || containerRebuild.Changed;

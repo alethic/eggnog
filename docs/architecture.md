@@ -329,21 +329,31 @@ A function with a merge that is not a lattice (`FunctionMerge<T>`) merges as egg
 `:merge (f old new)` do: `FunctionMerge.New`, `Old` and `Of(name, f)`, where `f` need be neither associative,
 commutative nor idempotent, and `Expression((old, new) => term)`, egglog's merge of any expression: primitives,
 constants, and applications of functions and constructors, which the merge looks up or makes (`MergeFn::Function`), so
-that a merge of classes may make terms, as `(Join old new)` does. An expression is checked and lowered when its function
-is defined, and named by its rendering; a lookup with no row, or a primitive that throws or has no result, fails the
-merge as egglog's merge panics, which fails a rule's run or a host write's flush, and what they wrote stands (section
-2.12). A host batch works out an expression of primitives and constants itself, so its failure fails only the fact; one that
-calls tables only the engine evaluates, after every write of the batch, so the batch stages each write as it comes, and
-flushes what it planned before a later read of the key, a later write of a table the expression reads, and the write
-itself after a merge of classes, as egglog's next command runs after the last one's flush. Each write folds into the value before it, in the order the writes come,
-so a host write of the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys
-equal merges the row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild
-does. A batch stages its unions after its writes, so after it merges classes it flushes and rebuilds before a write of
-such a function whose keys are classes, which then gives egglog's result. A rule's matches reach the merge in the engine's match order,
-which is not egglog's (the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so a rule that
-writes one key more than once in an iteration may leave another value than egglog's. A parallel insert (a flush of many
-rows with `DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the stored row, as
-egglog's does, so its order is not the serial one, which a batch's own reads assume.
+that a merge of classes may make terms, as `(Join old new)` does. A class constant, which must be from the root as a
+global rule's must, stands for egglog's global, which egglog lowers to a function of no keys read by the merge: the
+merge gives the class as the last rebuild pass left it canonical (`MergeFn.IdConst`, which the root's database keeps and
+each rebuild pass refreshes, as the pass rebuilds the global's row), so a merge does not see the unions of its own
+flush, such as a rule's run's, though a primitive of the expression takes the class canonical as it runs; and in a
+function of the class's sort it gives the old value when the old and new agree, at any depth, as that read does; in a
+function of another sort it gives the class then, where egglog's read gives the old value, of that other sort, in its
+place (section 2.13, item 6). A batch that merged classes flushes and rebuilds before a write of a function whose merge
+holds a class constant, whatever its output, as egglog's next command reads the global after the rebuild, and flushes
+after such a write before its next fact, so that a union after the write merges after it, as egglog's next command does.
+An expression is checked and lowered when its function is defined, and named by its rendering; a lookup with no row, or
+a primitive that throws or has no result, fails the merge as egglog's merge panics, which fails a rule's run or a host
+write's flush, and what they wrote stands (section 2.12). A host batch works out an expression of primitives and
+constants itself, so its failure fails only the fact; one that calls tables only the engine evaluates, after every write
+of the batch, so the batch stages each write as it comes, and flushes what it planned before a later read of the key, a
+later write of a table the expression reads, and the write itself after a merge of classes, as egglog's next command
+runs after the last one's flush. Each write folds into the value before it, in the order the writes come, so a host
+write of the value already there folds again (`(+ old new)` of 2 and 2 is 4), and a union that makes two keys equal
+merges the row it keeps, the smaller class's, as the old value with the other as the new, as egglog's rebuild does. A
+batch stages its unions after its writes, so after it merges classes it flushes and rebuilds before a write of such a
+function whose keys are classes, which then gives egglog's result. A rule's matches reach the merge in the engine's
+match order, which is not egglog's (the join-index key order item of [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md)), so
+a rule that writes one key more than once in an iteration may leave another value than egglog's. A parallel insert (a
+flush of many rows with `DegreeOfParallelism` above 1) folds each key's incoming rows before merging them into the
+stored row, as egglog's does, so its order is not the serial one, which a batch's own reads assume.
 
 Only the root writes such a function (decision 2 of [`engine/decisions.md`](engine/decisions.md)). Below it the library
 refuses, before anything is written: a host write of one; a host merge (a union, a constructor write that gives a term
@@ -806,6 +816,15 @@ with egglog" lists:
    value's application among them, in its naive rule, and functions have no defaults: a lookup without a row fails.
 3. No proofs or explanations.
 4. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
+5. A rule or a merge expression may not hold a constant container of classes, which egglog's global may be and egglog
+   lowers as it lowers a class global (`(let $v (vec-of (A)))` read by a rule or by `:merge $v`); it builds the
+   container from terms and class constants with its primitives, such as `Primitives.VecOf`, which gives the same.
+6. A merge expression's class constant is the class as the last rebuild left it, as egglog's read of the global's
+   lowered table is, but a primitive of the expression takes its classes canonical as the merge runs (decision 22),
+   where egglog's takes the ids as they are: within a rule's run it sees the run's own unions, so
+   `(rule () ((union $g $g2) (set (h) 5)))` with `:merge (+ old (set-length (set-of $g $g2)))` counts one class where
+   egglog counts two. And in a function of another sort than the class, the constant gives the class when the old and
+   new values agree, where egglog's read gives the old value, which is not of the class's sort.
 
 Kept by choice, and not a departure to remove: there is no `.egg` front end. Programs are written in C#, egglog's
 `push` and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the

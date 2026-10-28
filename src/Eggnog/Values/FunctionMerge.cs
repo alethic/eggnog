@@ -42,13 +42,15 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// egglog's <c>:merge</c> of any expression over <c>old</c> and <c>new</c>: <paramref name="merge"/> builds it once
-        /// from the two values, out of primitives (<c>Primitives.Max.Of(old, new)</c>), constants, and applications of
-        /// functions and constructors (<c>join.Of(old, new)</c>), which the merge looks up or makes as egglog's does. The
-        /// merge is checked and lowered when its function is defined, and named by its rendering, such as
-        /// <c>(Join old new)</c>. A merge over classes may make terms; a function lookup with no row, or a primitive that
-        /// throws or has no result, fails the merge, as egglog's merge panics, which fails a rule's run, or a host write's
-        /// flush, and keeps what they wrote. As every merge that is not a lattice, only the root writes its function.
+        /// egglog's <c>:merge</c> of any expression over <c>old</c> and <c>new</c>: <paramref name="merge"/> builds it
+        /// once from the two values, out of primitives (<c>Primitives.Max.Of(old, new)</c>), constants, and
+        /// applications of functions and constructors (<c>join.Of(old, new)</c>), which the merge looks up or makes as
+        /// egglog's does. The merge is checked and lowered when its function is defined, and named by its rendering,
+        /// such as <c>(Join old new)</c>. A merge over classes may make terms, and may hold a class of the root,
+        /// egglog's global, which is the class as the last rebuild left it canonical, or the old value when the old and
+        /// new agree in a function of the class's sort; a function lookup with no row, or a primitive that throws or
+        /// has no result, fails the merge, as egglog's merge panics, which fails a rule's run, or a host write's flush,
+        /// and keeps what they wrote. As every merge that is not a lattice, only the root writes its function.
         /// </summary>
         /// <typeparam name="T">The value type, or the sort.</typeparam>
         /// <param name="merge">Builds the merge from the old and the new value.</param>
