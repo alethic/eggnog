@@ -181,7 +181,7 @@ namespace Eggnog
                         throw new ArgumentException($"The merge {Name} of '{functionName}' calls '{table.Name}', a table of another graph.", "merge");
 
                     if (table.ReadScope is { } tag)
-                        throw new ArgumentException($"The merge {Name} of '{functionName}' reads '{table.Name}@{tag.Name}'; a merge reads its own scope.", "merge");
+                        throw new ArgumentException($"The merge {Name} of '{functionName}' reads '{table.Name} @{tag.Name}'; a merge reads its own scope.", "merge");
 
                     return Relations.MergeFn.Function(table.Function, LowerAll(graph, functionName, shape.Arguments, registered));
                 }

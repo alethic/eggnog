@@ -44,7 +44,7 @@ namespace Eggnog
         /// <summary>
         /// Renders a rule as written: <c>(rule (body…) (head…) :ruleset name)</c>, with <c>:naive</c> for a naive rule,
         /// <c>:erasing tag</c> for an erasing rule's licence, or <c>:reads-own-facts "reason"</c> for an exempt rule; a
-        /// scoped application renders as <c>(present@schema p)</c>.
+        /// scoped application renders as <c>(present @schema p)</c>.
         /// </summary>
         /// <param name="rule">The rule.</param>
         /// <returns>The rendering.</returns>
@@ -331,7 +331,7 @@ namespace Eggnog
 
                     break;
                 case ScopedFact scoped:
-                    // Fact.In renders as its facts, each application read in the tagged scope: (present@schema p).
+                    // Fact.In renders as its facts, each application read in the tagged scope: (present @schema p).
                     for (var i = 0; i < scoped.Facts.Length; i++)
                     {
                         if (i > 0)
@@ -382,14 +382,15 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Appends a table's name, with <c>@tag</c> for a scoped read: its handle's tag, or an enclosing
+        /// Appends a table's name, with <c> @tag</c> for a scoped read (a space, so that it never reads as an egglog
+        /// symbol such as a user's table named <c>T@tag</c>): its handle's tag, or an enclosing
         /// <see cref="Fact.In"/>'s.
         /// </summary>
         static void AppendTable(StringBuilder builder, TableHandle table, ScopeTag? enclosing)
         {
             builder.Append(table.Name);
             if ((table.ReadScope ?? enclosing) is { } tag)
-                builder.Append('@').Append(tag.Name);
+                builder.Append(" @").Append(tag.Name);
         }
 
         /// <summary>

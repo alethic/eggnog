@@ -47,7 +47,7 @@ namespace Eggnog.Tests.Scopes
                 r.When(t.Seen.Of(x));
                 r.Then(t.Fact.Of("other"));
             });
-            // The mirrors of fact@outer, fact@inner and the function best@outer: the relations' copy their subsumed rows
+            // The mirrors of fact @outer, fact @inner and the function best @outer: the relations' copy their subsumed rows
             // too, as every relation is subsumable.
             var copyRules = t.Graph.Mirrors.AllCopyRules();
             Assert.Equal(5, copyRules.Length);

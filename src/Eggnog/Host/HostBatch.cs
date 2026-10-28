@@ -1020,7 +1020,7 @@ namespace Eggnog
 
             // Writes are never scoped: a host write goes to the scope written, never through a scoped view.
             if (table.ReadScope is { } tag)
-                throw new ArgumentException($"'{table.Name}@{tag.Name}' is read-only; write '{table.Name}' in the scope itself.");
+                throw new ArgumentException($"'{table.Name} @{tag.Name}' is read-only; write '{table.Name}' in the scope itself.");
         }
 
         /// <summary>

@@ -2,7 +2,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The mirror of one value-only table under one tag: the engine function <c>T@tag</c> that scoped atoms read, and
+    /// The mirror of one value-only table under one tag: the engine function <c>T @tag</c> that scoped atoms read, and
     /// the copy rules that keep it equal to the tagged scope's own view of <c>T</c>: one copies the rows that are not
     /// subsumed, and for a subsumable relation a second subsumes in the mirror the rows that are, so that scoped atoms
     /// skip exactly the rows the tagged scope's own atoms skip.
@@ -50,13 +50,14 @@ namespace Eggnog
         public Relations.FunctionId Function => Handle.Function;
 
         /// <summary>
-        /// Gets the mirror's name, <c>{source}@{tag}</c>: unique, since table names contain no '@' and tag names are
-        /// unique per graph.
+        /// Gets the mirror's name, <c>{source} @{tag}</c>: with a space, so never an egglog symbol, and so never the name
+        /// of a table an egglog program defines, <c>{source}@{tag}</c> among them. Mirrors are told apart by their source
+        /// and tag, not by name.
         /// </summary>
         public string Name => Handle.Name;
 
         /// <summary>
-        /// Gets the copy rule: <c>T(x…) → T@tag(x…)</c> for a relation, <c>T(x…) = v → T@tag(x…) = v</c> for a function
+        /// Gets the copy rule: <c>T(x…) → T @tag(x…)</c> for a relation, <c>T(x…) = v → T @tag(x…) = v</c> for a function
         /// (merged by its lattice). Semi-naive and inheritable; it runs only in mirror syncs.
         /// </summary>
         public CompiledRule CopyRule { get; }

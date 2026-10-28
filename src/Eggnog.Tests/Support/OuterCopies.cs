@@ -3,7 +3,7 @@ namespace Eggnog.Tests.Support
 
     /// <summary>
     /// Rules over a <see cref="ScopeTheory"/> that copy what scoped atoms read under its outer tag into tables of the
-    /// running scope: <c>fact@outer</c> into <c>outer facts</c>, <c>best@outer</c> into <c>bests</c>.
+    /// running scope: <c>fact @outer</c> into <c>outer facts</c>, <c>best @outer</c> into <c>bests</c>.
     /// </summary>
     public sealed class OuterCopies
     {

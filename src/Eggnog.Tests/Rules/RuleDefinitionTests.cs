@@ -279,7 +279,7 @@ namespace Eggnog.Tests.Rules
         public void AHandleScopedToAnotherTagInsideFactInIsRefused()
         {
             var t = new ScopeTheory();
-            AssertScopedRefused(t, "mismatched", r => r.When(Fact.In(t.Inner, t.Fact.In(t.Outer).Of("a"))), "'fact@outer' is inside Fact.In('inner')");
+            AssertScopedRefused(t, "mismatched", r => r.When(Fact.In(t.Inner, t.Fact.In(t.Outer).Of("a"))), "'fact @outer' is inside Fact.In('inner')");
         }
 
         [Fact]
@@ -303,8 +303,8 @@ namespace Eggnog.Tests.Rules
         public void AScopedWriteIsRefused()
         {
             var t = new ScopeTheory();
-            AssertScopedRefused(t, "scoped insert", r => r.Then(t.Fact.In(t.Outer).Of("a")), "'fact@outer' is read-only");
-            AssertScopedRefused(t, "scoped write", r => r.Then(t.Best.In(t.Outer).Of("k").Is(1L)), "'best@outer' is read-only");
+            AssertScopedRefused(t, "scoped insert", r => r.Then(t.Fact.In(t.Outer).Of("a")), "'fact @outer' is read-only");
+            AssertScopedRefused(t, "scoped write", r => r.Then(t.Best.In(t.Outer).Of("k").Is(1L)), "'best @outer' is read-only");
             AssertScopedRefused(t, "scoped head", r => r.Then(Fact.In(t.Outer, t.Fact.Of("a"))), "head facts are writes; Fact.In('outer') is read-only");
         }
 
@@ -357,7 +357,7 @@ namespace Eggnog.Tests.Rules
             var outer = t.Root.CreateChild(t.Outer);
             outer.Freeze();
 
-            // fact@outer exists already, so a second reader of it is fine; best@outer would be new.
+            // fact @outer exists already, so a second reader of it is fine; best @outer would be new.
             t.Rules.DefineRule("second reader", r => r.When(t.Fact.In(t.Outer).Of(r.Var<string>("x"))));
             AssertScopedRefused(t, "late", r =>
             {
@@ -471,7 +471,7 @@ namespace Eggnog.Tests.Rules
                 r.Then(analysis.Of(x));
             }));
             Assert.Equal("analysis from scoped", e.RuleName);
-            Assert.Equal("rule writes analysis table 'analysis' and may not read scoped atoms; it reads 'source@outer'", e.Message);
+            Assert.Equal("rule writes analysis table 'analysis' and may not read scoped atoms; it reads 'source @outer'", e.Message);
             Assert.Empty(t.Rules.Rules);
         }
 
@@ -503,7 +503,7 @@ namespace Eggnog.Tests.Rules
 
         /// <summary>
         /// A failed definition does not count as the first scoped read of a table: after only a failed definition read
-        /// <c>fact@outer</c>, freezing a scope tagged outer still refuses the first real reader.
+        /// <c>fact @outer</c>, freezing a scope tagged outer still refuses the first real reader.
         /// </summary>
         [Fact]
         public void AFailedDefinitionDoesNotCountAsTheFirstScopedRead()

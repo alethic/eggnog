@@ -974,7 +974,7 @@ namespace Eggnog.Tests.Cases
         }
 
         /// <summary>
-        /// A split step brings current the mirrors its matcher reads: the matcher reads <c>present@schema</c> from
+        /// A split step brings current the mirrors its matcher reads: the matcher reads <c>present @schema</c> from
         /// below a writable scope tagged schema that gains the fact after the child last synced, and the run records
         /// the sync as a step.
         /// </summary>
@@ -1243,7 +1243,7 @@ namespace Eggnog.Tests.Cases
 
         /// <summary>
         /// <c>Run</c> resolves, before any work, the tags a split rule's matcher reads. The split reads
-        /// <c>present@schema</c>, which nothing up to the root carries: refused with
+        /// <c>present @schema</c>, which nothing up to the root carries: refused with
         /// <see cref="InvalidOperationException"/>, and the schedule's first step never runs.
         /// </summary>
         [Fact]

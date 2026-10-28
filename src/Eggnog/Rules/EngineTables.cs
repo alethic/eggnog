@@ -313,7 +313,7 @@ namespace Eggnog
 
             if (table.ReadScope is not null)
                 throw Refuse(new ArgumentException(
-                    $"'{table.Name}@{table.ReadScope.Name}' is a scoped view, which {Lower(who)} does not use.", nameof(table)));
+                    $"'{table.Name} @{table.ReadScope.Name}' is a scoped view, which {Lower(who)} does not use.", nameof(table)));
 
             if (writes)
             {

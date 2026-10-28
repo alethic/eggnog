@@ -373,10 +373,18 @@ alone), whether lifts copy the table into a case's parent (`Lift`; by default fa
 do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
 rows may be subsumed (`Subsumable`, section 2.5).
 
-`EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction` so that it
-takes no name a user's table may take (the `$` prefix is reserved). A rule that derives it says the scope has no model. In a case it
-stops the case (section 2.9); elsewhere it is an ordinary fact, unless a run asks to stop on it
-(`RunOptions.StopOnContradiction`).
+`EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
+derives it says the scope has no model. In a case it stops the case (section 2.9); elsewhere it is an ordinary fact,
+unless a run asks to stop on it (`RunOptions.StopOnContradiction`).
+
+A table's name is any non-empty string unique among the user's tables, `@` and a leading `$` included, as in egglog. The
+tables the library makes for itself take no name of the user's: the built-in contradiction relation is not among the
+names a definition checks, so a user's table may also be named `contradiction` or `$contradiction`, and is another table
+(the built-in is told apart by reference); a mirror table (section 2.8) is named `T @tag` and a scheduler's worklist
+`$worklist ...`, names with a space, which no egglog symbol holds. A scoped read renders, and is named in diagnostics,
+as its mirror is, `T @tag`, apart from a user's table named `T@tag`. A rule or diagnostic names the built-in relation and
+a user's `$contradiction` alike, and, since the C# API takes any non-empty name, a scoped read and a user's table named
+`T @tag` alike; each pair is still two tables, told apart by reference.
 
 ### 2.4 Terms and facts
 
@@ -638,7 +646,7 @@ root                      empty and frozen, or a shared theory
 - **Scoped reads.** `table.In(tag)` (and `Fact.In(tag, facts)`) reads a table as the scope tagged `tag` sees it, from a
   rule running in a descendant. Only value-only tables (every column a value type, never a sort) can be read this way,
   so no class id crosses a scope boundary inside a rule. A scoped read compiles to an ordinary atom over a hidden
-  *mirror table* `T@tag`, which copy rules keep equal to the tagged scope's own view of `T`. The copy rules run in the
+  *mirror table* `T @tag`, which copy rules keep equal to the tagged scope's own view of `T`. The copy rules run in the
   tagged scope just before anything reads the mirror, when that scope is writable and has changed since its last sync,
   and once more when it freezes. Creating a mirror is a table definition, and is refused while a live frozen scope
   carries the tag (its mirror would stay empty there). A subsumable relation's mirror is subsumable, and a second copy
@@ -807,7 +815,9 @@ with egglog" lists:
 3. No proofs or explanations.
 4. Relations are unit-valued functions rather than constructors over a fresh sort; this is invisible to users.
 
-Kept by choice, and not a departure to remove: there is no `.egg` front end. Programs are written in C#, egglog's
+Kept by choice, and not a departure to remove: the built-in `EGraph.Contradiction` is named `$contradiction`, a name
+an egglog program may also give a table of its own (section 2.3); the two are different tables, told apart by
+reference, but render alike. And there is no `.egg` front end. Programs are written in C#, egglog's
 `push` and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the
 egglog binary (the roadmap's "Closed").
 

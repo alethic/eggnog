@@ -38,7 +38,7 @@ namespace Eggnog
         /// <summary>
         /// Defines a nullary relation: a fact that holds or not.
         /// </summary>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or the role is <see cref="TableRole.Term"/>.</exception>
@@ -50,7 +50,7 @@ namespace Eggnog
         /// Defines a relation over one column.
         /// </summary>
         /// <typeparam name="T1">The column's type: a registered value type or a defined sort.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
@@ -64,7 +64,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T1">The first column's type.</typeparam>
         /// <typeparam name="T2">The second column's type.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
@@ -79,7 +79,7 @@ namespace Eggnog
         /// <typeparam name="T1">The first column's type.</typeparam>
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <typeparam name="T3">The third column's type.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
@@ -96,7 +96,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <typeparam name="T4">The fourth column's type.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
@@ -113,7 +113,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -133,7 +133,7 @@ namespace Eggnog
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -154,7 +154,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -177,7 +177,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -201,7 +201,7 @@ namespace Eggnog
         /// <typeparam name="T4">The fourth key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -221,7 +221,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -243,7 +243,7 @@ namespace Eggnog
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -266,7 +266,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -290,7 +290,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -315,7 +315,7 @@ namespace Eggnog
         /// <typeparam name="T4">The fourth key's type.</typeparam>
         /// <typeparam name="TOut">The output type: a value type, or a sort, whose classes the function holds without
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
         /// <see cref="TableOptions.Subsumable"/>.</param>
@@ -333,7 +333,7 @@ namespace Eggnog
         /// Defines a nullary constructor (a term head).
         /// </summary>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
@@ -348,7 +348,7 @@ namespace Eggnog
         /// </summary>
         /// <typeparam name="T1">The key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
@@ -364,7 +364,7 @@ namespace Eggnog
         /// <typeparam name="T1">The first key's type.</typeparam>
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
@@ -382,7 +382,7 @@ namespace Eggnog
         /// <typeparam name="T2">The second key's type.</typeparam>
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
@@ -401,7 +401,7 @@ namespace Eggnog
         /// <typeparam name="T3">The third key's type.</typeparam>
         /// <typeparam name="T4">The fourth key's type.</typeparam>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
         /// is always a term.</param>
@@ -458,7 +458,7 @@ namespace Eggnog
         /// <c>DefineRelation</c> overloads stop at four: its facts are <see cref="RelationN.Of"/> of one argument per
         /// column.
         /// </summary>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
         /// <returns>The relation.</returns>
@@ -474,7 +474,7 @@ namespace Eggnog
         /// key. Otherwise as those overloads, with or without a lattice.
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
@@ -491,7 +491,7 @@ namespace Eggnog
         /// as the typed overloads with a merge do; only the root writes it.
         /// </summary>
         /// <typeparam name="TOut">The output type: a value type, or a sort.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
         /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
@@ -508,7 +508,7 @@ namespace Eggnog
         /// argument per key.
         /// </summary>
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
-        /// <param name="name">The name: unique among the graph's tables, non-empty, without '@', not starting with '$'.</param>
+        /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="cost">The cost of a node with this head.</param>
         /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
@@ -558,8 +558,9 @@ namespace Eggnog
             DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
-        /// Defines the built-in nullary relation <see cref="Contradiction"/>, under a name a user's table cannot take
-        /// (<c>$contradiction</c>, a reserved prefix), so that it takes no name an egglog program may use.
+        /// Defines the built-in nullary relation <see cref="Contradiction"/>, named <c>$contradiction</c>. A built-in table
+        /// takes no name of the user's: it is not entered among the names a definition checks, so a user's table may be
+        /// named <c>$contradiction</c> too, as in egglog, and is another table.
         /// </summary>
         /// <returns>The relation.</returns>
         Relation DefineContradiction() =>
@@ -576,7 +577,7 @@ namespace Eggnog
         {
             EngineCallMarker.ThrowIfActive();
             if (builtIn == false)
-                NameRules.ValidateTableName(name, nameof(name));
+                NameRules.ValidateName(name, nameof(name));
             options ??= DefaultTableOptions;
             foreach (var key in keys)
                 CheckOwnType(key ?? throw new ArgumentNullException(nameof(keys), "A column type is null."));
@@ -627,7 +628,7 @@ namespace Eggnog
 
             lock (DefinitionLock)
             {
-                if (tablesByName.ContainsKey(name))
+                if (builtIn == false && tablesByName.ContainsKey(name))
                     throw new ArgumentException($"A table named '{name}' is already defined.", nameof(name));
 
                 var columns = new ColumnType[keys.Length + 1];
@@ -662,7 +663,8 @@ namespace Eggnog
                     Extraction.Declare(constructor);
                 }
 
-                tablesByName.Add(name, handle);
+                if (builtIn == false)
+                    tablesByName.Add(name, handle);
                 var nextTables = new TableHandle[tables.Length + 1];
                 tables.CopyTo(nextTables, 0);
                 nextTables[^1] = handle;

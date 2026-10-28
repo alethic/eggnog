@@ -124,7 +124,9 @@ namespace Eggnog
             }
 
             var description = compiled.Variants.Description + "@" + scheduler.Name;
-            var worklist = graph.TakeWorklist("$worklist:" + description, types);
+            // A worklist is an internal table, never entered among the user's table names, so a user's table of the same
+            // name is another table; its name holds a space, so it is never an egglog symbol.
+            var worklist = graph.TakeWorklist("$worklist " + description, types);
             var query = new RuleProgram(program.Name, program.Registers, program.Atoms, program.Steps,
                 [new HeadOp(HeadOpKind.Collect, null, operands, slot, null)], program.WrittenIdConstants, program.IdConstantOrigins,
                 free.ToArray(), false, program.ReadScopes)

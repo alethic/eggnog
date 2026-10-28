@@ -1017,7 +1017,7 @@ namespace Eggnog
                     throw Error($"rule writes analysis table '{written.Name}' and may read only term and analysis tables; it reads '{SourceName(atom)}'");
 
                 if (atom.Scope is not null)
-                    throw Error($"rule writes analysis table '{written.Name}' and may not read scoped atoms; it reads '{SourceName(atom)}@{atom.Scope.Name}'");
+                    throw Error($"rule writes analysis table '{written.Name}' and may not read scoped atoms; it reads '{SourceName(atom)} @{atom.Scope.Name}'");
             }
 
             // A primitive over the tables reads any of them, which no check of the atoms sees.
@@ -1038,7 +1038,7 @@ namespace Eggnog
         {
             var own = table.ReadScope;
             if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                throw Error($"'{table.Name}@{own.Name}' is inside Fact.In('{enclosing.Name}')");
+                throw Error($"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}')");
 
             var scope = own ?? enclosing;
             if (scope is null)
@@ -1091,7 +1091,7 @@ namespace Eggnog
         void CheckWritable(TableHandle table)
         {
             if (table.ReadScope is { } tag)
-                throw Error($"'{table.Name}@{tag.Name}' is read-only");
+                throw Error($"'{table.Name} @{tag.Name}' is read-only");
 
             if (owner is { IsRoot: false } && table is FunctionHandle { Merge: { } merge })
                 throw Error($"'{table.Name}' has the merge '{merge.Name}', which is not a lattice, so only the root may write it, and a rule local to '{owner.Path}' never runs there");

@@ -218,7 +218,7 @@ namespace Eggnog.Tests.Rules
 
             var mirror = t.Graph.Mirrors.Get(t.Fact, t.Outer);
             var copy = mirror.CopyRule;
-            Assert.Equal($"$mirror/fact@outer#{copy.Serial}", copy.Variants.Default!.Description);
+            Assert.Equal($"$mirror/fact @outer#{copy.Serial}", copy.Variants.Default!.Description);
 
             outer.Assume(t.Fact.Of("a"));
             var report = outer.Run(Schedule.Saturate(t.Rules));

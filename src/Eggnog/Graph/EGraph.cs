@@ -93,9 +93,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the built-in nullary relation "this scope has no model", an addition egglog lacks, named
-        /// <c>$contradiction</c>, a name no user's table can take (the <c>$</c> prefix is reserved), so that it leaves
-        /// <c>contradiction</c> to an egglog program: a fact table like any other, which <see cref="Scope.IsContradictory"/>
-        /// reads and <see cref="RunOptions.StopOnContradiction"/> obeys.
+        /// <c>$contradiction</c>: a fact table like any other, which <see cref="Scope.IsContradictory"/> reads and
+        /// <see cref="RunOptions.StopOnContradiction"/> obeys. It takes no name of the user's, so an egglog program may
+        /// name its own tables <c>contradiction</c> or <c>$contradiction</c>; those are other tables, and this one is
+        /// told apart by reference.
         /// </summary>
         public Relation Contradiction { get; }
 
