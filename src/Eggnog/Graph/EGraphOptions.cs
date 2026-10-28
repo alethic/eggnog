@@ -15,8 +15,9 @@ namespace Eggnog
         /// <summary>
         /// Gets the degree of parallelism of rule tasks and rebuilds at the root. 1, the default: serial and
         /// deterministic, extraction ties included. More: the facts are equal modulo renaming of classes, but
-        /// fresh ids, and so extraction ties, may differ between runs. Must be at least 1
-        /// (<see cref="System.ArgumentOutOfRangeException"/> at graph construction).
+        /// fresh ids, and so extraction ties, may differ between runs. 0: every processor of the machine
+        /// (<see cref="System.Environment.ProcessorCount"/>), as egglog's <c>-j 0</c> when <c>RAYON_NUM_THREADS</c> is
+        /// unset. Must not be negative (<see cref="System.ArgumentOutOfRangeException"/> at graph construction).
         /// </summary>
         public int DegreeOfParallelism { get; init; } = 1;
 

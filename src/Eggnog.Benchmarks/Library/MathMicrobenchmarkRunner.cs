@@ -32,7 +32,7 @@ namespace Eggnog.Benchmarks.Library
 
         /// <summary>
         /// Runs the mode with the arguments after <see cref="Option"/>: <c>--threads n</c> (egglog's <c>-j</c>, default
-        /// 1) and <c>--repetitions n</c> (default 2).
+        /// 1, 0 for every processor) and <c>--repetitions n</c> (default 2).
         /// </summary>
         /// <param name="args">The arguments after <see cref="Option"/>.</param>
         /// <returns>0 when every repetition matched egglog's sizes; 1 when one did not; 2 for a bad command line.</returns>
@@ -42,11 +42,12 @@ namespace Eggnog.Benchmarks.Library
             var repetitions = 2;
             for (var i = 0; i < args.Length; i += 2)
             {
-                var valid = i + 1 < args.Length && int.TryParse(args[i + 1], NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value >= 1;
+                var value = 0;
+                var valid = i + 1 < args.Length && int.TryParse(args[i + 1], NumberStyles.None, CultureInfo.InvariantCulture, out value);
                 if (valid && args[i] == "--threads")
-                    threads = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
-                else if (valid && args[i] == "--repetitions")
-                    repetitions = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+                    threads = value;
+                else if (valid && value >= 1 && args[i] == "--repetitions")
+                    repetitions = value;
                 else
                 {
                     Console.Error.WriteLine($"usage: Eggnog.Benchmarks {Option} [--threads <n>] [--repetitions <n>]");

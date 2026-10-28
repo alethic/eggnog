@@ -87,8 +87,8 @@ time, and take part from the next iteration of every run. A table definition may
 root is frozen; before that it throws `InvalidOperationException` if another thread is using the root at that moment.
 Definitions are taken under the graph's definition lock and published copy-on-write to the engine.
 
-`EGraphOptions` sets the root's degree of parallelism (default 1: serial and deterministic) and whether rule
-statistics record each rule's query plan.
+`EGraphOptions` sets the root's degree of parallelism (default 1: serial and deterministic; 0 for every processor, as
+egglog's `-j 0` when `RAYON_NUM_THREADS` is unset) and whether rule statistics record each rule's query plan.
 
 ### 2.2 Column types and values
 
@@ -728,9 +728,11 @@ Extractors over a frozen scope may run concurrently, one per thread.
 - **Frozen scopes** are immutable, and their reads, queries and extractors are safe from any number of threads.
 - **Parallelism inside one operation** is opt-in. `EGraphOptions.DegreeOfParallelism` sets the root's (default 1:
   serial and deterministic, extraction ties included); with more, the facts are the same but fresh ids, and so
-  extraction ties, may differ between runs. `ScopeOptions.DegreeOfParallelism` sets one scope's; children of a frozen
-  scope are serial unless it is set. Concurrency across scopes is the caller's: children of a frozen scope run on
-  whatever threads the host calls them from.
+  extraction ties, may differ between runs. 0 means every processor of the machine, as egglog's `-j 0` when
+  `RAYON_NUM_THREADS` is unset (that variable is not carried over); a negative degree is refused.
+  `ScopeOptions.DegreeOfParallelism` sets one scope's, with the same meanings; children of a frozen scope are serial
+  unless it is set. Concurrency across scopes is the caller's: children of a frozen scope run
+  on whatever threads the host calls them from.
 - **User delegates** (primitives, lambdas, lattices, filters, cost functions) run inside engine calls, possibly on
   several threads at once. They must be pure and must not call into any graph; such a call throws.
 - A split's cases run on their parent's thread.

@@ -35,6 +35,21 @@ namespace Eggnog
         int engineCalls;
 
         /// <summary>
+        /// Gets the engine's heuristics for a degree of parallelism of at least 0: 0 for every processor of the machine,
+        /// as egglog's <c>-j 0</c> when <c>RAYON_NUM_THREADS</c> is unset (<c>set_num_threads</c> passes it to rayon's
+        /// <c>num_threads</c>, src/lib.rs:540-550, and rayon reads that variable first; it is not carried over), and 1
+        /// for serial.
+        /// </summary>
+        /// <param name="degree">The degree of parallelism, at least 0.</param>
+        /// <returns>The heuristics.</returns>
+        internal static Relations.ParallelHeuristics Parallelism(int degree) => degree switch
+        {
+            0 => Relations.ParallelHeuristics.Default,
+            1 => Relations.ParallelHeuristics.Serial,
+            _ => new Relations.ParallelHeuristics(degree),
+        };
+
+        /// <summary>
         /// Gets the graph's number in the process, in creation order: the order of classes of two graphs, which no
         /// container holds together, so that one never equals the other.
         /// </summary>
@@ -45,19 +60,18 @@ namespace Eggnog
         /// <see cref="Contradiction"/> relation, designated as the engine's contradiction function.
         /// </summary>
         /// <param name="options">The graph's options; <c>null</c> for <see cref="EGraphOptions.Default"/>.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is less than
-        /// 1.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="EGraphOptions.DegreeOfParallelism"/> is
+        /// negative.</exception>
         public EGraph(EGraphOptions? options = null)
         {
             EngineCallMarker.ThrowIfActive();
             Number = System.Threading.Interlocked.Increment(ref graphs);
             options ??= EGraphOptions.Default;
-            if (options.DegreeOfParallelism < 1)
-                throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must be at least 1.");
+            if (options.DegreeOfParallelism < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must not be negative.");
 
             Options = options;
-            var parallelism = options.DegreeOfParallelism == 1 ? Relations.ParallelHeuristics.Serial : new Relations.ParallelHeuristics(options.DegreeOfParallelism);
-            Engine = new Relations.EGraph(parallelism);
+            Engine = new Relations.EGraph(Parallelism(options.DegreeOfParallelism));
             if (options.RecordPlans)
                 Engine.ReportLevel = Relations.ReportLevel.WithPlan;
 

@@ -493,6 +493,8 @@ cargo +1.91.0 build --release --bin egglog
 target/release/egglog.exe -j 1 tests/math-microbenchmark.egg
 ```
 
+`--threads 0` uses every processor, as `-j 0` does when `RAYON_NUM_THREADS` is unset.
+
 egglog's process time includes starting the process and parsing the file, and its `(print-stats)` prints the time of
 search, merge and rebuild per ruleset; the C# mode's first repetition includes JIT compilation. Compare the C# mode's
 warm repetitions with egglog's search, merge and rebuild total, or the BenchmarkDotNet class with egglog's process

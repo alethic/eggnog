@@ -113,7 +113,7 @@ namespace Eggnog
         /// <param name="options">The child's options; <c>null</c> for <see cref="ScopeOptions.Default"/>.</param>
         /// <returns>The child.</returns>
         /// <exception cref="ArgumentException">The tag belongs to another graph, or it is the root's.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The options' degree of parallelism is less than 1.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The options' degree of parallelism is negative.</exception>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="InvalidOperationException">The scope is faulted, at depth 31 (the deepest a scope tree
         /// goes), or in use on another thread; or the call comes from a run observer (a structural call), or from a
@@ -133,8 +133,8 @@ namespace Eggnog
                     throw new ArgumentException("The root tag is the root's; tag a child with a tag of its own.", nameof(tag));
             }
 
-            if (options?.DegreeOfParallelism is < 1)
-                throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must be at least 1.");
+            if (options?.DegreeOfParallelism is < 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "The degree of parallelism must not be negative.");
 
             var held = EnterRead();
             try
@@ -149,7 +149,7 @@ namespace Eggnog
 
                 var contextOptions = new Relations.ContextOptions
                 {
-                    Parallelism = options?.DegreeOfParallelism is { } degree ? new Relations.ParallelHeuristics(degree) : null,
+                    Parallelism = options?.DegreeOfParallelism is { } degree ? EGraph.Parallelism(degree) : null,
                     InheritWatermarks = Graph.InheritWatermarks,
                 };
 
