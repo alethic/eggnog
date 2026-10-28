@@ -508,7 +508,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Equates two operands: unifies registers, binds a constant, or evaluates two constants now.
+        /// Equates two operands: unifies registers, binds a constant, or compares two constants
+        /// (<see cref="EquateConstants"/>).
         /// </summary>
         void Equate(Operand left, Operand right)
         {
@@ -520,12 +521,13 @@ namespace Eggnog
                 Bind(right.Index, left);
             else if (ReferenceEquals(left.Type, right.Type) == false)
                 throw Error($"variables '{Literal(left)}' ({left.Type.Name}) and '{Literal(right)}' ({right.Type.Name}) are equated");
-            else if (SameConstant(left, right) == false)
-                throw Error(NeverMatches(left, right));
+            else
+                EquateConstants(left, right);
         }
 
         /// <summary>
-        /// Merges the classes of two raw registers; their types must agree, and their constants, if both have one.
+        /// Merges the classes of two raw registers; their types must agree. When both have a constant, the class keeps the
+        /// first and the two are compared (<see cref="EquateConstants"/>).
         /// </summary>
         void Unify(int a, int b)
         {
@@ -539,8 +541,8 @@ namespace Eggnog
 
             var ca = constants[ra];
             var cb = constants[rb];
-            if (ca is { } x && cb is { } y && SameConstant(x, y) == false)
-                throw Error(NeverMatches(x, y));
+            if (ca is { } x && cb is { } y)
+                EquateConstants(x, y);
 
             var root = Math.Min(ra, rb);
             var child = Math.Max(ra, rb);
@@ -549,7 +551,8 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Binds a raw register's class to a constant.
+        /// Binds a raw register's class to a constant; a class bound already keeps its constant, compared with the new one
+        /// (<see cref="EquateConstants"/>).
         /// </summary>
         void Bind(int register, Operand constant)
         {
@@ -557,10 +560,10 @@ namespace Eggnog
             if (ReferenceEquals(rawTypes[root], constant.Type) == false)
                 throw Error($"variables '{rawNames[register]}' ({rawTypes[register].Name}) and '{Literal(constant)}' ({constant.Type.Name}) are equated");
 
-            if (constants[root] is { } existing && SameConstant(existing, constant) == false)
-                throw Error(NeverMatches(existing, constant));
-
-            constants[root] = constant;
+            if (constants[root] is { } existing)
+                EquateConstants(existing, constant);
+            else
+                constants[root] = constant;
         }
 
         /// <summary>
@@ -1412,35 +1415,34 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets whether two constant operands may be equal (<c>c1.Is(c2)</c>, directly or through unification). Value
-        /// constants compare by cell, now: equal values of one column type have equal cells, so different cells never
-        /// match. Class constants are never refused: a global rule runs in every scope a run reaches and a local rule in its
+        /// Equates two constant operands of one type (<c>c1.Is(c2)</c>, directly or through unification); the caller keeps
+        /// the first. Equal constants need nothing. Different value constants are accepted, as egglog accepts
+        /// <c>(= 1 2)</c> in a rule, which then never fires, and in a check, which then fails: an
+        /// <see cref="ProgramStepKind.Equal"/> step of the two never holds, so the program has no match. Class constants
+        /// are compared where the rule runs: a global rule runs in every scope a run reaches and a local rule in its
         /// owner's descendants, and a child, which starts as a copy of its parent, may union two classes that differ where
         /// the rule's constants come from. When the two are already one class there (in the owner for a local rule; in the
-        /// root for a global rule) and that can be read now, the union holds in every scope the rule runs in, and the caller
-        /// keeps the first constant. Otherwise (different classes, a scope that cannot be read without racing another
-        /// thread, or a query, whose classes may come from any scope and are checked against the scope it runs in) an
+        /// root for a global rule) and that can be read now, the union holds in every scope the rule runs in and nothing
+        /// is added. Otherwise (different classes, a scope that cannot be read without racing another thread, or a query,
+        /// whose classes may come from any scope and are checked against the scope it runs in) an
         /// <see cref="ProgramStepKind.Equal"/> step keeps only the matches where the two constants are one class in the
-        /// running context, whose canonical forms the engine substitutes, and this returns <c>true</c>. So a definition's
-        /// outcome never depends on another thread. Cost: one <c>Find</c> per class at definition, and one comparison per
-        /// match when the step is added.
+        /// running context, whose canonical forms the engine substitutes. So a definition's outcome never depends on
+        /// another thread. Cost: one <c>Find</c> per class at definition, and one comparison per match when the step is
+        /// added.
         /// </summary>
-        bool SameConstant(Operand x, Operand y)
+        void EquateConstants(Operand x, Operand y)
         {
-            if (x.Kind != y.Kind)
-                return false;
-
             if (x.Kind == OperandKind.Constant)
-                return x.Bits == y.Bits;
-
-            if (x.Index == y.Index)
-                return true;
-
-            if (TryCompareClasses(idCells[x.Index], idCells[y.Index]) == true)
-                return true;
+            {
+                if (x.Bits == y.Bits)
+                    return;
+            }
+            else if (x.Index == y.Index || TryCompareClasses(idCells[x.Index], idCells[y.Index]) == true)
+            {
+                return;
+            }
 
             rawSteps.Add((ProgramStepKind.Equal, null, new[] { x, y }, default));
-            return true;
         }
 
         /// <summary>
@@ -1501,11 +1503,6 @@ namespace Eggnog
             OperandKind.IdConstant => "#" + idCells[operand.Index].ToString(CultureInfo.InvariantCulture),
             _ => rawNames[operand.Index],
         };
-
-        /// <summary>
-        /// The message of two different constants equated.
-        /// </summary>
-        string NeverMatches(Operand x, Operand y) => $"never matches: {Literal(x)} = {Literal(y)} is false";
 
         /// <summary>
         /// Makes a definition error naming the rule.

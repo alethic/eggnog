@@ -65,19 +65,6 @@ namespace Eggnog.Tests.Rules
             }, "variables 'a' (i64) and 'b' (String) are equated");
         }
 
-        [Fact]
-        public void ConstantsThatNeverMatchAreRefused()
-        {
-            var t = new NodeTheory();
-            AssertRefused(t, "constants", r => r.When(((Term<long>)1L).Is(2L)), "never matches: 1 = 2 is false");
-            AssertRefused(t, "substituted", r =>
-            {
-                var x = r.Var<long>("x");
-                r.When(t.Num.Of(x), x.Is(1L), x.Is(2L));
-            }, "never matches: 1 = 2 is false");
-            t.Rules.DefineRule("equal constants are dropped", r => r.When(((Term<long>)1L).Is(1L)));
-        }
-
         /// <summary>
         /// <c>c1.Is(c2)</c> of class constants is never refused. Classes that differ at the root are compared where the
         /// rule runs, so the rule does not match at the root and matches in a child that unions them; classes already

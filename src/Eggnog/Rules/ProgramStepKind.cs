@@ -23,9 +23,11 @@ namespace Eggnog
         NotEqual,
 
         /// <summary>
-        /// Keeps the match where two class constants are one class in the running context: a comparison a definition
-        /// leaves to run time when it cannot drop it as already true (the classes differ where the rule's constants come
-        /// from, that scope cannot be read now without racing another thread, or the program is a query).
+        /// Keeps the match where two constants are equal: two class constants that are one class in the running context,
+        /// a comparison a definition leaves to run time when it cannot drop it as already true (the classes differ where
+        /// the rule's constants come from, that scope cannot be read now without racing another thread, or the program is
+        /// a query); or two different value constants, which never are, so the program has no match, as egglog's
+        /// <c>(= 1 2)</c> in a query.
         /// </summary>
         Equal,
 
