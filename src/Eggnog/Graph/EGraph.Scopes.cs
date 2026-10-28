@@ -15,7 +15,7 @@ namespace Eggnog
         const string RootTagName = "root";
 
         /// <summary>
-        /// The name of <see cref="Contradiction"/>, under the reserved <c>$</c> prefix.
+        /// The name of <see cref="Contradiction"/>, which a user's table may share.
         /// </summary>
         const string ContradictionName = "$contradiction";
 
@@ -124,9 +124,10 @@ namespace Eggnog
 
         /// <summary>
         /// Defines the mirror table of <paramref name="source"/> under <paramref name="tag"/>: an engine function
-        /// named <c>{source}@{tag}</c> with the source's layout (a lattice function gets its own lattice merge, and a
-        /// subsumable relation's mirror is subsumable, so that it holds the source's subsumptions too), and an
-        /// internal handle of the source's kind over it, which is listed neither in <see cref="Tables"/> nor in extraction.
+        /// named <c>{source} @{tag}</c>, a name with a space and so never an egglog symbol such as a user's table
+        /// <c>{source}@{tag}</c> (the mirror is told apart by its source and tag, not by name), with the source's
+        /// layout (a lattice function gets its own lattice merge, and a subsumable relation's mirror is subsumable, so
+        /// that it holds the source's subsumptions too), and an internal handle of the source's kind over it, which is listed neither in <see cref="Tables"/> nor in extraction.
         /// A table definition: while the root is writable it enters the root's guard. Called by the mirror registry
         /// under the definition lock.
         /// </summary>
@@ -138,7 +139,7 @@ namespace Eggnog
         internal TableHandle DefineMirrorTable(TableHandle source, ScopeTag tag, int index)
         {
             TableHandle handle = source.Kind == TableKind.Relation ? new UntypedRelation() : new UntypedFunction();
-            var name = source.Name + "@" + tag.Name;
+            var name = source.Name + " @" + tag.Name;
             var lattice = (source as FunctionHandle)?.Lattice;
             var function = AddEngineTable(name, source.Kind, source.Columns, lattice, source.Output, source.Subsumable);
             handle.Graph = this;

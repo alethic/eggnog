@@ -176,7 +176,7 @@ namespace Eggnog
                 throw Refuse(new ArgumentException($"Table '{table.Name}' belongs to another graph.", nameof(table)));
 
             if (table.ReadScope is not null)
-                throw Refuse(new ArgumentException($"'{table.Name}@{table.ReadScope.Name}' is a scoped view, which a primitive does not use.", nameof(table)));
+                throw Refuse(new ArgumentException($"'{table.Name} @{table.ReadScope.Name}' is a scoped view, which a primitive does not use.", nameof(table)));
         }
 
         /// <summary>

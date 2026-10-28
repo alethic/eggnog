@@ -130,7 +130,7 @@ namespace Eggnog.Tests.Subsumption
                 r.When(fact.Of(n));
                 r.Subsume(fact.In(tag).Of(n));
             }));
-            Assert.Contains("'fact@schema' is read-only", scoped.Message, StringComparison.Ordinal);
+            Assert.Contains("'fact @schema' is read-only", scoped.Message, StringComparison.Ordinal);
             var scopedFact = Assert.Throws<RuleDefinitionException>(() => t.Rules.DefineRule("scoped fact", r =>
             {
                 var n = r.Var<long>("n");

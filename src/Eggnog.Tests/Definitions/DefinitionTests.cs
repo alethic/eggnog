@@ -25,7 +25,6 @@ namespace Eggnog.Tests.Definitions
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("t"));
             Assert.Throws<ArgumentException>(() => graph.DefineFunction<long, long>("t"));
             Assert.Equal("contradiction", graph.DefineRelation("contradiction").Name);
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation("$contradiction"));
             Assert.Equal(3, graph.Tables.Count);
         }
 
@@ -33,11 +32,68 @@ namespace Eggnog.Tests.Definitions
         public void InvalidTableNamesAreRefused()
         {
             var graph = new EGraph();
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("dom@schema"));
-            Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("$internal"));
             Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>(""));
             Assert.Throws<ArgumentNullException>(() => graph.DefineRelation<long>(null!));
             Assert.Single(graph.Tables);
+        }
+
+        /// <summary>
+        /// As in egglog, a table's name may hold <c>'@'</c> anywhere and start with <c>'$'</c>, and such a table is
+        /// written, read and matched as any other. egglog's answer:
+        /// <c>(relation r@x (i64)) (relation $f (i64)) (relation @bad (i64)) (r@x 1) ($f 2) (@bad 3)
+        /// (rule ((r@x a)) (($f a))) (run 1) (check ($f 1))</c> succeeds, and <c>(print-function $f 10)</c> prints
+        /// <c>($f 2)</c> and <c>($f 1)</c>.
+        /// </summary>
+        [Fact]
+        public void TableNamesMayHoldAtSignsAndStartWithADollarAsInEgglog()
+        {
+            var graph = new EGraph();
+            var r = graph.DefineRelation<long>("r@x");
+            var f = graph.DefineRelation<long>("$f");
+            var bad = graph.DefineRelation<long>("@bad");
+            var g = graph.DefineFunction<long, long>("g@h");
+            Assert.Equal(new[] { "r@x", "$f", "@bad", "g@h" }, new[] { r.Name, f.Name, bad.Name, g.Name });
+            Assert.Throws<ArgumentException>(() => graph.DefineRelation<long>("r@x"));
+            var rules = graph.DefineRuleset("rules");
+            rules.DefineRule("copy", rule =>
+            {
+                var a = rule.Var<long>("a");
+                rule.When(r.Of(a));
+                rule.Then(f.Of(a));
+            });
+            graph.Root.Assume(r.Of(1L), f.Of(2L), bad.Of(3L), g.Of(1L).Is(5L));
+
+            graph.Root.Run(Schedule.Saturate(rules));
+
+            Assert.True(graph.Root.Check(f.Of(1L)));
+            Assert.Equal(2, graph.Root.CountRows(f));
+            Assert.True(graph.Root.Check(bad.Of(3L)));
+            Assert.True(graph.Root.Check(g.Of(1L).Is(5L)));
+            Assert.Equal("(rule ((r@x a)) (($f a)) :ruleset rules)", rules.Rules[0].ToString());
+        }
+
+        /// <summary>
+        /// The built-in <see cref="EGraph.Contradiction"/> takes no name of the user's: a user's table named
+        /// <c>$contradiction</c>, which egglog accepts (<c>(relation $contradiction ()) ($contradiction)
+        /// (check ($contradiction))</c> succeeds), is another table, and holding it is no contradiction.
+        /// </summary>
+        [Fact]
+        public void AUsersTableMayBeNamedAsTheBuiltInContradiction()
+        {
+            var graph = new EGraph();
+            var own = graph.DefineRelation("$contradiction");
+            Assert.NotSame(graph.Contradiction, own);
+            Assert.Equal(graph.Contradiction.Name, own.Name);
+            Assert.Throws<ArgumentException>(() => graph.DefineRelation("$contradiction"));
+            Assert.Equal(new TableHandle[] { graph.Contradiction, own }, graph.Tables);
+
+            graph.Root.Assume(own.Of());
+
+            Assert.True(graph.Root.Check(own.Of()));
+            Assert.False(graph.Root.IsContradictory);
+            Assert.False(graph.Root.Check(graph.Contradiction.Of()));
+            graph.Root.Assume(graph.Contradiction.Of());
+            Assert.True(graph.Root.IsContradictory);
         }
 
         [Fact]

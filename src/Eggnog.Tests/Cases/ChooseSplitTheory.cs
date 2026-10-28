@@ -11,7 +11,7 @@ namespace Eggnog.Tests.Cases
         /// <summary>
         /// Defines the theory in a new graph.
         /// </summary>
-        /// <param name="scoped">Whether the split's body also reads <c>present@schema(p)</c>.</param>
+        /// <param name="scoped">Whether the split's body also reads <c>present @schema(p)</c>.</param>
         public ChooseSplitTheory(bool scoped = false)
         {
             Graph = new EGraph();

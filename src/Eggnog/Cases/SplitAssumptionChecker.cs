@@ -265,7 +265,7 @@ namespace Eggnog
                 throw Error($"table '{table.Name}' belongs to another graph");
 
             if (table.ReadScope is { } tag)
-                throw Error($"'{table.Name}@{tag.Name}' is read-only");
+                throw Error($"'{table.Name} @{tag.Name}' is read-only");
 
             if (table is FunctionHandle { Merge: { } merge })
                 throw Error($"'{table.Name}' has the merge '{merge.Name}', which is not a lattice, so only the root may write it, and a case is a child");

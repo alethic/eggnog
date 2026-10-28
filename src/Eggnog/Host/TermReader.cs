@@ -510,7 +510,7 @@ namespace Eggnog
         {
             var own = table.ReadScope;
             if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                throw new ArgumentException($"'{table.Name}@{own.Name}' is inside Fact.In('{enclosing.Name}').");
+                throw new ArgumentException($"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}').");
 
             var tag = own ?? enclosing;
             if (tag is null)
@@ -529,7 +529,7 @@ namespace Eggnog
         {
             var own = table.ReadScope;
             if (own is not null && enclosing is not null && ReferenceEquals(own, enclosing) == false)
-                return $"'{table.Name}@{own.Name}' is inside Fact.In('{enclosing.Name}')";
+                return $"'{table.Name} @{own.Name}' is inside Fact.In('{enclosing.Name}')";
 
             var tag = own ?? enclosing;
             if (tag is null)

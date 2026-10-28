@@ -146,8 +146,45 @@ namespace Eggnog.Tests.Scopes
             Assert.Equal(0, b.Mirrors.FrozenCount(bTheory.Schema));
             // The relation present is subsumable, as every relation is, so its mirror has a copy rule for its subsumed rows.
             Assert.Equal(3, b.Mirrors.CopyRules(bTheory.Schema).Length);
-            Assert.Equal(new[] { "dom@schema", "present@schema", "subsumed present@schema" },
+            Assert.Equal(new[] { "dom @schema", "present @schema", "subsumed present @schema" },
                 b.Mirrors.AllCopyRules().Select(r => r.Rule.Name.Replace("copy ", "", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal));
+        }
+
+        /// <summary>
+        /// A user's table named <c>fact@outer</c>, an egglog symbol, is a table of its own beside the mirror of <c>fact</c>
+        /// under <c>outer</c>, whose name, <c>fact @outer</c>, holds a space and so is never an egglog symbol: the scoped
+        /// read sees the tagged scope's <c>fact</c>, never the user's table, the user's table sees only its own rows, and
+        /// the two render apart.
+        /// </summary>
+        [Fact]
+        public void AUsersTableNamedAsAScopedReadIsNotTheMirror()
+        {
+            var graph = new EGraph();
+            var fact = graph.DefineRelation<string>("fact");
+            var outerTag = graph.DefineScopeTag("outer");
+            var own = graph.DefineRelation<string>("fact@outer");
+            var scoped = graph.DefineQuery("scoped", q => q.When(fact.In(outerTag).Of(q.Var<string>("x"))));
+            var scopedB = graph.DefineQuery("scoped b", q => q.When(fact.In(outerTag).Of("b")));
+            var plain = graph.DefineQuery("plain", q => q.When(own.Of(q.Var<string>("x"))));
+            var later = graph.DefineRelation<string>("fact @outer");
+            var outer = graph.Root.CreateChild(outerTag);
+            outer.Assume(fact.Of("a"));
+            outer.Assume(own.Of("b"));
+            var inner = outer.CreateChild();
+
+            Assert.Equal(1, inner.Count(scoped));
+            Assert.Equal(0, inner.Count(scopedB));
+            Assert.Equal(1, inner.Count(plain));
+            Assert.True(inner.Check(own.Of("b")));
+            Assert.False(inner.Check(own.Of("a")));
+            Assert.Equal(0, inner.CountRows(later));
+            Assert.Equal(new[] { "copy fact @outer", "copy subsumed fact @outer" },
+                graph.Mirrors.AllCopyRules().Select(r => r.Rule.Name).OrderBy(n => n, StringComparer.Ordinal));
+            Assert.Equal(new TableHandle[] { graph.Contradiction, fact, own, later }, graph.Tables);
+            Assert.Equal("fact@outer", own.ToString());
+            Assert.Equal("fact @outer", fact.In(outerTag).ToString());
+            Assert.Equal("(query ((fact @outer x)) (x))", scoped.ToString());
+            Assert.Equal("(query ((fact@outer x)) (x))", plain.ToString());
         }
 
         /// <summary>

@@ -38,7 +38,7 @@ namespace Eggnog.Tests.Rendering
                 s.Assume(dom.Of(p).Is(Primitives.Singleton<string>().Of(v)), present.Of(p));
             }, cases);
 
-            Assert.Equal("(split ((present@schema p) (= d (dom p))) (cases v d) (key p) ((set (dom p) (set-of v)) (present p)) :case-tag case)", split.ToString());
+            Assert.Equal("(split ((present @schema p) (= d (dom p))) (cases v d) (key p) ((set (dom p) (set-of v)) (present p)) :case-tag case)", split.ToString());
             Assert.Equal(new[] { schema }, split.ReadScopes);
             Assert.Equal("(saturate (run horn) (split (by kind) (run horn)))", Schedule.Saturate(horn, Schedule.Split(split, horn)).ToString());
             var untagged = graph.DefineDomainSplit("plain", dom, [present]);
@@ -187,7 +187,7 @@ namespace Eggnog.Tests.Rendering
             var tautology = c.Rewrite.Rules[4];
             Assert.Equal("declared tautology", tautology.Name);
             Assert.Equal(
-                "(rule ((= s (inset e p)) (present@schema p) (= d (dom@schema p)) (guard (set-subset d s))) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
+                "(rule ((= s (inset e p)) (present @schema p) (= d (dom @schema p)) (guard (set-subset d s))) ((union e (PTrue))) :ruleset rewrite :erasing schema)",
                 tautology.ToString());
 
             var lower = c.Rewrite.Rules[0];
@@ -196,9 +196,9 @@ namespace Eggnog.Tests.Rendering
                 lower.ToString());
 
             // Fact.In renders its facts read in the tagged scope; a scoped view renders with its tag.
-            Assert.Equal("(present@schema \"kind\") (= (dom@schema \"kind\") (set-of \"a\"))",
+            Assert.Equal("(present @schema \"kind\") (= (dom @schema \"kind\") (set-of \"a\"))",
                 Fact.In(c.Schema, c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a"))).ToString());
-            Assert.Equal("dom@schema", c.Dom.In(c.Schema).ToString());
+            Assert.Equal("dom @schema", c.Dom.In(c.Schema).ToString());
             Assert.Equal("dom", c.Dom.ToString());
         }
 

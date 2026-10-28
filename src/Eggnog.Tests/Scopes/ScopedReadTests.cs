@@ -42,7 +42,7 @@ namespace Eggnog.Tests.Scopes
 
             // The mirror table itself, read in the tagged scope, holds the same rows.
             var mirror = t.Graph.Mirrors.Get(t.Fact, t.Outer);
-            Assert.Equal("fact@outer", mirror.Name);
+            Assert.Equal("fact @outer", mirror.Name);
             Assert.DoesNotContain(mirror.Handle, t.Graph.Tables);
             Assert.Equal(2, outer.Engine.TableSize(mirror.Function));
             Assert.Equal(outer.CountRows(t.Fact), outer.Engine.TableSize(mirror.Function));
@@ -160,7 +160,7 @@ namespace Eggnog.Tests.Scopes
             Assert.Contains("read-only", Assert.Throws<ArgumentException>(() => outer.Assume(t.Best.In(t.Outer).Of("k").Is(1L))).Message);
             Assert.Contains("read-only", Assert.Throws<ArgumentException>(() => outer.Assume(Fact.In(t.Outer, t.Fact.Of("a")))).Message);
             Assert.False(outer.Check(t.Fact.Of("a")));
-            Assert.Equal("fact@outer", t.Fact.In(t.Outer).ToString());
+            Assert.Equal("fact @outer", t.Fact.In(t.Outer).ToString());
             Assert.Same(t.Outer, t.Fact.In(t.Outer).ReadScope);
             Assert.Null(t.Fact.ReadScope);
         }
@@ -181,7 +181,7 @@ namespace Eggnog.Tests.Scopes
             var view = t.Edge.In(t.Outer);
             Assert.Same(t.Outer, view.ReadScope);
             Assert.Null(t.Edge.ReadScope);
-            Assert.Equal("edge@outer", view.ToString());
+            Assert.Equal("edge @outer", view.ToString());
             Assert.True(inner.Check(view.Of(1L, 2L)));
             Assert.False(inner.Check(view.Of(2L, 3L)));
             Assert.True(inner.Check(t.Edge.Of(2L, 3L)));

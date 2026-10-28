@@ -6,7 +6,7 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The sync of mirrors just before use: before an iteration, a query or a freeze reads <c>T@tag</c> in a
+    /// The sync of mirrors just before use: before an iteration, a query or a freeze reads <c>T @tag</c> in a
     /// scope, the tagged scope runs the tag's copy rules once if it is writable and changed since its last sync.
     /// </summary>
     /// <remarks>

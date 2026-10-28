@@ -397,8 +397,8 @@ namespace Eggnog.Tests.Predicates.Scoped
             });
 
             // Deletions read facts only from the schema, and the ruleset's licence checks it: a conjunct's own
-            // consequences in the query (present(kind) from StrEq(kind, A)) can never delete it. present@schema and
-            // dom@schema are mirrors.
+            // consequences in the query (present(kind) from StrEq(kind, A)) can never delete it. present @schema and
+            // dom @schema are mirrors.
             Rewrite.DefineRule("declared tautology", r =>
             {
                 var (e, p) = r.Vars<Pred, string>("e", "p");

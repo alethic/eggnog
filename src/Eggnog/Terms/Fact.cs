@@ -82,7 +82,7 @@ namespace Eggnog
 
         /// <summary>
         /// Renders the fact as an s-expression: <c>(present p)</c>, <c>(= d (dom p))</c>, <c>(!= a b)</c>; a scoped
-        /// application renders as <c>(present@schema p)</c>.
+        /// application renders as <c>(present @schema p)</c>.
         /// </summary>
         /// <returns>The rendering.</returns>
         public override string ToString() => SExpression.Render(this);

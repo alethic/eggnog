@@ -92,10 +92,11 @@ namespace Eggnog
         public ScopeTag? ReadScope { get; private set; }
 
         /// <summary>
-        /// Gets the table's name, or <c>dom@schema</c> for a scoped view.
+        /// Gets the table's name, or <c>dom @schema</c> for a scoped view, with a space, so that it never reads as an egglog symbol
+        /// such as a user's table named <c>dom@schema</c>.
         /// </summary>
         /// <returns>The name.</returns>
-        public override string ToString() => ReadScope is { } tag ? Name + "@" + tag.Name : Name;
+        public override string ToString() => ReadScope is { } tag ? Name + " @" + tag.Name : Name;
 
         /// <summary>
         /// Gets the unscoped table: for a scoped view, the table it views; for a mirror handle, the table it mirrors;
@@ -104,7 +105,7 @@ namespace Eggnog
         internal TableHandle? Source { get; set; }
 
         /// <summary>
-        /// Gets the tag of a mirror handle: the handle over the engine function <c>T@tag</c>, which scoped reads of the
+        /// Gets the tag of a mirror handle: the handle over the engine function <c>T @tag</c>, which scoped reads of the
         /// table under the tag compile to and which only copy rules write. <c>null</c> for every other handle.
         /// </summary>
         internal ScopeTag? MirrorTag { get; set; }

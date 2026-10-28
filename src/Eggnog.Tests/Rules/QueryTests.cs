@@ -751,7 +751,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(3, inner.Count(tagged));
             Assert.Equal(3, outer.Count(tagged));
             Assert.Equal(4, inner.CountRows(t.Fact));
-            Assert.Equal("(query ((fact@outer x) (fact x)) (x))", tagged.ToString());
+            Assert.Equal("(query ((fact @outer x) (fact x)) (x))", tagged.ToString());
         }
 
         /// <summary>
