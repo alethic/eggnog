@@ -5,9 +5,10 @@ namespace Eggnog
 
     /// <summary>
     /// The equal filter, one per graph: <c>[a, b] → unit</c> when the cells are equal, nothing otherwise. Its operands are
-    /// class constants whose comparison a definition leaves to run time (<see cref="ProgramStepKind.Equal"/>), which the
-    /// engine substitutes with their canonical forms in the running context, so equal cells mean one class there. No user
-    /// code runs; immutable and thread-safe.
+    /// constants a body equates (<see cref="ProgramStepKind.Equal"/>): class constants whose comparison a definition
+    /// leaves to run time, which the engine substitutes with their canonical forms in the running context, so equal cells
+    /// mean one class there, or two different value constants, which never hold. No user code runs; immutable and
+    /// thread-safe.
     /// </summary>
     internal sealed class EqualFunction : Relations.ExternalFunction
     {

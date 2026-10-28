@@ -206,7 +206,8 @@ namespace Eggnog
         internal Relations.ExternalFunctionId NotEqual { get; }
 
         /// <summary>
-        /// Gets the graph's equal filter, for class-constant comparisons left to run time.
+        /// Gets the graph's equal filter: for class-constant comparisons left to run time, and for two different value
+        /// constants a body equates, which never hold.
         /// </summary>
         internal Relations.ExternalFunctionId Equal { get; }
 

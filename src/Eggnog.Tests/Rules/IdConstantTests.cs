@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Rules
         /// constants already in one class are equal, so the rule compiles and matches.
         /// </summary>
         [Fact]
-        public void ClassConstantsAlreadyEqualAtDefinitionAreNotNeverMatches()
+        public void ClassConstantsAlreadyEqualAtDefinitionMatch()
         {
             var t = new NodeTheory();
             var a = t.Root.Make(t.A.Of());

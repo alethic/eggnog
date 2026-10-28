@@ -40,10 +40,10 @@ namespace Eggnog.Tests.Differential
 
         // The state of the rule being generated. The compiler shares the output of applications with equal arguments
         // (functions are functional), so a body never repeats an application, and never equates two variables that are
-        // keys of applications: two outputs pinned to different constants would never match, a definition error. A
-        // computation checked against a constant (p(args).Is(c), a check) pins the register it shares with every equal
-        // computation of the body, so it is used only when the body has no equal computation, and no later let repeats
-        // it.
+        // keys of applications: two outputs pinned to different constants would never match, so the rule would never fire
+        // and add nothing to the comparison. A computation checked against a constant (p(args).Is(c), a check) pins the
+        // register it shares with every equal computation of the body, so it is used only when the body has no equal
+        // computation, and no later let repeats it.
         List<(string Name, DiffType Type)> variables = new();
         List<string> headVariables = new();
         HashSet<string> applications = new(StringComparer.Ordinal);
