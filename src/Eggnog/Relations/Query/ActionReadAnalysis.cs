@@ -17,9 +17,11 @@ namespace Eggnog.Relations
     /// <see cref="InstrKind.AssertNe"/>, <see cref="InstrKind.AssertAnyNe"/> or <see cref="InstrKind.ReadCounter"/>; a
     /// <see cref="InstrKind.LookupOrInsertDefault"/> of a key or the union column of a shared constructor (its row
     /// exists after the ancestor's run, and its value changes only by unions, which a descendant sees through its find);
-    /// any lookup of the store's union-find (canonicalization); or an <see cref="InstrKind.External"/> or
-    /// <see cref="InstrKind.ExternalWithFallback"/> whose functions all have <see cref="ExternalFunction.ReadsTables"/>
-    /// <c>false</c>.
+    /// a <see cref="InstrKind.LookupOrInsertDefault"/> whose destination no later instruction reads (a relation's fact
+    /// in a head, egglog's lookup-or-insert of a relation's constructor), which writes at most the row an
+    /// <see cref="InstrKind.Insert"/> of it would; any lookup of the store's union-find (canonicalization); or an
+    /// <see cref="InstrKind.External"/> or <see cref="InstrKind.ExternalWithFallback"/> whose functions all have
+    /// <see cref="ExternalFunction.ReadsTables"/> <c>false</c>.
     /// </para>
     /// <para>
     /// Everything else reads a row a descendant can change, and an inherited watermark would never re-fire the old match:
@@ -30,7 +32,8 @@ namespace Eggnog.Relations
     /// reads tables or is not registered. Conservative by construction: an unknown instruction is not query-determined.
     /// </para>
     /// <para>
-    /// Cold path: once per rule, when it is planned. O(instructions), without allocation.
+    /// Cold path: once per rule, when it is planned. O(instructions), without allocation, apart from the scan for reads
+    /// of a lookup-or-insert's destination, which lists the operands of the instructions after it.
     /// </para>
     /// </remarks>
     internal static class ActionReadAnalysis
@@ -48,15 +51,33 @@ namespace Eggnog.Relations
             ArgumentNullException.ThrowIfNull(actions);
             ArgumentNullException.ThrowIfNull(schema);
             ArgumentNullException.ThrowIfNull(externals);
-            foreach (var instr in actions.Instrs)
-                if (IsQueryDetermined(instr, schema, externals) == false)
-                    return false;
+            var instrs = actions.Instrs;
+            for (var i = 0; i < instrs.Length; i++)
+                if (IsQueryDetermined(instrs[i], schema, externals) == false)
+                    if (instrs[i] is not LookupOrInsertDefaultInstr lookup || IsRead(instrs, i + 1, lookup.Destination))
+                        return false;
 
             return true;
         }
 
         /// <summary>
-        /// Gets whether one instruction is query-determined (see the type remarks).
+        /// Gets whether an instruction from <paramref name="start"/> on reads <paramref name="variable"/>.
+        /// </summary>
+        static bool IsRead(Instr[] instrs, int start, Variable variable)
+        {
+            for (var i = start; i < instrs.Length; i++)
+                foreach (var (entry, isEntry, _) in ActionSubstituter.Operands(instrs[i]))
+                    if (isEntry && entry.IsVariable && entry.Variable == variable)
+                        return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets whether one instruction, judged alone, is query-determined (see the type remarks). It does not apply the
+        /// exemption of a <see cref="InstrKind.LookupOrInsertDefault"/> whose destination no later instruction reads,
+        /// which depends on the rest of the program: <see cref="IsQueryDetermined(ActionInfo, LayeredSchema,
+        /// ExternalFunctionRegistry)"/> applies it.
         /// </summary>
         /// <param name="instr">The instruction.</param>
         /// <param name="schema">The store's schema.</param>

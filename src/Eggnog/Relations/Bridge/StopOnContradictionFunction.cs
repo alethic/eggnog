@@ -4,7 +4,7 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The early stop of a case: called by every rule right after it inserts into the e-graph's contradiction function,
+    /// The early stop of a case: called by every rule right after it writes into the e-graph's contradiction function,
     /// it stops the run's search when the running context stops on contradictions
     /// (<see cref="ContextOptions.StopOnContradiction"/>), so a vacuous case does no more work. Elsewhere it does
     /// nothing: for host runs a contradiction is an ordinary fact.

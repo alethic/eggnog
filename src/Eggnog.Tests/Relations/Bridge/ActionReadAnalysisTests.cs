@@ -120,9 +120,9 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// The analysis as rules see it, through the bridge's lowering: writes, unions, canonicalization and
-        /// constructor terms inherit; a naive rule, a function lookup, a subsumption, a table-reading primitive on
-        /// either side do not.
+        /// The analysis as rules see it, through the bridge's lowering: writes, unions, canonicalization, constructor
+        /// terms and a relation's fact whose output nothing reads inherit; a naive rule, a function lookup, a relation
+        /// lookup whose output is read, a subsumption, a table-reading primitive on either side do not.
         /// </summary>
         [Fact]
         public void BridgeRulesInheritExactlyWhenTheirActionsAreQueryDetermined()
@@ -163,7 +163,8 @@ namespace Eggnog.Relations.Tests
                 (Rule("pure-lhs", true, (rb, x, y) => rb.QueryPrim(pure, [x, x], ColumnTy.Id)), true),
                 (Rule("naive", false, (rb, x, y) => rb.Set(g.Path, [x, y, unit])), false),
                 (Rule("lookup-function", true, (rb, x, y) => rb.Lookup(g.Low, [x], () => "")), false),
-                (Rule("lookup-relation", true, (rb, x, y) => rb.Lookup(g.Path, [x, y], () => "")), false),
+                (Rule("fact", true, (rb, x, y) => rb.Lookup(g.Path, [x, y], () => "")), true),
+                (Rule("lookup-relation", true, (rb, x, y) => rb.Set(g.Path, [x, y, rb.Lookup(g.Path, [x, y], () => "")])), false),
                 (Rule("subsume", true, (rb, x, y) => rb.Subsume(subsumable, [x])), false),
                 (Rule("reading-rhs", true, (rb, x, y) => rb.CallExternalFunc(reading, [x], ColumnTy.Id, () => "")), false),
                 (Rule("reading-lhs", true, (rb, x, y) => rb.QueryPrim(reading, [x, x], ColumnTy.Id)), false),

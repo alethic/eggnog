@@ -63,7 +63,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal(variant.Owned[1], actions[1].Function);
             Assert.Equal(Relations.RuleActionKind.QueryPrim, actions[2].Kind);
             Assert.Equal(t.Graph.NotEqual, actions[2].Function);
-            Assert.Equal(Relations.RuleActionKind.Insert, actions[3].Kind);
+            Assert.Equal(Relations.RuleActionKind.LookupOrInsert, actions[3].Kind);
         }
 
         [Fact]
@@ -80,7 +80,8 @@ namespace Eggnog.Tests.Rules
                 r.Then(t.Tag.Of(m), f.Of(x).Is(x), m.Is(t.A.Of()), t.Wrap.Of(m).Is(t.Lit.Of(x)));
             });
 
-            // m.Is(A()) writes A's output (the union-id merge unions it with m); two constructor terms union.
+            // A relation's fact is a lookup-or-insert, as in egglog, where a relation is a constructor. m.Is(A()) writes
+            // A's output (the union-id merge unions it with m); two constructor terms union.
             Assert.Equal(
                 new[]
                 {
@@ -94,9 +95,9 @@ namespace Eggnog.Tests.Rules
                 new[]
                 {
                     Relations.RuleActionKind.CallExternal,
-                    Relations.RuleActionKind.Insert,
                     Relations.RuleActionKind.LookupOrInsert,
-                    Relations.RuleActionKind.Insert,
+                    Relations.RuleActionKind.LookupOrInsert,
+                    Relations.RuleActionKind.LookupOrInsert,
                     Relations.RuleActionKind.Insert,
                     Relations.RuleActionKind.Insert,
                     Relations.RuleActionKind.LookupOrInsert,

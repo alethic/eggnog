@@ -76,7 +76,7 @@ namespace Eggnog.Relations
         public void Ground(VariableId variable) => grounded.Insert(variable.Index);
 
         /// <summary>
-        /// Sets the contradiction early stop: every head insert into <paramref name="table"/>, the e-graph's
+        /// Sets the contradiction early stop: every head write into <paramref name="table"/>, the e-graph's
         /// contradiction function, is followed by a call to <paramref name="stop"/>
         /// (<see cref="StopOnContradictionFunction"/>, <see cref="TryGetStop"/>).
         /// </summary>
@@ -90,9 +90,9 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the early-stop function to call after a head insert into <paramref name="table"/>.
+        /// Gets the early-stop function to call after a head write into <paramref name="table"/>.
         /// </summary>
-        /// <param name="table">The table inserted into.</param>
+        /// <param name="table">The table written into.</param>
         /// <param name="stop">The early-stop function.</param>
         /// <returns><c>true</c> if <paramref name="table"/> is the contradiction function's table.</returns>
         public bool TryGetStop(TableId table, out ExternalFunctionId stop)

@@ -22,12 +22,14 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the most engine iterations the run may make, in every scope of the run, cases included (mirror syncs do not
-        /// count); must be at least 0. The default is 10,000. Since every case's iterations count, a run that splits needs a
-        /// larger limit than the same theory without splits. There is no budget per case: to bound each case of a split,
-        /// pass <c>Repeat(n, steps)</c> as its in-case schedule (see <see cref="Schedule.Split(SplitRule, Schedule)"/>),
-        /// so that one case that does not terminate cannot use up this limit before the split step lifts.
+        /// count); must be at least 0. The default, <see cref="int.MaxValue"/>, is the largest count the iteration counter
+        /// holds and in effect sets no limit: as in egglog, a <c>Saturate</c> runs until nothing changes. Since every case's
+        /// iterations count, a run that splits uses up a limit faster than the same theory without splits. There is no
+        /// budget per case: to bound each case of a split, pass <c>Repeat(n, steps)</c> as its in-case schedule (see
+        /// <see cref="Schedule.Split(SplitRule, Schedule)"/>), so that one case that does not terminate cannot use up a
+        /// limit that is set before the split step lifts.
         /// </summary>
-        public int IterationLimit { get; init; } = 10_000;
+        public int IterationLimit { get; init; } = int.MaxValue;
 
         /// <summary>
         /// Gets whether the run stops once the scope is contradictory (<see cref="EGraph.Contradiction"/> holds): every

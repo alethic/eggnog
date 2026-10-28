@@ -150,6 +150,77 @@ namespace Eggnog.Tests.Deletion
             Assert.Equal(3L, t.Root.Get(total.Of("k")));
         }
 
+        /// <summary>
+        /// A rule that deletes a row and writes it back settles, as in egglog: a fact the table already holds stages
+        /// nothing, so the delete wins and the next iteration finds nothing to match. In a child of a frozen root too.
+        /// </summary>
+        [Fact]
+        public void ARuleThatDeletesAndWritesBackARowSettles()
+        {
+            var root = Rewriting();
+            var report = root.Root.Run(Schedule.Saturate(root.Rules));
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(0, root.Root.CountRows(root.Num));
+
+            var t = Rewriting();
+            t.Root.Freeze();
+            var child = t.Root.CreateChild();
+            report = child.Run(Schedule.Saturate(t.Rules));
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(0, child.CountRows(t.Num));
+            Assert.Equal(2, t.Root.CountRows(t.Num));
+
+            static NodeTheory Rewriting()
+            {
+                var t = new NodeTheory();
+                t.Rules.DefineRule("rewrite", r =>
+                {
+                    var n = r.Var<long>("n");
+                    r.When(t.Num.Of(n));
+                    r.Delete(t.Num.Of(n));
+                    r.Then(t.Num.Of(n));
+                });
+                t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L));
+                return t;
+            }
+        }
+
+        /// <summary>
+        /// One rule deletes a row the table holds and another writes it in the same iteration: the write stages nothing,
+        /// so the row goes, as in egglog. A row the table lacks is written and survives a delete of it.
+        /// </summary>
+        [Fact]
+        public void AWriteOfAHeldRowDoesNotOutliveADeleteOfIt()
+        {
+            var t = new NodeTheory();
+            var keep = t.Graph.DefineRelation<long>("keep");
+            t.Rules.DefineRule("drop", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(keep.Of(n));
+                r.Delete(t.Num.Of(n));
+            });
+            t.Rules.DefineRule("add", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(keep.Of(n));
+                r.Then(t.Num.Of(n));
+            });
+            t.Rules.DefineRule("fresh", r =>
+            {
+                var n = r.Var<long>("n");
+                r.When(keep.Of(n));
+                r.Then(t.Num.Of(Primitives.Add.Of(n, 10L)));
+                r.Delete(t.Num.Of(Primitives.Add.Of(n, 10L)));
+            });
+            t.Root.Assume(keep.Of(1L), t.Num.Of(1L));
+
+            t.Root.Run(t.Rules);
+
+            Assert.False(t.Root.Check(t.Num.Of(1L)));
+            Assert.True(t.Root.Check(t.Num.Of(11L)));
+        }
+
         [Fact]
         public void AScopeWithALiveChildCannotDelete()
         {

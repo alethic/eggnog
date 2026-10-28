@@ -637,6 +637,39 @@ namespace Eggnog.Tests.Cases
             Assert.IsType<ScopeContradictedException>(refused);
         }
 
+        /// <summary>
+        /// A rule that derives <c>graph.Contradiction</c> in a case cuts the case's search short once its first batch of
+        /// matches runs, although the rule layer writes the relation through a lookup-or-insert; in a plain child the
+        /// contradiction is an ordinary fact and the search runs in full.
+        /// </summary>
+        [Fact]
+        public void ARuleThatDerivesTheContradictionCutsACasesSearchShort()
+        {
+            var t = new NodeTheory();
+            var parent = t.Root.CreateChild();
+            using var cases = parent.OpenCases();
+            var @case = cases.Add();
+            var plain = parent.CreateChild();
+
+            // More facts than one action batch: the first batch's write of the contradiction stops the search.
+            const int Facts = 3 * Relations.Bindings.DefaultBatchSize;
+            for (var i = 0; i < Facts; i++)
+            {
+                @case.Assume(t.Num.Of((long)i));
+                plain.Assume(t.Num.Of((long)i));
+            }
+
+            var rule = t.Rules.DefineRule("num contradicts", r => { var n = r.Var<long>("n"); r.When(t.Num.Of(n)); r.Then(t.Graph.Contradiction.Of()); });
+
+            var stopped = @case.Run(t.Rules);
+            Assert.True(@case.IsContradictory);
+            Assert.True(stopped.Rules[rule].Matches < Facts);
+
+            var ordinary = plain.Run(t.Rules);
+            Assert.True(plain.IsContradictory);
+            Assert.Equal(Facts, ordinary.Rules[rule].Matches);
+        }
+
     }
 
 }

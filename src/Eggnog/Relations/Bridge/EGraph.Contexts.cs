@@ -36,7 +36,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets the contradiction function's table and the early-stop function, which rule lowering appends after every
-        /// head insert into that table; <c>null</c> when no contradiction function is designated.
+        /// head write into that table (an insert or a lookup-or-insert); <c>null</c> when no contradiction function is
+        /// designated.
         /// </summary>
         internal (TableId Table, ExternalFunctionId Stop)? ContradictionHook => Contradiction is { } c ? (GetTable(c), stopOnContradiction) : null;
 
@@ -61,9 +62,10 @@ namespace Eggnog.Relations
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Rules planned after the designation follow every head insert into the function with the early-stop call
-        /// (<see cref="StopOnContradictionFunction"/>), which cuts a stopping case's search short; a rule planned
-        /// before the designation keeps its plan, so its insert only sets the stop flag when it merges. The rule layer
+        /// Rules planned after the designation follow every head write into the function (an insert or a
+        /// lookup-or-insert) with the early-stop call (<see cref="StopOnContradictionFunction"/>), which cuts a stopping
+        /// case's search short; a rule planned
+        /// before the designation keeps its plan, so its write only sets the stop flag when it merges. The rule layer
         /// designates its contradiction relation when it builds the graph, before any rule runs.
         /// </para>
         /// <para>
