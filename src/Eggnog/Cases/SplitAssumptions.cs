@@ -14,9 +14,14 @@ namespace Eggnog
     /// The checks at definition (<see cref="Compile"/>): every fact is a write (a relation row, a function value, a
     /// constructor output, or a union of classes); no table is read in a term (a function application is refused with
     /// <i>"assumptions do not read; match 'dom' in When"</i>), none is scoped or of another graph; a primitive takes and
-    /// returns values, with arguments of its parameters' types; a class constant is from the root, as for a global rule; a
-    /// variable is declared in the split rule or is its case variable. Grounding then never fails for want of a check, only
-    /// for a primitive that throws or a conflict the host batch finds.
+    /// returns values, with arguments of its parameters' types; a class constant is from the root, as for a global rule,
+    /// and so is every class a constant container holds; a variable is declared in the split rule or is its case variable.
+    /// Grounding then never fails for want of a check, only for a primitive that throws or a conflict the host batch finds,
+    /// and the batch refuses a constant map whose keys hold classes that are one in the case, as a host write of it is
+    /// refused (architecture 2.2), whether the union came before the definition or after: the run then fails, naming the
+    /// case, and faults the scope it was called on. A case is a writable child, as egglog's push, so its batch interns a
+    /// constant container of classes its view does not hold in the case's own container layers, which the lift does not
+    /// carry to the scope (decisions row 9).
     /// </para>
     /// <para>
     /// Cost: grounding allocates the ground facts of one case, a few objects per term; it runs once per case opened, not

@@ -185,7 +185,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Checks a constant: of this graph's types; a class from the root, as for a global rule.
+        /// Checks a constant: of this graph's types; a class from the root, as for a global rule, and so is every class a
+        /// constant container holds. A case runs in a writable child, as egglog's push, so its batch interns a constant
+        /// container of classes its view does not hold in the case's own container layers (decisions row 9).
         /// </summary>
         void CheckConstant(TermShape shape)
         {
@@ -193,10 +195,11 @@ namespace Eggnog
             if (type.Store is not null && ReferenceEquals(type.Store, graph.Values) == false)
                 throw Error($"column type {type.Name} belongs to another graph");
 
-            // A split's assumptions hold no constant container of classes, though a case's own rules and writes make
-            // one in the case's containers (decisions row 9).
             if (type.HoldsClasses)
-                throw Error($"a constant {type.Name} holds classes, which a split's assumptions do not make; a split's assumptions hold values and classes only");
+            {
+                CheckContainerClasses(type, shape.Constant!);
+                return;
+            }
 
             if (type.Kind != ColumnKind.Sort)
                 return;
@@ -213,6 +216,43 @@ namespace Eggnog
                 var scope = origin.IsBatch ? origin.Parent! : origin;
                 throw Error($"class {id} came from scope '{scope.Path}'; a split rule may hold only classes from the root");
             }
+        }
+
+        /// <summary>
+        /// Checks that every class a constant container holds, at any depth, is from the root, as a class constant must
+        /// be, and that the constant is one the root could write: it is read as the root would use it
+        /// (<see cref="ColumnType.CanonicalObject"/>), which throws for a class of another graph, of a child scope, or of
+        /// a batch that did not commit, and for a function value that is a default value or names a table of another
+        /// graph or a scoped view. The refusal gives that reason.
+        /// </summary>
+        void CheckContainerClasses(ColumnType type, object constant)
+        {
+            try
+            {
+                type.CanonicalObject(constant, graph.Root, static cell => cell);
+            }
+            catch (ArgumentException exception)
+            {
+                throw Error($"a constant {type.Name} is not one a split rule may hold: {ReasonOf(exception)}", exception);
+            }
+        }
+
+        /// <summary>
+        /// Gets the message of an <see cref="ArgumentException"/> without the parameter name the runtime appends to it
+        /// or a closing period, so that the reason a check gives reads as part of a sentence.
+        /// </summary>
+        static string ReasonOf(ArgumentException exception)
+        {
+            var message = exception.Message;
+            if (string.IsNullOrEmpty(exception.ParamName) == false)
+            {
+                // The runtime appends its suffix, in its own wording, to the message the exception was given.
+                var suffix = new ArgumentException(string.Empty, exception.ParamName).Message;
+                if (message.EndsWith(suffix, StringComparison.Ordinal))
+                    message = message[..^suffix.Length];
+            }
+
+            return message.TrimEnd().TrimEnd('.');
         }
 
         /// <summary>
