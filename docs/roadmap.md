@@ -21,19 +21,6 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
-- **Containers of classes in children.** egglog makes an eq-sort container in any command; here a writable root and a
-  writable child make one, the child in its own container layers under an id local to it, as egglog interns in the copy
-  its push makes, and a frozen scope uses those its view holds (decisions row 9; architecture 3.8, "Interning in a
-  child"). A child rebuilds, in its container layers, the containers of classes it made and those its own unions
-  displace an element of, whether a host write, a rule or a write primitive made the union, and merges those that
-  become equal, as egglog rebuilds the copy its push makes (architecture 3.8, "The container pass"), and catches up
-  with the containers its writable ancestors gain after it exists, claiming, merging and adopting them as a fresh root
-  replaying the same commands holds them, but for a map whose keys collapse, which follows the history of the level
-  that holds it (architecture 3.8, "Catch-up"). Container types of classes register while the root is frozen too, as
-  egglog declares a sort inside a `(push)`. Left: a split's assumptions hold no constant container of classes, and a
-  lift drops a row that names a container a case made. A container of function values counts as one of classes
-  whatever the values hold, since a function value may hold classes whatever its sort's inputs (architecture 2.2),
-  where egglog's counts by those inputs.
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.
@@ -42,8 +29,10 @@ gates").
 Kept, not departures to remove: egglog defects the port fixes (decisions rows 6 and 7, and the defect list of
 [`history/egglog-engine-map.md`](history/egglog-engine-map.md)), which change match counts and plans but not results;
 relations as unit-valued functions where egglog makes them constructors over a sort of their own (architecture 2.13,
-item 4), observable only in serialization, which emulates egglog's form; and the `BigInt` shift and the `BigRat`
-`pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
+item 4), observable only in serialization, which emulates egglog's form; the lasting departures of decisions row 9 for
+containers of classes, a container of function values counting as one of classes at the root too, a query on a frozen
+scope, the frozen root included, interning nothing, and the others there only in children and splits; and the `BigInt`
+shift and the `BigRat` `pow` past `int.MaxValue` bits, which no .NET `BigInteger` holds.
 
 ## Engine work
 

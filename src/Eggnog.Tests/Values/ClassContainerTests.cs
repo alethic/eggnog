@@ -2388,11 +2388,13 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// A split's assumptions make no constant vector of classes: a split that assumes one is refused at its
-        /// definition, naming the split, though a case's own rules make such vectors in the case's containers.
+        /// A split's assumptions may hold a constant vector of classes from the root, which each case interns in its own
+        /// containers when its view does not hold it (SplitTests checks the cases against egglog's push), but not one
+        /// that holds a class of a child scope, as no split rule holds a class constant of one: that split is refused at
+        /// its definition, naming it, and nothing is registered.
         /// </summary>
         [Fact]
-        public void ASplitsAssumptionOfAConstantVectorOfClassesIsRefused()
+        public void ASplitsAssumptionHoldsAConstantVectorOfTheRootsClassesButNotOfAChildsClass()
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
@@ -2401,17 +2403,79 @@ namespace Eggnog.Tests.Values
             var h = graph.DefineFunction<string, Vec<Node>>("h");
             var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
             var one = graph.Root.Make(num.Of(1L));
+            using var child = graph.Root.CreateChild();
+            var two = child.Make(num.Of(2L));
 
-            var error = Assert.Throws<RuleDefinitionException>(() => graph.DefineSplit("pick", s =>
+            void Define(string name, Vec<Node> constant) => graph.DefineSplit(name, s =>
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), h.Of(k).Is(Vec.Of(one)));
-            }));
-            Assert.Equal("pick", error.RuleName);
-            Assert.Contains("holds classes, which a split's assumptions do not make", error.Message, StringComparison.Ordinal);
-            Assert.Empty(graph.SplitRules);
+                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), h.Of(k).Is(constant));
+            });
+
+            Define("pick", Vec.Of(one));
+            var error = Assert.Throws<RuleDefinitionException>(() => Define("pick a child's", Vec.Of(one, two)));
+            Assert.Equal("pick a child's", error.RuleName);
+            Assert.Equal($"a constant {graph.Values.TypeOf<Vec<Node>>().Name} is not one a split rule may hold: class {two.Id} came from scope "
+                + $"'{child.Path}', which is not '{graph.Root.Path}' or an ancestor of it", error.Message);
+            Assert.Equal("pick", Assert.Single(graph.SplitRules).Name);
+        }
+
+        /// <summary>
+        /// A split's assumptions may not hold a constant function value, alone or in a vector, that the root could not
+        /// write: a default value, which applies nothing, or one that names a table of another graph. Each split is
+        /// refused at its definition with the reason the value is refused, and none of them is registered. egglog has
+        /// neither a default function value nor a second graph, so the expectation is the host's own refusal of the value.
+        /// </summary>
+        [Fact]
+        public void ASplitsAssumptionRefusesAConstantFunctionValueTheRootCouldNotWrite()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterFn<Node, Node>();
+            graph.Values.RegisterVec<UnstableFn<Node, Node>>();
+            var add = graph.DefineConstructor<Node, Node, Node>("Add");
+            var hf = graph.DefineFunction<string, UnstableFn<Node, Node>>("hf");
+            var hv = graph.DefineFunction<string, Vec<UnstableFn<Node, Node>>>("hv");
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
+            var one = graph.Root.Make(num.Of(1L));
+            var other = new EGraph();
+            other.DefineSort<Node>("Math");
+            var otherAdd = other.DefineConstructor<Node, Node, Node>("Add");
+
+            void Define<T>(string name, Function<string, T> function, T constant) where T : notnull =>
+                graph.DefineSplit(name, s =>
+                {
+                    var (k, d) = s.Vars<string, Set<long>>("k", "d");
+                    s.When(d.Is(choice.Of(k)));
+                    var v = s.Cases("v", d);
+                    s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), function.Of(k).Is(constant));
+                });
+
+            Define("pick", hf, UnstableFn.Of<Node, Node>(add, one));
+            var fnName = graph.Values.TypeOf<UnstableFn<Node, Node>>().Name;
+            var vecName = graph.Values.TypeOf<Vec<UnstableFn<Node, Node>>>().Name;
+            var foreign = UnstableFn.Of<Node, Node>(otherAdd, one);
+            var cases = new (string Name, Action Define, string Message)[]
+            {
+                ("default", () => Define("default", hf, default),
+                    $"a constant {fnName} is not one a split rule may hold: A default {fnName} applies nothing; make one with "
+                    + "UnstableFn.Of or unstable-fn"),
+                ("another graph's", () => Define("another graph's", hf, foreign),
+                    $"a constant {fnName} is not one a split rule may hold: Table 'Add' belongs to another graph"),
+                ("a vector of another graph's", () => Define("a vector of another graph's", hv, Vec.Of(foreign)),
+                    $"a constant {vecName} is not one a split rule may hold: Table 'Add' belongs to another graph"),
+            };
+            foreach (var (name, define, message) in cases)
+            {
+                var error = Assert.Throws<RuleDefinitionException>(define);
+                Assert.Equal(name, error.RuleName);
+                Assert.Equal(message, error.Message);
+            }
+
+            Assert.Equal("pick", Assert.Single(graph.SplitRules).Name);
         }
 
         /// <summary>

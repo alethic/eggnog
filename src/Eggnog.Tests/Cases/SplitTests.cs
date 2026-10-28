@@ -1700,6 +1700,239 @@ namespace Eggnog.Tests.Cases
             Assert.DoesNotContain("(fact \"a only\")", lifted[1]);
         }
 
+        /// <summary>
+        /// A split's cases each assume a constant vector of classes from the root, which the root's view holds only when
+        /// <paramref name="rootHolds"/>; a case-local rule unions the two classes in case 1, whose container pass
+        /// rebuilds the vector. Each case is checked against egglog's binary running it as a push with its assumptions
+        /// written as sets, and the lift against what checks in every push (probe <c>split-case-vector.egg</c>, which
+        /// exits 0). The split runs at a writable root, in a child of a frozen root, or in a child of a writable root
+        /// (<paramref name="where"/>).
+        /// </summary>
+        [Theory]
+        [InlineData("writable root", false)]
+        [InlineData("writable root", true)]
+        [InlineData("frozen root", false)]
+        [InlineData("frozen root", true)]
+        [InlineData("child", false)]
+        [InlineData("child", true)]
+        public void ACaseAssumesAConstantVectorOfClassesAsEgglogsPushDoes(string where, bool rootHolds) =>
+            AssumeAConstantContainerInEachCase<Vec<Node>>(where, rootHolds, graph =>
+            {
+                graph.Values.RegisterVec<Node>();
+                return ((one, two) => Vec.Of(one, two), one => Vec.Of(one, one));
+            });
+
+        /// <summary>
+        /// <see cref="ACaseAssumesAConstantVectorOfClassesAsEgglogsPushDoes"/> for a set of classes, which case 1's
+        /// rebuild collapses to one element (probe <c>split-case-set.egg</c>, which exits 0).
+        /// </summary>
+        [Theory]
+        [InlineData("writable root", false)]
+        [InlineData("writable root", true)]
+        [InlineData("frozen root", false)]
+        [InlineData("frozen root", true)]
+        [InlineData("child", false)]
+        [InlineData("child", true)]
+        public void ACaseAssumesAConstantSetOfClassesAsEgglogsPushDoes(string where, bool rootHolds) =>
+            AssumeAConstantContainerInEachCase<Set<Node>>(where, rootHolds, graph =>
+            {
+                graph.Values.RegisterSet<Node>();
+                return ((one, two) => Set.Of(one, two), one => Set.Of(one));
+            });
+
+        /// <summary>
+        /// <see cref="ACaseAssumesAConstantVectorOfClassesAsEgglogsPushDoes"/> for a function value partially applied to
+        /// a class, <c>(unstable-fn "Add" (Num 2))</c>, which case 1's rebuild makes <c>(unstable-fn "Add" (Num 1))</c>
+        /// (probe <c>split-case-fn.egg</c>, which exits 0).
+        /// </summary>
+        [Theory]
+        [InlineData("writable root", false)]
+        [InlineData("writable root", true)]
+        [InlineData("frozen root", false)]
+        [InlineData("frozen root", true)]
+        [InlineData("child", false)]
+        [InlineData("child", true)]
+        public void ACaseAssumesAConstantFunctionValueOfAClassAsEgglogsPushDoes(string where, bool rootHolds) =>
+            AssumeAConstantContainerInEachCase<UnstableFn<Node, Node>>(where, rootHolds, graph =>
+            {
+                graph.Values.RegisterFn<Node, Node>();
+                var add = graph.DefineConstructor<Node, Node, Node>("Add");
+                return ((one, two) => UnstableFn.Of<Node, Node>(add, two), one => UnstableFn.Of<Node, Node>(add, one));
+            });
+
+        /// <summary>
+        /// The program of the probes <c>split-case-vector.egg</c>, <c>split-case-set.egg</c> and <c>split-case-fn.egg</c>
+        /// for one container type <typeparamref name="T"/>. The root makes <c>(Num 1)</c> and <c>(Num 2)</c> and holds
+        /// <c>held("one")</c>, the container of the first class alone (<c>Same</c>), and, when
+        /// <paramref name="rootHolds"/>, <c>held("both")</c>, the container of both (<c>Original</c>). Each case of a
+        /// split over <c>choice("k") = {1, 2}</c> assumes <c>choice("k") = {v}</c>, <c>g("k") = Original</c> and
+        /// <c>h("k") = Same</c> as constants, and an in-case rule unions the two classes in case 1. In case 1, then,
+        /// <c>g("k")</c> is rebuilt to <c>Same</c> and merges with the root's <c>held("one")</c>; in case 2 it is a
+        /// container the case interned in its own layers, or the root's <c>held("both")</c>. The lift keeps what checks in
+        /// every push, <c>h("k") = held("one")</c> and, when the root holds it, <c>g("k") = held("both")</c>; without it
+        /// the lift drops <c>g("k")</c>, whose value in case 2 is local to the case, where egglog's every push checks
+        /// <c>g("k") = Original</c> (decisions row 9). Nothing a case interned reaches the root's environment or the split
+        /// scope's layers.
+        /// </summary>
+        static void AssumeAConstantContainerInEachCase<T>(string where, bool rootHolds,
+            Func<EGraph, (Func<Node, Node, T> Original, Func<Node, T> Same)> define) where T : notnull
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var (original, same) = define(graph);
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
+            var g = graph.DefineFunction<string, T>("g");
+            var h = graph.DefineFunction<string, T>("h");
+            var held = graph.DefineFunction<string, T>("held");
+            var inCase = graph.DefineRuleset("in-case");
+            inCase.DefineRule("union in case 1", r =>
+            {
+                r.When(choice.Of("k").Is(Set.Of(1L)));
+                r.Then(num.Of(1L).Is(num.Of(2L)));
+            });
+
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            root.Assume(held.Of("one").Is(same(one)));
+            if (rootHolds)
+                root.Assume(held.Of("both").Is(original(one, two)));
+
+            var split = graph.DefineSplit("pick", s =>
+            {
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
+                s.When(d.Is(choice.Of(k)));
+                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                var v = s.Cases("v", d);
+                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(original(one, two)), h.Of(k).Is(same(one)));
+            });
+
+            if (where == "frozen root")
+                root.Freeze();
+
+            using var child = where == "writable root" ? null : root.CreateChild();
+            var scope = child ?? root;
+            scope.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            var type = graph.Values.TypeOf<T>();
+
+            // Each case's state at its last step: what egglog's push checks after (run-schedule (saturate in-case)).
+            var states = new Dictionary<long, bool[]>();
+            var report = scope.Run(Schedule.Split(split, Schedule.Saturate(inCase)), new RunOptions
+            {
+                Observer = step =>
+                {
+                    var inside = step.Scope;
+                    if (inside.IsCase == false)
+                        return;
+
+                    var v = Assert.Single(inside.Get(choice.Of("k")));
+                    states[v] = new[]
+                    {
+                        inside.Check(num.Of(1L).Is(num.Of(2L))),
+                        inside.Check(g.Of("k").Is(same(one))),
+                        inside.Check(g.Of("k").Is(held.Of("one"))),
+                        inside.Check(g.Of("k").Is(original(one, two))),
+                        inside.Check(h.Of("k").Is(held.Of("one"))),
+                        rootHolds && inside.Check(g.Of("k").Is(held.Of("both"))),
+                        inside.Engine.Context.Context.ContainerLayers!.IsEmpty,
+                    };
+                },
+            });
+
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(2, report.CasesOpened);
+            Assert.False(scope.IsFaulted);
+
+            // Case 1: (check (= (Num 1) (Num 2))), (check (= (g "k") Same)), (check (= (g "k") (held "one"))),
+            // (check (= (g "k") Original)), (check (= (h "k") (held "one"))), and (check (= (g "k") (held "both"))) when
+            // the root holds it; its union made the case claim and rebuild containers in its layers.
+            Assert.Equal(new[] { true, true, true, true, true, rootHolds, false }, states[1]);
+
+            // Case 2: the union, (= (g "k") Same) and (= (g "k") (held "one")) fail; (g "k") is Original, interned in the
+            // case's own layers unless the root holds it.
+            Assert.Equal(new[] { false, false, false, true, true, rootHolds, rootHolds }, states[2]);
+
+            // The lift: what checks in every push, but for a row naming a container a case interned.
+            Assert.Empty(scope.Children);
+            Assert.True(scope.Check(h.Of("k").Is(held.Of("one"))));
+            Assert.True(scope.Check(h.Of("k").Is(same(one))));
+            Assert.False(scope.Check(num.Of(1L).Is(num.Of(2L))));
+            if (rootHolds)
+            {
+                Assert.True(scope.Check(g.Of("k").Is(held.Of("both"))));
+                Assert.True(scope.Check(g.Of("k").Is(original(one, two))));
+                Assert.False(scope.Check(held.Of("one").Is(held.Of("both"))));
+            }
+            else
+            {
+                Assert.False(scope.TryGet(g.Of("k"), out _));
+            }
+
+            // Nothing case-local leaked: the split scope's view and the root's hold Original only when the root made it,
+            // the split scope's layers are empty and, below the root, the root has no row of the cases'.
+            Assert.Equal(rootHolds, type.TryEncodeExistingObject(original(one, two), root.ContainerView, out _));
+            Assert.Equal(rootHolds, type.TryEncodeExistingObject(original(one, two), scope.ContainerView, out _));
+            if (child is not null)
+            {
+                Assert.True(child.Engine.Context.Context.ContainerLayers!.IsEmpty);
+                Assert.False(root.TryGet(h.Of("k"), out _));
+                Assert.False(root.TryGet(g.Of("k"), out _));
+            }
+
+            scope.Engine.Context.CheckInvariants();
+        }
+
+        /// <summary>
+        /// A split's constant map whose keys are vectors of the root's classes <c>(Num 1)</c> and <c>(Num 2)</c> is accepted
+        /// at the definition, which reads the classes as they were written; once the root has unioned the two, before the
+        /// definition or after it, each case's host batch refuses the map, whose two keys are one now, as the root refuses
+        /// the same host write (architecture 2.2): the run fails, naming the case, and faults the scope it was called on,
+        /// as every case whose assumptions cannot be written does. egglog has no constant map to compare with, so the
+        /// expectation is the root's own refusal of that write.
+        /// </summary>
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ACasesConstantMapWhoseKeysAreOneNowIsRefusedWhenTheCaseRuns(bool unionFirst)
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            graph.Values.RegisterVec<Node>();
+            graph.Values.RegisterMap<Vec<Node>, long>();
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var choice = graph.DefineFunction<string, Set<long>>("choice", ValueLattice.Intersect<long>());
+            var g = graph.DefineFunction<string, Map<Vec<Node>, long>>("g");
+            var root = graph.Root;
+            var one = root.Make(num.Of(1L));
+            var two = root.Make(num.Of(2L));
+            var map = Map.Of((Vec.Of(one), 1L), (Vec.Of(two), 2L));
+            if (unionFirst)
+                root.Union(one, two);
+
+            var split = graph.DefineSplit("pick", s =>
+            {
+                var (k, d) = s.Vars<string, Set<long>>("k", "d");
+                s.When(d.Is(choice.Of(k)));
+                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                var v = s.Cases("v", d);
+                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(map));
+            });
+
+            if (unionFirst == false)
+                root.Union(one, two);
+
+            root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            var refused = Assert.Throws<ArgumentException>(() => root.Assume(g.Of("host").Is(map)));
+            Assert.Contains("hold classes that are one now", refused.Message, StringComparison.Ordinal);
+
+            var failure = Assert.Throws<RuleEvaluationException>(() => root.Run(Schedule.Split(split, Schedule.Saturate(graph.DefineRuleset("in-case")))));
+            Assert.Contains("case 0 of 'root' assumes", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("hold classes that are one now", failure.InnerException?.Message, StringComparison.Ordinal);
+            Assert.True(root.IsFaulted);
+            Assert.Same(failure, root.Failure);
+        }
+
     }
 
 }

@@ -135,12 +135,14 @@ A column holds either a class or a value.
   - A function keyed by them sees its rows meet then. A host batch checks those meetings as it checks a sort key's.
   - Such a container is a value to egglog: never unioned, no constructor's output, and a function of one needs a merge
     that decodes no values.
-  - A writable root makes one in the graph's environment of its type. A writable child uses one its view holds, its
-    own rebuilt copies included, and otherwise makes one in its own container layers, under an id local to it, which
-    its ancestors and siblings never see and which goes when it is disposed, as egglog's push interns in its copy
-    (decisions row 9; section 3.8, "Interning in a child"). A frozen scope, and a query on one, which runs in a
-    transient child but interns for the frozen scope, uses those its view holds; one it lacks matches nothing there,
-    and a write that needs one is refused.
+  - A writable root makes one in the graph's environment of its type. A writable child uses one its view holds, its own
+    rebuilt copies included, and otherwise makes one in its own container layers, under an id local to it, which its
+    ancestors and siblings never see and which goes when it is disposed, as egglog's push interns in its copy (decisions
+    row 9; section 3.8, "Interning in a child"). A split's case is such a child, and the constants its assumptions write
+    may be containers of the root's classes, which it makes in its own layers when its view does not hold them (section
+    2.9). A frozen scope, and a query on one, which runs in a transient child but interns nothing, uses those its view
+    holds; one it lacks matches nothing there where the term's value is bound already, a query that would bind a
+    variable to one fails, and a write that needs one is refused.
   - Their types register while the root is frozen and its children run, as well as at a writable root, as egglog
     declares a container sort inside a `(push)` (section 3.8, "The container pass").
   - A child merges classes they hold as the root does: a merge in a child, a host write's, a rule's, a write primitive's
@@ -167,7 +169,8 @@ A column holds either a class or a value.
     a multiset's elements with the first, the element of least cell, and returns it, with no result for an empty
     multiset.
   - egglog has no literal for one, so a rule builds it from terms with its primitives. A host writes or reads one as a
-    constant, its classes made canonical first. A constant map whose keys hold classes and are one now is refused:
+    constant, its classes made canonical first, and a split's assumptions hold one as a constant whose classes are the
+    root's. A constant map whose keys hold classes and are one now is refused:
     which key egglog's rebuild keeps depends on container cells the host's map no longer knows.
   - As a constructor's argument it extracts as its value, the container of its classes, and each class extracts as its
     own term.
@@ -205,12 +208,12 @@ A column holds either a class or a value.
     where its access is allowed. Anywhere else the application fails, egglog's panic: in a rule, it needs `Naive()`
     to read a function.
   - Its cell is a container id. Its arguments may hold classes whatever the sort's inputs, so a value that holds
-    classes is a container of classes, as above, rebuilt when they merge and made only at a writable root, whenever
-    its type was registered, while the root was frozen too. A nested function value is rebuilt when it holds classes,
-    where egglog's `rebuild_contents` decides by its sort's inputs. For the same reason the type counts as one
-    of classes, so a set, a vector, a pair, a map or a multiset of function values is a container of classes, made only
-    at a writable root, and rebuilds the values it holds, which egglog's leaves stale when the sort's inputs hold no
-    classes (roadmap, "Containers of classes in children").
+    classes is a container of classes, as above, rebuilt when they merge and made at a writable root or in a writable
+    child's own container layers, whenever its type was registered, while the root was frozen too. A nested function
+    value is rebuilt when it holds classes, where egglog's `rebuild_contents` decides by its sort's inputs. For the same
+    reason the type counts as one of classes, so a set, a vector, a pair, a map or a multiset of function values is a
+    container of classes, made as above, and rebuilds the values it holds, which egglog's leaves stale when the sort's
+    inputs hold no classes, a lasting departure (decisions row 9).
   - It serializes as a node of its target's name, its arguments the children, and extracts as
     `(unstable-fn "name" args)`, costing what its arguments cost.
   - egglog's higher-order container primitives apply one: `Primitives.UnstableVecMap` (`unstable-vec-map`, an element
@@ -659,10 +662,14 @@ they have no model.
 
 - **Split rules.** `DefineDomainSplit(name, domain, guards, caseTag)` splits, wherever every guard relation holds of a
   key `k` and the lattice-valued function `domain(k)` has more than one element, into one case per element `v`, each
-  assuming `domain(k) = {v}`. `DefineSplit(name, define)` takes any body, a key, a set variable to split on
-  (`Cases`), and the assumptions each case makes. Which keys are worth splitting is part of the split rule's body:
-  more guards split less, and never unsoundly. The coverage obligation is the theory's: the cases must cover the
-  scope, which a domain that only narrows guarantees.
+  assuming `domain(k) = {v}`. `DefineSplit(name, define)` takes any body, a key, a set variable to split on (`Cases`),
+  and the assumptions each case makes: writes over the body's variables, the case's element, and constants, among them
+  classes from the root and containers of the root's classes, a container of which a case makes in its own containers
+  when its view does not hold it, as egglog's push would. They compute over values only. A constant map whose keys hold
+  classes that are one in the case is refused when the case writes it, as a host write of it is (section 2.2), and the
+  run fails, which faults the scope it was called on (section 2.12). Which keys are worth splitting is part of the split
+  rule's body: more guards split less, and never unsoundly. The coverage obligation is the theory's: the cases must
+  cover the scope, which a domain that only narrows guarantees.
 - **Split steps.** `Schedule.Split(rule, inCase)` is a step of a run. Where the split rule's body matches, it opens
   the cases, runs `inCase` in each, and lifts. Cases live until the top-level run ends: a later execution of the step
   skips a key that a live split already covers (in the scope or an ancestor), runs `inCase` again in the cases it
@@ -679,7 +686,9 @@ they have no model.
   case agrees). Tables with `Lift = false` are left out. A row arrives in the parent not subsumed, unless the parent
   subsumed it: a lift writes what every case holds, not what the cases chose to stop matching. A lift runs in rounds
   until a round writes nothing, because a term lifted in one round can make the next round's facts expressible over the
-  parent's classes. If every case is contradictory, the lift writes the contradiction into the parent.
+  parent's classes. If every case is contradictory, the lift writes the contradiction into the parent. A row that names
+  a container of classes a case made is not lifted, though every case may hold an equal one, nor is an equality of
+  containers the cases reach only by rebuilding them equal (decisions row 9; section 3.9).
 - **Guarded terms by hand.** A lift writes only what holds in every case, so it builds no term that differs by case. A
   host that needs one for a few if-then-else guards lifts it by hand: it opens a child per distinct condition and
   assumes the condition, runs the theory there, and extracts the then-branch's best term; it then `Make`s that term in
@@ -1027,18 +1036,18 @@ recording the entry in the child's container log while the child has live descen
 race to intern one content agree on one id and only the winner mints. Rule actions and external functions reach it
 through their execution state (`ContainerEnv.GetOrInsert` redirects a child's state there, one field test at the root),
 the bridge's `EGraphContext.GetContainerValue` through the child's view, and the library's encodes through the scope's
-(`ContainerClasses.Intern`). The id is local to the child, so the layer owns it, no ancestor or sibling sees the
-container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a row naming
-a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was created, so
-the local id is larger than every id that existed then, and a container that existed before the child wins any later
-merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's blocks was reserved
-may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up merges the two, the
-smaller id winning ("Catch-up" below), so the child matches a fresh root replaying the same commands up to the ids of
-what it interned.
-The child's container pass rebuilds what it interned as it rebuilds what it claimed. A frozen context interns no new
-container of classes, nor does a query on a frozen scope, which interns for the frozen scope though it runs in a
-transient child; a transient child keeps no layer, and in DEBUG the query asserts that no cell it returns is an id
-local to the transient. Interning is immediate and never rolled back, as in egglog. The bridge
+(`ContainerClasses.Intern`), a split's case among them when the host batch that writes its assumptions encodes a
+constant container of the root's classes. The id is local to the child, so the layer owns it, no ancestor or sibling
+sees the container, disposing the child drops it with its layers, and a lift drops the rows that name it, as it drops a
+row naming a class the case made (section 3.9). The child's id blocks are reserved on the shared counter after it was
+created, so the local id is larger than every id that existed then, and a container that existed before the child wins
+any later merge with it, as in egglog's push; a container a writable ancestor makes after one of the child's blocks was
+reserved may have the larger id. When a writable ancestor later gains an equal content, the child's catch-up merges the
+two, the smaller id winning ("Catch-up" below), so the child matches a fresh root replaying the same commands up to the
+ids of what it interned. The child's container pass rebuilds what it interned as it rebuilds what it claimed. A frozen
+context interns no new container of classes, nor does a query on a frozen scope, which runs in a transient child but
+uses only what the frozen scope's view holds; a transient child keeps no layer, and in DEBUG the query asserts that no
+cell it returns is an id local to the transient. Interning is immediate and never rolled back, as in egglog. The bridge
 registers a container type from a child as from the root; registration takes the container environments' writer lock, so
 children of a frozen root, each on its own thread domain, may register at once.
 
@@ -1167,7 +1176,12 @@ Added entry too.
 
 For containers whose rebuild does not depend on the order of the unions, the result is what a fresh root replaying the
 same commands in the same order holds, up to the ids of what the child interned, which egglog cannot be asked, since it
-has no writable parent under a live push.
+has no writable parent under a live push. But a child and a writable ancestor that both write one key of a function
+without a merge, with a value whose constructor term neither saw the other make, a class or a container of classes
+that holds one, each make a class for the term, and the child's catch-up compares its row with the copy of the
+ancestor's in the pass in which congruence on the two terms' rows makes the classes one: the assert-equal merge
+refuses them and faults the child, where the replay, whose second write finds the first's class, holds one row. A
+value that makes no new term merges (decisions row 9).
 A map whose keys collapse depends on that order, and so does a container that holds one, and each copy follows the
 history of the level that holds it: the child's for a copy it claimed, the ancestor's for one it sees there. So for such
 a map a child may depart from the replay (decisions row 9): a content the ancestor rebuilds in place under an id the
@@ -1244,12 +1258,13 @@ row, per staged row or per find, and the root's allocation probes pin this.
   up to date, drops contradictory cases, takes the live case with the fewest groups as the seed, stages the meet of the
   partitions (the unions every case agrees on) and the facts of every table in the lift spec (`LiftSpec`), and flushes
   them into the parent at one epoch. To be complete, it also looks up ancestor rows by each merged class's winner, since
-  with loser-only marking those rows are never copied into a case. An equality of container ids in the parent's view
-  is withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal, which the
-  parent keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of
-  classes a case interned has an id local to the case, which stands for no parent id, so a row that names one is
-  dropped, as a row naming a class the case made is. A memo (`LiftSignature`) makes a lift over cases and a parent
-  that have not changed return at once.
+  with loser-only marking those rows are never copied into a case. An equality of container ids in the parent's view is
+  withheld from the meet, since the cases reach it only by rebuilding the containers' contents equal, which the parent
+  keeps apart, and so is a row of an id output whose only common parent id rests on one. A container of classes a case
+  interned has an id local to the case, which stands for no parent id, so a row that names one is dropped, as a row
+  naming a class the case made is: a container the case's rules, writes or the constants of its split's assumptions
+  made, which the case interned in its own layers. A memo (`LiftSignature`) makes a lift over cases and a parent that
+  have not changed return at once.
 - `CaseSet`: the cases of one split, created as cases, run, lifted and disposed together.
 - `SplitDriver`: one step of a split schedule. It asks its sources (`ISplitSource`) for split requests, skips requests a
   live record in the scope or an ancestor covers and requests over the limits, opens the cases, runs the in-case

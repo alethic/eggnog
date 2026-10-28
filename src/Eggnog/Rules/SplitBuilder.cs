@@ -177,8 +177,9 @@ namespace Eggnog
 
         /// <summary>
         /// Adds the assumptions written into each case, as one host batch: relation rows, function values
-        /// (<c>F.Of(k).Is(v)</c>, merged by F's lattice), constructor outputs and unions, over the declared variables and the
-        /// case variable.
+        /// (<c>F.Of(k).Is(v)</c>, merged by F's lattice), constructor outputs and unions, over the declared variables, the
+        /// case variable and constants: values, classes from the root, containers of values, and containers of classes from
+        /// the root, which a case makes in its own containers when its view does not hold them, as egglog's push does.
         /// </summary>
         /// <param name="facts">The facts.</param>
         /// <exception cref="ArgumentException">The tag of a <see cref="Fact.In"/> belongs to another graph.</exception>
