@@ -120,7 +120,7 @@ namespace Eggnog
         internal override uint Encode(TFn value)
         {
             var (content, target) = Content(value);
-            if (MaskOf(content, target) != 0)
+            if (MaskOf(content, target).IsEmpty == false)
                 throw ContainerClasses.NeedScope(Name);
 
             var arguments = content.ArgumentArray;
@@ -128,7 +128,7 @@ namespace Eggnog
             for (var i = 0; i < cells.Length; i++)
                 cells[i] = target.Partial[i].EncodeObject(arguments[i]);
 
-            return env.GetOrInsertShared(new Relations.FunctionContainer(target.Id, 0, cells), counters);
+            return env.GetOrInsertShared(new Relations.FunctionContainer(target.Id, default, cells), counters);
         }
 
         /// <summary>
@@ -144,7 +144,7 @@ namespace Eggnog
         {
             var (content, target) = Content(value);
             var mask = MaskOf(content, target);
-            if (mask == 0)
+            if (mask.IsEmpty)
                 return Encode(value);
 
             var arguments = content.ArgumentArray;
@@ -160,7 +160,7 @@ namespace Eggnog
         {
             var (content, target) = Content(value);
             var mask = MaskOf(content, target);
-            if (mask == 0)
+            if (mask.IsEmpty)
                 return Encode(value);
 
             var arguments = content.ArgumentArray;
@@ -175,7 +175,7 @@ namespace Eggnog
         internal override TFn Canonical(TFn value, Scope scope, Func<uint, uint> find)
         {
             var (content, target) = Content(value);
-            if (MaskOf(content, target) == 0)
+            if (MaskOf(content, target).IsEmpty)
                 return value;
 
             var arguments = content.ArgumentArray;
@@ -205,7 +205,7 @@ namespace Eggnog
         {
             var (content, target) = Content(value);
             var mask = MaskOf(content, target);
-            if (mask == 0)
+            if (mask.IsEmpty)
                 return TryEncodeExisting(value, scope.ContainerView, out cell);
 
             cell = 0;
@@ -258,7 +258,7 @@ namespace Eggnog
         public bool HoldsClassesIn(object value)
         {
             var (content, target) = Content((TFn)value);
-            return MaskOf(content, target) != 0;
+            return MaskOf(content, target).IsEmpty == false;
         }
 
         /// <summary>
@@ -398,16 +398,21 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        /// <remarks>The target's id and the rebuild flags, then the arguments' cells.</remarks>
+        /// <remarks>The target's id, the number of words of the rebuild flags and those words, then the arguments'
+        /// cells.</remarks>
         public long[] Content(uint cell, Relations.ContainerView view)
         {
             var (fn, _) = Read(cell, view);
             var cells = fn.Arguments;
-            var content = new long[cells.Length + 2];
+            var words = fn.Rebuild.WordCount;
+            var content = new long[cells.Length + words + 2];
             content[0] = fn.Target;
-            content[1] = (long)fn.Rebuild;
+            content[1] = words;
+            for (var i = 0; i < words; i++)
+                content[i + 2] = (long)fn.Rebuild.Word(i);
+
             for (var i = 0; i < cells.Length; i++)
-                content[i + 2] = cells[i];
+                content[i + words + 2] = cells[i];
 
             return content;
         }
@@ -416,10 +421,10 @@ namespace Eggnog
         public long[] Rebuild(long[] content, Func<uint, uint> find)
         {
             var rebuilt = (long[])content.Clone();
-            var flags = (ulong)content[1];
-            for (var i = 2; i < content.Length; i++)
-                if ((flags & (1UL << (i - 2))) != 0)
-                    rebuilt[i] = find((uint)content[i]);
+            var words = (int)content[1];
+            for (var i = 0; i < content.Length - words - 2; i++)
+                if (i >> 6 < words && ((ulong)content[(i >> 6) + 2] & (1UL << i)) != 0)
+                    rebuilt[i + words + 2] = find((uint)content[i + words + 2]);
 
             return rebuilt;
         }
@@ -463,18 +468,21 @@ namespace Eggnog
         /// <c>rebuild_contents</c> (src/sort/fn.rs:57-66) decides a nested one by its sort's inputs; a value's own arguments
         /// decide it here, so a function value of values is one in any scope, and one of classes is rebuilt.
         /// </summary>
-        static ulong MaskOf(FnValue content, FnTarget target)
+        static Relations.ArgumentFlags MaskOf(FnValue content, FnTarget target)
         {
-            var mask = target.Rebuild;
-            if (target.Nested == 0)
-                return mask;
+            if (target.Nested.IsEmpty)
+                return target.Rebuild;
 
             var arguments = content.ArgumentArray;
+            var count = Relations.ArgumentFlags.WordsFor(arguments.Length);
+            Span<ulong> mask = count <= 4 ? stackalloc ulong[4] : new ulong[count];
+            mask = mask[..count];
+            target.Rebuild.CopyTo(mask);
             for (var i = 0; i < arguments.Length; i++)
-                if ((target.Nested & (1UL << i)) != 0 && ((IFnColumnType)target.Partial[i]).HoldsClassesIn(arguments[i]) == false)
-                    mask &= ~(1UL << i);
+                if (target.Nested[i] && ((IFnColumnType)target.Partial[i]).HoldsClassesIn(arguments[i]) == false)
+                    mask[i >> 6] &= ~(1UL << i);
 
-            return mask;
+            return new Relations.ArgumentFlags(mask);
         }
 
         /// <summary>

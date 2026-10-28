@@ -1256,7 +1256,7 @@ namespace Eggnog.Relations.Tests
                     root.NewId();
 
                 uint Fn(int target, params uint[] arguments) =>
-                    root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new FunctionContainer(target, 1, arguments), state));
+                    root.Database.WithExecutionState(state => state.Containers.GetOrInsert(new FunctionContainer(target, new ArgumentFlags(1), arguments), state));
 
                 return inPlace
                     ? (store, values.GetEnvironment<FunctionContainer>(), Fn(1, 2), Fn(0, 1, 0))
@@ -1269,9 +1269,9 @@ namespace Eggnog.Relations.Tests
             var (fresh, freshEnv, ff, fg) = Build();
             var replay = fresh.Root;
             Assert.Equal((f, g), (ff, fg));
-            var gContent = inPlace ? new FunctionContainer(0, 1, [1, 0]) : new FunctionContainer(0, 1, [1, 3]);
-            var copy = inPlace ? new FunctionContainer(1, 1, [0]) : new FunctionContainer(1, 1, [2]);
-            Assert.Equal(gContent.ComputeHash(), (inPlace ? copy : new FunctionContainer(1, 1, [3])).ComputeHash());
+            var gContent = inPlace ? new FunctionContainer(0, new ArgumentFlags(1), [1, 0]) : new FunctionContainer(0, new ArgumentFlags(1), [1, 3]);
+            var copy = inPlace ? new FunctionContainer(1, new ArgumentFlags(1), [0]) : new FunctionContainer(1, new ArgumentFlags(1), [2]);
+            Assert.Equal(gContent.ComputeHash(), (inPlace ? copy : new FunctionContainer(1, new ArgumentFlags(1), [3])).ComputeHash());
 
             var steps = inPlace
                 ? new[] { (child, 0u, 2u), (root, 0u, 2u), (root, f, g) }

@@ -23,9 +23,6 @@ namespace Eggnog
         /// <param name="output">The column type of the function sort's output.</param>
         public FnTarget(int id, FnTargetKind kind, object target, ColumnType[] partial, ColumnType[] inputs, ColumnType output)
         {
-            if (partial.Length > 64)
-                throw new ArgumentException($"A function value holds at most 64 partially applied arguments, not {partial.Length}.", nameof(partial));
-
             Id = id;
             Kind = kind;
             Target = target;
@@ -33,14 +30,19 @@ namespace Eggnog
             Inputs = inputs;
             Output = output;
             Parameters = [.. partial, .. inputs];
+            var rebuild = new ulong[Relations.ArgumentFlags.WordsFor(partial.Length)];
+            var nested = new ulong[rebuild.Length];
             for (var i = 0; i < partial.Length; i++)
             {
                 if (partial[i].InvolvesClasses)
-                    Rebuild |= 1UL << i;
+                    rebuild[i >> 6] |= 1UL << i;
 
                 if (partial[i] is IFnColumnType)
-                    Nested |= 1UL << i;
+                    nested[i >> 6] |= 1UL << i;
             }
+
+            Rebuild = new Relations.ArgumentFlags(rebuild);
+            Nested = new Relations.ArgumentFlags(nested);
         }
 
         /// <summary>
@@ -94,17 +96,17 @@ namespace Eggnog
         public ColumnType Output { get; }
 
         /// <summary>
-        /// Gets the rebuild flags of the partially applied arguments, one bit per argument of an e-class or eq-container
-        /// sort, as egglog's <c>rebuild_contents</c> rebuilds them. A value clears the bit of a nested function value that
+        /// Gets the rebuild flags of the partially applied arguments, set for each argument of an e-class or eq-container
+        /// sort, as egglog's <c>rebuild_contents</c> rebuilds them. A value clears the flag of a nested function value that
         /// holds no classes (<see cref="Nested"/>).
         /// </summary>
-        public ulong Rebuild { get; }
+        public Relations.ArgumentFlags Rebuild { get; }
 
         /// <summary>
         /// Gets the flags of the partially applied arguments that are function values, which hold classes or not by their
         /// own arguments.
         /// </summary>
-        public ulong Nested { get; }
+        public Relations.ArgumentFlags Nested { get; }
 
         /// <summary>
         /// Gets the message of an application in a context where the target is not valid: egglog's panic of

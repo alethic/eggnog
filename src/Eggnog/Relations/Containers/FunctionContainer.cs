@@ -8,7 +8,8 @@ namespace Eggnog.Relations
     /// arguments. The function is the id of its target (<see cref="Eggnog.FnTarget"/>), which names the constructor,
     /// function or primitive, as egglog's resolved id and name do. Each argument has a rebuild flag, set for one of an
     /// e-class or eq-container sort, as egglog's <c>rebuild_contents</c> rebuilds an argument by its sort; the flags are
-    /// part of the container's identity, as the arguments' sorts are of egglog's. Holds at most 64 arguments.
+    /// part of the container's identity, as the arguments' sorts are of egglog's. Holds any number of arguments, as
+    /// egglog's vector does.
     /// </summary>
     internal readonly struct FunctionContainer : IContainerValue<FunctionContainer>
     {
@@ -19,9 +20,9 @@ namespace Eggnog.Relations
         /// Initializes a new instance.
         /// </summary>
         /// <param name="target">The target's id.</param>
-        /// <param name="rebuild">The rebuild flags, one bit per argument.</param>
+        /// <param name="rebuild">The rebuild flags, one per argument.</param>
         /// <param name="arguments">The arguments' cells, owned by the container from here.</param>
-        public FunctionContainer(int target, ulong rebuild, uint[] arguments)
+        public FunctionContainer(int target, ArgumentFlags rebuild, uint[] arguments)
         {
             Target = target;
             Rebuild = rebuild;
@@ -34,9 +35,9 @@ namespace Eggnog.Relations
         public int Target { get; }
 
         /// <summary>
-        /// Gets the rebuild flags, one bit per argument.
+        /// Gets the rebuild flags, one per argument.
         /// </summary>
-        public ulong Rebuild { get; }
+        public ArgumentFlags Rebuild { get; }
 
         /// <summary>
         /// Gets the arguments' cells.
@@ -49,14 +50,14 @@ namespace Eggnog.Relations
         uint[] Cells => arguments ?? Array.Empty<uint>();
 
         /// <inheritdoc />
-        public bool HoldsIds => Rebuild != 0;
+        public bool HoldsIds => Rebuild.IsEmpty == false;
 
         /// <inheritdoc />
         public ulong ComputeHash()
         {
             var hasher = new FxHasher();
             hasher.Write((ulong)(uint)Target);
-            hasher.Write(Rebuild);
+            Rebuild.HashInto(ref hasher);
             foreach (var argument in Cells)
                 hasher.Write(argument);
 
@@ -71,7 +72,7 @@ namespace Eggnog.Relations
             uint[]? changed = null;
             for (var i = 0; i < cells.Length; i++)
             {
-                if ((Rebuild & (1UL << i)) == 0)
+                if (Rebuild[i] == false)
                     continue;
 
                 var value = rebuilder.RebuildValue(cells[i]);
@@ -102,7 +103,7 @@ namespace Eggnog.Relations
         {
             var cells = Cells;
             for (var i = 0; i < cells.Length; i++)
-                if ((Rebuild & (1UL << i)) != 0)
+                if (Rebuild[i])
                     visitor.Visit(cells[i]);
         }
 
