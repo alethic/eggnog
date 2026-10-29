@@ -8,7 +8,8 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// Inserts a relation row (the unit output is appended when lowering).
+        /// Inserts a relation row unless the table holds it: egglog's lookup-or-insert, the relation being a constructor
+        /// there.
         /// </summary>
         Insert,
 
@@ -35,7 +36,8 @@ namespace Eggnog
 
         /// <summary>
         /// Deletes the row of a key, if there is one: egglog's <c>delete</c>. The table's merge deletes before it
-        /// inserts, so a row the same iteration also writes stays.
+        /// inserts, so a row the same iteration also stages stays; a relation fact or constructor term the table already
+        /// holds stages nothing (<see cref="Insert"/> and constructor terms look the row up), so its deletion wins.
         /// </summary>
         Delete,
 

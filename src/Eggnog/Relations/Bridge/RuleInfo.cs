@@ -112,7 +112,7 @@ namespace Eggnog.Relations
         /// <remarks>
         /// Computes <see cref="AllowInheritance"/> with the plan, from the plan's lowered actions and the store's schema
         /// (<see cref="ActionReadAnalysis"/>); a rule planned on a database without a store never inherits. When the
-        /// e-graph has a contradiction function, a head insert into it is followed by the early-stop call
+        /// e-graph has a contradiction function, a head write into it is followed by the early-stop call
         /// (<see cref="StopOnContradictionFunction"/>). Cold path.
         /// </remarks>
         /// <param name="database">The database of the context that plans the rule; its views must be current in a

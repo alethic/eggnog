@@ -290,8 +290,10 @@ namespace Eggnog
         /// Deletes the row of a function or constructor application: egglog's <c>(delete (f args...))</c>. The row of the
         /// application's keys goes, if there is one, and nothing else: a deleted constructor term's class stays, with its
         /// other members. The keys are evaluated as head terms, made if absent. Every deletion of an iteration lands
-        /// before its writes, so a row the same iteration also writes stays, as in egglog, and a deletion is no change
-        /// for saturation. A rule that deletes runs only where the scope may delete: not in a scope with live
+        /// before its writes, so a row the same iteration also writes stays where the write stages it, as in egglog: a
+        /// key the table lacked, or a function's output. A relation's fact or a constructor's term the table already
+        /// holds stages nothing, so a deletion of it in the same iteration wins. A deletion is no change for
+        /// saturation. A rule that deletes runs only where the scope may delete: not in a scope with live
         /// descendants, a child of a writable parent, or a run that splits (<see cref="Scope.Run"/> refuses it before any
         /// work). The application must be of the running scope, not a scoped view (a
         /// <see cref="RuleDefinitionException"/> otherwise).

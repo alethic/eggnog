@@ -119,6 +119,23 @@ namespace Eggnog.Tests.Scheduling
             Assert.Throws<ArgumentOutOfRangeException>(() => t.Root.Run(t.Rules, new RunOptions { IterationLimit = -1 }));
         }
 
+        /// <summary>
+        /// A run has no iteration limit by default: as in egglog, a <c>Saturate</c> that needs more than 10,000 iterations
+        /// runs to its fixpoint.
+        /// </summary>
+        [Fact]
+        public void SaturateHasNoIterationLimitByDefault()
+        {
+            Assert.Equal(int.MaxValue, RunOptions.Default.IterationLimit);
+
+            var t = Counter(10_005);
+            var report = t.Root.Run(Schedule.Saturate(t.Rules));
+            Assert.Equal(RunStopReason.Completed, report.StopReason);
+            Assert.Equal(10_006, report.Iterations);
+            Assert.True(report.Saturated);
+            Assert.True(t.Root.Check(t.Num.Of(10_005L)));
+        }
+
         [Fact]
         public void CancellationStopsARunBetweenIterationsWithoutFaulting()
         {

@@ -459,11 +459,13 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   a deleted constructor term's class stays, with its other members and the rows that name it, and making the term again
   mints a new class. The keys are evaluated as head terms, made if absent. Every deletion of an iteration lands before
   its writes, so a row the same iteration writes stays, and a deletion is no change for saturation, as in egglog. A
-  scope deletes only when the engine's retraction guard lets it (section 3.8): not with live descendants, which would
-  not see the deletion, and not under a writable parent; so not in a case either. `Run` refuses, before any work, a rule
-  that deletes where the scope may not, and in a run that splits, whose cases stay live until it ends; one defined on
-  another thread during the run takes part only in the iterations where it may run. `graph.Contradiction` is not
-  deleted.
+  relation's fact or a constructor's term in a head writes nothing when the table already holds the row, since egglog
+  makes a relation a constructor and looks the row up, so a deletion of it in the same iteration wins and a rule that
+  deletes a row and writes it back settles. A scope deletes only when the engine's retraction guard lets it (section
+  3.8): not with live descendants, which would not see the deletion, and not under a writable parent; so not in a case
+  either. `Run` refuses, before any work, a rule that deletes where the scope may not, and in a run that splits, whose
+  cases stay live until it ends; one defined on another thread during the run takes part only in the iterations where
+  it may run. `graph.Contradiction` is not deleted.
 - **Heads never read tables**, but in a full rule callback (`ThenCallFull`) or a primitive of full access, a function
   value's application among them, whose rule is naive. A function's output used
   in a head must be matched in the body. This keeps every match a function of the body alone, which is what lets a
@@ -531,23 +533,24 @@ too, and a rule whose head uses no variable of its body cannot be scheduled (egg
 runs on the scope's thread under the engine-call marker, so it cannot call into a graph; one that throws faults the
 scope.
 
-`RunOptions` bounds a run: `IterationLimit` (default 10,000 engine iterations, counted in every scope of the run,
-cases included), `TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases), and for splits
-`CaseLimit`, `SplitDepthLimit` and `Lift` limits. Limits and cancellation are checked before every iteration and
-every split step; an iteration or a lift cannot be interrupted, so a run overshoots by at most one of them. Reaching a
-limit is not an error: the run stops soundly with fewer facts, and `RunReport.StopReason` says why.
+`RunOptions` bounds a run: `IterationLimit` (engine iterations, counted in every scope of the run, cases included),
+`TimeLimit`, `RowLimit` (rows in the own layers of the scope and its live cases), and for splits `CaseLimit`,
+`SplitDepthLimit` and `Lift` limits. The first three are off by default, so a `Saturate` runs until nothing changes, as
+egglog's does. Limits and cancellation are checked before every iteration and every split step; an iteration or a lift
+cannot be interrupted, so a run overshoots by at most one of them. Reaching a limit is not an error: the run stops
+soundly with fewer facts, and `RunReport.StopReason` says why.
 
-There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case
-schedule: `Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not
-terminate uses up the run's `IterationLimit`, and if it does so before the split step lifts, the scope gets nothing
-from any of the step's cases. `Repeat(n, Saturate(...))` bounds nothing, since each of its passes is a full
-saturation. The bound applies to each execution of the in-case schedule, not to the case over the run: a case runs it
-before the step's lift, again when the step deepens after the lift, and again at each later execution of the step. A
-case cut off this way stays live, its facts hold under its assumption, and the lift stays sound; a run that otherwise
-ends normally reports `Completed`. A host that must know a case was cut off finds, in the steps (`RunReport.Steps`,
-which stays empty unless `RunOptions.RecordSteps` is set, or an `Observer` that sees each step), an execution of the
-in-case schedule that ran all `n` passes in that case and still changed it in the last. A host sizes `n` from the
-passes its cases take when they do terminate, read from the same steps.
+There is no iteration budget per case. To bound each case of a split, pass `Repeat(n, rules)` as the in-case schedule:
+`Split(rule, Repeat(n, horn, lattice))`. Under `Saturate` as the in-case schedule, one case that does not terminate
+keeps the run going, or uses up an `IterationLimit` that is set, and if it does so before the split step lifts, the
+scope gets nothing from any of the step's cases. `Repeat(n, Saturate(...))` bounds nothing, since each of its passes is
+a full saturation. The bound applies to each execution of the in-case schedule, not to the case over the run: a case
+runs it before the step's lift, again when the step deepens after the lift, and again at each later execution of the
+step. A case cut off this way stays live, its facts hold under its assumption, and the lift stays sound; a run that
+otherwise ends normally reports `Completed`. A host that must know a case was cut off finds, in the steps
+(`RunReport.Steps`, which stays empty unless `RunOptions.RecordSteps` is set, or an `Observer` that sees each step), an
+execution of the in-case schedule that ran all `n` passes in that case and still changed it in the last. A host sizes
+`n` from the passes its cases take when they do terminate, read from the same steps.
 
 `RunReport` gives the iterations, whether the run saturated and whether it changed the scope, search, merge and
 rebuild times, per-rule statistics (matches, search time, iterations with matches, and the plan when

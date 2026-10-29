@@ -138,9 +138,10 @@ namespace Eggnog
         /// <para>
         /// To bound each case, pass <c>Repeat(n, steps)</c> as <paramref name="inCase"/>, with rulesets as the steps; not
         /// <c>Saturate(steps)</c>, nor <c>Repeat(n, Saturate(steps))</c>, each of whose passes is a full saturation.
-        /// <see cref="RunOptions.IterationLimit"/> counts the iterations of every case, so a case that does not terminate
-        /// under <c>Saturate</c> uses up the run's limit; when that happens before the step lifts, the scope gets nothing
-        /// from any of the step's cases, those that saturated included. The bound applies to each execution of
+        /// A case that does not terminate under <c>Saturate</c> keeps the run going, since a run has no iteration limit
+        /// unless one is set; <see cref="RunOptions.IterationLimit"/> counts the iterations of every case, so such a case
+        /// uses up a limit that is set, and when that happens before the step lifts, the scope gets nothing from any of
+        /// the step's cases, those that saturated included. The bound applies to each execution of
         /// <paramref name="inCase"/> in a case: once before the step lifts, once more after it when the step deepens
         /// (below <see cref="RunOptions.SplitDepthLimit"/>), and again at each later execution of the step, so a case can
         /// run <c>n</c> passes several times in one run. A case cut off this way stays live: what it derived holds under

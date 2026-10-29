@@ -127,10 +127,13 @@ namespace Eggnog
                     {
                         case HeadOpKind.Insert:
                         {
-                            var row = new Relations.RuleEntry[inputs.Length + 1];
-                            inputs.CopyTo(row, 0);
-                            row[^1] = unit;
-                            builder.Set(op.Table!.Function, row);
+                            // egglog makes a relation a constructor (src/ast/desugar.rs:396-428), so a fact in a head is a
+                            // lookup-or-insert (egglog-bridge/src/rule.rs:573): a row the table already holds stages
+                            // nothing, and a delete of it in the same iteration wins at the merge. The relation's default
+                            // is the unit row.
+                            var name = program.Name;
+                            var table = op.Table!.Name;
+                            builder.Lookup(op.Table.Function, inputs, () => $"rule '{name}': insert into '{table}' failed");
                             break;
                         }
                         case HeadOpKind.Write:

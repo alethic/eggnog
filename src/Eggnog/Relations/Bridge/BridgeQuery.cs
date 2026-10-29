@@ -205,7 +205,7 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// <see cref="BuildCachedPlan(Database, string)"/>, with the contradiction early stop: when
-        /// <paramref name="stopOnContradiction"/> is given, every head insert into its table (the e-graph's contradiction
+        /// <paramref name="stopOnContradiction"/> is given, every head write into its table (the e-graph's contradiction
         /// function) is followed by a call to its function (<see cref="StopOnContradictionFunction"/>).
         /// </summary>
         /// <remarks>
