@@ -397,7 +397,7 @@ namespace Eggnog.Relations
                     // egglog's lowered global holds the class as it was canonical when the global was made, and as each
                     // rebuild leaves it after that.
                     var id = merge.Constant.Rep;
-                    return ResolvedMergeFn.IdConst(id, db.AddClassConstant(id, unionFind.FindNaive(id)), merge.KeepsOldOnEqual);
+                    return ResolvedMergeFn.IdConst(id, db.AddClassConstant(id, unionFind.FindNaive(id)));
                 }
                 case MergeFnKind.Old:
                     return ResolvedMergeFn.Old();

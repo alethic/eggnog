@@ -235,8 +235,8 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// An id constant yields its class as the last rebuild left it canonical, as egglog's read of a global yields the
-        /// class the rebuild keeps canonical in the global's table; one that keeps the old value yields it when the values
-        /// agree, as egglog's function node does (egglog PR 287), and one that does not yields the class then too.
+        /// class the rebuild keeps canonical in the global's table, and the old value when the values agree, as egglog's
+        /// function node does (egglog PR 287).
         /// </summary>
         [Fact]
         public void AnIdConstantYieldsItsCanonicalClassUnlessTheValuesAgree()
@@ -249,15 +249,8 @@ namespace Eggnog.Relations.Tests
             {
                 Schema = [ColumnTy.Id, ColumnTy.Id],
                 Default = DefaultVal.Fail,
-                Merge = MergeFn.IdConst(g, true),
+                Merge = MergeFn.IdConst(g),
                 Name = "f",
-            });
-            var h = egraph.AddTable(new FunctionConfig
-            {
-                Schema = [ColumnTy.Id, ColumnTy.Id],
-                Default = DefaultVal.Fail,
-                Merge = MergeFn.IdConst(g, false),
-                Name = "h",
             });
             var a = egraph.FreshId();
             var b = egraph.FreshId();
@@ -270,10 +263,6 @@ namespace Eggnog.Relations.Tests
             egraph.AddValues([(f, [b, y])]);
             egraph.AddValues([(f, [b, y])]);
             Assert.Equal(y, egraph.LookupId(f, [b]));
-
-            egraph.AddValues([(h, [b, y])]);
-            egraph.AddValues([(h, [b, y])]);
-            Assert.Equal(g, egraph.LookupId(h, [b]));
 
             // g loses a union to the smaller x: the merge yields x.
             Union(egraph, x, g);
@@ -446,8 +435,8 @@ namespace Eggnog.Relations.Tests
             Assert.False(MergeFn.Old.IsLattice);
             Assert.False(MergeFn.New.IsLattice);
             Assert.False(MergeFn.Const(new Value(1)).IsLattice);
-            Assert.False(MergeFn.IdConst(new Value(1), true).IsLattice);
-            Assert.Throws<InvalidOperationException>(() => MergeFn.IdConst(new Value(1), true).AsLattice());
+            Assert.False(MergeFn.IdConst(new Value(1)).IsLattice);
+            Assert.Throws<InvalidOperationException>(() => MergeFn.IdConst(new Value(1)).AsLattice());
 
             var min = MergeFn.Primitive(prim, MergeFn.Old, MergeFn.New);
             Assert.False(min.IsLattice);
@@ -488,7 +477,7 @@ namespace Eggnog.Relations.Tests
             var merge = MergeFn.Primitive(new ExternalFunctionId(2), MergeFn.Const(new Value(1)), MergeFn.Function(new FunctionId(0), MergeFn.Old, MergeFn.New));
             Assert.Equal("(f2 (const 1) (fn0 old new))", merge.ToString());
             Assert.Equal("union", MergeFn.UnionId.ToString());
-            Assert.Equal("(id 4)", MergeFn.IdConst(new Value(4), true).ToString());
+            Assert.Equal("(id 4)", MergeFn.IdConst(new Value(4)).ToString());
             Assert.Equal("assert-eq", MergeFn.AssertEq.ToString());
             Assert.Throws<ArgumentNullException>(() => MergeFn.Primitive(new ExternalFunctionId(0), MergeFn.Old, null!));
         }

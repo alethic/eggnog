@@ -32,7 +32,10 @@ namespace Eggnog.Relations
     /// same container, hash and id; the element index holds exactly the occurrences of the values of the hash-cons
     /// entries under their ids (<see cref="CheckInvariants"/>). Content keys are unique; ids normally are too (a
     /// bijection), but a rebuild that renames one container's id to another container's id makes two entries share it,
-    /// as in egglog; lookups by id then return either.
+    /// as in egglog; lookups by id then return either, where egglog's reverse map names the container its rebuild
+    /// renamed or reinserted last and loses the other (mod.rs:411-462, 521-571). The library reaches this only through
+    /// a union of a container id in a class column, which a merge's class constant puts there as an old value of
+    /// another sort.
     /// </para>
     /// <para>
     /// Threading: <see cref="GetOrInsert"/>, <see cref="TryGetId(in TContainer, out uint)"/>,

@@ -238,35 +238,139 @@ namespace Eggnog.Tests.Values
         }
 
         /// <summary>
-        /// Under a primitive, in a function of another sort, a class constant is its class also when the old and new
-        /// values agree: :merge (vec-push old $g) of (vec-of (B)) and (vec-of (B)) gives (vec-of (B) (A)), by a host's
-        /// write, which a later fact of its batch reads, and by a rule's. egglog's read of the global, a function node,
-        /// yields the old value then (lib.rs:1222-1226), so it pushes the vector itself as an E and leaves (h)
-        /// unextractable.
+        /// Under a primitive, in a function of another sort, a class constant keeps the old value when the old and new
+        /// values agree, as egglog's read of the global, a function node, does (lib.rs:1222-1226), so :merge
+        /// (vec-push old $g) of (vec-of (B)) and (vec-of (B)) pushes the old vector itself as an E, by a host's write,
+        /// which a later fact of its batch reads, and by a rule's: the vector holds (B) and a second element, which is
+        /// neither (A) nor (B) and has no term, so neither it nor (h) extracts. The row is egglog's: a rule binds the
+        /// element, (union (A) (B)) changes nothing of it, and (union (vec-get (h) 1) (A)) makes (h) (vec-of (A) (A)), so
+        /// (VW (h)) extracts as (VW (vec-of (A) (A))). The engine's invariants hold throughout.
         /// </summary>
         [Fact]
-        public void UnderAPrimitiveAClassConstantIsItsClassWhenTheValuesAgree()
+        public void UnderAPrimitiveAClassConstantKeepsTheOldValueOfAnotherSortWhenTheValuesAgree()
+        {
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterVec<Node>();
+            var of = Primitives.VecOf<Node>();
+            var get = Primitives.VecGet<Node>();
+            var g = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var vw = t.Graph.DefineConstructor<Vec<Node>, Node>("VW");
+            var h = t.Graph.DefineFunction<string, Vec<Node>>("h", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
+            var k = t.Graph.DefineFunction<long, Vec<Node>>("k", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
+            var n = t.Graph.DefineFunction<Vec<Node>, long>("n");
+            var seen = t.Graph.DefineRelation<Node>("seen");
+            t.Rules.DefineRule("set", r =>
+            {
+                r.Then(k.Of(1L).Is(of.Of(t.B.Of())));
+                r.Then(k.Of(1L).Is(of.Of(t.B.Of())));
+            });
+            t.Rules.DefineRule("seen", r =>
+            {
+                var x = r.Var<Node>("x");
+                r.When(get.Of(h.Of("x"), 1L).Is(x));
+                r.Then(seen.Of(x));
+            });
+
+            t.Root.Assume(h.Of("x").Is(of.Of(t.B.Of())));
+            t.Root.Assume(h.Of("x").Is(of.Of(t.B.Of())), n.Of(h.Of("x")).Is(7L));
+            t.Root.Run(t.Rules);
+            t.Root.Engine.Context.CheckInvariants();
+            t.Graph.Engine.ContainerValues.CheckInvariants();
+
+            var pushed = t.Root.Get(h.Of("x"));
+            Assert.Equal(2, pushed.Count);
+            Assert.Equal(b, pushed[0]);
+            Assert.NotEqual(g, pushed[1]);
+            Assert.NotEqual(b, pushed[1]);
+            Assert.False(t.Root.Check(h.Of("x").Is(of.Of(t.B.Of(), t.A.Of()))));
+            Assert.True(t.Root.Check(h.Of("x").Is(of.Of(t.B.Of(), pushed[1]))));
+            Assert.Equal(7L, t.Root.Get(n.Of(of.Of(t.B.Of(), pushed[1]))));
+            Assert.True(t.Root.Check(k.Of(1L).Is(of.Of(t.B.Of(), pushed[1]))));
+            Assert.True(t.Root.Check(seen.Of(pushed[1])));
+            Assert.False(t.Root.CreateExtractor().TryExtract(pushed[1], out _));
+            var wrapped = t.Root.Make(vw.Of(h.Of("x")));
+            Assert.False(t.Root.CreateExtractor().TryExtract(wrapped, out _));
+
+            t.Root.Union(g, b);
+            Assert.Equal(pushed[1], t.Root.Get(h.Of("x"))[1]);
+            Assert.False(t.Root.CreateExtractor().TryExtract(wrapped, out _));
+
+            t.Root.Union(pushed[1], g);
+            t.Root.Engine.Context.CheckInvariants();
+            t.Graph.Engine.ContainerValues.CheckInvariants();
+            Assert.True(t.Root.Check(h.Of("x").Is(of.Of(t.A.Of(), t.A.Of()))));
+            Assert.Equal("(VW (vec-of (A) (A)))", t.Root.Extract(wrapped).ToString());
+        }
+
+        /// <summary>
+        /// The rebuild's merge of two rows whose vectors its pass makes equal sees one vector, so a class constant keeps
+        /// the old value there: with :merge (vec-push old $g), $g the class of (C) (here (Lit 1)), (h (A)) at
+        /// (vec-of (A)), (h (B)) at (vec-of (B)) and (union (A) (B)), the one row left holds (A) and the old vector
+        /// itself, which has no term. The pass merges the containers' unions into the union-find before it rebuilds the
+        /// tables (the engine's fix of egglog defect 23), where egglog's table rebuild still sees two vectors and pushes
+        /// the class: egglog's binary gives (vec-of (A) (C)).
+        /// </summary>
+        [Fact]
+        public void TheRebuildsMergeOfVectorsItsPassMadeEqualKeepsTheOldValue()
+        {
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterVec<Node>();
+            var of = Primitives.VecOf<Node>();
+            var a = t.Root.Make(t.A.Of());
+            var b = t.Root.Make(t.B.Of());
+            var g = t.Root.Make(t.Lit.Of(1L));
+            var h = t.Graph.DefineFunction<Node, Vec<Node>>("h", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
+
+            t.Root.Assume(h.Of(t.A.Of()).Is(of.Of(t.A.Of())));
+            t.Root.Assume(h.Of(t.B.Of()).Is(of.Of(t.B.Of())));
+            t.Root.Union(a, b);
+            t.Root.Engine.Context.CheckInvariants();
+            t.Graph.Engine.ContainerValues.CheckInvariants();
+
+            Assert.Equal(1, t.Root.CountRows(h));
+            var merged = t.Root.Get(h.Of(t.A.Of()));
+            Assert.Equal(2, merged.Count);
+            Assert.True(t.Root.AreEqual(a, merged[0]));
+            Assert.False(t.Root.AreEqual(g, merged[1]));
+            Assert.False(t.Root.AreEqual(a, merged[1]));
+            Assert.False(t.Root.Check(h.Of(t.A.Of()).Is(of.Of(t.A.Of(), t.Lit.Of(1L)))));
+            Assert.False(t.Root.CreateExtractor().TryExtract(merged[1], out _));
+        }
+
+        /// <summary>
+        /// A union of two vectors' ids, which only an old value of another sort pushed as an element makes possible,
+        /// leaves two vectors under one id, and a read of the id gives either: with :merge (vec-push old $g), (h) set
+        /// twice to (vec-of (B)) holds (B) and V0, the id of (vec-of (B)), and (h3) set twice to (h) holds (B), V0 and
+        /// V1, the id of (h); (union (vec-get (h) 1) (vec-get (h3) 2)) makes V0 and V1 one class, and (vec-length (h)) is
+        /// 1 here, where egglog's binary gives 2, as its rebuild points the id at the vector it renamed (architecture
+        /// 2.13, item 6). The engine's invariants hold.
+        /// </summary>
+        [Fact]
+        public void AUnionOfTwoVectorsIdsLeavesBothUnderOneId()
         {
             var t = new NodeTheory();
             t.Graph.Values.RegisterVec<Node>();
             var of = Primitives.VecOf<Node>();
             var g = t.Root.Make(t.A.Of());
             var h = t.Graph.DefineFunction<string, Vec<Node>>("h", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
-            var k = t.Graph.DefineFunction<long, Vec<Node>>("k", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
-            var n = t.Graph.DefineFunction<Vec<Node>, long>("n");
-            t.Rules.DefineRule("set", r =>
-            {
-                r.Then(k.Of(1L).Is(of.Of(t.B.Of())));
-                r.Then(k.Of(1L).Is(of.Of(t.B.Of())));
-            });
+            var h3 = t.Graph.DefineFunction<string, Vec<Node>>("h3", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecPush<Node>().Of(old, g)));
 
             t.Root.Assume(h.Of("x").Is(of.Of(t.B.Of())));
-            t.Root.Assume(h.Of("x").Is(of.Of(t.B.Of())), n.Of(h.Of("x")).Is(7L));
-            t.Root.Run(t.Rules);
+            t.Root.Assume(h.Of("x").Is(of.Of(t.B.Of())));
+            t.Root.Assume(h3.Of("x").Is(h.Of("x")));
+            t.Root.Assume(h3.Of("x").Is(h.Of("x")));
+            var hv = t.Root.Get(h.Of("x"));
+            var h3v = t.Root.Get(h3.Of("x"));
+            Assert.Equal(2, hv.Count);
+            Assert.Equal(3, h3v.Count);
+            Assert.True(t.Root.AreEqual(hv[1], h3v[1]));
 
-            Assert.True(t.Root.Check(h.Of("x").Is(of.Of(t.B.Of(), t.A.Of()))));
-            Assert.Equal(7L, t.Root.Get(n.Of(of.Of(t.B.Of(), t.A.Of()))));
-            Assert.True(t.Root.Check(k.Of(1L).Is(of.Of(t.B.Of(), t.A.Of()))));
+            t.Root.Union(hv[1], h3v[2]);
+            t.Root.Engine.Context.CheckInvariants();
+            t.Graph.Engine.ContainerValues.CheckInvariants();
+            Assert.Single(t.Root.Get(h.Of("x")));
+            Assert.Equal(3, t.Root.Get(h3.Of("x")).Count);
         }
 
         /// <summary>
@@ -418,6 +522,47 @@ namespace Eggnog.Tests.Values
 
             t.Root.Assume(h.Of("x").Is(5L));
             Assert.Equal(13L, t.Root.Get(h.Of("x")));
+        }
+
+        /// <summary>
+        /// A merge's primitive takes its classes as they are, as egglog's does, so within a rule's run it does not see the
+        /// run's own union: with :merge (+ old (set-length (set-of $g $g2))) and (h) at 10,
+        /// (rule () ((union $g $g2) (set (h) 5))) gives 12, as egglog's does; the set the merge made, of two classes, is
+        /// rebuilt to one. The rebuild's merge of two rows whose keys the union makes equal reads the classes as its
+        /// pass leaves them, and counts one: (set (m (A)) 10) (set (m (B)) 5) (union $g $g2) gives 11.
+        /// </summary>
+        [Fact]
+        public void AMergesPrimitiveTakesItsClassesAsTheyAre()
+        {
+            var t = new NodeTheory();
+            t.Graph.Values.RegisterSet<Node>();
+            var g = t.Root.Make(t.A.Of());
+            var g2 = t.Root.Make(t.B.Of());
+            var setOf = Primitives.SetOf<Node>();
+            var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) =>
+                Primitives.Add.Of(old, Primitives.Count<Node>().Of(setOf.Of(g, g2)))));
+            t.Root.Assume(h.Of("x").Is(10L));
+            t.Rules.DefineRule("set", r =>
+            {
+                r.Then(t.A.Of().Is(t.B.Of()));
+                r.Then(h.Of("x").Is(5L));
+            });
+
+            t.Root.Run(t.Rules);
+
+            Assert.Equal(12L, t.Root.Get(h.Of("x")));
+            Assert.True(t.Root.AreEqual(g, g2));
+            t.Root.Engine.Context.CheckInvariants();
+            t.Graph.Engine.ContainerValues.CheckInvariants();
+
+            var u = t.Root.Make(t.Lit.Of(1L));
+            var v = t.Root.Make(t.Lit.Of(2L));
+            var m = t.Graph.DefineFunction<Node, long>("m", FunctionMerge.Expression<long>((old, @new) =>
+                Primitives.Add.Of(old, Primitives.Count<Node>().Of(setOf.Of(u, v)))));
+            t.Root.Assume(m.Of(u).Is(10L), m.Of(v).Is(5L));
+            t.Root.Union(u, v);
+            Assert.Equal(1, t.Root.CountRows(m));
+            Assert.Equal(11L, t.Root.Get(m.Of(u)));
         }
 
         /// <summary>

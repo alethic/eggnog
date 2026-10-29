@@ -19,6 +19,7 @@ namespace Eggnog
         readonly Relations.ExecutionState state;
         readonly ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions;
         readonly string who;
+        readonly bool canonical;
         Exception? refusal;
         bool done;
 
@@ -29,12 +30,15 @@ namespace Eggnog
         /// <param name="state">The engine's state for the call.</param>
         /// <param name="actions">The table actions of the call site, made once per table.</param>
         /// <param name="who">What calls, for messages: "A rule callback", "A primitive".</param>
-        public EngineTables(Scope scope, Relations.ExecutionState state, ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions, string who)
+        /// <param name="canonical">Whether classes are read and written canonical through the state; not for a merge's
+        /// primitive, which takes them as they are, as egglog's does.</param>
+        public EngineTables(Scope scope, Relations.ExecutionState state, ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions, string who, bool canonical = true)
         {
             Scope = scope;
             this.state = state;
             this.actions = actions;
             this.who = who;
+            this.canonical = canonical;
         }
 
         /// <summary>
@@ -65,6 +69,13 @@ namespace Eggnog
         /// Ends the call: the tables answer nothing after.
         /// </summary>
         public void End() => done = true;
+
+        /// <summary>
+        /// Gets a class cell canonical through the state, or as it is for a merge's primitive.
+        /// </summary>
+        /// <param name="cell">The class cell.</param>
+        /// <returns>The cell to use.</returns>
+        uint Find(uint cell) => canonical ? State.Canonicalize(cell) : cell;
 
         /// <summary>
         /// Records a refusal, the first one only, and returns it to throw.
@@ -173,12 +184,12 @@ namespace Eggnog
                 return false;
 
             var output = table.Columns[^1];
-            value = (T)output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
+            value = (T)output.DecodeObject(output.InvolvesClasses ? Find(cell) : cell, Scope);
             return true;
         }
 
         /// <summary>
-        /// Reads the output of a function's row at keys' cells, the class canonical through the state.
+        /// Reads the output of a function's row at keys' cells, the class canonical through the state (<see cref="Find"/>).
         /// </summary>
         /// <exception cref="ArgumentException">The function belongs to another graph or is a scoped view.</exception>
         public bool TryLookupCell(FunctionHandle table, ReadOnlySpan<uint> keys, out uint value)
@@ -188,7 +199,7 @@ namespace Eggnog
                 return false;
 
             if (table.Columns[^1].InvolvesClasses)
-                value = State.Canonicalize(value);
+                value = Find(value);
 
             return true;
         }
@@ -205,7 +216,7 @@ namespace Eggnog
                 return false;
 
             var output = table.Columns[^1];
-            value = output.DecodeObject(output.InvolvesClasses ? State.Canonicalize(cell) : cell, Scope);
+            value = output.DecodeObject(output.InvolvesClasses ? Find(cell) : cell, Scope);
             return true;
         }
 
@@ -278,7 +289,7 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Gets the cell of a container of classes a read names, its classes usable and canonical through the state,
+        /// Gets the cell of a container of classes a read names, its classes usable and canonical (<see cref="Find"/>),
         /// without interning it.
         /// </summary>
         /// <returns>Whether a write made it.</returns>
@@ -291,7 +302,7 @@ namespace Eggnog
 
             try
             {
-                return type.TryEncodeCanonicalObject(value, Scope, State.Canonicalize, out cell);
+                return type.TryEncodeCanonicalObject(value, Scope, Find, out cell);
             }
             catch (ArgumentException refused)
             {
@@ -352,15 +363,15 @@ namespace Eggnog
                     throw Refuse(refused);
                 }
 
-                return State.Canonicalize(cell);
+                return Find(cell);
             }
 
             try
             {
-                // A container of classes: its classes usable and canonical through the state, as a class is, and the
+                // A container of classes: its classes usable and canonical (Find), as a class is, and the
                 // container interned at a writable root or child, or in a frozen scope the one it sees.
                 if (type.HoldsClasses)
-                    return type.EncodeCanonicalObject(value, Scope, State.Canonicalize, null);
+                    return type.EncodeCanonicalObject(value, Scope, Find, null);
 
                 return type.EncodeObject(value);
             }

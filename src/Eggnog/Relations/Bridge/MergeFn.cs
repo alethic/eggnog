@@ -40,7 +40,7 @@ namespace Eggnog.Relations
 
         readonly MergeFn[] args;
 
-        MergeFn(MergeFnKind kind, Value constant, ExternalFunctionId primitive, FunctionId function, MergeFn[] args, bool isLattice, bool keepsOldOnEqual = false)
+        MergeFn(MergeFnKind kind, Value constant, ExternalFunctionId primitive, FunctionId function, MergeFn[] args, bool isLattice)
         {
             Kind = kind;
             Constant = constant;
@@ -48,7 +48,6 @@ namespace Eggnog.Relations
             FunctionId = function;
             this.args = args;
             IsLattice = isLattice;
-            KeepsOldOnEqual = keepsOldOnEqual;
         }
 
         /// <summary>
@@ -87,16 +86,17 @@ namespace Eggnog.Relations
         /// last rebuild pass left it, so that an id that has lost a union still names its class. egglog has no such
         /// node: it lowers a global to a function of no keys (src/ast/remove_globals.rs), whose read in a merge is a
         /// <see cref="Function(FunctionId, MergeFn[])"/> node with no arguments. That node yields the old value when
-        /// the old and new values agree, at any depth (egglog PR 287), which this node does when
-        /// <paramref name="keepsOldOnEqual"/> is set, for a function whose output is the class's sort; for a function
-        /// of another sort, where egglog's read would yield the old value of that other sort in place of the class, it
-        /// yields the class always. As egglog's read sees the global's table as the last rebuild left it, a merge
-        /// within a flush does not see the flush's own unions. Not a lattice merge.
+        /// the old and new values agree, at any depth (egglog PR 287), and so does this node, whatever the function's
+        /// sort: in a function of another sort than the class's, the old value, of that sort, stands where a class is
+        /// expected, as in egglog. The values agree where egglog's do, but for the rebuild's merge of two rows whose
+        /// containers the same pass makes equal, which sees them equal where egglog's sees two ids
+        /// (<see cref="Database.RebuildPass"/>), and so keeps the old value where egglog's gives the class. As egglog's
+        /// read sees the global's table as the last rebuild left it, a merge within a flush does not see the flush's own
+        /// unions. Not a lattice merge.
         /// </summary>
         /// <param name="id">The e-class id.</param>
-        /// <param name="keepsOldOnEqual">Whether the merge yields the old value when the old and new values agree.</param>
         /// <returns>The merge.</returns>
-        public static MergeFn IdConst(Value id, bool keepsOldOnEqual) => new(MergeFnKind.IdConst, id, default, default, NoArgs, false, keepsOldOnEqual);
+        public static MergeFn IdConst(Value id) => new(MergeFnKind.IdConst, id, default, default, NoArgs, false);
 
         /// <summary>
         /// Creates the merge that applies the external function <paramref name="primitive"/> to the results of
@@ -137,11 +137,6 @@ namespace Eggnog.Relations
         /// merge.
         /// </summary>
         public Value Constant { get; }
-
-        /// <summary>
-        /// Gets whether a <see cref="MergeFnKind.IdConst"/> merge yields the old value when the old and new values agree.
-        /// </summary>
-        public bool KeepsOldOnEqual { get; }
 
         /// <summary>
         /// Gets the external function of a <see cref="MergeFnKind.Primitive"/> merge.

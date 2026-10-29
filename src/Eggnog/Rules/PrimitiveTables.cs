@@ -67,7 +67,8 @@ namespace Eggnog
 
         /// <summary>
         /// Reads the output of a function's row at keys' cells, as a function value's application does where the context
-        /// reads (<see cref="FnApply"/>): the class canonical.
+        /// reads (<see cref="FnApply"/>): the class canonical, or in a merge as the row holds it, as egglog's merge reads
+        /// it.
         /// </summary>
         /// <param name="table">The function.</param>
         /// <param name="keys">The keys' cells.</param>

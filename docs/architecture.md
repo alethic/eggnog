@@ -333,12 +333,19 @@ that a merge of classes may make terms, as `(Join old new)` does. A class consta
 global rule's must, stands for egglog's global, which egglog lowers to a function of no keys read by the merge: the
 merge gives the class as the last rebuild pass left it canonical (`MergeFn.IdConst`, which the root's database keeps and
 each rebuild pass refreshes, as the pass rebuilds the global's row), so a merge does not see the unions of its own
-flush, such as a rule's run's, though a primitive of the expression takes the class canonical as it runs; and in a
-function of the class's sort it gives the old value when the old and new agree, at any depth, as that read does; in a
-function of another sort it gives the class then, where egglog's read gives the old value, of that other sort, in its
-place (section 2.13, item 6). A batch that merged classes flushes and rebuilds before a write of a function whose merge
-holds a class constant, whatever its output, as egglog's next command reads the global after the rebuild, and flushes
-after such a write before its next fact, so that a union after the write merges after it, as egglog's next command does.
+flush, such as a rule's run's; and it gives the old value when the old and new agree, at any depth, as that read does,
+whatever the function's sort: in a function of another sort, the old value of that sort stands where a class is
+expected, as in egglog, so `:merge (vec-push old $g)` of a vector and the same vector pushes the vector itself as an
+element, which has no term and does not extract, as in egglog. It keeps the old value where egglog gives the class in
+the rebuild's merge of two rows whose containers the same pass makes equal: the pass merges the containers' unions
+into the union-find before it rebuilds the tables, where egglog's table rebuild still sees two ids (the engine's fix of
+row 23 of the engine map's defect list), so with `:merge (vec-push old $g)`, `(h (A))` at `(vec-of (A))`, `(h (B))`
+at `(vec-of (B))` and `(union (A) (B))`, the merged vector's second element is the old vector here and `$g` in egglog.
+A union of such an element with another container's id can leave two containers under one id, which a read gives
+differently from egglog (section 2.13, item 6). A merge's primitives take their ids as they are, as
+egglog's do (decision 22), so within a rule's run they do not see the run's own unions either, and the next rebuild
+makes what they made canonical. A batch that merged classes flushes and rebuilds before a write of a function whose
+merge holds a class constant, whatever its output, as egglog's next command reads the global after the rebuild.
 An expression is checked and lowered when its function is defined, and named by its rendering; a lookup with no row, or
 a primitive that throws or has no result, fails the merge as egglog's merge panics, which fails a rule's run or a host
 write's flush, and what they wrote stands (section 2.12). A host batch works out an expression of primitives and
@@ -819,12 +826,13 @@ with egglog" lists:
 5. A rule or a merge expression may not hold a constant container of classes, which egglog's global may be and egglog
    lowers as it lowers a class global (`(let $v (vec-of (A)))` read by a rule or by `:merge $v`); it builds the
    container from terms and class constants with its primitives, such as `Primitives.VecOf`, which gives the same.
-6. A merge expression's class constant is the class as the last rebuild left it, as egglog's read of the global's
-   lowered table is, but a primitive of the expression takes its classes canonical as the merge runs (decision 22),
-   where egglog's takes the ids as they are: within a rule's run it sees the run's own unions, so
-   `(rule () ((union $g $g2) (set (h) 5)))` with `:merge (+ old (set-length (set-of $g $g2)))` counts one class where
-   egglog counts two. And in a function of another sort than the class, the constant gives the class when the old and
-   new values agree, where egglog's read gives the old value, which is not of the class's sort.
+6. When a rebuild leaves two different containers under one id, a read of the id gives either of them, where egglog's
+   gives the one its rebuild renamed or reinserted last (`core-relations/src/containers/mod.rs:411-462`, `521-571`).
+   Only an ill-typed element, the old value of another sort that a merge's class constant keeps, puts a container's
+   id in a class column, so only a union of such an element reaches it: with `:merge (vec-push old $g)`, `(h)` set
+   twice to `(vec-of (B))` and `(h3)` twice to `(h)`, `(union (vec-get (h) 1) (vec-get (h3) 2))` makes
+   `(vec-length (h))` 1 here and 2 in egglog. egglog's choice follows its hash tables' iteration order when two of
+   the containers are renamed, and leaves the other container under the id out of its id-to-container map.
 
 Kept by choice, and not a departure to remove: there is no `.egg` front end. Programs are written in C#, egglog's
 `push` and `pop` become child scopes, and egglog's tests are ported to the C# API, their answers checked against the

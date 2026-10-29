@@ -753,7 +753,6 @@ namespace Eggnog
                     OnUndo(() => opaqueMerges = false);
                 }
 
-                NoteClassConstantMerge(table);
                 rows.Add((table, Row(keys, cell)));
                 return;
             }
@@ -772,25 +771,10 @@ namespace Eggnog
             }
 
             CheckNotReadByExpression(table);
-            NoteClassConstantMerge(table);
             var row = new uint[keys.Length + 1];
             keys.CopyTo(row, 0);
             row[^1] = cell;
             rows.Add((table, row));
-        }
-
-        /// <summary>
-        /// Records a write through a merge that holds class constants: the engine's merge reads the classes as the last
-        /// rebuild left them, so a merge of classes later in the batch must flush after it, as egglog's next command
-        /// merges after this one's merge (<see cref="EveryFactRebuilds"/>).
-        /// </summary>
-        void NoteClassConstantMerge(FunctionHandle table)
-        {
-            if (table.Merge!.ReadsClasses && classConstantMerges == false)
-            {
-                classConstantMerges = true;
-                OnUndo(() => classConstantMerges = false);
-            }
         }
 
         /// <summary>

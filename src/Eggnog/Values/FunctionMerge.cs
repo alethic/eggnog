@@ -48,9 +48,10 @@ namespace Eggnog
         /// egglog's does. The merge is checked and lowered when its function is defined, and named by its rendering,
         /// such as <c>(Join old new)</c>. A merge over classes may make terms, and may hold a class of the root,
         /// egglog's global, which is the class as the last rebuild left it canonical, or the old value when the old and
-        /// new agree in a function of the class's sort; a function lookup with no row, or a primitive that throws or
-        /// has no result, fails the merge, as egglog's merge panics, which fails a rule's run, or a host write's flush,
-        /// and keeps what they wrote. As every merge that is not a lattice, only the root writes its function.
+        /// new agree, whatever the function's sort, as egglog's read of the global is; its primitives take their classes
+        /// as they are, as egglog's do. A function lookup with no row, or a primitive that throws or has no result, fails
+        /// the merge, as egglog's merge panics, which fails a rule's run, or a host write's flush, and keeps what they
+        /// wrote. As every merge that is not a lattice, only the root writes its function.
         /// </summary>
         /// <typeparam name="T">The value type, or the sort.</typeparam>
         /// <param name="merge">Builds the merge from the old and the new value.</param>

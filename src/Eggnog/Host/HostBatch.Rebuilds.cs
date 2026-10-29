@@ -43,13 +43,6 @@ namespace Eggnog
         bool opaqueMerges;
 
         /// <summary>
-        /// Whether a fact before the one being planned wrote a function whose merge holds class constants, which reads
-        /// the classes as the last rebuild left them: every later fact needs the batch rebuilt, so that a merge of classes
-        /// after the write comes after its merge, as egglog's next command's does.
-        /// </summary>
-        bool classConstantMerges;
-
-        /// <summary>
         /// Whether a rebuild stopped the scope, a case its contradiction stopped: the batch's later calls plan nothing, as
         /// a stopped case's writes change nothing.
         /// </summary>
@@ -62,12 +55,10 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether every fact needs the facts before it rebuilt: after a merge expression's primitive wrote what it
-        /// chose; after a write through a merge that holds class constants, whose merge one flush with a later merge of
-        /// classes would run after that merge, where the batch worked it out before; and after a merge of classes when
-        /// rows the rebuild compares by its passes may meet, which one rebuild of two facts' merges compares otherwise
-        /// than egglog's two commands, each rebuilt, do (CheckClassOutputs).
+        /// chose, and after a merge of classes when rows the rebuild compares by its passes may meet, which one rebuild of
+        /// two facts' merges compares otherwise than egglog's two commands, each rebuilt, do (CheckClassOutputs).
         /// </summary>
-        bool EveryFactRebuilds => opaqueMerges || classConstantMerges || (mergedBeforeFact && passSensitive);
+        bool EveryFactRebuilds => opaqueMerges || (mergedBeforeFact && passSensitive);
 
         /// <summary>
         /// Flushes and rebuilds the facts planned so far before a fact that needs them so (<see cref="NeedsRebuild"/>).
@@ -365,7 +356,6 @@ namespace Eggnog
             removeKeys.Clear();
             ResetMergeCheck();
             opaqueMerges = false;
-            classConstantMerges = false;
             notedMerges.Clear();
             MarkFact();
             mergedBeforeFact = false;
