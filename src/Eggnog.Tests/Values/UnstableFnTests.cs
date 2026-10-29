@@ -582,6 +582,161 @@ namespace Eggnog.Tests.Values
             Assert.Throws<ArgumentOutOfRangeException>(() => vecOf.WithArity(-1));
         }
 
+        /// <summary>
+        /// A function value holds any number of partially applied arguments, as egglog's vector does, and rebuilds each of
+        /// a class, past the 64th too. The expectation is egglog's at 5e655cae running probe wide.egg, which exits clean:
+        /// (f 1) = (unstable-fn "vec-of" (Num 0) ... (Num 69)) and (f 2), the same with (Num 0) at 65, are equal once
+        /// (union (Num 65) (Num 0)); (g) = (unstable-fn "W" (Num 0) ... (Num 69)), of a constructor of 71 arguments,
+        /// applies to (Num 70) as (W (Num 0) ... (Num 70)), which after (union (Num 66) (Num 1)) is the term with (Num 1)
+        /// at 66, by the table's congruence; (g)'s argument at 66 is then rebuilt to (Num 1)'s class.
+        /// </summary>
+        [Fact]
+        public void AFunctionValueHoldsAndRebuildsMoreThan64PartialArguments()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterVec<Node>();
+            var vecType = graph.Values.RegisterFn<Node, Vec<Node>>();
+            graph.Values.RegisterFn<Node, Node>();
+            var f = graph.DefineFunction<long, UnstableFn<Node, Vec<Node>>>("f");
+            var g = graph.DefineFunction<UnstableFn<Node, Node>>("g");
+            var w = graph.DefineConstructorN<Node>("W", Enumerable.Repeat(typeof(Node), 71).ToArray());
+            var vecOf = Primitives.UnstableFn<Node, Vec<Node>>(Primitives.VecOf<Node>().WithArity(71));
+            var root = graph.Root;
+            var first = new object[70];
+            var second = new object[70];
+            for (var i = 0; i < first.Length; i++)
+            {
+                first[i] = num.Of((long)i);
+                second[i] = num.Of(i == 65 ? 0L : i);
+            }
+
+            root.Assume(f.Of(1L).Is(vecOf.Of(first)), f.Of(2L).Is(vecOf.Of(second)));
+            Assert.False(root.Check(f.Of(1L).Is(f.Of(2L))));
+
+            // The content carries two words of flags, every argument's set, and rebuilds the argument at 65.
+            var container = (IContainerColumnType)vecType;
+            Assert.True(vecType.TryEncodeExisting(root.Get(f.Of(1L)), root.ContainerView, out var one));
+            Assert.True(vecType.TryEncodeExisting(root.Get(f.Of(2L)), root.ContainerView, out var two));
+            var content = container.Content(one, root.ContainerView);
+            Assert.Equal(74, content.Length);
+            Assert.Equal(new long[] { 2, -1, 0x3F }, content[1..4]);
+            var (zero, sixtyFive) = ((uint)content[4], (uint)content[4 + 65]);
+            Assert.Equal(container.Content(two, root.ContainerView), container.Rebuild(content, cell => cell == sixtyFive ? zero : cell));
+
+            root.Union(root.Make(num.Of(65L)), root.Make(num.Of(0L)));
+            Assert.True(root.Check(f.Of(1L).Is(f.Of(2L))));
+            Assert.True(root.AreEqual((Node)root.Get(f.Of(1L)).Arguments[65], num.Of(0L)));
+
+            root.Assume(g.Of().Is(Primitives.UnstableFn<Node, Node>(w).Of(first)));
+            var app = graph.DefineFunction<Node>("app");
+            root.Assume(app.Of().Is(Primitives.UnstableApp<Node, Node>().Of(g.Of(), num.Of(70L))));
+            var applied = root.Get(app.Of());
+            var all = new object[71];
+            for (var i = 0; i < all.Length; i++)
+                all[i] = num.Of((long)i);
+
+            Assert.True(root.AreEqual(applied, w.Of(all)));
+            root.Union(root.Make(num.Of(66L)), root.Make(num.Of(1L)));
+            all[66] = num.Of(1L);
+            Assert.True(root.AreEqual(applied, w.Of(all)));
+            Assert.True(root.AreEqual((Node)root.Get(g.Of()).Arguments[66], num.Of(1L)));
+        }
+
+        /// <summary>
+        /// A nested function value past the 64th partially applied argument that holds no class is not rebuilt, and the
+        /// value's classes around it are.
+        /// </summary>
+        [Fact]
+        public void ANestedFunctionValuePastThe64thArgumentIsAValue()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            graph.Values.RegisterFn<long, long>();
+            var type = graph.Values.RegisterFn<long, Node>();
+            var parameters = new Type[71];
+            for (var i = 0; i < 70; i++)
+                parameters[i] = typeof(Node);
+
+            parameters[66] = typeof(UnstableFn<long, long>);
+            parameters[70] = typeof(long);
+            var pick = Primitive.Create<Node>("pick", parameters, args => (Node)args[(int)(long)args[70]]);
+            var h = graph.DefineFunction<long, UnstableFn<long, Node>>("h");
+            var root = graph.Root;
+            var first = new object[70];
+            var second = new object[70];
+            for (var i = 0; i < first.Length; i++)
+            {
+                first[i] = num.Of((long)i);
+                second[i] = num.Of(i == 68 ? 0L : i);
+            }
+
+            first[66] = second[66] = Primitives.UnstableFn<long, long>(Primitives.Add).Of(1L);
+            var pickFrom = Primitives.UnstableFn<long, Node>(pick);
+            root.Assume(h.Of(1L).Is(pickFrom.Of(first)), h.Of(2L).Is(pickFrom.Of(second)));
+            Assert.False(root.Check(h.Of(1L).Is(h.Of(2L))));
+
+            // Every argument's flag is set but the nested value's.
+            Assert.True(type.TryEncodeExisting(root.Get(h.Of(1L)), root.ContainerView, out var cell));
+            var content = ((IContainerColumnType)type).Content(cell, root.ContainerView);
+            Assert.Equal(new long[] { 2, -1, 0x3F & ~(1L << 2) }, content[1..4]);
+
+            root.Union(root.Make(num.Of(68L)), root.Make(num.Of(0L)));
+            Assert.True(root.Check(h.Of(1L).Is(h.Of(2L))));
+            var app = graph.DefineFunction<Node>("app");
+            root.Assume(app.Of().Is(Primitives.UnstableApp<long, Node>().Of(h.Of(1L), 68L)));
+            Assert.True(root.AreEqual(root.Get(app.Of()), num.Of(0L)));
+            Assert.Equal("(unstable-fn \"+\" 1)", root.Get(h.Of(2L)).Arguments[66].ToString());
+        }
+
+        /// <summary>
+        /// A function value of more than 64 partially applied arguments, none past the 64th a class, carries one word of
+        /// flags, as one of 64 or fewer does, and rebuilds its classes below the 64th.
+        /// </summary>
+        [Fact]
+        public void AFunctionValueWithNoClassPastThe64thArgumentCarriesOneWordOfFlags()
+        {
+            var graph = new EGraph();
+            graph.DefineSort<Node>("Math");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var type = graph.Values.RegisterFn<long, Node>();
+            var parameters = new Type[71];
+            for (var i = 0; i < parameters.Length; i++)
+                parameters[i] = i < 64 ? typeof(Node) : typeof(long);
+
+            var pick = Primitive.Create<Node>("pick", parameters, args => (Node)args[(int)(long)args[70]]);
+            var h = graph.DefineFunction<long, UnstableFn<long, Node>>("h");
+            var root = graph.Root;
+            var first = new object[70];
+            var second = new object[70];
+            for (var i = 0; i < first.Length; i++)
+            {
+                first[i] = i < 64 ? num.Of((long)i) : (long)i;
+                second[i] = i < 64 ? num.Of(i == 5 ? 0L : i) : (long)i;
+            }
+
+            var pickFrom = Primitives.UnstableFn<long, Node>(pick);
+            root.Assume(h.Of(1L).Is(pickFrom.Of(first)), h.Of(2L).Is(pickFrom.Of(second)));
+            Assert.False(root.Check(h.Of(1L).Is(h.Of(2L))));
+
+            // One word of flags, every argument's below the 64th set, and the argument at 5 rebuilds.
+            var container = (IContainerColumnType)type;
+            Assert.True(type.TryEncodeExisting(root.Get(h.Of(1L)), root.ContainerView, out var one));
+            Assert.True(type.TryEncodeExisting(root.Get(h.Of(2L)), root.ContainerView, out var two));
+            var content = container.Content(one, root.ContainerView);
+            Assert.Equal(73, content.Length);
+            Assert.Equal(new long[] { 1, -1 }, content[1..3]);
+            var (zero, five) = ((uint)content[3], (uint)content[3 + 5]);
+            Assert.Equal(container.Content(two, root.ContainerView), container.Rebuild(content, cell => cell == five ? zero : cell));
+
+            root.Union(root.Make(num.Of(5L)), root.Make(num.Of(0L)));
+            Assert.True(root.Check(h.Of(1L).Is(h.Of(2L))));
+            Assert.True(root.AreEqual((Node)root.Get(h.Of(1L)).Arguments[5], num.Of(0L)));
+            Assert.Equal(69L, root.Get(h.Of(1L)).Arguments[69]);
+        }
+
     }
 
 }
