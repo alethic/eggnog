@@ -706,8 +706,8 @@ namespace Eggnog
         /// merge leaves unchanged plans nothing.
         /// </summary>
         /// <exception cref="InvalidOperationException">The scope is not the root: only the root writes a function whose
-        /// merge is not a lattice. Or the function has a sort key, and the batch merged classes before the
-        /// write.</exception>
+        /// merge is not a lattice. Or the batch merged classes before the write, and the function has a sort key, an output
+        /// of classes its merge compares, or a merge that holds class constants.</exception>
         /// <exception cref="RuleEvaluationException">The merge threw; nothing is written and the scope is not
         /// faulted.</exception>
         void PlanMergeWrite(FunctionHandle table, TermShape application, Term value)
@@ -718,9 +718,9 @@ namespace Eggnog
 
             // egglog's next command would write after the merge's rebuild had merged the rows the merge makes equal; the
             // batch stages its merges after its writes, which reverses that order, and the merge is not commutative.
-            if (mergedBeforeFact && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues)))
+            if (mergedBeforeFact && (HasSortKey(table) || (table.Output!.InvolvesClasses && table.Merge!.ComparesValues) || table.Merge!.ReadsClasses))
                 throw new InvalidOperationException(
-                    $"'{table.Name}' is written after this batch merged classes, its keys or output are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
+                    $"'{table.Name}' is written after this batch merged classes, its keys, output or merge's constants are classes, and its merge '{table.Merge!.Name}' is not a lattice; write it in a later call, which sees the merge as egglog's next command does.");
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);

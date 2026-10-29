@@ -142,8 +142,8 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether a write of a function's value needs the facts before it rebuilt: one of a function that holds
-        /// classes, or whose merge is not a lattice and meets the merged classes or calls tables, after a merge of
-        /// classes; one of a table a merge expression reads; or one whose terms need it.
+        /// classes, or whose merge is not a lattice and meets the merged classes, holds classes or calls tables, after a
+        /// merge of classes; one of a table a merge expression reads; or one whose terms need it.
         /// </summary>
         bool NeedsToWrite(TermShape application, TermShape value)
         {
@@ -155,7 +155,7 @@ namespace Eggnog
             {
                 var output = function.Output!;
                 var merge = function.Merge;
-                if (merge is null ? output.InvolvesClasses : HasSortKey(function) || (output.InvolvesClasses && merge.ComparesValues) || merge.CanSimulate == false)
+                if (merge is null ? output.InvolvesClasses : HasSortKey(function) || (output.InvolvesClasses && merge.ComparesValues) || merge.ReadsClasses || merge.CanSimulate == false)
                     return true;
             }
 

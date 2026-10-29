@@ -205,17 +205,8 @@ namespace Eggnog
                 return;
 
             var id = type.ClassOf(shape.Constant!);
-            if (id.Origin is not { } origin)
-                throw Error("a class constant is default(ClassId), which names no class");
-
-            if (ReferenceEquals(origin.Graph, graph) == false)
-                throw Error($"class {id} belongs to another graph");
-
-            if (ClassChecks.AllowedInRule(null, origin) == false)
-            {
-                var scope = origin.IsBatch ? origin.Parent! : origin;
-                throw Error($"class {id} came from scope '{scope.Path}'; a split rule may hold only classes from the root");
-            }
+            if (ClassChecks.CheckRuleConstant(null, graph, id, "a split rule may hold only classes from the root") is { } refusal)
+                throw Error(refusal);
         }
 
         /// <summary>

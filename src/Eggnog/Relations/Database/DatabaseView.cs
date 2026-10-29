@@ -119,6 +119,14 @@ namespace Eggnog.Relations
         public string? GetTableName(TableId table) => database.GetTableName(table);
 
         /// <summary>
+        /// Gets the class constant a merge holds in <paramref name="slot"/> as the database's last rebuild pass left it
+        /// canonical (<see cref="Database.ReadClassConstant"/>).
+        /// </summary>
+        /// <param name="slot">The slot.</param>
+        /// <returns>The class's id.</returns>
+        public uint ReadClassConstant(int slot) => database.ReadClassConstant(slot);
+
+        /// <summary>
         /// Gets the ids of every table the view sees, in ascending order. egglog's <c>table_ids</c>. In a child
         /// context's view, every table of the store's schema. Allocates an enumerator; cold path.
         /// </summary>

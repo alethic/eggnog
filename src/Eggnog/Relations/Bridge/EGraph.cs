@@ -259,7 +259,9 @@ namespace Eggnog.Relations
         /// functions the merge may call ("Illegal merge attempted for function ...", and so on) and turns function
         /// references into <see cref="TableAction"/>s. The merge's dependencies decide when the table merges: a
         /// <see cref="MergeFnKind.Function"/> merge reads and writes the function it looks up, so that function's table
-        /// merges first; a union-id or primitive merge writes the union-find (<c>fill_deps</c>, lib.rs:1033-1057).
+        /// merges first; a union-id or primitive merge writes the union-find (<c>fill_deps</c>, lib.rs:1033-1057). An
+        /// <see cref="MergeFnKind.IdConst"/> merge reads the class as the last rebuild pass left it, which the database
+        /// keeps (<see cref="Database.AddClassConstant"/>), so it depends on no table.
         /// </para>
         /// <para>
         /// The table is added to the store (<see cref="Relations.Store.AddTable"/>): at any time, children or not;
@@ -390,6 +392,13 @@ namespace Eggnog.Relations
             {
                 case MergeFnKind.Const:
                     return ResolvedMergeFn.Const(merge.Constant.Rep);
+                case MergeFnKind.IdConst:
+                {
+                    // egglog's lowered global holds the class as it was canonical when the global was made, and as each
+                    // rebuild leaves it after that.
+                    var id = merge.Constant.Rep;
+                    return ResolvedMergeFn.IdConst(id, db.AddClassConstant(id, unionFind.FindNaive(id)));
+                }
                 case MergeFnKind.Old:
                     return ResolvedMergeFn.Old();
                 case MergeFnKind.New:

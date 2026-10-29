@@ -5,10 +5,13 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// A merge that is an expression over the old and the new value (<see cref="FunctionMerge.Expression{T}"/>), egglog's
-    /// <c>:merge</c> of any expression: primitives, constants, and calls of functions and constructors, which the
-    /// engine's merge looks up or makes as egglog's <c>MergeFn::Function</c> does. It is lowered to the engine's merge
-    /// forms when its function is defined, and named by its rendering, such as <c>(Join old new)</c>.
+    /// A merge that is an expression over the old and the new value (<see cref="FunctionMerge.Expression{T}"/>),
+    /// egglog's <c>:merge</c> of any expression: primitives, constants, and calls of functions and constructors, which
+    /// the engine's merge looks up or makes as egglog's <c>MergeFn::Function</c> does. A class constant, which must be
+    /// from the root, is the class it names as the last rebuild left it canonical, or the old value when the values
+    /// agree, whatever the function's sort, as egglog's read of a global is. Its primitives take their classes as they
+    /// are, as egglog's do. It is lowered to the engine's merge forms when its function is defined, and named by its
+    /// rendering, such as <c>(Join old new)</c>.
     /// </summary>
     /// <typeparam name="T">The value type, or the sort.</typeparam>
     internal sealed class FunctionMergeExpression<T> : FunctionMergeDefinition
@@ -19,6 +22,7 @@ namespace Eggnog
         readonly Term<T> body;
         readonly TableHandle[] tables;
         readonly bool callsTablePrimitive;
+        bool readsClasses;
 
         /// <summary>
         /// Initializes a new instance: builds the expression over the two variables once.
@@ -88,6 +92,10 @@ namespace Eggnog
         public override bool ComparesValues => true;
 
         /// <inheritdoc />
+        /// <remarks>Set when the expression is lowered with a class constant.</remarks>
+        public override bool ReadsClasses => readsClasses;
+
+        /// <inheritdoc />
         /// <remarks>Not when the expression calls tables, or a primitive over them, whose writes the engine's merge
         /// stages.</remarks>
         public override bool CanSimulate => tables.Length == 0 && callsTablePrimitive == false;
@@ -100,18 +108,33 @@ namespace Eggnog
 
         /// <inheritdoc />
         /// <exception cref="ArgumentException">The expression holds a variable other than the old and the new value, a
-        /// class constant, a table of another graph, or a scoped view.</exception>
+        /// class constant that is not from the root, a table of another graph, or a scoped view.</exception>
         public override Relations.MergeFn CreateMergeFn(EGraph graph, string functionName, ColumnType type, List<Relations.ExternalFunctionId> registered) =>
             Lower(graph, functionName, body, registered);
 
         /// <summary>
         /// Evaluates an expression of primitives and constants over the two cells, as the engine's merge will, on the
-        /// calling thread (the host batch holds <see cref="EngineCallMarker"/>); a primitive that throws or has no result
-        /// throws, and a write primitive's unions go to <paramref name="union"/>.
+        /// calling thread (the host batch holds <see cref="EngineCallMarker"/>), its primitives taking their classes as
+        /// they are; a primitive that throws or has no result throws, and a write primitive's unions go to
+        /// <paramref name="union"/>.
         /// </summary>
         /// <exception cref="InvalidOperationException">The expression calls tables (<see cref="CanSimulate"/>).</exception>
-        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming, Action<uint, uint> union) =>
-            CanSimulate ? Evaluate(scope, body, stored, incoming, union) : throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
+        public override uint MergeCells(Scope scope, ColumnType type, uint stored, uint incoming, Action<uint, uint> union)
+        {
+            if (CanSimulate == false)
+                throw new InvalidOperationException($"The merge {Name} calls tables, so only the engine evaluates it.");
+
+            // As the engine's merge primitive (MergePrimitiveCall): no canonicalizer, not even an outer call's.
+            var canonicalizer = ClassCanonicalizer.Enter(null);
+            try
+            {
+                return Evaluate(scope, body, stored, incoming, union);
+            }
+            finally
+            {
+                ClassCanonicalizer.Exit(canonicalizer);
+            }
+        }
 
         /// <summary>
         /// Evaluates one term of an expression without applications.
@@ -125,7 +148,16 @@ namespace Eggnog
                 case TermShapeKind.Variable:
                     return ReferenceEquals(term, old) ? stored : incoming;
                 case TermShapeKind.Constant:
-                    return TypeOf(graph, shape.ConstantType, shape.ClrType).EncodeObject(shape.Constant!);
+                {
+                    var type = TypeOf(graph, shape.ConstantType, shape.ClrType);
+                    if (type.Kind != ColumnKind.Sort)
+                        return type.EncodeObject(shape.Constant!);
+
+                    // A class constant, as the engine's merge runs it: the old value when the values agree, whatever its
+                    // sort, and otherwise the class as the last rebuild left it canonical, which is as the scope finds it
+                    // now: the batch flushes and rebuilds after its merge of classes before such a write.
+                    return stored == incoming ? stored : scope.Engine.Find(type.ClassOf(shape.Constant!).Cell);
+                }
                 default:
                 {
                     var arguments = new uint[shape.Arguments.Length];
@@ -167,7 +199,12 @@ namespace Eggnog
                 {
                     var constantType = TypeOf(graph, shape.ConstantType, shape.ClrType);
                     if (constantType.Kind == ColumnKind.Sort)
-                        throw new ArgumentException($"The merge {Name} of '{functionName}' holds a class constant; apply a nullary constructor or function instead, as egglog lowers a global.", "merge");
+                    {
+                        // egglog's read of the global keeps the old value when the values agree, of whatever sort.
+                        var cell = ClassCell(graph, functionName, constantType.ClassOf(shape.Constant!));
+                        readsClasses = true;
+                        return Relations.MergeFn.IdConst(new Relations.Value(cell));
+                    }
 
                     if (constantType.HoldsClasses)
                         throw new ArgumentException($"The merge {Name} of '{functionName}' holds a constant {constantType.Name}, which holds classes; build it with its primitives over terms, as egglog has no literal for one.", "merge");
@@ -209,6 +246,19 @@ namespace Eggnog
                     return Relations.MergeFn.Primitive(call, arguments);
                 }
             }
+        }
+
+        /// <summary>
+        /// Gets the cell of a class constant, which egglog would hold as a global: it names a class of the graph, made by
+        /// a batch that committed, and is from the root, as a global rule's class constants are, so that it is a class
+        /// in every scope the merge runs in.
+        /// </summary>
+        uint ClassCell(EGraph graph, string functionName, ClassId id)
+        {
+            if (ClassChecks.CheckRuleConstant(null, graph, id, "a merge may hold only classes from the root") is { } refusal)
+                throw new ArgumentException($"The merge {Name} of '{functionName}' holds a class constant it may not: {refusal}.", "merge");
+
+            return id.Cell;
         }
 
         /// <summary>

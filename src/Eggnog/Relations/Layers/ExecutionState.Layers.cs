@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -68,6 +69,20 @@ namespace Eggnog.Relations
                 return child.Owner.UnionFind.Find(id);
 
             return RequireView().Owner.Owner is { IsRoot: true } root ? root.Store.RootUnionFind.FindNaive(id) : id;
+        }
+
+        /// <summary>
+        /// Gets the class constant a merge holds in <paramref name="slot"/> as the root's last rebuild pass left it
+        /// canonical, as egglog's merge reads the row of its lowered global. At a root or in a bare database only: a merge
+        /// that holds a class constant is not a lattice, and a child has no layer of a table whose merge is not a lattice
+        /// (<see cref="ContextTables.CreateLayer"/>), so no such merge runs in a child.
+        /// </summary>
+        /// <param name="slot">The slot (<see cref="Database.AddClassConstant"/>).</param>
+        /// <returns>The class's id.</returns>
+        internal uint ReadClassConstant(int slot)
+        {
+            Debug.Assert(layers is null, "a child runs no merge that holds a class constant");
+            return RequireView().ReadClassConstant(slot);
         }
 
         /// <summary>

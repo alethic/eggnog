@@ -22,11 +22,13 @@ namespace Eggnog
         /// <param name="context">The call site's context.</param>
         /// <param name="primitive">The primitive called.</param>
         /// <param name="actions">The table actions of the call site, made once per table.</param>
+        /// <param name="canonical">Whether classes are read and written canonical through the state; not for a merge's
+        /// primitive, which takes them as they are, as egglog's does.</param>
         public EnginePrimitiveTables(Scope scope, Relations.ExecutionState state, PrimitiveAccess context, Primitive primitive,
-            ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions)
+            ConcurrentDictionary<Relations.FunctionId, Relations.TableAction> actions, bool canonical = true)
             : base(scope, context, primitive)
         {
-            tables = new EngineTables(scope, state, actions, "A primitive");
+            tables = new EngineTables(scope, state, actions, "A primitive", canonical);
             ScopeRuntime.AssertReadsAsState(scope, state);
         }
 

@@ -38,8 +38,9 @@ namespace Eggnog.Relations
         readonly ExternalFunctionId panic;
         readonly TableAction? function;
         readonly ResolvedMergeFn[] args;
+        readonly int slot;
 
-        ResolvedMergeFn(MergeFnKind kind, uint constant, TableId unionFind, ExternalFunctionId primitive, ExternalFunctionId panic, TableAction? function, ResolvedMergeFn[] args)
+        ResolvedMergeFn(MergeFnKind kind, uint constant, TableId unionFind, ExternalFunctionId primitive, ExternalFunctionId panic, TableAction? function, ResolvedMergeFn[] args, int slot = 0)
         {
             this.kind = kind;
             this.constant = constant;
@@ -48,6 +49,7 @@ namespace Eggnog.Relations
             this.panic = panic;
             this.function = function;
             this.args = args;
+            this.slot = slot;
         }
 
         /// <summary>
@@ -56,6 +58,16 @@ namespace Eggnog.Relations
         /// <param name="value">The value.</param>
         /// <returns>The node.</returns>
         public static ResolvedMergeFn Const(uint value) => new(MergeFnKind.Const, value, default, default, default, null, NoArgs);
+
+        /// <summary>
+        /// Creates a node that produces the e-class id <paramref name="id"/> as the last rebuild pass left it canonical,
+        /// which the database keeps in <paramref name="slot"/> (<see cref="Database.AddClassConstant"/>), or the old value
+        /// when the values agree (<see cref="MergeFn.IdConst"/>).
+        /// </summary>
+        /// <param name="id">The e-class id.</param>
+        /// <param name="slot">The database's slot for the id.</param>
+        /// <returns>The node.</returns>
+        public static ResolvedMergeFn IdConst(uint id, int slot) => new(MergeFnKind.IdConst, id, default, default, default, null, NoArgs, slot);
 
         /// <summary>
         /// Creates a node that keeps the old value.
@@ -135,6 +147,11 @@ namespace Eggnog.Relations
             {
                 case MergeFnKind.Const:
                     return constant;
+                case MergeFnKind.IdConst:
+                    // The read of egglog's global, a function node, which yields the old value when the values agree, at
+                    // any depth (lib.rs:1222-1226), even one of another sort than the class's. The global's row is as the
+                    // last rebuild pass left it, not as this flush's unions leave the union-find.
+                    return current == incoming ? current : state.ReadClassConstant(slot);
                 case MergeFnKind.Old:
                     return current;
                 case MergeFnKind.New:

@@ -38,6 +38,12 @@ namespace Eggnog
         public virtual bool ComparesValues => DecodesValues;
 
         /// <summary>
+        /// Gets whether the merge reads classes it holds, egglog's globals, whatever its output: an expression with a class
+        /// constant, once its function is defined, which reads the class as the last rebuild before it leaves it.
+        /// </summary>
+        public virtual bool ReadsClasses => false;
+
+        /// <summary>
         /// Gets whether a host batch can work out the merged value itself (<see cref="MergeCells"/>); <c>false</c> for an
         /// expression that calls tables, so that only the engine evaluates it.
         /// </summary>

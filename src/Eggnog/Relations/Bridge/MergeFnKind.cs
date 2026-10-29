@@ -2,7 +2,9 @@ namespace Eggnog.Relations
 {
 
     /// <summary>
-    /// The cases of egglog-bridge's <c>MergeFn</c> (egglog-bridge/src/lib.rs:1010-1030); see <see cref="MergeFn"/>.
+    /// The cases of egglog-bridge's <c>MergeFn</c> (egglog-bridge/src/lib.rs:1010-1030), and <see cref="IdConst"/>, the
+    /// library's class constant, which egglog lowers to a <see cref="Function"/> node with no arguments; see
+    /// <see cref="MergeFn"/>.
     /// </summary>
     internal enum MergeFnKind : byte
     {
@@ -42,6 +44,11 @@ namespace Eggnog.Relations
         /// Produce a constant.
         /// </summary>
         Const,
+
+        /// <summary>
+        /// Produce an e-class id constant in its canonical form as the last rebuild pass left it.
+        /// </summary>
+        IdConst,
 
     }
 

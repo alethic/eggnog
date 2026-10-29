@@ -124,6 +124,12 @@ namespace Eggnog.Relations
         /// Here the container unions are merged into the union-find first (only when the containers changed), so the
         /// table rebuild sees them.
         /// </para>
+        /// <para>
+        /// A merge sees the difference: when two rows collapse whose containers this pass made equal, the table
+        /// rebuild's merge gets one id as both the old and the new value, where egglog's gets two, so a merge that keeps
+        /// the old value when the values agree (a class constant, <see cref="MergeFn.IdConst"/>, or a function lookup)
+        /// keeps it here where egglog's computes its result.
+        /// </para>
         /// </remarks>
         /// <param name="unionFind">The union-find table.</param>
         /// <param name="tables">The function tables to rebuild and refresh; distinct, and not the union-find.</param>
@@ -147,6 +153,9 @@ namespace Eggnog.Relations
             if (containerRebuild.DirtyCount > 0 && containers!.Log.Active)
                 containers.Log.AppendDirty(containerRebuild.DirtyIds);
 
+            // The rows of egglog's lowered globals are rebuilt with the others, so the merges of the pass read the
+            // class constants as the pass makes them canonical (Bridge/Database.ClassConstants.cs).
+            RefreshClassConstants(unionFind);
             var tableRebuild = ApplyRebuild(unionFind, tables, next);
             var refreshed = RefreshRowsForValues(tables, containerRebuild.DirtyIds, next);
             return tableRebuild || refreshed || containerRebuild.Changed;

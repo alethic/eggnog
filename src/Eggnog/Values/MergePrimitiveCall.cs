@@ -7,7 +7,9 @@ namespace Eggnog
     /// <summary>
     /// A primitive called by a merge expression (<see cref="FunctionMerge.Expression{T}"/>): it decodes the arguments,
     /// invokes the primitive under <see cref="EngineCallMarker"/> and encodes the result, as a rule's head computation
-    /// does.
+    /// does, but takes its classes as they are, as egglog's merge primitives do: a container it returns holds them
+    /// uncanonicalized, and its tables read and write them so (<see cref="EnginePrimitiveTables"/>), so that within a
+    /// run it does not see the run's own unions; the next rebuild makes what it returns canonical.
     /// </summary>
     /// <remarks>
     /// A primitive that throws, or a partial one with no result, fails the merge: the failure is recorded as an evaluation
@@ -56,7 +58,8 @@ namespace Eggnog
         {
             EngineCallMarker.Enter();
             Relations.ContainerView.EnterEngineCall(state);
-            var canonicalizer = this.result.HoldsClasses ? ClassCanonicalizer.Enter(state.Canonicalize) : null;
+            // No canonicalizer, not even an outer call's: the merge takes its classes as they are.
+            var canonicalizer = ClassCanonicalizer.Enter(null);
             try
             {
                 if (primitive.IsWrite)
@@ -76,7 +79,7 @@ namespace Eggnog
                     // the merge's state.
                     var tables = new EnginePrimitiveTables(
                         ScopeRuntime.Of(graph, state).Owner ?? throw new InvalidOperationException("A merge ran in a context with no scope."),
-                        state, PrimitiveAccess.Write, primitive, actions);
+                        state, PrimitiveAccess.Write, primitive, actions, canonical: false);
                     try
                     {
                         var found = primitive.TryInvokeTables(args, parameters, this.result, tables, out result);
@@ -104,9 +107,7 @@ namespace Eggnog
             }
             finally
             {
-                if (this.result.HoldsClasses)
-                    ClassCanonicalizer.Exit(canonicalizer);
-
+                ClassCanonicalizer.Exit(canonicalizer);
                 Relations.ContainerView.ExitEngineCall(state);
                 EngineCallMarker.Exit();
             }

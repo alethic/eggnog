@@ -21,6 +21,11 @@ gates").
 - **Table reads in rule heads.** egglog 3.0.0 allows lookups in the heads of `:naive` and `:unsafe-seminaive` rules; here
   heads never read but in a full rule callback, egglog's `rust_rule_full`, or a primitive of full access, a function
   value's application among them (architecture 2.13, item 2). Such a rule inherits no progress in a child.
+- **Constant containers of classes.** egglog's global may be a container of classes, which a rule or a `:merge` reads as
+  it reads a class global; here a rule or a merge expression builds it with its primitives (architecture 2.13, item 5).
+- **Containers under one id.** When a rebuild leaves two different containers under one id, egglog's read of the id
+  gives the one its rebuild renamed or reinserted last; here it gives either. Only a union of an ill-typed element, the
+  old value of another sort a merge's class constant keeps, reaches it (architecture 2.13, item 6).
 - **egglog 3.0.0.** The engine follows `5e655cae` until the behaviour items of
   [`egglog-3.0.0-todo.md`](egglog-3.0.0-todo.md) are followed: join-key order, container term forms, escaped string
   literals, duplicate rule names, the thread count per graph.

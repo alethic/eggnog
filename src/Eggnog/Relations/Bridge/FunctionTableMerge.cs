@@ -44,7 +44,7 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(output);
             this.output = output;
-            identityOnEqual = output.Kind is MergeFnKind.UnionId or MergeFnKind.AssertEq or MergeFnKind.Old or MergeFnKind.New or MergeFnKind.Function;
+            identityOnEqual = output.Kind is MergeFnKind.UnionId or MergeFnKind.AssertEq or MergeFnKind.Old or MergeFnKind.New or MergeFnKind.Function or MergeFnKind.IdConst;
             Math = math;
             outputColumn = math.OutputColumn;
             timestampColumn = math.TimestampColumn;

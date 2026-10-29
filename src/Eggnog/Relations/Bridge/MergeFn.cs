@@ -10,7 +10,8 @@ namespace Eggnog.Relations
     /// (egglog-bridge/src/lib.rs:1010-1030). Constructors use <see cref="UnionId"/>; custom functions use
     /// <see cref="AssertEq"/> unless they declare <c>:merge</c>, which the frontend translates into
     /// <see cref="Old"/>, <see cref="New"/>, <see cref="Const"/>, <see cref="Primitive(ExternalFunctionId, MergeFn[])"/>
-    /// and <see cref="Function(FunctionId, MergeFn[])"/> nodes.
+    /// and <see cref="Function(FunctionId, MergeFn[])"/> nodes, and the library's class constants into
+    /// <see cref="IdConst"/> nodes.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -20,8 +21,8 @@ namespace Eggnog.Relations
     /// <para>
     /// Every merge function declares whether it is a lattice merge (associative, commutative and idempotent), which
     /// decides whether a context with ancestors may write the table: <see cref="AssertEq"/> and <see cref="UnionId"/>
-    /// are; <see cref="Old"/>, <see cref="New"/> and <see cref="Const"/> are not (the result depends on arrival order,
-    /// or is not idempotent); a <see cref="Primitive(ExternalFunctionId, MergeFn[])"/> or
+    /// are; <see cref="Old"/>, <see cref="New"/>, <see cref="Const"/> and <see cref="IdConst"/> are not (the result
+    /// depends on arrival order, or is not idempotent); a <see cref="Primitive(ExternalFunctionId, MergeFn[])"/> or
     /// <see cref="Function(FunctionId, MergeFn[])"/> merge is not unless declared with <see cref="AsLattice"/>
     /// (<c>min</c>, <c>max</c> or <c>set-union</c> over the old and new values, say). egglog documents the lattice
     /// requirement without recording it. Only the root's declaration matters: the arguments of a lattice primitive are
@@ -81,6 +82,23 @@ namespace Eggnog.Relations
         public static MergeFn Const(Value constant) => new(MergeFnKind.Const, constant, default, default, NoArgs, false);
 
         /// <summary>
+        /// Creates the merge that produces the e-class id <paramref name="id"/> in its canonical form as the root's
+        /// last rebuild pass left it, so that an id that has lost a union still names its class. egglog has no such
+        /// node: it lowers a global to a function of no keys (src/ast/remove_globals.rs), whose read in a merge is a
+        /// <see cref="Function(FunctionId, MergeFn[])"/> node with no arguments. That node yields the old value when
+        /// the old and new values agree, at any depth (egglog PR 287), and so does this node, whatever the function's
+        /// sort: in a function of another sort than the class's, the old value, of that sort, stands where a class is
+        /// expected, as in egglog. The values agree where egglog's do, but for the rebuild's merge of two rows whose
+        /// containers the same pass makes equal, which sees them equal where egglog's sees two ids
+        /// (<see cref="Database.RebuildPass"/>), and so keeps the old value where egglog's gives the class. As egglog's
+        /// read sees the global's table as the last rebuild left it, a merge within a flush does not see the flush's own
+        /// unions. Not a lattice merge.
+        /// </summary>
+        /// <param name="id">The e-class id.</param>
+        /// <returns>The merge.</returns>
+        public static MergeFn IdConst(Value id) => new(MergeFnKind.IdConst, id, default, default, NoArgs, false);
+
+        /// <summary>
         /// Creates the merge that applies the external function <paramref name="primitive"/> to the results of
         /// <paramref name="args"/>: egglog's <c>MergeFn::Primitive</c>. When the function produces nothing, the merge is an
         /// egglog-level panic ("Merge function for ... primitive call failed") and the old output stays. Not a lattice
@@ -115,7 +133,8 @@ namespace Eggnog.Relations
         public MergeFnKind Kind { get; }
 
         /// <summary>
-        /// Gets the constant of a <see cref="MergeFnKind.Const"/> merge.
+        /// Gets the constant of a <see cref="MergeFnKind.Const"/> merge, or the id of a <see cref="MergeFnKind.IdConst"/>
+        /// merge.
         /// </summary>
         public Value Constant { get; }
 
@@ -174,6 +193,9 @@ namespace Eggnog.Relations
             {
                 case MergeFnKind.Const:
                     builder.Append("(const ").Append(Constant.Rep).Append(')');
+                    return;
+                case MergeFnKind.IdConst:
+                    builder.Append("(id ").Append(Constant.Rep).Append(')');
                     return;
                 case MergeFnKind.Primitive:
                 case MergeFnKind.Function:
