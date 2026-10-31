@@ -64,8 +64,8 @@ namespace Eggnog.Tests.Predicates.Scoped
             InstantGt = graph.DefineConstructor<string, string, Pred>("InstantGt", cost: 1000);
 
             // Query bookkeeping is never lifted; the analyses are derived from terms alone.
-            var queryOnly = new TableOptions { Lift = false };
-            var analysis = new TableOptions { Role = TableRole.Analysis };
+            var queryOnly = new RelationOptions { Lift = false };
+            var analysis = new FunctionOptions { Analysis = true };
             WhereClause = graph.DefineRelation<Pred>("where", queryOnly);
             Conjunct = graph.DefineRelation<Pred>("conjunct", queryOnly);
             InSet = graph.DefineFunction<Pred, string, Set<string>>("inset", ValueLattice.Intersect<string>(), analysis);

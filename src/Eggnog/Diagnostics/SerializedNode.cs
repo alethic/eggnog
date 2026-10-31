@@ -59,7 +59,8 @@ namespace Eggnog
         public IReadOnlyList<string> Children { get; }
 
         /// <summary>
-        /// Gets whether the row is subsumed (<see cref="TableOptions.Subsumable"/>).
+        /// Gets whether the row is subsumed (<see cref="RelationOptions.Subsumable"/>,
+        /// <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
         public bool Subsumed { get; }
 

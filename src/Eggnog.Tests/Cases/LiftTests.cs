@@ -75,9 +75,9 @@ namespace Eggnog.Tests.Cases
         public void TablesThatDoNotLiftAreLeftOut()
         {
             var graph = new EGraph();
-            var local = graph.DefineRelation<string>("local", new TableOptions { Lift = false });
-            var analysis = graph.DefineRelation<string>("analysis", new TableOptions { Role = TableRole.Analysis });
-            var lifting = graph.DefineRelation<string>("lifting", new TableOptions { Role = TableRole.Analysis, Lift = true });
+            var local = graph.DefineRelation<string>("local", new RelationOptions { Lift = false });
+            var analysis = graph.DefineRelation<string>("analysis", new RelationOptions { Analysis = true });
+            var lifting = graph.DefineRelation<string>("lifting", new RelationOptions { Analysis = true, Lift = true });
             var root = graph.Root;
             Assert.False(local.Lift);
             Assert.False(analysis.Lift);

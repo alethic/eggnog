@@ -59,8 +59,8 @@ namespace Eggnog.Tests.Diagnostics
         {
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
-            var a = graph.DefineConstructor<Node>("a", options: new TableOptions { Subsumable = true });
-            var b = graph.DefineConstructor<Node>("b", options: new TableOptions { Subsumable = true });
+            var a = graph.DefineConstructor<Node>("a");
+            var b = graph.DefineConstructor<Node>("b");
             graph.Root.Make(a.Of());
             graph.Root.Make(b.Of());
             graph.Root.Subsume(a.Of());

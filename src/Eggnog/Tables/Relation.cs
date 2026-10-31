@@ -5,7 +5,7 @@ namespace Eggnog
 
     /// <summary>
     /// A relation over 0 key columns: a set of tuples, defined with
-    /// <see cref="EGraph.DefineRelation(string, TableOptions)"/>.
+    /// <see cref="EGraph.DefineRelation(string, RelationOptions)"/>.
     /// </summary>
     public sealed class Relation : RelationHandle
     {

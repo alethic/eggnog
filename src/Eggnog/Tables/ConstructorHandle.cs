@@ -21,9 +21,9 @@ namespace Eggnog
         public ulong Cost { get; internal set; }
 
         /// <summary>
-        /// Gets whether extraction may use the constructor's rows.
+        /// Gets whether extraction skips the constructor's rows (<see cref="ConstructorOptions.Unextractable"/>).
         /// </summary>
-        public bool Extractable { get; internal set; }
+        public bool Unextractable { get; internal set; }
 
         /// <summary>
         /// The untyped application, of any arity: the term with this head and <paramref name="arguments"/>.

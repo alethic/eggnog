@@ -441,7 +441,7 @@ namespace Eggnog.Tests.Terms
             var key = graph.DefineRelation<long>("key");
             var f = graph.DefineFunction<long, long>("f");
             var o = graph.DefineFunction<long, long>("o");
-            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new TableOptions { Role = TableRole.Analysis });
+            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new FunctionOptions { Analysis = true });
             var lookup = LookupOf(f);
             var rules = graph.DefineRuleset("rules");
 
@@ -578,7 +578,7 @@ namespace Eggnog.Tests.Terms
             // egglog's subsume looks the row up and fails without one: from a host write and from a rule's head. A row the
             // primitive sees is subsumed: queries skip it, checks still see it.
             var graph = new EGraph();
-            var r = graph.DefineRelation<long>("r", new TableOptions { Subsumable = true });
+            var r = graph.DefineRelation<long>("r");
             var o = graph.DefineFunction<long, long>("o");
             var sub = Primitive.CreateWrite("sub", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {

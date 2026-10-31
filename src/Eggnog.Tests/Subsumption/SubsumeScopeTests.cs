@@ -160,7 +160,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var schema = t.Graph.DefineScopeTag("schema");
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             var copied = t.Graph.DefineRelation<string>("copied");
             t.Rules.DefineRule("copy", r =>
             {
@@ -202,7 +202,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var schema = t.Graph.DefineScopeTag("schema");
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             var query = t.Graph.DefineQuery("schema facts", q => q.When(fact.In(schema).Of(q.Var<string>("x"))));
             t.Root.Freeze();
             var outer = t.Root.CreateChild(schema);
@@ -220,7 +220,7 @@ namespace Eggnog.Tests.Subsumption
         public void ALiftWritesTheRowsEveryCaseHoldsNotTheirSubsumption()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             var root = t.Root;
             root.Assume(fact.Of("a"));
             root.Subsume(fact.Of("c"));
@@ -269,7 +269,7 @@ namespace Eggnog.Tests.Subsumption
         {
             var t = new MathTheory();
             var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            var key = t.Graph.DefineRelation<string>("key", MathTheory.Subsumable);
+            var key = t.Graph.DefineRelation<string>("key");
             var split = t.Graph.DefineDomainSplit("split", dom, [key]);
             var root = t.Root;
             root.Assume(dom.Of("k").Is(Set.Of("x", "y")), dom.Of("j").Is(Set.Of("x", "y")), key.Of("k"), key.Of("j"));

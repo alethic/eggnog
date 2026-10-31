@@ -108,7 +108,7 @@ namespace Eggnog.Tests.Extraction
             var dear = graph.DefineConstructor<Node>("Dear", cost: 10);
             var x = graph.Root.Make(dear.Of());
             var extractor = graph.Root.CreateExtractor();
-            var hidden = graph.DefineConstructor<Node>("Hidden", cost: 1, options: new TableOptions { Extractable = false });
+            var hidden = graph.DefineConstructor<Node>("Hidden", cost: 1, options: new ConstructorOptions { Unextractable = true });
 
             graph.Root.Assume(hidden.Of().Is(x));
 

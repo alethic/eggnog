@@ -201,7 +201,7 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterPair<NumericBound, long>();
             var set = Assert.Throws<ArgumentException>(() => graph.Values.RegisterSet<Pair<NumericBound, long>>());
             Assert.Contains("implements neither", set.Message, StringComparison.Ordinal);
-            var unlifted = new TableOptions { Lift = false };
+            var unlifted = new FunctionOptions { Lift = false };
             var lattice = Assert.Throws<ArgumentException>(() =>
                 graph.DefineFunction<long, Pair<NumericBound, long>>("bounds", ValueLattice.Max<Pair<NumericBound, long>>(), unlifted));
             Assert.Contains("not comparable", lattice.Message, StringComparison.Ordinal);

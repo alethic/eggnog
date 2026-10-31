@@ -117,10 +117,15 @@ static class Eggnog.Compute
     static Term<TResult> Of<T1, T2, TResult>(Term<T1> a, Term<T2> b, Func<T1, T2, TResult> function)
     static Term<TResult> Of<T1, TResult>(Term<T1> a, Func<T1, TResult> function)
 abstract class Eggnog.ConstructorHandle : TableHandle
-    Boolean Extractable { get }
+    Boolean Unextractable { get }
     UInt64 Cost { get }
 sealed class Eggnog.ConstructorN<TSort> : ConstructorHandle
     ConstructorTerm<TSort> Of(params ReadOnlySpan<Object> keys)
+sealed class Eggnog.ConstructorOptions
+    Boolean Lift { get; init }
+    Boolean Subsumable { get; init }
+    Boolean Unextractable { get; init }
+    ctor()
 sealed class Eggnog.ConstructorTerm<TSort> : Term<TSort>
     ConstructorHandle Head { get }
 sealed class Eggnog.Constructor<TSort> : ConstructorHandle
@@ -163,24 +168,24 @@ static class Eggnog.DoublePrimitives
 sealed class Eggnog.EGraph
     Boolean RemoveScheduler(RuleScheduler scheduler)
     ColumnType<TSort> DefineSort<TSort : struct, ISort<TSort>>(String name)
-    Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, IReadOnlyList<Type> keys, UInt64 cost = 1, TableOptions options = null)
-    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
-    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
-    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
-    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    Function<T1, TOut> DefineFunction<T1, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
-    Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    Function<TOut> DefineFunction<TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
-    Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, FunctionMerge<TOut> merge, TableOptions options = null)
-    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, ConstructorOptions options = null)
+    Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, ConstructorOptions options = null)
+    Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, ConstructorOptions options = null)
+    Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, ConstructorOptions options = null)
+    Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, ConstructorOptions options = null)
+    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, IReadOnlyList<Type> keys, UInt64 cost = 1, ConstructorOptions options = null)
+    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
+    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
+    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(String name, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
+    Function<T1, TOut> DefineFunction<T1, TOut>(String name, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
+    Function<TOut> DefineFunction<TOut>(String name, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
+    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, FunctionMerge<TOut> merge, FunctionOptions options = null)
+    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, ValueLattice<TOut> lattice = null, FunctionOptions options = null)
     GraphUsage Usage { get }
     IReadOnlyList<Ruleset> Rulesets { get }
     IReadOnlyList<ScopeTag> ScopeTags { get }
@@ -188,12 +193,12 @@ sealed class Eggnog.EGraph
     IReadOnlyList<TableHandle> Tables { get }
     Query DefineQuery(String name, Action<QueryBuilder> define)
     Relation Contradiction { get }
-    Relation DefineRelation(String name, TableOptions options = null)
-    Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(String name, TableOptions options = null)
-    Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(String name, TableOptions options = null)
-    Relation<T1, T2> DefineRelation<T1, T2>(String name, TableOptions options = null)
-    Relation<T1> DefineRelation<T1>(String name, TableOptions options = null)
-    RelationN DefineRelationN(String name, IReadOnlyList<Type> keys, TableOptions options = null)
+    Relation DefineRelation(String name, RelationOptions options = null)
+    Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(String name, RelationOptions options = null)
+    Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(String name, RelationOptions options = null)
+    Relation<T1, T2> DefineRelation<T1, T2>(String name, RelationOptions options = null)
+    Relation<T1> DefineRelation<T1>(String name, RelationOptions options = null)
+    RelationN DefineRelationN(String name, IReadOnlyList<Type> keys, RelationOptions options = null)
     RuleScheduler AddScheduler(IRuleScheduler scheduler)
     Ruleset DefineRuleset(String name)
     Ruleset DefineRuleset(String name, RulesetOptions options)
@@ -268,6 +273,10 @@ sealed class Eggnog.FunctionN<TOut> : FunctionHandle
     FunctionN<TOut> In(ScopeTag scope)
     Term<TOut> Of(params ReadOnlySpan<Object> keys)
     ValueLattice<TOut> Lattice { get }
+sealed class Eggnog.FunctionOptions
+    Boolean Analysis { get; init }
+    Boolean? Lift { get; init }
+    ctor()
 sealed class Eggnog.Function<TOut> : FunctionHandle
     Function<TOut> In(ScopeTag scope)
     Term<TOut> Of()
@@ -587,6 +596,11 @@ abstract class Eggnog.RelationHandle : TableHandle
 sealed class Eggnog.RelationN : RelationHandle
     Fact Of(params ReadOnlySpan<Object> keys)
     RelationN In(ScopeTag scope)
+sealed class Eggnog.RelationOptions
+    Boolean Analysis { get; init }
+    Boolean Subsumable { get; init }
+    Boolean? Lift { get; init }
+    ctor()
 sealed class Eggnog.Relation<T1> : RelationHandle
     Fact Of(Term<T1> a)
     Relation<T1> In(ScopeTag scope)
@@ -900,12 +914,6 @@ enum Eggnog.TableKind
     Relation
     Function
     Constructor
-sealed class Eggnog.TableOptions
-    Boolean Extractable { get; init }
-    Boolean? Lift { get; init }
-    Boolean? Subsumable { get; init }
-    TableRole Role { get; init }
-    ctor()
 enum Eggnog.TableRole
     Term
     Fact

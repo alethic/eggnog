@@ -212,7 +212,7 @@ namespace Eggnog
         /// then <c>(subsume left)</c>. Later matches skip the left side's row, so no other rule rewrites it again, and
         /// extraction skips it. The row subsumed is the one the body matched: the left side's arguments are the values
         /// the match bound, so a left side may read a function, as in a plain rewrite. The left side must then be an
-        /// application of a constructor defined <see cref="TableOptions.Subsumable"/> (a <see
+        /// application of a subsumable constructor (<see cref="ConstructorOptions.Subsumable"/>; a <see
         /// cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
@@ -253,8 +253,9 @@ namespace Eggnog
         /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
         /// longer match it, and extraction skips it; its class keeps every other member. A term that does not exist yet
         /// is made, subsumed, and the rule's later head items still run for the match. Subsumption is sticky. The
-        /// constructor must be defined <see cref="TableOptions.Subsumable"/> (a <see cref="RuleDefinitionException"/>
-        /// otherwise). The term's arguments are evaluated as head terms, made if absent.
+        /// constructor must be subsumable (<see cref="ConstructorOptions.Subsumable"/>; a
+        /// <see cref="RuleDefinitionException"/> otherwise). The term's arguments are evaluated as head terms, made if
+        /// absent.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
         /// <param name="term">The constructor term.</param>
@@ -269,8 +270,8 @@ namespace Eggnog
         /// Subsumes relation rows (<c>r.Of(a, b)</c>): egglog's <c>(subsume (r a b))</c>. Each row stays, and lookups,
         /// checks and host reads still find it, but from the next iteration rule bodies, queries and split rules no
         /// longer match it. A row that does not exist yet is inserted, subsumed, and the rule's later head items still
-        /// run for the match. Subsumption is sticky. Each relation must be defined <see
-        /// cref="TableOptions.Subsumable"/>, and each fact must be a relation row of the running scope, not a scoped
+        /// run for the match. Subsumption is sticky. Each relation must be subsumable (<see
+        /// cref="RelationOptions.Subsumable"/>), and each fact must be a relation row of the running scope, not a scoped
         /// view (a <see cref="RuleDefinitionException"/> otherwise).
         /// </summary>
         /// <param name="rows">The relation rows.</param>
