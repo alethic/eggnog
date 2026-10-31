@@ -83,15 +83,21 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
+        /// The dirty ids the container step of the current pass found (<see cref="RebuildContainerLayers"/>). Domain
+        /// thread only; reused.
+        /// </summary>
+        List<uint>? dirtyIds;
+
+        /// <summary>
         /// The container step of each pass of a child's rebuild, before its tables' pass: the container pass over its
         /// container layers (<see cref="ContainerLayers.RebuildPass"/>), then, when the pass changed something, the
         /// merge of the unions it staged into the union-find, so that the tables' pass that follows rewrites the rows
         /// naming the containers merged away, as egglog's rebuild loop merges the container rebuild's unions before the
-        /// tables rebuild (egglog-bridge/src/lib.rs:666-668); then the re-stamp, at <paramref name="epoch"/>, of the
-        /// rows of the child's own layers that name a dirty container, so the child's semi-naive evaluation sees them
-        /// as new, as egglog's <c>refresh_rows_for_values</c> does at the root; and, while the child has live
-        /// descendants, the dirty ids the pass found join the Dirty stream of its container log. With
-        /// <paramref name="settle"/>, all of it repeats, at the same epoch, until a container pass changes nothing.
+        /// tables rebuild (egglog-bridge/src/lib.rs:666-668); and, while the child has live descendants, the dirty ids
+        /// the pass found join the Dirty stream of its container log. With <paramref name="settle"/>, all of it repeats,
+        /// at the same epoch, until a container pass changes nothing. The rows that name a dirty container are re-stamped
+        /// after the tables' pass has merged, as egglog's <c>refresh_rows_for_values</c> runs after its tables rebuild
+        /// (egglog-bridge/src/lib.rs:669-677): the dirty ids are returned for it (<see cref="ContextTables.RebuildPass"/>).
         /// </summary>
         /// <remarks>
         /// <para>
@@ -103,11 +109,9 @@ namespace Eggnog.Relations
         /// (<see cref="HideReason.Refreshed"/>).
         /// </para>
         /// <para>
-        /// The re-stamp runs <see cref="RefreshTableOperation"/> through
-        /// <see cref="Relations.Database.RunOnTables{TOperation}"/>, which notifies every layer that re-staged rows, so
-        /// the tables' pass's merge applies them. The cursors' Dirty positions are committed with the rest after the
-        /// loop (<see cref="ContextTables.CommitCursors"/>). Cost: the container pass's, plus one rebuild-index probe
-        /// per dirty id and own layer, plus the rows found; nothing more when no container concerns the pass.
+        /// The cursors' Dirty positions are committed with the rest after the loop
+        /// (<see cref="ContextTables.CommitCursors"/>). Cost: the container pass's, plus copying the dirty ids; nothing
+        /// more when no container concerns the pass.
         /// </para>
         /// <para>
         /// Only the union-find merges here (<see cref="Relations.Database.MergeTable"/>), as at the root, where nothing
@@ -133,15 +137,23 @@ namespace Eggnog.Relations
         /// <param name="inherited">The ancestors' dirty ids, in the first pass; otherwise <c>null</c>.</param>
         /// <param name="settle">Whether to repeat the step until a container pass changes nothing.</param>
         /// <param name="pass">Set when the step changed something.</param>
+        /// <param name="dirty">Set to the dirty ids the container passes found, whose own rows the tables' pass
+        /// re-stamps; valid until the next container step.</param>
         /// <returns>The non-local dirty ids the container passes found, whose ancestor rows the tables' pass
         /// re-stamps; valid until the next container pass.</returns>
-        ReadOnlySpan<uint> RebuildContainerLayers(uint epoch, uint[]? inherited, bool settle, ref bool pass)
+        ReadOnlySpan<uint> RebuildContainerLayers(uint epoch, uint[]? inherited, bool settle, ref bool pass, out ReadOnlySpan<uint> dirty)
         {
             List<uint>? restamp = null;
+            var found = dirtyIds ??= new List<uint>();
+            found.Clear();
+            dirty = default;
             while (true)
             {
                 if (contradicted)
+                {
+                    found.Clear();
                     return default;
+                }
 
                 var summary = containerLayers!.RebuildPass(epoch, inherited);
                 inherited = null;
@@ -153,10 +165,7 @@ namespace Eggnog.Relations
 
                 if (summary.DirtyCount > 0)
                 {
-                    var own = tables!.OwnRebuildTables();
-                    if (own.Length > 0)
-                        pass |= database.RunOnTables(own, new RefreshTableOperation(summary.Dirty.ToArray(), epoch));
-
+                    found.AddRange(summary.Dirty);
                     var log = containerLayers.Log;
                     if (log.Active)
                         log.AppendDirty(summary.Found);
@@ -165,6 +174,7 @@ namespace Eggnog.Relations
                 // The unions just merged are the next container pass's delta; one that changes nothing ends the step.
                 if (settle == false || summary.Changed == false)
                 {
+                    dirty = CollectionsMarshal.AsSpan(found);
                     if (restamp is null)
                         return summary.Restamp;
 

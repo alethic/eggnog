@@ -11,7 +11,9 @@ namespace Eggnog.Tests.Host
     /// What a failed command keeps, as egglog's: its actions run as a rule (src/lib.rs:1171-1195), whose writes staged
     /// before the panic outlive it, so the terms its calls made and what its primitives wrote stand, while its own write
     /// does not happen, or is refused where it conflicts; a write its flush refuses keeps the value before it, and the
-    /// command's other writes stand, its own included. Each program ran on egglog's binary at 5e655cae as the comments
+    /// command's other writes stand, its own included; a union whose rebuild makes two rows of a function without a merge
+    /// meet with different values stands, with one of the rows, and so does the rest. Each program ran on egglog's binary
+    /// at 5e655cae as the comments
     /// say; those with write primitives ran on egglog's library at 5e655cae, with full primitives (setf k v) staging
     /// (f k) = v and returning k, (uni a b) unioning (Num a) and (Num b) and returning a, and (setf-boom k v) staging
     /// (f k) = v with no result.
@@ -197,23 +199,30 @@ namespace Eggnog.Tests.Host
             Assert.Equal(0, t.Root.CountRows(t.Num));
         }
 
-        [Fact]
-        public void AConflictingConstructorWriteGoesWithItsCongruence()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AConflictingConstructorWriteGoesWithItsCongruence(bool inChild)
         {
-            // (set (h x) 1) (set (h y) 2), y = (Wrap (Num 2)), then (union (Num 1) (Num 2)) and (union (Wrap (Num 1)) x) in
-            // one call: the second makes (Wrap (Num 1)) meet y, so h's rows of x and y meet with two values. The fact is
-            // refused, its constructor's output set to x with it; the union before it stands, and nothing faults.
+            // (Wrap (Num 2)) (Lit 1) (Num 1) (set (h (Lit 1)) 1) (set (h (Wrap (Num 2))) 2) (union (Num 1) (Num 2))
+            // (union (Wrap (Num 1)) (Lit 1)), the last two in one call: the second makes (Wrap (Num 1)) meet
+            // (Wrap (Num 2)), so h's two rows meet, "Illegal merge attempted for function h". The union stands, with its
+            // congruence, and the rebuild keeps the row of (Wrap (Num 2)), whose id is the smaller: (h (Lit 1)) is 2.
             var t = new Theory();
             var wrap = t.Graph.DefineConstructor<Node, Node>("Wrap");
-            var y = t.Root.Make(wrap.Of(t.Num.Of(2L)));
-            var x = t.Root.Make(t.Lit.Of(1L));
-            t.Root.Make(t.Num.Of(1L));
-            t.Root.Assume(t.H.Of(x).Is(1L), t.H.Of(y).Is(2L));
-            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(1L).Is(t.Num.Of(2L)), wrap.Of(t.Num.Of(1L)).Is(x)));
-            Assert.False(t.Root.IsFaulted);
-            Assert.True(t.Root.Check(t.Num.Of(1L).Is(t.Num.Of(2L))));
-            Assert.False(t.Root.AreEqual(x, y));
-            Assert.Equal(1L, t.Root.Get(t.H.Of(x)));
+            var s = t.Open(inChild);
+            var y = s.Make(wrap.Of(t.Num.Of(2L)));
+            var x = s.Make(t.Lit.Of(1L));
+            s.Make(t.Num.Of(1L));
+            s.Assume(t.H.Of(x).Is(1L), t.H.Of(y).Is(2L));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.Num.Of(1L).Is(t.Num.Of(2L)), wrap.Of(t.Num.Of(1L)).Is(x)));
+            Assert.Equal(2L, e.StoredValue);
+            Assert.Equal(1L, e.NewValue);
+            Assert.False(s.IsFaulted);
+            Assert.True(s.Check(t.Num.Of(1L).Is(t.Num.Of(2L))));
+            Assert.True(s.AreEqual(x, y));
+            Assert.Equal(2L, s.Get(t.H.Of(x)));
+            Assert.Equal(1, s.CountRows(t.H));
         }
 
         [Theory]
@@ -345,36 +354,48 @@ namespace Eggnog.Tests.Host
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        public void AHeldUnionThatConflictsKeepsTheFactsOwnWrite(bool inChild)
+        public void AHeldUnionThatConflictsStandsWithTheFactsOwnWrite(bool inChild)
         {
             // (set (h (Num 1)) 1) (set (h (Num 2)) 2) (fail (set (g 3) (uni 1 2))), "Illegal merge attempted for function
-            // h": (g 3) is 1. egglog keeps the union too and one of h's rows; the batch refuses a union that conflicts, as
-            // it refuses the fact's own (architecture 2.3), and keeps the rest of the fact.
+            // h": (g 3) is 1, the union stands, (check (= (Num 1) (Num 2))), and the rebuild keeps (h (Num 1)), 1; a later
+            // (set (h (Num 2)) 2) fails, and (set (g 4) (h (Num 2))) makes (g 4) 1.
             var t = new Theory();
+            var q = t.Graph.DefineFunction<Node, Node>("q");
             var s = t.Open(inChild);
-            var one = s.Make(t.Num.Of(1L));
-            var two = s.Make(t.Num.Of(2L));
+            var classes = new System.Collections.Generic.Dictionary<long, Node>();
+            foreach (var key in new[] { 1L, 2L, 3L, 4L })
+                classes[key] = s.Make(t.Num.Of(key));
+
             var uni = Primitive.CreateWrite("uni", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Union(one, two);
+                tables.Union(classes[(long)args[0]], classes[(long)args[1]]);
                 result = (long)args[0];
                 return true;
             });
-            s.Assume(t.H.Of(one).Is(1L), t.H.Of(two).Is(2L));
-            Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(3L).Is(uni.Of(1L, 2L))));
+            s.Assume(t.H.Of(classes[1]).Is(1L), t.H.Of(classes[2]).Is(2L));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(3L).Is(uni.Of(1L, 2L))));
+            Assert.Same(t.H, e.Table);
+            Assert.Equal(1L, e.StoredValue);
             Assert.False(s.IsFaulted);
             Assert.Equal(1L, s.Get(t.G.Of(3L)));
-            Assert.False(s.AreEqual(one, two));
-            Assert.Equal(2L, s.Get(t.H.Of(two)));
+            Assert.True(s.AreEqual(classes[1], classes[2]));
+            Assert.Equal(1L, s.Get(t.H.Of(classes[2])));
+            Assert.Equal(1, s.CountRows(t.H));
+            Assert.Throws<FactConflictException>(() => s.Assume(t.H.Of(classes[2]).Is(2L)));
+            s.Assume(t.G.Of(4L).Is(t.H.Of(classes[2])));
+            Assert.Equal(1L, s.Get(t.G.Of(4L)));
 
-            // (function q (Math) Math :no-merge) (set (q (Num 1)) (Num 10)) (set (q (Num 2)) (Num 20))
-            // (fail (set (g 30) (uni 1 2))), "Illegal merge attempted for function q", which the rebuild's passes find:
-            // (g 30) is 1.
-            var q = t.Graph.DefineFunction<Node, Node>("q");
-            s.Assume(q.Of(one).Is(t.Num.Of(10L)), q.Of(two).Is(t.Num.Of(20L)));
-            Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(30L).Is(uni.Of(1L, 2L))));
-            Assert.Equal(1L, s.Get(t.G.Of(30L)));
-            Assert.False(s.AreEqual(one, two));
+            // (function q (Math) Math :no-merge) (set (q (Num 3)) (Num 10)) (set (q (Num 4)) (Num 20))
+            // (fail (set (g 30) (uni 3 4))), "Illegal merge attempted for function q", which the rebuild's passes find:
+            // (g 30) is 3, the union stands, q keeps (Num 10), and (Num 10) and (Num 20) stay apart.
+            s.Assume(q.Of(classes[3]).Is(t.Num.Of(10L)), q.Of(classes[4]).Is(t.Num.Of(20L)));
+            e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(30L).Is(uni.Of(3L, 4L))));
+            Assert.Same(q, e.Table);
+            Assert.Equal(3L, s.Get(t.G.Of(30L)));
+            Assert.True(s.AreEqual(classes[3], classes[4]));
+            Assert.True(s.Check(q.Of(classes[4]).Is(t.Num.Of(10L))));
+            Assert.False(s.Check(t.Num.Of(10L).Is(t.Num.Of(20L))));
+            Assert.Equal(1, s.CountRows(q));
         }
 
         [Theory]
@@ -432,12 +453,13 @@ namespace Eggnog.Tests.Host
         [InlineData(false, true)]
         [InlineData(true, false)]
         [InlineData(true, true)]
-        public void AHeldUnionThatConflictsKeepsTheOtherHeldUnions(bool inChild, bool conflictFirst)
+        public void AHeldUnionThatConflictsStandsWithTheOtherHeldUnions(bool inChild, bool conflictFirst)
         {
-            // (set (h (Num 1)) 1) (set (h (Num 2)) 2) (Num 5) (Num 6) (fail (set (g 40) (+ (uni 1 2) (uni 5 6)))), and with
-            // the two calls swapped: "Illegal merge attempted for function h", (g 40) is 6, and (Num 5) and (Num 6) are
-            // one, whatever the order. egglog keeps the union of 1 and 2 as well; the batch refuses it (architecture
-            // 2.13, item 7). The same through (function q (Math) Math :no-merge), whose conflict the rebuild's passes find.
+            // (Num 1) (Num 2) (Num 5) (Num 6) (Num 11) (Num 12) (Num 15) (Num 16) (set (h (Num 1)) 1) (set (h (Num 2)) 2)
+            // (fail (set (g 40) (+ (uni 1 2) (uni 5 6)))), and with the two calls swapped: "Illegal merge attempted for
+            // function h", (g 40) is 6, both unions stand, whatever the order, and h keeps (h (Num 1)), 1. The same
+            // through (function q (Math) Math :no-merge), whose conflict the rebuild's passes find, with (set (q (Num 11))
+            // (Num 100)) (set (q (Num 12)) (Num 200)) and (g 41) of (uni 11 12) and (uni 15 16): q keeps (Num 100).
             var t = new Theory();
             var q = t.Graph.DefineFunction<Node, Node>("q");
             var s = t.Open(inChild);
@@ -459,25 +481,28 @@ namespace Eggnog.Tests.Host
             Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(40L).Is(conflictFirst ? add.Of(conflicting, other) : add.Of(other, conflicting))));
             Assert.Equal(6L, s.Get(t.G.Of(40L)));
             Assert.True(s.AreEqual(classes[5], classes[6]));
-            Assert.False(s.AreEqual(classes[1], classes[2]));
+            Assert.True(s.AreEqual(classes[1], classes[2]));
+            Assert.Equal(1L, s.Get(t.H.Of(classes[2])));
 
             conflicting = uni.Of(11L, 12L);
             other = uni.Of(15L, 16L);
             Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(41L).Is(conflictFirst ? add.Of(conflicting, other) : add.Of(other, conflicting))));
             Assert.Equal(26L, s.Get(t.G.Of(41L)));
             Assert.True(s.AreEqual(classes[15], classes[16]));
-            Assert.False(s.AreEqual(classes[11], classes[12]));
+            Assert.True(s.AreEqual(classes[11], classes[12]));
+            Assert.True(s.Check(q.Of(classes[12]).Is(t.Num.Of(100L))));
+            Assert.False(s.Check(t.Num.Of(100L).Is(t.Num.Of(200L))));
             Assert.False(s.IsFaulted);
         }
 
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        public void AHeldUnionThatConflictsAmongManyIsRefusedAlone(bool inChild)
+        public void AHeldUnionThatConflictsAmongManyStandsWithThem(bool inChild)
         {
             // One call that unions two classes whose rows of q conflict, then 500 pairs of classes with no rows, over a q
-            // of 2000 rows: the fact fails, refusing the first union only, and every pair is one, in a few checks of the
-            // rows rather than one for each union.
+            // of 2000 rows: the fact fails after its rebuild, as egglog's command with (uni ...) calls of each, and every
+            // union stands, the conflicting one too, whose rows' rebuild keeps q's row of the first class.
             const int Pairs = 500;
             var t = new Theory();
             var q = t.Graph.DefineFunction<Node, Node>("q");
@@ -508,9 +533,198 @@ namespace Eggnog.Tests.Host
             });
             Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(50L).Is(many.Of(7L))));
             Assert.Equal(7L, s.Get(t.G.Of(50L)));
-            Assert.False(s.AreEqual(keyed[0], keyed[1]));
+            Assert.True(s.AreEqual(keyed[0], keyed[1]));
+            Assert.True(s.Check(q.Of(keyed[1]).Is(t.Num.Of(10000L))));
+            Assert.Equal(keyed.Length - 1, s.CountRows(q));
             for (var i = 0; i < Pairs; i++)
                 Assert.True(s.AreEqual(free[2 * i], free[2 * i + 1]));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TheRebuildOfAFactsUnionsKeepsTheRowStoredFirstWhenBothMove(bool inChild)
+        {
+            // (Num 0) (Num 1) (Num 2) (set (h (Num 2)) 2) (set (h (Num 1)) 1) (fail (set (g 50) (+ (uni 0 1) (uni 0 2)))),
+            // "Illegal merge attempted for function h": both rows move to (Num 0), whose id is the smallest, and the
+            // rebuild keeps the one stored first, (h (Num 0)) -> 2; (g 50) is 0.
+            var t = new Theory();
+            var s = t.Open(inChild);
+            var classes = new System.Collections.Generic.Dictionary<long, Node>();
+            foreach (var key in new[] { 0L, 1L, 2L })
+                classes[key] = s.Make(t.Num.Of(key));
+
+            var uni = Primitive.CreateWrite("uni", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Union(classes[(long)args[0]], classes[(long)args[1]]);
+                result = (long)args[0];
+                return true;
+            });
+            s.Assume(t.H.Of(classes[2]).Is(2L), t.H.Of(classes[1]).Is(1L));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(50L).Is(Primitives.Add.Of(uni.Of(0L, 1L), uni.Of(0L, 2L)))));
+            Assert.Equal(2L, e.StoredValue);
+            Assert.Equal(1L, e.NewValue);
+            Assert.Equal(0L, s.Get(t.G.Of(50L)));
+            Assert.True(s.AreEqual(classes[0], classes[2]));
+            Assert.True(s.AreEqual(classes[0], classes[1]));
+            Assert.Equal(2L, s.Get(t.H.Of(classes[0])));
+            Assert.Equal(1, s.CountRows(t.H));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TwoFunctionsThatConflictInOneRebuildEachKeepARow(bool inChild)
+        {
+            // (Num 1) (Num 2) (Num 3) (Num 4) (set (h2 (Num 1)) 5) (set (h2 (Num 2)) 6) (set (h (Num 1)) 1)
+            // (set (h (Num 2)) 2) (fail (set (g 60) (+ (uni 3 4) (uni 2 1)))), with h defined before h2: "Illegal merge
+            // attempted for function h", the first function the rebuild merges; both unions stand, (g 60) is 5, h keeps 1
+            // and h2 keeps 5.
+            var t = new Theory();
+            var h2 = t.Graph.DefineFunction<Node, long>("h2");
+            var s = t.Open(inChild);
+            var classes = new System.Collections.Generic.Dictionary<long, Node>();
+            foreach (var key in new[] { 1L, 2L, 3L, 4L })
+                classes[key] = s.Make(t.Num.Of(key));
+
+            var uni = Primitive.CreateWrite("uni", [typeof(long), typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Union(classes[(long)args[0]], classes[(long)args[1]]);
+                result = (long)args[0];
+                return true;
+            });
+            s.Assume(h2.Of(classes[1]).Is(5L), h2.Of(classes[2]).Is(6L), t.H.Of(classes[1]).Is(1L), t.H.Of(classes[2]).Is(2L));
+            var e = Assert.Throws<FactConflictException>(() => s.Assume(t.G.Of(60L).Is(Primitives.Add.Of(uni.Of(3L, 4L), uni.Of(2L, 1L)))));
+            Assert.Equal("Illegal merge attempted for function h", e.InnerException!.Message);
+            Assert.Same(t.H, e.Table);
+            Assert.Equal(1L, e.StoredValue);
+            Assert.Equal(2L, e.NewValue);
+            Assert.Equal(5L, s.Get(t.G.Of(60L)));
+            Assert.True(s.AreEqual(classes[3], classes[4]));
+            Assert.True(s.AreEqual(classes[1], classes[2]));
+            Assert.Equal(1L, s.Get(t.H.Of(classes[2])));
+            Assert.Equal(5L, s.Get(h2.Of(classes[2])));
+            Assert.Equal(1, s.CountRows(t.H));
+            Assert.Equal(1, s.CountRows(h2));
+            Assert.False(s.IsFaulted);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TheConflictNamesTheFunctionTheRebuildFailsOn(bool inChild)
+        {
+            // (constructor W (Math) Math) (function q (Math) Math :no-merge) (set (h (W (Num 1))) 1)
+            // (set (h (W (Num 2))) 2) (set (q (Num 1)) (Num 3)) (set (q (Num 2)) (Num 4)) (union (Num 1) (Num 2)):
+            // "Illegal merge attempted for function q", whose rows meet in the rebuild's first pass, h's only in the
+            // second; h keeps 1 and q (Num 3), and the union stands (probe t1.egg).
+            var t = new Theory();
+            var w = t.Graph.DefineConstructor<Node, Node>("W");
+            var q = t.Graph.DefineFunction<Node, Node>("q");
+            var s = t.Open(inChild);
+            s.Assume(t.H.Of(w.Of(t.Num.Of(1L))).Is(1L));
+            s.Assume(t.H.Of(w.Of(t.Num.Of(2L))).Is(2L));
+            s.Assume(q.Of(t.Num.Of(1L)).Is(t.Num.Of(3L)));
+            s.Assume(q.Of(t.Num.Of(2L)).Is(t.Num.Of(4L)));
+            var e = Assert.Throws<FactConflictException>(() => s.Union(s.Make(t.Num.Of(1L)), s.Make(t.Num.Of(2L))));
+            Assert.Equal("Illegal merge attempted for function q", e.InnerException!.Message);
+            Assert.Same(q, e.Table);
+            Assert.True(s.Check(t.Num.Of(1L).Is(t.Num.Of(2L))));
+            Assert.Equal(1L, s.Get(t.H.Of(w.Of(t.Num.Of(2L)))));
+            Assert.True(s.Check(q.Of(t.Num.Of(2L)).Is(t.Num.Of(3L))));
+            Assert.Equal(1, s.CountRows(t.H));
+            Assert.Equal(1, s.CountRows(q));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TheRowAtTheCanonicalKeyIsKeptOverOneThatMoves(bool inChild)
+        {
+            // (constructor W (Math) Math) (function q (Math) Math :no-merge) (set (q (W (Num 3))) (Num 5)), then in a push
+            // or not (set (q (Num 5)) (Num 2)) (union (W (Num 3)) (Num 5)): "Illegal merge attempted for function q", and
+            // q keeps (Num 5), the row written first, before the push (probe t2.egg); (Num 2) and (Num 5) stay apart.
+            // In the child the row written first is the ancestor's, and the child's own moves onto it.
+            var t = new Theory();
+            var w = t.Graph.DefineConstructor<Node, Node>("W");
+            var q = t.Graph.DefineFunction<Node, Node>("q");
+            t.Root.Assume(q.Of(w.Of(t.Num.Of(3L))).Is(t.Num.Of(5L)));
+            var s = t.Open(inChild);
+            s.Assume(q.Of(t.Num.Of(5L)).Is(t.Num.Of(2L)));
+            var e = Assert.Throws<FactConflictException>(() => s.Union(s.Make(w.Of(t.Num.Of(3L))), s.Make(t.Num.Of(5L))));
+            Assert.Same(q, e.Table);
+            Assert.False(s.IsFaulted);
+            Assert.True(s.Check(w.Of(t.Num.Of(3L)).Is(t.Num.Of(5L))));
+            Assert.True(s.Check(q.Of(t.Num.Of(5L)).Is(t.Num.Of(5L))));
+            Assert.False(s.Check(t.Num.Of(2L).Is(t.Num.Of(5L))));
+            Assert.Equal(1, s.CountRows(q));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TheRowOfTheContainerMadeFirstIsKept(bool inChild)
+        {
+            // (constructor W (Math) Math) (constructor S (MS) Math) with MS (Set Math), (function g (MS) i64 :no-merge),
+            // (function mx (Math) i64 :merge (max old new)): (union (Num 2) (W (Num 1)))
+            // (set (mx (S (set-of (Num 5) (Num 0)))) 3) (set (g (set-of (Num 5) (Num 2))) 3)
+            // (set (g (set-of (Num 5) (Num 0))) 1), then in a push or not (union (Num 0) (Num 2)): "Illegal merge
+            // attempted for function g", and g keeps 1, the row of (set-of (Num 5) (Num 0)), the container made first,
+            // though its row was written second. In the child both rows are the ancestor's, the one of the container
+            // the child's container pass rebuilds in place re-stamped, the other moving onto it.
+            var t = new Theory();
+            t.Graph.Values.RegisterSet<Node>();
+            var w = t.Graph.DefineConstructor<Node, Node>("W");
+            var sc = t.Graph.DefineConstructor<Set<Node>, Node>("S");
+            var g = t.Graph.DefineFunction<Set<Node>, long>("gs");
+            var mx = t.Graph.DefineFunction<Node, long>("mx", ValueLattice.Max<long>());
+            var of = Primitives.SetOf<Node>();
+            t.Root.Union(t.Root.Make(t.Num.Of(2L)), t.Root.Make(w.Of(t.Num.Of(1L))));
+            t.Root.Assume(mx.Of(sc.Of(of.Of(t.Num.Of(5L), t.Num.Of(0L)))).Is(3L));
+            t.Root.Assume(g.Of(of.Of(t.Num.Of(5L), t.Num.Of(2L))).Is(3L));
+            t.Root.Assume(g.Of(of.Of(t.Num.Of(5L), t.Num.Of(0L))).Is(1L));
+            var s = t.Open(inChild);
+            var e = Assert.Throws<FactConflictException>(() => s.Union(s.Make(t.Num.Of(0L)), s.Make(t.Num.Of(2L))));
+            Assert.Same(g, e.Table);
+            Assert.Equal(1L, e.StoredValue);
+            Assert.Equal(3L, e.NewValue);
+            Assert.False(s.IsFaulted);
+            Assert.Equal(1L, s.Get(g.Of(of.Of(t.Num.Of(5L), t.Num.Of(0L)))));
+            Assert.Equal(1, s.CountRows(g));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AFactWhoseUnionConflictsAfterAnEarlierUnionCallsItsPrimitiveOnce(bool inChild)
+        {
+            // (Lit 1) (Num 2) (Num 3) (Num 4) (set (h (Lit 1)) 1) (set (h (Num 2)) 2) (union (Num 3) (Num 4))
+            // (union (Lit (+ 0 1)) (Num 2)): "Illegal merge attempted for function h", the union stands, and h keeps 1
+            // (probe t4.egg). egglog evaluates the command's call once; so does the batch, which drops the fact, flushes
+            // the earlier union and plans the fact again with the result its first plan computed.
+            var t = new Theory();
+            var s = t.Open(inChild);
+            var calls = 0;
+            var pure = Primitive.Create<long, long>("pure", x =>
+            {
+                calls++;
+                return x;
+            });
+            var one = s.Make(t.Lit.Of(1L));
+            var two = s.Make(t.Num.Of(2L));
+            var three = s.Make(t.Num.Of(3L));
+            var four = s.Make(t.Num.Of(4L));
+            s.Assume(t.H.Of(one).Is(1L), t.H.Of(two).Is(2L));
+            s.Write(w =>
+            {
+                w.Union(three, four);
+                Assert.Throws<FactConflictException>(() => w.Assume(t.Lit.Of(pure.Of(1L)).Is(t.Num.Of(2L))));
+            });
+            Assert.Equal(1, calls);
+            Assert.True(s.AreEqual(three, four));
+            Assert.True(s.AreEqual(one, two));
+            Assert.Equal(1L, s.Get(t.H.Of(two)));
+            Assert.Equal(1, s.CountRows(t.H));
         }
 
         [Fact]
@@ -546,6 +760,92 @@ namespace Eggnog.Tests.Host
             Assert.Throws<ArgumentException>(() => t.Root.Assume(Fact.Exists(t.Add.Of(t.Num.Of(72L), foreign))));
             Assert.False(t.Has(t.Num.Of(72L)));
         }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ABatchsRowsAndTheUnionThatMakesThemMeetKeepEgglogsRowInAChild(bool frozen)
+        {
+            // (W (Num 4)) (push) (set (h (W (Num 0))) 2) (set (h (W (Num 4))) 1) (union (W (Num 4)) (W (Num 0))):
+            // "Illegal merge attempted for function h", and h keeps 1, the row at the key the rebuild keeps (probe
+            // batch-row.egg). The batch flushes the rows with the union; a child merges the rows before the union, as
+            // egglog's flush leaves them unrebuilt, so the rebuild moves (W (Num 0))'s row onto the other's.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("M");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var w = graph.DefineConstructor<Node, Node>("W");
+            var h = graph.DefineFunction<Node, long>("h");
+            if (frozen)
+                graph.Root.Freeze();
+
+            var s = graph.Root.CreateChild();
+            s.Make(w.Of(num.Of(4L)));
+            s.Write(writer =>
+            {
+                writer.Assume(h.Of(w.Of(num.Of(0L))).Is(2L), h.Of(w.Of(num.Of(4L))).Is(1L));
+                var e = Assert.Throws<FactConflictException>(() => writer.Assume(((Term<Node>)w.Of(num.Of(4L))).Is(w.Of(num.Of(0L)))));
+                Assert.Equal(1L, e.StoredValue);
+            });
+            Assert.Equal(1L, s.Get(h.Of(w.Of(num.Of(0L)))));
+            Assert.Equal(1, s.CountRows(h));
+            Assert.False(s.IsFaulted);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AFactsWriteAndTheUnionItsPrimitiveHeldKeepEgglogsRowInAChild(bool frozen)
+        {
+            // (push) (union (Num 0) (Num 1)) (set (q (Num 5)) (Num 4))
+            // (set (q (Num 0)) (vec-get (vec-union (vec-of (Num 5)) (vec-of (Num 1))) 0)): "Illegal merge attempted for
+            // function q", and q keeps (Num 4) at (Num 0), the row the table holds first of the two the rebuild moves
+            // (probe child-held-row.egg), in a child as at the root.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("M");
+            graph.Values.RegisterVec<Node>();
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var q = graph.DefineFunction<Node, Node>("q");
+            if (frozen)
+                graph.Root.Freeze();
+
+            var s = graph.Root.CreateChild();
+            s.Union(s.Make(num.Of(0L)), s.Make(num.Of(1L)));
+            s.Assume(q.Of(num.Of(5L)).Is(num.Of(4L)));
+            var of = Primitives.VecOf<Node>();
+            var held = Primitives.VecGet<Node>().Of(Primitives.VecUnion<Node>().Of(of.Of(num.Of(5L)), of.Of(num.Of(1L))), 0L);
+            Assert.Throws<FactConflictException>(() => s.Assume(q.Of(num.Of(0L)).Is(held)));
+            Assert.True(s.Check(q.Of(num.Of(0L)).Is(num.Of(4L))));
+            Assert.Equal(1, s.CountRows(q));
+            Assert.False(s.IsFaulted);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AFactsWriteThatTheUnionItsPrimitiveHeldMakesEqualStandsInAChild(bool frozen)
+        {
+            // (push) (set (q (Num 4)) (Num 0)) (union (Num 0) (Num 5))
+            // (set (q (Num 5)) (vec-get (vec-union (vec-of (Num 4)) (vec-of (Num 0))) 0)): the union makes (Num 4) one
+            // with (Num 0) and (Num 5), so the two rows meet holding one class, and egglog's command succeeds (probe
+            // child-false-fail.egg).
+            var graph = new EGraph();
+            graph.DefineSort<Node>("M");
+            graph.Values.RegisterVec<Node>();
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var q = graph.DefineFunction<Node, Node>("q");
+            if (frozen)
+                graph.Root.Freeze();
+
+            var s = graph.Root.CreateChild();
+            s.Assume(q.Of(num.Of(4L)).Is(num.Of(0L)));
+            s.Union(s.Make(num.Of(0L)), s.Make(num.Of(5L)));
+            var of = Primitives.VecOf<Node>();
+            s.Assume(q.Of(num.Of(5L)).Is(Primitives.VecGet<Node>().Of(Primitives.VecUnion<Node>().Of(of.Of(num.Of(4L)), of.Of(num.Of(0L))), 0L)));
+            Assert.True(s.Check(q.Of(num.Of(5L)).Is(num.Of(0L))));
+            Assert.Equal(1, s.CountRows(q));
+            Assert.False(s.IsFaulted);
+        }
+
     }
 
 }

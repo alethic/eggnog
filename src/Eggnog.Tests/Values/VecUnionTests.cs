@@ -116,11 +116,11 @@ namespace Eggnog.Tests.Values
         }
 
         [Fact]
-        public void AUnionThatConflictsIsRefusedBeforeItIsWritten()
+        public void AUnionThatConflictsStandsAndFailsTheFactAfterItsRebuild()
         {
-            // (function g (X) i64 :no-merge) (set (g (a)) 1) (set (g (b)) 2): the union of a and b would give g two values.
-            // The union is refused, as the batch refuses a union that conflicts (architecture 2.3), and the fact fails; its
-            // own write of u stands, as egglog's command keeps what its flush wrote.
+            // (function g (X) i64 :no-merge) (set (g (a)) 1) (set (g (b)) 2): the union of a and b gives g two values, and
+            // egglog's rebuild after the command panics; probe v1.egg: the union stands, the rebuild keeps g's row of 1,
+            // and the command's own write of u stands.
             var t = new Theory();
             var g = t.Graph.DefineFunction<Node, long>("g");
             var u = t.Graph.DefineFunction<Vec<Node>>("u");
@@ -129,26 +129,30 @@ namespace Eggnog.Tests.Values
             Assert.Throws<FactConflictException>(() => t.Root.Assume(u.Of().Is(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of()))));
 
             Assert.False(t.Root.IsFaulted);
-            Assert.False(t.Merged);
+            Assert.True(t.Merged);
             Assert.True(t.Root.Check(u.Of().Is(t.P.Of())));
+            Assert.Equal(1, t.Root.CountRows(g));
+            Assert.Equal(1L, t.Root.Get(g.Of(t.B.Of())));
         }
 
         [Fact]
         public void AMergeOfVectorsIsSimulatedByTheBatch()
         {
-            // The vec-union merge's unions are the batch's: a conflict they make is refused, and so are two lengths,
-            // before anything is written; egglog's command errs the same ways.
+            // The vec-union merge's unions are the batch's: a conflict they make fails the fact after its rebuild, which
+            // keeps the union and g's row of 1, and two lengths are refused before anything is written; egglog's commands
+            // err the same ways (probe v1.egg).
             var t = new Theory();
             var g = t.Graph.DefineFunction<Node, long>("g");
             var ff = t.Graph.DefineFunction<Vec<Node>>("ff", FunctionMerge.Expression<Vec<Node>>((old, @new) => Primitives.VecUnion<Node>().Of(old, @new)));
             t.Root.Assume(g.Of(t.A.Of()).Is(1L), g.Of(t.B.Of()).Is(2L), ff.Of().Is(t.P.Of()));
 
             Assert.Throws<FactConflictException>(() => t.Root.Assume(ff.Of().Is(t.Q.Of())));
+            Assert.True(t.Merged);
+            Assert.Equal(1L, t.Root.Get(g.Of(t.B.Of())));
             var of = Primitives.VecOf<Node>();
             Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(ff.Of().Is(of.Of(t.B.Of(), t.A.Of()))));
 
             Assert.False(t.Root.IsFaulted);
-            Assert.False(t.Merged);
             Assert.True(t.Root.Check(ff.Of().Is(t.P.Of())));
         }
 
@@ -343,6 +347,40 @@ namespace Eggnog.Tests.Values
             Assert.False(t.Merged);
         }
 
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void AFailedFactsVectorUnionIsRebuiltWhereEgglogLeavesItUnrebuilt(bool inChild)
+        {
+            // egglog at 5e655cae: (constructor c () X) (constructor d () X) (function g (X) i64 :no-merge)
+            // (function k (i64) i64 :no-merge) (set (g (a)) 1) (set (g (b)) 2)
+            // (fail (set (k 1) (+ (vec-length (vec-union (p) (q))) (/ 1 0)))): the command fails at (/ 1 0) before its
+            // rebuild, so (check (= (a) (b))) fails and g holds both rows until the next (union (c) (d)), which fails
+            // with "Illegal merge attempted for function g" and leaves one (probe r1.egg). Here the union is rebuilt with
+            // the batch: the classes are one at once, and g keeps one row (architecture 2.13, item 7).
+            var t = new Theory();
+            var c = t.Graph.DefineConstructor<Node>("c");
+            var d = t.Graph.DefineConstructor<Node>("d");
+            var g = t.Graph.DefineFunction<Node, long>("g");
+            var k = t.Graph.DefineFunction<long, long>("k");
+            var s = t.Root;
+            if (inChild)
+            {
+                t.Root.Freeze();
+                s = t.Root.CreateChild();
+            }
+
+            s.Assume(g.Of(t.A.Of()).Is(1L), g.Of(t.B.Of()).Is(2L));
+            var length = Primitives.VecLength<Node>().Of(Primitives.VecUnion<Node>().Of(t.P.Of(), t.Q.Of()));
+            Assert.Throws<RuleEvaluationException>(() => s.Assume(k.Of(1L).Is(Primitives.Add.Of(length, Primitives.Divide.Of(1L, 0L)))));
+
+            Assert.True(s.AreEqual(s.Make(t.A.Of()), s.Make(t.B.Of())));
+            Assert.Equal(1, s.CountRows(g));
+            Assert.Equal(1L, s.Get(g.Of(t.B.Of())));
+            s.Union(s.Make(c.Of()), s.Make(d.Of()));
+            Assert.False(s.IsFaulted);
+        }
     }
 
 }

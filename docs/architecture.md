@@ -317,11 +317,22 @@ an expression (`FunctionMerge.Expression`); a lattice or `FunctionMerge.Of` deco
 write's value may then be a constructor term too, made if absent, as egglog's `set` evaluates it, and the class written
 again after a union that made it equal holds. Two rows that a union makes meet must hold one class by then: the rebuild
 compares them in the pass that makes them meet, under the merges of the passes before it, and its assert-equal merge
-panics on two classes that only that pass's congruences would make one, as egglog's does. A host batch replays those
-passes at the end of the fact whose merge makes the rows meet, and refuses that fact's merge, as egglog's command panics
-(the unions its primitives made that cause the conflict, the rest of the fact kept; otherwise the fact's own write),
-where egglog's command keeps the union and one of the rows (section 2.13, item 7); a rule's run fails with
-`RuleEvaluationException`. A
+panics on two classes that only that pass's congruences would make one, as egglog's does. Its merge then keeps one of
+the rows and the rebuild goes on, as egglog's: the row at the key the rebuild keeps canonical, or, when both rows move,
+the one the table holds first. The container unions of a pass reach the union-find before its table rebuild, which
+fixes an egglog defect (`docs/engine/decisions.md`, the fix of row 23), so a row whose output is a container's class
+may move a pass earlier than egglog's: the rows may then meet holding one class where egglog's merge panics, or both
+move where egglog's moves one, and the rebuild keeps the other row. A child's rebuild keeps the same row, as egglog's
+after a push, whose table holds the ancestors' rows before the child's own and a row it moved at its end: the child
+stages the ancestors' rows that move before its own, merges a run's or a flush's rows before its unions, as egglog's
+flush leaves them for the rebuild, and re-stamps a row whose container changed in place, which stays at its key, after
+the pass's merge, as egglog's refresh. A host batch replays
+those passes at the end of the fact whose merge makes the rows meet, a union of the fact, of its primitives or of a
+constructor write, and fails that fact after its rebuild, as egglog's command fails there: the merge stands with the
+rest of the fact, and `FactConflictException` names the row the rebuild kept, of the function the rebuild's failure
+names; a rule's run fails with `RuleEvaluationException`, its unions standing. A failure before the rebuild, of a
+rule's write or of a fact where it runs, rebuilds the unions all the same, where egglog leaves them unrebuilt
+(section 2.13, item 7). A
 batch that merged classes flushes and rebuilds before a later write of such a function, as egglog's next command runs
 after the rebuild; a split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
 egglog would look up in the head. Below the root a function with `New`, `Old` or an expression is root-only like any
@@ -602,8 +613,17 @@ it failed, as egglog's failed command does, since its actions run as a rule whos
 terms its calls made, and the writes, deletions and unions its primitives made, but not its own write. A write its
 primitives made that conflicts keeps the value before it, as egglog's flush does, and the fact fails keeping its own
 write and the rest of what it staged; the primitives' writes are planned before the fact's own, as egglog stages them,
-so of two writes of one key the primitive's stands. A union its primitives made that conflicts is refused alone, as a
-union of the batch that conflicts is (section 2.3), and the fact keeps the rest. A refusal egglog's type
+so of two writes of one key the primitive's stands. A union of the fact, its primitives' included, that makes two rows
+of a function without a merge meet with different outputs stands, as egglog's does: the batch flushes and rebuilds the
+fact on its own, after the batch's earlier calls when they merged classes, so that the rebuild keeps the row egglog's
+keeps, and the fact then fails keeping all it staged, as egglog's command fails at its rebuild (section 2.3). Its
+primitives run once, as egglog's command evaluates them: one over the tables or over classes is planned after the flush
+of the earlier calls in the first place, and a pure one over values gives the second plan the result it gave the first.
+The same holds in a child, a split's case included, which the failure faults (section 2.9).
+While a scope under the batch's has a `Write` batch open, the flush is refused, and so is the fact, which writes
+nothing, as any call that needs a flush then is. The unions of a fact that fails where it runs, or for a write its
+primitives made, are rebuilt with the batch, where egglog's command leaves them unrebuilt (section 2.13, item 7). A
+refusal egglog's type
 checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then stops, as egglog's
 program stops at an error, and the facts before stand; a `Write` callback may catch the failure and go on. A batch is
 planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives and
@@ -613,8 +633,8 @@ a union makes, such as a read of a function whose keys are classes, or in a chil
 view does not hold yet, which its container pass may make by rebuilding its copy of a container the union reaches,
 comes after the batch flushes and rebuilds its earlier calls, as egglog's next command comes after the last one's
 rebuild), resolves existing terms, mints ids for new ones, keeps only the rows, subsumptions and unions that do not
-already hold, and checks every conflict a function without a lattice would see, including conflicts a union in the
-batch would cause through congruence, and below the root every merge that would rewrite a row of a function whose merge
+already hold, checks every conflict of a write of a function without a lattice, finds those a union in the batch
+causes through congruence, and below the root refuses every merge that would rewrite a row of a function whose merge
 is not a lattice (section 2.3). A fact that throws, for a function read with no value, a primitive with no result
 or that throws, or a conflict, fails without faulting the scope. The batch is then staged and flushed: merged, rebuilt,
 and visible when the call returns. A batch whose facts all hold already stages nothing, so it moves neither the scope's
@@ -797,8 +817,8 @@ Extractors over a frozen scope may run concurrently, one per thread.
   was called on), a scheduler that throws, and an exception the engine cannot undo in a child (section 3.8). `Failure`
   keeps the exception, and every later call except `Dispose` throws `InvalidOperationException` with it as the inner
   exception. A faulted root makes the graph unusable.
-- Refusals made before anything changes (`ArgumentException`, `FactConflictException`, a definition error) do not
-  fault.
+- Refusals made before anything changes (`ArgumentException`, a write's `FactConflictException`, a definition error)
+  do not fault, nor does the `FactConflictException` of a merge whose rows conflict, which comes after its rebuild.
 - A disposed scope gives back its own state, but not what it drew from the graph:
 
   | State | Left behind after the scope is released |
@@ -851,9 +871,14 @@ with egglog" lists:
    twice to `(vec-of (B))` and `(h3)` twice to `(h)`, `(union (vec-get (h) 1) (vec-get (h3) 2))` makes
    `(vec-length (h))` 1 here and 2 in egglog. egglog's choice follows its hash tables' iteration order when two of
    the containers are renamed, and leaves the other container under the id out of its id-to-container map.
-7. A host union, a primitive's in a host write included, that would make two rows of a function without a merge meet
-   with different outputs is refused, and its fact fails keeping the rest of what it staged (sections 2.3 and 2.7);
-   egglog's command fails too, at its rebuild, but keeps the union and one of the rows.
+7. A rule's run whose write fails, or whose call panics, and a host fact that fails where it runs (a primitive that
+   throws or has no result) or for a write its primitives made, rebuild the unions they made, so a later read sees
+   them, where egglog's run and command return at the failure before their rebuild (`egglog-bridge/src/lib.rs:597-599`)
+   and leave the unions in the union-find unrebuilt: its checks and queries do not see them until a later command
+   rebuilds, which then fails if they make two rows of a function without a merge meet with different outputs. With
+   `(rule ((tag x) (= y (W x))) ((union x y)))` and `(rule ((tag x)) ((set (h x) 3)))` after `(set (h (Num 4)) 2)
+   (tag (Num 4)) (W (Num 4))`, the run fails in both, and `(check (= (Num 4) (W (Num 4))))` passes here, and in egglog
+   only after another command's union.
 
 Kept by choice, and not a departure to remove: the built-in `EGraph.Contradiction` is named `$contradiction`, a name
 an egglog program may also give a table of its own (section 2.3); the two are different tables, told apart by
@@ -1183,8 +1208,9 @@ ancestors' layers and journals, and at its next call (a write, a run, a read) ca
 absorbs the ancestor rows appended since its cursors that mention its own losers, catches up with the containers of
 classes its ancestors gained, and then rebuilds its own rows. `Context.Rebuild` is the one rebuild loop at every level:
 egglog's passes at the root; in a child, the catch-up in the first pass, then per pass the container pass and the merge
-of its unions, the rewrite of its own rows, the hide-and-copy of ancestor rows that name its new losers or a container
-its container pass changed in place, and the merge. Before the root is first shared (a child created from it, or a
+of its unions, the hide-and-copy of ancestor rows that name its new losers or a container its container pass changed
+in place, the rewrite of its own rows, and the merge, which folds rows that come to share a key in the order egglog's
+table after a push holds them (section 2.3). Before the root is first shared (a child created from it, or a
 freeze), it settles: the rows written since its last rebuild are canonicalized.
 
 The containers of classes come in two steps. Before the loop, the pre-loop scan (`ContainerLayers.ScanAdds`) drains

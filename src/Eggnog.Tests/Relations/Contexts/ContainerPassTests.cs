@@ -242,9 +242,9 @@ namespace Eggnog.Relations.Tests
 
         /// <summary>
         /// Rows on claimed ids. The child's own row under <c>va</c>, a container it claims and merges away, moves to
-        /// the winner <c>vb</c> and meets the root's row there; its own row under <c>vb</c>, a container it rebuilds in
-        /// place, is re-stamped. The root's row under <c>vb</c> is copied into the child with the pass's epoch and
-        /// hidden there, refreshed, as it names an id whose meaning changed and none that is stale; the root keeps it.
+        /// the winner <c>vb</c> and meets the root's row there, which the merge folds it into, the output an own row that
+        /// hides the root's (its key held); its own rows under <c>vb</c>, a container it rebuilds in place, are then
+        /// re-stamped, as egglog's refresh runs after its tables rebuild. The root keeps its row.
         /// </summary>
         [Fact]
         public void RowsOnClaimedIdsFollowTheContainersMergesAndAreRestamped()
@@ -274,7 +274,7 @@ namespace Eggnog.Relations.Tests
             Assert.True(restamped[2] > ownStamp, "the child's own row naming a container it rebuilt in place was re-stamped");
             Assert.True(Row(child, f, vb)![2] > rootStamp);
 #if DEBUG
-            Assert.Equal(HideReason.Refreshed, child.Tables!.TryGetLayer(f)!.ReasonFor(0, RootRowOf(root, f, vb)));
+            Assert.Equal(HideReason.KeyHeld, child.Tables!.TryGetLayer(f)!.ReasonFor(0, RootRowOf(root, f, vb)));
 #endif
             child.CheckInvariants();
             Assert.Equal([(vb, 2u)], Rows(root, f));

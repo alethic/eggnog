@@ -14,13 +14,16 @@ namespace Eggnog
         // inserts in the order they were staged, each merged into what the table holds, so a write a function without a
         // merge refuses keeps the value before it, and the rebuild then merges the unions. A conflict there, or a panic
         // of a call, fails the command, and what it staged stands but the write that conflicted, or, for a panic, what the
-        // command had not staged yet: its own write. The batch marks where each fact's planning starts (MarkFact); a
-        // fact that fails where it runs drops what it planned but its terms (FailFact, UndoFact): what it appended to the
-        // batch's lists is cut back to the marks, the values it set or removed and the earlier writes its deletions
-        // cancelled are put back from a log, and the congruence check is replayed from the merges of the facts before
-        // it; then the writes, deletions and unions its primitives held are planned again, as the fact plans them. One
-        // that fails in what its primitives held drops only that write, deletion or union (PlanHeld), and keeps the rest
-        // and its own write, failing at its end (EndFact).
+        // command had not staged yet: its own write. A conflict of the rebuild, two rows of a function without a merge
+        // that the unions make meet with different values, keeps one of the rows and fails the command once the rebuild
+        // is done, so everything stands. The batch marks where each fact's planning starts (MarkFact); a fact that fails
+        // where it runs drops what it planned but its terms (FailFact, UndoFact): what it appended to the batch's lists
+        // is cut back to the marks, the values it set or removed and the earlier writes its deletions cancelled are put
+        // back from a log, and the congruence check is replayed from the merges of the facts before it; then the writes,
+        // deletions and unions its primitives held are planned again, as the fact plans them. One that fails in what its
+        // primitives held drops only that write or deletion (PlanHeld), and keeps the rest and its own write, failing at
+        // its end; one whose merges make rows conflict keeps all it planned, is flushed and rebuilt on its own, and fails
+        // after (EndFact).
 
         /// <summary>
         /// Where the fact being planned started.
@@ -56,14 +59,8 @@ namespace Eggnog
         List<Action>? factWritesApplied;
 
         /// <summary>
-        /// The unions the fact being planned held and planned at its end (<see cref="PlanFactUnions"/>), which a failure
-        /// of the congruence check its own merges fail keeps.
-        /// </summary>
-        List<(uint A, uint B)>? factUnionsApplied;
-
-        /// <summary>
-        /// The first failure of a write, deletion or union the fact being planned held (<see cref="PlanHeld"/>), which
-        /// fails the fact at its end, as egglog's command panics after its flush.
+        /// The first failure of a write or deletion the fact being planned held (<see cref="PlanHeld"/>), which fails the
+        /// fact at its end, as egglog's command panics after its flush.
         /// </summary>
         Exception? heldFailure;
 
@@ -92,7 +89,6 @@ namespace Eggnog
             factStart = Mark();
             factRemovalsApplied = null;
             factWritesApplied = null;
-            factUnionsApplied = null;
             heldFailure = null;
             factPanicked = false;
         }
@@ -114,12 +110,11 @@ namespace Eggnog
 
         /// <summary>
         /// Compares, at the end of a fact, the rows of a function of a sort that the batch's merges make meet, as egglog's
-        /// rebuild after the command does (<see cref="CheckClassOutputs"/>): a conflict fails the fact that made it, as
-        /// egglog's command panics. Only when the fact changed the check and rows meet, or, below the root, a class that
-        /// loses is held by a container of a kind that a row of a function whose merge is not a lattice holds
-        /// (<see cref="ReplaysRootOnlyRows"/>).
+        /// rebuild after the command does (<see cref="CheckClassOutputs"/>): a conflict is noted for the fact that made it,
+        /// which fails after its rebuild, as egglog's command panics then (<see cref="EndFact"/>). Only when the fact
+        /// changed the check and rows meet, or, below the root, a class that loses is held by a container of a kind that a
+        /// row of a function whose merge is not a lattice holds (<see cref="ReplaysRootOnlyRows"/>).
         /// </summary>
-        /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
         /// rewrite a row of a function whose merge is not a lattice.</exception>
         void CheckFactClassOutputs()
@@ -129,117 +124,157 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Compares the rows the fact's merges make meet (<see cref="CheckFactClassOutputs"/>) once its held unions are
-        /// planned. A conflict refuses the held unions that cause it, as a conflict a union of the batch causes refuses
-        /// that union, keeps the others, and fails the fact at its end; one the fact's own merges cause, with none of the
-        /// held unions, is the fact's own failure. The held unions are planned again from the first, in halves
-        /// (<see cref="PlanHeldUnions"/>), so a union that conflicts alone is the one refused, whatever its place, in
-        /// O(log n) checks for each union refused, not one per union.
-        /// </summary>
-        /// <param name="first">Where the first held union the fact planned started.</param>
-        /// <param name="planned">The held unions the fact planned, in order; <c>null</c> for none.</param>
-        /// <exception cref="FactConflictException">The fact's own merges make the rows conflict.</exception>
-        /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
-        /// rewrite a row of a function whose merge is not a lattice.</exception>
-        void CheckHeldClassOutputs(FactMark first, List<(uint A, uint B)>? planned)
-        {
-            try
-            {
-                CheckFactClassOutputs();
-            }
-            catch (FactConflictException conflict) when (planned is not null)
-            {
-                heldFailure ??= conflict;
-                UndoTo(first, keepTerms: true);
-                CheckFactClassOutputs();
-                if (planned.Count > 1)
-                {
-                    var half = planned.Count / 2;
-                    PlanHeldUnions(planned, 0, half);
-                    PlanHeldUnions(planned, half, planned.Count - half);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Plans <paramref name="count"/> held unions of <paramref name="planned"/> from <paramref name="start"/> again,
-        /// and keeps them if the rows the fact's merges make meet still agree (<see cref="CheckFactClassOutputs"/>);
-        /// otherwise drops them, and plans each half again the same way, down to the one union that conflicts, which is
-        /// refused.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
-        /// rewrite a row of a function whose merge is not a lattice.</exception>
-        void PlanHeldUnions(List<(uint A, uint B)> planned, int start, int count)
-        {
-            var mark = Mark();
-            for (var i = start; i < start + count; i++)
-            {
-                var (a, b) = planned[i];
-                PlanHeld(() => PlanUnionCore(a, b));
-            }
-
-            try
-            {
-                CheckFactClassOutputs();
-                return;
-            }
-            catch (FactConflictException)
-            {
-                UndoTo(mark, keepTerms: true);
-            }
-
-            if (count > 1)
-            {
-                var half = count / 2;
-                PlanHeldUnions(planned, start, half);
-                PlanHeldUnions(planned, start + half, count - half);
-            }
-        }
-
-        /// <summary>
-        /// Plans one write, deletion or union a primitive of the fact held, as egglog's flush applies each of a command's
-        /// staged writes: one that conflicts, or whose merge fails, is dropped, as the table keeps the value before it, and
-        /// the fact goes on, to fail at its end (<see cref="EndFact"/>). Any other failure is a refusal of the fact, which
+        /// Plans one write or deletion a primitive of the fact held, as egglog's flush applies each of a command's staged
+        /// writes: one that conflicts, or whose merge fails, is dropped, as the table keeps the value before it, and the
+        /// fact goes on, to fail at its end (<see cref="EndFact"/>). Any other failure is a refusal of the fact, which
         /// propagates.
         /// </summary>
         /// <param name="effect">Plans the effect.</param>
-        /// <returns>Whether the effect was planned.</returns>
-        bool PlanHeld(Action effect)
+        void PlanHeld(Action effect)
         {
             var mark = Mark();
             try
             {
                 effect();
-                return true;
             }
             catch (Exception failure) when (failure is FactConflictException or RuleEvaluationException)
             {
                 UndoTo(mark, keepTerms: true);
                 heldFailure ??= failure;
-                return false;
             }
         }
 
         /// <summary>
-        /// Ends a fact: plans what its primitives held (<see cref="PlanFactUnions"/>), and fails the fact, keeping what it
-        /// planned, when a write, deletion or union of them failed, as egglog's command panics after its flush.
+        /// Ends a fact: plans what its primitives held (<see cref="PlanHeldEffects"/>), and fails the fact, keeping what
+        /// it planned, when a write or deletion of them failed, as egglog's command panics after its flush. When the
+        /// fact's merges make two rows of a function without a lattice meet with different values (<see cref="Meet"/>,
+        /// <see cref="CheckClassOutputs"/>), the fact stands, and the batch flushes and rebuilds it at once
+        /// (<see cref="FlushConflict"/>), as egglog's rebuild after the command merges the rows: its assert-equal merge
+        /// keeps the row the table holds and panics, which fails the command once the rebuild is done, so the union and
+        /// every other consequence of the rebuild stand. That rebuild must be the fact's own, as egglog's is the
+        /// command's, since which row it keeps depends on the rows' places and the classes' ids as the commands before left
+        /// them: when the facts before merged classes the batch has not flushed, the fact is dropped, they are flushed and
+        /// rebuilt, and the fact is to be planned again, against the rebuilt scope, as egglog's command runs after the
+        /// last one's rebuild; there its own write may be what conflicts instead. Its primitives run once, as egglog's
+        /// command evaluates them: one over the tables or classes is planned after such a flush in the first place
+        /// (<see cref="Needs(TermShape)"/>), and a pure one over values gives the plan again the result it gave the first
+        /// (<see cref="computed"/>). A flush the scope refuses, for a batch open under it, refuses the fact, which
+        /// writes nothing, before anything of it is kept.
         /// </summary>
-        /// <exception cref="FactConflictException">A held write or union conflicted.</exception>
-        /// <exception cref="RuleEvaluationException">A held write's merge failed.</exception>
-        void EndFact()
+        /// <returns><c>false</c> when the fact is to be planned again.</returns>
+        /// <exception cref="FactConflictException">A held write conflicted, or the fact's merges made rows conflict, and
+        /// the fact stands.</exception>
+        /// <exception cref="RuleEvaluationException">A held write's merge failed; or the flush of the facts before failed,
+        /// as egglog's command whose merge panics, and the fact is not written.</exception>
+        /// <exception cref="InvalidOperationException">The fact's merges make rows conflict, and a scope under this one
+        /// has a <see cref="Scope.Write"/> batch open, which the flush would change; the fact is not written.</exception>
+        bool EndFact()
         {
-            if (PlanFactUnions() is { } failure)
+            PlanHeldEffects();
+            if (mergeConflicts is not null && scope.HasBatchBelow)
+            {
+                UndoFact(keepTerms: false);
+                throw BatchBelow();
+            }
+
+            if (mergeConflicts is not null && mergedBeforeFact)
+            {
+                UndoFact(keepTerms: false);
+                Rebuild();
+                ReplayComputed();
+                return false;
+            }
+
+            ForgetComputed();
+            var conflicts = mergeConflicts;
+            var failure = heldFailure;
+            mergeConflicts = null;
+            MarkFact();
+            SettleFact();
+            if (conflicts is not null)
+                FlushConflict(conflicts, failure);
+
+            if (failure is not null)
             {
                 settledFailure = failure;
                 ExceptionDispatchInfo.Throw(failure);
             }
+
+            return true;
         }
 
         /// <summary>
-        /// Ends a fact that failed. One whose end failed for what its primitives held (<see cref="EndFact"/>) keeps
-        /// everything else it planned, its own write included, as egglog's command keeps what its flush wrote. One that
-        /// failed as egglog's command panics where it runs (a primitive that threw or has no result, a merge that failed,
-        /// a conflict of its own write or of its own merges, a function read with no value) ends as egglog's failed
+        /// Flushes and rebuilds what the batch planned, the fact whose merges make two rows of a function without a
+        /// lattice meet with different values last (<see cref="EndFact"/>): the engine's rebuild keeps the row its table
+        /// holds, records the failure and rebuilds to the end, and the flush then fails, as egglog's rebuild after the
+        /// command does (egglog-bridge/src/lib.rs:594-623, 1186-1192). The fact fails, keeping all it planned, and the
+        /// batch goes on afresh, as egglog's later commands do. A flush that does not fail, where the batch's check found
+        /// more than the rebuild does, ends the fact as written.
+        /// </summary>
+        /// <param name="conflicts">The first two rows of each function the batch's check found meeting with different
+        /// values.</param>
+        /// <param name="failure">The failure of a write the fact's primitives held, which the fact fails with instead, as
+        /// egglog's command fails at its flush before its rebuild.</param>
+        /// <exception cref="FactConflictException">The rebuild failed: the row it kept holds the stored value, the other
+        /// row the new one, and the engine's failure is the inner exception.</exception>
+        void FlushConflict(List<(TableHandle Table, uint[] Key, uint Held, uint Incoming)> conflicts, Exception? failure)
+        {
+            try
+            {
+                Rebuild();
+            }
+            catch (RuleEvaluationException panic) when (failure is null)
+            {
+                var exception = DescribeConflict(conflicts, panic);
+                settledFailure = exception;
+                throw exception;
+            }
+            catch (RuleEvaluationException)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Describes, after the rebuild, two rows that the fact's merges made meet, of the function whose merge the
+        /// engine's failure names, as egglog's panic names the first that fails, or else of the first function noted:
+        /// their keys and the value the table holds at the keys' canonical cells, which the rebuild kept, and the other
+        /// row's value, as the rebuild left them canonical.
+        /// </summary>
+        FactConflictException DescribeConflict(List<(TableHandle Table, uint[] Key, uint Held, uint Incoming)> conflicts, RuleEvaluationException panic)
+        {
+            var message = panic.InnerException is Relations.PanicException inner ? inner.PanicMessage : panic.Message;
+            var conflict = conflicts[0];
+            foreach (var noted in conflicts)
+            {
+                if (message == Relations.EGraph.IllegalMergeMessage(noted.Table.Name))
+                {
+                    conflict = noted;
+                    break;
+                }
+            }
+
+            var table = conflict.Table;
+            var columns = table.KeyArray;
+            var keys = new uint[conflict.Key.Length];
+            for (var i = 0; i < keys.Length; i++)
+                keys[i] = columns[i].InvolvesClasses ? engine.Find(conflict.Key[i]) : conflict.Key[i];
+
+            var output = table.Output!;
+            var held = output.InvolvesClasses ? engine.Find(conflict.Held) : conflict.Held;
+            var incoming = output.InvolvesClasses ? engine.Find(conflict.Incoming) : conflict.Incoming;
+            if (engine.TryLookup(table.Function, keys, out var kept) == false)
+                kept = held;
+
+            var other = kept == incoming ? held : incoming;
+            return new FactConflictException(table, DecodeKeys(table, keys), Decode(output, kept), Decode(output, other), panic);
+        }
+
+        /// <summary>
+        /// Ends a fact that failed. One whose end failed for what its primitives held, or for the rows its merges make
+        /// meet (<see cref="EndFact"/>), keeps everything else it planned, its own write included, as egglog's command
+        /// keeps what its flush wrote and its rebuild made. One that failed as egglog's command panics where it runs (a
+        /// primitive that threw or has no result, a merge that failed, a conflict of its own write, a function read with
+        /// no value) ends as egglog's failed
         /// command ends: what it staged before it failed stands, since its actions run as a rule whose staged writes
         /// outlive the panic (src/lib.rs:1171-1195). The terms its calls made stand, with their ids; so do the writes,
         /// deletions and unions its primitives held, planned again here as the fact plans them; its own write does not
@@ -249,6 +284,7 @@ namespace Eggnog
         /// <param name="failure">What the fact threw.</param>
         void FailFact(Exception failure)
         {
+            ForgetComputed();
             if (ReferenceEquals(failure, settledFailure))
             {
                 settledFailure = null;
@@ -264,22 +300,49 @@ namespace Eggnog
 
             var removals = Join(factRemovalsApplied, factRemovals);
             var writes = Join(factWritesApplied, factWrites);
-            var unions = Join(factUnionsApplied, factUnions);
+            var unions = factUnions;
             UndoFact(keepTerms: true);
             if (removals is null && writes is null && unions is null)
                 return;
 
+            // What it held is planned from a mark after its terms, so that dropping it keeps them.
+            MarkFact();
             factRemovals = removals;
             factWrites = writes;
             factUnions = unions;
             try
             {
-                PlanFactUnions();
+                PlanHeldEffects();
             }
             catch (Exception)
             {
                 // The fact failed already; what its primitives held cannot be planned either, so it goes.
                 UndoFact(keepTerms: true);
+                return;
+            }
+
+            // Its unions make rows meet with different values: the rebuild that keeps one of them follows at once, and the
+            // fact fails with its own failure. A scope with a batch open under it refuses the rebuild, and what the fact
+            // held goes, before the next fact starts.
+            var conflicts = mergeConflicts is not null;
+            if (conflicts && scope.HasBatchBelow)
+            {
+                UndoFact(keepTerms: true);
+                return;
+            }
+
+            mergeConflicts = null;
+            MarkFact();
+            SettleFact();
+            if (conflicts)
+            {
+                try
+                {
+                    Rebuild();
+                }
+                catch (RuleEvaluationException)
+                {
+                }
             }
         }
 
@@ -302,8 +365,8 @@ namespace Eggnog
             factReaders = null;
             factRemovalsApplied = null;
             factWritesApplied = null;
-            factUnionsApplied = null;
             heldFailure = null;
+            mergeConflicts = null;
             factPanicked = false;
             UndoTo(factStart, keepTerms);
             if (keepTerms == false)

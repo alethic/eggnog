@@ -175,6 +175,9 @@ namespace Eggnog.Tests.Host
         [Fact]
         public void AUnionThatMergesConflictingKeysThroughCongruenceIsAConflict()
         {
+            // egglog at 5e655cae: (A) (B) (set (size (Wrap (A))) 1) (set (size (Wrap (B))) 2) (union (A) (B)) fails at its
+            // rebuild, "Illegal merge attempted for function size", which keeps the union, its congruence (check (= (Wrap
+            // (A)) (Wrap (B)))) and the row of (Wrap (A)), 1; (union (A) (B)) and (union (B) (A)) then hold.
             var t = new NodeTheory();
             var size = t.Graph.DefineFunction<Node, long>("size");
             var a = t.Root.Make(t.A.Of());
@@ -182,17 +185,22 @@ namespace Eggnog.Tests.Host
             t.Root.Assume(size.Of(t.Wrap.Of(a)).Is(1L), size.Of(t.Wrap.Of(b)).Is(2L));
             var version = t.Root.Version;
 
-            // a = b makes (Wrap a) = (Wrap b), which gives size two values for one key.
             var e = Assert.Throws<FactConflictException>(() => t.Root.Union(a, b));
 
             Assert.Same(size, e.Table);
-            Assert.Equal(new HashSet<object> { 1L, 2L }, new HashSet<object> { e.StoredValue, e.NewValue });
+            Assert.Equal(1L, e.StoredValue);
+            Assert.Equal(2L, e.NewValue);
+            Assert.IsType<RuleEvaluationException>(e.InnerException);
+            Assert.Contains("Illegal merge attempted for function size", e.InnerException!.Message);
             Assert.False(t.Root.IsFaulted);
-            Assert.False(t.Root.AreEqual(a, b));
-            Assert.Equal(version, t.Root.Version);
-            Assert.Throws<FactConflictException>(() => t.Root.Assume(((Term<Node>)a).Is(b)));
-            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.B.Of().Is(a)));
-            Assert.False(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(t.Root.Make(t.Wrap.Of(a)), t.Wrap.Of(b)));
+            Assert.NotEqual(version, t.Root.Version);
+            Assert.Equal(1, t.Root.CountRows(size));
+            Assert.Equal(1L, t.Root.Get(size.Of(t.Wrap.Of(b))));
+            Assert.False(t.Root.Union(a, b));
+            t.Root.Assume(t.B.Of().Is(a));
+            Assert.Equal(1L, t.Root.Get(size.Of(t.Wrap.Of(a))));
         }
 
         [Fact]
@@ -240,8 +248,11 @@ namespace Eggnog.Tests.Host
         }
 
         [Fact]
-        public void ACallThatFailsWritesNothingAndTheOtherCallsStand()
+        public void ACallThatFailsAtItsRebuildStandsAndTheOtherCallsStand()
         {
+            // egglog at 5e655cae: (set (size (A)) 1) (set (size (B)) 2) (Wrap (A)) (num 1) (union (A) (B)) (num 2): the
+            // union fails at its rebuild, "Illegal merge attempted for function size", keeping the union and (size (A)),
+            // 1, and the commands around it stand.
             var t = new NodeTheory();
             var size = t.Graph.DefineFunction<Node, long>("size");
             var a = t.Root.Make(t.A.Of());
@@ -260,7 +271,9 @@ namespace Eggnog.Tests.Host
             Assert.True(t.Root.Check(t.Num.Of(1L)));
             Assert.True(t.Root.Check(t.Num.Of(2L)));
             Assert.True(t.Root.AreEqual(made, t.Wrap.Of(a)));
-            Assert.False(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.Equal(1L, t.Root.Get(size.Of(b)));
+            Assert.Equal(1, t.Root.CountRows(size));
             Assert.False(t.Root.IsFaulted);
         }
 
@@ -285,9 +298,10 @@ namespace Eggnog.Tests.Host
         [Fact]
         public void AConflictOfClassesFailsTheFactWhoseUnionMadeIt()
         {
-            // (set (fo (A)) c) (set (fo (B)) d) (union (A) (B)): egglog's rebuild after the union finds two classes for one
-            // key and the command fails; the facts before it stand, and a later union that would make c and d one does
-            // not save it.
+            // egglog at 5e655cae: (set (fo (A)) (Lit 3)) (set (fo (B)) (Lit 4)) (num 1) (union (A) (B)): the rebuild after
+            // the union finds two classes for one key, keeps (fo (A)), (Lit 3), and the command fails; the union stands,
+            // and (Lit 3) and (Lit 4) stay apart until a union of their own, which fo's one row then accepts. A program
+            // stops at the failure, so (num 2) after it is not written.
             var t = new NodeTheory();
             var fo = t.Graph.DefineFunction<Node, Node>("fo");
             var a = t.Root.Make(t.A.Of());
@@ -296,23 +310,20 @@ namespace Eggnog.Tests.Host
             var d = t.Root.Make(t.Lit.Of(4L));
             t.Root.Assume(fo.Of(a).Is(c), fo.Of(b).Is(d));
 
-            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(1L), t.A.Of().Is(t.B.Of()), t.Num.Of(2L)));
+            var e = Assert.Throws<FactConflictException>(() => t.Root.Assume(t.Num.Of(1L), t.A.Of().Is(t.B.Of()), t.Num.Of(2L)));
+            Assert.Equal(c, e.StoredValue);
+            Assert.Equal(d, e.NewValue);
             Assert.True(t.Root.Check(t.Num.Of(1L)));
-            Assert.False(t.Root.AreEqual(a, b));
-
-            Assert.Throws<FactConflictException>(() => t.Root.Assume(t.A.Of().Is(t.B.Of()), t.Lit.Of(3L).Is(t.Lit.Of(4L))));
-            Assert.False(t.Root.AreEqual(a, b));
+            Assert.False(t.Root.Check(t.Num.Of(2L)));
+            Assert.True(t.Root.AreEqual(a, b));
             Assert.False(t.Root.AreEqual(c, d));
+            Assert.Equal(1, t.Root.CountRows(fo));
+            Assert.True(t.Root.AreEqual(t.Root.Get(fo.Of(b)), c));
 
-            t.Root.Write(w =>
-            {
-                w.Assume(t.Num.Of(3L));
-                Assert.Throws<FactConflictException>(() => w.Union(a, b));
-                w.Assume(t.Num.Of(4L));
-            });
-            Assert.True(t.Root.Check(t.Num.Of(3L), t.Num.Of(4L)));
-            Assert.False(t.Root.AreEqual(a, b));
-            Assert.Equal(2, t.Root.CountRows(fo));
+            t.Root.Assume(t.A.Of().Is(t.B.Of()), t.Lit.Of(3L).Is(t.Lit.Of(4L)));
+            Assert.True(t.Root.AreEqual(c, d));
+            Assert.Equal(1, t.Root.CountRows(fo));
+            Assert.False(t.Root.IsFaulted);
         }
 
         [Fact]
@@ -764,9 +775,9 @@ namespace Eggnog.Tests.Host
         }
 
         /// <summary>
-        /// A host write never gives a function without a lattice a second value: a host union that would merge two keys
-        /// holding different values is refused with <see cref="FactConflictException"/>, leaves the classes apart, and
-        /// does not fault the root.
+        /// A host union that merges two keys of a function without a lattice holding different values fails with
+        /// <see cref="FactConflictException"/> as egglog's command fails at its rebuild, (union (A) (B)) after (set (f
+        /// (A)) 1) (set (f (B)) 2): the union stands, the rebuild keeps (f (A)), 1, and the root is not faulted.
         /// </summary>
         [Fact]
         public void AHostUnionThatMergesTwoConflictingKeys()
@@ -779,12 +790,14 @@ namespace Eggnog.Tests.Host
             var thrown = Record.Exception(() => t.Root.Union(a, b));
             Assert.False(t.Root.IsFaulted, "the root is faulted by " + thrown?.GetType().Name);
             Assert.IsType<FactConflictException>(thrown);
-            Assert.False(t.Root.AreEqual(a, b));
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.Equal(1L, t.Root.Get(f.Of(b)));
+            Assert.Equal(1, t.Root.CountRows(f));
         }
 
         /// <summary>
         /// The same inside one batch: two keys of one function without a lattice that a union of the batch merges are a
-        /// <see cref="FactConflictException"/>, and the root is not faulted.
+        /// <see cref="FactConflictException"/>, the union and the row of (A) stand, and the root is not faulted.
         /// </summary>
         [Fact]
         public void ABatchWhoseUnionMergesTwoConflictingKeysIsAFactConflict()
@@ -800,6 +813,8 @@ namespace Eggnog.Tests.Host
             }));
             Assert.False(t.Root.IsFaulted, "the root is faulted by " + thrown?.GetType().Name);
             Assert.IsType<FactConflictException>(thrown);
+            Assert.True(t.Root.AreEqual(a, b));
+            Assert.Equal(1L, t.Root.Get(f.Of(b)));
         }
 
         /// <summary>
@@ -821,6 +836,111 @@ namespace Eggnog.Tests.Host
             Assert.IsType<InvalidOperationException>(thrown);
         }
 
+        [Fact]
+        public void AConflictingUnionWhileABatchBelowIsOpenWritesNothing()
+        {
+            // The union's rows of h conflict, so its fact needs a flush, which a batch open in a child refuses: the union
+            // is refused with it, the classes stay apart, h keeps both rows, and the outer batch writes the rest.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("S");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var h = graph.DefineFunction<Node, long>("h");
+            var r = graph.DefineRelation<Node>("r");
+            var root = graph.Root;
+            root.Assume(h.Of(a.Of()).Is(1L), h.Of(b.Of()).Is(2L));
+            var x = root.Make(a.Of());
+            var y = root.Make(b.Of());
+            using var child = root.CreateChild();
+            root.Write(w =>
+            {
+                child.Write(cw =>
+                {
+                    cw.Assume(r.Of(a.Of()));
+                    var refused = Assert.Throws<InvalidOperationException>(() => w.Union(x, y));
+                    Assert.Contains("has a Write batch open", refused.Message, StringComparison.Ordinal);
+                });
+                w.Assume(r.Of(b.Of()));
+            });
+            Assert.False(root.AreEqual(x, y));
+            Assert.Equal(2, root.CountRows(h));
+            Assert.True(root.Check(r.Of(b.Of())));
+            Assert.False(root.IsFaulted);
+            Assert.True(child.Check(r.Of(a.Of())));
+        }
+
+        [Fact]
+        public void APureComputationAfterAUnionWhileABatchBelowIsOpenIsWritten()
+        {
+            // (union (A) (B)) (set (k 1) (+ 1 2)): the union makes no rows conflict, h(B) having none, and (+ 1 2)
+            // computes over values, which the union leaves as they are; so the fact needs no flush, which a batch open in
+            // a child would refuse, and the outer batch writes it with the union.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("S");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var h = graph.DefineFunction<Node, long>("h");
+            var k = graph.DefineFunction<long, long>("k");
+            var r = graph.DefineRelation<Node>("r");
+            var root = graph.Root;
+            root.Assume(h.Of(a.Of()).Is(1L));
+            var x = root.Make(a.Of());
+            var y = root.Make(b.Of());
+            using var child = root.CreateChild();
+            root.Write(w =>
+            {
+                w.Union(x, y);
+                child.Write(cw =>
+                {
+                    cw.Assume(r.Of(a.Of()));
+                    w.Assume(k.Of(1L).Is(Primitives.Add.Of(1L, 2L)));
+                });
+            });
+            Assert.True(root.AreEqual(x, y));
+            Assert.Equal(3L, root.Get(k.Of(1L)));
+            Assert.Equal(1L, root.Get(h.Of(b.Of())));
+            Assert.False(root.IsFaulted);
+        }
+
+        [Fact]
+        public void AHeldUnionThatConflictsWhileABatchBelowIsOpenGoesWithItsFailedFact()
+        {
+            // The fact's own write of f conflicts, so the union its primitive held is planned as the failed fact keeps it;
+            // its rows of h conflict, which needs a flush that a batch open in a child refuses: the union goes, the
+            // classes stay apart, h keeps both rows, and the outer batch writes the rest.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("S");
+            var a = graph.DefineConstructor<Node>("A");
+            var b = graph.DefineConstructor<Node>("B");
+            var h = graph.DefineFunction<Node, long>("h");
+            var f = graph.DefineFunction<long, long>("f");
+            var r = graph.DefineRelation<Node>("r");
+            var root = graph.Root;
+            root.Assume(h.Of(a.Of()).Is(1L), h.Of(b.Of()).Is(2L), f.Of(1L).Is(5L));
+            var x = root.Make(a.Of());
+            var y = root.Make(b.Of());
+            var uni = Primitive.CreateWrite("uni", [typeof(long)], (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
+            {
+                tables.Union(x, y);
+                result = (long)args[0];
+                return true;
+            });
+            using var child = root.CreateChild();
+            root.Write(w =>
+            {
+                child.Write(cw =>
+                {
+                    cw.Assume(r.Of(a.Of()));
+                    Assert.Throws<FactConflictException>(() => w.Assume(f.Of(1L).Is(uni.Of(7L))));
+                });
+                w.Assume(r.Of(b.Of()));
+            });
+            Assert.False(root.AreEqual(x, y));
+            Assert.Equal(2, root.CountRows(h));
+            Assert.Equal(5L, root.Get(f.Of(1L)));
+            Assert.True(root.Check(r.Of(b.Of())));
+            Assert.False(root.IsFaulted);
+        }
     }
 
 }

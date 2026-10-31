@@ -376,7 +376,7 @@ namespace Eggnog.Relations
         RuleSetReport MergeRuleSetCore(RuleSetReport executed, uint timestamp)
         {
             var start = Stopwatch.GetTimestamp();
-            var changed = MergeAllCore(timestamp);
+            var changed = MergeWritesCore(timestamp);
             return executed.WithMerge(changed, Stopwatch.GetElapsedTime(start));
         }
 

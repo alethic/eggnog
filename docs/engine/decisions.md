@@ -59,4 +59,7 @@ corrections). They bind colored contexts and the lift.
   (`Database.RebuildPass`), shows in a merge: the rebuild's merge of two rows whose containers the same pass makes equal
   sees the old and new values equal, where egglog's sees two ids, so a class constant or a function lookup in the merge
   keeps the old value there where egglog's gives the class or looks the function up (architecture 2.3, the merge
-  paragraph).
+  paragraph). It also shows in when two rows of a function without a merge meet, when the class a row outputs or is
+  keyed by is a constructor's of such a container: the congruence that egglog's rebuild finds a pass later is found in
+  the same pass, so the rows may meet holding one class where egglog's assert-equal merge panics, or both move in one
+  pass where egglog's moves one onto the other, and the rebuild keeps the other row.

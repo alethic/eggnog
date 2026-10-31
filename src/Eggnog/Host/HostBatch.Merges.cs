@@ -10,12 +10,15 @@ namespace Eggnog
 
         // The congruence check of merges. A union of the batch, or a constructor write that gives an existing key
         // another class, merges classes; the rebuild then merges every pair of rows whose keys become equal, and for a
-        // function without a lattice two such rows with different values are an engine panic, which would fail the
-        // whole flush rather than the fact whose merge made them meet, as egglog's command does. Phase 1 therefore
-        // simulates the closure the rebuild will compute: an overlay union-find over the cells
-        // of the batch (canonical or fresh), and a signature table of the rows whose keys a merge can change, stored and
-        // planned. Two rows of a constructor that meet merge their outputs, which cascades; two rows of a function
-        // without a lattice that meet with different values are a FactConflictException, before anything is staged.
+        // function without a lattice two such rows with different values are egglog's panic at the rebuild after the
+        // command: its assert-equal merge keeps the row the table holds, the rebuild goes on to the end, and the command
+        // fails, keeping its union and all the rebuild made. Phase 1 therefore simulates the closure the rebuild will
+        // compute, to find the fact whose merges make such rows meet: an overlay union-find over the cells of the batch
+        // (canonical or fresh), and a signature table of the rows whose keys a merge can change, stored and planned. Two
+        // rows of a constructor that meet merge their outputs, which cascades; two rows of a function without a lattice
+        // that meet with different values are noted (mergeConflicts), and the fact that made them meet is flushed and
+        // rebuilt on its own, so that the engine's rebuild keeps the row egglog's does and the fact then fails
+        // (EndFact).
         //
         // The check starts at the batch's first merge, and only when the graph has a function without a lattice keyed by
         // a sort (or, below the root, a function with a merge that only the root writes, keyed by a sort or holding
@@ -79,6 +82,13 @@ namespace Eggnog
         bool mergedClasses;
 
         /// <summary>
+        /// For each function without a lattice whose rows the check found meeting with different values in the fact
+        /// being planned, the first two: the function, the keys of the row the batch takes as held, its output, and the
+        /// other's; <c>null</c> for none.
+        /// </summary>
+        List<(TableHandle Table, uint[] Key, uint Held, uint Incoming)>? mergeConflicts;
+
+        /// <summary>
         /// Forgets the congruence check and the merges, once the batch has flushed and rebuilt what it planned
         /// (<see cref="Rebuild"/>).
         /// </summary>
@@ -103,14 +113,13 @@ namespace Eggnog
             passSensitive = false;
             mergeCheckDecided = false;
             mergedClasses = false;
+            mergeConflicts = null;
         }
 
         /// <summary>
         /// Records that the batch merges two classes (canonical or fresh cells), starting the congruence check at the
         /// first merge, and runs the closure.
         /// </summary>
-        /// <exception cref="FactConflictException">The merge would give a function without a lattice two values for one
-        /// key.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and the merge would rewrite a row of a
         /// function whose merge is not a lattice.</exception>
         void NoteMerge(uint a, uint b)
@@ -132,8 +141,6 @@ namespace Eggnog
         /// <summary>
         /// Adds a planned row of <paramref name="table"/> (keys then output) to the congruence check, once it runs.
         /// </summary>
-        /// <exception cref="FactConflictException">The row meets a row of a function without a lattice that holds another
-        /// value.</exception>
         void TrackRow(TableHandle table, uint[] row)
         {
             if (mergeRows is null || congruent!.Contains(table) == false)
@@ -145,8 +152,6 @@ namespace Eggnog
         /// <summary>
         /// Adds a planned row of <paramref name="table"/> to the congruence check, once it runs.
         /// </summary>
-        /// <exception cref="FactConflictException">The row meets a row of a function without a lattice that holds another
-        /// value.</exception>
         void TrackRow(TableHandle table, uint[] key, uint output)
         {
             if (mergeRows is null || congruent!.Contains(table) == false)
@@ -412,8 +417,6 @@ namespace Eggnog
         /// Places a row in the signature table under its key in the overlay's classes; a row already there with that key
         /// meets it.
         /// </summary>
-        /// <exception cref="FactConflictException">The rows are of a function without a lattice and hold different
-        /// values.</exception>
         void Place(int index)
         {
             var (table, key, _, _) = mergeRows![index];
@@ -436,9 +439,9 @@ namespace Eggnog
 
         /// <summary>
         /// Two rows of one table whose keys are equal in the overlay: a constructor's outputs merge; a function without a
-        /// lattice must hold one value.
+        /// lattice must hold one value, and two are noted as a conflict (<see cref="NoteConflict"/>), which merges
+        /// nothing, as egglog's assert-equal merge keeps one row.
         /// </summary>
-        /// <exception cref="FactConflictException">The function's rows hold different values.</exception>
         void Meet(int first, int second)
         {
             var a = mergeRows![first];
@@ -472,17 +475,28 @@ namespace Eggnog
                 return;
             }
 
+            NoteConflict(a, b);
+        }
+
+        /// <summary>
+        /// Notes two rows of a function without a lattice that meet with different values, the first of the function the
+        /// fact being planned makes meet (<see cref="mergeConflicts"/>): a stored row is the one taken as held.
+        /// </summary>
+        void NoteConflict((TableHandle Table, uint[] Key, uint Output, bool Stored) a, (TableHandle Table, uint[] Key, uint Output, bool Stored) b)
+        {
+            var conflicts = mergeConflicts ??= new List<(TableHandle, uint[], uint, uint)>();
+            foreach (var noted in conflicts)
+                if (ReferenceEquals(noted.Table, a.Table))
+                    return;
+
             var (held, incoming) = a.Stored || b.Stored == false ? (a, b) : (b, a);
-            var output = held.Table.Output!;
-            throw new FactConflictException(held.Table, DecodeKeys(held.Table, held.Key), Decode(output, held.Output), Decode(output, incoming.Output));
+            conflicts.Add((held.Table, held.Key, held.Output, incoming.Output));
         }
 
         /// <summary>
         /// Runs the queued merges to closure: the class with fewer indexed rows joins the other, and its rows are placed
         /// again under their new keys, which may queue further merges.
         /// </summary>
-        /// <exception cref="FactConflictException">A merge would give a function without a lattice two values for one
-        /// key.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a merge would rewrite a row of a
         /// function whose merge is not a lattice (<see cref="CheckRootOnly"/>).</exception>
         void Close()
@@ -592,8 +606,9 @@ namespace Eggnog
         /// passes left, starting from the batch's own merges (its unions and its constructor writes), and then merges
         /// what met: a constructor's meeting rows union their classes for the next pass, and two rows of a function of
         /// a sort that meet must hold one class already, since its assert-equal merge panics on two, as egglog's does,
-        /// before a later pass could merge them. The batch fails the fact that made them meet, as egglog's command
-        /// panics, rather than let the panic fail the whole flush. Below the root, it also refuses a merge in which a
+        /// before a later pass could merge them; the merge keeps one of them and merges nothing, and the passes go on.
+        /// The batch notes the first such two (<see cref="NoteConflict"/>), and the fact that made them meet then fails
+        /// after its rebuild, as egglog's command does (<see cref="EndFact"/>). Below the root, it also refuses a merge in which a
         /// class or a container that a row of a function whose merge only the root writes names, or holds, loses
         /// (<see cref="CheckRootOnly"/>), and runs too once a class that loses is held by a container of a kind such a
         /// row holds (<see cref="ReplaysRootOnlyRows"/>); there the containers of the view that hold a cell that loses
@@ -604,7 +619,6 @@ namespace Eggnog
         /// meet, or such a class is held. The batch runs it at the end of each fact that changes the check
         /// (<see cref="CheckFactClassOutputs"/>).
         /// </summary>
-        /// <exception cref="FactConflictException">Two such rows hold different classes when they meet.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a merge the passes make would
         /// rewrite a row of a function whose merge is not a lattice (<see cref="CheckRootOnly"/>).</exception>
         void CheckClassOutputs()
@@ -681,8 +695,7 @@ namespace Eggnog
                         continue;
                     }
 
-                    var (held, incoming) = other.Stored || row.Stored == false ? (other, row) : (row, other);
-                    throw new FactConflictException(held.Table, DecodeKeys(held.Table, held.Key), Decode(output, held.Output), Decode(output, incoming.Output));
+                    NoteConflict(other, row);
                 }
 
                 if (found.Count == 0 && mergedContainers == false)

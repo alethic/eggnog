@@ -56,11 +56,14 @@ namespace Eggnog
             try
             {
                 RebuildFor(shape.Table!, shape.Arguments, deletes: true);
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanDelete(shape.Table!, shape.Arguments, nameof(term));
-                EndFact();
+                    PlanDelete(shape.Table!, shape.Arguments, nameof(term));
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {
@@ -92,11 +95,14 @@ namespace Eggnog
             try
             {
                 RebuildFor(relation.Table, relation.Arguments, deletes: true);
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanDelete(relation.Table, relation.Arguments, nameof(fact));
-                EndFact();
+                    PlanDelete(relation.Table, relation.Arguments, nameof(fact));
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {

@@ -295,8 +295,8 @@ namespace Eggnog.Relations
                     else
                     {
                         // A first pass whose catch-up staged row copies settles its containers before they merge.
-                        var restamp = RebuildContainerLayers(epoch, inherited, first && caughtUp, ref pass);
-                        pass |= tables!.RebuildPass(epoch, restamp);
+                        var restamp = RebuildContainerLayers(epoch, inherited, first && caughtUp, ref pass, out var dirty);
+                        pass |= tables!.RebuildPass(epoch, restamp, dirty);
                     }
                 }
                 catch when (IsRoot == false)

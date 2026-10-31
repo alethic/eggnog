@@ -212,10 +212,11 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void AChildsMergeThatCollapsesTwoKeysConflictsAsTheRootsDoes()
         {
-            // Probe map-child-conflict.egg: the program of AMergeThatCollapsesTwoKeysConflicts with each union in a
-            // push of its own, where egglog at 5e655cae panics as at its root, which (fail ...) catches; g and h keep
-            // their two rows each. The child's batch checks the merge against the maps and multisets of its view and
-            // refuses it, as the root's does, before anything is written.
+            // Probe m1.egg: the program of AMergeThatCollapsesTwoKeysConflicts with both unions in one push, where
+            // egglog at 5e655cae panics at each union's rebuild as at its root; the unions stand, and each rebuild keeps
+            // the row of the container made first, g's of {(Num 1): 1}, 20, and h's of {(Num 3), (Num 4)}, 1; after the
+            // pop g and h have their two rows each. The child's batch checks the merge against the maps and multisets of
+            // its view, as the root's does.
             var t = new Theory();
             var g = t.Graph.DefineFunction<Map<Node, long>, long>("g");
             var h = t.Graph.DefineFunction<MultiSet<Node>, long>("h");
@@ -232,10 +233,12 @@ namespace Eggnog.Tests.Values
                 Assert.Throws<FactConflictException>(() => child.Union(one, two));
                 Assert.Throws<FactConflictException>(() => child.Union(three, four));
                 Assert.False(child.IsFaulted);
-                Assert.False(child.AreEqual(one, two));
-                Assert.False(child.AreEqual(three, four));
-                Assert.Equal(2, child.CountRows(g));
-                Assert.Equal(2, child.CountRows(h));
+                Assert.True(child.AreEqual(one, two));
+                Assert.True(child.AreEqual(three, four));
+                Assert.Equal(1, child.CountRows(g));
+                Assert.Equal(1, child.CountRows(h));
+                Assert.True(child.Check(g.Of(t.Insert(t.Empty, 2L, 1L)).Is(20L)));
+                Assert.True(child.Check(h.Of(of.Of(t.Num.Of(4L), t.Num.Of(4L))).Is(1L)));
             }
 
             Assert.Equal(2, t.Root.CountRows(g));
@@ -388,6 +391,18 @@ namespace Eggnog.Tests.Values
 
             public Map<Node, long> M => Map.Of((K1, 1L), (K2, 2L), (K3, 3L));
 
+            // M as egglog's program makes it, by map-insert, with the maps it inserts into before it: which of two rows
+            // that meet a rebuild keeps follows the maps the program made and their order.
+            public Term<Map<Node, long>> InsertedM => Insert(Insert(Insert(Empty, Num.Of(1L), 1L), G.Of(Num.Of(10L)), 2L), G.Of(Num.Of(20L)), 3L);
+
+            // {#3: 2}, by map-insert.
+            public Term<Map<Node, long>> InsertedK2 => Insert(Empty, G.Of(Num.Of(10L)), 2L);
+
+            static Term<Map<Node, long>> Empty => Primitives.MapEmpty<Node, long>().Of();
+
+            static Term<Map<Node, long>> Insert(Term<Map<Node, long>> map, Term<Node> key, long value) =>
+                Primitives.MapInsert<Node, long>().Of(map, key, value);
+
             public void Merge() => MergeIn(Root);
 
             public void MergeIn(Scope scope) => scope.Write(w =>
@@ -413,11 +428,15 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void RowsOfMapsMeetAsThePassesMakeThem()
         {
-            // f(M) = 100 and f({#3: 2}) = 200 meet when M is {(Num 1): 2}: egglog panics, and the batch refuses it.
+            // f(M) = 100 and f({#3: 2}) = 200 meet when M is {(Num 1): 2}: egglog panics at the rebuild, probes m2.egg
+            // and m3.egg, one action or two commands, and the merge stands, its rebuild keeping 200.
             var conflict = new Passes();
-            conflict.Root.Assume(conflict.F.Of(conflict.M).Is(100L), conflict.F.Of(Map.Of((conflict.K2, 2L))).Is(200L));
+            conflict.Root.Assume(conflict.F.Of(conflict.InsertedM).Is(100L), conflict.F.Of(conflict.InsertedK2).Is(200L));
             Assert.Throws<FactConflictException>(conflict.Merge);
             Assert.False(conflict.Root.IsFaulted);
+            Assert.True(conflict.Root.AreEqual(conflict.A, conflict.B));
+            Assert.Equal(1, conflict.Root.CountRows(conflict.F));
+            Assert.Equal(200L, conflict.Root.Get(conflict.F.Of(Map.Of((conflict.K1, 2L)))));
 
             // f(M) = 100 and f({#4: 3}) = 200 never meet, since M keeps 2: egglog keeps both rows.
             var apart = new Passes();
@@ -432,9 +451,9 @@ namespace Eggnog.Tests.Values
             // Probes map-passes.egg and map-passes-conflict.egg, which put the merge of Passes in a push, one
             // action as a rule's head and, in the first, also two commands: egglog at 5e655cae makes M {(Num 1): 2}
             // there either way and keeps f(M) = 100 apart from f({#4: 3}) = 200, (print-size f) 2, and panics on f(M) =
-            // 100 meeting f({#3: 2}) = 200, "Illegal merge attempted for function f"; after the pop M has its three
-            // keys. Here the merge is the child's batch, whose check replays the passes of the child's rebuild over the
-            // maps of its view.
+            // 100 meeting f({#3: 2}) = 200, "Illegal merge attempted for function f", keeping the unions and f's row of
+            // 200 (probe m2.egg); after the pop M has its three keys. Here the merge is the child's batch, whose check
+            // replays the passes of the child's rebuild over the maps of its view.
             var t = new Passes();
             var m = t.Graph.DefineFunction<Map<Node, long>>("m");
             t.Root.Assume(m.Of().Is(t.M));
@@ -452,14 +471,19 @@ namespace Eggnog.Tests.Values
             Assert.Equal(t.M, t.Root.Get(m.Of()));
 
             var conflict = new Passes();
-            conflict.Root.Assume(conflict.F.Of(conflict.M).Is(100L), conflict.F.Of(Map.Of((conflict.K2, 2L))).Is(200L));
+            conflict.Root.Assume(conflict.F.Of(conflict.InsertedM).Is(100L), conflict.F.Of(conflict.InsertedK2).Is(200L));
             conflict.Root.Freeze();
             using (var child = conflict.Root.CreateChild())
             {
                 Assert.Throws<FactConflictException>(() => conflict.MergeIn(child));
                 Assert.False(child.IsFaulted);
-                Assert.False(child.AreEqual(conflict.A, conflict.B));
-                Assert.Equal(2, child.CountRows(conflict.F));
+                Assert.True(child.AreEqual(conflict.A, conflict.B));
+                Assert.Equal(1, child.CountRows(conflict.F));
+
+                // egglog's push keeps 200, the row its table holds first once the first pass has moved f(M) to its end
+                // (probe m3.egg); so does the child, whose rebuild stages the ancestor's row before the one the first
+                // pass moved into its own layer.
+                Assert.Equal(200L, child.Get(conflict.F.Of(Map.Of((conflict.K1, 2L)))));
             }
         }
 

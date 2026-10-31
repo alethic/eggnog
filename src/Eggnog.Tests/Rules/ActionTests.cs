@@ -143,6 +143,81 @@ namespace Eggnog.Tests.Rules
             Assert.True(t.Root.Check(t.Tag.Of(t.Wrap.Of(t.Lit.Of(4L)))));
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ARunsRebuildKeepsTheRowItsTableHoldsFirstInAChildAsAtTheRoot(bool inChild)
+        {
+            // egglog at 5e655cae: (sort S) (constructor Z () S) (constructor X () S) (constructor B () S)
+            // (constructor C () S) (function h (S) i64 :no-merge) (Z) (X) (set (h (B)) 2) (set (h (C)) 1)
+            // (rule () ((union (Z) (X)) (union (Z) (C)))), then in a push or not (union (X) (B)) (fail (run 1)): "Illegal
+            // merge attempted for function h", and h holds (h (Z)) -> 1 either way (probe e18.egg). In the push the union
+            // moved (h (B)) to the end of the table, so the run's rebuild meets (h (C)) first; in the child that row is
+            // the ancestor's, the other the child's own.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("S");
+            var z = graph.DefineConstructor<Node>("Z");
+            var x = graph.DefineConstructor<Node>("X");
+            var b = graph.DefineConstructor<Node>("B");
+            var c = graph.DefineConstructor<Node>("C");
+            var h = graph.DefineFunction<Node, long>("h");
+            var rules = graph.DefineRuleset("both");
+            rules.DefineRule("both", r => r.Then(z.Of().Is(x.Of()), z.Of().Is(c.Of())));
+            var root = graph.Root;
+            root.Make(z.Of());
+            root.Make(x.Of());
+            root.Assume(h.Of(b.Of()).Is(2L));
+            root.Assume(h.Of(c.Of()).Is(1L));
+            var s = root;
+            if (inChild)
+            {
+                root.Freeze();
+                s = root.CreateChild();
+            }
+
+            s.Union(s.Make(x.Of()), s.Make(b.Of()));
+            var e = Assert.Throws<RuleEvaluationException>(() => s.Run(rules));
+
+            Assert.Contains("Illegal merge attempted for function h", e.Message);
+            Assert.False(s.IsFaulted);
+            Assert.Equal(1L, s.Get(h.Of(z.Of())));
+            Assert.Equal(1, s.CountRows(h));
+            Assert.True(s.AreEqual(s.Make(z.Of()), s.Make(b.Of())));
+        }
+
+        [Fact]
+        public void AFailedRunsUnionsAreRebuiltWhereEgglogLeavesThemUnrebuilt()
+        {
+            // egglog at 5e655cae: (rule ((tag x) (= y (Wrap x))) ((union x y))) (rule ((tag x)) ((set (h x) 3)))
+            // (set (h (Lit 4)) 2) (tag (Lit 4)) (Wrap (Lit 4)) (fail (run 1)): "Illegal merge attempted for function h",
+            // and h keeps 2; the run returns at the failure before its rebuild, so (check (= (Lit 4) (Wrap (Lit 4))))
+            // fails until a later command's union rebuilds (probe t5.egg). Here the run rebuilds the union, which the
+            // check sees at once (architecture 2.13, item 7).
+            var t = new NodeTheory();
+            var h = t.Graph.DefineFunction<Node, long>("h");
+            t.Rules.DefineRule("union", r =>
+            {
+                var (x, y) = r.Vars<Node, Node>("x", "y");
+                r.When(t.Tag.Of(x), y.Is(t.Wrap.Of(x)));
+                r.Then(x.Is(y));
+            });
+            t.Rules.DefineRule("set", r =>
+            {
+                var x = r.Var<Node>("x");
+                r.When(t.Tag.Of(x));
+                r.Then(h.Of(x).Is(3L));
+            });
+            t.Root.Assume(h.Of(t.Lit.Of(4L)).Is(2L));
+            t.Root.Assume(t.Tag.Of(t.Lit.Of(4L)));
+            t.Root.Make(t.Wrap.Of(t.Lit.Of(4L)));
+
+            var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
+
+            Assert.Contains("Illegal merge attempted for function h", e.Message);
+            Assert.Equal(2L, t.Root.Get(h.Of(t.Lit.Of(4L))));
+            Assert.True(t.Root.Check(t.Lit.Of(4L).Is(t.Wrap.Of(t.Lit.Of(4L)))));
+        }
+
         [Fact]
         public void AConflictingRuleWriteFailsTheRunAndKeepsTheValue()
         {

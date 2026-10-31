@@ -18,12 +18,13 @@ namespace Eggnog
     /// egglog's next command would; a fact that needs what the batch's merges of classes make is planned after the batch
     /// flushes and rebuilds what it planned before it, see <c>HostBatch.Rebuilds.cs</c>), resolves existing terms by
     /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
-    /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
+    /// and checks conflicts of functions without a lattice, and finds those a merge of the batch causes (see
     /// <c>HostBatch.Merges.cs</c>). A fact that throws keeps what it staged before it failed, as egglog's failed command
-    /// does, the terms its calls made and what its primitives wrote, but not its own write; one that fails for a write or
-    /// a union its primitives made, which conflicts, keeps its own write and the rest, and drops only that one, as
-    /// egglog's flush keeps the value before a write it refuses (see <c>HostBatch.Facts.cs</c>). The batch's other facts
-    /// stand. A <see cref="ScopeWriter"/> call refused for its
+    /// does, the terms its calls made and what its primitives wrote, but not its own write; one that fails for a write its
+    /// primitives made, which conflicts, keeps its own write and the rest, and drops only that one, as egglog's flush
+    /// keeps the value before a write it refuses; and one whose merges make two rows of a function without a lattice meet
+    /// with different values keeps everything, is flushed and rebuilt, and fails after, as egglog's command fails after
+    /// its rebuild (see <c>HostBatch.Facts.cs</c>). The batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
     /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
@@ -87,7 +88,7 @@ namespace Eggnog
 
         /// <summary>
         /// Marks the batch rejected: a call of it was refused for its thread or for coming from a delegate the engine
-        /// invoked, or a flush of it failed for want of ids or epochs or for a conflict, so nothing more of it may be
+        /// invoked, or a flush of it failed for want of ids or epochs, so nothing more of it may be
         /// written (see <see cref="Scope.Write"/>). Any
         /// thread may call it, including one that a guard refused.
         /// </summary>
@@ -111,12 +112,17 @@ namespace Eggnog
             try
             {
                 RebuildFor(term);
-                if (stopped)
-                    scope.ThrowIfStopped();
+                uint cell;
+                do
+                {
+                    if (stopped)
+                        scope.ThrowIfStopped();
 
-                Literals.Call(term.Shape);
-                var cell = PlanTermCore(term);
-                EndFact();
+                    Literals.Call(term.Shape);
+                    cell = PlanTermCore(term);
+                }
+                while (EndFact() == false);
+
                 return cell;
             }
             catch (Exception failure)
@@ -233,6 +239,11 @@ namespace Eggnog
             for (var i = 0; i < arguments.Length; i++)
                 arguments[i] = PlanTermCore(shape.Arguments[i]);
 
+            // A pure primitive over no classes that the fact computed before its plan was dropped gives its result again.
+            var replays = primitive.Access == PrimitiveAccess.Pure && primitive.IsWrite == false && primitive.DispatchesOnContext == false && overClasses == false;
+            if (replays && TryReplay(primitive, arguments, out var replayed))
+                return replayed;
+
             bool found;
             uint cell;
             EngineCallMarker.Enter();
@@ -280,6 +291,9 @@ namespace Eggnog
             if (found == false)
                 throw new RuleEvaluationException(null, null, $"primitive '{primitive.Name}' has no result for these arguments", null);
 
+            if (replays)
+                NoteComputed(primitive, arguments, cell);
+
             // A class the primitive returns is canonical, as every cell the batch plans is, unless the batch made it; so is
             // a container of classes, which the batch never makes fresh.
             return result.InvolvesClasses && fresh.Contains(cell) == false ? engine.Find(cell) : cell;
@@ -300,11 +314,14 @@ namespace Eggnog
             try
             {
                 RebuildFor(fact);
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanFactCore(fact);
-                EndFact();
+                    PlanFactCore(fact);
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {
@@ -420,11 +437,14 @@ namespace Eggnog
                 if (term.Shape is { Kind: TermShapeKind.Application } shape)
                     RebuildFor(shape.Table!, shape.Arguments, deletes: false);
 
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanSubsumeCore(term);
-                EndFact();
+                    PlanSubsumeCore(term);
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {
@@ -497,11 +517,14 @@ namespace Eggnog
                 if (fact is RelationFact relation)
                     RebuildFor(relation.Table, relation.Arguments, deletes: false);
 
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanSubsumeCore(fact);
-                EndFact();
+                    PlanSubsumeCore(fact);
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {
@@ -538,24 +561,28 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Plans a union, unless the classes are equal already; repeated unions are planned once. A union that would
-        /// merge two keys of a function without a lattice holding different values is a conflict.
+        /// Plans a union, unless the classes are equal already; repeated unions are planned once. A union that merges two
+        /// keys of a function without a lattice holding different values is a conflict, which the union's fact fails on
+        /// after its rebuild (<see cref="EndFact"/>).
         /// </summary>
         /// <param name="a">One class: canonical or fresh.</param>
         /// <param name="b">The other class.</param>
-        /// <exception cref="FactConflictException">The union would give a function without a lattice two values for
-        /// one key.</exception>
+        /// <exception cref="FactConflictException">The union gave a function without a lattice two values for one key;
+        /// it stands, flushed and rebuilt.</exception>
         public void PlanUnion(uint a, uint b)
         {
             PlanFactUnions();
             try
             {
                 RebuildForUnion();
-                if (stopped)
-                    return;
+                do
+                {
+                    if (stopped)
+                        return;
 
-                PlanUnionCore(a, b);
-                EndFact();
+                    PlanUnionCore(a, b);
+                }
+                while (EndFact() == false);
             }
             catch (Exception failure)
             {
@@ -588,16 +615,13 @@ namespace Eggnog
         /// when <see cref="IsEmpty"/>.
         /// </summary>
         /// <returns>Whether the scope changed.</returns>
-        /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
-        /// different classes when the rebuild compares them (<c>CheckClassOutputs</c>); nothing is staged.</exception>
-        /// <exception cref="Relations.PanicException">A merge recorded a failure.</exception>
+        /// <exception cref="Relations.PanicException">A merge recorded a failure, or the rebuild did: two rows of a
+        /// function without a lattice met with different values, and the rebuild kept one.</exception>
         public bool Commit()
         {
             PlanFactUnions();
             if (IsEmpty)
                 return false;
-
-            CheckClassOutputs();
 
             foreach (var term in pending)
             {
@@ -1065,43 +1089,41 @@ namespace Eggnog
         void CollectUnion(uint a, uint b) => (factUnions ??= new List<(uint, uint)>()).Add((a, b));
 
         /// <summary>
+        /// Plans what the fact or term held back while it was planned (<see cref="PlanHeldEffects"/>), and starts the
+        /// next fact: its primitives see the terms planned so far, its deletions cancel them, and its failure drops what
+        /// it plans after.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The scope is not the root, and a union would rewrite a row of a
+        /// function whose merge is not a lattice.</exception>
+        void PlanFactUnions()
+        {
+            PlanHeldEffects();
+            MarkFact();
+            SettleFact();
+        }
+
+        /// <summary>
         /// Plans what the fact or term held back while it was planned, as egglog applies a command's staged writes and
         /// unions after it evaluates the command: the deletions and writes of its primitives where the fact had no write
         /// point of its own (<see cref="PlanHeldWrites"/>), then the unions of its primitives and merges, in order, and
-        /// compares the rows its merges make meet. A later fact of the batch sees them, as egglog's next command would.
-        /// A write, deletion or union that fails is dropped alone (<see cref="PlanHeld"/>), and the first such failure is
-        /// returned, for the end of the fact to throw (<see cref="EndFact"/>).
+        /// compares the rows its merges make meet, as egglog's rebuild after the command does. A later fact of the batch
+        /// sees them, as egglog's next command would. A write or deletion that fails is dropped alone
+        /// (<see cref="PlanHeld"/>); rows that the merges make meet with different values are noted for the end of the
+        /// fact (<see cref="EndFact"/>), and the unions stand.
         /// </summary>
-        /// <returns>The first failure of what the fact held, or <c>null</c>.</returns>
-        /// <exception cref="FactConflictException">The fact's own merges make two rows of a function of a sort hold
-        /// different classes when they meet.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a union would rewrite a row of a
         /// function whose merge is not a lattice.</exception>
-        Exception? PlanFactUnions()
+        void PlanHeldEffects()
         {
             PlanHeldWrites();
-            var first = default(FactMark);
-            List<(uint A, uint B)>? planned = null;
             if (factUnions is { Count: > 0 } held)
             {
                 factUnions = null;
-                factUnionsApplied = Join(factUnionsApplied, held);
-                first = Mark();
                 foreach (var (a, b) in held)
-                    if (PlanHeld(() => PlanUnionCore(a, b)))
-                        (planned ??= new List<(uint, uint)>()).Add((a, b));
+                    PlanUnionCore(a, b);
             }
 
-            // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares
-            // them.
-            CheckHeldClassOutputs(first, planned);
-
-            // The next fact starts here: its primitives see the terms planned so far, its deletions cancel them, and its
-            // failure drops what it plans after.
-            var failure = heldFailure;
-            MarkFact();
-            SettleFact();
-            return failure;
+            CheckFactClassOutputs();
         }
 
         /// <summary>

@@ -3,7 +3,7 @@ namespace Eggnog
 
     /// <summary>
     /// Where a host batch stood at a point of its planning, which it can go back to (<c>HostBatch.UndoTo</c>): the start
-    /// of a fact, or of one write, deletion or union a primitive of the fact held. The lengths of the batch's lists, with
+    /// of a fact, or of one write or deletion a primitive of the fact held. The lengths of the batch's lists, with
     /// the fact's bounds in them as they were then, since a deletion of the fact moves those bounds when it cancels what
     /// an earlier fact wrote.
     /// </summary>
