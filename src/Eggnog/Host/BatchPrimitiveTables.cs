@@ -7,10 +7,12 @@ namespace Eggnog
     /// The tables of a primitive a host write computes, in egglog's full context of a top-level action, over the write's
     /// batch (<see cref="HostBatch"/>): its reads see the batch's earlier facts, as egglog's next command sees the last
     /// one's, and not what the fact being planned stages, as egglog's lookup does not; it gets or makes a term's class at
-    /// once, as egglog's lookup of a constructor in an action does; and its other writes and its unions are held back until
-    /// the end of the fact, as egglog stages a command's writes, then planned as the facts they are, its deletions at the
-    /// fact's write point, before the fact's own writes, as egglog's flush applies removals before inserts. A write's
-    /// table is checked when it is made; the batch's other checks apply when it plans the write, as to any of its facts.
+    /// once, as egglog's lookup of a constructor in an action does; and its other writes and its unions are held back, as
+    /// egglog stages a command's writes, then planned as the facts they are: its deletions, then its writes, at the fact's
+    /// write point, before the fact's own writes, as egglog's flush applies removals before inserts and its primitives'
+    /// inserts before the command's own, and its unions at the end of the fact. A write or a union that conflicts is
+    /// dropped alone, and the fact fails at its end. A write's table is checked when it is made; the batch's other checks
+    /// apply when it plans the write, as to any of its facts.
     /// </summary>
     internal sealed class BatchPrimitiveTables : PrimitiveTables
     {

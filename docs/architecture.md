@@ -318,8 +318,10 @@ write's value may then be a constructor term too, made if absent, as egglog's `s
 again after a union that made it equal holds. Two rows that a union makes meet must hold one class by then: the rebuild
 compares them in the pass that makes them meet, under the merges of the passes before it, and its assert-equal merge
 panics on two classes that only that pass's congruences would make one, as egglog's does. A host batch replays those
-passes at the end of the fact whose merge makes the rows meet, and refuses that fact, as egglog's command panics; a rule's
-run fails with `RuleEvaluationException`. A
+passes at the end of the fact whose merge makes the rows meet, and refuses that fact's merge, as egglog's command panics
+(the unions its primitives made that cause the conflict, the rest of the fact kept; otherwise the fact's own write),
+where egglog's command keeps the union and one of the rows (section 2.13, item 7); a rule's run fails with
+`RuleEvaluationException`. A
 batch that merged classes flushes and rebuilds before a later write of such a function, as egglog's next command runs
 after the rebuild; a split's case writes its functions before its unions. A rewrite's right side may not be a function application, which
 egglog would look up in the head. Below the root a function with `New`, `Old` or an expression is root-only like any
@@ -597,8 +599,11 @@ A scope is written through `Assume(facts)`, `Make(term)` (returns the term's cla
 deletion is a call of its own. Each call is one batch; `Write(w => ...)` makes several calls one batch through a
 `ScopeWriter`. A batch's facts are egglog's commands, one after the other: a fact that fails keeps what it staged before
 it failed, as egglog's failed command does, since its actions run as a rule whose staged writes outlive the panic: the
-terms its calls made, and the writes, deletions and unions its primitives made, but not its own write (a failure of
-those primitive effects drops them and the fact's own write, where egglog keeps the write). A refusal egglog's type
+terms its calls made, and the writes, deletions and unions its primitives made, but not its own write. A write its
+primitives made that conflicts keeps the value before it, as egglog's flush does, and the fact fails keeping its own
+write and the rest of what it staged; the primitives' writes are planned before the fact's own, as egglog stages them,
+so of two writes of one key the primitive's stands. A union its primitives made that conflicts is refused alone, as a
+union of the batch that conflicts is (section 2.3), and the fact keeps the rest. A refusal egglog's type
 checker or the library makes, before anything runs, writes nothing. An `Assume` of several facts then stops, as egglog's
 program stops at an error, and the facts before stand; a `Write` callback may catch the failure and go on. A batch is
 planned first, reading only: it validates the facts, checks class origins, interns constants, evaluates primitives and
@@ -846,6 +851,9 @@ with egglog" lists:
    twice to `(vec-of (B))` and `(h3)` twice to `(h)`, `(union (vec-get (h) 1) (vec-get (h3) 2))` makes
    `(vec-length (h))` 1 here and 2 in egglog. egglog's choice follows its hash tables' iteration order when two of
    the containers are renamed, and leaves the other container under the id out of its id-to-container map.
+7. A host union, a primitive's in a host write included, that would make two rows of a function without a merge meet
+   with different outputs is refused, and its fact fails keeping the rest of what it staged (sections 2.3 and 2.7);
+   egglog's command fails too, at its rebuild, but keeps the union and one of the rows.
 
 Kept by choice, and not a departure to remove: the built-in `EGraph.Contradiction` is named `$contradiction`, a name
 an egglog program may also give a table of its own (section 2.3); the two are different tables, told apart by

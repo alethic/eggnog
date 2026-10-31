@@ -15,7 +15,8 @@ namespace Eggnog
     /// <see cref="InvalidOperationException"/> instead of interleaving with the batch, which it rejects:
     /// <see cref="Scope.Write"/> then writes nothing more. In any other call that throws, the fact that failed keeps
     /// what it staged before it failed, as egglog's failed command does: the terms its calls made and what its primitives
-    /// wrote, but not its own write; and the batch's other facts stand, the call's own earlier ones included. The batch
+    /// wrote, but not its own write, unless what failed is a write or a union its primitives made, which alone is dropped;
+    /// and the batch's other facts stand, the call's own earlier ones included. The batch
     /// flushes before a call that needs what an earlier call's merge of classes makes, as egglog's next command runs after
     /// the last one's rebuild (see <see cref="Scope.Write"/>). While the batch is open, the scope's writable ancestors refuse writes and runs.
     /// </remarks>

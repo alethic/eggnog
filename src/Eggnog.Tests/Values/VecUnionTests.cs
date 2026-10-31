@@ -119,6 +119,8 @@ namespace Eggnog.Tests.Values
         public void AUnionThatConflictsIsRefusedBeforeItIsWritten()
         {
             // (function g (X) i64 :no-merge) (set (g (a)) 1) (set (g (b)) 2): the union of a and b would give g two values.
+            // The union is refused, as the batch refuses a union that conflicts (architecture 2.3), and the fact fails; its
+            // own write of u stands, as egglog's command keeps what its flush wrote.
             var t = new Theory();
             var g = t.Graph.DefineFunction<Node, long>("g");
             var u = t.Graph.DefineFunction<Vec<Node>>("u");
@@ -128,7 +130,7 @@ namespace Eggnog.Tests.Values
 
             Assert.False(t.Root.IsFaulted);
             Assert.False(t.Merged);
-            Assert.Equal(0, t.Root.CountRows(u));
+            Assert.True(t.Root.Check(u.Of().Is(t.P.Of())));
         }
 
         [Fact]

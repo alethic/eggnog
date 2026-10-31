@@ -227,7 +227,7 @@ namespace Eggnog.Tests.Terms
         public void AWritePrimitiveWritesFromAHeadAndAHostWrite()
         {
             // A write primitive that inserts a row of seen and returns its argument: from a rule's head, the row is staged
-            // with the iteration's writes; from a host write, at the end of the fact, as egglog stages a command's.
+            // with the iteration's writes; from a host write, at the fact's write point, as egglog stages a command's.
             var graph = new EGraph();
             var seen = graph.DefineRelation<long>("seen");
             var g = graph.DefineFunction<long, long>("g");

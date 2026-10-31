@@ -70,7 +70,8 @@ namespace Eggnog
         /// sort (a union); a call run for its effect alone (<see cref="Fact.Exists"/>, egglog's bare action). Facts that
         /// hold already write nothing, so they move neither <see cref="Version"/> nor any extractor. A fact that fails
         /// ends the call as egglog's failed command ends its program: what it staged before it failed stands, the terms
-        /// its calls made and what its primitives wrote, while its own write does not happen; the facts before it stand,
+        /// its calls made and what its primitives wrote, while its own write does not happen, unless what failed is a write
+        /// or a union its primitives made, which alone is dropped; the facts before it stand,
         /// and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
         /// call does nothing.
         /// </summary>
@@ -397,7 +398,8 @@ namespace Eggnog
         /// an earlier call's merge of classes makes, as egglog's next command sees it after the rebuild: the batch then
         /// flushes and rebuilds its earlier calls before that call. Each fact of a call is a command: one that fails keeps
         /// what it staged before it failed, as egglog's failed command does, the terms its calls made and what its
-        /// primitives wrote, but not its own write; the batch's other facts stand, the call's own earlier facts included,
+        /// primitives wrote, but not its own write, unless what failed is a write or a union its primitives made, which
+        /// alone is dropped; the batch's other facts stand, the call's own earlier facts included,
         /// and the call's later facts are not written; an exception <paramref name="write"/> lets escape propagates once
         /// they are written.
         /// </summary>
@@ -416,8 +418,9 @@ namespace Eggnog
         /// calls a primitive over the tables; and after a merge of classes, when the graph has a function of a sort that
         /// holds classes or is keyed by a map of them, whose rows the rebuild compares pass by pass, as egglog rebuilds
         /// after each command. A conflict a merge of the batch would cause is found in the fact that causes it, which then
-        /// fails, keeping only the terms it made: two rows of a function of a sort that its merges make meet are compared
-        /// at the end of that fact, as the rebuild's passes will compare them. While the batch is open, the scopes it
+        /// fails, keeping the terms it made and what its primitives wrote, or, for a union its primitives made, all but
+        /// that union: two rows of a function of a sort that its merges make meet are compared at the end of that fact, as
+        /// the rebuild's passes will compare them. While the batch is open, the scopes it
         /// reads through (its writable ancestors) refuse writes and runs, which would change what the batch's calls were checked against. Other calls of the thread
         /// domain are allowed, reads and queries of the ancestors and writes into descendants and siblings included; the
         /// batch is brought up to date with them before each of its calls and before it commits, without moving
@@ -428,8 +431,8 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The scope is frozen (write in a child of it) or faulted, or in use on
         /// another thread; or the call comes from a run observer or a user delegate the engine invoked.</exception>
         /// <exception cref="FactConflictException">Two rows of a function of a sort that the batch's merges make meet hold
-        /// different classes when the rebuild compares them; the fact whose merge made them meet is not
-        /// written.</exception>
+        /// different classes when the rebuild compares them; the merge that made them meet is not written, nor, when it is
+        /// the fact's own, the fact's write.</exception>
         /// <exception cref="RuleEvaluationException">A merge failed as a flush merged the batch's calls: what the flush
         /// staged stands, as egglog's failed command keeps it, and the scope is not faulted. A flush before a later call
         /// fails that call, which writes nothing, and the batch goes on, as egglog's later commands do.</exception>

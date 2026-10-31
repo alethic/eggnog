@@ -7,7 +7,7 @@ namespace Eggnog
 
     /// <summary>
     /// A host write that would give a function without a lattice a second value for one key, against the stored value or
-    /// another write of the same batch. Nothing is written.
+    /// another write of the same batch. The write that conflicts is not made.
     /// </summary>
     /// <remarks>
     /// A union of the batch (a host <c>Union</c>, a sort equality, or a constructor write that gives an existing key
@@ -67,7 +67,7 @@ namespace Eggnog
             var keys = string.Join(" ", key.Select((k, i) => Format(table.Keys, i, k)));
             var stored = Format(table.Output, storedValue);
             var written = Format(table.Output, newValue);
-            return $"Function '{table.Name}' has no lattice and already holds {stored} at ({table.Name}{(keys.Length > 0 ? " " + keys : "")}); {written} conflicts with it. The fact was not written.";
+            return $"Function '{table.Name}' has no lattice and already holds {stored} at ({table.Name}{(keys.Length > 0 ? " " + keys : "")}); {written} conflicts with it, and was not written.";
         }
 
         /// <summary>

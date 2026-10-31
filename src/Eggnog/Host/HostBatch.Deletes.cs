@@ -60,7 +60,7 @@ namespace Eggnog
                     return;
 
                 PlanDelete(shape.Table!, shape.Arguments, nameof(term));
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -96,7 +96,7 @@ namespace Eggnog
                     return;
 
                 PlanDelete(relation.Table, relation.Arguments, nameof(fact));
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -107,7 +107,8 @@ namespace Eggnog
 
         /// <summary>
         /// Plans the deletion of the row of <paramref name="arguments"/> from <paramref name="table"/>, and from the
-        /// mirror of the table under the scope's own tag.
+        /// mirror of the table under the scope's own tag: with its primitives' deletions, before their writes, as
+        /// egglog's flush applies all of a command's removals, its own included, before its inserts.
         /// </summary>
         void PlanDelete(TableHandle table, Term[] arguments, string parameter)
         {
@@ -115,34 +116,66 @@ namespace Eggnog
             CheckDeletable(table);
             Literals.Action(arguments, null);
             var keys = PlanKeys(table, arguments, out var existing);
-            ApplyFactRemovals();
+            PlanHeldRemovals();
             RemoveRow(table, keys, existing);
+            PlanHeldInserts();
         }
 
         /// <summary>
-        /// Holds back a primitive's deletion of a row until the write point of its fact (<see cref="ApplyFactRemovals"/>).
+        /// Holds back a primitive's deletion of a row until the write point of its fact (<see cref="PlanHeldWrites"/>).
         /// </summary>
         /// <param name="table">The table.</param>
         /// <param name="arguments">The row's keys, as constant terms.</param>
         internal void HoldRemove(TableHandle table, Term[] arguments) => (factRemovals ??= new()).Add((table, arguments));
 
         /// <summary>
-        /// Plans the deletions the fact being planned holds back, at its write point: after its terms are evaluated,
-        /// before its own writes.
+        /// Plans the deletions, then the writes, that the primitives of the fact being planned hold back, at its write
+        /// point: after its terms are evaluated, before its own writes, as egglog's flush applies a command's staged
+        /// removals before its inserts, and its primitives' inserts, staged as they ran, before the command's own. Each is
+        /// planned alone (<see cref="PlanHeld"/>): one that conflicts is dropped, and the fact fails at its end.
         /// </summary>
         /// <exception cref="InvalidOperationException">A deletion is of a table whose keys are classes after the batch
         /// merged classes, or of a table an expression of the batch's merges reads.</exception>
-        void ApplyFactRemovals()
+        void PlanHeldWrites()
         {
-            if (factRemovals is not { Count: > 0 } held)
-                return;
+            PlanHeldRemovals();
+            PlanHeldInserts();
+        }
 
-            factRemovals = null;
-            factRemovalsApplied = factRemovalsApplied is { } applied ? [.. applied, .. held] : held;
-            foreach (var (table, arguments) in held)
+        /// <summary>
+        /// Plans the deletions that the primitives of the fact being planned hold back (<see cref="PlanHeldWrites"/>).
+        /// </summary>
+        /// <exception cref="InvalidOperationException">A deletion is of a table whose keys are classes after the batch
+        /// merged classes, or of a table an expression of the batch's merges reads.</exception>
+        void PlanHeldRemovals()
+        {
+            if (factRemovals is { Count: > 0 } removals)
             {
-                var keys = PlanKeys(table, arguments, out var existing);
-                RemoveRow(table, keys, existing);
+                factRemovals = null;
+                factRemovalsApplied = Join(factRemovalsApplied, removals);
+                foreach (var (table, arguments) in removals)
+                {
+                    PlanHeld(() =>
+                    {
+                        var keys = PlanKeys(table, arguments, out var existing);
+                        RemoveRow(table, keys, existing);
+                    });
+                }
+            }
+        }
+
+        /// <summary>
+        /// Plans the writes that the primitives of the fact being planned hold back, in the order they made them
+        /// (<see cref="PlanHeldWrites"/>).
+        /// </summary>
+        void PlanHeldInserts()
+        {
+            if (factWrites is { Count: > 0 } writes)
+            {
+                factWrites = null;
+                factWritesApplied = Join(factWritesApplied, writes);
+                foreach (var write in writes)
+                    PlanHeld(write);
             }
         }
 

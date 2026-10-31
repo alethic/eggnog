@@ -20,8 +20,10 @@ namespace Eggnog
     /// lookup, mints a fresh id per new term, records only the rows, subsumptions and unions that do not hold already,
     /// and checks conflicts of functions without a lattice, including those a merge of the batch would cause (see
     /// <c>HostBatch.Merges.cs</c>). A fact that throws keeps what it staged before it failed, as egglog's failed command
-    /// does, the terms its calls made and what its primitives wrote, but not its own write (see
-    /// <c>HostBatch.Facts.cs</c>), and the batch's other facts stand. A <see cref="ScopeWriter"/> call refused for its
+    /// does, the terms its calls made and what its primitives wrote, but not its own write; one that fails for a write or
+    /// a union its primitives made, which conflicts, keeps its own write and the rest, and drops only that one, as
+    /// egglog's flush keeps the value before a write it refuses (see <c>HostBatch.Facts.cs</c>). The batch's other facts
+    /// stand. A <see cref="ScopeWriter"/> call refused for its
     /// thread marks the batch <see cref="IsRejected"/>, and <see cref="Scope.Write"/> then commits nothing more.
     /// </para>
     /// <para>
@@ -114,7 +116,7 @@ namespace Eggnog
 
                 Literals.Call(term.Shape);
                 var cell = PlanTermCore(term);
-                PlanFactUnions();
+                EndFact();
                 return cell;
             }
             catch (Exception failure)
@@ -302,7 +304,7 @@ namespace Eggnog
                     return;
 
                 PlanFactCore(fact);
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -324,7 +326,7 @@ namespace Eggnog
                 {
                     CheckTable(relation.Table);
                     var keys = PlanKeys(relation.Table, relation.Arguments, out var existing);
-                    ApplyFactRemovals();
+                    PlanHeldWrites();
                     if (existing && TryStored(relation.Table, keys, out _))
                         return;
 
@@ -350,7 +352,7 @@ namespace Eggnog
                     {
                         var a = PlanTermCore(equality.Left);
                         var b = PlanTermCore(equality.Right);
-                        ApplyFactRemovals();
+                        PlanHeldWrites();
                         PlanUnionCore(a, b);
                     }
                     else
@@ -364,7 +366,7 @@ namespace Eggnog
                     // egglog's action of an expression for its effect alone: a let of its value, never used
                     // (src/core.rs:765-770), so a function's application is read and fails without a row.
                     PlanTermCore(exists.Application);
-                    ApplyFactRemovals();
+                    PlanHeldWrites();
                     break;
                 case FilterFact:
                     throw new ArgumentException("host writes are ground facts; 'True' is a filter", nameof(fact));
@@ -422,7 +424,7 @@ namespace Eggnog
                     return;
 
                 PlanSubsumeCore(term);
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -459,7 +461,7 @@ namespace Eggnog
             else if (pendingByKey.TryGetValue(key, out planned))
                 subsumed = subsumedTerms.Contains(key);
 
-            ApplyFactRemovals();
+            PlanHeldWrites();
             if (stored || planned is not null)
             {
                 if (subsumed)
@@ -499,7 +501,7 @@ namespace Eggnog
                     return;
 
                 PlanSubsumeCore(fact);
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -530,7 +532,7 @@ namespace Eggnog
 
             // egglog's subsume looks the row up before the fact's deletions apply: one already subsumed is left to them.
             var subsumed = subsumeKeys.Contains(Key(table, row)) || (existing && TryStored(table, keys, out _, out var held) && held);
-            ApplyFactRemovals();
+            PlanHeldWrites();
             if (subsumed == false)
                 AddSubsume(table, row);
         }
@@ -553,7 +555,7 @@ namespace Eggnog
                     return;
 
                 PlanUnionCore(a, b);
-                PlanFactUnions();
+                EndFact();
             }
             catch (Exception failure)
             {
@@ -660,7 +662,7 @@ namespace Eggnog
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);
-            ApplyFactRemovals();
+            PlanHeldWrites();
             var key = Key(table, keys);
             if (functionValues.TryGetValue(key, out var earlier))
             {
@@ -724,7 +726,7 @@ namespace Eggnog
 
             var keys = PlanKeys(table, application.Arguments, out var existing);
             var cell = PlanTermCore(value);
-            ApplyFactRemovals();
+            PlanHeldWrites();
             var key = Key(table, keys);
             if (table.Merge!.CanSimulate == false)
             {
@@ -834,7 +836,7 @@ namespace Eggnog
             uint stored = 0;
             var found = existing && TryStored(table, keys, out stored);
             var planned = found ? null : pendingByKey.GetValueOrDefault(key);
-            ApplyFactRemovals();
+            PlanHeldWrites();
             if (found)
             {
                 if (stored == cell)
@@ -1063,50 +1065,43 @@ namespace Eggnog
         void CollectUnion(uint a, uint b) => (factUnions ??= new List<(uint, uint)>()).Add((a, b));
 
         /// <summary>
-        /// Plans the writes and unions held back while the fact or term was planned, in order, as egglog applies a
-        /// command's writes and unions after it evaluates the command: a later fact of the batch sees them, as egglog's
-        /// next command would.
+        /// Plans what the fact or term held back while it was planned, as egglog applies a command's staged writes and
+        /// unions after it evaluates the command: the deletions and writes of its primitives where the fact had no write
+        /// point of its own (<see cref="PlanHeldWrites"/>), then the unions of its primitives and merges, in order, and
+        /// compares the rows its merges make meet. A later fact of the batch sees them, as egglog's next command would.
+        /// A write, deletion or union that fails is dropped alone (<see cref="PlanHeld"/>), and the first such failure is
+        /// returned, for the end of the fact to throw (<see cref="EndFact"/>).
         /// </summary>
-        /// <exception cref="FactConflictException">A union would give a function without a lattice two values for one
-        /// key.</exception>
+        /// <returns>The first failure of what the fact held, or <c>null</c>.</returns>
+        /// <exception cref="FactConflictException">The fact's own merges make two rows of a function of a sort hold
+        /// different classes when they meet.</exception>
         /// <exception cref="InvalidOperationException">The scope is not the root, and a union would rewrite a row of a
         /// function whose merge is not a lattice.</exception>
-        void PlanFactUnions()
+        Exception? PlanFactUnions()
         {
-            try
+            PlanHeldWrites();
+            var first = default(FactMark);
+            List<(uint A, uint B)>? planned = null;
+            if (factUnions is { Count: > 0 } held)
             {
-                // A primitive's deletions first, where the fact had no write point of its own; then its writes, in order,
-                // as egglog's flush applies a command's staged removals, then its inserts, before its rebuild merges the
-                // unions; each may hold back unions of its own.
-                ApplyFactRemovals();
-                if (factWrites is { Count: > 0 } writes)
-                {
-                    factWrites = null;
-                    foreach (var write in writes)
-                        write();
-                }
-
-                if (factUnions is { Count: > 0 } held)
-                {
-                    factUnions = null;
-                    foreach (var (a, b) in held)
-                        PlanUnionCore(a, b);
-                }
-
-                // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares
-                // them.
-                CheckFactClassOutputs();
+                factUnions = null;
+                factUnionsApplied = Join(factUnionsApplied, held);
+                first = Mark();
+                foreach (var (a, b) in held)
+                    if (PlanHeld(() => PlanUnionCore(a, b)))
+                        (planned ??= new List<(uint, uint)>()).Add((a, b));
             }
-            catch
-            {
-                factHeldFailed = true;
-                throw;
-            }
+
+            // The fact's merges made rows of a function of a sort meet: egglog's rebuild after its command compares
+            // them.
+            CheckHeldClassOutputs(first, planned);
 
             // The next fact starts here: its primitives see the terms planned so far, its deletions cancel them, and its
             // failure drops what it plans after.
+            var failure = heldFailure;
             MarkFact();
             SettleFact();
+            return failure;
         }
 
         /// <summary>

@@ -8,7 +8,8 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// The writes of primitives over the tables held back while a fact is planned (<see cref="PlanFactUnions"/>).
+        /// The writes of primitives over the tables held back while a fact is planned, until its write point
+        /// (<see cref="PlanHeldWrites"/>).
         /// </summary>
         List<Action>? factWrites;
 
@@ -192,8 +193,9 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Holds back a write of a primitive of a host write until the end of the fact, as egglog stages a command's
-        /// writes: a relation's row, a function's value or a subsumption, planned then as the fact or the term it is.
+        /// Holds back a write of a primitive of a host write until the write point of the fact, as egglog stages a
+        /// command's writes: a relation's row, a function's value or a subsumption, planned then as the fact or the term it
+        /// is, before the fact's own write, which egglog's command stages after its primitives' writes.
         /// </summary>
         /// <param name="write">Plans the write.</param>
         internal void HoldWrite(Action write) => (factWrites ??= new List<Action>()).Add(write);
