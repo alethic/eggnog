@@ -155,7 +155,7 @@ namespace Eggnog.Tests.Values
                         samples[i] = text.ToString();
                     }
 
-                    var set = Set.Of(samples);
+                    var set = Set.From(samples);
                     Assert.Equal(set[set.Count - 1], samples.Aggregate(max.Merge));
                     Assert.Equal(set[0], samples.Aggregate(min.Merge));
                     Assert.Equal(set[0], samples.Aggregate(max.CaseJoin!));

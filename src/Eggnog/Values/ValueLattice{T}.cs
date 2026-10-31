@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Eggnog
 {
@@ -47,20 +46,17 @@ namespace Eggnog
         /// associativity, and, with a case join, absorption. For consumers' tests.
         /// </summary>
         /// <param name="samples">The values to check.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="samples"/> is <c>null</c>.</exception>
         /// <exception cref="InvalidOperationException">A law fails; the message names the law and the
         /// values.</exception>
-        public void Verify(IEnumerable<T> samples)
+        public void Verify(params ReadOnlySpan<T> samples)
         {
-            ArgumentNullException.ThrowIfNull(samples);
-            var values = samples.ToArray();
             var equal = EqualityComparer<T>.Default;
-            foreach (var a in values)
+            foreach (var a in samples)
             {
                 if (equal.Equals(Merge(a, a), a) == false)
                     throw Law("idempotence", $"Merge({a}, {a}) is {Merge(a, a)}, not {a}");
 
-                foreach (var b in values)
+                foreach (var b in samples)
                 {
                     var ab = Merge(a, b);
                     var ba = Merge(b, a);
@@ -75,7 +71,7 @@ namespace Eggnog
                             throw Law("absorption", $"Merge({a}, CaseJoin({a}, {b})) is {absorbed}, not {a}");
                     }
 
-                    foreach (var c in values)
+                    foreach (var c in samples)
                     {
                         var left = Merge(Merge(a, b), c);
                         var right = Merge(a, Merge(b, c));
