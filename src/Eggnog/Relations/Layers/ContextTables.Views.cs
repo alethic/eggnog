@@ -166,9 +166,52 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the parent's view of <paramref name="table"/>: the root's view, or the parent's cached one.
+        /// Gets the parent's view of <paramref name="table"/>: the root's view, or the parent's cached one. The ancestors
+        /// that would only pass their own parent's view on are skipped in a loop, not recursed through, so a chain of
+        /// any depth needs no more stack than one level; they are left without the view cached, which their own next
+        /// read caches.
         /// </summary>
-        TableView ParentView(TableId table) => depth == 1 ? schema.RootView(table) : chain[depth - 1].Tables!.GetView(table);
+        TableView ParentView(TableId table)
+        {
+            for (var a = depth - 1; a >= 1; a--)
+            {
+                var tables = chain[a].Tables!;
+                if (tables.SharesParentView(table) == false)
+                    return tables.GetView(table);
+            }
+
+            return schema.RootView(table);
+        }
+
+        /// <summary>
+        /// Gets whether <see cref="GetView"/> here would return the parent's view: none cached, and either the context
+        /// is frozen with no slot for the table or the table is shared and the context has no layer of it.
+        /// </summary>
+        bool SharesParentView(TableId table)
+        {
+            var cache = Volatile.Read(ref views);
+            var index = table.Index;
+            if ((uint)index < (uint)cache.Length)
+            {
+                if (Volatile.Read(ref cache[index]) is not null)
+                    return false;
+            }
+            else if (frozen)
+            {
+                return true;
+            }
+
+            return schema[table] is { IsContextPrivate: false } && TryGetLayer(table) is null;
+        }
+
+        /// <summary>
+        /// Gets whether the context has a view of <paramref name="table"/> cached.
+        /// </summary>
+        bool HasCachedView(TableId table)
+        {
+            var cache = Volatile.Read(ref views);
+            return (uint)table.Index < (uint)cache.Length && Volatile.Read(ref cache[table.Index]) is not null;
+        }
 
         /// <summary>
         /// Builds the context's view of a table; see <see cref="GetView"/>.
@@ -195,6 +238,14 @@ namespace Eggnog.Relations
             layers[depth] = new LayerView(depth, own.Info, HiddenRows.None, frozen);
             var floor = ClearedFloor(table);
             var frozenTop = frozen ? depth : DeepestFrozenAncestor();
+
+            // The levels that are not frozen and hide something of the table, in order: the only ones the loop below
+            // asks for hides, so a chain whose levels mostly hide nothing builds in O(depth), not O(depth²).
+            List<TableLayer>? hiders = null;
+            for (var level = Math.Max(floor, frozenTop) + 1; level <= depth; level++)
+                if (LayerAt(level, table) is { HasHidden: true } layer)
+                    (hiders ??= new List<TableLayer>()).Add(layer);
+
             List<HiddenSet>? live = null;
             for (var j = floor; j < depth; j++)
             {
@@ -208,9 +259,10 @@ namespace Eggnog.Relations
 
                 // The levels that are not frozen, above the layer: one set is used as it is, more are unioned.
                 (live ??= new List<HiddenSet>()).Clear();
-                for (var level = Math.Max(j, frozenTop) + 1; level <= depth; level++)
-                    if (LayerAt(level, table)?.HiddenOver(j) is { Count: > 0 } set)
-                        live.Add(set);
+                if (hiders is not null)
+                    foreach (var hider in hiders)
+                        if (hider.Depth > Math.Max(j, frozenTop) && hider.HiddenOver(j) is { Count: > 0 } set)
+                            live.Add(set);
 
                 HiddenSet? livePart = null;
                 if (live.Count == 1)
@@ -236,6 +288,20 @@ namespace Eggnog.Relations
         HiddenSet? FrozenFold(int frozenTop, TableId table, int layer)
         {
             Debug.Assert(frozenTop > 0 && chain[frozenTop].IsFrozen);
+
+            // A frozen level's view is built from its parent's fold, so the frozen levels that have none cached are
+            // built root first: each build then finds its parent's view cached, and a chain of any depth needs no
+            // more stack than one level.
+            if (chain[frozenTop].Tables!.HasCachedView(table) == false)
+            {
+                var first = frozenTop;
+                while (first > 1 && chain[first - 1].Tables!.HasCachedView(table) == false)
+                    first--;
+
+                for (var level = first; level < frozenTop; level++)
+                    chain[level].Tables!.GetView(table);
+            }
+
             var view = chain[frozenTop].Tables!.GetView(table);
 
             // A frozen ancestor without a layer of the table shares the view of the deepest level that has one; the

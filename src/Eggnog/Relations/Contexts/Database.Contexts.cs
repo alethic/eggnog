@@ -372,9 +372,16 @@ namespace Eggnog.Relations
         uint CurrentClock() => clockRep < 0 ? 0u : Store.CheckEpoch(counters.Read(new CounterId(clockRep)));
 
         /// <summary>
-        /// Moves the change stamp. Thread-safe: the tables of one stratum may merge in parallel.
+        /// Moves the change stamp, and then the store's change clock when the database's context has live descendants,
+        /// whose catch-up tests read the stamp (<see cref="ChangeClock"/>). Thread-safe: the tables of one stratum may
+        /// merge in parallel.
         /// </summary>
-        void BumpChangeStamp() => Interlocked.Increment(ref changeStamp);
+        void BumpChangeStamp()
+        {
+            Interlocked.Increment(ref changeStamp);
+            if (owner is { } context && (context.IsRoot ? context.Store.ContainerLog : context.ContainerLayers?.Log) is { Active: true })
+                context.Store.ChangeClock.Advance();
+        }
 
         /// <summary>
         /// Gets the entry of <paramref name="table"/> that the single-table query members read

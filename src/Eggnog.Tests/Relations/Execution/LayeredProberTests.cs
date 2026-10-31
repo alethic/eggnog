@@ -66,14 +66,14 @@ namespace Eggnog.Relations.Tests
             // stays at 24 bytes.
             Assert.Equal(24, Unsafe.SizeOf<FrameUpdate>());
             var updates = new FrameUpdates();
-            updates.RefineAtomDense(new AtomId(3), 2, new OffsetRange(5, 9));
+            var pool = new TrieNodePool(false, 3);
+            updates.RefineAtomDense(new AtomId(3), 2, new OffsetRange(5, 9), pool);
             var e = updates.Entries[0];
             Assert.Equal(FrameUpdateKind.RefineAtomDense, e.Kind);
             Assert.Equal(2, e.Layer);
             Assert.Equal((5, 9), (e.A, e.B));
 
             // A refinement that lies in one layer becomes a dense or single-layer one; several layers make an owned node.
-            var pool = new TrieNodePool(false, 3);
             updates.RefineAtomLayered(new AtomId(1), LayeredSubset.Single(1, Subset.Dense(0, 4)), pool);
             Assert.Equal(FrameUpdateKind.RefineAtomDense, updates.Entries[1].Kind);
             Assert.Equal(1, updates.Entries[1].Layer);
@@ -84,6 +84,33 @@ namespace Eggnog.Relations.Tests
             Assert.Equal(FrameUpdateKind.RefineAtomOwned, updates.Entries[2].Kind);
             Assert.True(updates.Entries[2].Node!.IsMultiLayer);
             updates.Rollback(pool);
+        }
+
+        [Fact]
+        public void ADenseRefinementPastTheLayerByteIsANodeTheFrameOwns()
+        {
+            // Layer 255 still fits the entry's byte; layer 256 and beyond, which only a chain that deep has, become a
+            // pooled single-layer node of the dense rows, released with the frame like a sparse refinement's.
+            var updates = new FrameUpdates();
+            var pool = new TrieNodePool(false, 1001);
+            updates.RefineAtomDense(new AtomId(0), 255, new OffsetRange(1, 3), pool);
+            updates.RefineAtomDense(new AtomId(1), 256, new OffsetRange(2, 5), pool);
+            updates.RefineAtomSubset(new AtomId(2), 1000, Subset.Dense(4, 6), pool);
+            Assert.Equal(FrameUpdateKind.RefineAtomDense, updates.Entries[0].Kind);
+            Assert.Equal(255, updates.Entries[0].Layer);
+            foreach (var (entry, layer, rows) in new[] { (1, 256, new[] { 2, 3, 4 }), (2, 1000, new[] { 4, 5 }) })
+            {
+                var e = updates.Entries[entry];
+                Assert.Equal(FrameUpdateKind.RefineAtomOwned, e.Kind);
+                Assert.Equal(entry, e.Id);
+                Assert.Equal(layer, e.Node!.SingleLayer);
+                Assert.Equal(new[] { layer }, LayerTestUtil.Layers(e.Node));
+                Assert.Equal(rows, OffsetTestUtil.Collect(e.Node.GetLayerRows(layer)));
+                Assert.True(e.Node.GetLayerRows(layer - 1).IsEmpty);
+            }
+
+            updates.Rollback(pool);
+            Assert.Equal(0, updates.Count);
         }
 
         [Fact]

@@ -19,7 +19,8 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// The layer of a <see cref="FrameUpdateKind.RefineAtomDense"/> refinement's rows: 0 at a root. A byte beside
-        /// <see cref="Kind"/>, so the struct stays 24 bytes.
+        /// <see cref="Kind"/>, so the struct stays 24 bytes; a dense refinement of a deeper layer is a node the frame
+        /// owns instead (<see cref="FrameUpdates.RefineAtomDense(AtomId, int, OffsetRange, TrieNodePool)"/>).
         /// </summary>
         public byte Layer;
 

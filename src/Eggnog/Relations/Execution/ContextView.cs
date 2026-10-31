@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.Threading;
 
 namespace Eggnog.Relations
@@ -74,8 +73,8 @@ namespace Eggnog.Relations
         {
             ArgumentNullException.ThrowIfNull(database);
             ArgumentNullException.ThrowIfNull(source);
-            if (source.Depth < 0 || source.Depth >= LayeredSubset.MaxLayers)
-                throw new ArgumentOutOfRangeException(nameof(source), source.Depth, $"A context's depth lies in [0, {LayeredSubset.MaxLayers}).");
+            if (source.Depth < 0)
+                throw new ArgumentOutOfRangeException(nameof(source), source.Depth, "A context's depth is not negative.");
 
             this.database = database;
             this.source = source;
@@ -321,16 +320,15 @@ namespace Eggnog.Relations
             if (IsLayered == false)
                 return LayeredSubset.Single(0, ConstraintProcessor.Process(view.Layers[0]!.Info, constraints, fast, slow));
 
-            var present = view.PresentMask;
-            if (present == 0)
+            if (view.PresentCount == 0)
             {
                 ConstraintProcessor.Split(ClassificationInfo(table), constraints, fast, slow);
                 return LayeredSubset.Empty;
             }
 
-            if ((present & (present - 1)) == 0)
+            if (view.PresentCount == 1)
             {
-                var only = BitOperations.TrailingZeroCount(present);
+                var only = view.FirstPresent;
                 return LayeredSubset.Single(only, ConstraintProcessor.Process(view.Layers[only]!.Info, constraints, fast, slow));
             }
 
@@ -408,29 +406,27 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Evaluates a header over two or more present layers; see <see cref="Evaluate(TableId, ReadOnlySpan{Constraint}, List{Constraint}, List{Constraint}, HeaderScratch?)"/>.
-        /// With <paramref name="scratch"/>, the per-layer subsets and lists are its buffers, and only a result with rows
-        /// in two or more layers allocates (its per-layer array), or a header whose layers times constraints exceed 256
-        /// (its table of fast constraints per layer, on the stack up to that size).
+        /// With <paramref name="scratch"/>, the per-layer subsets and lists and the table of fast constraints per layer
+        /// (on the stack up to 256 entries) are its buffers, and only a result with rows in two or more layers allocates
+        /// (its per-layer array); without it, a table of more than 256 entries is allocated too.
         /// </summary>
         LayeredSubset EvaluateLayers(TableView view, ReadOnlySpan<Constraint> constraints, List<Constraint> fast, List<Constraint> slow, HeaderScratch? scratch)
         {
             var layers = view.Layers;
             var count = layers.Length;
             var width = constraints.Length;
-            var subsets = scratch?.LayerSubsets() ?? new Subset[count];
+            var subsets = scratch?.LayerSubsets(count) ?? new Subset[count];
             var layerFast = scratch?.LayerFast ?? new List<Constraint>(width);
             var layerSlow = scratch?.LayerSlow ?? new List<Constraint>();
 
             // Which constraints each present layer answers fast: entry l * width + j for constraint j in layer l.
             var cells = count * width;
-            Span<bool> member = cells <= 256 ? stackalloc bool[cells] : new bool[cells];
-            var present = 0u;
+            Span<bool> member = cells <= 256 ? stackalloc bool[cells] : (scratch?.LayerMembership(cells) ?? new bool[cells]).AsSpan(0, cells);
             for (var l = 0; l < count; l++)
             {
                 if (layers[l] is not { } lv)
                     continue;
 
-                present |= 1u << l;
                 layerFast.Clear();
                 layerSlow.Clear();
                 subsets[l] = ConstraintProcessor.Process(lv.Info, constraints, layerFast, layerSlow);
@@ -448,7 +444,7 @@ namespace Eggnog.Relations
             {
                 var isFast = false;
                 for (var l = 0; l < count; l++)
-                    isFast |= (present & (1u << l)) != 0 && member[l * width + j];
+                    isFast |= layers[l] is not null && member[l * width + j];
 
                 var constraint = constraints[j];
                 if (isFast)
@@ -464,7 +460,7 @@ namespace Eggnog.Relations
 
             for (var l = 0; l < count; l++)
             {
-                if ((present & (1u << l)) == 0)
+                if (layers[l] is null)
                     continue;
 
                 for (var i = firstFast; i < fast.Count; i++)

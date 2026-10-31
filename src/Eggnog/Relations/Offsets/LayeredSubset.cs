@@ -18,9 +18,16 @@ namespace Eggnog.Relations
     /// Representation. While the rows lie in at most one layer, the subset is <em>single</em>: one <see cref="Subset"/>
     /// and its layer, which is what every root subset is (layer 0), so the root path is a plain subset behind one null
     /// test. Once two or more layers are nonempty it is <em>multi-layer</em>: an array of per-layer subsets indexed by
-    /// layer, with a mask of the nonempty ones; the entries outside the mask are <see cref="Subset.Empty"/>. Every
-    /// operation that can empty layers collapses back: a multi-layer subset always has at least two nonempty layers.
-    /// <c>default</c> is <see cref="Empty"/>.
+    /// layer, whose entry is <see cref="Subset.Empty"/> exactly when the layer holds no rows, with a 64-bit mask of the
+    /// nonempty layers below <see cref="MaskedLayers"/>. Every operation that can empty layers collapses back: a
+    /// multi-layer subset always has at least two nonempty layers. <c>default</c> is <see cref="Empty"/>.
+    /// </para>
+    /// <para>
+    /// Layers. Any number: one per level of the context chain, which has no depth limit. The mask makes walking the
+    /// layers of a chain up to 63 deep one trailing-zero count per nonempty layer; a deeper chain's layers from
+    /// <see cref="MaskedLayers"/> on are found by testing their entries (<see cref="GetLayers"/>), with no further
+    /// storage. The mask's upper half lives in the field that holds a single-layer subset's layer, so the struct stays
+    /// four words.
     /// </para>
     /// <para>
     /// Ownership. Move-only, as <see cref="Subset"/> is: a struct copy aliases the per-layer buffers (and the array), so
@@ -31,23 +38,29 @@ namespace Eggnog.Relations
     /// field.
     /// </para>
     /// <para>
-    /// At most <see cref="MaxLayers"/> layers, because the layer mask is a <see cref="uint"/>. Not thread-safe for
-    /// mutation; any number of threads may read one nobody mutates.
+    /// Not thread-safe for mutation; any number of threads may read one nobody mutates.
     /// </para>
     /// </remarks>
     internal struct LayeredSubset
     {
 
         /// <summary>
-        /// The most layers a subset can span: the layers of the deepest context chain, whose depth is at most
-        /// <see cref="Context.MaxDepth"/>.
+        /// The layers a multi-layer subset's mask covers: <c>[0, 64)</c>. Layers from here on are found by their entries.
         /// </summary>
-        public const int MaxLayers = 32;
+        public const int MaskedLayers = 64;
 
         Subset single;
-        int singleLayer;
         Subset[]? layers;
-        uint mask;
+
+        /// <summary>
+        /// The layer of a single-layer subset; bits 32 to 63 of the mask of a multi-layer one.
+        /// </summary>
+        int layerOrHighMask;
+
+        /// <summary>
+        /// Bits 0 to 31 of the mask of a multi-layer subset; 0 for a single-layer one.
+        /// </summary>
+        uint lowMask;
 
         /// <summary>
         /// Initializes a single-layer subset.
@@ -56,21 +69,22 @@ namespace Eggnog.Relations
         LayeredSubset(int layer, Subset rows)
         {
             single = rows;
-            singleLayer = layer;
             layers = null;
-            mask = 0;
+            layerOrHighMask = layer;
+            lowMask = 0;
         }
 
         /// <summary>
-        /// Initializes a multi-layer subset over <paramref name="layers"/>, whose nonempty entries are
-        /// <paramref name="mask"/>; the caller collapses it if fewer than two are.
+        /// Initializes a multi-layer subset over <paramref name="layers"/>, whose nonempty entries below
+        /// <see cref="MaskedLayers"/> are <paramref name="mask"/>; the caller collapses it if fewer than two entries are
+        /// nonempty.
         /// </summary>
-        LayeredSubset(Subset[] layers, uint mask)
+        LayeredSubset(Subset[] layers, ulong mask)
         {
             single = default;
-            singleLayer = 0;
             this.layers = layers;
-            this.mask = mask;
+            layerOrHighMask = (int)(uint)(mask >> 32);
+            lowMask = (uint)mask;
         }
 
         /// <summary>
@@ -111,13 +125,23 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Gets the layers that hold rows: bit <c>l</c> is set when layer <c>l</c> is nonempty. A single-layer subset has
-        /// its layer's bit, or no bit when empty.
+        /// Gets one more than the highest layer that holds rows (0 when empty): the length a per-layer array of a copy
+        /// needs. O(1), except for a multi-layer subset whose array is longer than <see cref="MaskedLayers"/>, whose
+        /// entries from there on are tested from the top down.
         /// </summary>
-        public readonly uint LayerMask
+        public readonly int TopLayer
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => layers is null ? (single.IsEmpty ? 0u : 1u << singleLayer) : mask;
+            get
+            {
+                if (layers is null)
+                    return single.IsEmpty ? 0 : layerOrHighMask + 1;
+
+                for (var l = layers.Length - 1; l >= MaskedLayers; l--)
+                    if (layers[l].IsEmpty == false)
+                        return l + 1;
+
+                return 64 - BitOperations.LeadingZeroCount(Mask);
+            }
         }
 
         /// <summary>
@@ -126,7 +150,7 @@ namespace Eggnog.Relations
         public readonly int SingleLayer
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => layers is null ? singleLayer : -1;
+            get => layers is null ? layerOrHighMask : -1;
         }
 
         /// <summary>
@@ -149,14 +173,14 @@ namespace Eggnog.Relations
         /// <summary>
         /// Creates a single-layer subset holding <paramref name="rows"/> of layer <paramref name="layer"/>. O(1).
         /// </summary>
-        /// <param name="layer">The layer, in <c>[0, <see cref="MaxLayers"/>)</c>.</param>
+        /// <param name="layer">The layer, not negative.</param>
         /// <param name="rows">The rows, whose ownership moves to the result.</param>
         /// <returns>The subset.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is out of range.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is negative.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static LayeredSubset Single(int layer, Subset rows)
         {
-            if ((uint)layer >= MaxLayers)
+            if (layer < 0)
                 ThrowLayerOutOfRange(layer);
 
             return new LayeredSubset(layer, rows);
@@ -167,24 +191,20 @@ namespace Eggnog.Relations
         /// <c>l</c>. Collapses to a single-layer subset (or <see cref="Empty"/>) when fewer than two entries are nonempty,
         /// returning the array to <paramref name="pool"/>; empty entries are disposed. O(array length).
         /// </summary>
-        /// <param name="layers">The per-layer rows, at most <see cref="MaxLayers"/>; the array and every entry move to the
-        /// result (the array to <paramref name="pool"/> when it collapses).</param>
+        /// <param name="layers">The per-layer rows, of any length; the array and every entry move to the result (the
+        /// array to <paramref name="pool"/> when it collapses).</param>
         /// <param name="pool">The pool the array returns to once the subset no longer needs it, or <c>null</c>.</param>
         /// <returns>The subset.</returns>
-        /// <exception cref="ArgumentException"><paramref name="layers"/> has more than <see cref="MaxLayers"/> entries.</exception>
         public static LayeredSubset FromLayers(Subset[] layers, SubsetArrayPool? pool)
         {
             ArgumentNullException.ThrowIfNull(layers);
-            if (layers.Length > MaxLayers)
-                throw new ArgumentException($"A layered subset spans at most {MaxLayers} layers.", nameof(layers));
-
-            var nonempty = 0u;
+            var nonempty = 0UL;
             for (var l = 0; l < layers.Length; l++)
             {
                 if (layers[l].IsEmpty)
                     layers[l].Dispose();
-                else
-                    nonempty |= 1u << l;
+                else if (l < MaskedLayers)
+                    nonempty |= 1UL << l;
             }
 
             var result = new LayeredSubset(layers, nonempty);
@@ -196,19 +216,35 @@ namespace Eggnog.Relations
         /// Borrows the rows of layer <paramref name="layer"/>: empty when the layer holds none. Valid until the subset is
         /// next mutated or disposed. O(1).
         /// </summary>
-        /// <param name="layer">The layer, in <c>[0, <see cref="MaxLayers"/>)</c>.</param>
+        /// <param name="layer">The layer, not negative; a layer past the subset's holds no rows.</param>
         /// <returns>The layer's rows.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is out of range.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is negative.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly SubsetRef GetLayer(int layer)
         {
-            if ((uint)layer >= MaxLayers)
+            if (layer < 0)
                 ThrowLayerOutOfRange(layer);
 
             if (layers is null)
-                return layer == singleLayer ? single.AsRef() : default;
+                return layer == layerOrHighMask ? single.AsRef() : default;
 
-            return (mask & (1u << layer)) != 0 ? layers[layer].AsRef() : default;
+            // An entry is empty exactly when its layer holds no rows, so the entry answers without the mask.
+            return (uint)layer < (uint)layers.Length ? layers[layer].AsRef() : default;
+        }
+
+        /// <summary>
+        /// Gets the layers that hold rows, in ascending order: none for <see cref="Empty"/>, the one layer of a nonempty
+        /// single-layer subset. Valid until the subset is next mutated or disposed, except that the caller may empty the
+        /// layer it was just given.
+        /// </summary>
+        /// <returns>The enumerator.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public readonly LayerEnumerator GetLayers()
+        {
+            if (layers is null)
+                return single.IsEmpty ? LayerEnumerator.Empty : LayerEnumerator.Single(layerOrHighMask);
+
+            return LayerEnumerator.Multi(Mask, layers);
         }
 
         /// <summary>
@@ -226,7 +262,7 @@ namespace Eggnog.Relations
             {
                 if (other.layers is null)
                 {
-                    if (singleLayer == other.singleLayer)
+                    if (layerOrHighMask == other.layerOrHighMask)
                         single.Intersect(other.single.AsRef());
                     else
                         single.Dispose();
@@ -234,8 +270,9 @@ namespace Eggnog.Relations
                     return;
                 }
 
-                if ((other.mask & (1u << singleLayer)) != 0)
-                    single.Intersect(other.layers[singleLayer].AsRef());
+                var theirs = other.GetLayer(layerOrHighMask);
+                if (theirs.IsEmpty == false)
+                    single.Intersect(theirs);
                 else
                     single.Dispose();
 
@@ -245,9 +282,9 @@ namespace Eggnog.Relations
             if (other.layers is null)
             {
                 // Only the other side's layer can survive: keep it, release the rest.
-                var layer = other.singleLayer;
+                var layer = other.layerOrHighMask;
                 var kept = Subset.Empty;
-                if ((mask & (1u << layer)) != 0)
+                if (GetLayer(layer).IsEmpty == false)
                 {
                     kept = layers[layer].Take();
                     kept.Intersect(other.single.AsRef());
@@ -255,24 +292,21 @@ namespace Eggnog.Relations
 
                 ReleaseLayers(pool);
                 single = kept;
-                singleLayer = layer;
+                layerOrHighMask = layer;
                 return;
             }
 
-            var remaining = mask;
-            var survivors = 0u;
-            while (remaining != 0)
+            var survivors = 0UL;
+            foreach (var l in GetLayers())
             {
-                var l = BitOperations.TrailingZeroCount(remaining);
-                var bit = 1u << l;
-                remaining &= remaining - 1;
-                if ((other.mask & bit) != 0)
+                var theirs = other.GetLayer(l);
+                if (theirs.IsEmpty == false)
                 {
-                    layers[l].Intersect(other.layers[l].AsRef());
+                    layers[l].Intersect(theirs);
                     if (layers[l].IsEmpty)
                         layers[l].Dispose();
-                    else
-                        survivors |= bit;
+                    else if (l < MaskedLayers)
+                        survivors |= 1UL << l;
                 }
                 else
                 {
@@ -280,7 +314,7 @@ namespace Eggnog.Relations
                 }
             }
 
-            mask = survivors;
+            Mask = survivors;
             Collapse(pool);
         }
 
@@ -293,18 +327,13 @@ namespace Eggnog.Relations
         public readonly LayeredSubset Clone(SubsetArrayPool? pool)
         {
             if (layers is null)
-                return new LayeredSubset(singleLayer, single.Clone());
+                return new LayeredSubset(layerOrHighMask, single.Clone());
 
-            var copy = RentArray(pool, 32 - BitOperations.LeadingZeroCount(mask));
-            var remaining = mask;
-            while (remaining != 0)
-            {
-                var l = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
+            var copy = RentArray(pool, TopLayer);
+            foreach (var l in GetLayers())
                 copy[l] = layers[l].Clone();
-            }
 
-            return new LayeredSubset(copy, mask);
+            return new LayeredSubset(copy, Mask);
         }
 
         /// <summary>
@@ -328,7 +357,7 @@ namespace Eggnog.Relations
             if (layers is not null)
                 ThrowMultiLayer();
 
-            layer = singleLayer;
+            layer = layerOrHighMask;
             var taken = single.Take();
             this = default;
             return taken;
@@ -366,14 +395,11 @@ namespace Eggnog.Relations
         public readonly override string ToString()
         {
             if (layers is null)
-                return $"L{singleLayer}:{single}";
+                return $"L{layerOrHighMask}:{single}";
 
             var text = new StringBuilder("{");
-            var remaining = mask;
-            while (remaining != 0)
+            foreach (var l in GetLayers())
             {
-                var l = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
                 if (text.Length > 1)
                     text.Append(", ");
 
@@ -390,46 +416,63 @@ namespace Eggnog.Relations
         static Subset[] RentArray(SubsetArrayPool? pool, int length) => pool is not null && pool.LayerCount >= length ? pool.Rent() : new Subset[length];
 
         /// <summary>
+        /// Gets or sets the mask of a multi-layer subset: bit <c>l</c> is set when layer <c>l</c>, below
+        /// <see cref="MaskedLayers"/>, holds rows.
+        /// </summary>
+        ulong Mask
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            readonly get => ((ulong)(uint)layerOrHighMask << 32) | lowMask;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set
+            {
+                layerOrHighMask = (int)(uint)(value >> 32);
+                lowMask = (uint)value;
+            }
+        }
+
+        /// <summary>
         /// Sums the sizes of the nonempty layers of a multi-layer subset.
         /// </summary>
         readonly int MultiSize()
         {
             var total = 0;
-            var remaining = mask;
-            while (remaining != 0)
-            {
-                var l = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
+            foreach (var l in GetLayers())
                 total += layers![l].Size;
-            }
 
             return total;
         }
 
         /// <summary>
         /// Turns a multi-layer subset with fewer than two nonempty layers into a single-layer one (or
-        /// <see cref="Empty"/>), returning its array to <paramref name="pool"/>.
+        /// <see cref="Empty"/>), returning its array to <paramref name="pool"/>. O(1) when two masked layers hold rows or
+        /// the array is no longer than <see cref="MaskedLayers"/>; otherwise the entries from there on are tested until a
+        /// second nonempty layer turns up.
         /// </summary>
         void Collapse(SubsetArrayPool? pool)
         {
             Debug.Assert(layers is not null);
+            var mask = Mask;
             if ((mask & (mask - 1)) != 0)
                 return;
 
             var array = layers!;
-            if (mask == 0)
+            var only = mask == 0 ? -1 : BitOperations.TrailingZeroCount(mask);
+            for (var l = MaskedLayers; l < array.Length; l++)
             {
-                single = default;
-                singleLayer = 0;
-            }
-            else
-            {
-                singleLayer = BitOperations.TrailingZeroCount(mask);
-                single = array[singleLayer].Take();
+                if (array[l].IsEmpty)
+                    continue;
+
+                if (only >= 0)
+                    return;
+
+                only = l;
             }
 
+            single = only < 0 ? default : array[only].Take();
+            layerOrHighMask = Math.Max(only, 0);
+            lowMask = 0;
             layers = null;
-            mask = 0;
             pool?.Return(array);
         }
 
@@ -440,18 +483,13 @@ namespace Eggnog.Relations
         void ReleaseLayers(SubsetArrayPool? pool)
         {
             var array = layers!;
-            var remaining = mask;
-            while (remaining != 0)
-            {
-                var l = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
+            foreach (var l in GetLayers())
                 array[l].Dispose();
-            }
 
             layers = null;
-            mask = 0;
+            lowMask = 0;
             single = default;
-            singleLayer = 0;
+            layerOrHighMask = 0;
             pool?.Return(array);
         }
 
@@ -459,7 +497,7 @@ namespace Eggnog.Relations
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ThrowLayerOutOfRange(int layer)
         {
-            throw new ArgumentOutOfRangeException(nameof(layer), layer, $"A layer lies in [0, {MaxLayers}).");
+            throw new ArgumentOutOfRangeException(nameof(layer), layer, "A layer is not negative.");
         }
 
         [DoesNotReturn]

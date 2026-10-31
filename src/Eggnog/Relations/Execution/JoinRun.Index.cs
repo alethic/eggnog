@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog.Relations
@@ -34,14 +33,13 @@ namespace Eggnog.Relations
                 return;
             }
 
-            var remaining = node.LayerMask;
-            var first = BitOperations.TrailingZeroCount(remaining);
-            remaining &= remaining - 1;
+            var layers = node.GetLayers();
+            layers.MoveNext();
+            var first = layers.Current;
             BuildPiece(ref prober.First, node, first, view.Layers[first]!, node.GetLayerRows(first), columns, root);
-            while (remaining != 0)
+            while (layers.MoveNext())
             {
-                var layer = BitOperations.TrailingZeroCount(remaining);
-                remaining &= remaining - 1;
+                var layer = layers.Current;
                 BuildPiece(ref prober.AddPiece(), node, layer, view.Layers[layer]!, node.GetLayerRows(layer), columns, root);
             }
         }
@@ -64,7 +62,7 @@ namespace Eggnog.Relations
         /// </summary>
         void BuildPiece(ref ProberPiece piece, TrieNode node, int layer, LayerView lv, SubsetRef rows, ReadOnlySpan<ColumnId> columns, bool root)
         {
-            piece.Layer = (byte)layer;
+            piece.Layer = layer;
             piece.View = lv;
             var table = lv.Table;
             if (rows.Size <= SparseColumnIndex.Capacity && columns.Length == 1)

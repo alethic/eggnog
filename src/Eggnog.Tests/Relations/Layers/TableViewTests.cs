@@ -97,7 +97,7 @@ namespace Eggnog.Relations.Tests
             Assert.Null(child.Tables!.TryGetLayer(f));
             Assert.Equal(1, rootView.LayerCount);
             Assert.True(rootView.Layers[0]!.IsFrozen);
-            Assert.Equal(1u, rootView.PresentMask);
+            Assert.Equal(1u, LayerTestUtil.PresentMask(rootView));
 
             // Writing another table creates no layer of this one.
             Insert(child, g, a, 3, 0);
@@ -120,7 +120,7 @@ namespace Eggnog.Relations.Tests
 
             var view = child.GetView(f);
             Assert.Equal(2, view.LayerCount);
-            Assert.Equal(0b11u, view.PresentMask);
+            Assert.Equal(0b11u, LayerTestUtil.PresentMask(view));
             Assert.True(view.Layers[0]!.Hidden.IsNone);
             Assert.True(view.Layers[1]!.Hidden.IsNone);
             Assert.False(view.Layers[1]!.IsFrozen);
@@ -222,7 +222,7 @@ namespace Eggnog.Relations.Tests
             var view = child.GetView(f);
             Assert.Null(view.Layers[0]);
             Assert.NotNull(view.Layers[1]);
-            Assert.Equal(0b10u, view.PresentMask);
+            Assert.Equal(0b10u, LayerTestUtil.PresentMask(view));
             Assert.Null(Row(child, f, a));
 
             // Rows written afterwards are the child's own; a grandchild sees only them.
@@ -250,11 +250,11 @@ namespace Eggnog.Relations.Tests
 
             // A descendant never reads a context-private table; its view has no ancestor layer.
             var view = child.GetView(p);
-            Assert.Equal(0u, view.PresentMask);
+            Assert.Equal(0u, LayerTestUtil.PresentMask(view));
             Assert.Null(Row(child, p, a));
             Insert(child, p, a, 0, 0);
             Assert.Equal(0u, Row(child, p, a)![1]);
-            Assert.Equal(0b10u, child.GetView(p).PresentMask);
+            Assert.Equal(0b10u, LayerTestUtil.PresentMask(child.GetView(p)));
             Assert.Null(child.Tables!.TryGetLayer(p)!.Own.CompactionGate);
             Assert.Equal(1u, Row(root, p, a)![1]);
             LookupPaths.Check(child);

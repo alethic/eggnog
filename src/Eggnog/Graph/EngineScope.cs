@@ -66,6 +66,12 @@ namespace Eggnog
         public abstract void EnsureClean();
 
         /// <summary>
+        /// <see cref="EnsureClean"/> for a scope whose writable ancestors were just brought up to date, root first, in
+        /// its thread domain: they are not brought up to date again.
+        /// </summary>
+        public abstract void EnsureCleanBelowCurrentAncestors();
+
+        /// <summary>
         /// Takes a failure a merge recorded on the context outside an engine call that reports it: the rebuild of
         /// <see cref="EnsureClean"/>, which records a lattice merge that throws and does not throw itself.
         /// Called only for a scope that is not the root, right after its catch-up. Cost: one volatile read when nothing is
@@ -283,8 +289,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="options">The child's options.</param>
         /// <returns>The child's engine side.</returns>
-        /// <exception cref="InvalidOperationException">The context is at the deepest level (depth 31), faulted or
-        /// stopped.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted or stopped.</exception>
         /// <exception cref="Relations.PanicException">A failure was recorded on this context.</exception>
         public abstract ContextEngineScope CreateChild(Relations.ContextOptions options);
 

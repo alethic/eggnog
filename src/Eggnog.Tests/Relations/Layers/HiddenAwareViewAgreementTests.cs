@@ -301,7 +301,7 @@ namespace Eggnog.Relations.Tests
 
                 // AllRows: every present layer with rows, densely.
                 var all = view.AllRows(pool);
-                for (var j = 0; j < LayeredSubset.MaxLayers; j++)
+                for (var j = 0; j < view.LayerCount + 2; j++)
                 {
                     var rows = j < view.LayerCount && view.Layers[j] is { } l ? l.Sorted!.Rows.Count : 0;
                     var got = OffsetTestUtil.Collect(all.GetLayer(j));

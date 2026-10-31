@@ -64,6 +64,14 @@ namespace Eggnog.Relations
         /// </summary>
         public long RestampedCopies;
 
+        /// <summary>
+        /// The ancestor cursors the context's catch-up tests read (<see cref="ContextTables.NeedsCatchUp"/>,
+        /// <see cref="ContextTables.HasNewAddedEntries"/>): one per unsettled ancestor a test visited because the store's
+        /// change clock moved since the context's last test that found nothing. Zero for the tests of a chain that
+        /// nothing changed since, which therefore cost O(1) per level.
+        /// </summary>
+        public long AncestorCursorReads;
+
     }
 
 }

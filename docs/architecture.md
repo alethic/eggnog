@@ -1242,8 +1242,18 @@ entry's id in the parent.
 plan indexes, seals staging, compresses or flattens the union-find, builds every view, and publishes. A context that is
 not frozen shares one thread domain (`ThreadAffinityGuard`) with the descendants created under it; each child of a
 frozen context gets its own. A second thread entering a domain is refused rather than made to wait.
-`ConcurrentChildren` runs children of frozen contexts side by side within the graph's `ParallelismBudget`. Depth is
-limited to 31.
+`ConcurrentChildren` runs children of frozen contexts side by side within the graph's `ParallelismBudget`. A chain may
+be any depth, as egglog's stack of pushes may: a `LayeredSubset` keeps a 64-bit mask of its nonempty layers below 64
+and finds deeper ones by their per-layer entries, and a frame's dense refinement of a layer past 255, which its entry's
+layer byte does not hold, is a node the frame owns. Every walk over the levels of a chain (a rebuild, a clean test, a
+catch-up, a view build, a freeze's new domain, a release) is a loop rather than a recursion, so depth costs no stack.
+A child keeps a cursor into each unsettled ancestor, and a clean test that reads them goes by the store's
+`ChangeClock`, which every change of a level with live descendants moves (its change stamp, an entry of its container
+log): while the clock has not moved since a level last found itself current, the level needs no ancestor read. A
+catch-up walks the chain root first and rebuilds each level once. So testing or catching up a chain that nothing
+changed costs O(d) at depth d, and after a change each level reads its d cursors once; a level's view is built in
+O(d) plus the levels that hide rows of the table. Building a chain of n levels costs O(n²) in all, the per-ancestor
+cursors and gates of each new child, where egglog's push copies the e-graph.
 
 **Compaction under live descendants.** A table compacts on egglog's trigger (more tombstones than half its physical
 rows, and more than 16), and at freeze whenever it has a tombstone. Compaction renumbers rows and starts a new

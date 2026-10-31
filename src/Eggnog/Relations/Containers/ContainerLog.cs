@@ -100,6 +100,13 @@ namespace Eggnog.Relations
         public bool Active => active;
 
         /// <summary>
+        /// Gets or sets the store's change clock, which every recording that sets <see cref="Pending"/> and every
+        /// append to the Dirty stream moves (<see cref="Relations.ChangeClock"/>); set once, before the level has a
+        /// descendant.
+        /// </summary>
+        public ChangeClock? Clock { get; set; }
+
+        /// <summary>
         /// Gets whether an environment may have buffered Added entries since the last drain: set by every recording, so
         /// a reader that finds it clear and the count at its cursor has nothing new to read. One volatile read.
         /// </summary>
@@ -182,13 +189,17 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Marks that an environment buffered an Added entry: one volatile read, and a write only when the flag was
-        /// clear. Called by the recording environment under the shard lock it holds, after the entry is buffered.
+        /// Marks that an environment buffered an Added entry: one volatile read, and a write and a move of the
+        /// <see cref="Clock"/> only when the flag was clear. Called by the recording environment under the shard lock it
+        /// holds, after the entry is buffered.
         /// </summary>
         public void NotePending()
         {
             if (pending == false)
+            {
                 pending = true;
+                Clock?.Advance();
+            }
         }
 
         /// <summary>
@@ -266,6 +277,8 @@ namespace Eggnog.Relations
                 ids.CopyTo(dirty.AsSpan(count));
                 Volatile.Write(ref dirtyCount, count + ids.Length);
             }
+
+            Clock?.Advance();
         }
 
         /// <summary>

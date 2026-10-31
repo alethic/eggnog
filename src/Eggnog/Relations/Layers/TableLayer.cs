@@ -58,6 +58,11 @@ namespace Eggnog.Relations
         readonly Dictionary<long, HideReason> reasons = new();
 #endif
 
+        /// <summary>
+        /// The number of ancestor layers <see cref="hidden"/> holds a set for.
+        /// </summary>
+        int hiddenLayers;
+
         volatile bool isAdopted;
         bool isCleared;
         bool hasRetractions;
@@ -133,19 +138,9 @@ namespace Eggnog.Relations
 
         /// <summary>
         /// Gets whether this context hides any row of any ancestor layer of the table (a set exists only once a row was
-        /// hidden, and sets never shrink). O(depth). Domain thread only.
+        /// hidden, and sets never shrink). One volatile read: what lets a view build skip the levels that hide nothing.
         /// </summary>
-        internal bool HasHidden
-        {
-            get
-            {
-                foreach (var set in hidden)
-                    if (set is not null)
-                        return true;
-
-                return false;
-            }
-        }
+        internal bool HasHidden => Volatile.Read(ref hiddenLayers) > 0;
 
         /// <summary>
         /// Hides row <paramref name="row"/> of the ancestor layer at depth <paramref name="layer"/>: the row carries
@@ -163,7 +158,10 @@ namespace Eggnog.Relations
             var ancestor = Owner.AncestorLayer(layer, Id) ?? throw new InvalidOperationException($"The ancestor at depth {layer} has no layer of table {Id} to hide a row of.");
             var set = hidden[layer];
             if (set is null)
+            {
                 hidden[layer] = set = new HiddenSet(ancestor.Version.Major);
+                Volatile.Write(ref hiddenLayers, hiddenLayers + 1);
+            }
 
             Debug.Assert(set.Generation == ancestor.Version.Major, "a hidden set outlived its layer's generation");
             var wasSealed = set.IsSealed;

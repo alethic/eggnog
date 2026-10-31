@@ -8,9 +8,9 @@ namespace Eggnog.Relations.Tests
 {
 
     /// <summary>
-    /// Tests for the lifecycle of contexts in non-frozen chains: creation, disposal rules, descendant gates, the depth
-    /// limit, the shared thread domain, and the refusal of a second thread and of re-entrant structural calls; and the
-    /// domains of children under frozen parents.
+    /// Tests for the lifecycle of contexts in non-frozen chains: creation, disposal rules, descendant gates, chains of
+    /// any depth and what testing them costs, the shared thread domain, and the refusal of a second thread and of
+    /// re-entrant structural calls; and the domains of children under frozen parents.
     /// </summary>
     public class ContextLifecycleTests
     {
@@ -175,25 +175,80 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
-        /// A chain reaches <see cref="Context.MaxDepth"/> (31) below the root, and the deepest context refuses a child.
+        /// A chain has no depth limit, as egglog's stack of pushes has none: 200 levels below the root, each counted
+        /// by every ancestor's gate, and disposed from the bottom up.
         /// </summary>
         [Fact]
-        public void DepthIsLimitedToThirtyOne()
+        public void AChainHasNoDepthLimit()
         {
+            const int Depth = 200;
             var store = new Store();
             var chain = new List<Context> { store.Root };
-            for (var i = 0; i < Context.MaxDepth; i++)
+            for (var i = 0; i < Depth; i++)
                 chain.Add(chain[^1].CreateChild());
 
-            Assert.Equal(31, chain[^1].Depth);
-            Assert.Equal(31, store.Root.Gate.LiveDescendants);
-            Assert.Throws<InvalidOperationException>(() => chain[^1].CreateChild());
+            Assert.Equal(Depth, chain[^1].Depth);
+            Assert.Equal(Depth, store.Root.Gate.LiveDescendants);
+            Assert.Equal(Depth - 100, chain[100].Gate.LiveDescendants);
             Assert.Equal(0, chain[^1].ChildCount);
 
             for (var i = chain.Count - 1; i > 0; i--)
+            {
                 chain[i].Dispose();
+                Assert.Equal(i - 1, store.Root.Gate.LiveDescendants);
+            }
 
-            Assert.Equal(0, store.Root.Gate.LiveDescendants);
+            Assert.Equal(0, store.Root.ChildCount);
+        }
+
+        /// <summary>
+        /// A chain's catch-up tests go by the store's change clock: building a 200-deep chain reads each level's cursors
+        /// into its ancestors a bounded number of times, O(depth²) reads in all rather than O(depth³), and rebuilding,
+        /// testing and extending the chain once nothing changed reads none; after a write at the root, one rebuild of the
+        /// leaf reads each level's cursors at most a few times and shows the row at the leaf.
+        /// </summary>
+        [Fact]
+        public void TestingAChainThatDidNotChangeReadsNoAncestorCursor()
+        {
+            const int Depth = 200;
+            const long Bound = 2L * Depth * (Depth + 1);
+            var store = new Store();
+            var f = store.AddTable(LayeredTestUtil.MaxFunction(1), name: "f");
+            var chain = new List<Context> { store.Root };
+            for (var i = 0; i < Depth; i++)
+                chain.Add(chain[^1].CreateChild());
+
+            long Reads()
+            {
+                long reads = 0;
+                for (var i = 1; i < chain.Count; i++)
+                    reads += chain[i].Tables!.Statistics.AncestorCursorReads;
+
+                return reads;
+            }
+
+            var leaf = chain[^1];
+            Assert.False(leaf.Rebuild());
+            Assert.InRange(Reads(), 0, Bound);
+            Assert.True(leaf.IsClean);
+            var before = Reads();
+            Assert.False(leaf.Rebuild());
+            Assert.True(leaf.IsClean);
+            Assert.True(leaf.IsViewCurrent);
+            leaf.CreateChild().Dispose();
+            Assert.True(leaf.IsClean);
+            Assert.Equal(before, Reads());
+
+            LayeredTestUtil.Insert(store.Root, f, 1, 1, 0);
+            Assert.False(leaf.IsClean);
+            before = Reads();
+            leaf.Rebuild();
+            Assert.True(leaf.IsClean);
+            Assert.InRange(Reads() - before, 1, Bound);
+            Assert.Equal(1, leaf.GetView(f).VisibleCount);
+
+            for (var i = chain.Count - 1; i > 0; i--)
+                chain[i].Dispose();
         }
 
         /// <summary>

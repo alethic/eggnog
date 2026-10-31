@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Threading;
 
 namespace Eggnog
@@ -402,6 +403,46 @@ namespace Eggnog
         /// failure; the scope where it happened and <paramref name="called"/> are faulted.</exception>
         bool CatchUpCore(Scope called)
         {
+            // The writable scopes from here up, caught up root first in a loop rather than by a recursion through the
+            // parent, so a chain of any depth needs no more stack than one level.
+            var count = 1;
+            for (var up = Parent; up is { IsFrozen: false }; up = up.Parent)
+                count++;
+
+            if (count == 1)
+                return CatchUpLevel(called);
+
+            var chain = ArrayPool<Scope>.Shared.Rent(count);
+            try
+            {
+                var at = this;
+                for (var i = count - 1; i >= 0; i--, at = at.Parent!)
+                    chain[i] = at;
+
+                // A stopped ancestor cannot be caught up with, and leaves the scopes below it without a model.
+                for (var i = 0; i < count; i++)
+                    if (chain[i].CatchUpLevel(called))
+                        return true;
+
+                return false;
+            }
+            finally
+            {
+                Array.Clear(chain, 0, count);
+                ArrayPool<Scope>.Shared.Return(chain);
+            }
+        }
+
+        /// <summary>
+        /// Brings this scope alone up to date, its writable ancestors being up to date: one step of
+        /// <see cref="CatchUpCore"/>'s walk.
+        /// </summary>
+        /// <param name="called">The scope the call was made on.</param>
+        /// <returns>Whether the scope is a stopped case or lies under one, once caught up.</returns>
+        /// <exception cref="RuleEvaluationException">A merge of this scope's catch-up recorded a failure; the scope and
+        /// <paramref name="called"/> are faulted.</exception>
+        bool CatchUpLevel(Scope called)
+        {
             // The root is never behind its own writes: every flush there rebuilds and takes what its merges recorded, so its
             // catch-up records nothing and is not checked.
             if (IsRoot)
@@ -410,12 +451,9 @@ namespace Eggnog
                 return false;
             }
 
-            // A stopped ancestor cannot be caught up with, and leaves this scope without a model.
-            if (Parent is { IsFrozen: false } parent && parent.CatchUpCore(called))
-                return true;
-
+            // The walk has just brought every writable ancestor up to date, root first, so only this level is left.
             var before = Engine.Version;
-            Engine.EnsureClean();
+            Engine.EnsureCleanBelowCurrentAncestors();
             var moved = Engine.Version - before;
             if (moved != 0)
                 Interlocked.Add(ref upkeepStamps, moved);

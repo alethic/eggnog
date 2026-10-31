@@ -86,6 +86,9 @@ namespace Eggnog
         public override void EnsureClean() => Context.EnsureClean();
 
         /// <inheritdoc />
+        public override void EnsureCleanBelowCurrentAncestors() => Context.EnsureCleanBelowCurrentAncestors();
+
+        /// <inheritdoc />
         public override bool TryTakeRecordedFailure(out string message)
         {
             if (Context.Context.Database.Failure is null)

@@ -120,7 +120,7 @@ namespace Eggnog.Relations.Tests
             var fast = new List<Constraint>();
             var slow = new List<Constraint>();
             var header = db.View.Evaluate(f, [Constraint.EqConst(C(1), new Value(7))], fast, slow);
-            Assert.Equal(0b11u, header.LayerMask);
+            Assert.Equal(0b11u, LayerTestUtil.Mask(header));
             Assert.Equal(fresh.Length, header.GetLayer(1).Size);
             Assert.Equal(1, header.GetLayer(0).Size);
             Assert.Single(fast);

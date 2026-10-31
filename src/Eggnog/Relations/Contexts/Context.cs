@@ -30,8 +30,8 @@ namespace Eggnog.Relations
     /// <see cref="ScanMerges{TVisitor}"/> visitor), reads are allowed, but writes to a context of the same domain,
     /// rebuilds with work to do, <see cref="CreateChild"/>, <see cref="Freeze"/> and <see cref="Dispose"/> are refused
     /// before they change anything. <see cref="Dispose"/> drops a child once it has no live children; the root is never
-    /// disposed. Depth is limited to <see cref="MaxDepth"/>. Every ancestor's <see cref="Gate"/> counts its live
-    /// descendants.
+    /// disposed. A chain may be any depth, as egglog's stack of pushes may. Every ancestor's <see cref="Gate"/> counts its
+    /// live descendants.
     /// </para>
     /// <para>
     /// Union-find. The root's union-find is egglog's <see cref="DisplacedTable"/>; a child's is an
@@ -58,11 +58,6 @@ namespace Eggnog.Relations
     /// </remarks>
     internal sealed partial class Context : IDisposable
     {
-
-        /// <summary>
-        /// The deepest context: <c>LayeredSubset</c> keeps a 32-bit layer mask, one bit per level.
-        /// </summary>
-        public const int MaxDepth = 31;
 
         /// <summary>
         /// The value <see cref="activeScans"/> takes when <see cref="Dispose"/> claims the context: any scan that starts
@@ -163,6 +158,13 @@ namespace Eggnog.Relations
         /// The number of passes the last <see cref="Rebuild"/> ran (<see cref="LastRebuildPasses"/>). Domain thread only.
         /// </summary>
         int lastRebuildPasses;
+
+        /// <summary>
+        /// Whether the last <see cref="Rebuild"/> ended at its clean test, finding the context clean: what a child's
+        /// rebuild, which rebuilds this context first, reads instead of testing this context's chain again. Domain
+        /// thread only.
+        /// </summary>
+        bool foundClean;
 
         /// <summary>
         /// The largest epoch the context captured (<see cref="BeginEpoch"/>) or ran rules at (<see cref="UseEpoch"/>):
@@ -386,8 +388,8 @@ namespace Eggnog.Relations
         /// <summary>
         /// Gets whether the context may be read: not disposed or faulted, and either frozen or caught up with
         /// everything — nothing merged since its last rebuild is left unrebuilt, and, in a child, no write is staged
-        /// and unmerged, its union-find is current with its parent's, and its parent is clean too. The recursion stops
-        /// at the first frozen ancestor, so the cost is O(ancestors that are not frozen).
+        /// and unmerged, its union-find is current with its parent's, and its parent is clean too. The walk up the chain
+        /// stops at the first frozen ancestor, so the cost is O(ancestors that are not frozen) levels.
         /// </summary>
         /// <remarks>
         /// At the root, writes staged and not merged do not make it unclean: they are invisible until merged, as in
@@ -400,26 +402,38 @@ namespace Eggnog.Relations
         /// scan keeps such containers for the rebuild's catch-up, which claims, adopts or merges them
         /// (<see cref="ContainerLayers.HasPending"/>).
         /// </remarks>
-        public bool IsClean
+        public bool IsClean => IsCleanBelow(parentClean: false);
+
+        /// <summary>
+        /// Gets <see cref="IsClean"/>, taking the parent as clean when <paramref name="parentClean"/> is set, which only
+        /// a caller that has just seen the parent clean, with nothing changed since, passes.
+        /// </summary>
+        bool IsCleanBelow(bool parentClean)
         {
-            get
+            // A loop up the chain rather than a recursion through the parent, so a chain of any depth needs no stack.
+            for (var c = this; ; c = c.parent!)
             {
-                if (disposed || faulted)
+                if (c.disposed || c.faulted)
                     return false;
 
-                if (frozen)
+                if (c.frozen)
                     return true;
 
-                if (parent is null)
-                    return journalMark == DisplacedCount;
+                if (c.parent is null)
+                    return c.journalMark == c.DisplacedCount;
 
-                return journalMark == journal!.Count
-                    && containerLayers!.ContainerMark == journalMark
-                    && containerLayers.HasPending == false
-                    && database.Catalog.Notifications.IsEmpty
-                    && unionFindCursor == parent.DisplacedCount
-                    && tables!.NeedsCatchUp == false
-                    && parent.IsClean;
+                var here = c.journalMark == c.journal!.Count
+                    && c.containerLayers!.ContainerMark == c.journalMark
+                    && c.containerLayers.HasPending == false
+                    && c.database.Catalog.Notifications.IsEmpty
+                    && c.unionFindCursor == c.parent.DisplacedCount
+                    && c.tables!.NeedsCatchUp == false;
+                if (here == false)
+                    return false;
+
+                // Only the first level's parent may be taken as clean.
+                if (parentClean)
+                    return true;
             }
         }
 
@@ -435,21 +449,26 @@ namespace Eggnog.Relations
         {
             get
             {
-                if (disposed || faulted)
-                    return false;
+                // A loop up the chain, as in IsCleanBelow.
+                for (var c = this; ; c = c.parent!)
+                {
+                    if (c.disposed || c.faulted)
+                        return false;
 
-                if (frozen)
-                    return true;
+                    if (c.frozen)
+                        return true;
 
-                if (parent is null)
-                    return journalMark == DisplacedCount;
+                    if (c.parent is null)
+                        return c.journalMark == c.DisplacedCount;
 
-                return journalMark == journal!.Count
-                    && containerLayers!.ContainerMark == journalMark
-                    && containerLayers.HasPending == false
-                    && unionFindCursor == parent.DisplacedCount
-                    && tables!.NeedsCatchUp == false
-                    && parent.IsViewCurrent;
+                    var here = c.journalMark == c.journal!.Count
+                        && c.containerLayers!.ContainerMark == c.journalMark
+                        && c.containerLayers.HasPending == false
+                        && c.unionFindCursor == c.parent.DisplacedCount
+                        && c.tables!.NeedsCatchUp == false;
+                    if (here == false)
+                        return false;
+                }
             }
         }
 

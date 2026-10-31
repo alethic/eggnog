@@ -455,18 +455,29 @@ namespace Eggnog.Relations
         }
 
         /// <summary>
-        /// Counts the live descendants by walking the children.
+        /// Counts the live descendants by walking the children, with a work list rather than a recursion, so a subtree of
+        /// any depth needs no more stack than one level.
         /// </summary>
         int CountLiveDescendants()
         {
-            Context[] snapshot;
-            lock (children)
-                snapshot = children.ToArray();
-
             var count = 0;
-            foreach (var child in snapshot)
-                if (child.disposed == false)
-                    count += 1 + child.CountLiveDescendants();
+            var work = new Stack<Context>();
+            work.Push(this);
+            while (work.TryPop(out var context))
+            {
+                Context[] snapshot;
+                lock (context.children)
+                    snapshot = context.children.ToArray();
+
+                foreach (var child in snapshot)
+                {
+                    if (child.disposed)
+                        continue;
+
+                    count++;
+                    work.Push(child);
+                }
+            }
 
             return count;
         }

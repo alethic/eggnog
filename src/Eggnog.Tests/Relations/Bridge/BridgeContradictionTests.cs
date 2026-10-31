@@ -175,6 +175,47 @@ namespace Eggnog.Relations.Tests
         }
 
         /// <summary>
+        /// A case stopped second from the top of a 40-deep chain of cases stops every case below it when the deepest is
+        /// brought up to date, level by level from the top, while the case above it stays as it was; an ordinary child at
+        /// the bottom is refused, unfaulted.
+        /// </summary>
+        [Fact]
+        public void ACaseStoppedHalfwayUpADeepChainStopsTheCasesBelowIt()
+        {
+            const int Depth = 40;
+            var g = new ContextGraph();
+            g.EGraph.DesignateContradiction(g.Bottom);
+            var rule = g.MarkIsBottom();
+            g.Root.Freeze();
+
+            var chain = new List<EGraphContext>();
+            var parent = g.Root;
+            for (var d = 1; d <= Depth; d++)
+            {
+                parent = parent.CreateChild(ContextOptions.Case);
+                chain.Add(parent);
+            }
+
+            var ordinary = chain[^1].CreateChild();
+            chain[^1].EnsureClean();
+            Assert.True(chain[^1].IsClean);
+            g.Assert(chain[1], g.Mark, chain[1].FreshId());
+            chain[1].FlushUpdates();
+            Assert.True(chain[1].RunRules(rule).Stopped);
+
+            chain[^1].EnsureClean();
+            Assert.False(chain[0].IsStopped);
+            Assert.All(chain.Skip(1), @case => Assert.True(@case.IsStopped));
+            Assert.All(chain, @case => Assert.False(@case.IsFaulted));
+            Assert.Throws<InvalidOperationException>(ordinary.EnsureClean);
+            Assert.False(ordinary.IsFaulted);
+
+            ordinary.Dispose();
+            for (var d = Depth - 1; d >= 0; d--)
+                chain[d].Dispose();
+        }
+
+        /// <summary>
         /// A rule planned before the designation keeps its plan without the early stop: the case still stops when the
         /// contradiction row merges, but the rest of the search runs.
         /// </summary>

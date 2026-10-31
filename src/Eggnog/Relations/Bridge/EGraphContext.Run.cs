@@ -96,22 +96,64 @@ namespace Eggnog.Relations
         /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
         /// work is due and the call comes from inside an operation of the same domain.</exception>
         /// <exception cref="PanicException">The flush of host writes recorded a failure.</exception>
-        public void EnsureClean()
+        public void EnsureClean() => EnsureCleanCore(ancestorsCurrent: false);
+
+        /// <summary>
+        /// <see cref="EnsureClean()"/> for a context whose writable ancestors this thread domain has just brought up to
+        /// date, root first, with nothing in between: it skips bringing them up to date again, which would find
+        /// nothing to do. What a walk down a chain calls at each level (<c>Scope.CatchUp</c>), so that the walk costs
+        /// one ancestor pass per level, not one per level and ancestor.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The context is faulted; its domain is held by another thread; or
+        /// work is due and the call comes from inside an operation of the same domain.</exception>
+        /// <exception cref="PanicException">The flush of host writes recorded a failure.</exception>
+        public void EnsureCleanBelowCurrentAncestors() => EnsureCleanCore(ancestorsCurrent: true);
+
+        /// <summary>
+        /// Brings the context up to date, and its writable ancestors first unless <paramref name="ancestorsCurrent"/>.
+        /// </summary>
+        void EnsureCleanCore(bool ancestorsCurrent)
         {
             context.ThrowIfDisposed();
             if (context.IsFrozen)
                 return;
 
             using var scope = context.Domain.Enter();
-            if (parent is { IsFrozen: false } p)
-                p.EnsureClean();
+            if (ancestorsCurrent == false && parent is { IsFrozen: false })
+            {
+                // A loop over the writable ancestors, root first, not a recursion through the parent, so a chain of any
+                // depth needs no more stack than one level. Every context of the chain is a bridge context's.
+                var chain = context.Ancestors;
+                var top = chain.Length - 2;
+                while (top > 0 && chain[top - 1].IsFrozen == false)
+                    top--;
 
+                for (var a = top; a < chain.Length - 1; a++)
+                    ((EGraphContext)chain[a].Host!).EnsureCleanLevel();
+            }
+
+            EnsureCleanLevel();
+        }
+
+        /// <summary>
+        /// Brings this level up to date, its writable ancestors being up to date: flushes its host writes and rebuilds
+        /// it. The body of <see cref="EnsureClean()"/> once the walk has brought every writable ancestor up to date.
+        /// </summary>
+        void EnsureCleanLevel()
+        {
+            context.ThrowIfDisposed();
+            if (context.IsFrozen)
+                return;
+
+            using var scope = context.Domain.Enter();
             if (IsStopped)
                 return;
 
             if (hostWrites.IsEmpty == false)
                 FlushCore(throwOnFailure: true);
 
+            // Every writable ancestor is up to date by now, here or in the caller's walk, so the rebuild is this level's.
             if (IsRoot)
             {
                 if (context.DisplacedCount != context.JournalMark)
@@ -119,7 +161,7 @@ namespace Eggnog.Relations
             }
             else
             {
-                context.Rebuild();
+                context.RebuildBelowCurrentAncestors();
             }
         }
 

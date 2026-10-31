@@ -10,12 +10,6 @@ namespace Eggnog
     {
 
         /// <summary>
-        /// The most origin links a check walks: deeper than any scope tree, whose depth the engine limits to 31 (a
-        /// context's layer mask has 32 bits).
-        /// </summary>
-        const int MaxLinks = 32;
-
-        /// <summary>
         /// Gets the cell of <paramref name="value"/>, checking that it may be used in <paramref name="scope"/>: it names a
         /// class, it belongs to the scope's graph, a batch origin is the open batch or committed, and its scope is
         /// <paramref name="scope"/> or an ancestor of it. A disposed scope's classes pass in the scope and its live
@@ -65,14 +59,9 @@ namespace Eggnog
                 origin = origin.Parent!;
             }
 
-            var walk = target;
-            for (var links = 0; walk is not null && links <= MaxLinks; links++)
-            {
+            for (var walk = target; walk is not null; walk = walk.Parent)
                 if (ReferenceEquals(walk, origin))
                     return null;
-
-                walk = walk.Parent;
-            }
 
             if (origin.Disposed)
                 return $"class {value} came from scope '{origin.Path}', which is disposed";

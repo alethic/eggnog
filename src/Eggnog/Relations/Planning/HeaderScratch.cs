@@ -37,6 +37,8 @@ namespace Eggnog.Relations
         int count;
         Subset[]? layerSubsets;
 
+        bool[]? layerMembership;
+
         /// <summary>
         /// Gets the list a header's fast constraints are evaluated into.
         /// </summary>
@@ -63,11 +65,34 @@ namespace Eggnog.Relations
         public int Count => count;
 
         /// <summary>
-        /// Gets a buffer of one <see cref="Subset"/> per possible layer (<see cref="LayeredSubset.MaxLayers"/>), every
-        /// entry empty; whoever fills entries empties them again before the next use. Allocated on first use.
+        /// Gets a buffer of at least <paramref name="layers"/> <see cref="Subset"/>s, every entry empty; whoever fills
+        /// entries empties them again before the next use. Allocated on first use, and again only for a view with more
+        /// layers than any before it.
         /// </summary>
+        /// <param name="layers">The number of layers of the view evaluated.</param>
         /// <returns>The buffer.</returns>
-        public Subset[] LayerSubsets() => layerSubsets ??= new Subset[LayeredSubset.MaxLayers];
+        public Subset[] LayerSubsets(int layers)
+        {
+            if (layerSubsets is null || layerSubsets.Length < layers)
+                layerSubsets = new Subset[Math.Max(layers, 2 * (layerSubsets?.Length ?? 0))];
+
+            return layerSubsets;
+        }
+
+        /// <summary>
+        /// Gets a buffer of at least <paramref name="cells"/> flags, with no meaning between uses: a header's table of
+        /// which constraints each layer answers fast, when it is too large for the stack. Allocated on first use, and
+        /// again only for a larger table than any before it.
+        /// </summary>
+        /// <param name="cells">The number of flags: the view's layers times the header's constraints.</param>
+        /// <returns>The buffer.</returns>
+        public bool[] LayerMembership(int cells)
+        {
+            if (layerMembership is null || layerMembership.Length < cells)
+                layerMembership = new bool[Math.Max(cells, 2 * (layerMembership?.Length ?? 0))];
+
+            return layerMembership;
+        }
 
         /// <summary>
         /// Starts an instantiation of <paramref name="headers"/> headers: grows the buffers to hold them. Allocates only
@@ -132,7 +157,7 @@ namespace Eggnog.Relations
         /// <summary>
         /// Ends an instantiation: disposes the subsets of the headers still held (none after <see cref="TakeHeaders"/>)
         /// and clears every list and the per-layer buffer (which an evaluation that threw may have left filled), so the
-        /// scratch keeps no rows and no constraints alive. O(headers held + <see cref="LayeredSubset.MaxLayers"/>).
+        /// scratch keeps no rows and no constraints alive. O(headers held + the per-layer buffer's length).
         /// </summary>
         public void ReleaseHeaders()
         {

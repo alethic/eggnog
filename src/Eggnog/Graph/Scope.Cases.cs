@@ -106,15 +106,28 @@ namespace Eggnog
         /// </summary>
         internal void ReleaseDisposedCases()
         {
-            foreach (var child in Snapshot())
+            // The cases under this scope, parents before children, released in reverse: a walk with a work list, not a
+            // recursion, so cases nested to any depth need no more stack than one level.
+            List<Scope>? cases = null;
+            Stack<Scope>? work = null;
+            for (var scope = this; scope is not null; scope = work is { Count: > 0 } ? work.Pop() : null)
             {
-                if (child.IsCase == false)
-                    continue;
+                foreach (var child in scope.Snapshot())
+                {
+                    if (child.IsCase == false)
+                        continue;
 
-                child.ReleaseDisposedCases();
-                if (child.ownedByCases && child.Engine.IsDisposed)
-                    child.ReleaseCase();
+                    (cases ??= new List<Scope>()).Add(child);
+                    (work ??= new Stack<Scope>()).Push(child);
+                }
             }
+
+            if (cases is null)
+                return;
+
+            for (var i = cases.Count - 1; i >= 0; i--)
+                if (cases[i].ownedByCases && cases[i].Engine.IsDisposed)
+                    cases[i].ReleaseCase();
         }
 
         /// <summary>
@@ -125,13 +138,35 @@ namespace Eggnog
         /// </summary>
         internal void DisposeVacuous()
         {
-            // A descendant's own case set, if any, loses its cases with them: their parent has no model.
-            foreach (var child in Snapshot())
+            // A descendant's own case set, if any, loses its cases with them: their parent has no model. The descendants,
+            // parents before children, are disposed in reverse: a walk with a work list, not a recursion, so a subtree
+            // of any depth needs no more stack than one level.
+            var descendants = new List<Scope>();
+            var work = new Stack<Scope>();
+            work.Push(this);
+            while (work.TryPop(out var scope))
             {
-                child.DisposeVacuous();
-                child.ReleaseCase();
+                foreach (var child in scope.Snapshot())
+                {
+                    descendants.Add(child);
+                    work.Push(child);
+                }
             }
 
+            for (var i = descendants.Count - 1; i >= 0; i--)
+            {
+                descendants[i].MarkVacuousDisposed();
+                descendants[i].ReleaseCase();
+            }
+
+            MarkVacuousDisposed();
+        }
+
+        /// <summary>
+        /// Marks this scope disposed, as one step of <see cref="DisposeVacuous"/>.
+        /// </summary>
+        void MarkVacuousDisposed()
+        {
             if (Interlocked.Exchange(ref disposed, 1) == 0)
                 Origin.Disposed = true;
         }
