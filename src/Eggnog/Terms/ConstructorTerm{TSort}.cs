@@ -19,7 +19,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="head">The constructor.</param>
         /// <param name="arguments">One term per key.</param>
-        internal ConstructorTerm(ConstructorHandle head, Term[] arguments)
+        internal ConstructorTerm(ConstructorHandle<TSort> head, Term[] arguments)
         {
             Head = head;
             this.arguments = arguments;
@@ -28,7 +28,7 @@ namespace Eggnog
         /// <summary>
         /// Gets the constructor.
         /// </summary>
-        public ConstructorHandle Head { get; }
+        public ConstructorHandle<TSort> Head { get; }
 
         /// <inheritdoc />
         internal override TermShape Shape => new(TermShapeKind.Application, typeof(TSort), null, null, null, null, Head, null, arguments);

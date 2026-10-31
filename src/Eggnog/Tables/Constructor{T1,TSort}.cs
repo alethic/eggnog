@@ -9,7 +9,7 @@ namespace Eggnog
     /// </summary>
     /// <typeparam name="T1">The type of key 1.</typeparam>
     /// <typeparam name="TSort">The sort of the terms.</typeparam>
-    public sealed class Constructor<T1, TSort> : ConstructorHandle where TSort : struct, ISort<TSort>
+    public sealed class Constructor<T1, TSort> : ConstructorHandle<TSort> where TSort : struct, ISort<TSort>
     {
 
         /// <summary>

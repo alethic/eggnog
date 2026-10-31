@@ -79,10 +79,10 @@ namespace Eggnog
         public void Insert(RelationHandle relation, params ReadOnlySpan<object> keys) => Tables.Insert(relation, keys);
 
         /// <inheritdoc />
-        public void Set(FunctionHandle function, ReadOnlySpan<object> keys, object value) => Tables.Set(function, keys, value);
+        public void Set<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<object> keys, TOut value) => Tables.Set(function, keys, value!);
 
         /// <inheritdoc />
-        public TSort Make<TSort>(ConstructorHandle constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort> =>
+        public TSort Make<TSort>(ConstructorHandle<TSort> constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort> =>
             Tables.Make<TSort>(constructor, keys);
 
         /// <inheritdoc />

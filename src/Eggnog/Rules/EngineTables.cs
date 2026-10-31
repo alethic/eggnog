@@ -167,7 +167,18 @@ namespace Eggnog
             action.Subsume(State, key);
         }
 
-        /// <inheritdoc cref="ITableReader.TryLookup"/>
+        /// <summary>
+        /// Reads a function's value, or a constructor's class, at a key, without inserting: egglog's <c>lookup</c>. The
+        /// typed lookups of <see cref="ITableReader"/> come here, and so does a table whose output type the handle does not
+        /// carry, which is why the output's type is checked.
+        /// </summary>
+        /// <typeparam name="T">The output's type.</typeparam>
+        /// <param name="table">The function or constructor, of the call's graph.</param>
+        /// <param name="keys">One value per key column.</param>
+        /// <param name="value">The value, when the key has a row.</param>
+        /// <returns>Whether the key has a row.</returns>
+        /// <exception cref="ArgumentException">The table is a relation or not of the call's graph, its output is not of the
+        /// type, or a value is not of its column's type.</exception>
         public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
         {
             value = default!;

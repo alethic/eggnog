@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Eggnog
 {
@@ -103,7 +104,25 @@ namespace Eggnog
         public abstract void UnionCells(uint a, uint b);
 
         /// <inheritdoc />
-        public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value)
+        public bool TryLookup<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<object> keys, [MaybeNullWhen(false)] out TOut value) =>
+            TryLookupUntyped(function, keys, out value);
+
+        /// <inheritdoc />
+        public bool TryLookup<TSort>(ConstructorHandle<TSort> constructor, ReadOnlySpan<object> keys, out TSort value) where TSort : struct, ISort<TSort> =>
+            TryLookupUntyped(constructor, keys, out value);
+
+        /// <summary>
+        /// Reads a function's value, or a constructor's class, at a key, as <see cref="ITableReader"/>'s typed lookups do,
+        /// for a table whose output type the handle does not carry, such as a function value's (<see cref="FnValue"/>):
+        /// the output's type is checked when the call is made.
+        /// </summary>
+        /// <typeparam name="T">The output's type.</typeparam>
+        /// <param name="table">The function or constructor.</param>
+        /// <param name="keys">One value per key column.</param>
+        /// <param name="value">The value, when the key has a row.</param>
+        /// <returns>Whether the key has a row.</returns>
+        /// <exception cref="ArgumentException">The table is a relation, or its output is not of the type.</exception>
+        public bool TryLookupUntyped<T>(TableHandle table, ReadOnlySpan<object> keys, [MaybeNullWhen(false)] out T value)
         {
             Reads();
             return TryLookupCore(table, keys, out value);
@@ -131,14 +150,25 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public void Set(FunctionHandle function, ReadOnlySpan<object> keys, object value)
+        public void Set<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<object> keys, TOut value) => SetUntyped(function, keys, value!);
+
+        /// <summary>
+        /// Sets a function's value at a key, as <see cref="ITableWriter.Set{TOut}"/> does, for a function whose output type
+        /// the handle does not carry, such as a function value's (<see cref="FnValue"/>): the value's type is checked when
+        /// the call is made.
+        /// </summary>
+        /// <param name="function">The function.</param>
+        /// <param name="keys">One value per key column.</param>
+        /// <param name="value">The value, of the output's type.</param>
+        /// <exception cref="ArgumentException">The function, or a value, is not one the call may write.</exception>
+        public void SetUntyped(FunctionHandle function, ReadOnlySpan<object> keys, object value)
         {
             Writes();
             SetCore(function, keys, value);
         }
 
         /// <inheritdoc />
-        public TSort Make<TSort>(ConstructorHandle constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>
+        public TSort Make<TSort>(ConstructorHandle<TSort> constructor, params ReadOnlySpan<object> keys) where TSort : struct, ISort<TSort>
         {
             Writes();
             return MakeCore<TSort>(constructor, keys);
@@ -168,7 +198,7 @@ namespace Eggnog
         /// <summary>
         /// Reads a value, the context allowing reads.
         /// </summary>
-        protected abstract bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, out T value);
+        protected abstract bool TryLookupCore<T>(TableHandle table, ReadOnlySpan<object> keys, [MaybeNullWhen(false)] out T value);
 
         /// <summary>
         /// Reads whether a relation holds a row, the context allowing reads.

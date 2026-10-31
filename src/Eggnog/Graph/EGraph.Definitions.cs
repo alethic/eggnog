@@ -555,7 +555,7 @@ namespace Eggnog
         /// <param name="options">Whether extraction may use it and the lift policy.</param>
         /// <returns>The constructor.</returns>
         internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, TableOptions? options = null) =>
-            DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
+            DefineTable(() => sort.CreateUntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
 
         /// <summary>
         /// Defines the built-in nullary relation <see cref="Contradiction"/>, named <c>$contradiction</c>. A built-in table

@@ -262,7 +262,7 @@ namespace Eggnog.Tests.Terms
                 if (tables.TryLookup(f, [args[0]], out long value) == false)
                     return false;
 
-                result = tables.Make<Node>(num, value);
+                result = tables.Make(num, value);
                 return true;
             });
 
@@ -274,6 +274,36 @@ namespace Eggnog.Tests.Terms
 
             Assert.True(graph.Root.AreEqual(graph.Root.Get(node.Of(1L)), graph.Root.Make(num.Of(10L))));
             Assert.Throws<RuleEvaluationException>(() => graph.Root.Assume(node.Of(2L).Is(make.Of(2L))));
+        }
+
+        [Fact]
+        public void APrimitiveLooksUpAConstructorsClassAndSetsAFunctionsValue()
+        {
+            // The handles carry the sort and the output's type: a lookup of a constructor reads the class without making
+            // the term, and a value set is converted to the function's output type.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("T");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var f = graph.DefineFunction<long, long>("f");
+            var found = graph.DefineFunction<long, Node>("found");
+            var look = Primitive.CreateFull("look-num", Long, (ITables tables, ReadOnlySpan<object> args, out Node result) =>
+            {
+                result = default;
+                if (tables.TryLookup(num, [args[0]], out var cls) == false)
+                    return false;
+
+                tables.Set(f, [args[0]], 1);
+                result = cls;
+                return true;
+            });
+            var three = graph.Root.Make(num.Of(3L));
+
+            graph.Root.Assume(found.Of(3L).Is(look.Of(3L)));
+
+            Assert.True(graph.Root.AreEqual(three, graph.Root.Get(found.Of(3L))));
+            Assert.Equal(1L, graph.Root.Get(f.Of(3L)));
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Assume(found.Of(4L).Is(look.Of(4L))));
+            Assert.False(graph.Root.Check(Fact.Exists(num.Of(4L))));
         }
 
         [Fact]
@@ -483,7 +513,7 @@ namespace Eggnog.Tests.Terms
             var o = graph.DefineFunction<long, long>("o");
             var both = Primitive.CreateFull("make-and-find", Long, (ITables tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Make<Node>(num, args[0]);
+                tables.Make(num, args[0]);
                 result = tables.TryLookup(num, [args[0]], out Node _) ? 1 : 0;
                 return true;
             });
@@ -510,7 +540,7 @@ namespace Eggnog.Tests.Terms
 
             var makeAndCount = Primitive.CreateFull("make-and-count", Long, (ITables tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Make<Node>(num, args[0]);
+                tables.Make(num, args[0]);
                 result = tables.TableSize(num);
                 return true;
             });

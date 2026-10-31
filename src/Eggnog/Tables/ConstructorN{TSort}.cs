@@ -11,7 +11,7 @@ namespace Eggnog
     /// where the typed constructors stop at four children.
     /// </summary>
     /// <typeparam name="TSort">The sort of the terms.</typeparam>
-    public sealed class ConstructorN<TSort> : ConstructorHandle where TSort : struct, ISort<TSort>
+    public sealed class ConstructorN<TSort> : ConstructorHandle<TSort> where TSort : struct, ISort<TSort>
     {
 
         /// <summary>

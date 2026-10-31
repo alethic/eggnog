@@ -11,7 +11,7 @@ namespace Eggnog
     /// <typeparam name="T2">The type of key 2.</typeparam>
     /// <typeparam name="T3">The type of key 3.</typeparam>
     /// <typeparam name="TOut">The type of the value.</typeparam>
-    public sealed class Function<T1, T2, T3, TOut> : FunctionHandle
+    public sealed class Function<T1, T2, T3, TOut> : FunctionHandle<TOut>
     {
 
         /// <summary>
@@ -21,11 +21,6 @@ namespace Eggnog
         {
 
         }
-
-        /// <summary>
-        /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error.
-        /// </summary>
-        public new ValueLattice<TOut>? Lattice => (ValueLattice<TOut>?)base.Lattice;
 
         /// <summary>
         /// The function's value at the keys: matched in a body (<c>d.Is(dom.Of(p))</c>), written in a head or a host

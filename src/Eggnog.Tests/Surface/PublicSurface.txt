@@ -119,19 +119,20 @@ static class Eggnog.Compute
 abstract class Eggnog.ConstructorHandle : TableHandle
     Boolean Extractable { get }
     UInt64 Cost { get }
-sealed class Eggnog.ConstructorN<TSort> : ConstructorHandle
+abstract class Eggnog.ConstructorHandle<TSort> : ConstructorHandle
+sealed class Eggnog.ConstructorN<TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of(params ReadOnlySpan<Object> keys)
 sealed class Eggnog.ConstructorTerm<TSort> : Term<TSort>
-    ConstructorHandle Head { get }
-sealed class Eggnog.Constructor<TSort> : ConstructorHandle
+    ConstructorHandle<TSort> Head { get }
+sealed class Eggnog.Constructor<TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of()
-sealed class Eggnog.Constructor<T1, TSort> : ConstructorHandle
+sealed class Eggnog.Constructor<T1, TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of(Term<T1> a)
-sealed class Eggnog.Constructor<T1, T2, TSort> : ConstructorHandle
+sealed class Eggnog.Constructor<T1, T2, TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b)
-sealed class Eggnog.Constructor<T1, T2, T3, TSort> : ConstructorHandle
+sealed class Eggnog.Constructor<T1, T2, T3, TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c)
-sealed class Eggnog.Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle
+sealed class Eggnog.Constructor<T1, T2, T3, T4, TSort> : ConstructorHandle<TSort>
     ConstructorTerm<TSort> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
 sealed class Eggnog.CostModel
     CostModel Unextractable(ConstructorHandle head)
@@ -250,12 +251,15 @@ sealed class Eggnog.FactConflictException : InvalidOperationException
     ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
 sealed class Eggnog.FullRuleCallbackContext : RuleCallbackContext, ITableReader, ITableWriter, ITables
     Boolean Contains(RelationHandle relation, params ReadOnlySpan<Object> keys)
-    Boolean TryLookup<T>(TableHandle table, ReadOnlySpan<Object> keys, out T value)
+    Boolean TryLookup<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<Object> keys, out TOut value)
+    Boolean TryLookup<TSort : struct, ISort<TSort>>(ConstructorHandle<TSort> constructor, ReadOnlySpan<Object> keys, out TSort value)
     Int64 TableSize(TableHandle table)
 delegate Eggnog.FuncN<TResult>
     TResult Invoke(ReadOnlySpan<Object> arguments)
 abstract class Eggnog.FunctionHandle : TableHandle
     ValueLattice Lattice { get }
+abstract class Eggnog.FunctionHandle<TOut> : FunctionHandle
+    ValueLattice<TOut> Lattice { get }
 static class Eggnog.FunctionMerge
     static FunctionMerge<T> Expression<T>(Func<Term<T>, Term<T>, Term<T>> merge)
     static FunctionMerge<T> New<T>()
@@ -264,30 +268,24 @@ static class Eggnog.FunctionMerge
 struct Eggnog.FunctionMerge<T>
     String Name { get }
     override String ToString()
-sealed class Eggnog.FunctionN<TOut> : FunctionHandle
+sealed class Eggnog.FunctionN<TOut> : FunctionHandle<TOut>
     FunctionN<TOut> In(ScopeTag scope)
     Term<TOut> Of(params ReadOnlySpan<Object> keys)
-    ValueLattice<TOut> Lattice { get }
-sealed class Eggnog.Function<TOut> : FunctionHandle
+sealed class Eggnog.Function<TOut> : FunctionHandle<TOut>
     Function<TOut> In(ScopeTag scope)
     Term<TOut> Of()
-    ValueLattice<TOut> Lattice { get }
-sealed class Eggnog.Function<T1, TOut> : FunctionHandle
+sealed class Eggnog.Function<T1, TOut> : FunctionHandle<TOut>
     Function<T1, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a)
-    ValueLattice<TOut> Lattice { get }
-sealed class Eggnog.Function<T1, T2, TOut> : FunctionHandle
+sealed class Eggnog.Function<T1, T2, TOut> : FunctionHandle<TOut>
     Function<T1, T2, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b)
-    ValueLattice<TOut> Lattice { get }
-sealed class Eggnog.Function<T1, T2, T3, TOut> : FunctionHandle
+sealed class Eggnog.Function<T1, T2, T3, TOut> : FunctionHandle<TOut>
     Function<T1, T2, T3, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c)
-    ValueLattice<TOut> Lattice { get }
-sealed class Eggnog.Function<T1, T2, T3, T4, TOut> : FunctionHandle
+sealed class Eggnog.Function<T1, T2, T3, T4, TOut> : FunctionHandle<TOut>
     Function<T1, T2, T3, T4, TOut> In(ScopeTag scope)
     Term<TOut> Of(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d)
-    ValueLattice<TOut> Lattice { get }
 struct Eggnog.GraphUsage : IEquatable<GraphUsage>
     Boolean Equals(GraphUsage other)
     Double FractionUsed { get }
@@ -312,13 +310,14 @@ interface Eggnog.ISort<TSort>
     static abstract TSort FromId(ClassId id)
 interface Eggnog.ITableReader
     abstract Boolean Contains(RelationHandle relation, params ReadOnlySpan<Object> keys)
-    abstract Boolean TryLookup<T>(TableHandle table, ReadOnlySpan<Object> keys, out T value)
+    abstract Boolean TryLookup<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<Object> keys, out TOut value)
+    abstract Boolean TryLookup<TSort : struct, ISort<TSort>>(ConstructorHandle<TSort> constructor, ReadOnlySpan<Object> keys, out TSort value)
     abstract Int64 TableSize(TableHandle table)
 interface Eggnog.ITableWriter
-    abstract TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params ReadOnlySpan<Object> keys)
+    abstract TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle<TSort> constructor, params ReadOnlySpan<Object> keys)
     abstract Void Insert(RelationHandle relation, params ReadOnlySpan<Object> keys)
     abstract Void Remove(TableHandle table, params ReadOnlySpan<Object> keys)
-    abstract Void Set(FunctionHandle function, ReadOnlySpan<Object> keys, Object value)
+    abstract Void Set<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<Object> keys, TOut value)
     abstract Void Subsume(TableHandle table, params ReadOnlySpan<Object> keys)
     abstract Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 interface Eggnog.ITables : ITableReader, ITableWriter
@@ -544,16 +543,21 @@ static class Eggnog.Primitives
     static PrimitiveN<TResult> UnstableApp<T1, T2, TResult>()
     static PrimitiveN<TResult> UnstableApp<T1, TResult>()
     static PrimitiveN<TResult> UnstableApp<TResult>()
+    static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult>(FunctionHandle<TResult> target)
     static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult>(Primitive target)
-    static PrimitiveN<UnstableFn<T1, T2, T3, T4, TResult>> UnstableFn<T1, T2, T3, T4, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target)
+    static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult>(FunctionHandle<TResult> target)
     static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult>(Primitive target)
-    static PrimitiveN<UnstableFn<T1, T2, T3, TResult>> UnstableFn<T1, T2, T3, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target)
+    static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult>(FunctionHandle<TResult> target)
     static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult>(Primitive target)
-    static PrimitiveN<UnstableFn<T1, T2, TResult>> UnstableFn<T1, T2, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target)
+    static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(FunctionHandle<TResult> target)
     static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(Primitive target)
-    static PrimitiveN<UnstableFn<T1, TResult>> UnstableFn<T1, TResult>(TableHandle target)
+    static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target)
+    static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(FunctionHandle<TResult> target)
     static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(Primitive target)
-    static PrimitiveN<UnstableFn<TResult>> UnstableFn<TResult>(TableHandle target)
     static PrimitiveN<ValueTuple> UnstableMultiSetClearIndex<T>()
     static PrimitiveN<ValueTuple> UnstableMultiSetFillIndex<T>()
     static PrimitiveN<Vec<T>> VecEmpty<T>()
@@ -635,10 +639,10 @@ sealed class Eggnog.RuleBuilder
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
 class Eggnog.RuleCallbackContext : ITableWriter
     T Get<T>(Var<T> variable)
-    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle constructor, params ReadOnlySpan<Object> keys)
+    TSort Make<TSort : struct, ISort<TSort>>(ConstructorHandle<TSort> constructor, params ReadOnlySpan<Object> keys)
     Void Insert(RelationHandle relation, params ReadOnlySpan<Object> keys)
     Void Remove(TableHandle table, params ReadOnlySpan<Object> keys)
-    Void Set(FunctionHandle function, ReadOnlySpan<Object> keys, Object value)
+    Void Set<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<Object> keys, TOut value)
     Void Subsume(TableHandle table, params ReadOnlySpan<Object> keys)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.RuleDefinitionException : Exception
@@ -925,16 +929,21 @@ abstract class Eggnog.Term<T> : Term
     Type ClrType { get }
     static Term<T> op_Implicit(T value)
 static class Eggnog.UnstableFn
+    static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult>(FunctionHandle<TResult> target, params ReadOnlySpan<Object> arguments)
     static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
-    static UnstableFn<T1, T2, T3, T4, TResult> Of<T1, T2, T3, T4, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult>(FunctionHandle<TResult> target, params ReadOnlySpan<Object> arguments)
     static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
-    static UnstableFn<T1, T2, T3, TResult> Of<T1, T2, T3, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult>(FunctionHandle<TResult> target, params ReadOnlySpan<Object> arguments)
     static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
-    static UnstableFn<T1, T2, TResult> Of<T1, T2, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, TResult> Of<T1, TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<T1, TResult> Of<T1, TResult>(FunctionHandle<TResult> target, params ReadOnlySpan<Object> arguments)
     static UnstableFn<T1, TResult> Of<T1, TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
-    static UnstableFn<T1, TResult> Of<T1, TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<TResult> Of<TResult : struct, ISort<TResult>>(ConstructorHandle<TResult> target, params ReadOnlySpan<Object> arguments)
+    static UnstableFn<TResult> Of<TResult>(FunctionHandle<TResult> target, params ReadOnlySpan<Object> arguments)
     static UnstableFn<TResult> Of<TResult>(Primitive target, params ReadOnlySpan<Object> arguments)
-    static UnstableFn<TResult> Of<TResult>(TableHandle target, params ReadOnlySpan<Object> arguments)
 struct Eggnog.UnstableFn<TResult> : IComparable<UnstableFn<TResult>>, IEquatable<UnstableFn<TResult>>
     Boolean Equals(UnstableFn<TResult> other)
     IReadOnlyList<Object> Arguments { get }
