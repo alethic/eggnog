@@ -243,7 +243,7 @@ namespace Eggnog.Tests.Terms
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), pick.Of(k).Is(Primitives.OrderingMin<Node>().Of(t.A.Of(), t.B.Of())));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), pick.Of(k).Is(Primitives.OrderingMin<Node>().Of(t.A.Of(), t.B.Of())));
             }));
 
             Assert.Contains("compute over values", e.Message, StringComparison.Ordinal);

@@ -1702,7 +1702,7 @@ namespace Eggnog.Tests.Values
                 }
 
                 Assert.False(child.IsFaulted);
-                Assert.True(child.Check(Primitives.Count<Node>().Of(s.Of()).Is(1L)));
+                Assert.True(child.Check(Primitives.SetLength<Node>().Of(s.Of()).Is(1L)));
                 Assert.True(child.Check(Primitives.MapLength<Node, long>().Of(m.Of()).Is(1L)));
                 Assert.True(child.Check(Primitives.MapGet<Node, long>().Of(m.Of(), a.Of()).Is(20L)));
                 Assert.True(child.Check(Primitives.MultiSetCount<Node>().Of(ms.Of(), a.Of()).Is(3L)));
@@ -1720,7 +1720,7 @@ namespace Eggnog.Tests.Values
                 child.Engine.Context.CheckInvariants();
             }
 
-            Assert.True(root.Check(Primitives.Count<Node>().Of(s.Of()).Is(2L)));
+            Assert.True(root.Check(Primitives.SetLength<Node>().Of(s.Of()).Is(2L)));
             Assert.False(root.TryGet(vc.Of(), out _));
             Assert.Equal(vectors, graph.Engine.ContainerValues.GetEnvironment<Relations.VecContainer>().Count);
             Assert.False(root.Check(va.Of().Is(vb.Of())));
@@ -2411,7 +2411,7 @@ namespace Eggnog.Tests.Values
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), h.Of(k).Is(constant));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), h.Of(k).Is(constant));
             });
 
             Define("pick", Vec.Of(one));
@@ -2451,7 +2451,7 @@ namespace Eggnog.Tests.Values
                     var (k, d) = s.Vars<string, Set<long>>("k", "d");
                     s.When(d.Is(choice.Of(k)));
                     var v = s.Cases("v", d);
-                    s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), function.Of(k).Is(constant));
+                    s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), function.Of(k).Is(constant));
                 });
 
             Define("pick", hf, UnstableFn.Of<Node, Node>(add, one));
@@ -2500,9 +2500,9 @@ namespace Eggnog.Tests.Values
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             var make = graph.DefineRuleset("make");
             make.DefineRule("make", r =>
@@ -2557,7 +2557,7 @@ namespace Eggnog.Tests.Values
             merge.DefineRule("u", r =>
             {
                 r.When(go.Of());
-                r.Then(a.Of().Is(b.Of()), Fact.Exists(lit.Of(Primitives.Divide.Of(10L, 0L))));
+                r.Then(a.Of().Is(b.Of()), Fact.Exists(lit.Of(Int64Primitives.Divide.Of(10L, 0L))));
             });
             var follow = graph.DefineRuleset("follow");
             follow.DefineRule("follow", r =>
@@ -2770,13 +2770,13 @@ namespace Eggnog.Tests.Values
             merge.DefineRule("u", r =>
             {
                 r.When(go.Of());
-                r.Then(a.Of().Is(b.Of()), Fact.Exists(lit.Of(Primitives.Divide.Of(10L, 0L))));
+                r.Then(a.Of().Is(b.Of()), Fact.Exists(lit.Of(Int64Primitives.Divide.Of(10L, 0L))));
             });
             var fail = graph.DefineRuleset("fail");
             fail.DefineRule("fail", r =>
             {
                 r.When(stop.Of());
-                r.Then(Fact.Exists(lit.Of(Primitives.Divide.Of(20L, 0L))));
+                r.Then(Fact.Exists(lit.Of(Int64Primitives.Divide.Of(20L, 0L))));
             });
             var va = Primitives.VecOf<Node>().Of(a.Of());
             var vb = Primitives.VecOf<Node>().Of(b.Of());
@@ -2865,7 +2865,7 @@ namespace Eggnog.Tests.Values
                 Assert.False(child.IsFaulted);
                 Assert.True(child.AreEqual(one, child.Make(num.Of(4L))));
                 Assert.Equal(2L, child.Get(h.Of(f.Of())));
-                Assert.True(child.Check(Primitives.Count<Node>().Of(s.Of()).Is(1L)));
+                Assert.True(child.Check(Primitives.SetLength<Node>().Of(s.Of()).Is(1L)));
                 Assert.True(child.Check(f.Of().Is(v3.Of())));
                 Assert.Equal(1, child.CountRows(l));
                 Assert.Equal(1, child.CountRows(h));

@@ -143,10 +143,10 @@ namespace Eggnog
                     split.When(guard.Of(k));
 
                 split.When(d.Is(domain.Of(k)));
-                split.Where(Primitives.Greater.Of(Primitives.Count<TElement>().Of(d), 1L));
+                split.Where(Int64Primitives.Greater.Of(Primitives.SetLength<TElement>().Of(d), 1L));
                 var v = split.Cases("v", d);
                 split.Key(k);
-                split.Assume(domain.Of(k).Is(Primitives.Singleton<TElement>().Of(v)));
+                split.Assume(domain.Of(k).Is(Primitives.SetOf<TElement>().Of(v)));
             }, caseTag);
         }
 

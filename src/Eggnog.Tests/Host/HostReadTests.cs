@@ -68,11 +68,11 @@ namespace Eggnog.Tests.Host
             Assert.False(t.Root.Check(Fact.Exists(t.Wrap.Of(t.B.Of()))));
             // egglog's (check (+ 1 2)), (check (+ "a" "b")) and (check (vec-push (vec-of 1) 2)) hold: a call with a result,
             // interned or not.
-            Assert.True(t.Root.Check(Fact.Exists(Primitives.Add.Of(1L, 2L))));
+            Assert.True(t.Root.Check(Fact.Exists(Int64Primitives.Add.Of(1L, 2L))));
             Assert.True(t.Root.Check(Fact.Exists(StringPrimitives.Concat.Of("a", "b"))));
             t.Graph.Values.RegisterVec<long>();
             Assert.True(t.Root.Check(Fact.Exists(Primitives.VecPush<long>().Of(Primitives.VecOf<long>().Of(1L), 2L))));
-            Assert.True(t.Root.Check(Fact.Exists(Primitives.Multiply.Of(4000000000L, 4000000L))));
+            Assert.True(t.Root.Check(Fact.Exists(Int64Primitives.Multiply.Of(4000000000L, 4000000L))));
             Assert.False(t.Root.Check(Fact.Exists(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L), 5L))));
         }
 
@@ -163,7 +163,7 @@ namespace Eggnog.Tests.Host
             Assert.Equal(-7.25, graph.Root.Get(DoublePrimitives.Negate.Of(7.25)));
             Assert.True(graph.Root.Check(((Term<int>)(-5)).Is(-5)));
             Assert.Equal(-5, graph.Root.Get((Term<int>)(-5)));
-            Assert.True(graph.Root.Check(Primitives.Singleton<string>().Of("q").Is(Set.Of("q"))));
+            Assert.True(graph.Root.Check(Primitives.SetOf<string>().Of("q").Is(Set.Of("q"))));
             Assert.True(graph.Root.Check(Fact.In(graph.RootTag, StringPrimitives.Concat.Of("x", "y").Is("xy"))));
 
             Assert.Equal(before, graph.Values.InternedCount);
@@ -218,7 +218,7 @@ namespace Eggnog.Tests.Host
             {
                 var n = r.Var<long>("n");
                 r.When(n.Is(count.Of("c")));
-                r.Then(count.Of("c").Is(Primitives.Add.Of(n, 1L)));
+                r.Then(count.Of("c").Is(Int64Primitives.Add.Of(n, 1L)));
             });
             graph.Root.Assume(count.Of("c").Is(0L));
 
@@ -259,8 +259,8 @@ namespace Eggnog.Tests.Host
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
-            Assert.Throws<InvalidOperationException>(() => t.Root.Get(f.Of(Primitives.Add.Of(1L, 2L))));
-            Assert.Equal(3L, t.Root.Get(Primitives.Add.Of(1L, 2L)));
+            Assert.Throws<InvalidOperationException>(() => t.Root.Get(f.Of(Int64Primitives.Add.Of(1L, 2L))));
+            Assert.Equal(3L, t.Root.Get(Int64Primitives.Add.Of(1L, 2L)));
             var other = new NodeTheory();
             Assert.Throws<ArgumentException>(() => t.Root.Check(other.Num.Of(1L)));
         }

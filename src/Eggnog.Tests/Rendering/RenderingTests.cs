@@ -35,7 +35,7 @@ namespace Eggnog.Tests.Rendering
                 var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(present.In(schema).Of(p), d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
-                s.Assume(dom.Of(p).Is(Primitives.Singleton<string>().Of(v)), present.Of(p));
+                s.Assume(dom.Of(p).Is(Primitives.SetOf<string>().Of(v)), present.Of(p));
             }, cases);
 
             Assert.Equal("(split ((present @schema p) (= d (dom p))) (cases v d) (key p) ((set (dom p) (set-of v)) (present p)) :case-tag case)", split.ToString());
@@ -62,14 +62,14 @@ namespace Eggnog.Tests.Rendering
             {
                 var (k, p, v, d) = r.Vars<Ctx, string, string, Set<string>>("c", "p", "v", "d");
                 r.When(c.Ne.Of(k, p, v), d.Is(c.Dom.Of(k, p)));
-                r.Where(Primitives.Contains<string>().Of(d, v));
-                r.Then(c.Dom.Of(k, p).Is(Primitives.Remove<string>().Of(d, v)));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(c.Dom.Of(k, p).Is(Primitives.SetRemove<string>().Of(d, v)));
             });
             Assert.Equal(
                 "(rule ((ne c p v) (= d (dom c p)) (set-contains d v)) ((set (dom c p) (set-remove d v))) :ruleset lattice)",
                 rule.ToString());
-            Assert.Equal("(set-length (set-diff d s))", Primitives.Count<string>().Of(Primitives.Except<string>().Of(Var<Set<string>>("d"), Var<Set<string>>("s"))).ToString());
-            Assert.Equal("(+ n 1)", Primitives.Add.Of(Var<long>("n"), 1L).ToString());
+            Assert.Equal("(set-length (set-diff d s))", Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(Var<Set<string>>("d"), Var<Set<string>>("s"))).ToString());
+            Assert.Equal("(+ n 1)", Int64Primitives.Add.Of(Var<long>("n"), 1L).ToString());
         }
 
         [Fact]

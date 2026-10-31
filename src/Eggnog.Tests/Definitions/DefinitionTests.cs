@@ -288,7 +288,7 @@ namespace Eggnog.Tests.Definitions
                     started.Set();
                     return Volatile.Read(ref keepGoing) == 1;
                 });
-                r.Then(tick.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(tick.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             graph.Root.Assume(tick.Of(0L));
 

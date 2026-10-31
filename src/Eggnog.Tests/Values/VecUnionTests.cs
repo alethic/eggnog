@@ -299,9 +299,9 @@ namespace Eggnog.Tests.Values
                 {
                     var (k, d) = s.Vars<string, Set<long>>("k", "d");
                     s.When(d.Is(choice.Of(k)));
-                    s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                    s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                     var v = s.Cases("v", d);
-                    s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                    s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
                 });
                 var unions = t.Graph.DefineRuleset("unions");
                 unions.DefineRule("union", r =>

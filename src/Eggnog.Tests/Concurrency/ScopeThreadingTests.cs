@@ -339,7 +339,7 @@ namespace Eggnog.Tests.Concurrency
                     release.Wait(Patience);
                     return true;
                 });
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var noRules = t.Graph.DefineRuleset("none");
             var nums = t.Graph.DefineQuery("nums", q => q.When(t.Num.Of(q.Var<long>("x"))));

@@ -139,7 +139,7 @@ namespace Eggnog
 
         /// <summary>
         /// Gets the function. For a partial primitive (<see cref="Primitive.IsPartial"/>) it throws where there is no
-        /// result, and for one over the graph's cells, such as <see cref="Primitives.Get{T}"/>, or one that writes the
+        /// result, and for one over the graph's cells, such as <see cref="Primitives.SetGet{T}"/>, or one that writes the
         /// graph, it always throws <see cref="InvalidOperationException"/>.
         /// </summary>
         public Func<T1, T2, TResult> Function { get; }
@@ -181,7 +181,7 @@ namespace Eggnog
         /// <param name="result">The result, when there is one.</param>
         /// <returns>Whether there is a result.</returns>
         /// <exception cref="InvalidOperationException">The primitive writes the graph, or reads its cells, as
-        /// <see cref="Primitives.Get{T}"/> does (<see cref="Function"/>).</exception>
+        /// <see cref="Primitives.SetGet{T}"/> does (<see cref="Function"/>).</exception>
         public bool TryInvoke(T1 a, T2 b, [MaybeNullWhen(false)] out TResult result)
         {
             if (write is not null)

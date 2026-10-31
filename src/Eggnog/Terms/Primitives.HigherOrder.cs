@@ -93,8 +93,8 @@ namespace Eggnog
             => FnMultiSetPrimitiveCache<T>.ClearIndex;
 
         /// <summary>
-        /// egglog's fallible form of a filter primitive: <c>&lt;</c> of <see cref="Less"/> (<c>bool-&lt;</c>),
-        /// <c>set-contains</c> of <see cref="Contains{T}"/>, <c>!=</c> of <see cref="NotEqual{T}"/>, and so on, which
+        /// egglog's fallible form of a filter primitive: <c>&lt;</c> of <see cref="Int64Primitives.Less"/> (<c>bool-&lt;</c>),
+        /// <c>set-contains</c> of <see cref="SetContains{T}"/>, <c>!=</c> of <see cref="NotEqual{T}"/>, and so on, which
         /// <see cref="RuleBuilder.Where(Term{bool})"/> renders. A partial primitive of <c>Unit</c>, named as egglog names
         /// it, with a result where the filter holds and none where it does not: a target for a function value into
         /// <c>Unit</c>, such as egglog's <c>(unstable-fn "&lt;" 1)</c>.

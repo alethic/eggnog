@@ -132,7 +132,7 @@ namespace Eggnog.Tests.Cases
                 var (p, d) = s.Vars<string, Set<string>>("p", "d");
                 s.When(d.Is(c.Dom.Of(p)));
                 var v = s.Cases("v", d);
-                s.Assume(c.Dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(c.Dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
             // dom(empty) = {} with no presence: no contradiction, and nothing to split.
@@ -184,10 +184,10 @@ namespace Eggnog.Tests.Cases
                 {
                     var (k, d) = s.Vars<string, Set<string>>("k", "d");
                     s.When(c.Discriminator.Of(k), c.Present.Of(k), d.Is(c.Dom.Of(k)));
-                    s.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
+                    s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L));
                     var v = s.Cases("v", d);
                     s.Key(k);
-                    s.Assume(c.Dom.Of(k).Is(Primitives.Singleton<string>().Of(v)));
+                    s.Assume(c.Dom.Of(k).Is(Primitives.SetOf<string>().Of(v)));
                 }, c.Case);
 
                 var report = scope.Run(Schedule.Saturate(Settle(c), Schedule.Split(rule, Settle(c))));
@@ -553,10 +553,10 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<string>>("k", "d");
                 s.When(present.In(schema).Of(k), d.Is(dom.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L));
                 var v = s.Cases("v", d);
                 s.Key(k);
-                s.Assume(dom.Of(k).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(dom.Of(k).Is(Primitives.SetOf<string>().Of(v)));
             });
             Assert.Equal(new[] { schema }, written.ReadScopes);
 
@@ -575,7 +575,7 @@ namespace Eggnog.Tests.Cases
                 s.When(t.Fact.In(t.Outer).Of(p), d.Is(dom.Of(p)));
                 var v = s.Cases("v", d);
                 s.Key(p);
-                s.Assume(dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
         /// <summary>
@@ -693,7 +693,7 @@ namespace Eggnog.Tests.Cases
                 s.Where(p, _ => throw new InvalidOperationException("in a matcher"));
                 var v = s.Cases("v", d);
                 s.Key(p);
-                s.Assume(c.Dom.Of(p).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(c.Dom.Of(p).Is(Primitives.SetOf<string>().Of(v)));
             });
 
             var failure = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(failing, c.Horn)));
@@ -879,7 +879,7 @@ namespace Eggnog.Tests.Cases
                 s.When(t.Tag.Of(n), d.Is(labels.Of(n)));
                 var v = s.Cases("v", d);
                 s.Key(n);
-                s.Assume(labels.Of(n).Is(Primitives.Singleton<string>().Of(v)));
+                s.Assume(labels.Of(n).Is(Primitives.SetOf<string>().Of(v)));
             });
             foreach (var label in new[] { "x", "y" })
             {
@@ -1537,14 +1537,14 @@ namespace Eggnog.Tests.Cases
                 var n = r.Var<long>("n");
                 r.When(dom.Of("k").Is(Set.Of("a")), n.Is(counter.Of("c")));
                 r.Where(n, n => n < 2);
-                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+                r.Then(counter.Of("c").Is(Int64Primitives.Add.Of(n, 1L)));
             });
             rules.DefineRule("count in b", r =>
             {
                 var n = r.Var<long>("n");
                 r.When(dom.Of("k").Is(Set.Of("b")), n.Is(counter.Of("c")));
                 r.Where(n, n => limitInB is null || n < limitInB);
-                r.Then(counter.Of("c").Is(Primitives.Add.Of(n, 1L)));
+                r.Then(counter.Of("c").Is(Int64Primitives.Add.Of(n, 1L)));
             });
             rules.DefineRule("facts in a", r => { r.When(dom.Of("k").Is(Set.Of("a"))); r.Then(fact.Of("x"), fact.Of("a only")); });
             rules.DefineRule("fact in b", r => { r.When(dom.Of("k").Is(Set.Of("b"))); r.Then(fact.Of("x")); });
@@ -1803,9 +1803,9 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(original(one, two)), h.Of(k).Is(same(one)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), g.Of(k).Is(original(one, two)), h.Of(k).Is(same(one)));
             });
 
             if (where == "frozen root")
@@ -1914,9 +1914,9 @@ namespace Eggnog.Tests.Cases
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)), g.Of(k).Is(map));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), g.Of(k).Is(map));
             });
 
             if (unionFirst == false)

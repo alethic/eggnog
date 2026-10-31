@@ -185,12 +185,12 @@ A column holds either a class or a value.
   `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would
   intern in its own order, gives no result where the order decides. Its counts are `long`s, as egglog's are `usize`s.
   Containers compare element by element, so they can be the elements of sets and multisets and the keys of maps.
-- **`Set<T>`** is egglog's `Set` container, in the same way (`ValueStore.RegisterSet`, with `Primitives.SetOf`,
-  `Singleton`, `Union`, `Intersect`, `Except`, `Insert`, `Remove`, `Contains`, `NotContains`, `Count` and `Get`, egglog's
-  `set-*` primitives, and the additions `IsSubsetOf` and `IsEmpty`). The graph registers `Set<long>`, `Set<int>` and
-  `Set<string>` itself. It keeps its elements in element order, and its container keeps them in cell order, the order
-  of its term, `(set-of a b)`, and of `Get`, which reads that order as egglog's `set-get` does: a read over elements no
-  write interned gives no result where the order decides, as `MultiSetPick`'s.
+- **`Set<T>`** is egglog's `Set` container, in the same way (`ValueStore.RegisterSet`, with `Primitives.SetEmpty`,
+  `SetOf`, `SetUnion`, `SetIntersect`, `SetDifference`, `SetInsert`, `SetRemove`, `SetContains`, `SetNotContains`,
+  `SetLength` and `SetGet`, egglog's `set-*` primitives, and the additions `SetIsSubset` and `SetIsEmpty`). The graph
+  registers `Set<long>`, `Set<int>` and `Set<string>` itself. It keeps its elements in element order, and its container
+  keeps them in cell order, the order of its term, `(set-of a b)`, and of `SetGet`, which reads that order as egglog's
+  `set-get` does: a read over elements no write interned gives no result where the order decides, as `MultiSetPick`'s.
 - **`UnstableFn<T1, …, TResult>`**, of up to four inputs, is egglog's `UnstableFn` sort (`ValueStore.RegisterFn`, named
   `UnstableFn<(i64, i64), i64>` and so on): a function value, a constructor, a function or a primitive with its leading
   arguments partially applied.
@@ -272,7 +272,7 @@ scope:
 | Operation | What it interns |
 |---|---|
 | A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, `BigRat`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in egglog's order, and then each new result of a computation it writes |
-| A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
+| A rule's primitive, in its body or head, during a run | each new result, such as a set that `SetUnion` or `SetIntersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
 | A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
@@ -406,14 +406,16 @@ a user's `$contradiction` alike, and, since the C# API takes any non-empty name,
 ### 2.4 Terms and facts
 
 `Term<T>` is an expression of type `T`: a constant (any `T` converts implicitly), a variable (`Var<T>`), a table
-application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
+application (`f.Of(a, b)` for a function or constructor), a primitive application (`Int64Primitives.Add.Of(x, y)`, or a
 user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
 take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
 call: `PrimitiveN<TResult>`; or, as egglog's primitives over the database, made with `Primitive.CreateRead`,
 `CreateWrite` or `CreateFull`, its function also taking the tables to read, write or both, valid only during the call:
 `ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
-value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
+value type: `Int64Primitives` (`i64`), `DoublePrimitives` (`f64`), `BigIntegerPrimitives` (`BigInt`),
+`BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`); `Primitives` holds
+the container primitives, each named with its container's prefix as egglog's are (`SetUnion` for `set-union`,
+`VecPush` for `vec-push`), and those over every sort. A
 comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`
 for `i64` and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
 `Primitive.CreateVariadic`). Each call site has one of egglog's capability contexts (decisions row 12), and a primitive

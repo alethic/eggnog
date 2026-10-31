@@ -228,7 +228,7 @@ namespace Eggnog.Tests.Values
                 Assert.True(scope.AreEqual(scope.Get(Primitives.MultiSetPick<Node>().Of(t.Bag.Of())), copy ? t.Two : t.One));
                 Assert.True(scope.AreEqual(scope.Get(Primitives.MultiSetPickMax<Node>().Of(t.Bag.Of())), copy ? t.Three : t.One));
                 Assert.Equal(copy ? 3L : 1L, scope.Get(Primitives.MultiSetCount<Node>().Of(t.Bag.Of(), t.Num.Of(3L))));
-                Assert.True(scope.AreEqual(scope.Get(Primitives.Get<Node>().Of(t.Set.Of(), 0L)), copy ? t.Two : t.One));
+                Assert.True(scope.AreEqual(scope.Get(Primitives.SetGet<Node>().Of(t.Set.Of(), 0L)), copy ? t.Two : t.One));
                 Assert.Equal(copy, scope.Check(Primitives.MapContains<Node, long>().Of(t.Dict.Of(), t.Num.Of(2L)).Is(true)));
                 Assert.Equal(copy ? 7L : 5L, scope.Get(Primitives.UnstableApp<long, long>().Of(t.Fn.Of(), 1L)));
                 Assert.True(scope.Check(Primitives.UnstableMultiSetFilter<Node>().Of(Primitives.UnstableFn<Node, ValueTuple>(t.IsEven).Of(), t.Bag.Of())

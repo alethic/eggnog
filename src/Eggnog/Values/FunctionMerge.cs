@@ -43,7 +43,7 @@ namespace Eggnog
 
         /// <summary>
         /// egglog's <c>:merge</c> of any expression over <c>old</c> and <c>new</c>: <paramref name="merge"/> builds it
-        /// once from the two values, out of primitives (<c>Primitives.Max.Of(old, new)</c>), constants, and
+        /// once from the two values, out of primitives (<c>Int64Primitives.Max.Of(old, new)</c>), constants, and
         /// applications of functions and constructors (<c>join.Of(old, new)</c>), which the merge looks up or makes as
         /// egglog's does. The merge is checked and lowered when its function is defined, and named by its rendering,
         /// such as <c>(Join old new)</c>. A merge over classes may make terms, and may hold a class of the root,
