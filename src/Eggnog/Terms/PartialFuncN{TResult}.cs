@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace Eggnog
 {
@@ -7,7 +6,7 @@ namespace Eggnog
     /// <summary>
     /// A partial function of any number of arguments, the shape of egglog's <c>-?&gt;</c> primitives: it returns
     /// <c>false</c> when it has no result for its arguments.
-    /// <see cref="Primitive.CreatePartial{TResult}(string, IReadOnlyList{Type}, PartialFuncN{TResult})"/> makes a
+    /// <see cref="Primitive.CreatePartial{TResult}(string, ReadOnlySpan{Type}, PartialFuncN{TResult})"/> makes a
     /// primitive of it. Its <c>out</c> parameter carries no nullability attribute, as <see cref="PartialFunc{T1, TResult}"/>.
     /// </summary>
     /// <typeparam name="TResult">The result type.</typeparam>

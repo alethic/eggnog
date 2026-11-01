@@ -185,23 +185,30 @@ A column holds either a class or a value.
   `MultiSetPickMax` read that order, as egglog's do: a read over elements no write interned, which egglog's `check` would
   intern in its own order, gives no result where the order decides. Its counts are `long`s, as egglog's are `usize`s.
   Containers compare element by element, so they can be the elements of sets and multisets and the keys of maps.
-- **`Set<T>`** is egglog's `Set` container, in the same way (`ValueStore.RegisterSet`, with `Primitives.SetOf`,
-  `Singleton`, `Union`, `Intersect`, `Except`, `Insert`, `Remove`, `Contains`, `NotContains`, `Count` and `Get`, egglog's
-  `set-*` primitives, and the additions `IsSubsetOf` and `IsEmpty`). The graph registers `Set<long>`, `Set<int>` and
-  `Set<string>` itself. It keeps its elements in element order, and its container keeps them in cell order, the order
-  of its term, `(set-of a b)`, and of `Get`, which reads that order as egglog's `set-get` does: a read over elements no
-  write interned gives no result where the order decides, as `MultiSetPick`'s.
+- **`Set<T>`** is egglog's `Set` container, in the same way (`ValueStore.RegisterSet`, with `Primitives.SetEmpty`,
+  `SetOf`, `SetUnion`, `SetIntersect`, `SetDifference`, `SetInsert`, `SetRemove`, `SetContains`, `SetNotContains`,
+  `SetLength` and `SetGet`, egglog's `set-*` primitives, and the additions `SetIsSubset` and `SetIsEmpty`). The graph
+  registers `Set<long>`, `Set<int>` and `Set<string>` itself. It keeps its elements in element order, and its container
+  keeps them in cell order, the order of its term, `(set-of a b)`, and of `SetGet`, which reads that order as egglog's
+  `set-get` does: a read over elements no write interned gives no result where the order decides, as `MultiSetPick`'s.
+- **Container values** are made on the host with `Set.Of`, `Vec.Of`, `MultiSet.Of` and `Map.Of`, which copy a span,
+  or with `From` over a sequence. The first three take one span, not `params` (`Set.Of(["red", "amber"])`), and build
+  collection expressions too (`Set<long> s = [1, 2, 3];`): a `params` span would make `Set.Of(array)` the set of one
+  array under C# 13 and the set of its elements from C# 14, while one span takes an array as its elements or refuses it
+  in every language version. `Map.Of` takes its entries as `params`, which an array of tuples cannot misbind.
 - **`UnstableFn<T1, …, TResult>`**, of up to four inputs, is egglog's `UnstableFn` sort (`ValueStore.RegisterFn`, named
   `UnstableFn<(i64, i64), i64>` and so on): a function value, a constructor, a function or a primitive with its leading
   arguments partially applied.
   - `Primitives.UnstableFn<…>(target)` is egglog's `unstable-fn`: a pure primitive of the partial arguments, rendered
-    `(unstable-fn "name" args)`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`,
-    `Name` and `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive
-    is a target at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
+    `(unstable-fn "name" args)`; the target is a `FunctionHandle<TResult>`, a `ConstructorHandle<TResult>` or a
+    `Primitive`. A host makes a value with `UnstableFn.Of<…>(target, args)` and reads its `Target`, `Name` and
+    `Arguments`. egglog has no literal for one, so a rule makes it with `unstable-fn`. A variadic primitive is a target
+    at an arity, `VecOf<long>().WithArity(2)`, which egglog infers from the partial arguments and the sort.
   - A write primitive such as `vec-union` runs through a function value where it runs when it is called, a child
     included.
   - The target's parameters must end with the sort's inputs and its result be the sort's output, as egglog's type
-    checker requires. A relation is no target: egglog's relation outputs a sort of its own that no function sort names.
+    checker requires; a table's result is its handle's type, so a wrong one does not compile. A relation is no target:
+    egglog's relation outputs a sort of its own that no function sort names, and no overload takes one.
   - `Primitives.UnstableApp<…>()` is egglog's `unstable-app`. It applies the value to the inputs where the call site's
     context allows the target, as egglog's `FunctionContainer::apply` dispatches (decisions row 12): a constructor
     makes its term where the context writes, a function reads its row where the context reads, and a primitive runs
@@ -272,7 +279,7 @@ scope:
 | Operation | What it interns |
 |---|---|
 | A host write (`Make`, `Assume`, `Union`, `Write`) | each new constant that is not stored inline (strings, doubles, `BigInt`s, `BigRat`s, sets, containers, registered values, and `long`s outside `[0, 2^31)`), each fact's in egglog's order, and then each new result of a computation it writes |
-| A rule's primitive, in its body or head, during a run | each new result, such as a set that `Union` or `Intersect` computes |
+| A rule's primitive, in its body or head, during a run | each new result, such as a set that `SetUnion` or `SetIntersect` computes |
 | A lattice merge, in a run or in a child's catch-up | each new merged value |
 | A lift's case join | each new joined value, in the shared pool for the parent |
 | A split's case assumptions | each new value a case assumes, such as the singleton set of a domain split's case |
@@ -287,7 +294,9 @@ interned interns nothing, and one that names a new string interns the string and
 ### 2.3 Tables
 
 There are three kinds of table, each typed by up to four key columns, or of any number (`TableHandle` is the untyped
-base):
+base; `RelationHandle`, `FunctionHandle` and `ConstructorHandle` the bases by kind, and `FunctionHandle<TOut>` and
+`ConstructorHandle<TSort>` the bases that carry a function's output type and a constructor's sort, which the calls that
+read or write a table's value take, so that the type is inferred and a wrong one does not compile):
 
 | Kind | Defined by | Rows | In the engine |
 |---|---|---|---|
@@ -385,10 +394,14 @@ union below the root that would rewrite one of the function's rows fails the run
 or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying or held
 by the row, faults that child at its next call, and not the root.
 
-`TableOptions` sets a relation's or function's role (`Fact`, the default, or `Analysis`, a table derived from terms
-alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and analyses
-do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
-rows may be subsumed (`Subsumable`, section 2.5).
+Each kind of table has its own options, so that each offers only what applies to it. `RelationOptions` and
+`FunctionOptions` set the role (`Analysis`: a table derived from terms alone, rather than a fact, the default) and
+whether lifts copy the table into a case's parent (`Lift`; by default facts lift and analyses do not).
+`ConstructorOptions` sets whether lifts copy the constructor's terms (`Lift`, by default yes) and whether extraction
+skips its rows (`Unextractable`, egglog's `:unextractable`); a constructor's role is always `Term`, and its cost is not
+an option but a parameter of `DefineConstructor` (`cost`, by default 1). `RelationOptions` and `ConstructorOptions`
+also set whether the rows may be subsumed (`Subsumable`, section 2.5); `FunctionOptions` has no such setting, since
+no function can be.
 
 `EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
 derives it says the scope has no model. In a case it stops the case (section 2.9); elsewhere it is an ordinary fact,
@@ -406,20 +419,24 @@ a user's `$contradiction` alike, and, since the C# API takes any non-empty name,
 ### 2.4 Terms and facts
 
 `Term<T>` is an expression of type `T`: a constant (any `T` converts implicitly), a variable (`Var<T>`), a table
-application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
+application (`f.Of(a, b)` for a function or constructor), a primitive application (`Int64Primitives.Add.Of(x, y)`, or a
 user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
 take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
 call: `PrimitiveN<TResult>`; or, as egglog's primitives over the database, made with `Primitive.CreateRead`,
 `CreateWrite` or `CreateFull`, its function also taking the tables to read, write or both, valid only during the call:
-`ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
-value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
-comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`
-for `i64` and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
-`Primitive.CreateVariadic`). Each call site has one of egglog's capability contexts (decisions row 12), and a primitive
-whose access (`Primitive.Access`) it does not allow is refused there: a semi-naive rule's body neither reads nor writes,
-its head writes, a naive rule's body reads and its head does both, a merge writes, a host write does both, a host check
-and a query read. What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
+`ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The
+built-in primitives are egglog's, with egglog's names and results, one class per value type: `Int64Primitives` (`i64`),
+`DoublePrimitives` (`f64`), `BigIntegerPrimitives` (`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives`
+(`bool`) and `StringPrimitives` (`String`); `Primitives` holds the container primitives, each named with its container's
+prefix as egglog's are (`SetUnion` for `set-union`, `VecPush` for `vec-push`), and those over every sort. A comparison
+returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<` for `i64`
+and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as
+egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
+`Primitive.CreateVariadic`, whose `VariadicFunc` takes them as a span valid only during the call). Each call site has
+one of egglog's capability contexts (decisions row 12), and a primitive whose access (`Primitive.Access`) it does not
+allow is refused there: a semi-naive rule's body neither reads nor writes, its head writes, a naive rule's body reads
+and its head does both, a merge writes, a host write does both, a host check and a query read. What is not yet followed
+is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`, egglog's bare call: in a
 body or a check, that an application has a row or a primitive's call a result; in a head or a host write, an action
@@ -450,17 +467,18 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   rules) is egglog's `birewrite`: the two rewrites `{name}=>` and `{name}<=`, under the same conditions.
 - **Rule callbacks** are egglog's `rust_rule` and `rust_rule_full` (`src/prelude.rs`): `ThenCall(callback)` puts host
   code in the head, which for each match reads the rule's variables (`RuleCallbackContext.Get`) and writes as a head
-  does (`Insert`, `Set`, `Make`, `Union`, `Remove`, `Subsume`), staged with the iteration's other writes; it reads no
-  table, as egglog's write state reads none, so the rule stays semi-naive. `ThenCallFull` also reads
-  (`FullRuleCallbackContext.TryLookup`, `Contains`, `TableSize`) and makes the rule naive, as egglog marks
+  does (`Insert`, `Set`, `Make`, `Union`, `Remove`, `Subsume`; `Make(t.Lit, 1L)` and `Set(f, [k], v)` infer the sort and
+  the output's type from the handle), staged with the iteration's other writes; it reads no table, as egglog's write
+  state reads none, so the rule stays semi-naive. `ThenCallFull` also reads (`FullRuleCallbackContext.TryLookup` of a
+  function's value or a constructor's class, `Contains`, `TableSize`) and makes the rule naive, as egglog marks
   `rust_rule_full`'s. Since a callback decides what it writes, its writes are checked when made, not before the run: a
   function whose merge is not a lattice only at the root, a deletion only where the scope may delete (a scope's own
   mirrors are then reconciled as for a rule that deletes), a subsumption only of a subsumable table, no analysis table
-  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as
-  egglog's callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
+  and no scoped view; a refused write, even one the callback catches, or an exception fails the rule's run, as egglog's
+  callback returning `None` panics (section 2.12). A rule with a full callback has no licence unless it calls
   `ReadsOwnFacts`, since its reads are not atoms the licence sees. Callbacks run on the engine's threads, as primitives
-  do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds every
-  scheduler's query.
+  do, and cannot call into a graph. Under `RunWith` a full callback's rule is queried semi-naively, as egglog builds
+  every scheduler's query.
 - **Subsumption** is egglog's. `Subsume(term)` and `Subsume(rows)` in a head, and `Rewrite(left, right, subsume: true)`
   (egglog's `rewrite ... :subsume`, which also subsumes the matched left side), mark a row of a relation or
   constructor as subsumed; so do the host's `Scope.Subsume` and `ScopeWriter.Subsume` (section 2.7). The row stays:
@@ -469,8 +487,9 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
   rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
   nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
-  subsumable and no function is; `TableOptions.Subsumable = false` opts a table out, an addition that stores no
-  subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
+  subsumable and no function is; `Subsumable = false` on `RelationOptions` or `ConstructorOptions` opts a table out,
+  an addition that stores no subsumption cell, so that a table that is never subsumed pays no cell per row and no
+  filter per atom.
 - **Deletion** is egglog's `delete`. `Delete(application)` and `Delete(rows)` in a head, and the host's `Scope.Delete`
   (section 2.7), delete the row of a key of a relation, a function or a constructor, if there is one, and nothing else:
   a deleted constructor term's class stays, with its other members and the rows that name it, and making the term again

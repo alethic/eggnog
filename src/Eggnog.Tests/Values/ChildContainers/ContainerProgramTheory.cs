@@ -201,7 +201,7 @@ namespace Eggnog.Tests.Values
                 var v = b.Var<Vec<Node>>("v");
                 var x = b.Var<Node>("x");
                 b.When(go.Of(k), s.Is(fs.Of(k)), v.Is(fv.Of(k)), x.Is(Primitives.VecGet<Node>().Of(v, 1L)));
-                b.Then(Fact.Exists(sn.Of(Primitives.Insert<Node>().Of(s, x))));
+                b.Then(Fact.Exists(sn.Of(Primitives.SetInsert<Node>().Of(s, x))));
             });
             r.DefineRule("map insert", b =>
             {
@@ -224,7 +224,7 @@ namespace Eggnog.Tests.Values
                 var (a, c) = b.Vars<long, long>("a", "c");
                 var (s, t) = b.Vars<Set<Node>, Set<Node>>("s", "t");
                 b.When(vu.Of(a, c), s.Is(fs.Of(a)), t.Is(fs.Of(c)));
-                b.Then(Fact.Exists(sn.Of(Primitives.Union<Node>().Of(s, t))));
+                b.Then(Fact.Exists(sn.Of(Primitives.SetUnion<Node>().Of(s, t))));
             });
             r.DefineRule("apply", b =>
             {

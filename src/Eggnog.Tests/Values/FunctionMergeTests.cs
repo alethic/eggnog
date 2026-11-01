@@ -70,7 +70,7 @@ namespace Eggnog.Tests.Values
         {
             var graph = new EGraph();
             var sum = graph.DefineFunction<string, long>("sum", Sum);
-            graph.Root.Assume(sum.Of("k").Is(2L), sum.Of("k").Is(Primitives.Add.Of(sum.Of("k"), 1L)));
+            graph.Root.Assume(sum.Of("k").Is(2L), sum.Of("k").Is(Int64Primitives.Add.Of(sum.Of("k"), 1L)));
 
             Assert.Equal(5L, graph.Root.Get(sum.Of("k")));
         }
@@ -405,8 +405,8 @@ namespace Eggnog.Tests.Values
                 Assert.False(child.IsFaulted);
                 Assert.False(child.AreEqual(na, nb));
                 Assert.False(child.AreEqual(zero, five));
-                Assert.Equal(Vec.Of(nb), child.Get(k.Of()));
-                Assert.Equal(Vec.Of(five), child.Get(k5.Of()));
+                Assert.Equal(Vec.Of([nb]), child.Get(k.Of()));
+                Assert.Equal(Vec.Of([five]), child.Get(k5.Of()));
                 Assert.Equal(2L, child.Get(sum.Of(of.Of(a.Of()))));
                 Assert.Equal(new long[] { 1, 1, 1, 1 }, new[] { child.CountRows(sum), child.CountRows(last), child.CountRows(nest), child.CountRows(last2) });
 
@@ -417,7 +417,7 @@ namespace Eggnog.Tests.Values
 
             Assert.False(root.AreEqual(na, nb));
             Assert.False(root.AreEqual(nb, nc));
-            Assert.Equal(Vec.Of(nb), root.Get(k.Of()));
+            Assert.Equal(Vec.Of([nb]), root.Get(k.Of()));
             Assert.Equal(2L, root.Get(sum.Of(of.Of(a.Of()))));
         }
 
@@ -1170,14 +1170,14 @@ namespace Eggnog.Tests.Values
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             var adds = graph.DefineRuleset("adds");
             adds.DefineRule("add one", r => r.Then(sum.Of("k").Is(1L)));
             var none = graph.DefineRuleset("none");
-            graph.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            graph.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
 
             var e = Assert.Throws<InvalidOperationException>(() => graph.Root.Run(Schedule.Split(split, Schedule.Run(adds))));
 
@@ -1203,16 +1203,16 @@ namespace Eggnog.Tests.Values
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
-            t.Root.Assume(sum.Of(a).Is(1L), sum.Of(b).Is(2L), choice.Of("k").Is(Set.Of(1L, 2L)));
+            t.Root.Assume(sum.Of(a).Is(1L), sum.Of(b).Is(2L), choice.Of("k").Is(Set.Of([1L, 2L])));
             t.Rules.DefineRule("join", r =>
             {
-                r.When(choice.Of("k").Is(Set.Of(1L)));
+                r.When(choice.Of("k").Is(Set.Of([1L])));
                 r.Then(t.A.Of().Is(t.B.Of()));
             });
 

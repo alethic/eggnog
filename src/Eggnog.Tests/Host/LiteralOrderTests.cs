@@ -228,8 +228,8 @@ namespace Eggnog.Tests.Host
             var b = graph.DefineConstructor<System.Numerics.BigInteger, string, string, Node>("B");
             var root = graph.Root;
 
-            root.Make(f2.Of("x", Set.Of("a", "b")));
-            root.Make(f3.Of("y", Vec.Of("d", "c")));
+            root.Make(f2.Of("x", Set.Of(["a", "b"])));
+            root.Make(f3.Of("y", Vec.Of(["d", "c"])));
             root.Make(b.Of(new System.Numerics.BigInteger(123), "p", "q"));
 
             AssertCells(graph, "a", "b", "x", "d", "c", "y", "123", "p", "q");
@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Host
             var graph = new EGraph();
             graph.DefineSort<Node>("T");
             var f = graph.DefineFunction<string, long>("f");
-            var c = graph.DefineConstructor<string, Node>("C", options: new TableOptions { Subsumable = true });
+            var c = graph.DefineConstructor<string, Node>("C");
             var root = graph.Root;
 
             root.Delete(f.Of("zz"));

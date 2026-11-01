@@ -35,7 +35,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = b.Var<long>("x");
                 b.When(r.Of(x));
-                b.Then(Fact.Exists(num.Of(x)), k.Of(x).Is(x), Fact.Exists(lit.Of(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L), Primitives.Subtract.Of(x, 2L)))));
+                b.Then(Fact.Exists(num.Of(x)), k.Of(x).Is(x), Fact.Exists(lit.Of(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L), Int64Primitives.Subtract.Of(x, 2L)))));
             });
 
             Assert.Throws<RuleEvaluationException>(() => root.Run(rules));
@@ -60,7 +60,7 @@ namespace Eggnog.Tests.Rules
             graph.DefineSort<Node>("Math");
             var lit = graph.DefineConstructor<long, Node>("Lit");
             var r = graph.DefineRelation<long>("R");
-            var cnt = graph.DefineFunction("cnt", FunctionMerge.Expression<long>(static (old, @new) => Primitives.Add.Of(old, @new)));
+            var cnt = graph.DefineFunction("cnt", FunctionMerge.Expression<long>(static (old, @new) => Int64Primitives.Add.Of(old, @new)));
             graph.Values.RegisterVec<long>();
             var root = graph.Root;
             root.Assume(r.Of(1L), r.Of(2L));
@@ -69,7 +69,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = b.Var<long>("x");
                 b.When(r.Of(x));
-                b.Then(cnt.Of().Is(1L), Fact.Exists(lit.Of(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L, 2L), Primitives.Subtract.Of(x, 2L)))));
+                b.Then(cnt.Of().Is(1L), Fact.Exists(lit.Of(Primitives.VecGet<long>().Of(Primitives.VecOf<long>().Of(1L, 2L), Int64Primitives.Subtract.Of(x, 2L)))));
             });
 
             Assert.Throws<RuleEvaluationException>(() => root.Run(rules));
@@ -109,7 +109,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = b.Var<long>("x");
                 b.When(r.Of(x));
-                b.Then(Fact.Exists(num.Of(x)), Fact.Exists(lit.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L)))));
+                b.Then(Fact.Exists(num.Of(x)), Fact.Exists(lit.Of(Int64Primitives.Divide.Of(10L, Int64Primitives.Subtract.Of(x, 3L)))));
             });
 
             Assert.Throws<RuleEvaluationException>(() => root.Run(rules));
@@ -144,7 +144,7 @@ namespace Eggnog.Tests.Rules
             {
                 var x = b.Var<long>("x");
                 b.When(r.Of(x));
-                b.Then(Fact.Exists(lit.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L)))));
+                b.Then(Fact.Exists(lit.Of(Int64Primitives.Divide.Of(10L, Int64Primitives.Subtract.Of(x, 3L)))));
             });
             rules.DefineRule("good", b =>
             {

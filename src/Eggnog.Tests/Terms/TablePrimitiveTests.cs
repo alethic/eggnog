@@ -262,7 +262,7 @@ namespace Eggnog.Tests.Terms
                 if (tables.TryLookup(f, [args[0]], out long value) == false)
                     return false;
 
-                result = tables.Make<Node>(num, value);
+                result = tables.Make(num, value);
                 return true;
             });
 
@@ -274,6 +274,36 @@ namespace Eggnog.Tests.Terms
 
             Assert.True(graph.Root.AreEqual(graph.Root.Get(node.Of(1L)), graph.Root.Make(num.Of(10L))));
             Assert.Throws<RuleEvaluationException>(() => graph.Root.Assume(node.Of(2L).Is(make.Of(2L))));
+        }
+
+        [Fact]
+        public void APrimitiveLooksUpAConstructorsClassAndSetsAFunctionsValue()
+        {
+            // The handles carry the sort and the output's type: a lookup of a constructor reads the class without making
+            // the term, and a value set is converted to the function's output type.
+            var graph = new EGraph();
+            graph.DefineSort<Node>("T");
+            var num = graph.DefineConstructor<long, Node>("Num");
+            var f = graph.DefineFunction<long, long>("f");
+            var found = graph.DefineFunction<long, Node>("found");
+            var look = Primitive.CreateFull("look-num", Long, (ITables tables, ReadOnlySpan<object> args, out Node result) =>
+            {
+                result = default;
+                if (tables.TryLookup(num, [args[0]], out var cls) == false)
+                    return false;
+
+                tables.Set(f, [args[0]], 1);
+                result = cls;
+                return true;
+            });
+            var three = graph.Root.Make(num.Of(3L));
+
+            graph.Root.Assume(found.Of(3L).Is(look.Of(3L)));
+
+            Assert.True(graph.Root.AreEqual(three, graph.Root.Get(found.Of(3L))));
+            Assert.Equal(1L, graph.Root.Get(f.Of(3L)));
+            Assert.Throws<RuleEvaluationException>(() => graph.Root.Assume(found.Of(4L).Is(look.Of(4L))));
+            Assert.False(graph.Root.Check(Fact.Exists(num.Of(4L))));
         }
 
         [Fact]
@@ -385,7 +415,7 @@ namespace Eggnog.Tests.Terms
             // (function counter () i64 :merge (+ old new)), a primitive that adds 1 to it, called twice with one argument:
             // egglog gives each call of an action its own binding, so the counter is 2, from a head as from a host write.
             var graph = new EGraph();
-            var counter = graph.DefineFunction("counter", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
+            var counter = graph.DefineFunction("counter", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, @new)));
             var a = graph.DefineFunction<long>("a");
             var b = graph.DefineFunction<long>("b");
             var bump = Primitive.CreateWrite("bump", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
@@ -441,7 +471,7 @@ namespace Eggnog.Tests.Terms
             var key = graph.DefineRelation<long>("key");
             var f = graph.DefineFunction<long, long>("f");
             var o = graph.DefineFunction<long, long>("o");
-            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new TableOptions { Role = TableRole.Analysis });
+            var an = graph.DefineFunction<long, long>("an", (ValueLattice<long>?)null, new FunctionOptions { Analysis = true });
             var lookup = LookupOf(f);
             var rules = graph.DefineRuleset("rules");
 
@@ -483,7 +513,7 @@ namespace Eggnog.Tests.Terms
             var o = graph.DefineFunction<long, long>("o");
             var both = Primitive.CreateFull("make-and-find", Long, (ITables tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Make<Node>(num, args[0]);
+                tables.Make(num, args[0]);
                 result = tables.TryLookup(num, [args[0]], out Node _) ? 1 : 0;
                 return true;
             });
@@ -502,7 +532,7 @@ namespace Eggnog.Tests.Terms
             {
                 w.Assume(o.Of(0L).Is(both.Of(3L)));
                 w.Assume(o.Of(1L).Is(find.Of(3L)));
-                w.Assume(o.Of(2L).Is(Primitives.Add.Of(count.Of(), find.Of(4L))));
+                w.Assume(o.Of(2L).Is(Int64Primitives.Add.Of(count.Of(), find.Of(4L))));
             });
             Assert.Equal(0L, graph.Root.Get(o.Of(0L)));
             Assert.Equal(1L, graph.Root.Get(o.Of(1L)));
@@ -510,7 +540,7 @@ namespace Eggnog.Tests.Terms
 
             var makeAndCount = Primitive.CreateFull("make-and-count", Long, (ITables tables, ReadOnlySpan<object> args, out long result) =>
             {
-                tables.Make<Node>(num, args[0]);
+                tables.Make(num, args[0]);
                 result = tables.TableSize(num);
                 return true;
             });
@@ -578,7 +608,7 @@ namespace Eggnog.Tests.Terms
             // egglog's subsume looks the row up and fails without one: from a host write and from a rule's head. A row the
             // primitive sees is subsumed: queries skip it, checks still see it.
             var graph = new EGraph();
-            var r = graph.DefineRelation<long>("r", new TableOptions { Subsumable = true });
+            var r = graph.DefineRelation<long>("r");
             var o = graph.DefineFunction<long, long>("o");
             var sub = Primitive.CreateWrite("sub", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
             {
@@ -666,7 +696,7 @@ namespace Eggnog.Tests.Terms
             Assert.False(graph.Root.Check(Fact.Exists(f.Of(1L))));
 
             // (set (f 2) (+ 4 (del 2))) and (r (del-r 5)): the command's own write of the row it deletes is kept.
-            graph.Root.Assume(f.Of(2L).Is(Primitives.Add.Of(4L, del.Of(2L))), r.Of(delR.Of(5L)));
+            graph.Root.Assume(f.Of(2L).Is(Int64Primitives.Add.Of(4L, del.Of(2L))), r.Of(delR.Of(5L)));
             Assert.True(graph.Root.Check(f.Of(2L).Is(4L)));
             Assert.True(graph.Root.Check(r.Of(5L)));
 
@@ -837,7 +867,7 @@ namespace Eggnog.Tests.Terms
                 result = 0;
                 return true;
             });
-            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, setW.Of(@new))));
+            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, setW.Of(@new))));
             var copy = graph.DefineFunction<long, long>("copy");
             graph.Root.Assume(weight.Of(6L).Is(1L), total.Of("k").Is(0L));
 

@@ -74,7 +74,7 @@ namespace Eggnog
         /// and the facts after it are not written. On a case whose contradiction stopped it, or a scope under one, the
         /// call does nothing.
         /// </summary>
-        /// <param name="facts">The facts.</param>
+        /// <param name="facts">The facts; none, a <c>null</c> array included, write nothing.</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="FactConflictException">A function without a lattice holds another value, or a union the facts
         /// make would merge two of its keys that hold different values.</exception>
@@ -91,9 +91,8 @@ namespace Eggnog
         /// ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the scope's reads
         /// throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws the same
         /// way.</exception>
-        public void Assume(params Fact[] facts)
+        public void Assume(params ReadOnlySpan<Fact> facts)
         {
-            ArgumentNullException.ThrowIfNull(facts);
             EnterWrite();
             try
             {
@@ -189,8 +188,8 @@ namespace Eggnog
         /// under one, the call does nothing.
         /// </summary>
         /// <typeparam name="TSort">The sort.</typeparam>
-        /// <param name="term">The term: an application of a constructor defined <see
-        /// cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="term">The term: an application of a subsumable constructor (<see
+        /// cref="ConstructorOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">The constructor is not subsumable, or a subterm reads a function
         /// (<c>Get</c> it first), computes, is a variable, or holds a class value this scope cannot use.</exception>
@@ -244,7 +243,7 @@ namespace Eggnog
         /// fails keeps the terms its keys made, as egglog's failed command does, and the rows before it stand. On a case
         /// whose contradiction stopped it, or a scope under one, the call does nothing.
         /// </summary>
-        /// <param name="rows">The rows, of relations defined <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="rows">The rows, of subsumable relations (<see cref="RelationOptions.Subsumable"/>).</param>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A fact is not a relation row, a relation is not subsumable, a term in a
         /// row is not ground or holds a class value this scope cannot use, or a row writes through a scoped view
@@ -259,9 +258,8 @@ namespace Eggnog
         /// epochs ran out in the rebuild after the merge, the write stays, and if that rebuild left work undone the
         /// scope's reads throw the same way (<see cref="Check"/>). Every later call that needs an id or an epoch throws
         /// the same way.</exception>
-        public void Subsume(params Fact[] rows)
+        public void Subsume(params ReadOnlySpan<Fact> rows)
         {
-            ArgumentNullException.ThrowIfNull(rows);
             EnterWrite();
             try
             {
@@ -361,9 +359,8 @@ namespace Eggnog
         /// rows before it stand.</exception>
         /// <exception cref="RuleEvaluationException">As for <see cref="Delete{T}"/>.</exception>
         /// <exception cref="OverflowException">As for <see cref="Delete{T}"/>.</exception>
-        public void Delete(params Fact[] rows)
+        public void Delete(params ReadOnlySpan<Fact> rows)
         {
-            ArgumentNullException.ThrowIfNull(rows);
             EnterWrite();
             try
             {

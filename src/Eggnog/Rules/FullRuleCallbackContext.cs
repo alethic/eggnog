@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Eggnog
 {
@@ -26,7 +27,12 @@ namespace Eggnog
         }
 
         /// <inheritdoc />
-        public bool TryLookup<T>(TableHandle table, ReadOnlySpan<object> keys, out T value) => Tables.TryLookup(table, keys, out value);
+        public bool TryLookup<TOut>(FunctionHandle<TOut> function, ReadOnlySpan<object> keys, [MaybeNullWhen(false)] out TOut value) =>
+            Tables.TryLookup(function, keys, out value);
+
+        /// <inheritdoc />
+        public bool TryLookup<TSort>(ConstructorHandle<TSort> constructor, ReadOnlySpan<object> keys, out TSort value) where TSort : struct, ISort<TSort> =>
+            Tables.TryLookup(constructor, keys, out value);
 
         /// <inheritdoc />
         public bool Contains(RelationHandle relation, params ReadOnlySpan<object> keys) => Tables.Contains(relation, keys);

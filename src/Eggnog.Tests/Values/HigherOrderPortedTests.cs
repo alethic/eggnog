@@ -79,7 +79,7 @@ namespace Eggnog.Tests.Values
             rules.DefineRule("square", r =>
             {
                 var x = r.Var<long>("x");
-                r.Rewrite(square.Of(num.Of(x)), num.Of(Primitives.Multiply.Of(x, x)));
+                r.Rewrite(square.Of(num.Of(x)), num.Of(Int64Primitives.Multiply.Of(x, x)));
             });
             graph.Values.RegisterFn<Node, Node>();
 
@@ -401,7 +401,7 @@ namespace Eggnog.Tests.Values
                     n.Is(polynomial.Of(m)),
                     counts.Is(Primitives.MultiSetSumMultiSets<Node>().Of(map.Of(Primitives.UnstableFn<MultiSet<Node>, MultiSet<Node>>(Primitives.MultiSetResetCounts<Node>()).Of(), m))),
                     term.Is(Primitives.MultiSetPickMax<Node>().Of(counts)));
-                r.Where(Primitives.Greater.Of(Primitives.MultiSetCount<Node>().Of(counts, term), 1L));
+                r.Where(Int64Primitives.Greater.Of(Primitives.MultiSetCount<Node>().Of(counts, term), 1L));
                 r.When(
                     picked.Is(filter.Of(containing.Of(term), m)),
                     common.Is(Primitives.UnstableMultiSetReduce<MultiSet<Node>>().Of(
@@ -508,22 +508,22 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterMultiSet<MultiSet<long>>();
             graph.Values.RegisterFn<long, MultiSet<long>>();
             graph.Values.RegisterFn<MultiSet<long>, MultiSet<long>>();
-            var twice = Primitive.Create<MultiSet<long>>("twice", [typeof(long)], args => MultiSet.Of((long)args[0], (long)args[0]));
+            var twice = Primitive.Create<MultiSet<long>>("twice", [typeof(long)], args => MultiSet.Of([(long)args[0], (long)args[0]]));
             var flatTwice = Primitives.UnstableFn<MultiSet<long>, MultiSet<long>>(Primitives.UnstableMultiSetFlatMap<long>())
                 .Of(Primitives.UnstableFn<long, MultiSet<long>>(twice).Of());
-            var mss = MultiSet.Of(MultiSet.Of(1L, 2L), MultiSet.Of(3L));
+            var mss = MultiSet.Of([MultiSet.Of([1L, 2L]), MultiSet.Of([3L])]);
             var map = Primitives.UnstableMultiSetMap<MultiSet<long>, MultiSet<long>>();
-            Assert.True(graph.Root.Check(map.Of(flatTwice, mss).Is(MultiSet.Of(MultiSet.Of(1L, 1L, 2L, 2L), MultiSet.Of(3L, 3L)))));
+            Assert.True(graph.Root.Check(map.Of(flatTwice, mss).Is(MultiSet.Of([MultiSet.Of([1L, 1L, 2L, 2L]), MultiSet.Of([3L, 3L])]))));
 
             // (unstable-multiset-map (unstable-fn "unstable-multiset-reduce" (unstable-fn "*") 1) _mss): each multiset's
             // product.
             graph.Values.RegisterFn<long, long, long>();
             graph.Values.RegisterFn<MultiSet<long>, long>();
             var product = Primitives.UnstableFn<MultiSet<long>, long>(Primitives.UnstableMultiSetReduce<long>())
-                .Of(Primitives.UnstableFn<long, long, long>(Primitives.Multiply).Of(), 1L);
+                .Of(Primitives.UnstableFn<long, long, long>(Int64Primitives.Multiply).Of(), 1L);
             var products = graph.DefineFunction<MultiSet<long>>("products");
-            graph.Root.Assume(products.Of().Is(Primitives.UnstableMultiSetMap<MultiSet<long>, long>().Of(product, MultiSet.Of(MultiSet.Of(2L, 3L), MultiSet.Of(4L), MultiSet<long>.Empty))));
-            Assert.Equal(MultiSet.Of(6L, 4L, 1L), graph.Root.Get(products.Of()));
+            graph.Root.Assume(products.Of().Is(Primitives.UnstableMultiSetMap<MultiSet<long>, long>().Of(product, MultiSet.Of([MultiSet.Of([2L, 3L]), MultiSet.Of([4L]), MultiSet<long>.Empty]))));
+            Assert.Equal(MultiSet.Of([6L, 4L, 1L]), graph.Root.Get(products.Of()));
         }
 
     }

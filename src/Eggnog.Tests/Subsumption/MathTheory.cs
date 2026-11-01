@@ -10,13 +10,8 @@ namespace Eggnog.Tests.Subsumption
     public sealed class MathTheory
     {
 
-        /// <summary>
-        /// The options of a subsumable table.
-        /// </summary>
-        public static readonly TableOptions Subsumable = new() { Subsumable = true };
-
-        /// <summary>Gets the options of a relation or constructor that opts out of subsumption.</summary>
-        public static readonly TableOptions NotSubsumable = new() { Subsumable = false };
+        /// <summary>Gets the options of a constructor that opts out of subsumption.</summary>
+        public static readonly ConstructorOptions NotSubsumable = new() { Subsumable = false };
 
         /// <summary>
         /// Defines the theory in a new graph.
@@ -25,11 +20,11 @@ namespace Eggnog.Tests.Subsumption
         {
             Graph = new EGraph();
             Graph.DefineSort<Node>("Math");
-            Num = Graph.DefineConstructor<long, Node>("Num", 1, Subsumable);
-            Var = Graph.DefineConstructor<string, Node>("Var", 1, Subsumable);
-            Add = Graph.DefineConstructor<Node, Node, Node>("Add", 1, Subsumable);
-            Mul = Graph.DefineConstructor<Node, Node, Node>("Mul", 1, Subsumable);
-            Seen = Graph.DefineRelation<long>("seen", NotSubsumable);
+            Num = Graph.DefineConstructor<long, Node>("Num");
+            Var = Graph.DefineConstructor<string, Node>("Var");
+            Add = Graph.DefineConstructor<Node, Node, Node>("Add");
+            Mul = Graph.DefineConstructor<Node, Node, Node>("Mul");
+            Seen = Graph.DefineRelation<long>("seen", new RelationOptions { Subsumable = false });
             Rules = Graph.DefineRuleset("rules");
         }
 

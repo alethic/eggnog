@@ -1,6 +1,5 @@
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Eggnog
@@ -15,7 +14,7 @@ namespace Eggnog
     internal sealed class VariadicCall<T, TResult> : Primitive
     {
 
-        readonly Func<IReadOnlyList<T>, TResult> function;
+        readonly VariadicFunc<T, TResult> function;
 
         /// <summary>
         /// Initializes a new instance.
@@ -23,7 +22,7 @@ namespace Eggnog
         /// <param name="name">The name it renders as.</param>
         /// <param name="arity">The number of arguments.</param>
         /// <param name="function">The function over all the arguments.</param>
-        public VariadicCall(string name, int arity, Func<IReadOnlyList<T>, TResult> function)
+        public VariadicCall(string name, int arity, VariadicFunc<T, TResult> function)
             : base(name, new RepeatedTypes(typeof(T), arity), typeof(TResult), false, false)
         {
             this.function = function;
@@ -34,8 +33,7 @@ namespace Eggnog
             ((ColumnType<TResult>)result).EncodeIn(Call(arguments, parameters, scope), scope);
 
         /// <summary>
-        /// Decodes the arguments into a pooled array and calls the function over them, which must not keep the list: it
-        /// is valid only during the call.
+        /// Decodes the arguments into a pooled array and calls the function over a span of them, which it cannot keep.
         /// </summary>
         TResult Call(ReadOnlySpan<uint> arguments, ColumnType[] parameters, Scope? scope)
         {
@@ -45,7 +43,7 @@ namespace Eggnog
                 for (var i = 0; i < arguments.Length; i++)
                     values[i] = ((ColumnType<T>)parameters[i]).Decode(arguments[i], scope);
 
-                return function(new ArraySegment<T>(values, 0, arguments.Length));
+                return function(values.AsSpan(0, arguments.Length));
             }
             finally
             {

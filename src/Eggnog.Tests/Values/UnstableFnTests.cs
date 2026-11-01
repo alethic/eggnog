@@ -36,17 +36,17 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterFn<long, long>();
             var f = graph.DefineFunction<long, UnstableFn<long, long>>("f");
             var app = Primitives.UnstableApp<long, long>();
-            var plusTwo = UnstableFn.Of<long, long>(Primitives.Add, 2L);
-            graph.Root.Assume(f.Of(1L).Is(plusTwo), f.Of(2L).Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(2L)));
+            var plusTwo = UnstableFn.Of<long, long>(Int64Primitives.Add, 2L);
+            graph.Root.Assume(f.Of(1L).Is(plusTwo), f.Of(2L).Is(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(2L)));
 
             var read = graph.Root.Get(f.Of(1L));
             Assert.Equal(plusTwo, read);
-            Assert.Same(Primitives.Add, read.Target);
+            Assert.Same(Int64Primitives.Add, read.Target);
             Assert.Equal("+", read.Name);
             Assert.Equal(new object[] { 2L }, read.Arguments);
             Assert.Equal("(unstable-fn \"+\" 2)", read.ToString());
             Assert.True(graph.Root.Check(f.Of(1L).Is(f.Of(2L))));
-            Assert.False(graph.Root.Check(f.Of(1L).Is(UnstableFn.Of<long, long>(Primitives.Add, 3L))));
+            Assert.False(graph.Root.Check(f.Of(1L).Is(UnstableFn.Of<long, long>(Int64Primitives.Add, 3L))));
             Assert.True(graph.Root.Check(app.Of(f.Of(1L), 3L).Is(5L)));
             Assert.True(graph.Root.Check(app.Of(plusTwo, 3L).Is(5L)));
 
@@ -58,7 +58,7 @@ namespace Eggnog.Tests.Values
             {
                 var k = r.Var<long>("k");
                 r.When(f.Of(k).Is(plusTwo));
-                r.Then(f.Of(Primitives.Add.Of(k, 10L)).Is(plusTwo));
+                r.Then(f.Of(Int64Primitives.Add.Of(k, 10L)).Is(plusTwo));
             }));
             Assert.Contains("Primitives.UnstableFn", literal.Message, StringComparison.Ordinal);
         }
@@ -66,20 +66,20 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void ATargetsSignatureEndsWithTheSorts()
         {
-            // fail-typecheck/unstable-fn-wrong-args-type.egg and unstable-fn-wrong-return-type.egg:
-            // (datatype Math (Zero) (Inc Math)) (sort Fn (UnstableFn (i64) Math)) (unstable-fn "Inc"), and (UnstableFn (Math) i64).
+            // fail-typecheck/unstable-fn-wrong-args-type.egg: (datatype Math (Zero) (Inc Math)) (sort Fn (UnstableFn (i64)
+            // Math)) (unstable-fn "Inc"). unstable-fn-wrong-return-type.egg's (UnstableFn (Math) i64) does not compile, as
+            // the constructor carries its sort.
             var graph = new EGraph();
             graph.DefineSort<Node>("Math");
             var inc = graph.DefineConstructor<Node, Node>("Inc");
             Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, Node>(inc));
             Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, Node>(inc));
-            Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<Node, long>(inc));
 
             // fail-typecheck/unstable-fn-primitive-missing-partial-arg.egg: (unstable-app (unstable-fn "+") 2) of
             // (UnstableFn (i64) i64), which "+" is only partially applied to one argument.
-            Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, long>(Primitives.Add).Of());
-            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, long>(Primitives.Add));
-            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, long>(Primitives.Add, "2"));
+            Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of());
+            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, long>(Int64Primitives.Add));
+            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, long>(Int64Primitives.Add, "2"));
 
             // fail-typecheck/unstable-fn-wrong-args.egg: (sort Fn (UnstableFn (Math) Math)) (unstable-app (unstable-fn "Inc") 10)
             Assert.Throws<ArgumentException>(() => Primitives.UnstableApp<Node, Node>().Of(Primitives.UnstableFn<Node, Node>(inc).Of(), 10L));
@@ -97,11 +97,12 @@ namespace Eggnog.Tests.Values
         public void ARelationIsNoTarget()
         {
             // egglog desugars (relation R (i64)) to a constructor of the reserved sort @RSort, which no function sort names.
+            // The public overloads take a function or a constructor, so a relation does not compile; the untyped path
+            // underneath still refuses one.
             var graph = new EGraph();
             var rel = graph.DefineRelation<long>("R");
-            var primitive = Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, bool>(rel));
-            Assert.Contains("'R' is a relation", primitive.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => UnstableFn.Of<long, bool>(rel));
+            var refused = Assert.Throws<ArgumentException>(() => FnValue.Create(rel, [], [typeof(long)], typeof(ValueTuple)));
+            Assert.Contains("'R' is a relation", refused.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -116,7 +117,7 @@ namespace Eggnog.Tests.Values
             var leaf = graph.DefineConstructor<UnstableFn<long, long>, Node>("Leaf");
             var hold = graph.DefineConstructor<UnstableFn<Node, Node>, Node>("Hold");
             var output = graph.DefineFunction<long, long>("out");
-            var x = graph.Root.Make(leaf.Of(Primitives.UnstableFn<long, long>(Primitives.Add).Of(2L)));
+            var x = graph.Root.Make(leaf.Of(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(2L)));
             var y = graph.Root.Make(hold.Of(Primitives.UnstableFn<Node, Node>(add).Of(num.Of(1L))));
             var rules = graph.DefineRuleset("rules");
             var rule = rules.DefineRule("apply", r =>
@@ -198,7 +199,7 @@ namespace Eggnog.Tests.Values
             using (var child = root.CreateChild())
             {
                 // A value of values, the child makes in the graph's pool.
-                child.Assume(f.Of(1L).Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                child.Assume(f.Of(1L).Is(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(5L)));
                 Assert.True(child.Check(Primitives.UnstableApp<long, long>().Of(f.Of(1L), 1L).Is(6L)));
                 interned = graph.Values.InternedCount;
 
@@ -258,7 +259,7 @@ namespace Eggnog.Tests.Values
                 h = graph.DefineFunction<UnstableFn<long, long>>("h");
                 child.Union(one, two);
                 var before = graph.Values.InternedCount;
-                child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(5L)));
                 Assert.True(child.Check(Primitives.UnstableApp<long, long>().Of(h.Of(), 1L).Is(6L)));
                 Assert.True(child.AreEqual(one, two));
                 child.Engine.Context.CheckInvariants();
@@ -270,7 +271,7 @@ namespace Eggnog.Tests.Values
 
                 using (var sibling = root.CreateChild())
                 {
-                    sibling.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Primitives.Add).Of(5L)));
+                    sibling.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(5L)));
                     Assert.True(sibling.Check(Primitives.UnstableApp<long, long>().Of(h.Of(), 1L).Is(6L)));
                     Assert.Equal(interned, graph.Values.InternedCount);
                     Assert.False(sibling.AreEqual(one, two));
@@ -357,7 +358,7 @@ namespace Eggnog.Tests.Values
             var h = graph.DefineFunction<UnstableFn<long, long>>("h");
             graph.Root.Freeze();
             using var child = graph.Root.CreateChild();
-            child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(first).Of(Primitives.UnstableFn<long, long>(Primitives.Add).Of(1L))));
+            child.Assume(h.Of().Is(Primitives.UnstableFn<long, long>(first).Of(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(1L))));
             Assert.True(child.Check(app.Of(h.Of(), 7L).Is(7L)));
             Assert.Equal("(unstable-fn \"first\" (unstable-fn \"+\" 1))", child.Get(h.Of()).ToString());
         }
@@ -548,7 +549,7 @@ namespace Eggnog.Tests.Values
             Assert.Equal(0, x.CompareTo(UnstableFn.Of<Node, Node>(add, one)));
             Assert.Equal(-Math.Sign(x.CompareTo(y)), Math.Sign(y.CompareTo(x)));
             Assert.NotEqual(0, x.CompareTo(y));
-            Assert.Equal(2, Set.Of(x, y, x).Count);
+            Assert.Equal(2, Set.Of([x, y, x]).Count);
 
             // Two primitives of one name are two functions.
             graph.Values.RegisterFn<long, long>();
@@ -571,7 +572,7 @@ namespace Eggnog.Tests.Values
             var vecOf = Primitives.VecOf<long>();
             Assert.Same(vecOf.WithArity(2), vecOf.WithArity(2));
             var fn = Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(2));
-            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, Vec<long>>().Of(fn.Of(1L), 2L).Is(Vec.Of(1L, 2L))));
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, Vec<long>>().Of(fn.Of(1L), 2L).Is(Vec.Of([1L, 2L]))));
             Assert.Equal("(unstable-fn \"vec-of\" 1)", UnstableFn.Of<long, Vec<long>>(vecOf.WithArity(2), 1L).ToString());
             Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(1)).Of(1L));
 
@@ -673,7 +674,7 @@ namespace Eggnog.Tests.Values
                 second[i] = num.Of(i == 68 ? 0L : i);
             }
 
-            first[66] = second[66] = Primitives.UnstableFn<long, long>(Primitives.Add).Of(1L);
+            first[66] = second[66] = Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(1L);
             var pickFrom = Primitives.UnstableFn<long, Node>(pick);
             root.Assume(h.Of(1L).Is(pickFrom.Of(first)), h.Of(2L).Is(pickFrom.Of(second)));
             Assert.False(root.Check(h.Of(1L).Is(h.Of(2L))));

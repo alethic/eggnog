@@ -37,13 +37,13 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterVec<long>();
             var f = graph.DefineFunction<long, Vec<long>>("f");
             var before = graph.Values.InternedCount;
-            graph.Root.Assume(f.Of(1L).Is(Vec.Of(3L, 1L, 2L)), f.Of(2L).Is(Vec.Of(3L, 1L, 2L)), f.Of(3L).Is(Vec<long>.Empty));
+            graph.Root.Assume(f.Of(1L).Is(Vec.Of([3L, 1L, 2L])), f.Of(2L).Is(Vec.Of([3L, 1L, 2L])), f.Of(3L).Is(Vec<long>.Empty));
 
-            Assert.Equal(Vec.Of(3L, 1L, 2L), graph.Root.Get(f.Of(1L)));
+            Assert.Equal(Vec.Of([3L, 1L, 2L]), graph.Root.Get(f.Of(1L)));
             Assert.Empty(graph.Root.Get(f.Of(3L)));
             Assert.True(graph.Root.Check(f.Of(1L).Is(f.Of(2L))));
             Assert.Equal(before + 2, graph.Values.InternedCount);
-            Assert.False(graph.Root.Check(f.Of(1L).Is(Vec.Of(1L, 2L, 3L))));
+            Assert.False(graph.Root.Check(f.Of(1L).Is(Vec.Of([1L, 2L, 3L]))));
             Assert.Equal(before + 2, graph.Values.InternedCount);
         }
 
@@ -71,7 +71,7 @@ namespace Eggnog.Tests.Values
                 r.When(x.Is(v.Of(k)));
                 r.Then(set.Of(k).Is(Primitives.VecSet<long>().Of(x, 2L, 9L)));
             });
-            graph.Root.Assume(v.Of(1L).Is(Vec.Of(1L, 2L, 3L)), v.Of(2L).Is(Vec.Of(1L)));
+            graph.Root.Assume(v.Of(1L).Is(Vec.Of([1L, 2L, 3L])), v.Of(2L).Is(Vec.Of([1L])));
 
             graph.Root.Run(Schedule.Run(body));
             Assert.Equal(3L, graph.Root.Get(got.Of(1L)));
@@ -90,12 +90,12 @@ namespace Eggnog.Tests.Values
             var before = graph.Values.InternedCount;
             using var a = graph.Root.CreateChild();
             using var b = graph.Root.CreateChild();
-            a.Assume(f.Of(1L).Is(Vec.Of("x", "y")));
-            b.Assume(f.Of(1L).Is(Vec.Of("x", "y")));
+            a.Assume(f.Of(1L).Is(Vec.Of(["x", "y"])));
+            b.Assume(f.Of(1L).Is(Vec.Of(["x", "y"])));
 
             // "x", "y" and the vector, each once.
             Assert.Equal(before + 3, graph.Values.InternedCount);
-            Assert.Equal(Vec.Of("x", "y"), b.Get(f.Of(1L)));
+            Assert.Equal(Vec.Of(["x", "y"]), b.Get(f.Of(1L)));
         }
 
         [Fact]
@@ -149,8 +149,8 @@ namespace Eggnog.Tests.Values
         {
             var append = Primitives.VecAppend<long>().Function;
             Assert.Equal(Vec<long>.Empty, append([]));
-            Assert.Equal(Vec.Of(1L, 2L, 3L, 4L, 5L), append([Vec.Of(1L, 2L), Vec<long>.Empty, Vec.Of(3L), Vec.Of(4L, 5L)]));
-            var many = Enumerable.Range(0, 2000).Select(i => Vec.Of((long)i, (long)i)).ToArray();
+            Assert.Equal(Vec.Of([1L, 2L, 3L, 4L, 5L]), append([Vec.Of([1L, 2L]), Vec<long>.Empty, Vec.Of([3L]), Vec.Of([4L, 5L])]));
+            var many = Enumerable.Range(0, 2000).Select(i => Vec.Of([(long)i, (long)i])).ToArray();
             Assert.Equal(4000, append(many).Count);
         }
 

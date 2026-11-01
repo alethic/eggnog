@@ -5,10 +5,10 @@ namespace Eggnog
 
     /// <summary>
     /// A term constructor over 0 key columns, defined with
-    /// <see cref="EGraph.DefineConstructor{TSort}(string, ulong, TableOptions)"/>.
+    /// <see cref="EGraph.DefineConstructor{TSort}(string, ulong, ConstructorOptions)"/>.
     /// </summary>
     /// <typeparam name="TSort">The sort of the terms.</typeparam>
-    public sealed class Constructor<TSort> : ConstructorHandle where TSort : struct, ISort<TSort>
+    public sealed class Constructor<TSort> : ConstructorHandle<TSort> where TSort : struct, ISort<TSort>
     {
 
         /// <summary>

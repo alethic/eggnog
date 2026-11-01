@@ -25,7 +25,7 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterMultiSet<long>();
             graph.Values.RegisterFn<long, long, long>();
             var reduce = Primitives.UnstableMultiSetReduce<long>();
-            var minus = Primitives.UnstableFn<long, long, long>(Primitives.Subtract);
+            var minus = Primitives.UnstableFn<long, long, long>(Int64Primitives.Subtract);
             var of = Primitives.MultiSetOf<long>();
             var r = graph.DefineFunction<long, long>("r");
             var root = graph.Root;
@@ -88,7 +88,7 @@ namespace Eggnog.Tests.Values
                 if (naive)
                 {
                     graph.Root.Run(rules);
-                    Assert.Equal(Vec.Of(2L, 4L), graph.Root.Get(output.Of()));
+                    Assert.Equal(Vec.Of([2L, 4L]), graph.Root.Get(output.Of()));
                 }
                 else
                 {
@@ -208,8 +208,8 @@ namespace Eggnog.Tests.Values
             var output = graph.DefineFunction<Vec<long>>("out");
             graph.Root.Freeze();
             using var child = graph.Root.CreateChild();
-            child.Assume(output.Of().Is(Primitives.UnstableVecMap<long, long>().Of(Primitives.UnstableFn<long, long>(Primitives.Add).Of(10L), Primitives.VecOf<long>().Of(1L, 2L))));
-            Assert.Equal(Vec.Of(11L, 12L), child.Get(output.Of()));
+            child.Assume(output.Of().Is(Primitives.UnstableVecMap<long, long>().Of(Primitives.UnstableFn<long, long>(Int64Primitives.Add).Of(10L), Primitives.VecOf<long>().Of(1L, 2L))));
+            Assert.Equal(Vec.Of([11L, 12L]), child.Get(output.Of()));
         }
 
     }

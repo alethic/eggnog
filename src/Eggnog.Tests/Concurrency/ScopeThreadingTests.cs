@@ -339,7 +339,7 @@ namespace Eggnog.Tests.Concurrency
                     release.Wait(Patience);
                     return true;
                 });
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var noRules = t.Graph.DefineRuleset("none");
             var nums = t.Graph.DefineQuery("nums", q => q.When(t.Num.Of(q.Var<long>("x"))));
@@ -882,7 +882,7 @@ namespace Eggnog.Tests.Concurrency
                             if (child.AreEqual(a, b) == false)
                                 throw new InvalidOperationException($"child {id}'s union did not hold");
 
-                            if (child.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                            if (child.Get(s.Of()).Equals(Set.Of([zero])) == false)
                                 throw new InvalidOperationException($"child {id} read {child.Get(s.Of())}");
 
                             Interlocked.Increment(ref rounds[id]);
@@ -982,24 +982,24 @@ namespace Eggnog.Tests.Concurrency
                 // Interns containers of values by host writes and through the rule, merges the classes and reads back.
                 void Exercise(Scope scope, string name, long key)
                 {
-                    scope.Assume(vec.Of(key).Is(Vec.Of(key, 1L)));
+                    scope.Assume(vec.Of(key).Is(Vec.Of([key, 1L])));
                     scope.Assume(pair.Of(key).Is(new Pair<long, long>(key, 2L)));
                     scope.Assume(map.Of(key).Is(Map.Of((key, 3L))));
-                    scope.Assume(bag.Of(key).Is(MultiSet.Of(key, key)));
+                    scope.Assume(bag.Of(key).Is(MultiSet.Of([key, key])));
                     scope.Assume(seed.Of(key));
                     scope.Run(Schedule.Run(rules));
                     scope.Union(zero, one);
                     if (scope.AreEqual(zero, one) == false)
                         throw new InvalidOperationException($"{name}'s union did not hold");
 
-                    if (scope.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                    if (scope.Get(s.Of()).Equals(Set.Of([zero])) == false)
                         throw new InvalidOperationException($"{name} read {scope.Get(s.Of())}");
 
-                    if (scope.Get(vec.Of(key)).Equals(Vec.Of(key, 1L)) == false
+                    if (scope.Get(vec.Of(key)).Equals(Vec.Of([key, 1L])) == false
                         || scope.Get(pair.Of(key)).Equals(new Pair<long, long>(key, 2L)) == false
                         || scope.Get(map.Of(key)).Equals(Map.Of((key, 3L))) == false
-                        || scope.Get(bag.Of(key)).Equals(MultiSet.Of(key, key)) == false
-                        || scope.Get(made.Of(key)).Equals(Vec.Of(key, 5L)) == false)
+                        || scope.Get(bag.Of(key)).Equals(MultiSet.Of([key, key])) == false
+                        || scope.Get(made.Of(key)).Equals(Vec.Of([key, 5L])) == false)
                         throw new InvalidOperationException($"{name} read back another container of values");
 
                     scope.Engine.Context.CheckInvariants();
@@ -1041,7 +1041,7 @@ namespace Eggnog.Tests.Concurrency
                         {
                             using var scope = middle.CreateChild();
                             Exercise(scope, "the grandchild", key + 500_000L);
-                            if (scope.Get(made.Of(key)).Equals(Vec.Of(key, 5L)) == false)
+                            if (scope.Get(made.Of(key)).Equals(Vec.Of([key, 5L])) == false)
                                 throw new InvalidOperationException("the grandchild read another vector of its parent's");
                         }, nested, 0);
                         if (grandchild.Join(Patience) == false)
@@ -1051,7 +1051,7 @@ namespace Eggnog.Tests.Concurrency
                             throw new InvalidOperationException("the grandchild failed", failure);
 
                         if (middle.Check(seed.Of(key + 500_000L)) || middle.AreEqual(zero, one) == false
-                            || middle.Get(s.Of()).Equals(Set.Of(zero)) == false)
+                            || middle.Get(s.Of()).Equals(Set.Of([zero])) == false)
                             throw new InvalidOperationException("the grandchild changed its frozen parent's view");
 
                         middle.Engine.Context.CheckInvariants();
@@ -1115,14 +1115,14 @@ namespace Eggnog.Tests.Concurrency
                 Assert.True(containers.GetEnvironment<Relations.MultiSetContainer>().HoldsIds);
                 Assert.True(containers.GetEnvironment<Relations.FunctionContainer>().HoldsIds);
                 Assert.False(root.AreEqual(zero, one));
-                Assert.Equal(Set.Of(one), root.Get(s.Of()));
+                Assert.Equal(Set.Of([one]), root.Get(s.Of()));
                 containers.CheckInvariants();
                 root.Engine.Context.CheckInvariants();
 
                 // A child made after the registrations reads and rebuilds as the others did.
                 using var last = root.CreateChild();
                 last.Union(zero, one);
-                Assert.Equal(Set.Of(zero), last.Get(s.Of()));
+                Assert.Equal(Set.Of([zero]), last.Get(s.Of()));
                 last.Engine.Context.CheckInvariants();
             }
         }

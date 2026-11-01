@@ -6,7 +6,7 @@ namespace Eggnog
 
     /// <summary>
     /// A relation over any number of key columns, as egglog's relations take: a set of tuples, defined with
-    /// <see cref="EGraph.DefineRelationN(string, IReadOnlyList{Type}, TableOptions)"/>
+    /// <see cref="EGraph.DefineRelationN(string, ReadOnlySpan{Type}, RelationOptions)"/>
     /// where the typed relations stop at four columns.
     /// </summary>
     public sealed class RelationN : RelationHandle

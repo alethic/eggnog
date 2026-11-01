@@ -26,8 +26,8 @@ namespace Eggnog.Tests.Diagnostics
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 3L));
-                r.Then(t.Num.Of(Primitives.Add.Of(x, 1L)));
+                r.Where(Int64Primitives.Less.Of(x, 3L));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             t.Root.Assume(t.Num.Of(0L));
             var report = t.Root.Run(Schedule.Saturate(t.Rules), new RunOptions

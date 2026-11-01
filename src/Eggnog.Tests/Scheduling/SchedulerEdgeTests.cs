@@ -105,7 +105,7 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = rule.Var<long>("x");
                 rule.When(r.Of(x));
-                rule.Then(output.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L))));
+                rule.Then(output.Of(Int64Primitives.Divide.Of(10L, Int64Primitives.Subtract.Of(x, 3L))));
             });
             var second = graph.DefineRuleset("second");
             second.DefineRule("b", rule =>

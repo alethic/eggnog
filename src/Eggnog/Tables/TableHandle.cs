@@ -63,7 +63,8 @@ namespace Eggnog
         public bool Lift { get; internal set; }
 
         /// <summary>
-        /// Gets whether rows of the table may be subsumed (<see cref="TableOptions.Subsumable"/>).
+        /// Gets whether rows of the table may be subsumed (<see cref="RelationOptions.Subsumable"/>,
+        /// <see cref="ConstructorOptions.Subsumable"/>).
         /// </summary>
         public bool Subsumable { get; internal set; }
 

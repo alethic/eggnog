@@ -97,8 +97,8 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = rule.Var<long>("x");
                 rule.When(r.Of(x));
-                rule.Where(Primitives.Less.Of(x, 10L));
-                rule.Then(r.Of(Primitives.Add.Of(x, 1L)));
+                rule.Where(Int64Primitives.Less.Of(x, 10L));
+                rule.Then(r.Of(Int64Primitives.Add.Of(x, 1L)));
             });
             var bo = graph.AddScheduler(new BackOffScheduler());
 
@@ -132,7 +132,7 @@ namespace Eggnog.Tests.Scheduling
             {
                 var x = rule.Var<long>("x");
                 rule.When(r.Of(x));
-                rule.Where(Primitives.Less.Of(x, 1L));
+                rule.Where(Int64Primitives.Less.Of(x, 1L));
                 rule.Then(few.Of(x));
             });
             var bo = graph.AddScheduler(new BackOffScheduler(matchLimit: 2, banLength: 3));

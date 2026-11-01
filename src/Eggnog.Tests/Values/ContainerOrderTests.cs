@@ -30,8 +30,8 @@ namespace Eggnog.Tests.Values
             var m = graph.DefineRelation<MultiSet<Ranked>>("m");
             var p = graph.DefineRelation<Map<Ranked, long>>("p");
             var (one, two, three) = (new Ranked(1), new Ranked(2), new Ranked(3));
-            var (setA, setB) = (Set.Of(one, three), Set.Of(two));
-            var (multisetA, multisetB) = (MultiSet.Of(one, three), MultiSet.Of(two));
+            var (setA, setB) = (Set.Of([one, three]), Set.Of([two]));
+            var (multisetA, multisetB) = (MultiSet.Of([one, three]), MultiSet.Of([two]));
             var (mapA, mapB) = (Map.Of((one, 0L), (three, 0L)), Map.Of((two, 0L)));
             graph.Root.Assume(s.Of(setB), s.Of(setA), m.Of(multisetB), m.Of(multisetA), p.Of(mapB), p.Of(mapA));
 

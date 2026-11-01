@@ -67,7 +67,7 @@ namespace Eggnog.Tests.Differential
             // The class the keep disequality compares a class variable with: made at the root before anything else, and
             // held by no table the program reads, so the disequality never drops a match.
             var keeper = graph.DefineConstructor("Keep", [], types[2]);
-            keep = graph.Root.Make(new ConstructorTerm<Node>(keeper, []));
+            keep = graph.Root.Make(new ConstructorTerm<Node>((ConstructorHandle<Node>)keeper, []));
 
             tags = new ScopeTag[ScopedProgram.TagCount];
             for (var i = 0; i < tags.Length; i++)
@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Differential
                 b.When(Atom(atom, variables, atom.Tag));
 
             if (rule.FilterVar is { } filtered)
-                b.When(new FilterFact(Compute.Of(Primitives.Less, variables[filtered], Term.Constant(types[0], rule.FilterBelow))));
+                b.When(new FilterFact(Compute.Of(Int64Primitives.Less, variables[filtered], Term.Constant(types[0], rule.FilterBelow))));
 
             // Every body variable is used, so match counts are distinct full bindings (as with the engine tests'
             // ColorSchema.Keep): a value through a filter that keeps everything, a class through a disequality with a
@@ -328,7 +328,7 @@ namespace Eggnog.Tests.Differential
                     return Fact.Equal((tag >= 0 ? function.InScope(tags[tag]) : function).Apply(keys), TermOf(atom.Output!, variables));
                 }
                 default:
-                    return Fact.Equal(new ConstructorTerm<Node>((ConstructorHandle)tables[atom.Table], keys), TermOf(atom.Output!, variables));
+                    return Fact.Equal(new ConstructorTerm<Node>((ConstructorHandle<Node>)tables[atom.Table], keys), TermOf(atom.Output!, variables));
             }
         }
 
@@ -341,7 +341,7 @@ namespace Eggnog.Tests.Differential
                 return variables![name];
 
             if (term.Construct >= 0)
-                return new ConstructorTerm<Node>((ConstructorHandle)tables[term.Construct], [TermOf(term.Argument!, variables)]);
+                return new ConstructorTerm<Node>((ConstructorHandle<Node>)tables[term.Construct], [TermOf(term.Argument!, variables)]);
 
             return Eggnog.Term.Constant(term.Constant is string ? types[1] : types[0], term.Constant!);
         }

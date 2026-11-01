@@ -52,20 +52,20 @@ namespace Eggnog.Tests.Values
             var t = new Theory();
             t.Root.Assume(t.Sets.Of().Is(t.Of(3L, 2L, 1L)));
             var x = t.Root.Make(t.S.Of(t.Of(2L, 1L)));
-            var get = Primitives.Get<Node>();
+            var get = Primitives.SetGet<Node>();
             Assert.Equal("(S (set-of (Num 2) (Num 1)))", t.Root.Extract(x).ToString());
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 0L).Is(t.Num.Of(3L))));
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
-            Assert.True(t.Root.Check(Primitives.Contains<Node>().Of(t.Sets.Of(), t.Num.Of(2L)).Is(true)));
+            Assert.True(t.Root.Check(Primitives.SetContains<Node>().Of(t.Sets.Of(), t.Num.Of(2L)).Is(true)));
 
             t.Root.Union(t.Make(1L), t.Make(2L));
 
             Assert.Equal("(S (set-of (Num 2)))", t.Root.Extract(x).ToString());
-            Assert.True(t.Root.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(2L)));
+            Assert.True(t.Root.Check(Primitives.SetLength<Node>().Of(t.Sets.Of()).Is(2L)));
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 0L).Is(t.Num.Of(3L))));
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 1L).Is(t.Num.Of(1L))));
             Assert.False(t.Root.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
-            Assert.Equal(Set.Of(t.Root.Find(t.Make(3L)), t.Root.Find(t.Make(1L))), t.Root.Get(t.Sets.Of()));
+            Assert.Equal(Set.Of([t.Root.Find(t.Make(3L)), t.Root.Find(t.Make(1L))]), t.Root.Get(t.Sets.Of()));
         }
 
         [Fact]
@@ -132,14 +132,14 @@ namespace Eggnog.Tests.Values
             t.Root.Assume(t.Sets.Of().Is(t.Of(3L, 2L, 1L)));
             var x = t.Root.Make(t.S.Of(t.Of(2L, 1L)));
             t.Root.Assume(g.Of(t.Of(3L, 4L)).Is(10L), g.Of(t.Of(3L)).Is(20L));
-            var get = Primitives.Get<Node>();
+            var get = Primitives.SetGet<Node>();
             t.Root.Freeze();
 
             using (var child = t.Root.CreateChild())
             {
                 child.Union(child.Make(t.Num.Of(1L)), child.Make(t.Num.Of(2L)));
                 Assert.Equal("(S (set-of (Num 2)))", child.Extract(x).ToString());
-                Assert.True(child.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(2L)));
+                Assert.True(child.Check(Primitives.SetLength<Node>().Of(t.Sets.Of()).Is(2L)));
                 Assert.True(child.Check(get.Of(t.Sets.Of(), 0L).Is(t.Num.Of(3L))));
                 Assert.True(child.Check(get.Of(t.Sets.Of(), 1L).Is(t.Num.Of(1L))));
                 Assert.False(child.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
@@ -155,12 +155,12 @@ namespace Eggnog.Tests.Values
             {
                 child.Assume(go.Of());
                 child.Run(merge);
-                Assert.True(child.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(2L)));
+                Assert.True(child.Check(Primitives.SetLength<Node>().Of(t.Sets.Of()).Is(2L)));
                 Assert.True(child.Check(t.S.Of(t.Of(1L)).Is(x)));
             }
 
             Assert.Equal("(S (set-of (Num 2) (Num 1)))", t.Root.Extract(x).ToString());
-            Assert.True(t.Root.Check(Primitives.Count<Node>().Of(t.Sets.Of()).Is(3L)));
+            Assert.True(t.Root.Check(Primitives.SetLength<Node>().Of(t.Sets.Of()).Is(3L)));
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
         }
 
@@ -171,9 +171,9 @@ namespace Eggnog.Tests.Values
             var (one, two) = (t.Make(1L), t.Make(2L));
             t.Root.Union(one, two);
 
-            t.Root.Assume(t.Sets.Of().Is(Set.Of(one, two)));
-            Assert.Equal(Set.Of(t.Root.Find(one)), t.Root.Get(t.Sets.Of()));
-            Assert.True(t.Root.Check(t.Sets.Of().Is(Set.Of(two))));
+            t.Root.Assume(t.Sets.Of().Is(Set.Of([one, two])));
+            Assert.Equal(Set.Of([t.Root.Find(one)]), t.Root.Get(t.Sets.Of()));
+            Assert.True(t.Root.Check(t.Sets.Of().Is(Set.Of([two]))));
         }
 
         [Fact]
@@ -186,8 +186,8 @@ namespace Eggnog.Tests.Values
             rules.DefineRule("contains", r =>
             {
                 var xs = r.Var<Set<Node>>("xs");
-                r.When(xs.Is(t.Sets.Of()), Fact.True(Primitives.Contains<Node>().Of(xs, t.Num.Of(2L))));
-                r.Then(hit.Of(Primitives.Get<Node>().Of(xs, 0L)));
+                r.When(xs.Is(t.Sets.Of()), Fact.True(Primitives.SetContains<Node>().Of(xs, t.Num.Of(2L))));
+                r.Then(hit.Of(Primitives.SetGet<Node>().Of(xs, 0L)));
             });
             t.Root.Assume(t.Sets.Of().Is(t.Of(3L, 2L)));
             t.Root.Run(rules);
@@ -223,7 +223,7 @@ namespace Eggnog.Tests.Values
                 var (k, d) = s.Vars<long, Set<Node>>("k", "d");
                 s.When(d.Is(domain.Of(k)));
                 var v = s.Cases("v", d);
-                s.Assume(domain.Of(k).Is(Primitives.Singleton<Node>().Of(v)));
+                s.Assume(domain.Of(k).Is(Primitives.SetOf<Node>().Of(v)));
             }));
             Assert.Contains("holds classes", exception.Message);
         }

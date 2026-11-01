@@ -2,7 +2,9 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The base of the typed constructors: term heads, whose rows map keys to the class of the term.
+    /// The base of every constructor, whatever its sort: term heads, whose rows map keys to the class of the term. The
+    /// members that cannot know the sort statically take or return this base; <see cref="ConstructorHandle{TSort}"/> is
+    /// the typed base, which carries the sort.
     /// </summary>
     public abstract class ConstructorHandle : TableHandle
     {
@@ -21,9 +23,9 @@ namespace Eggnog
         public ulong Cost { get; internal set; }
 
         /// <summary>
-        /// Gets whether extraction may use the constructor's rows.
+        /// Gets whether extraction skips the constructor's rows (<see cref="ConstructorOptions.Unextractable"/>).
         /// </summary>
-        public bool Extractable { get; internal set; }
+        public bool Unextractable { get; internal set; }
 
         /// <summary>
         /// The untyped application, of any arity: the term with this head and <paramref name="arguments"/>.

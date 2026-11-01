@@ -5,12 +5,12 @@ namespace Eggnog
 
     /// <summary>
     /// A function over 2 key columns, with a value or class output, defined with
-    /// <see cref="EGraph.DefineFunction{T1, T2, TOut}(string, ValueLattice{TOut}, TableOptions)"/>.
+    /// <see cref="EGraph.DefineFunction{T1, T2, TOut}(string, ValueLattice{TOut}, FunctionOptions)"/>.
     /// </summary>
     /// <typeparam name="T1">The type of key 1.</typeparam>
     /// <typeparam name="T2">The type of key 2.</typeparam>
     /// <typeparam name="TOut">The type of the value.</typeparam>
-    public sealed class Function<T1, T2, TOut> : FunctionHandle
+    public sealed class Function<T1, T2, TOut> : FunctionHandle<TOut>
     {
 
         /// <summary>
@@ -20,11 +20,6 @@ namespace Eggnog
         {
 
         }
-
-        /// <summary>
-        /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error.
-        /// </summary>
-        public new ValueLattice<TOut>? Lattice => (ValueLattice<TOut>?)base.Lattice;
 
         /// <summary>
         /// The function's value at the keys: matched in a body (<c>d.Is(dom.Of(p))</c>), written in a head or a host

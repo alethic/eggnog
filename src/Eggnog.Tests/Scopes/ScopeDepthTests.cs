@@ -47,9 +47,9 @@ namespace Eggnog.Tests.Scopes
                 var x = r.Var<long>("x");
                 r.When(seen.Of(x));
                 r.Where(x, x => x < 1000);
-                r.Then(seen.Of(Primitives.Add.Of(x, 1000L)));
+                r.Then(seen.Of(Int64Primitives.Add.Of(x, 1000L)));
             });
-            var length = Primitives.Count<Node>();
+            var length = Primitives.SetLength<Node>();
             var setOf = Primitives.SetOf<Node>();
 
             var scopes = new List<Scope> { graph.Root };

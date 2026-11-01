@@ -24,7 +24,7 @@ namespace Eggnog.Tests.Rules
             ruleset.DefineRule("demo_rule", rule =>
             {
                 var (x, f0, f1) = rule.Vars<long, long, long>("x", "f0", "f1");
-                rule.When(f0.Is(fib.Of(x)), f1.Is(fib.Of(Primitives.Add.Of(x, 1L))));
+                rule.When(f0.Is(fib.Of(x)), f1.Is(fib.Of(Int64Primitives.Add.Of(x, 1L))));
                 rule.ThenCall(ctx => ctx.Set(fib, [ctx.Get(x) + 2], ctx.Get(f0) + ctx.Get(f1)));
             });
 
@@ -45,8 +45,8 @@ namespace Eggnog.Tests.Rules
             rules.DefineRule("fib", rule =>
             {
                 var (x, f0, f1) = rule.Vars<long, long, long>("x", "f0", "f1");
-                rule.When(f0.Is(fib.Of(x)), f1.Is(fib.Of(Primitives.Add.Of(x, 1L))));
-                rule.Then(fib.Of(Primitives.Add.Of(x, 2L)).Is(Primitives.Add.Of(f0, f1)));
+                rule.When(f0.Is(fib.Of(x)), f1.Is(fib.Of(Int64Primitives.Add.Of(x, 1L))));
+                rule.Then(fib.Of(Int64Primitives.Add.Of(x, 2L)).Is(Int64Primitives.Add.Of(f0, f1)));
             });
             graph.Root.Assume(fib.Of(0L).Is(0L), fib.Of(1L).Is(1L));
             graph.Root.Run(Schedule.Repeat(10, rules));

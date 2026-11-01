@@ -30,12 +30,14 @@ namespace Eggnog
             if (Index(arguments[1], "unstable-multiset-fill-index") is not { } index)
                 return false;
 
+            // The function value's function is untyped here: its output's type is checked by the call.
+            var untyped = (PrimitiveTables)tables;
             foreach (var (element, count) in Ordered(tables, (MultiSet<T>)multiset))
             {
-                if (tables.TryLookup<long>(index, [multiset, element], out _))
+                if (untyped.TryLookupUntyped<long>(index, [multiset, element], out _))
                     break;
 
-                tables.Set(index, [multiset, element], count);
+                untyped.SetUntyped(index, [multiset, element], count);
             }
 
             return true;
