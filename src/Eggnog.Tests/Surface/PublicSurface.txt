@@ -322,6 +322,29 @@ interface Eggnog.ITableWriter
     abstract Void Subsume(TableHandle table, params ReadOnlySpan<Object> keys)
     abstract Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 interface Eggnog.ITables : ITableReader, ITableWriter
+static class Eggnog.Int64Primitives
+    static Primitive<Int64, Double> ToDouble { get }
+    static Primitive<Int64, Int64, Boolean> Equal { get }
+    static Primitive<Int64, Int64, Boolean> Greater { get }
+    static Primitive<Int64, Int64, Boolean> GreaterOrEqual { get }
+    static Primitive<Int64, Int64, Boolean> Less { get }
+    static Primitive<Int64, Int64, Boolean> LessOrEqual { get }
+    static Primitive<Int64, Int64, Int64> Add { get }
+    static Primitive<Int64, Int64, Int64> BitwiseAnd { get }
+    static Primitive<Int64, Int64, Int64> BitwiseOr { get }
+    static Primitive<Int64, Int64, Int64> BitwiseXor { get }
+    static Primitive<Int64, Int64, Int64> Divide { get }
+    static Primitive<Int64, Int64, Int64> Max { get }
+    static Primitive<Int64, Int64, Int64> Min { get }
+    static Primitive<Int64, Int64, Int64> Multiply { get }
+    static Primitive<Int64, Int64, Int64> Remainder { get }
+    static Primitive<Int64, Int64, Int64> ShiftLeft { get }
+    static Primitive<Int64, Int64, Int64> ShiftRight { get }
+    static Primitive<Int64, Int64, Int64> Subtract { get }
+    static Primitive<Int64, Int64> Abs { get }
+    static Primitive<Int64, Int64> BitwiseNot { get }
+    static Primitive<Int64, Int64> Log2 { get }
+    static Primitive<Int64, String> Format { get }
 sealed class Eggnog.LiftOptions
     Int32 CandidateLimit { get; init }
     Int32 RoundLimit { get; init }
@@ -458,28 +481,6 @@ sealed class Eggnog.Primitive<T1, T2, T3, T4, TResult> : Primitive
 static class Eggnog.Primitives
     static Primitive Fallible(Primitive filter)
     static Primitive ValueEq<T>()
-    static Primitive<Int64, Double> ToDouble { get }
-    static Primitive<Int64, Int64, Boolean> Equal { get }
-    static Primitive<Int64, Int64, Boolean> Greater { get }
-    static Primitive<Int64, Int64, Boolean> GreaterOrEqual { get }
-    static Primitive<Int64, Int64, Boolean> Less { get }
-    static Primitive<Int64, Int64, Boolean> LessOrEqual { get }
-    static Primitive<Int64, Int64, Int64> Add { get }
-    static Primitive<Int64, Int64, Int64> BitwiseAnd { get }
-    static Primitive<Int64, Int64, Int64> BitwiseOr { get }
-    static Primitive<Int64, Int64, Int64> BitwiseXor { get }
-    static Primitive<Int64, Int64, Int64> Divide { get }
-    static Primitive<Int64, Int64, Int64> Max { get }
-    static Primitive<Int64, Int64, Int64> Min { get }
-    static Primitive<Int64, Int64, Int64> Multiply { get }
-    static Primitive<Int64, Int64, Int64> Remainder { get }
-    static Primitive<Int64, Int64, Int64> ShiftLeft { get }
-    static Primitive<Int64, Int64, Int64> ShiftRight { get }
-    static Primitive<Int64, Int64, Int64> Subtract { get }
-    static Primitive<Int64, Int64> Abs { get }
-    static Primitive<Int64, Int64> BitwiseNot { get }
-    static Primitive<Int64, Int64> Log2 { get }
-    static Primitive<Int64, String> Format { get }
     static Primitive<Int64, Vec<Int64>> VecRange { get }
     static Primitive<Map<TKey, TValue>, Int64> MapLength<TKey, TValue>()
     static Primitive<Map<TKey, TValue>, TKey, Boolean> MapContains<TKey, TValue>()
@@ -504,22 +505,21 @@ static class Eggnog.Primitives
     static Primitive<MultiSet<TSort>, TSort> MultiSetUnionValues<TSort : struct, ISort<TSort>>()
     static Primitive<Pair<T1, T2>, T1> PairFirst<T1, T2>()
     static Primitive<Pair<T1, T2>, T2> PairSecond<T1, T2>()
-    static Primitive<Set<T>, Boolean> IsEmpty<T>()
-    static Primitive<Set<T>, Int64, T> Get<T>()
-    static Primitive<Set<T>, Int64> Count<T>()
-    static Primitive<Set<T>, Set<T>, Boolean> IsSubsetOf<T>()
-    static Primitive<Set<T>, Set<T>, Set<T>> Except<T>()
-    static Primitive<Set<T>, Set<T>, Set<T>> Intersect<T>()
-    static Primitive<Set<T>, Set<T>, Set<T>> Union<T>()
-    static Primitive<Set<T>, T, Boolean> Contains<T>()
-    static Primitive<Set<T>, T, Boolean> NotContains<T>()
-    static Primitive<Set<T>, T, Set<T>> Insert<T>()
-    static Primitive<Set<T>, T, Set<T>> Remove<T>()
+    static Primitive<Set<T>, Boolean> SetIsEmpty<T>()
+    static Primitive<Set<T>, Int64, T> SetGet<T>()
+    static Primitive<Set<T>, Int64> SetLength<T>()
+    static Primitive<Set<T>, Set<T>, Boolean> SetIsSubset<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> SetDifference<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> SetIntersect<T>()
+    static Primitive<Set<T>, Set<T>, Set<T>> SetUnion<T>()
+    static Primitive<Set<T>, T, Boolean> SetContains<T>()
+    static Primitive<Set<T>, T, Boolean> SetNotContains<T>()
+    static Primitive<Set<T>, T, Set<T>> SetInsert<T>()
+    static Primitive<Set<T>, T, Set<T>> SetRemove<T>()
     static Primitive<T, Int64, MultiSet<T>> MultiSetSingle<T>()
     static Primitive<T, MultiSet<T>, Boolean> MultiSetContainsSwapped<T>()
     static Primitive<T, MultiSet<T>, Boolean> MultiSetNotContainsSwapped<T>()
     static Primitive<T, MultiSet<T>, MultiSet<T>> MultiSetRemoveSwapped<T>()
-    static Primitive<T, Set<T>> Singleton<T>()
     static Primitive<T, T, Boolean> NotEqual<T>()
     static Primitive<T, T, T> OrderingMax<T>()
     static Primitive<T, T, T> OrderingMin<T>()
@@ -538,6 +538,7 @@ static class Eggnog.Primitives
     static PrimitiveN<MultiSet<T>> UnstableMultiSetFilterNot<T>()
     static PrimitiveN<MultiSet<T>> UnstableMultiSetFlatMap<T>()
     static PrimitiveN<MultiSet<TResult>> UnstableMultiSetMap<T, TResult>()
+    static PrimitiveN<Set<T>> SetEmpty<T>()
     static PrimitiveN<T> UnstableMultiSetReduce<T>()
     static PrimitiveN<TResult> UnstableApp<T1, T2, T3, T4, TResult>()
     static PrimitiveN<TResult> UnstableApp<T1, T2, T3, TResult>()

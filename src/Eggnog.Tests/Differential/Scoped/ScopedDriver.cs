@@ -277,7 +277,7 @@ namespace Eggnog.Tests.Differential
                 b.When(Atom(atom, variables, atom.Tag));
 
             if (rule.FilterVar is { } filtered)
-                b.When(new FilterFact(Compute.Of(Primitives.Less, variables[filtered], Term.Constant(types[0], rule.FilterBelow))));
+                b.When(new FilterFact(Compute.Of(Int64Primitives.Less, variables[filtered], Term.Constant(types[0], rule.FilterBelow))));
 
             // Every body variable is used, so match counts are distinct full bindings (as with the engine tests'
             // ColorSchema.Keep): a value through a filter that keeps everything, a class through a disequality with a

@@ -22,8 +22,8 @@ namespace Eggnog.Tests.Rendering
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, 5L));
-                r.Then(flag.Of(Primitives.GreaterOrEqual.Of(x, 3L)));
+                r.Where(Int64Primitives.Less.Of(x, 5L));
+                r.Then(flag.Of(Int64Primitives.GreaterOrEqual.Of(x, 3L)));
             });
 
             Assert.Equal("(rule ((num x) (< x 5)) ((flag (bool->= x 3))) :ruleset rules)", rule.ToString());
@@ -40,8 +40,8 @@ namespace Eggnog.Tests.Rendering
             {
                 var (p, d, v) = r.Vars<string, Set<string>, string>("p", "d", "v");
                 r.When(d.Is(dom.Of(p)), pick.Of(p, v));
-                r.Where(Primitives.Contains<string>().Of(d, v));
-                r.Where(Primitives.NotContains<string>().Of(d, p));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Where(Primitives.SetNotContains<string>().Of(d, p));
                 r.Where(Primitives.NotEqual<string>().Of(p, v));
                 r.Then(pick.Of(v, p));
             });
@@ -61,7 +61,7 @@ namespace Eggnog.Tests.Rendering
                 var (x, b) = r.Vars<long, bool>("x", "b");
                 r.When(t.Num.Of(x), flag.Of(b));
                 r.Where(b);
-                r.Where(BooleanPrimitives.And.Of(b, Primitives.Equal.Of(x, 1L)));
+                r.Where(BooleanPrimitives.And.Of(b, Int64Primitives.Equal.Of(x, 1L)));
                 r.Then(t.Num.Of(x));
             });
 

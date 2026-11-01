@@ -20,8 +20,8 @@ namespace Eggnog.Tests.Host
         {
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<long, long>("f");
-            t.Root.Assume(f.Of(1L).Is(Primitives.Add.Of(2L, 3L)), t.Num.Of(Primitives.Multiply.Of(2L, 3L)));
-            var lit = t.Root.Make(t.Lit.Of(Primitives.Subtract.Of(10L, 7L)));
+            t.Root.Assume(f.Of(1L).Is(Int64Primitives.Add.Of(2L, 3L)), t.Num.Of(Int64Primitives.Multiply.Of(2L, 3L)));
+            var lit = t.Root.Make(t.Lit.Of(Int64Primitives.Subtract.Of(10L, 7L)));
 
             Assert.Equal(5L, t.Root.Get(f.Of(1L)));
             Assert.True(t.Root.Check(t.Num.Of(6L)));
@@ -39,7 +39,7 @@ namespace Eggnog.Tests.Host
             var g = t.Graph.DefineFunction<long, long>("g");
             t.Root.Assume(f.Of(1L).Is(5L));
 
-            t.Root.Assume(g.Of(1L).Is(Primitives.Add.Of(f.Of(1L), 1L)));
+            t.Root.Assume(g.Of(1L).Is(Int64Primitives.Add.Of(f.Of(1L), 1L)));
 
             Assert.Equal(6L, t.Root.Get(g.Of(1L)));
         }
@@ -83,7 +83,7 @@ namespace Eggnog.Tests.Host
 
             Assert.True(t.Root.AreEqual(a, t.B.Of()));
             Assert.Equal(7L, t.Root.Get(g.Of(2L)));
-            t.Root.Assume(t.A.Of().Is(t.Lit.Of(1L)), g.Of(3L).Is(Primitives.Add.Of(g.Of(1L), 1L)));
+            t.Root.Assume(t.A.Of().Is(t.Lit.Of(1L)), g.Of(3L).Is(Int64Primitives.Add.Of(g.Of(1L), 1L)));
             Assert.Equal(2L, t.Root.Get(g.Of(3L)));
         }
 
@@ -114,7 +114,7 @@ namespace Eggnog.Tests.Host
             var f = t.Graph.DefineFunction<long, long>("f");
             var boom = Primitive.Create<long, long>("boom", static _ => throw new InvalidOperationException("boom"));
 
-            var none = Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(t.Num.Of(1L), f.Of(1L).Is(Primitives.Divide.Of(1L, 0L))));
+            var none = Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(t.Num.Of(1L), f.Of(1L).Is(Int64Primitives.Divide.Of(1L, 0L))));
             var threw = Assert.Throws<RuleEvaluationException>(() => t.Root.Assume(f.Of(1L).Is(boom.Of(1L))));
 
             Assert.Contains("primitive '/' has no result", none.Message);
@@ -145,7 +145,7 @@ namespace Eggnog.Tests.Host
             Assert.False(graph.Root.Check(StringPrimitives.Concat.Of("x", "y").Is("yx")));
             Assert.False(graph.Root.Check(StringPrimitives.Concat.Of("x", "y").Is("ab")));
             Assert.Equal("ab", graph.Root.Get(StringPrimitives.Concat.Of("a", "b")));
-            Assert.False(graph.Root.Check(name.Of(Primitives.Divide.Of(1L, 0L)).Is("ab")));
+            Assert.False(graph.Root.Check(name.Of(Int64Primitives.Divide.Of(1L, 0L)).Is("ab")));
             Assert.Equal(interned, graph.Values.InternedCount);
         }
 

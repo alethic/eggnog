@@ -120,13 +120,13 @@ namespace Eggnog.Tests.Rules
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(x, y));
+                r.Where(Int64Primitives.Less.Of(x, y));
             }, "variable 'y' is not bound by any When clause");
             AssertRefused(t, "nested", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Less.Of(Primitives.Add.Of(y, 1L), x));
+                r.Where(Int64Primitives.Less.Of(Int64Primitives.Add.Of(y, 1L), x));
             }, "variable 'y' is not bound by any When clause");
             AssertRefused(t, "head", r =>
             {

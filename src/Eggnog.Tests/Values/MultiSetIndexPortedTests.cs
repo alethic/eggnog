@@ -27,7 +27,7 @@ namespace Eggnog.Tests.Values
                 Product = Graph.DefineConstructor<MultiSet<Node>, Node>("product");
 
                 // (function ms-count (Maths Math) i64 :merge (+ old new)) (sort MSIndexFn (UnstableFn (Maths Math) i64))
-                Count = Graph.DefineFunction<MultiSet<Node>, Node, long>("ms-count", FunctionMerge.Expression<long>(static (old, @new) => Primitives.Add.Of(old, @new)));
+                Count = Graph.DefineFunction<MultiSet<Node>, Node, long>("ms-count", FunctionMerge.Expression<long>(static (old, @new) => Int64Primitives.Add.Of(old, @new)));
                 Graph.Values.RegisterFn<MultiSet<Node>, Node, long>();
                 Rules = Graph.DefineRuleset("rules");
             }

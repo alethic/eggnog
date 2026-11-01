@@ -118,7 +118,7 @@ namespace Eggnog.Tests.Deletion
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Greater.Of(x, 2L));
+                r.Where(Int64Primitives.Greater.Of(x, 2L));
                 r.Delete(t.Num.Of(x));
             });
             t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L), t.Num.Of(4L));
@@ -210,8 +210,8 @@ namespace Eggnog.Tests.Deletion
             {
                 var n = r.Var<long>("n");
                 r.When(keep.Of(n));
-                r.Then(t.Num.Of(Primitives.Add.Of(n, 10L)));
-                r.Delete(t.Num.Of(Primitives.Add.Of(n, 10L)));
+                r.Then(t.Num.Of(Int64Primitives.Add.Of(n, 10L)));
+                r.Delete(t.Num.Of(Int64Primitives.Add.Of(n, 10L)));
             });
             t.Root.Assume(keep.Of(1L), t.Num.Of(1L));
 
@@ -277,9 +277,9 @@ namespace Eggnog.Tests.Deletion
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             t.Rules.DefineRule("drop", r => r.Delete(t.Num.Of(1L)));
             t.Root.Assume(t.Num.Of(1L), choice.Of("k").Is(Set.Of([1L, 2L])));
@@ -349,7 +349,7 @@ namespace Eggnog.Tests.Deletion
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(output.Of(Primitives.Divide.Of(10L, Primitives.Subtract.Of(x, 3L))));
+                r.Then(output.Of(Int64Primitives.Divide.Of(10L, Int64Primitives.Subtract.Of(x, 3L))));
             });
             t.Root.Assume(t.Num.Of(1L), t.Num.Of(2L), t.Num.Of(3L));
             Assert.Equal(3, t.Root.Count(seen));
@@ -379,7 +379,7 @@ namespace Eggnog.Tests.Deletion
                 r.When(go.Of(x), v.Is(f.Of(x)));
                 r.Delete(go.Of(x));
                 r.Delete(f.Of(x));
-                r.Then(f.Of(x).Is(Primitives.Add.Of(v, 1L)));
+                r.Then(f.Of(x).Is(Int64Primitives.Add.Of(v, 1L)));
             });
             t.Root.Assume(f.Of(1L).Is(1L), go.Of(1L));
             Assert.Equal(1, t.Root.Count(one));
@@ -429,7 +429,7 @@ namespace Eggnog.Tests.Deletion
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Where(Primitives.Greater.Of(x, 4L));
+                r.Where(Int64Primitives.Greater.Of(x, 4L));
                 r.Then(big.Of(x));
             });
             t.Root.Assume(t.Num.Of(5L));

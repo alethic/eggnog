@@ -303,19 +303,19 @@ namespace Eggnog.Tests.Predicates.Literal
             {
                 var (c, p, v, d) = r.Vars<Ctx, string, string, Set<string>>("c", "p", "v", "d");
                 r.When(Ne.Of(c, p, v), d.Is(Dom.Of(c, p)));
-                r.Where(Primitives.Contains<string>().Of(d, v));
-                r.Then(Dom.Of(c, p).Is(Primitives.Remove<string>().Of(d, v)));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(Dom.Of(c, p).Is(Primitives.SetRemove<string>().Of(d, v)));
             });
             Lattice.DefineRule("an empty domain", r =>
             {
                 var (c, p, d) = r.Vars<Ctx, string, Set<string>>("c", "p", "d");
-                r.When(Present.Of(c, p), d.Is(Dom.Of(c, p)), Primitives.Count<string>().Of(d).Is(0L));
+                r.When(Present.Of(c, p), d.Is(Dom.Of(c, p)), Primitives.SetLength<string>().Of(d).Is(0L));
                 r.Then(Contradicts.Of(c));
             });
             Lattice.DefineRule("no possible type", r =>
             {
                 var (c, p, t) = r.Vars<Ctx, string, Set<string>>("c", "p", "t");
-                r.When(Present.Of(c, p), t.Is(Types.Of(c, p)), Primitives.Count<string>().Of(t).Is(0L));
+                r.When(Present.Of(c, p), t.Is(Types.Of(c, p)), Primitives.SetLength<string>().Of(t).Is(0L));
                 r.Then(Contradicts.Of(c));
             });
             Lattice.DefineRule("crossed bounds", r =>
@@ -323,7 +323,7 @@ namespace Eggnog.Tests.Predicates.Literal
                 var (c, p) = r.Vars<Ctx, string>("c", "p");
                 var (l, h) = r.Vars<long, long>("l", "h");
                 r.When(Present.Of(c, p), l.Is(Lo.Of(c, p)), h.Is(Hi.Of(c, p)));
-                r.Where(Primitives.Greater.Of(l, h));
+                r.Where(Int64Primitives.Greater.Of(l, h));
                 r.Then(Contradicts.Of(c));
             });
         }
@@ -334,34 +334,34 @@ namespace Eggnog.Tests.Predicates.Literal
             {
                 var (p, v, c, d) = r.Vars<string, string, Ctx, Set<string>>("p", "v", "c", "d");
                 r.When(Discriminator.Of(p, v), Present.Of(c, p), d.Is(Dom.Of(c, p)));
-                r.Where(Primitives.Greater.Of(Primitives.Count<string>().Of(d), 1L));
-                r.Where(Primitives.Contains<string>().Of(d, v));
+                r.Where(Int64Primitives.Greater.Of(Primitives.SetLength<string>().Of(d), 1L));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
                 r.Then(
                     Parent.Of(Assume.Of(c, p, v), c),
                     Present.Of(Assume.Of(c, p, v), p),
-                    Dom.Of(Assume.Of(c, p, v), p).Is(Primitives.Singleton<string>().Of(v)));
+                    Dom.Of(Assume.Of(c, p, v), p).Is(Primitives.SetOf<string>().Of(v)));
             });
             Split.DefineRule("a vacuous case removes its value", r =>
             {
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
                 var d = r.Var<Set<string>>("d");
                 r.When(k.Is(Assume.Of(c, p, v)), Contradicts.Of(k), d.Is(Dom.Of(c, p)));
-                r.Where(Primitives.Contains<string>().Of(d, v));
-                r.Then(Dom.Of(c, p).Is(Primitives.Remove<string>().Of(d, v)));
+                r.Where(Primitives.SetContains<string>().Of(d, v));
+                r.Then(Dom.Of(c, p).Is(Primitives.SetRemove<string>().Of(d, v)));
             });
             Split.DefineRule("report a stored form", r =>
             {
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
                 var (q, f) = r.Vars<string, string>("q", "f");
                 r.When(k.Is(Assume.Of(c, p, v)), Form.Of(k, q, f));
-                r.Then(FormCases.Of(c, p, q, f).Is(Primitives.Singleton<string>().Of(v)));
+                r.Then(FormCases.Of(c, p, q, f).Is(Primitives.SetOf<string>().Of(v)));
             });
             Split.DefineRule("lift a stored form", r =>
             {
                 var (c, p, q, f) = r.Vars<Ctx, string, string, string>("c", "p", "q", "f");
                 var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(FormCases.Of(c, p, q, f)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
-                r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
+                r.When(Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(d, s)).Is(0L));
                 r.Then(Form.Of(c, q, f));
             });
             Split.DefineRule("report presence", r =>
@@ -369,14 +369,14 @@ namespace Eggnog.Tests.Predicates.Literal
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
                 var q = r.Var<string>("q");
                 r.When(k.Is(Assume.Of(c, p, v)), Present.Of(k, q));
-                r.Then(PresentCases.Of(c, p, q).Is(Primitives.Singleton<string>().Of(v)));
+                r.Then(PresentCases.Of(c, p, q).Is(Primitives.SetOf<string>().Of(v)));
             });
             Split.DefineRule("lift presence", r =>
             {
                 var (c, p, q) = r.Vars<Ctx, string, string>("c", "p", "q");
                 var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(PresentCases.Of(c, p, q)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
-                r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
+                r.When(Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(d, s)).Is(0L));
                 r.Then(Present.Of(c, q));
             });
             Split.DefineRule("report a domain", r =>
@@ -384,14 +384,14 @@ namespace Eggnog.Tests.Predicates.Literal
                 var (k, c, p, v) = r.Vars<Ctx, Ctx, string, string>("k", "c", "p", "v");
                 var (q, dq) = r.Vars<string, Set<string>>("q", "dq");
                 r.When(k.Is(Assume.Of(c, p, v)), dq.Is(Dom.Of(k, q)));
-                r.Then(DomCases.Of(c, p, q).Is(dq), DomReported.Of(c, p, q).Is(Primitives.Singleton<string>().Of(v)));
+                r.Then(DomCases.Of(c, p, q).Is(dq), DomReported.Of(c, p, q).Is(Primitives.SetOf<string>().Of(v)));
             });
             Split.DefineRule("lift a domain", r =>
             {
                 var (c, p, q) = r.Vars<Ctx, string, string>("c", "p", "q");
                 var (reported, u, d) = r.Vars<Set<string>, Set<string>, Set<string>>("r", "u", "d");
                 r.When(reported.Is(DomReported.Of(c, p, q)), u.Is(DomCases.Of(c, p, q)), Present.Of(c, p), d.Is(Dom.Of(c, p)));
-                r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, reported)).Is(0L));
+                r.When(Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(d, reported)).Is(0L));
                 r.Then(Dom.Of(c, q).Is(u));
             });
         }
@@ -414,14 +414,14 @@ namespace Eggnog.Tests.Predicates.Literal
             {
                 var (e, p, v) = r.Vars<Pred, string, string>("e", "p", "v");
                 r.When(e.Is(StrEq.Of(p, v)));
-                r.Then(InSet.Of(e, p).Is(Primitives.Singleton<string>().Of(v)));
+                r.Then(InSet.Of(e, p).Is(Primitives.SetOf<string>().Of(v)));
             });
             Horn.DefineRule("inset of or", r =>
             {
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(InSet.Of(a, p)), sb.Is(InSet.Of(b, p)));
-                r.Then(InSet.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
+                r.Then(InSet.Of(e, p).Is(Primitives.SetUnion<string>().Of(sa, sb)));
             });
             Horn.DefineRule("inset admits", r =>
             {
@@ -448,7 +448,7 @@ namespace Eggnog.Tests.Predicates.Literal
                 var (e, a, b, p) = r.Vars<Pred, Pred, Pred, string>("e", "a", "b", "p");
                 var (sa, sb) = r.Vars<Set<string>, Set<string>>("sa", "sb");
                 r.When(e.Is(Or.Of(a, b)), sa.Is(Admits.Of(a, p)), sb.Is(Admits.Of(b, p)));
-                r.Then(Admits.Of(e, p).Is(Primitives.Union<string>().Of(sa, sb)));
+                r.Then(Admits.Of(e, p).Is(Primitives.SetUnion<string>().Of(sa, sb)));
             });
             Horn.DefineRule("a conjunct admits", r =>
             {
@@ -478,7 +478,7 @@ namespace Eggnog.Tests.Predicates.Literal
                 r.When(Conjunct.Of(NumGt.Of(p, n)));
                 r.Then(
                     Present.Of(Query.Of(), p),
-                    Lo.Of(Query.Of(), p).Is(Primitives.Add.Of(n, 1L)),
+                    Lo.Of(Query.Of(), p).Is(Int64Primitives.Add.Of(n, 1L)),
                     Types.Of(Query.Of(), p).Is(Set.Of(["number"])));
             });
         }
@@ -508,14 +508,14 @@ namespace Eggnog.Tests.Predicates.Literal
                 var (e, p) = r.Vars<Pred, string>("e", "p");
                 var (s, d) = r.Vars<Set<string>, Set<string>>("s", "d");
                 r.When(s.Is(InSet.Of(e, p)), Present.Of(Schema.Of(), p), d.Is(Dom.Of(Schema.Of(), p)));
-                r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(d, s)).Is(0L));
+                r.When(Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(d, s)).Is(0L));
                 r.Then(e.Is(PTrue.Of()));
             });
             Rewrite.DefineRule("a string path's negated string test", r =>
             {
                 var (e, p, t) = r.Vars<Pred, string, Set<string>>("e", "p", "t");
                 r.When(e.Is(Not.Of(IsString.Of(p))), t.Is(Types.Of(Query.Of(), p)));
-                r.When(Primitives.Count<string>().Of(Primitives.Except<string>().Of(t, StringOrNull)).Is(0L));
+                r.When(Primitives.SetLength<string>().Of(Primitives.SetDifference<string>().Of(t, StringOrNull)).Is(0L));
                 r.Then(e.Is(Not.Of(IsDefined.Of(p))));
             });
             Rewrite.DefineRule("a definedness test absorbs its negation", r =>

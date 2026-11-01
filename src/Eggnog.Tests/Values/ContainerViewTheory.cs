@@ -356,14 +356,14 @@ namespace Eggnog.Tests.Values
                 var s = r.Var<Set<Node>>("s");
                 r.Naive();
                 r.When(s.Is(Set.Of()));
-                r.Then(Gotten.Of().Is(Primitives.Get<Node>().Of(s, 0L)));
+                r.Then(Gotten.Of().Is(Primitives.SetGet<Node>().Of(s, 0L)));
             });
             rules.DefineRule("set-contains", r =>
             {
                 var s = r.Var<Set<Node>>("s");
                 r.Naive();
                 r.When(s.Is(Set.Of()));
-                r.Where(Primitives.Contains<Node>().Of(s, Num.Of(2L)));
+                r.Where(Primitives.SetContains<Node>().Of(s, Num.Of(2L)));
                 r.Then(Flags.Of(1L).Is(1L));
             });
             rules.DefineRule("map", r =>

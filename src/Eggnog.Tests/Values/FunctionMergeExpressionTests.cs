@@ -19,7 +19,7 @@ namespace Eggnog.Tests.Values
         public void AnExpressionOfPrimitivesAndConstantsMergesValues()
         {
             var graph = new EGraph();
-            var score = graph.DefineFunction<string, long>("score", FunctionMerge.Expression<long>((old, @new) => Primitives.Max.Of(old, Primitives.Add.Of(@new, 1L))));
+            var score = graph.DefineFunction<string, long>("score", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Max.Of(old, Int64Primitives.Add.Of(@new, 1L))));
             graph.Root.Assume(score.Of("k").Is(5L));
 
             graph.Root.Assume(score.Of("k").Is(2L));
@@ -53,7 +53,7 @@ namespace Eggnog.Tests.Values
         {
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight");
-            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             t.Rules.DefineRule("add", r =>
             {
                 var x = r.Var<long>("x");
@@ -77,7 +77,7 @@ namespace Eggnog.Tests.Values
         {
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight");
-            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             t.Rules.DefineRule("add four", r => r.Then(total.Of("k").Is(4L)));
             t.Root.Assume(total.Of("k").Is(1L));
 
@@ -86,7 +86,7 @@ namespace Eggnog.Tests.Values
             Assert.False(t.Root.IsFaulted);
 
             var graph = new EGraph();
-            var sum = graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
+            var sum = graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, @new)));
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("one", r => r.Then(sum.Of("k").Is(1L)));
             graph.Root.Assume(sum.Of("k").Is(long.MaxValue));
@@ -110,9 +110,9 @@ namespace Eggnog.Tests.Values
         public void ABatchSimulatesAnExpressionOfPrimitivesAndStagesOneThatCallsTables()
         {
             var graph = new EGraph();
-            var sum = graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
+            var sum = graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, @new)));
             var weight = graph.DefineFunction<long, long>("weight");
-            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             var copy = graph.DefineFunction<string, long>("copy");
 
             graph.Root.Assume(sum.Of("k").Is(2L), sum.Of("k").Is(2L), copy.Of("sum").Is(sum.Of("k")));
@@ -138,7 +138,7 @@ namespace Eggnog.Tests.Values
         {
             var t = new NodeTheory();
             var weight = t.Graph.DefineFunction<long, long>("weight", ValueLattice.Max<long>());
-            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, weight.Of(@new))));
+            var total = t.Graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, weight.Of(@new))));
             var joined = t.Graph.DefineFunction<string, Node>("joined", FunctionMerge.Expression<Node>((old, @new) => t.Add.Of(old, @new)));
             t.Root.Assume(weight.Of(4L).Is(10L), total.Of("k").Is(1L), joined.Of("k").Is(t.A.Of()));
 
@@ -417,7 +417,7 @@ namespace Eggnog.Tests.Values
             var g = t.Root.Make(t.A.Of());
             var g2 = t.Root.Make(t.B.Of());
             var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Add.Of(-2L, Primitives.Count<Node>().Of(Primitives.SetOf<Node>().Of(g, g2))))));
+                Int64Primitives.Add.Of(old, Int64Primitives.Add.Of(-2L, Primitives.SetLength<Node>().Of(Primitives.SetOf<Node>().Of(g, g2))))));
             t.Root.Assume(h.Of("x").Is(10L));
 
             t.Root.Write(w =>
@@ -442,7 +442,7 @@ namespace Eggnog.Tests.Values
             var g = t.Root.Make(t.A.Of());
             var g2 = t.Root.Make(t.B.Of());
             var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Count<Node>().Of(Primitives.SetOf<Node>().Of(g, g2)))));
+                Int64Primitives.Add.Of(old, Primitives.SetLength<Node>().Of(Primitives.SetOf<Node>().Of(g, g2)))));
             var n = t.Graph.DefineFunction<long, long>("n");
             t.Root.Assume(h.Of("x").Is(10L));
 
@@ -472,7 +472,7 @@ namespace Eggnog.Tests.Values
             var g = t.Root.Make(t.A.Of());
             var g2 = t.Root.Make(t.B.Of());
             var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Count<Node>().Of(Primitives.SetOf<Node>().Of(g, g2)))));
+                Int64Primitives.Add.Of(old, Primitives.SetLength<Node>().Of(Primitives.SetOf<Node>().Of(g, g2)))));
             var n = t.Graph.DefineFunction<long, long>("n");
             t.Root.Assume(h.Of("x").Is(10L));
 
@@ -490,7 +490,7 @@ namespace Eggnog.Tests.Values
             var u = t.Root.Make(t.Lit.Of(1L));
             var v = t.Root.Make(t.Lit.Of(2L));
             var k = t.Graph.DefineFunction<string, long>("k", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Count<Node>().Of(Primitives.SetOf<Node>().Of(u, v)))));
+                Int64Primitives.Add.Of(old, Primitives.SetLength<Node>().Of(Primitives.SetOf<Node>().Of(u, v)))));
             t.Root.Assume(k.Of("x").Is(10L));
             t.Root.Assume(k.Of("x").Is(5L), t.Lit.Of(1L).Is(t.Lit.Of(2L)));
             Assert.Equal(12L, t.Root.Get(k.Of("x")));
@@ -508,8 +508,8 @@ namespace Eggnog.Tests.Values
             var t = new NodeTheory();
             var g2 = t.Root.Make(t.B.Of());
             var g = t.Root.Make(t.A.Of());
-            var cnt = t.Graph.DefineFunction<Node, long>("cnt", FunctionMerge.Expression<long>((old, @new) => Primitives.Max.Of(old, @new)));
-            var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, cnt.Of(g))));
+            var cnt = t.Graph.DefineFunction<Node, long>("cnt", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Max.Of(old, @new)));
+            var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, cnt.Of(g))));
             t.Root.Assume(cnt.Of(g).Is(1L), cnt.Of(g2).Is(2L), h.Of("x").Is(10L));
             t.Rules.DefineRule("set", r =>
             {
@@ -540,7 +540,7 @@ namespace Eggnog.Tests.Values
             var g2 = t.Root.Make(t.B.Of());
             var setOf = Primitives.SetOf<Node>();
             var h = t.Graph.DefineFunction<string, long>("h", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Count<Node>().Of(setOf.Of(g, g2)))));
+                Int64Primitives.Add.Of(old, Primitives.SetLength<Node>().Of(setOf.Of(g, g2)))));
             t.Root.Assume(h.Of("x").Is(10L));
             t.Rules.DefineRule("set", r =>
             {
@@ -558,7 +558,7 @@ namespace Eggnog.Tests.Values
             var u = t.Root.Make(t.Lit.Of(1L));
             var v = t.Root.Make(t.Lit.Of(2L));
             var m = t.Graph.DefineFunction<Node, long>("m", FunctionMerge.Expression<long>((old, @new) =>
-                Primitives.Add.Of(old, Primitives.Count<Node>().Of(setOf.Of(u, v)))));
+                Int64Primitives.Add.Of(old, Primitives.SetLength<Node>().Of(setOf.Of(u, v)))));
             t.Root.Assume(m.Of(u).Is(10L), m.Of(v).Is(5L));
             t.Root.Union(u, v);
             Assert.Equal(1, t.Root.CountRows(m));
@@ -623,7 +623,7 @@ namespace Eggnog.Tests.Values
         public void AChildCannotWriteAFunctionWithAnExpression()
         {
             var t = new NodeTheory();
-            var sum = t.Graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
+            var sum = t.Graph.DefineFunction<string, long>("sum", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, @new)));
             var joined = t.Graph.DefineFunction<Node, Node>("joined", FunctionMerge.Expression<Node>((old, @new) => t.Add.Of(old, @new)));
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());
@@ -666,7 +666,7 @@ namespace Eggnog.Tests.Values
             gone.Dispose();
             var tables = t.Graph.Tables.Count;
 
-            var foreign = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, long>("f", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, leaked))));
+            var foreign = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, long>("f", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, leaked))));
             var constant = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => t.Add.Of(old, local))));
             var none = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => default(Node))));
             var elsewhere = Assert.Throws<ArgumentException>(() => t.Graph.DefineFunction<string, Node>("g", FunctionMerge.Expression<Node>((old, @new) => foreignClass)));

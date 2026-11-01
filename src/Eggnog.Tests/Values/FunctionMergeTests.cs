@@ -70,7 +70,7 @@ namespace Eggnog.Tests.Values
         {
             var graph = new EGraph();
             var sum = graph.DefineFunction<string, long>("sum", Sum);
-            graph.Root.Assume(sum.Of("k").Is(2L), sum.Of("k").Is(Primitives.Add.Of(sum.Of("k"), 1L)));
+            graph.Root.Assume(sum.Of("k").Is(2L), sum.Of("k").Is(Int64Primitives.Add.Of(sum.Of("k"), 1L)));
 
             Assert.Equal(5L, graph.Root.Get(sum.Of("k")));
         }
@@ -1170,9 +1170,9 @@ namespace Eggnog.Tests.Values
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             var adds = graph.DefineRuleset("adds");
             adds.DefineRule("add one", r => r.Then(sum.Of("k").Is(1L)));
@@ -1203,9 +1203,9 @@ namespace Eggnog.Tests.Values
             {
                 var (k, d) = s.Vars<string, Set<long>>("k", "d");
                 s.When(d.Is(choice.Of(k)));
-                s.Where(Primitives.Greater.Of(Primitives.Count<long>().Of(d), 1L));
+                s.Where(Int64Primitives.Greater.Of(Primitives.SetLength<long>().Of(d), 1L));
                 var v = s.Cases("v", d);
-                s.Assume(choice.Of(k).Is(Primitives.Singleton<long>().Of(v)));
+                s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             var a = t.Root.Make(t.A.Of());
             var b = t.Root.Make(t.B.Of());

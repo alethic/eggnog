@@ -38,7 +38,7 @@ namespace Eggnog.Tests.Readme
             rules.DefineRule("fold add", r =>
             {
                 var (x, y) = r.Vars<long, long>("x", "y");
-                r.Rewrite(add.Of(num.Of(x), num.Of(y)), num.Of(Primitives.Add.Of(x, y)));
+                r.Rewrite(add.Of(num.Of(x), num.Of(y)), num.Of(Int64Primitives.Add.Of(x, y)));
             });
 
             var root = graph.Root;

@@ -385,7 +385,7 @@ namespace Eggnog.Tests.Terms
             // (function counter () i64 :merge (+ old new)), a primitive that adds 1 to it, called twice with one argument:
             // egglog gives each call of an action its own binding, so the counter is 2, from a head as from a host write.
             var graph = new EGraph();
-            var counter = graph.DefineFunction("counter", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, @new)));
+            var counter = graph.DefineFunction("counter", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, @new)));
             var a = graph.DefineFunction<long>("a");
             var b = graph.DefineFunction<long>("b");
             var bump = Primitive.CreateWrite("bump", Long, (ITableWriter tables, ReadOnlySpan<object> args, out long result) =>
@@ -502,7 +502,7 @@ namespace Eggnog.Tests.Terms
             {
                 w.Assume(o.Of(0L).Is(both.Of(3L)));
                 w.Assume(o.Of(1L).Is(find.Of(3L)));
-                w.Assume(o.Of(2L).Is(Primitives.Add.Of(count.Of(), find.Of(4L))));
+                w.Assume(o.Of(2L).Is(Int64Primitives.Add.Of(count.Of(), find.Of(4L))));
             });
             Assert.Equal(0L, graph.Root.Get(o.Of(0L)));
             Assert.Equal(1L, graph.Root.Get(o.Of(1L)));
@@ -666,7 +666,7 @@ namespace Eggnog.Tests.Terms
             Assert.False(graph.Root.Check(Fact.Exists(f.Of(1L))));
 
             // (set (f 2) (+ 4 (del 2))) and (r (del-r 5)): the command's own write of the row it deletes is kept.
-            graph.Root.Assume(f.Of(2L).Is(Primitives.Add.Of(4L, del.Of(2L))), r.Of(delR.Of(5L)));
+            graph.Root.Assume(f.Of(2L).Is(Int64Primitives.Add.Of(4L, del.Of(2L))), r.Of(delR.Of(5L)));
             Assert.True(graph.Root.Check(f.Of(2L).Is(4L)));
             Assert.True(graph.Root.Check(r.Of(5L)));
 
@@ -837,7 +837,7 @@ namespace Eggnog.Tests.Terms
                 result = 0;
                 return true;
             });
-            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Primitives.Add.Of(old, setW.Of(@new))));
+            var total = graph.DefineFunction<string, long>("total", FunctionMerge.Expression<long>((old, @new) => Int64Primitives.Add.Of(old, setW.Of(@new))));
             var copy = graph.DefineFunction<long, long>("copy");
             graph.Root.Assume(weight.Of(6L).Is(1L), total.Of("k").Is(0L));
 

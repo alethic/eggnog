@@ -79,7 +79,7 @@ namespace Eggnog.Tests.Values
             rules.DefineRule("square", r =>
             {
                 var x = r.Var<long>("x");
-                r.Rewrite(square.Of(num.Of(x)), num.Of(Primitives.Multiply.Of(x, x)));
+                r.Rewrite(square.Of(num.Of(x)), num.Of(Int64Primitives.Multiply.Of(x, x)));
             });
             graph.Values.RegisterFn<Node, Node>();
 
@@ -401,7 +401,7 @@ namespace Eggnog.Tests.Values
                     n.Is(polynomial.Of(m)),
                     counts.Is(Primitives.MultiSetSumMultiSets<Node>().Of(map.Of(Primitives.UnstableFn<MultiSet<Node>, MultiSet<Node>>(Primitives.MultiSetResetCounts<Node>()).Of(), m))),
                     term.Is(Primitives.MultiSetPickMax<Node>().Of(counts)));
-                r.Where(Primitives.Greater.Of(Primitives.MultiSetCount<Node>().Of(counts, term), 1L));
+                r.Where(Int64Primitives.Greater.Of(Primitives.MultiSetCount<Node>().Of(counts, term), 1L));
                 r.When(
                     picked.Is(filter.Of(containing.Of(term), m)),
                     common.Is(Primitives.UnstableMultiSetReduce<MultiSet<Node>>().Of(
@@ -520,7 +520,7 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterFn<long, long, long>();
             graph.Values.RegisterFn<MultiSet<long>, long>();
             var product = Primitives.UnstableFn<MultiSet<long>, long>(Primitives.UnstableMultiSetReduce<long>())
-                .Of(Primitives.UnstableFn<long, long, long>(Primitives.Multiply).Of(), 1L);
+                .Of(Primitives.UnstableFn<long, long, long>(Int64Primitives.Multiply).Of(), 1L);
             var products = graph.DefineFunction<MultiSet<long>>("products");
             graph.Root.Assume(products.Of().Is(Primitives.UnstableMultiSetMap<MultiSet<long>, long>().Of(product, MultiSet.Of([MultiSet.Of([2L, 3L]), MultiSet.Of([4L]), MultiSet<long>.Empty]))));
             Assert.Equal(MultiSet.Of([6L, 4L, 1L]), graph.Root.Get(products.Of()));
