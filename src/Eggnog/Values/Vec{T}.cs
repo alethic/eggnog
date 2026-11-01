@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog
 {
@@ -15,6 +16,7 @@ namespace Eggnog
     /// changes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
+    [CollectionBuilder(typeof(Vec), nameof(Vec.Of))]
     public sealed class Vec<T> : IReadOnlyList<T>, IEquatable<Vec<T>>, IComparable<Vec<T>> where T : notnull
     {
 

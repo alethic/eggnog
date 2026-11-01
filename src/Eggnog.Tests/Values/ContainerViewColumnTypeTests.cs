@@ -200,16 +200,16 @@ namespace Eggnog.Tests.Values
 
             // unstable-multiset-map, -filter, -flat-map and -reduce over the multiset's cell, unstable-vec-map over the
             // vector's, and unstable-app over the function value's.
-            Assert.Equal(MultiSet.Of(1L, 1L, 3L), t.Plain.Get(t.Weights.Of()));
-            Assert.Equal(MultiSet.Of(2L, 3L, 3L, 3L), t.Copy.Get(t.Weights.Of()));
+            Assert.Equal(MultiSet.Of([1L, 1L, 3L]), t.Plain.Get(t.Weights.Of()));
+            Assert.Equal(MultiSet.Of([2L, 3L, 3L, 3L]), t.Copy.Get(t.Weights.Of()));
             Assert.True(t.Plain.Check(t.Filtered.Of().Is(t.Empty.Of())));
             Assert.True(t.Copy.Check(t.Filtered.Of().Is(t.Even.Of())));
             Assert.True(t.Plain.Check(t.FlatMapped.Of().Is(t.Bag.Of())));
             Assert.True(t.Copy.Check(t.FlatMapped.Of().Is(t.Flat.Of())));
             Assert.True(t.Plain.Check(t.Reduced.Of().Is(t.Add.Of(t.Add.Of(t.Num.Of(1L), t.Num.Of(1L)), t.Num.Of(3L)))));
             Assert.True(t.Copy.Check(t.Reduced.Of().Is(t.Add.Of(t.Add.Of(t.Add.Of(t.Num.Of(2L), t.Num.Of(3L)), t.Num.Of(3L)), t.Num.Of(3L)))));
-            Assert.Equal(Vec.Of(1L), t.Plain.Get(t.VectorWeights.Of()));
-            Assert.Equal(Vec.Of(2L), t.Copy.Get(t.VectorWeights.Of()));
+            Assert.Equal(Vec.Of([1L]), t.Plain.Get(t.VectorWeights.Of()));
+            Assert.Equal(Vec.Of([2L]), t.Copy.Get(t.VectorWeights.Of()));
             Assert.Equal(5L, t.Plain.Get(t.Applied.Of()));
             Assert.Equal(7L, t.Copy.Get(t.Applied.Of()));
 
@@ -238,7 +238,7 @@ namespace Eggnog.Tests.Values
                 // (Num 1) (Num 1) (Num 3) folds to (Num 3), the copy's (Num 2) (Num 3) (Num 3) (Num 3) to (Num 2).
                 Assert.True(scope.AreEqual(scope.Get(Primitives.UnstableMultiSetReduce<Node>().Of(Primitives.UnstableFn<Node, Node, Node>(t.Fold).Of(), t.Num.Of(1L), t.Bag.Of())),
                     copy ? t.Two : t.Three));
-                Assert.Equal(copy ? Vec.Of(2L) : Vec.Of(1L), scope.Get(Primitives.UnstableVecMap<Node, long>().Of(Primitives.UnstableFn<Node, long>(t.Weight).Of(), t.Vector.Of())));
+                Assert.Equal(copy ? Vec.Of([2L]) : Vec.Of([1L]), scope.Get(Primitives.UnstableVecMap<Node, long>().Of(Primitives.UnstableFn<Node, long>(t.Weight).Of(), t.Vector.Of())));
                 var argument = (Node)((IFnValue)scope.Get(t.Fn.Of())).Content!.ArgumentArray[0];
                 Assert.Equal((copy ? t.Two : t.One).Id.Cell, argument.Id.Cell);
             }
@@ -259,7 +259,7 @@ namespace Eggnog.Tests.Values
             var two = root.Make(num.Of(2L));
             root.Assume(vector.Of().Is(Primitives.VecOf<Node>().Of(num.Of(1L), num.Of(2L))));
             var vecs = (VecColumnType<Node>)graph.Values.TypeOf<Vec<Node>>();
-            Assert.True(vecs.TryEncodeExisting(Vec.Of(one, two), root.ContainerView, out var x));
+            Assert.True(vecs.TryEncodeExisting(Vec.Of([one, two]), root.ContainerView, out var x));
             root.Freeze();
 
             // One sibling holds the vector reversed, the others hold nothing; a fourth writes vectors of values, which its
@@ -283,7 +283,7 @@ namespace Eggnog.Tests.Values
                     try
                     {
                         for (var i = 0L; i < Writes; i++)
-                            writer.Assume(pairs.Of(i).Is(Vec.Of(i, i + 1)));
+                            writer.Assume(pairs.Of(i).Is(Vec.Of([i, i + 1])));
                     }
                     finally
                     {
@@ -314,8 +314,8 @@ namespace Eggnog.Tests.Values
             }
 
             Assert.True(Task.WaitAll(tasks.ToArray(), TimeSpan.FromMinutes(2)));
-            Assert.Equal(Vec.Of(Writes - 1, Writes), writer.Get(pairs.Of(Writes - 1)));
-            Assert.True(longs.TryEncodeExisting(Vec.Of(Writes - 1, Writes), root.ContainerView, out _));
+            Assert.Equal(Vec.Of([Writes - 1, Writes]), writer.Get(pairs.Of(Writes - 1)));
+            Assert.True(longs.TryEncodeExisting(Vec.Of([Writes - 1, Writes]), root.ContainerView, out _));
             Assert.False(writer.IsFaulted);
             foreach (var reader in readers)
             {

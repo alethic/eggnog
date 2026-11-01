@@ -17,12 +17,12 @@ namespace Eggnog
         /// <summary>
         /// <c>set-of</c>: the singleton set.
         /// </summary>
-        public static readonly Primitive<T, Set<T>> Singleton = new("set-of", static v => Set.Of(v), false);
+        public static readonly Primitive<T, Set<T>> Singleton = new("set-of", static v => Set.Of([v]), false);
 
         /// <summary>
         /// <c>set-of</c> of any number of elements.
         /// </summary>
-        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.From(xs));
+        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.Of(xs));
 
         /// <summary>
         /// <c>set-union</c>.

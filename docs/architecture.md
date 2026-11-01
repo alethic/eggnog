@@ -191,6 +191,11 @@ A column holds either a class or a value.
   `Set<string>` itself. It keeps its elements in element order, and its container keeps them in cell order, the order
   of its term, `(set-of a b)`, and of `Get`, which reads that order as egglog's `set-get` does: a read over elements no
   write interned gives no result where the order decides, as `MultiSetPick`'s.
+- **Container values** are made on the host with `Set.Of`, `Vec.Of`, `MultiSet.Of` and `Map.Of`, which copy a span,
+  or with `From` over a sequence. The first three take one span, not `params` (`Set.Of(["red", "amber"])`), and build
+  collection expressions too (`Set<long> s = [1, 2, 3];`): a `params` span would make `Set.Of(array)` the set of one
+  array under C# 13 and the set of its elements from C# 14, while one span takes an array as its elements or refuses it
+  in every language version. `Map.Of` takes its entries as `params`, which an array of tuples cannot misbind.
 - **`UnstableFn<T1, …, TResult>`**, of up to four inputs, is egglog's `UnstableFn` sort (`ValueStore.RegisterFn`, named
   `UnstableFn<(i64, i64), i64>` and so on): a function value, a constructor, a function or a primitive with its leading
   arguments partially applied.
@@ -406,20 +411,23 @@ a user's `$contradiction` alike, and, since the C# API takes any non-empty name,
 ### 2.4 Terms and facts
 
 `Term<T>` is an expression of type `T`: a constant (any `T` converts implicitly), a variable (`Var<T>`), a table
-application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a
-user primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
+application (`f.Of(a, b)` for a function or constructor), a primitive application (`Primitives.Add.Of(x, y)`, or a user
+primitive made with `Primitive.Create` or `Primitive.CreatePartial`, of up to four typed parameters or, as egglog's
 take, of any number given by their types, its function taking the arguments as a span of objects, valid only during the
 call: `PrimitiveN<TResult>`; or, as egglog's primitives over the database, made with `Primitive.CreateRead`,
 `CreateWrite` or `CreateFull`, its function also taking the tables to read, write or both, valid only during the call:
-`ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The built-in primitives are egglog's, with egglog's names and results, one class per
-value type: `Primitives` (`i64`, and the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives`
-(`BigInt`), `BigRationalPrimitives` (`BigRat`), `BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A
-comparison returns a `bool`: as a filter it is egglog's fallible `<` and renders so; as a value it is egglog's `bool-<`
-for `i64` and `BigInt`, and an addition for `f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`, string `+` and `set-of` take any number of arguments (`VariadicPrimitive`,
-`Primitive.CreateVariadic`). Each call site has one of egglog's capability contexts (decisions row 12), and a primitive
-whose access (`Primitive.Access`) it does not allow is refused there: a semi-naive rule's body neither reads nor writes,
-its head writes, a naive rule's body reads and its head does both, a merge writes, a host write does both, a host check
-and a query read. What is not yet followed is in decision 22 of [`engine/decisions.md`](engine/decisions.md).
+`ITableReader`, `ITableWriter`, `ITables`), or a computation over a lambda (`Compute.Of(a, b, (a, b) => ...)`). The
+built-in primitives are egglog's, with egglog's names and results, one class per value type: `Primitives` (`i64`, and
+the set primitives), `DoublePrimitives` (`f64`), `BigIntegerPrimitives` (`BigInt`), `BigRationalPrimitives` (`BigRat`),
+`BooleanPrimitives` (`bool`) and `StringPrimitives` (`String`). A comparison returns a `bool`: as a filter it is
+egglog's fallible `<` and renders so; as a value it is egglog's `bool-<` for `i64` and `BigInt`, and an addition for
+`f64` and `BigRat`, which egglog compares only as filters; any other filter renders as egglog's `(guard …)`. `or`,
+string `+` and `set-of` take any number of arguments (`VariadicPrimitive`, `Primitive.CreateVariadic`, whose
+`VariadicFunc` takes them as a span valid only during the call). Each call site has one of egglog's capability contexts
+(decisions row 12), and a primitive whose access (`Primitive.Access`) it does not allow is refused there: a semi-naive
+rule's body neither reads nor writes, its head writes, a naive rule's body reads and its head does both, a merge writes,
+a host write does both, a host check and a query read. What is not yet followed is in decision 22 of
+[`engine/decisions.md`](engine/decisions.md).
 `Fact` is a statement: a relation row (`r.Of(a, b)`), an equality (`t.Is(u)`, which for a function application sets
 or matches its output), a disequality (`t.IsNot(u)`), an existence (`Fact.Exists(term)`, egglog's bare call: in a
 body or a check, that an application has a row or a primitive's call a result; in a head or a host write, an action

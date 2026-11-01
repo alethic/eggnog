@@ -191,7 +191,7 @@ namespace Eggnog.Tests.Differential
         {
             DiffType.I64 => ((long)term.Value!).ToString(CultureInfo.InvariantCulture) + "L",
             DiffType.Str => "\"" + (string)term.Value! + "\"",
-            DiffType.IntSet => ((Set<int>)term.Value!).IsEmpty ? "Set<int>.Empty" : $"Set.Of({string.Join(", ", (Set<int>)term.Value!)})",
+            DiffType.IntSet => ((Set<int>)term.Value!).IsEmpty ? "Set<int>.Empty" : $"Set.Of([{string.Join(", ", (Set<int>)term.Value!)}])",
             _ => $"handles[{term.Value}]",
         };
 

@@ -112,11 +112,10 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">Called from a primitive, lattice, filter or cost function; or a first
         /// scoped read of a guard creates a mirror while another thread is using the writable root.</exception>
         public SplitRule DefineDomainSplit<TKey, TElement>(string name, Function<TKey, Set<TElement>> domain,
-            IReadOnlyList<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull
+            ReadOnlySpan<Relation<TKey>> guards, ScopeTag? caseTag = null) where TElement : notnull
         {
             ArgumentNullException.ThrowIfNull(domain);
-            ArgumentNullException.ThrowIfNull(guards);
-            if (guards.Count == 0)
+            if (guards.Length == 0)
                 throw new ArgumentException("A domain split needs at least one guard: the relation that says which keys the domain describes.", nameof(guards));
 
             if (ReferenceEquals(domain.Graph, this) == false)
@@ -129,9 +128,10 @@ namespace Eggnog
                 throw new ArgumentException($"Function '{domain}' has no lattice; a domain split narrows the domain to one element in each case, which only a lattice's merge can do (a function without one would hold two values).", nameof(domain));
 
             // A guard may be a scoped view: it is read like any atom of DefineSplit's body.
-            for (var i = 0; i < guards.Count; i++)
+            var copy = new Relation<TKey>[guards.Length];
+            for (var i = 0; i < copy.Length; i++)
             {
-                var guard = guards[i] ?? throw new ArgumentNullException(nameof(guards), $"Guard {i} is null.");
+                var guard = copy[i] = guards[i] ?? throw new ArgumentNullException(nameof(guards), $"Guard {i} is null.");
                 if (ReferenceEquals(guard.Graph, this) == false)
                     throw new ArgumentException($"Relation '{guard}' is not a table of this graph.", nameof(guards));
             }
@@ -139,7 +139,7 @@ namespace Eggnog
             return DefineSplit(name, split =>
             {
                 var (k, d) = split.Vars<TKey, Set<TElement>>("k", "d");
-                foreach (var guard in guards)
+                foreach (var guard in copy)
                     split.When(guard.Of(k));
 
                 split.When(d.Is(domain.Of(k)));

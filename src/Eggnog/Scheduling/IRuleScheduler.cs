@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System;
 
 namespace Eggnog
 {
@@ -20,12 +20,13 @@ namespace Eggnog
 
         /// <summary>
         /// Gets whether a step that changed nothing may be taken as the end: egglog's <c>can_stop</c>, which a
-        /// <see cref="Schedule.Repeat"/> stops on. Called only after a step that changed nothing; <c>true</c> by default.
+        /// <see cref="Schedule.Repeat"/> stops on. Called only after a step that changed nothing. Every scheduler declares
+        /// it, where egglog defaults it: <c>true</c> is egglog's default, a scheduler that never holds work back.
         /// </summary>
-        /// <param name="rules">The names of the ruleset's rules.</param>
+        /// <param name="rules">The names of the ruleset's rules, valid only during the call.</param>
         /// <param name="ruleset">The ruleset's name.</param>
         /// <returns>Whether nothing is left that another step would do.</returns>
-        bool CanStop(IReadOnlyList<string> rules, string ruleset) => true;
+        bool CanStop(ReadOnlySpan<string> rules, string ruleset);
 
         /// <summary>
         /// Chooses which of a rule's matches fire: egglog's <c>filter_matches</c>. The matches are those it left

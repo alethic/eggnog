@@ -9,8 +9,8 @@ namespace Eggnog
     /// <summary>
     /// A primitive of any number of parameters, each of its own type, as egglog's primitives take, where the typed
     /// primitives stop at four: <see cref="Of"/> applies it to terms. Made by
-    /// <see cref="Primitive.Create{TResult}(string, IReadOnlyList{Type}, FuncN{TResult})"/> and
-    /// <see cref="Primitive.CreatePartial{TResult}(string, IReadOnlyList{Type}, PartialFuncN{TResult})"/>. Its functions
+    /// <see cref="Primitive.Create{TResult}(string, ReadOnlySpan{Type}, FuncN{TResult})"/> and
+    /// <see cref="Primitive.CreatePartial{TResult}(string, ReadOnlySpan{Type}, PartialFuncN{TResult})"/>. Its functions
     /// take the arguments as a span of objects, one per parameter, each of its parameter's type, valid only during the
     /// call: a call from a rule or a host write decodes them into a pooled buffer, cleared after the call. Such a call
     /// boxes its values, where a typed primitive's allocates nothing.

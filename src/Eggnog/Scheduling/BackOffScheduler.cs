@@ -66,10 +66,8 @@ namespace Eggnog
         public long BanLength { get; }
 
         /// <inheritdoc />
-        public bool CanStop(IReadOnlyList<string> rules, string ruleset)
+        public bool CanStop(ReadOnlySpan<string> rules, string ruleset)
         {
-            ArgumentNullException.ThrowIfNull(rules);
-
             // Every rule's counts are taken out, and only the banned ones put back.
             var banned = new List<(string Rule, BackOffRuleStats Stats)>();
             foreach (var rule in rules)

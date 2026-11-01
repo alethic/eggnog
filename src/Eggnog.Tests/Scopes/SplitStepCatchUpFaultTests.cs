@@ -46,7 +46,7 @@ namespace Eggnog.Tests.Scopes
                 var v = s.Cases("v", d);
                 s.Assume(pick.Of(p, v));
             });
-            w.Parent.Assume(dom.Of("k").Is(Set.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
+            w.Parent.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
             var inCase = untilDone ? Schedule.Until(Schedule.Saturate(Schedule.Run(rules)), done.Of("x")) : Schedule.Saturate(Schedule.Run(rules));
             return (w, Schedule.Split(split, inCase));
         }
@@ -133,7 +133,7 @@ namespace Eggnog.Tests.Scopes
             });
             w.Graph.Root.Freeze();
             var scope = w.Graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
+            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), weight.Of("a").Is(1L), weight.Of("b").Is(3L));
             w.Arm();
 
             var thrown = Record.Exception(() => scope.Run(Schedule.Split(split, Schedule.Saturate(rules)), new RunOptions { SplitDepthLimit = depthLimit }));

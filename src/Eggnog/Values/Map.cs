@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Eggnog
 {
@@ -19,15 +18,18 @@ namespace Eggnog
         /// <typeparam name="TValue">The value type.</typeparam>
         /// <param name="entries">The entries.</param>
         /// <returns>The map.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="entries"/>, a key or a value is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException">A key or a value is <c>null</c>.</exception>
         /// <exception cref="InvalidOperationException">Two keys cannot be compared: the key type, or a type a key holds,
         /// is not comparable.</exception>
-        public static Map<TKey, TValue> Of<TKey, TValue>(params (TKey Key, TValue Value)[] entries)
+        public static Map<TKey, TValue> Of<TKey, TValue>(params ReadOnlySpan<(TKey Key, TValue Value)> entries)
             where TKey : notnull
             where TValue : notnull
         {
-            ArgumentNullException.ThrowIfNull(entries);
-            return Map<TKey, TValue>.Create(entries.Select(e => new KeyValuePair<TKey, TValue>(e.Key, e.Value)));
+            var copy = new KeyValuePair<TKey, TValue>[entries.Length];
+            for (var i = 0; i < copy.Length; i++)
+                copy[i] = new KeyValuePair<TKey, TValue>(entries[i].Key, entries[i].Value);
+
+            return Map<TKey, TValue>.Create(copy);
         }
 
         /// <summary>

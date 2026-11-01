@@ -6,7 +6,7 @@ namespace Eggnog
 
     /// <summary>
     /// egglog's schedules, plus case splits: what <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/>
-    /// runs. A ruleset converts to <see cref="Run(Ruleset[])"/> of itself. Immutable; renders as an egglog schedule.
+    /// runs. A ruleset converts to <see cref="Run(ReadOnlySpan{Ruleset})"/> of itself. Immutable; renders as an egglog schedule.
     /// </summary>
     public abstract class Schedule
     {
@@ -24,7 +24,7 @@ namespace Eggnog
         /// </summary>
         /// <param name="rulesets">The rulesets.</param>
         /// <returns>The schedule.</returns>
-        public static Schedule Run(params Ruleset[] rulesets) => new RunSchedule(Copy(rulesets, nameof(rulesets)));
+        public static Schedule Run(params ReadOnlySpan<Ruleset> rulesets) => new RunSchedule(Copy(rulesets, nameof(rulesets)));
 
         /// <summary>
         /// Up to <paramref name="times"/> passes of <see cref="Sequence"/> of the steps; stops after a pass with no change.
@@ -33,7 +33,7 @@ namespace Eggnog
         /// <param name="steps">The steps of a pass.</param>
         /// <returns>The schedule.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="times"/> is negative.</exception>
-        public static Schedule Repeat(int times, params Schedule[] steps)
+        public static Schedule Repeat(int times, params ReadOnlySpan<Schedule> steps)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(times);
             return new RepeatSchedule(times, Copy(steps, nameof(steps)));
@@ -44,18 +44,18 @@ namespace Eggnog
         /// </summary>
         /// <param name="steps">The steps of a pass.</param>
         /// <returns>The schedule.</returns>
-        public static Schedule Saturate(params Schedule[] steps) => new SaturateSchedule(Copy(steps, nameof(steps)));
+        public static Schedule Saturate(params ReadOnlySpan<Schedule> steps) => new SaturateSchedule(Copy(steps, nameof(steps)));
 
         /// <summary>
         /// The steps in order, once each.
         /// </summary>
         /// <param name="steps">The steps.</param>
         /// <returns>The schedule.</returns>
-        public static Schedule Sequence(params Schedule[] steps) => new SequenceSchedule(Copy(steps, nameof(steps)));
+        public static Schedule Sequence(params ReadOnlySpan<Schedule> steps) => new SequenceSchedule(Copy(steps, nameof(steps)));
 
         /// <summary>
         /// Runs <paramref name="body"/> unless every fact of <paramref name="condition"/> already holds (egglog's
-        /// <c>:until</c>). The condition is a host check (<see cref="Scope.Check(Fact[])"/>) made each time the step
+        /// <c>:until</c>). The condition is a host check (<see cref="Scope.Check(ReadOnlySpan{Fact})"/>) made each time the step
         /// runs, so <c>Saturate(Until(body, facts))</c> runs the body until the facts hold or it changes nothing.
         /// <see cref="Scope.Run(Schedule, RunOptions, System.Threading.CancellationToken)"/> checks, before any work, that
         /// every fact can be read in its scope (no table, column type or class of another graph, no class it cannot use).
@@ -67,7 +67,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">There is no fact (a forgotten condition would make the step a silent no-op),
         /// or a fact is not a ground host check: a filter (<c>IsNot</c>, <c>Fact.True</c>), or a term with a variable or a
         /// computation.</exception>
-        public static Schedule Until(Schedule body, params Fact[] condition)
+        public static Schedule Until(Schedule body, params ReadOnlySpan<Fact> condition)
         {
             ArgumentNullException.ThrowIfNull(body);
             var facts = Copy(condition, nameof(condition));
@@ -172,14 +172,13 @@ namespace Eggnog
         /// <param name="inCase">The schedule run in each case; a case always stops on contradiction.</param>
         /// <returns>The schedule.</returns>
         /// <exception cref="ArgumentException">There is no rule, or a rule is listed twice.</exception>
-        public static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase)
+        public static Schedule Split(ReadOnlySpan<SplitRule> rules, Schedule inCase)
         {
-            ArgumentNullException.ThrowIfNull(rules);
             ArgumentNullException.ThrowIfNull(inCase);
-            if (rules.Count == 0)
+            if (rules.Length == 0)
                 throw new ArgumentException("A split step needs at least one split rule.", nameof(rules));
 
-            var copy = new SplitRule[rules.Count];
+            var copy = new SplitRule[rules.Length];
             for (var i = 0; i < copy.Length; i++)
             {
                 copy[i] = rules[i] ?? throw new ArgumentNullException(nameof(rules), $"Item {i} is null.");
@@ -231,11 +230,10 @@ namespace Eggnog
         }
 
         /// <summary>
-        /// Copies an array of non-null items.
+        /// Copies a span of non-null items.
         /// </summary>
-        static T[] Copy<T>(T[] items, string parameter) where T : class
+        static T[] Copy<T>(ReadOnlySpan<T> items, string parameter) where T : class
         {
-            ArgumentNullException.ThrowIfNull(items, parameter);
             var copy = new T[items.Length];
             for (var i = 0; i < items.Length; i++)
                 copy[i] = items[i] ?? throw new ArgumentNullException(parameter, $"Item {i} is null.");

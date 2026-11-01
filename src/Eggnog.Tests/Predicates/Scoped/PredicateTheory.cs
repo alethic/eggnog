@@ -16,7 +16,7 @@ namespace Eggnog.Tests.Predicates.Scoped
     public sealed partial class PredicateTheory
     {
 
-        static readonly Set<string> StringOrNull = Set.Of("string", "null");
+        static readonly Set<string> StringOrNull = Set.Of(["string", "null"]);
 
         /// <summary>
         /// Defines the theory in a graph. Every rule that reads a scope is defined here, before any schema is frozen:
@@ -208,7 +208,7 @@ namespace Eggnog.Tests.Predicates.Scoped
         public Rule DeclareBranch(Scope schema, string path, string value, params Fact[] consequences) =>
             schema.DefineRule(Horn, $"{path} = {value}", r =>
             {
-                r.When(Present.Of(path), Dom.Of(path).Is(Set.Of(value)));
+                r.When(Present.Of(path), Dom.Of(path).Is(Set.Of([value])));
                 r.Then(consequences);
             });
 
@@ -289,13 +289,13 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumGt.Of(p, n)));
-                r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(Set.Of("number")));
+                r.Then(Present.Of(p), Lo.Of(p).Is(Primitives.Add.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
             });
             Horn.DefineRule("a numeric upper bound", r =>
             {
                 var (p, n) = r.Vars<string, long>("p", "n");
                 r.When(Conjunct.Of(NumLt.Of(p, n)));
-                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(Set.Of("number")));
+                r.Then(Present.Of(p), Hi.Of(p).Is(Primitives.Subtract.Of(n, 1L)), Types.Of(p).Is(Set.Of(["number"])));
             });
         }
 
@@ -305,7 +305,7 @@ namespace Eggnog.Tests.Predicates.Scoped
             {
                 var (p, d) = r.Vars<string, Set<string>>("p", "d");
                 r.When(d.Is(Dom.Of(p)));
-                r.Then(Types.Of(p).Is(Set.Of("string")));
+                r.Then(Types.Of(p).Is(Set.Of(["string"])));
             });
             Lattice.DefineRule("a form describes strings", r =>
             {

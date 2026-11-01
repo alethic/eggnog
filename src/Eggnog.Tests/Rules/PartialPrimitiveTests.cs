@@ -178,7 +178,7 @@ namespace Eggnog.Tests.Rules
             });
             graph.Root.Freeze();
             var scope = graph.Root.CreateChild();
-            scope.Assume(dom.Of("k").Is(Set.Of("a", "b")));
+            scope.Assume(dom.Of("k").Is(Set.Of(["a", "b"])));
 
             var e = Assert.Throws<RuleEvaluationException>(() => scope.Run(Schedule.Split(split, rules)));
 
@@ -259,7 +259,7 @@ namespace Eggnog.Tests.Rules
             Assert.Equal("(rule ((mark v) (!= v (from-string \"7\")) (< v (from-string \"100\"))) ((mark (+ v (from-string \"5\")))) :ruleset rules)",
                 rule.ToString());
             Assert.Equal("(from-string \"5\")", ((Term<BigInteger>)new BigInteger(5)).ToString());
-            Assert.Equal("(set-of (from-string \"1\"))", ((Term<Set<BigInteger>>)Set.Of(BigInteger.One)).ToString());
+            Assert.Equal("(set-of (from-string \"1\"))", ((Term<Set<BigInteger>>)Set.Of([BigInteger.One])).ToString());
         }
 
         /// <summary>
