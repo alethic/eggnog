@@ -6,7 +6,7 @@ namespace Eggnog
     /// <summary>
     /// egglog's <c>:merge</c> of a function that is not a lattice: <c>new</c>, <c>old</c>, or any function of the old
     /// and the new value (<c>(+ old new)</c>), made by <see cref="FunctionMerge"/>. A function defined with one
-    /// (<see cref="EGraph.DefineFunction{TOut}(string, FunctionMerge{TOut}, TableOptions)"/>) takes a second value for a
+    /// (<see cref="EGraph.DefineFunction{TOut}(string, FunctionMerge{TOut}, FunctionOptions)"/>) takes a second value for a
     /// key by merging it with the first, as egglog's does. Such a merge depends on the order of writes, so only the root
     /// writes the function. Below the root (in a child scope or a case) a host write of it is refused, and so are a host
     /// merge of classes that would rewrite one of its rows and a rule that would write it; a rule's union there that

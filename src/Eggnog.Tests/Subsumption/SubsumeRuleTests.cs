@@ -48,9 +48,9 @@ namespace Eggnog.Tests.Subsumption
         {
             // test_rewrite_subsumed: once (most-exp) is rewritten with :subsume, a later rewrite of it never fires.
             var t = new MathTheory();
-            var expensive = t.Graph.DefineConstructor<Node>("expensive", 100, MathTheory.Subsumable);
-            var mostExpensive = t.Graph.DefineConstructor<Node>("most-exp", 1000, MathTheory.Subsumable);
-            var cheap = t.Graph.DefineConstructor<Node>("cheap", 1, MathTheory.Subsumable);
+            var expensive = t.Graph.DefineConstructor<Node>("expensive", 100);
+            var mostExpensive = t.Graph.DefineConstructor<Node>("most-exp", 1000);
+            var cheap = t.Graph.DefineConstructor<Node>("cheap", 1);
             var first = t.Graph.DefineRuleset("first");
             first.DefineRule("most to expensive", r => r.Rewrite(mostExpensive.Of(), expensive.Of(), subsume: true));
             var second = t.Graph.DefineRuleset("second");
@@ -108,9 +108,9 @@ namespace Eggnog.Tests.Subsumption
             // term-encoding-subsume-rebuild-bug.egg: a union that rewrites the subsumed row's key keeps it subsumed.
             var graph = new EGraph();
             graph.DefineSort<Node>("X");
-            var init = graph.DefineConstructor<Node>("Init", 1, MathTheory.Subsumable);
-            var init2 = graph.DefineConstructor<Node>("Init2", 1, MathTheory.Subsumable);
-            var fn = graph.DefineConstructor<Node, Node>("Fn", 1, MathTheory.Subsumable);
+            var init = graph.DefineConstructor<Node>("Init", 1);
+            var init2 = graph.DefineConstructor<Node>("Init2", 1);
+            var fn = graph.DefineConstructor<Node, Node>("Fn", 1);
             var matched = graph.DefineRelation("matched");
             var rules = graph.DefineRuleset("rules");
             rules.DefineRule("match", r =>
@@ -139,7 +139,7 @@ namespace Eggnog.Tests.Subsumption
             var a = graph.DefineConstructor<Node>("A");
             var b = graph.DefineConstructor<Node>("B");
             var c = graph.DefineConstructor<Node>("C");
-            var r = graph.DefineRelation<Node, Node>("R", MathTheory.Subsumable);
+            var r = graph.DefineRelation<Node, Node>("R");
             var root = graph.Root;
             var (av, bv, cv) = (root.Make(a.Of()), root.Make(b.Of()), root.Make(c.Of()));
             root.Subsume(r.Of(av, bv));
@@ -212,7 +212,7 @@ namespace Eggnog.Tests.Subsumption
             // subsumed, and the head's later items still run. egglog at 5e655cae halts the match at a missing row and
             // loses a subsumption an earlier lookup predicted (its defect 19); the engine's port fixes both.
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<long>("fact");
             var after = t.Graph.DefineRelation<long>("after");
             t.Rules.DefineRule("flag", r =>
             {
@@ -306,7 +306,7 @@ namespace Eggnog.Tests.Subsumption
         public void QueriesSkipSubsumedRowsAndChecksDoNot()
         {
             var t = new MathTheory();
-            var fact = t.Graph.DefineRelation<string>("fact", MathTheory.Subsumable);
+            var fact = t.Graph.DefineRelation<string>("fact");
             var query = t.Graph.DefineQuery("facts", q => q.When(fact.Of(q.Var<string>("x"))));
             t.Root.Assume(fact.Of("a"), fact.Of("b"));
             t.Root.Subsume(fact.Of("b"));

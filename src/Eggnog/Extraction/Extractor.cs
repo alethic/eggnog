@@ -242,7 +242,7 @@ namespace Eggnog
         void ThrowIfConstructorAdded()
         {
             foreach (var constructor in Scope.Graph.Extraction.ConstructorsSince(constructorsAtCreation))
-                if (constructor.Extractable && Costs.IsUnextractable(constructor) == false && Scope.Engine.TableSize(constructor.Function) > 0)
+                if (constructor.Unextractable == false && Costs.IsUnextractable(constructor) == false && Scope.Engine.TableSize(constructor.Function) > 0)
                     throw new InvalidOperationException(
                         $"Constructor '{constructor.Name}' was defined after the extractor was created, and has rows in scope '{Scope.Path}'; create a new one.");
         }

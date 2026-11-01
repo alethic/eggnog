@@ -771,7 +771,7 @@ namespace Eggnog
             CheckTable(table);
             CheckWritable(table);
             if (table.Subsumable == false)
-                throw Error($"'{table.Name}' is not subsumable: only relations and constructors are, unless defined with TableOptions.Subsumable false");
+                throw Error($"'{table.Name}' is not subsumable: only relations and constructors are, unless defined with Subsumable false");
 
             Operand[] inputs;
             if (item.Fact is null && item.Variable is not null)

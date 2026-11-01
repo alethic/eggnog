@@ -63,7 +63,7 @@ namespace Eggnog.Tests.Subsumption
             {
                 var t = new MathTheory();
                 var schema = t.Graph.DefineScopeTag("schema");
-                var fact = t.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+                var fact = t.Graph.DefineRelation<long>("fact");
                 var drop = t.Graph.DefineRelation<long>("drop");
                 var scoped = t.Graph.DefineQuery("scoped", q => q.When(fact.In(schema).Of(q.Var<long>("x"))));
                 var plain = t.Graph.DefineQuery("plain", q => q.When(fact.Of(q.Var<long>("x"))));

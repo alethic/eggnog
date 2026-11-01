@@ -22,7 +22,7 @@ namespace Eggnog.Tests.Subsumption
         {
             Theory = new MathTheory();
             Theory.Graph.InheritWatermarks = inherit;
-            Fact = Theory.Graph.DefineRelation<long>("fact", MathTheory.Subsumable);
+            Fact = Theory.Graph.DefineRelation<long>("fact");
             Both = Theory.Graph.DefineRelation<long>("both");
             var t = Theory;
             t.DefineSee();

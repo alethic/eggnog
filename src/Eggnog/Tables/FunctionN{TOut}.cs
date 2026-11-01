@@ -6,7 +6,7 @@ namespace Eggnog
 
     /// <summary>
     /// A function over any number of key columns, as egglog's functions take, with a value or class output, defined with
-    /// <see cref="EGraph.DefineFunctionN{TOut}(string, ReadOnlySpan{Type}, ValueLattice{TOut}, TableOptions)"/>
+    /// <see cref="EGraph.DefineFunctionN{TOut}(string, ReadOnlySpan{Type}, ValueLattice{TOut}, FunctionOptions)"/>
     /// where the typed functions stop at four keys.
     /// </summary>
     /// <typeparam name="TOut">The type of the value.</typeparam>

@@ -9,8 +9,6 @@ namespace Eggnog
     public sealed partial class EGraph
     {
 
-        static readonly TableOptions DefaultTableOptions = new();
-
         readonly Dictionary<string, TableHandle> tablesByName = new(StringComparer.Ordinal);
         readonly Dictionary<string, Ruleset> rulesetsByName = new(StringComparer.Ordinal);
         TableHandle[] tables = Array.Empty<TableHandle>();
@@ -39,25 +37,26 @@ namespace Eggnog
         /// Defines a nullary relation: a fact that holds or not.
         /// </summary>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, or the role is <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Relation DefineRelation(string name, TableOptions? options = null) =>
-            DefineTable(static () => new Relation(), name, TableKind.Relation, Array.Empty<ColumnType>(), null, options, null, 0);
+        public Relation DefineRelation(string name, RelationOptions? options = null) =>
+            DefineTable(static () => new Relation(), name, TableKind.Relation, Array.Empty<ColumnType>(), null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a relation over one column.
         /// </summary>
         /// <typeparam name="T1">The column's type: a registered value type or a defined sort.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
-        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Relation<T1> DefineRelation<T1>(string name, TableOptions? options = null) =>
-            DefineTable(static () => new Relation<T1>(), name, TableKind.Relation, new ColumnType[] { Values.TypeOf<T1>() }, null, options, null, 0);
+        public Relation<T1> DefineRelation<T1>(string name, RelationOptions? options = null) =>
+            DefineTable(static () => new Relation<T1>(), name, TableKind.Relation, new ColumnType[] { Values.TypeOf<T1>() }, null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a relation over two columns.
@@ -65,13 +64,13 @@ namespace Eggnog
         /// <typeparam name="T1">The first column's type.</typeparam>
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
-        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Relation<T1, T2> DefineRelation<T1, T2>(string name, TableOptions? options = null) =>
-            DefineTable(static () => new Relation<T1, T2>(), name, TableKind.Relation, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, null, options, null, 0);
+        public Relation<T1, T2> DefineRelation<T1, T2>(string name, RelationOptions? options = null) =>
+            DefineTable(static () => new Relation<T1, T2>(), name, TableKind.Relation, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a relation over three columns.
@@ -80,14 +79,14 @@ namespace Eggnog
         /// <typeparam name="T2">The second column's type.</typeparam>
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
-        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(string name, TableOptions? options = null) =>
+        public Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(string name, RelationOptions? options = null) =>
             DefineTable(static () => new Relation<T1, T2, T3>(), name, TableKind.Relation,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, null, options, null, 0);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a relation over four columns.
@@ -97,14 +96,14 @@ namespace Eggnog
         /// <typeparam name="T3">The third column's type.</typeparam>
         /// <typeparam name="T4">The fourth column's type.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
-        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(string name, TableOptions? options = null) =>
+        public Relation<T1, T2, T3, T4> DefineRelation<T1, T2, T3, T4>(string name, RelationOptions? options = null) =>
             DefineTable(static () => new Relation<T1, T2, T3, T4>(), name, TableKind.Relation,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, null, options, null, 0);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a nullary function. With no lattice, two different values are an error: a host
@@ -115,15 +114,13 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
-            DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, lattice, 0);
+        public Function<TOut> DefineFunction<TOut>(string name, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a function of one key. With no lattice, two different values are an error: a
@@ -135,15 +132,13 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
-            DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, lattice, 0);
+        public Function<T1, TOut> DefineFunction<T1, TOut>(string name, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a function of two keys. With no lattice, two different values are an error: a
@@ -156,16 +151,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
+        public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, lattice, 0);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a function of three keys. With no lattice, two different values are an error: a
@@ -179,16 +172,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
+        public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, lattice, 0);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a function of four keys. With no lattice, two different values are an error: a
@@ -203,16 +194,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
+        public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
             DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), options, lattice, 0);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a nullary function whose merge is not a lattice, egglog's <c>:merge new</c>, <c>:merge old</c> or
@@ -223,16 +212,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
-        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
-        /// an expression merge classes).</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
+        /// default value, or the output is a sort and the merge is a function of values (<see
+        /// cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<TOut> DefineFunction<TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), options, null, 0,
+        public Function<TOut> DefineFunction<TOut>(string name, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<TOut>(), name, TableKind.Function, Array.Empty<ColumnType>(), Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -245,16 +232,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
-        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
-        /// an expression merge classes).</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
+        /// default value, or the output is a sort and the merge is a function of values (<see
+        /// cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, TOut> DefineFunction<T1, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), options, null, 0,
+        public Function<T1, TOut> DefineFunction<T1, TOut>(string name, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<T1, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -268,16 +253,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
-        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
-        /// an expression merge classes).</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
+        /// default value, or the output is a sort and the merge is a function of values (<see
+        /// cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), options, null, 0,
+        public Function<T1, T2, TOut> DefineFunction<T1, T2, TOut>(string name, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<T1, T2, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -292,16 +275,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
-        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
-        /// an expression merge classes).</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
+        /// default value, or the output is a sort and the merge is a function of values (<see
+        /// cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), options, null, 0,
+        public Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(string name, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<T1, T2, T3, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -317,16 +298,14 @@ namespace Eggnog
         /// making terms (egglog's <c>function</c> of an e-class sort).</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact. A function cannot be
-        /// <see cref="TableOptions.Subsumable"/>.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the role is
-        /// <see cref="TableRole.Term"/>, the options make it subsumable, the merge is a default value, or the output is
-        /// a sort and the merge is a function of values (<see cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and
-        /// an expression merge classes).</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, the merge is a
+        /// default value, or the output is a sort and the merge is a function of values (<see
+        /// cref="FunctionMerge.Of{T}"/>; <c>New</c>, <c>Old</c> and an expression merge classes).</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), options, null, 0,
+        public Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(string name, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new Function<T1, T2, T3, T4, TOut>(), name, TableKind.Function, new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -335,13 +314,13 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<TSort> DefineConstructor<TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
-            DefineTable(static () => new Constructor<TSort>(), name, TableKind.Constructor, Array.Empty<ColumnType>(), Values.TypeOf<TSort>(), options, null, cost);
+        public Constructor<TSort> DefineConstructor<TSort>(string name, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
+            DefineTable(static () => new Constructor<TSort>(), name, TableKind.Constructor, Array.Empty<ColumnType>(), Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines a constructor of one key (a term head).
@@ -350,13 +329,13 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
-            DefineTable(static () => new Constructor<T1, TSort>(), name, TableKind.Constructor, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TSort>(), options, null, cost);
+        public Constructor<T1, TSort> DefineConstructor<T1, TSort>(string name, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
+            DefineTable(static () => new Constructor<T1, TSort>(), name, TableKind.Constructor, new ColumnType[] { Values.TypeOf<T1>() }, Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines a constructor of two keys (a term head).
@@ -366,14 +345,14 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort>(string name, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, TSort>(), name, TableKind.Constructor,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TSort>(), options, null, cost);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>() }, Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines a constructor of three keys (a term head).
@@ -384,14 +363,14 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, TSort> DefineConstructor<T1, T2, T3, TSort>(string name, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, TSort>(), name, TableKind.Constructor,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TSort>(), options, null, cost);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>() }, Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines a constructor of four keys (a term head).
@@ -403,14 +382,14 @@ namespace Eggnog
         /// <typeparam name="TSort">The sort of its terms, defined with <see cref="DefineSort{TSort}(string)"/>.</typeparam>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public Constructor<T1, T2, T3, T4, TSort> DefineConstructor<T1, T2, T3, T4, TSort>(string name, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new Constructor<T1, T2, T3, T4, TSort>(), name, TableKind.Constructor,
-                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TSort>(), options, null, cost);
+                new ColumnType[] { Values.TypeOf<T1>(), Values.TypeOf<T2>(), Values.TypeOf<T3>(), Values.TypeOf<T4>() }, Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines a named ruleset. Any thread, any time.
@@ -448,10 +427,11 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name.</param>
         /// <param name="keys">The column types, of this graph.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        internal RelationHandle DefineRelation(string name, IReadOnlyList<ColumnType> keys, TableOptions? options = null) =>
-            DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, options, null, 0);
+        internal RelationHandle DefineRelation(string name, IReadOnlyList<ColumnType> keys, RelationOptions? options = null) =>
+            DefineTable(static () => new UntypedRelation(), name, TableKind.Relation, Copy(keys), null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a relation over any number of key columns, as egglog's relations take, where the typed
@@ -460,13 +440,13 @@ namespace Eggnog
         /// </summary>
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
-        /// <param name="options">The role, lift policy and subsumability; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis, the lift policy and subsumability; <c>null</c> for a
+        /// subsumable fact.</param>
         /// <returns>The relation.</returns>
-        /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
-        /// <see cref="TableRole.Term"/>.</exception>
+        /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public RelationN DefineRelationN(string name, ReadOnlySpan<Type> keys, TableOptions? options = null) =>
-            DefineTable(static () => new RelationN(), name, TableKind.Relation, TypesOf(keys), null, options, null, 0);
+        public RelationN DefineRelationN(string name, ReadOnlySpan<Type> keys, RelationOptions? options = null) =>
+            DefineTable(static () => new RelationN(), name, TableKind.Relation, TypesOf(keys), null, TableSettings.Of(options), null, 0);
 
         /// <summary>
         /// Defines a function over any number of key columns, as egglog's functions take, where the typed
@@ -477,14 +457,13 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="lattice">The merge of two values, not of classes; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, a lattice is given for a
-        /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
-        /// the options make it subsumable.</exception>
+        /// sort output or one with a case join for a lifted container output.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
-            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, lattice, 0);
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, ValueLattice<TOut>? lattice = null, FunctionOptions? options = null) =>
+            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// Defines a function over any number of key columns whose merge is not a lattice (<see cref="FunctionMerge"/>),
@@ -494,12 +473,12 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="merge">The merge of the old and the new value.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">As the typed overloads with a merge.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, FunctionMerge<TOut> merge, TableOptions? options = null) =>
-            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, null, 0,
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, FunctionMerge<TOut> merge, FunctionOptions? options = null) =>
+            DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), TableSettings.Of(options), null, 0,
                 merge: merge.Definition);
 
         /// <summary>
@@ -511,13 +490,13 @@ namespace Eggnog
         /// <param name="name">The name: unique among the user's tables, non-empty.</param>
         /// <param name="keys">The key columns' types: value types or sorts, each registered with this graph.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it, whether it is subsumable, and the lift policy; the role
-        /// is always a term.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is lifted;
+        /// <c>null</c> for the defaults. The role is always a term.</param>
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, ReadOnlySpan<Type> keys, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
-            DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), options, null, cost);
+        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, ReadOnlySpan<Type> keys, ulong cost = 1, ConstructorOptions? options = null) where TSort : struct, ISort<TSort> =>
+            DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Gets the column types of key types, each registered with this graph.
@@ -539,10 +518,10 @@ namespace Eggnog
         /// <param name="keys">The key types, of this graph.</param>
         /// <param name="output">The output type, of this graph: a value type or a sort.</param>
         /// <param name="lattice">The merge, of values of the output type; <c>null</c> for none.</param>
-        /// <param name="options">The role and lift policy; <c>null</c> for a fact.</param>
+        /// <param name="options">Whether it is an analysis and the lift policy; <c>null</c> for a fact.</param>
         /// <returns>The function.</returns>
-        internal FunctionHandle DefineFunction(string name, IReadOnlyList<ColumnType> keys, ColumnType output, ValueLattice? lattice = null, TableOptions? options = null) =>
-            DefineTable(static () => new UntypedFunction(), name, TableKind.Function, Copy(keys), output ?? throw new ArgumentNullException(nameof(output)), options, lattice, 0);
+        internal FunctionHandle DefineFunction(string name, IReadOnlyList<ColumnType> keys, ColumnType output, ValueLattice? lattice = null, FunctionOptions? options = null) =>
+            DefineTable(static () => new UntypedFunction(), name, TableKind.Function, Copy(keys), output ?? throw new ArgumentNullException(nameof(output)), TableSettings.Of(options), lattice, 0);
 
         /// <summary>
         /// The untyped constructor definition: any number of keys, where the typed overloads stop at four.
@@ -551,10 +530,11 @@ namespace Eggnog
         /// <param name="keys">The key types, of this graph.</param>
         /// <param name="sort">The sort of its terms, of this graph.</param>
         /// <param name="cost">The cost of a node with this head.</param>
-        /// <param name="options">Whether extraction may use it and the lift policy.</param>
+        /// <param name="options">Whether extraction skips it, whether it is subsumable, and whether it is
+        /// lifted.</param>
         /// <returns>The constructor.</returns>
-        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, TableOptions? options = null) =>
-            DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), options, null, cost);
+        internal ConstructorHandle DefineConstructor(string name, IReadOnlyList<ColumnType> keys, ColumnType sort, ulong cost = 1, ConstructorOptions? options = null) =>
+            DefineTable(static () => new UntypedConstructor(), name, TableKind.Constructor, Copy(keys), sort ?? throw new ArgumentNullException(nameof(sort)), TableSettings.Of(options), null, cost);
 
         /// <summary>
         /// Defines the built-in nullary relation <see cref="Contradiction"/>, named <c>$contradiction</c>. A built-in table
@@ -563,35 +543,30 @@ namespace Eggnog
         /// </summary>
         /// <returns>The relation.</returns>
         Relation DefineContradiction() =>
-            DefineTable(static () => new Relation(), ContradictionName, TableKind.Relation, Array.Empty<ColumnType>(), null, null, null, 0, builtIn: true);
+            DefineTable(static () => new Relation(), ContradictionName, TableKind.Relation, Array.Empty<ColumnType>(), null, TableSettings.Of((RelationOptions?)null), null, 0, builtIn: true);
 
         /// <summary>
         /// Defines a table: validates, then under the definition lock adds the engine function
         /// (<see cref="AddEngineTable"/>, which enters the root's guard while the root is writable) and publishes the
         /// handle.
         /// </summary>
-        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableOptions? options, ValueLattice? lattice, ulong cost,
+        T DefineTable<T>(Func<T> create, string name, TableKind kind, ColumnType[] keys, ColumnType? output, TableSettings settings, ValueLattice? lattice, ulong cost,
             bool builtIn = false, FunctionMergeDefinition? merge = null)
             where T : TableHandle
         {
             EngineCallMarker.ThrowIfActive();
             if (builtIn == false)
                 NameRules.ValidateName(name, nameof(name));
-            options ??= DefaultTableOptions;
             foreach (var key in keys)
                 CheckOwnType(key ?? throw new ArgumentNullException(nameof(keys), "A column type is null."));
 
             if (output is not null)
                 CheckOwnType(output);
 
-            var role = options.Role;
             switch (kind)
             {
                 case TableKind.Relation:
                 case TableKind.Function:
-                    if (role == TableRole.Term)
-                        throw new ArgumentException($"The role of {(kind == TableKind.Relation ? "relation" : "function")} '{name}' is Term; only constructors are terms.", nameof(options));
-
                     // A function may output a class, as egglog's function of an e-class sort: its merge then asserts
                     // the classes equal, or keeps the old or the new one; a lattice and a merge function decode values.
                     // So may it a container of classes, egglog's eq-sort container, which a lattice and a merge function
@@ -612,16 +587,11 @@ namespace Eggnog
                     if (lattice is { Ordered: true } && output!.IsOrdered == false)
                         throw new ArgumentException($"Lattice '{lattice.Name}' orders the values of {output!.Name}, which holds an element that is not comparable.", nameof(lattice));
 
-                    // egglog subsumes only constructors and relations (SubsumeMergeError, src/lib.rs:2590-2598).
-                    if (kind == TableKind.Function && options.Subsumable == true)
-                        throw new ArgumentException($"Function '{name}' cannot be subsumable; only relations and constructors can be subsumed.", nameof(options));
-
                     break;
                 default:
                     if (output!.Kind != ColumnKind.Sort)
                         throw new ArgumentException($"Constructor '{name}' outputs {output.Name}, which is not a sort defined with DefineSort.", nameof(name));
 
-                    role = TableRole.Term;
                     break;
             }
 
@@ -633,18 +603,19 @@ namespace Eggnog
                 var columns = new ColumnType[keys.Length + 1];
                 keys.CopyTo(columns, 0);
                 columns[^1] = output ?? Unit;
-                // As egglog, every relation and constructor is subsumable unless the options opt it out.
-                var subsumable = options.Subsumable ?? kind != TableKind.Function;
+                // As egglog, every relation and constructor is subsumable unless the options opt it out, and no
+                // function, which FunctionOptions cannot ask for (SubsumeMergeError, src/lib.rs:2590-2598).
+                var subsumable = settings.Subsumable;
                 var function = AddEngineTable(name, kind, columns, lattice, output, subsumable, merge);
                 var handle = create();
                 handle.Graph = this;
                 handle.Name = name;
                 handle.Index = tables.Length;
                 handle.Kind = kind;
-                handle.Role = role;
+                handle.Role = settings.Role;
                 handle.KeyArray = keys;
                 handle.Output = output;
-                handle.Lift = options.Lift ?? (kind == TableKind.Constructor || role == TableRole.Fact);
+                handle.Lift = settings.Lift;
                 handle.Subsumable = subsumable;
                 handle.Function = function;
                 handle.Columns = columns;
@@ -658,7 +629,7 @@ namespace Eggnog
                 if (handle is ConstructorHandle constructor)
                 {
                     constructor.Cost = cost;
-                    constructor.Extractable = options.Extractable;
+                    constructor.Unextractable = settings.Unextractable;
                     Extraction.Declare(constructor);
                 }
 

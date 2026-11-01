@@ -390,10 +390,14 @@ union below the root that would rewrite one of the function's rows fails the run
 or merge that a live child would have to rewrite at its catch-up, because the child merged away a class keying or held
 by the row, faults that child at its next call, and not the root.
 
-`TableOptions` sets a relation's or function's role (`Fact`, the default, or `Analysis`, a table derived from terms
-alone), whether lifts copy the table into a case's parent (`Lift`; by default facts and constructors lift and analyses
-do not), whether extraction may use a constructor's rows (`Extractable`), and whether a relation's or a constructor's
-rows may be subsumed (`Subsumable`, section 2.5).
+Each kind of table has its own options, so that each offers only what applies to it. `RelationOptions` and
+`FunctionOptions` set the role (`Analysis`: a table derived from terms alone, rather than a fact, the default) and
+whether lifts copy the table into a case's parent (`Lift`; by default facts lift and analyses do not).
+`ConstructorOptions` sets whether lifts copy the constructor's terms (`Lift`, by default yes) and whether extraction
+skips its rows (`Unextractable`, egglog's `:unextractable`); a constructor's role is always `Term`, and its cost is not
+an option but a parameter of `DefineConstructor` (`cost`, by default 1). `RelationOptions` and `ConstructorOptions`
+also set whether the rows may be subsumed (`Subsumable`, section 2.5); `FunctionOptions` has no such setting, since
+no function can be.
 
 `EGraph.Contradiction` is a built-in nullary relation, an addition egglog lacks, named `$contradiction`. A rule that
 derives it says the scope has no model. In a case it stops the case (section 2.9); elsewhere it is an ordinary fact,
@@ -478,8 +482,9 @@ rules.DefineRule("a singleton domain makes a path present", r =>
   subsumed it), and extraction skips it. A missing row is inserted subsumed, with its subterms made as usual, and the
   rule's later head items still run. Subsumption is sticky: merges and the unions that rewrite the row keep it, and
   nothing undoes it. What earlier matches derived from the row stays. As in egglog, every relation and constructor is
-  subsumable and no function is; `TableOptions.Subsumable = false` opts a table out, an addition that stores no
-  subsumption cell, so that a table that is never subsumed pays no cell per row and no filter per atom.
+  subsumable and no function is; `Subsumable = false` on `RelationOptions` or `ConstructorOptions` opts a table out,
+  an addition that stores no subsumption cell, so that a table that is never subsumed pays no cell per row and no
+  filter per atom.
 - **Deletion** is egglog's `delete`. `Delete(application)` and `Delete(rows)` in a head, and the host's `Scope.Delete`
   (section 2.7), delete the row of a key of a relation, a function or a constructor, if there is one, and nothing else:
   a deleted constructor term's class stays, with its other members and the rows that name it, and making the term again
