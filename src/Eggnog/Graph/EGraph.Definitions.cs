@@ -465,7 +465,7 @@ namespace Eggnog
         /// <exception cref="ArgumentException">The name is invalid or taken, a type is unknown, or the role is
         /// <see cref="TableRole.Term"/>.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public RelationN DefineRelationN(string name, IReadOnlyList<Type> keys, TableOptions? options = null) =>
+        public RelationN DefineRelationN(string name, ReadOnlySpan<Type> keys, TableOptions? options = null) =>
             DefineTable(static () => new RelationN(), name, TableKind.Relation, TypesOf(keys), null, options, null, 0);
 
         /// <summary>
@@ -483,7 +483,7 @@ namespace Eggnog
         /// sort output or one with a case join for a lifted container output, the role is <see cref="TableRole.Term"/>, or
         /// the options make it subsumable.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, ValueLattice<TOut>? lattice = null, TableOptions? options = null) =>
             DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, lattice, 0);
 
         /// <summary>
@@ -498,7 +498,7 @@ namespace Eggnog
         /// <returns>The function.</returns>
         /// <exception cref="ArgumentException">As the typed overloads with a merge.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public FunctionN<TOut> DefineFunctionN<TOut>(string name, IReadOnlyList<Type> keys, FunctionMerge<TOut> merge, TableOptions? options = null) =>
+        public FunctionN<TOut> DefineFunctionN<TOut>(string name, ReadOnlySpan<Type> keys, FunctionMerge<TOut> merge, TableOptions? options = null) =>
             DefineTable(static () => new FunctionN<TOut>(), name, TableKind.Function, TypesOf(keys), Values.TypeOf<TOut>(), options, null, 0,
                 merge: merge.Definition);
 
@@ -516,17 +516,16 @@ namespace Eggnog
         /// <returns>The constructor.</returns>
         /// <exception cref="ArgumentException">The name is invalid or taken, or a type is unknown.</exception>
         /// <exception cref="InvalidOperationException">Another thread is using the root.</exception>
-        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, IReadOnlyList<Type> keys, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
+        public ConstructorN<TSort> DefineConstructorN<TSort>(string name, ReadOnlySpan<Type> keys, ulong cost = 1, TableOptions? options = null) where TSort : struct, ISort<TSort> =>
             DefineTable(static () => new ConstructorN<TSort>(), name, TableKind.Constructor, TypesOf(keys), Values.TypeOf<TSort>(), options, null, cost);
 
         /// <summary>
         /// Gets the column types of key types, each registered with this graph.
         /// </summary>
         /// <exception cref="ArgumentException">A type is unknown.</exception>
-        ColumnType[] TypesOf(IReadOnlyList<Type> keys)
+        ColumnType[] TypesOf(ReadOnlySpan<Type> keys)
         {
-            ArgumentNullException.ThrowIfNull(keys);
-            var types = new ColumnType[keys.Count];
+            var types = new ColumnType[keys.Length];
             for (var i = 0; i < types.Length; i++)
                 types[i] = Values.TypeOf(keys[i] ?? throw new ArgumentNullException(nameof(keys), $"Key {i} is null."));
 

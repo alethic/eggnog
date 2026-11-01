@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System;
 
 namespace Eggnog.Tests.Support
 {
@@ -17,7 +17,7 @@ namespace Eggnog.Tests.Support
         public int CanStopCalls { get; private set; }
 
         /// <inheritdoc />
-        public bool CanStop(IReadOnlyList<string> rules, string ruleset)
+        public bool CanStop(ReadOnlySpan<string> rules, string ruleset)
         {
             CanStopCalls++;
             return CanStopCalls > 1;

@@ -223,7 +223,7 @@ namespace Eggnog.Tests.Scheduling
         {
             var t = new NodeTheory();
             Assert.Throws<ArgumentOutOfRangeException>(() => Schedule.Repeat(-1, t.Rules));
-            Assert.Throws<ArgumentNullException>(() => Schedule.Sequence(null!));
+            Assert.Throws<ArgumentNullException>(() => Schedule.Sequence(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => Schedule.Saturate(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => t.Root.Run(null!));
         }
@@ -282,7 +282,6 @@ namespace Eggnog.Tests.Scheduling
             Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, ((Term<long>)1L).IsNot(2L)));
             Assert.Throws<ArgumentException>(() => Schedule.Until(t.Rules, Fact.True(Primitives.Less.Of(1L, 2L))));
             Assert.Throws<ArgumentNullException>(() => Schedule.Until(null!, t.Num.Of(1L)));
-            Assert.Throws<ArgumentNullException>(() => Schedule.Until(t.Rules, null!));
             Assert.Throws<ArgumentNullException>(() => Schedule.Until(t.Rules, t.Num.Of(1L), null!));
         }
 
@@ -408,7 +407,7 @@ namespace Eggnog.Tests.Scheduling
                 var c = new Predicates.Scoped.PredicateTheory(new EGraph());
                 c.Graph.Root.Freeze();
                 var scope = c.Graph.Root.CreateChild(c.Schema);
-                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a", "b", "c")), c.Discriminator.Of("kind"));
+                scope.Assume(c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a", "b", "c"])), c.Discriminator.Of("kind"));
                 scope.Run(Schedule.Saturate(c.Horn, c.Lattice));
                 return (c, scope);
             }

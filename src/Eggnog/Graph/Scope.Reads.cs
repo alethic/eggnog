@@ -47,7 +47,8 @@ namespace Eggnog
         /// ancestor-or-self tagged <c>tag</c> directly (host reads never use mirrors). A subsumed row holds, as in
         /// egglog's <c>check</c> (<see cref="TableOptions.Subsumable"/>).
         /// </summary>
-        /// <param name="facts">The facts: relation rows, equalities of classes or values, existences.</param>
+        /// <param name="facts">The facts: relation rows, equalities of classes or values, existences. No facts, a
+        /// <c>null</c> array included, check nothing and hold.</param>
         /// <returns>Whether every fact holds.</returns>
         /// <exception cref="ObjectDisposedException">The scope is disposed.</exception>
         /// <exception cref="ArgumentException">A fact is a filter, a term in it is not ground, a <see cref="Fact.In"/> is
@@ -63,9 +64,8 @@ namespace Eggnog
         /// which is not frozen, has catch-up work, which takes one: an ancestor that changed since it last caught up, or
         /// a rebuild of its own that ran out before it finished. The scope is not faulted. A frozen scope, and one with
         /// nothing to catch up, reads without an epoch.</exception>
-        public bool Check(params Fact[] facts)
+        public bool Check(params ReadOnlySpan<Fact> facts)
         {
-            ArgumentNullException.ThrowIfNull(facts);
             var held = EnterRead();
             try
             {

@@ -117,7 +117,7 @@ namespace Eggnog.Tests.Rules
             var vs = graph.DefineFunction<long, Vec<long>>("vs");
             var isLong = graph.DefineFunction<long, bool>("long");
             var root = graph.Root;
-            root.Assume(vs.Of(1L).Is(Vec.Of(7L)), vs.Of(2L).Is(Vec.Of(7L, 8L)));
+            root.Assume(vs.Of(1L).Is(Vec.Of([7L])), vs.Of(2L).Is(Vec.Of([7L, 8L])));
             var rules = graph.DefineRuleset("rules");
             var rule = rules.DefineRule("long", r =>
             {

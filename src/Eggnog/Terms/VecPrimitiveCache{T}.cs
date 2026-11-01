@@ -21,7 +21,7 @@ namespace Eggnog
         /// <summary>
         /// <c>vec-of</c>.
         /// </summary>
-        public static readonly VariadicPrimitive<T, Vec<T>> Of = new("vec-of", static xs => Vec.From(xs));
+        public static readonly VariadicPrimitive<T, Vec<T>> Of = new("vec-of", static xs => Vec.Of(xs));
 
         /// <summary>
         /// <c>vec-append</c>.

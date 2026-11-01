@@ -19,21 +19,21 @@ namespace Eggnog.Tests.Values
         [Fact]
         public void AMultiSetCountsItsElements()
         {
-            var m = MultiSet.Of("b", "a", "a");
+            var m = MultiSet.Of(["b", "a", "a"]);
             Assert.Equal(3, m.Count);
             Assert.Equal(2, m.CountOf("a"));
             Assert.Equal(0, m.CountOf("c"));
             Assert.Equal(new[] { "a", "a", "b" }, m);
-            Assert.Equal(m, MultiSet.Of("a", "b", "a"));
-            Assert.NotEqual(m, MultiSet.Of("a", "b"));
-            Assert.Equal(MultiSet.Of("a", "b"), m.Remove("a"));
+            Assert.Equal(m, MultiSet.Of(["a", "b", "a"]));
+            Assert.NotEqual(m, MultiSet.Of(["a", "b"]));
+            Assert.Equal(MultiSet.Of(["a", "b"]), m.Remove("a"));
             Assert.Same(m, m.Remove("c"));
-            Assert.True(m.TrySubtract(MultiSet.Of("a", "b"), out var left));
-            Assert.Equal(MultiSet.Of("a"), left);
-            Assert.False(m.TrySubtract(MultiSet.Of("b", "b"), out _));
-            Assert.Equal(MultiSet.Of("a", "a", "a", "b", "c"), m.Sum(MultiSet.Of("c", "a")));
-            Assert.Equal(MultiSet.Of("a"), m.Intersect(MultiSet.Of("a", "c")));
-            Assert.Equal(MultiSet.Of("a", "b"), m.ResetCounts());
+            Assert.True(m.TrySubtract(MultiSet.Of(["a", "b"]), out var left));
+            Assert.Equal(MultiSet.Of(["a"]), left);
+            Assert.False(m.TrySubtract(MultiSet.Of(["b", "b"]), out _));
+            Assert.Equal(MultiSet.Of(["a", "a", "a", "b", "c"]), m.Sum(MultiSet.Of(["c", "a"])));
+            Assert.Equal(MultiSet.Of(["a"]), m.Intersect(MultiSet.Of(["a", "c"])));
+            Assert.Equal(MultiSet.Of(["a", "b"]), m.ResetCounts());
             Assert.Equal("{a, a, b}", m.ToString());
         }
 
@@ -67,7 +67,7 @@ namespace Eggnog.Tests.Values
             var ints = Primitives.MultiSetOf<long>();
             var outer = Primitives.MultiSetOf<MultiSet<long>>().Of(ints.Of(1L, 2L), ints.Of(1L, 2L), ints.Of(3L));
             Assert.True(t.Root.Check(Primitives.MultiSetSumMultiSets<long>().Of(outer).Is(ints.Of(1L, 1L, 2L, 2L, 3L))));
-            Assert.Equal(MultiSet.Of(1L, 3L), t.Root.Get(Primitives.MultiSetResetCounts<long>().Of(ints.Of(3L, 3L, 1L))));
+            Assert.Equal(MultiSet.Of([1L, 3L]), t.Root.Get(Primitives.MultiSetResetCounts<long>().Of(ints.Of(3L, 3L, 1L))));
         }
 
         [Fact]
@@ -86,8 +86,8 @@ namespace Eggnog.Tests.Values
             Assert.Equal("known", graph.Root.Get(pick.Of(of.Of("fresh", "known"))));
 
             // The cells are a graph's: without one, the picks have no function.
-            Assert.Throws<InvalidOperationException>(() => pick.TryInvoke(MultiSet.Of("x"), out _));
-            Assert.Throws<InvalidOperationException>(() => Primitives.MultiSetPickMax<string>().TryInvoke(MultiSet.Of("x"), out _));
+            Assert.Throws<InvalidOperationException>(() => pick.TryInvoke(MultiSet.Of(["x"]), out _));
+            Assert.Throws<InvalidOperationException>(() => Primitives.MultiSetPickMax<string>().TryInvoke(MultiSet.Of(["x"]), out _));
         }
 
         [Fact]
@@ -160,7 +160,7 @@ namespace Eggnog.Tests.Values
             graph.Values.Register<CaseKey>("CaseKey");
             graph.Values.RegisterMultiSet<CaseKey>();
             var f = graph.DefineFunction<long, MultiSet<CaseKey>>("f");
-            var multiset = MultiSet.Of(new CaseKey("A"), new CaseKey("a"));
+            var multiset = MultiSet.Of([new CaseKey("A"), new CaseKey("a")]);
             Assert.Equal(2, multiset.Count);
             Assert.Throws<ArgumentException>(() => graph.Root.Assume(f.Of(1L).Is(multiset)));
             Assert.Equal(0, graph.Root.CountRows(f));
@@ -194,8 +194,8 @@ namespace Eggnog.Tests.Values
             graph.Values.RegisterPair<long, long>();
             graph.Values.RegisterSet<Pair<long, long>>();
             var pairs = graph.DefineFunction<long, Set<Pair<long, long>>>("pairs");
-            graph.Root.Assume(pairs.Of(1L).Is(Set.Of(new Pair<long, long>(2L, 0L), new Pair<long, long>(1L, 9L))));
-            Assert.Equal(Set.Of(new Pair<long, long>(1L, 9L), new Pair<long, long>(2L, 0L)), graph.Root.Get(pairs.Of(1L)));
+            graph.Root.Assume(pairs.Of(1L).Is(Set.Of([new Pair<long, long>(2L, 0L), new Pair<long, long>(1L, 9L)])));
+            Assert.Equal(Set.Of([new Pair<long, long>(1L, 9L), new Pair<long, long>(2L, 0L)]), graph.Root.Get(pairs.Of(1L)));
 
             graph.Values.Register<NumericBound>("NumericBound");
             graph.Values.RegisterPair<NumericBound, long>();
@@ -227,11 +227,11 @@ namespace Eggnog.Tests.Values
                 r.When(x.Is(m.Of(k)), y.Is(Primitives.MultiSetRemove<long>().Of(x, 5L)));
                 r.Then(removed.Of(k).Is(y), picked.Of(k).Is(Primitives.MultiSetPick<long>().Of(x)));
             });
-            graph.Root.Assume(m.Of(1L).Is(MultiSet.Of(5L, 7L)), m.Of(2L).Is(MultiSet.Of(7L)));
+            graph.Root.Assume(m.Of(1L).Is(MultiSet.Of([5L, 7L])), m.Of(2L).Is(MultiSet.Of([7L])));
 
             graph.Root.Run(Schedule.Run(body));
 
-            Assert.Equal(MultiSet.Of(7L), graph.Root.Get(removed.Of(1L)));
+            Assert.Equal(MultiSet.Of([7L]), graph.Root.Get(removed.Of(1L)));
             Assert.Equal(5L, graph.Root.Get(picked.Of(1L)));
             Assert.False(graph.Root.TryGet(removed.Of(2L), out _));
             Assert.Equal(

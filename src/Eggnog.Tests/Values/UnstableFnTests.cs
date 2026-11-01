@@ -549,7 +549,7 @@ namespace Eggnog.Tests.Values
             Assert.Equal(0, x.CompareTo(UnstableFn.Of<Node, Node>(add, one)));
             Assert.Equal(-Math.Sign(x.CompareTo(y)), Math.Sign(y.CompareTo(x)));
             Assert.NotEqual(0, x.CompareTo(y));
-            Assert.Equal(2, Set.Of(x, y, x).Count);
+            Assert.Equal(2, Set.Of([x, y, x]).Count);
 
             // Two primitives of one name are two functions.
             graph.Values.RegisterFn<long, long>();
@@ -572,7 +572,7 @@ namespace Eggnog.Tests.Values
             var vecOf = Primitives.VecOf<long>();
             Assert.Same(vecOf.WithArity(2), vecOf.WithArity(2));
             var fn = Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(2));
-            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, Vec<long>>().Of(fn.Of(1L), 2L).Is(Vec.Of(1L, 2L))));
+            Assert.True(graph.Root.Check(Primitives.UnstableApp<long, Vec<long>>().Of(fn.Of(1L), 2L).Is(Vec.Of([1L, 2L]))));
             Assert.Equal("(unstable-fn \"vec-of\" 1)", UnstableFn.Of<long, Vec<long>>(vecOf.WithArity(2), 1L).ToString());
             Assert.Throws<ArgumentException>(() => Primitives.UnstableFn<long, Vec<long>>(vecOf.WithArity(1)).Of(1L));
 

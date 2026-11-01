@@ -310,7 +310,7 @@ namespace Eggnog.Tests.Values
                     r.When(x.Is(t.P.Of()), y.Is(t.Q.Of()));
                     r.Then(Fact.Exists(Primitives.VecUnion<Node>().Of(x, y)));
                 });
-                t.Root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+                t.Root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
 
                 t.Root.Run(replay ? Schedule.Run(unions) : Schedule.Split(split, Schedule.Run(unions)));
 

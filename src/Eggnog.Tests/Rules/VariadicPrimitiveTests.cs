@@ -34,7 +34,7 @@ namespace Eggnog.Tests.Rules
             graph.Root.Run(Schedule.Saturate(rules));
 
             Assert.True(graph.Root.Check(joined.Of("xyz")));
-            Assert.Equal(Set.Of("x", "y", "z"), graph.Root.Get(members.Of("x")));
+            Assert.Equal(Set.Of(["x", "y", "z"]), graph.Root.Get(members.Of("x")));
             Assert.Equal("(rule ((parts a b c)) ((joined (+ a b c)) (set (members a) (set-of a b c))) :ruleset rules)", rule.ToString());
         }
 
@@ -83,13 +83,19 @@ namespace Eggnog.Tests.Rules
         [Fact]
         public void AUserVariadicPrimitiveMakesOnePrimitivePerArity()
         {
-            var sum = Primitive.CreateVariadic<long, long>("sum", static xs => xs.Sum());
+            var sum = Primitive.CreateVariadic<long, long>("sum", static xs =>
+            {
+                var total = 0L;
+                foreach (var x in xs)
+                    total += x;
+
+                return total;
+            });
 
             Assert.Equal("sum", sum.Name);
             Assert.Equal(6, sum.Function(new[] { 1L, 2L, 3L }));
             Assert.Same(sum.Call(3), sum.Call(3));
             Assert.NotSame(sum.Call(2), sum.Call(3));
-            Assert.Throws<ArgumentNullException>(() => sum.Of(null!));
             Assert.Throws<ArgumentNullException>(() => sum.Of(1L, null!));
         }
 

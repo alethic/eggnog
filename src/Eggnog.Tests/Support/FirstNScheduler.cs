@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Eggnog.Tests.Support
@@ -39,6 +40,9 @@ namespace Eggnog.Tests.Support
         /// Gets the value of the first variable of the first match each call was offered, <c>null</c> for none.
         /// </summary>
         public List<object?> Firsts { get; }
+
+        /// <inheritdoc />
+        public bool CanStop(ReadOnlySpan<string> rules, string ruleset) => true;
 
         /// <inheritdoc />
         public bool FilterMatches(string rule, string ruleset, RuleMatches matches)

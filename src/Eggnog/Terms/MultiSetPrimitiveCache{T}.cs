@@ -18,7 +18,7 @@ namespace Eggnog
         /// <summary>
         /// <c>multiset-of</c>.
         /// </summary>
-        public static readonly VariadicPrimitive<T, MultiSet<T>> Of = new("multiset-of", static xs => MultiSet.From(xs));
+        public static readonly VariadicPrimitive<T, MultiSet<T>> Of = new("multiset-of", static xs => MultiSet.Of(xs));
 
         /// <summary>
         /// <c>multiset-single</c>: no result for a negative count.

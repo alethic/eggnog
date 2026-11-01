@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Eggnog
 {
@@ -19,6 +20,7 @@ namespace Eggnog
     /// <see cref="int.MaxValue"/>. Operations return a new multiset, or this one when nothing changes.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
+    [CollectionBuilder(typeof(MultiSet), nameof(MultiSet.Of))]
     public sealed class MultiSet<T> : IReadOnlyCollection<T>, IEquatable<MultiSet<T>>, IComparable<MultiSet<T>>
         where T : notnull
     {
@@ -293,18 +295,28 @@ namespace Eggnog
         /// <exception cref="ArgumentNullException">An element is <c>null</c>.</exception>
         internal static MultiSet<T> Create(IEnumerable<T> items)
         {
-            var sorted = items.ToArray();
-            if (sorted.Length == 0)
+            return Own(items.ToArray());
+        }
+
+        /// <summary>
+        /// Makes a multiset of <paramref name="items"/>, sorting it in place, repeats counted.
+        /// </summary>
+        /// <param name="items">The elements in any order; the multiset's to sort from now on.</param>
+        /// <returns>The multiset.</returns>
+        /// <exception cref="ArgumentNullException">An element is <c>null</c>.</exception>
+        internal static MultiSet<T> Own(T[] items)
+        {
+            if (items.Length == 0)
                 return Empty;
 
-            foreach (var item in sorted)
+            foreach (var item in items)
                 if (item is null)
                     throw new ArgumentNullException(nameof(items), "A multiset's element is null.");
 
-            Array.Sort(sorted, Order);
-            var distinct = new List<T>(sorted.Length);
-            var counts = new List<long>(sorted.Length);
-            foreach (var item in sorted)
+            Array.Sort(items, Order);
+            var distinct = new List<T>(items.Length);
+            var counts = new List<long>(items.Length);
+            foreach (var item in items)
             {
                 if (distinct.Count > 0 && Order.Compare(distinct[^1], item) == 0)
                 {
@@ -316,7 +328,7 @@ namespace Eggnog
                 counts.Add(1);
             }
 
-            return new(distinct.ToArray(), counts.ToArray(), sorted.Length);
+            return new(distinct.ToArray(), counts.ToArray(), items.Length);
         }
 
         /// <summary>
