@@ -4,8 +4,10 @@ namespace Eggnog
 {
 
     /// <summary>
-    /// The base of the typed functions: maps from keys to a value or a class, merged by a lattice or a
-    /// <see cref="FunctionMerge"/>, or, without either, required to agree.
+    /// The base of every function, whatever its output type: maps from keys to a value or a class, merged by a lattice
+    /// or a <see cref="FunctionMerge"/>, or, without either, required to agree. The members that cannot know the output
+    /// type statically take or return this base; <see cref="FunctionHandle{TOut}"/> is the typed base, which carries
+    /// it.
     /// </summary>
     public abstract class FunctionHandle : TableHandle
     {

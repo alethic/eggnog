@@ -264,6 +264,14 @@ namespace Eggnog
         /// <exception cref="InvalidOperationException">The type is not a sort.</exception>
         internal virtual object Wrap(ClassId id) => throw new InvalidOperationException($"{Name} is not a sort.");
 
+        /// <summary>
+        /// Makes the handle of a constructor of this sort for the untyped constructor definition, typed by the sort as the
+        /// typed constructors are (<see cref="ConstructorHandle{TSort}"/>).
+        /// </summary>
+        /// <returns>The handle; the graph sets the definition.</returns>
+        /// <exception cref="InvalidOperationException">The type is not a sort.</exception>
+        internal virtual ConstructorHandle CreateUntypedConstructor() => throw new InvalidOperationException($"{Name} is not a sort.");
+
     }
 
 }

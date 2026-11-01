@@ -774,7 +774,7 @@ namespace Eggnog.Tests.Values
             {
                 var y = r.Var<Node>("y");
                 r.When(y.Is(k.Of(r.Var<Node>("x"))));
-                r.ThenCallFull(ctx => looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out _)));
+                r.ThenCallFull(ctx => looked.Add(ctx.TryLookup(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out _)));
             });
             var root = graph.Root;
             var top = root.Make(l.Of(Primitives.VecOf<Node>().Of(k.Of(b.Of()))));
@@ -841,8 +841,8 @@ namespace Eggnog.Tests.Values
                 r.When(y.Is(k.Of(r.Var<Node>("x"))));
                 r.ThenCallFull(ctx =>
                 {
-                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y)])], out var one) ? one : null);
-                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out var two) ? two : null);
+                    looked.Add(ctx.TryLookup(g, [Vec.Of([ctx.Get(y)])], out var one) ? one : null);
+                    looked.Add(ctx.TryLookup(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out var two) ? two : null);
                 });
             });
             var root = graph.Root;

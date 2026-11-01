@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 
 using Eggnog.Tests.Support;
 
@@ -30,7 +31,7 @@ namespace Eggnog.Tests.Rules
                 rule.When(n.Is(t.Lit.Of(x)));
                 rule.ThenCall(ctx =>
                 {
-                    var made = ctx.Make<Node>(t.Lit, ctx.Get(x) + 100);
+                    var made = ctx.Make(t.Lit, ctx.Get(x) + 100);
                     ctx.Union(ctx.Get(n), made);
                     ctx.Insert(t.Tag, made);
                 });
@@ -62,7 +63,7 @@ namespace Eggnog.Tests.Rules
                 {
                     Assert.False(ctx.Contains(key, ctx.Get(k) + 1000));
                     Assert.True(ctx.TableSize(key) > 0);
-                    if (ctx.TryLookup<long>(best, [ctx.Get(k)], out var value))
+                    if (ctx.TryLookup(best, [ctx.Get(k)], out var value))
                         ctx.Set(seen, [ctx.Get(k)], value);
                 });
             });
@@ -74,6 +75,45 @@ namespace Eggnog.Tests.Rules
 
             Assert.True(rule.IsNaive);
             Assert.Equal(7L, graph.Root.Get(seen.Of(1L)));
+        }
+
+        /// <summary>
+        /// The handles carry the sort and the output's type, so a callback names neither: a lookup of a function infers
+        /// its output, one of a constructor its sort and reads the class without making the term, a value set is
+        /// converted to the output's type, and a term made is of the constructor's sort.
+        /// </summary>
+        [Fact]
+        public void TheHandlesCarryTheSortAndTheOutputType()
+        {
+            var t = new NodeTheory();
+            var size = t.Graph.DefineFunction<Node, long>("size", ValueLattice.Max<long>());
+            var rules = t.Rules;
+            var looked = new ConcurrentBag<(long Size, bool Found, bool Missing)>();
+            rules.DefineRule("size", rule =>
+            {
+                var (n, x) = rule.Vars<Node, long>("n", "x");
+                rule.When(n.Is(t.Lit.Of(x)));
+                rule.ThenCallFull(ctx =>
+                {
+                    var found = ctx.TryLookup(t.Lit, [ctx.Get(x)], out var same) && ctx.TryLookup(t.Lit, [ctx.Get(x)], out Node again) && same.Equals(again);
+                    var missing = ctx.TryLookup(t.Lit, [ctx.Get(x) + 1000], out _);
+                    ctx.Set(size, [ctx.Get(n)], 2);
+                    looked.Add((ctx.TryLookup(size, [ctx.Get(n)], out var held) ? held : -1L, found, missing));
+                    Node made = ctx.Make(t.Wrap, ctx.Get(n));
+                    ctx.Insert(t.Tag, made);
+                });
+            });
+            var one = t.Root.Make(t.Lit.Of(1L));
+            t.Root.Run(rules);
+            t.Root.Run(rules);
+
+            ConstructorHandle<Node> head = t.Lit.Of(1L).Head;
+            Assert.Same(t.Lit, head);
+            Assert.Equal(2L, t.Root.Get(size.Of(one)));
+            Assert.Contains((2L, true, false), looked);
+            Assert.DoesNotContain(looked, l => l.Found == false || l.Missing);
+            Assert.True(t.Root.Check(t.Tag.Of(t.Wrap.Of(t.Lit.Of(1L)))));
+            Assert.False(t.Root.Check(Fact.Exists(t.Lit.Of(1001L))));
         }
 
         /// <summary>
@@ -225,7 +265,7 @@ namespace Eggnog.Tests.Rules
                 rule.When(n.Is(t.Lit.Of(x)));
                 rule.ThenCall(ctx =>
                 {
-                    var made = ctx.Make<Node>(t.Lit, ctx.Get(x) + 1_000_000);
+                    var made = ctx.Make(t.Lit, ctx.Get(x) + 1_000_000);
                     ctx.Union(ctx.Get(n), made);
                     ctx.Insert(t.Tag, made);
                 });

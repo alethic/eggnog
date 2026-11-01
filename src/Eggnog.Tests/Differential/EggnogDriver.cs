@@ -286,7 +286,7 @@ namespace Eggnog.Tests.Differential
                 {
                     var arguments = term.Arguments.Select(a => Term(a, variables)).ToArray();
                     var table = tables[term.Table!];
-                    return table is ConstructorHandle constructor ? new ConstructorTerm<Node>(constructor, arguments) : ((FunctionHandle)table).Apply(arguments);
+                    return table is ConstructorHandle<Node> constructor ? new ConstructorTerm<Node>(constructor, arguments) : ((FunctionHandle)table).Apply(arguments);
                 }
                 default:
                     return Compute.Of(term.Primitive!.Create(), term.Arguments.Select(a => Term(a, variables)).ToArray());

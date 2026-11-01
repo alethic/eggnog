@@ -8,8 +8,8 @@ namespace Eggnog
     /// A function value of 4 inputs: egglog's <c>(UnstableFn (T1 T2 T3 T4) TResult)</c> sort (src/sort/fn.rs), whose
     /// column type <see cref="ValueStore.RegisterFn{T1, T2, T3, T4, TResult}"/> registers. It applies a constructor, a function or a primitive,
     /// partially applied to <see cref="Arguments"/>, its first parameters, to the inputs:
-    /// <see cref="Primitives.UnstableApp{T1, T2, T3, T4, TResult}"/>, egglog's <c>unstable-app</c>; <see cref="Primitives.UnstableFn{T1, T2, T3, T4, TResult}(TableHandle)"/>
-    /// makes one in a term, egglog's <c>unstable-fn</c>, and <see cref="UnstableFn.Of{T1, T2, T3, T4, TResult}(TableHandle, ReadOnlySpan{object})"/>
+    /// <see cref="Primitives.UnstableApp{T1, T2, T3, T4, TResult}"/>, egglog's <c>unstable-app</c>; <see cref="Primitives.UnstableFn{T1, T2, T3, T4, TResult}(FunctionHandle{TResult})"/> (or <see cref="Primitives.UnstableFn{T1, T2, T3, T4, TResult}(ConstructorHandle{TResult})"/>)
+    /// makes one in a term, egglog's <c>unstable-fn</c>, and <see cref="UnstableFn.Of{T1, T2, T3, T4, TResult}(FunctionHandle{TResult}, ReadOnlySpan{object})"/> (or <see cref="UnstableFn.Of{T1, T2, T3, T4, TResult}(ConstructorHandle{TResult}, ReadOnlySpan{object})"/>)
     /// on the host. Equal by function and arguments, as egglog's are. Immutable.
     /// </summary>
     /// <typeparam name="T1">The type of input 1.</typeparam>

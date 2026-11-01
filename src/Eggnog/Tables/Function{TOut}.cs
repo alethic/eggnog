@@ -8,7 +8,7 @@ namespace Eggnog
     /// <see cref="EGraph.DefineFunction{TOut}(string, ValueLattice{TOut}, FunctionOptions)"/>.
     /// </summary>
     /// <typeparam name="TOut">The type of the value.</typeparam>
-    public sealed class Function<TOut> : FunctionHandle
+    public sealed class Function<TOut> : FunctionHandle<TOut>
     {
 
         /// <summary>
@@ -18,11 +18,6 @@ namespace Eggnog
         {
 
         }
-
-        /// <summary>
-        /// Gets the lattice that merges the function's values; <c>null</c> when two different values are an error.
-        /// </summary>
-        public new ValueLattice<TOut>? Lattice => (ValueLattice<TOut>?)base.Lattice;
 
         /// <summary>
         /// The function's value at the keys: matched in a body (<c>d.Is(dom.Of(p))</c>), written in a head or a host
