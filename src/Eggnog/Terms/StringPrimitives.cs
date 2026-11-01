@@ -14,7 +14,11 @@ namespace Eggnog
         /// <summary>
         /// Gets <c>+</c> over <c>String</c>: the concatenation of any number of strings; of none, the empty string.
         /// </summary>
-        public static VariadicPrimitive<string, string> Concat { get; } = new("+", static xs => string.Concat(xs));
+#if NET9_0_OR_GREATER
+        public static VariadicPrimitive<string, string> Concat { get; } = new("+", static xs => string.Concat(xs!));
+#else
+        public static VariadicPrimitive<string, string> Concat { get; } = new("+", static xs => string.Concat(xs.ToArray()));
+#endif
 
         /// <summary>
         /// Gets <c>replace</c>: the first string with every match of the second, left to right and not overlapping,

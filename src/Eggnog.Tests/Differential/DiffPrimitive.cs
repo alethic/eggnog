@@ -83,10 +83,10 @@ namespace Eggnog.Tests.Differential
         public static DiffPrimitive SetBig { get; } = Lambda("set big", new[] { DiffType.IntSet }, DiffType.Bool, "d => d.Count > 1",
             a => ((Set<int>)a[0]).Count > 1, () => new Primitive<Set<int>, bool>(Primitive.LambdaName, d => d.Count > 1, true));
 
-        /// <summary>Gets the lambda <c>x =&gt; Set.Of((int)(x % 5), (int)((x + 2) % 5))</c>.</summary>
-        public static DiffPrimitive SetAround { get; } = Lambda("set around", new[] { DiffType.I64 }, DiffType.IntSet, "x => Set.Of((int)(x % 5), (int)((x + 2) % 5))",
-            a => Set.Of((int)((long)a[0] % 5), (int)(((long)a[0] + 2) % 5)),
-            () => new Primitive<long, Set<int>>(Primitive.LambdaName, x => Set.Of((int)(x % 5), (int)((x + 2) % 5)), true));
+        /// <summary>Gets the lambda <c>x =&gt; Set.Of([(int)(x % 5), (int)((x + 2) % 5)])</c>.</summary>
+        public static DiffPrimitive SetAround { get; } = Lambda("set around", new[] { DiffType.I64 }, DiffType.IntSet, "x => Set.Of([(int)(x % 5), (int)((x + 2) % 5)])",
+            a => Set.Of([(int)((long)a[0] % 5), (int)(((long)a[0] + 2) % 5)]),
+            () => new Primitive<long, Set<int>>(Primitive.LambdaName, x => Set.Of([(int)(x % 5), (int)((x + 2) % 5)]), true));
 
         /// <summary>Gets the lambda <c>(x, y) =&gt; (x + y) % 6</c>.</summary>
         public static DiffPrimitive SumMod { get; } = Lambda("sum mod", new[] { DiffType.I64, DiffType.I64 }, DiffType.I64, "(x, y) => (x + y) % 6",

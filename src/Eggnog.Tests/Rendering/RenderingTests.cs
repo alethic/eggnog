@@ -120,7 +120,7 @@ namespace Eggnog.Tests.Rendering
             var t = new NodeTheory();
             var f = t.Graph.DefineFunction<string, Set<string>>("f");
             var a = t.Root.Make(t.A.Of());
-            Assert.Equal("(= (f \"kind\") (set-of \"a\" \"b\"))", f.Of("kind").Is(Set.Of("b", "a")).ToString());
+            Assert.Equal("(= (f \"kind\") (set-of \"a\" \"b\"))", f.Of("kind").Is(Set.Of(["b", "a"])).ToString());
             Assert.Equal($"(tag {a.Id})", t.Tag.Of(a).ToString());
             Assert.Equal("(!= 1 2)", ((Term<long>)1L).IsNot(2L).ToString());
             Assert.Equal("(Lit 42)", t.Lit.Of(42L).ToString());
@@ -171,7 +171,7 @@ namespace Eggnog.Tests.Rendering
             var present = t.Graph.DefineRelation<string>("present");
             var dom = t.Graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             var strEq = t.Graph.DefineConstructor<string, string, Node>("StrEq");
-            t.Root.Assume(present.Of("kind"), dom.Of("kind").Is(Set.Of("b", "a")));
+            t.Root.Assume(present.Of("kind"), dom.Of("kind").Is(Set.Of(["b", "a"])));
             var made = t.Root.Make(strEq.Of("kind", "a"));
 
             Assert.Equal("(present \"kind\")", t.Root.Rows(present)[0].ToString());
@@ -197,7 +197,7 @@ namespace Eggnog.Tests.Rendering
 
             // Fact.In renders its facts read in the tagged scope; a scoped view renders with its tag.
             Assert.Equal("(present @schema \"kind\") (= (dom @schema \"kind\") (set-of \"a\"))",
-                Fact.In(c.Schema, c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of("a"))).ToString());
+                Fact.In(c.Schema, c.Present.Of("kind"), c.Dom.Of("kind").Is(Set.Of(["a"]))).ToString());
             Assert.Equal("dom @schema", c.Dom.In(c.Schema).ToString());
             Assert.Equal("dom", c.Dom.ToString());
         }
@@ -222,7 +222,7 @@ namespace Eggnog.Tests.Rendering
             t.Graph.Values.RegisterEnum<Shade>();
             var f = t.Graph.DefineFunction<long>("f");
             var dom = t.Graph.DefineFunction<Shade, Set<string>>("dom", ValueLattice.Intersect<string>());
-            t.Root.Assume(f.Of().Is(5L), t.Graph.Contradiction.Of(), dom.Of(default(Shade)).Is(Set.Of("b", "a")));
+            t.Root.Assume(f.Of().Is(5L), t.Graph.Contradiction.Of(), dom.Of(default(Shade)).Is(Set.Of(["b", "a"])));
 
             Assert.Equal("(f) = 5", t.Root.Rows(f).Single().ToString());
             Assert.Equal("($contradiction)", t.Root.Rows(t.Graph.Contradiction).Single().ToString());

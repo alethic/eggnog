@@ -235,7 +235,7 @@ namespace Eggnog.Tests.Diagnostics
         {
             var graph = new EGraph();
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b")));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of(["a", "b"])));
 
             var serialized = graph.Root.Serialize();
 
@@ -273,7 +273,7 @@ namespace Eggnog.Tests.Diagnostics
         {
             var graph = new EGraph();
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
-            graph.Root.Assume(dom.Of("k").Is(Set.Of("never on its own")));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of(["never on its own"])));
             var interned = graph.Values.InternedCount;
 
             graph.Root.Serialize().ToJson();
@@ -335,7 +335,7 @@ namespace Eggnog.Tests.Diagnostics
             var dom = graph.DefineFunction<string, Set<string>>("dom", ValueLattice.Intersect<string>());
             graph.Root.Assume(text.Of("b"));
             graph.Root.Assume(text.Of("a"));
-            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b", "q\"x")));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of(["a", "b", "q\"x"])));
 
             var serialized = graph.Root.Serialize();
 
@@ -356,7 +356,7 @@ namespace Eggnog.Tests.Diagnostics
             graph.Values.Register<Ranked>("Ranked", format: _ => "p");
             graph.Values.RegisterSet<Ranked>();
             var f = graph.DefineFunction<long, Set<Ranked>>("f");
-            graph.Root.Assume(f.Of(1L).Is(Set.Of(new Ranked(1), new Ranked(2))));
+            graph.Root.Assume(f.Of(1L).Is(Set.Of([new Ranked(1), new Ranked(2)])));
 
             var serialized = graph.Root.Serialize();
 

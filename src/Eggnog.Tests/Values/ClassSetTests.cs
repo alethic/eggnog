@@ -65,7 +65,7 @@ namespace Eggnog.Tests.Values
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 0L).Is(t.Num.Of(3L))));
             Assert.True(t.Root.Check(get.Of(t.Sets.Of(), 1L).Is(t.Num.Of(1L))));
             Assert.False(t.Root.Check(get.Of(t.Sets.Of(), 2L).Is(t.Num.Of(1L))));
-            Assert.Equal(Set.Of(t.Root.Find(t.Make(3L)), t.Root.Find(t.Make(1L))), t.Root.Get(t.Sets.Of()));
+            Assert.Equal(Set.Of([t.Root.Find(t.Make(3L)), t.Root.Find(t.Make(1L))]), t.Root.Get(t.Sets.Of()));
         }
 
         [Fact]
@@ -171,9 +171,9 @@ namespace Eggnog.Tests.Values
             var (one, two) = (t.Make(1L), t.Make(2L));
             t.Root.Union(one, two);
 
-            t.Root.Assume(t.Sets.Of().Is(Set.Of(one, two)));
-            Assert.Equal(Set.Of(t.Root.Find(one)), t.Root.Get(t.Sets.Of()));
-            Assert.True(t.Root.Check(t.Sets.Of().Is(Set.Of(two))));
+            t.Root.Assume(t.Sets.Of().Is(Set.Of([one, two])));
+            Assert.Equal(Set.Of([t.Root.Find(one)]), t.Root.Get(t.Sets.Of()));
+            Assert.True(t.Root.Check(t.Sets.Of().Is(Set.Of([two]))));
         }
 
         [Fact]

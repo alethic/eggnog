@@ -23,14 +23,14 @@ namespace Eggnog
         Rewrite,
 
         /// <summary>
-        /// <see cref="RuleBuilder.Subsume{TSort}(ConstructorTerm{TSort})"/>, <see cref="RuleBuilder.Subsume(Fact[])"/>,
+        /// <see cref="RuleBuilder.Subsume{TSort}(ConstructorTerm{TSort})"/>, <see cref="RuleBuilder.Subsume(System.ReadOnlySpan{Fact})"/>,
         /// or the subsumption of a rewrite's left side
         /// (<see cref="RuleBuilder.Rewrite{TSort}(Term{TSort}, Term{TSort}, bool)"/>): egglog's <c>subsume</c> action.
         /// </summary>
         Subsume,
 
         /// <summary>
-        /// <see cref="RuleBuilder.Delete{T}(Term{T})"/> or <see cref="RuleBuilder.Delete(Fact[])"/>: egglog's
+        /// <see cref="RuleBuilder.Delete{T}(Term{T})"/> or <see cref="RuleBuilder.Delete(System.ReadOnlySpan{Fact})"/>: egglog's
         /// <c>delete</c> action.
         /// </summary>
         Delete,

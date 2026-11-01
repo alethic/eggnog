@@ -282,7 +282,7 @@ namespace Eggnog.Tests.Deletion
                 s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)));
             });
             t.Rules.DefineRule("drop", r => r.Delete(t.Num.Of(1L)));
-            t.Root.Assume(t.Num.Of(1L), choice.Of("k").Is(Set.Of(1L, 2L)));
+            t.Root.Assume(t.Num.Of(1L), choice.Of("k").Is(Set.Of([1L, 2L])));
 
             var e = Assert.Throws<InvalidOperationException>(() => t.Root.Run(Schedule.Sequence(t.Rules, Schedule.Split(split, t.Rules))));
 

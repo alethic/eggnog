@@ -1,5 +1,5 @@
 sealed class Eggnog.BackOffScheduler : IRuleScheduler
-    Boolean CanStop(IReadOnlyList<String> rules, String ruleset)
+    Boolean CanStop(ReadOnlySpan<String> rules, String ruleset)
     Boolean FilterMatches(String rule, String ruleset, RuleMatches matches)
     IRuleScheduler Clone()
     Int64 BanLength { get }
@@ -168,7 +168,7 @@ sealed class Eggnog.EGraph
     Constructor<T1, T2, TSort> DefineConstructor<T1, T2, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
     Constructor<T1, TSort> DefineConstructor<T1, TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
     Constructor<TSort> DefineConstructor<TSort : struct, ISort<TSort>>(String name, UInt64 cost = 1, TableOptions options = null)
-    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, IReadOnlyList<Type> keys, UInt64 cost = 1, TableOptions options = null)
+    ConstructorN<TSort> DefineConstructorN<TSort : struct, ISort<TSort>>(String name, ReadOnlySpan<Type> keys, UInt64 cost = 1, TableOptions options = null)
     Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<T1, T2, T3, T4, TOut> DefineFunction<T1, T2, T3, T4, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     Function<T1, T2, T3, TOut> DefineFunction<T1, T2, T3, TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
@@ -179,8 +179,8 @@ sealed class Eggnog.EGraph
     Function<T1, TOut> DefineFunction<T1, TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
     Function<TOut> DefineFunction<TOut>(String name, FunctionMerge<TOut> merge, TableOptions options = null)
     Function<TOut> DefineFunction<TOut>(String name, ValueLattice<TOut> lattice = null, TableOptions options = null)
-    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, FunctionMerge<TOut> merge, TableOptions options = null)
-    FunctionN<TOut> DefineFunctionN<TOut>(String name, IReadOnlyList<Type> keys, ValueLattice<TOut> lattice = null, TableOptions options = null)
+    FunctionN<TOut> DefineFunctionN<TOut>(String name, ReadOnlySpan<Type> keys, FunctionMerge<TOut> merge, TableOptions options = null)
+    FunctionN<TOut> DefineFunctionN<TOut>(String name, ReadOnlySpan<Type> keys, ValueLattice<TOut> lattice = null, TableOptions options = null)
     GraphUsage Usage { get }
     IReadOnlyList<Ruleset> Rulesets { get }
     IReadOnlyList<ScopeTag> ScopeTags { get }
@@ -193,14 +193,14 @@ sealed class Eggnog.EGraph
     Relation<T1, T2, T3> DefineRelation<T1, T2, T3>(String name, TableOptions options = null)
     Relation<T1, T2> DefineRelation<T1, T2>(String name, TableOptions options = null)
     Relation<T1> DefineRelation<T1>(String name, TableOptions options = null)
-    RelationN DefineRelationN(String name, IReadOnlyList<Type> keys, TableOptions options = null)
+    RelationN DefineRelationN(String name, ReadOnlySpan<Type> keys, TableOptions options = null)
     RuleScheduler AddScheduler(IRuleScheduler scheduler)
     Ruleset DefineRuleset(String name)
     Ruleset DefineRuleset(String name, RulesetOptions options)
     Scope Root { get }
     ScopeTag DefineScopeTag(String name)
     ScopeTag RootTag { get }
-    SplitRule DefineDomainSplit<TKey, TElement>(String name, Function<TKey, Set<TElement>> domain, IReadOnlyList<Relation<TKey>> guards, ScopeTag caseTag = null)
+    SplitRule DefineDomainSplit<TKey, TElement>(String name, Function<TKey, Set<TElement>> domain, ReadOnlySpan<Relation<TKey>> guards, ScopeTag caseTag = null)
     SplitRule DefineSplit(String name, Action<SplitBuilder> define, ScopeTag caseTag = null)
     ValueStore Values { get }
     ctor(EGraphOptions options = null)
@@ -240,14 +240,14 @@ sealed class Eggnog.Extractor
 abstract class Eggnog.Fact
     override String ToString()
     static Fact Exists(Term application)
-    static Fact In(ScopeTag scope, params Fact[] facts)
+    static Fact In(ScopeTag scope, params ReadOnlySpan<Fact> facts)
     static Fact True(Term<Boolean> condition)
 sealed class Eggnog.FactConflictException : InvalidOperationException
     IReadOnlyList<Object> Key { get }
     Object NewValue { get }
     Object StoredValue { get }
     TableHandle Table { get }
-    ctor(TableHandle table, IReadOnlyList<Object> key, Object storedValue, Object newValue)
+    ctor(TableHandle table, ReadOnlySpan<Object> key, Object storedValue, Object newValue)
 sealed class Eggnog.FullRuleCallbackContext : RuleCallbackContext, ITableReader, ITableWriter, ITables
     Boolean Contains(RelationHandle relation, params ReadOnlySpan<Object> keys)
     Boolean TryLookup<T>(TableHandle table, ReadOnlySpan<Object> keys, out T value)
@@ -304,9 +304,9 @@ struct Eggnog.GraphUsage : IEquatable<GraphUsage>
     static Boolean op_Equality(GraphUsage left, GraphUsage right)
     static Boolean op_Inequality(GraphUsage left, GraphUsage right)
 interface Eggnog.IRuleScheduler
+    abstract Boolean CanStop(ReadOnlySpan<String> rules, String ruleset)
     abstract Boolean FilterMatches(String rule, String ruleset, RuleMatches matches)
     abstract IRuleScheduler Clone()
-    virtual Boolean CanStop(IReadOnlyList<String> rules, String ruleset)
 interface Eggnog.ISort<TSort>
     ClassId Id { get }
     static abstract TSort FromId(ClassId id)
@@ -365,7 +365,7 @@ sealed class Eggnog.LiftReport
     override String ToString()
 static class Eggnog.Map
     static Map<TKey, TValue> From<TKey, TValue>(IEnumerable<KeyValuePair<TKey, TValue>> entries)
-    static Map<TKey, TValue> Of<TKey, TValue>(params ValueTuple<TKey, TValue>[] entries)
+    static Map<TKey, TValue> Of<TKey, TValue>(params ReadOnlySpan<ValueTuple<TKey, TValue>> entries)
 sealed class Eggnog.Map<TKey, TValue> : IComparable<Map<TKey, TValue>>, IEnumerable, IEnumerable<KeyValuePair<TKey, TValue>>, IEquatable<Map<TKey, TValue>>, IReadOnlyCollection<KeyValuePair<TKey, TValue>>
     Boolean ContainsKey(TKey key)
     Boolean Equals(Map<TKey, TValue> other)
@@ -384,7 +384,7 @@ sealed class Eggnog.Map<TKey, TValue> : IComparable<Map<TKey, TValue>>, IEnumera
     static Map<TKey, TValue> Empty { get }
 static class Eggnog.MultiSet
     static MultiSet<T> From<T>(IEnumerable<T> items)
-    static MultiSet<T> Of<T>(params T[] items)
+    static MultiSet<T> Of<T>(ReadOnlySpan<T> items)
 sealed class Eggnog.MultiSet<T> : IComparable<MultiSet<T>>, IEnumerable, IEnumerable<T>, IEquatable<MultiSet<T>>, IReadOnlyCollection<T>
     Boolean Contains(T item)
     Boolean Equals(MultiSet<T> other)
@@ -447,12 +447,12 @@ abstract class Eggnog.Primitive
     static Primitive<T1, T2, TResult> CreatePartial<T1, T2, TResult>(String name, PartialFunc<T1, T2, TResult> function)
     static Primitive<T1, TResult> Create<T1, TResult>(String name, Func<T1, TResult> function)
     static Primitive<T1, TResult> CreatePartial<T1, TResult>(String name, PartialFunc<T1, TResult> function)
-    static PrimitiveN<TResult> Create<TResult>(String name, IReadOnlyList<Type> parameters, FuncN<TResult> function)
-    static PrimitiveN<TResult> CreateFull<TResult>(String name, IReadOnlyList<Type> parameters, TableFuncN<ITables, TResult> function)
-    static PrimitiveN<TResult> CreatePartial<TResult>(String name, IReadOnlyList<Type> parameters, PartialFuncN<TResult> function)
-    static PrimitiveN<TResult> CreateRead<TResult>(String name, IReadOnlyList<Type> parameters, TableFuncN<ITableReader, TResult> function)
-    static PrimitiveN<TResult> CreateWrite<TResult>(String name, IReadOnlyList<Type> parameters, TableFuncN<ITableWriter, TResult> function)
-    static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(String name, Func<IReadOnlyList<T>, TResult> function)
+    static PrimitiveN<TResult> Create<TResult>(String name, ReadOnlySpan<Type> parameters, FuncN<TResult> function)
+    static PrimitiveN<TResult> CreateFull<TResult>(String name, ReadOnlySpan<Type> parameters, TableFuncN<ITables, TResult> function)
+    static PrimitiveN<TResult> CreatePartial<TResult>(String name, ReadOnlySpan<Type> parameters, PartialFuncN<TResult> function)
+    static PrimitiveN<TResult> CreateRead<TResult>(String name, ReadOnlySpan<Type> parameters, TableFuncN<ITableReader, TResult> function)
+    static PrimitiveN<TResult> CreateWrite<TResult>(String name, ReadOnlySpan<Type> parameters, TableFuncN<ITableWriter, TResult> function)
+    static VariadicPrimitive<T, TResult> CreateVariadic<T, TResult>(String name, VariadicFunc<T, TResult> function)
 enum Eggnog.PrimitiveAccess
     Pure
     Read
@@ -573,7 +573,7 @@ sealed class Eggnog.QueryBuilder
     ValueTuple<Var<T1>, Var<T2>, Var<T3>> Vars<T1, T2, T3>(String name1, String name2, String name3)
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
     Var<T> Var<T>(String name)
-    Void When(params Fact[] facts)
+    Void When(params ReadOnlySpan<Fact> facts)
     Void Where(Term<Boolean> condition)
     Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
@@ -616,19 +616,19 @@ sealed class Eggnog.RuleBuilder
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
     Var<T> Var<T>(String name)
     Var<TSort> Make<TSort : struct, ISort<TSort>>(String name, ConstructorTerm<TSort> term)
-    Void Delete(params Fact[] rows)
+    Void Delete(params ReadOnlySpan<Fact> rows)
     Void Delete<T>(Term<T> term)
     Void Erasing(ScopeTag licence)
     Void Naive()
     Void ReadsOwnFacts(String reason)
     Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right)
     Void Rewrite<TSort : struct, ISort<TSort>>(Term<TSort> left, Term<TSort> right, Boolean subsume)
-    Void Subsume(params Fact[] rows)
+    Void Subsume(params ReadOnlySpan<Fact> rows)
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
-    Void Then(params Fact[] facts)
+    Void Then(params ReadOnlySpan<Fact> facts)
     Void ThenCall(Action<RuleCallbackContext> callback)
     Void ThenCallFull(Action<FullRuleCallbackContext> callback)
-    Void When(params Fact[] facts)
+    Void When(params ReadOnlySpan<Fact> facts)
     Void Where(Term<Boolean> condition)
     Void Where<T1, T2, T3, T4>(Term<T1> a, Term<T2> b, Term<T3> c, Term<T4> d, Func<T1, T2, T3, T4, Boolean> predicate)
     Void Where<T1, T2, T3>(Term<T1> a, Term<T2> b, Term<T3> c, Func<T1, T2, T3, Boolean> predicate)
@@ -737,19 +737,19 @@ enum Eggnog.RunStopReason
     RowLimit
 abstract class Eggnog.Schedule
     override String ToString()
-    static Schedule Repeat(Int32 times, params Schedule[] steps)
-    static Schedule Run(params Ruleset[] rulesets)
+    static Schedule Repeat(Int32 times, params ReadOnlySpan<Schedule> steps)
+    static Schedule Run(params ReadOnlySpan<Ruleset> rulesets)
     static Schedule RunWith(RuleScheduler scheduler, Ruleset ruleset)
-    static Schedule Saturate(params Schedule[] steps)
-    static Schedule Sequence(params Schedule[] steps)
-    static Schedule Split(IReadOnlyList<SplitRule> rules, Schedule inCase)
+    static Schedule Saturate(params ReadOnlySpan<Schedule> steps)
+    static Schedule Sequence(params ReadOnlySpan<Schedule> steps)
+    static Schedule Split(ReadOnlySpan<SplitRule> rules, Schedule inCase)
     static Schedule Split(SplitRule rule, Schedule inCase)
-    static Schedule Until(Schedule body, params Fact[] condition)
+    static Schedule Until(Schedule body, params ReadOnlySpan<Fact> condition)
 sealed class Eggnog.Scope : IDisposable
     Boolean Any(Query query)
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, TSort b)
     Boolean AreEqual<TSort : struct, ISort<TSort>>(TSort a, Term<TSort> b)
-    Boolean Check(params Fact[] facts)
+    Boolean Check(params ReadOnlySpan<Fact> facts)
     Boolean IsCase { get }
     Boolean IsContradictory { get }
     Boolean IsDisposed { get }
@@ -782,13 +782,13 @@ sealed class Eggnog.Scope : IDisposable
     TSort Find<TSort : struct, ISort<TSort>>(TSort value)
     TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     ValueTuple<Rule, Rule> DefineBiRewrite<TSort : struct, ISort<TSort>>(Ruleset ruleset, String name, Func<RuleBuilder, ValueTuple<Term<TSort>, Term<TSort>>> define)
-    Void Assume(params Fact[] facts)
-    Void Delete(params Fact[] rows)
+    Void Assume(params ReadOnlySpan<Fact> facts)
+    Void Delete(params ReadOnlySpan<Fact> rows)
     Void Delete<T>(Term<T> term)
     Void Dispose()
     Void ForEachMatch(Query query, QueryCallback callback)
     Void Freeze()
-    Void Subsume(params Fact[] rows)
+    Void Subsume(params ReadOnlySpan<Fact> rows)
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Write(Action<ScopeWriter> write)
     override String ToString()
@@ -806,8 +806,8 @@ sealed class Eggnog.ScopeTag
 sealed class Eggnog.ScopeWriter
     Scope Scope { get }
     TSort Make<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
-    Void Assume(params Fact[] facts)
-    Void Subsume(params Fact[] rows)
+    Void Assume(params ReadOnlySpan<Fact> facts)
+    Void Subsume(params ReadOnlySpan<Fact> rows)
     Void Subsume<TSort : struct, ISort<TSort>>(ConstructorTerm<TSort> term)
     Void Union<TSort : struct, ISort<TSort>>(TSort a, TSort b)
 sealed class Eggnog.SerializeOptions
@@ -841,7 +841,7 @@ sealed class Eggnog.SerializedNode
     override String ToString()
 static class Eggnog.Set
     static Set<T> From<T>(IEnumerable<T> items)
-    static Set<T> Of<T>(params T[] items)
+    static Set<T> Of<T>(ReadOnlySpan<T> items)
 sealed class Eggnog.Set<T> : IComparable<Set<T>>, IEnumerable, IEnumerable<T>, IEquatable<Set<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
     Boolean Contains(T item)
     Boolean Equals(Set<T> other)
@@ -867,9 +867,9 @@ sealed class Eggnog.SplitBuilder
     ValueTuple<Var<T1>, Var<T2>> Vars<T1, T2>(String name1, String name2)
     Var<T> Cases<T>(String name, Var<Set<T>> set)
     Var<T> Var<T>(String name)
-    Void Assume(params Fact[] facts)
-    Void Key(params Term[] variables)
-    Void When(params Fact[] facts)
+    Void Assume(params ReadOnlySpan<Fact> facts)
+    Void Key(params ReadOnlySpan<Term> variables)
+    Void When(params ReadOnlySpan<Fact> facts)
     Void Where(Term<Boolean> condition)
     Void Where<T1, T2>(Term<T1> a, Term<T2> b, Func<T1, T2, Boolean> predicate)
     Void Where<T1>(Term<T1> a, Func<T1, Boolean> predicate)
@@ -1002,7 +1002,7 @@ abstract class Eggnog.ValueLattice
 sealed class Eggnog.ValueLattice<T> : ValueLattice
     Func<T, T, T> CaseJoin { get }
     Func<T, T, T> Merge { get }
-    Void Verify(IEnumerable<T> samples)
+    Void Verify(params ReadOnlySpan<T> samples)
     ctor(String name, Func<T, T, T> merge, Func<T, T, T> caseJoin = null)
 sealed class Eggnog.ValueStore
     Boolean TryGetType<T>(out ColumnType<T> type)
@@ -1022,15 +1022,17 @@ sealed class Eggnog.ValueStore
     Int64 InternedCount { get }
 sealed class Eggnog.Var<T> : Term<T>
     String Name { get }
+delegate Eggnog.VariadicFunc<T, TResult>
+    TResult Invoke(ReadOnlySpan<T> arguments)
 sealed class Eggnog.VariadicPrimitive<T, TResult>
-    Func<IReadOnlyList<T>, TResult> Function { get }
     Primitive WithArity(Int32 arity)
     String Name { get }
-    Term<TResult> Of(params Term<T>[] arguments)
+    Term<TResult> Of(params ReadOnlySpan<Term<T>> arguments)
+    VariadicFunc<T, TResult> Function { get }
     override String ToString()
 static class Eggnog.Vec
     static Vec<T> From<T>(IEnumerable<T> items)
-    static Vec<T> Of<T>(params T[] items)
+    static Vec<T> Of<T>(ReadOnlySpan<T> items)
 sealed class Eggnog.Vec<T> : IComparable<Vec<T>>, IEnumerable, IEnumerable<T>, IEquatable<Vec<T>>, IReadOnlyCollection<T>, IReadOnlyList<T>
     Boolean Contains(T item)
     Boolean Equals(Vec<T> other)

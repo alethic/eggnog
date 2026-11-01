@@ -17,12 +17,12 @@ namespace Eggnog
         /// <summary>
         /// <c>set-empty</c>.
         /// </summary>
-        public static readonly PrimitiveN<Set<T>> Empty = Primitive.Create("set-empty", Array.Empty<Type>(), static _ => Set<T>.Empty);
+        public static readonly PrimitiveN<Set<T>> Empty = Primitive.Create("set-empty", [], static _ => Set<T>.Empty);
 
         /// <summary>
         /// <c>set-of</c> of any number of elements.
         /// </summary>
-        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.From(xs));
+        public static readonly VariadicPrimitive<T, Set<T>> SetOf = new("set-of", static xs => Set.Of(xs));
 
         /// <summary>
         /// <c>set-union</c>.

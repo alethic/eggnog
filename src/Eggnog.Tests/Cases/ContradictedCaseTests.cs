@@ -440,7 +440,7 @@ namespace Eggnog.Tests.Cases
         {
             var t = new ChooseSplitTheory();
             var root = t.Graph.Root;
-            root.Assume(t.Dom.Of("kind").Is(Set.Of("a", "b")));
+            root.Assume(t.Dom.Of("kind").Is(Set.Of(["a", "b"])));
             using var cases = root.OpenCases();
             var @case = cases.Add();
             @case.Assume(t.Graph.Contradiction.Of());

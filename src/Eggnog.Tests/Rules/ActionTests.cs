@@ -80,14 +80,14 @@ namespace Eggnog.Tests.Rules
             {
                 var x = r.Var<long>("x");
                 r.When(t.Num.Of(x));
-                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.SetInsert<long>().Of(Set.Of(100L), x)));
+                r.Then(best.Of("k").Is(x), dom.Of("k").Is(Primitives.SetInsert<long>().Of(Set.Of([100L]), x)));
             });
             t.Root.Assume(t.Num.Of(3L), t.Num.Of(9L), t.Num.Of(5L));
 
             t.Root.Run(Schedule.Saturate(t.Rules));
 
             Assert.Equal(9L, t.Root.Get(best.Of("k")));
-            Assert.Equal(Set.Of(100L), t.Root.Get(dom.Of("k")));
+            Assert.Equal(Set.Of([100L]), t.Root.Get(dom.Of("k")));
         }
 
         [Fact]
@@ -286,7 +286,7 @@ namespace Eggnog.Tests.Rules
                 r.Where(pick.Of(d, p));
                 r.Then(t.Num.Of(1L));
             });
-            t.Root.Assume(dom.Of("k").Is(Set.Of("b", "a")), dom.Of("e").Is(Set<string>.Empty));
+            t.Root.Assume(dom.Of("k").Is(Set.Of(["b", "a"])), dom.Of("e").Is(Set<string>.Empty));
 
             var e = Assert.Throws<RuleEvaluationException>(() => t.Root.Run(t.Rules));
 
@@ -312,7 +312,7 @@ namespace Eggnog.Tests.Rules
                 r.Where(boom.Of(d, v));
                 r.Then(pick.Of(v, p));
             });
-            graph.Root.Assume(dom.Of("k").Is(Set.Of("a", "b")), pick.Of("k", "b"));
+            graph.Root.Assume(dom.Of("k").Is(Set.Of(["a", "b"])), pick.Of("k", "b"));
 
             var e = Assert.Throws<RuleEvaluationException>(() => graph.Root.Run(rules));
             Assert.Equal("d={a, b} v=\"b\"", e.Bindings);

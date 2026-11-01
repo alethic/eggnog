@@ -372,7 +372,7 @@ namespace Eggnog.Tests.Values
                 found.Add(match.Get(v!));
                 return true;
             });
-            Assert.Equal(new[] { Vec.Of(root.Make(num.Of(1L))) }, found);
+            Assert.Equal(new[] { Vec.Of([root.Make(num.Of(1L))]) }, found);
         }
 
         [Fact]
@@ -387,10 +387,10 @@ namespace Eggnog.Tests.Values
             root.Write(w =>
             {
                 var made = w.Make(num.Of(9L));
-                w.Assume(f.Of().Is(Vec.Of(made, made)));
+                w.Assume(f.Of().Is(Vec.Of([made, made])));
             });
             var nine = root.Make(num.Of(9L));
-            Assert.Equal(Vec.Of(nine, nine), root.Get(f.Of()));
+            Assert.Equal(Vec.Of([nine, nine]), root.Get(f.Of()));
         }
 
         [Fact]
@@ -411,7 +411,7 @@ namespace Eggnog.Tests.Values
                 w.Assume(f.Of().Is(Primitives.VecOf<Node>().Of(two)));
             });
             Assert.True(root.AreEqual(one, two));
-            Assert.Equal(Vec.Of(root.Find(two)), root.Get(f.Of()));
+            Assert.Equal(Vec.Of([root.Find(two)]), root.Get(f.Of()));
         }
 
         /// <summary>
@@ -439,20 +439,20 @@ namespace Eggnog.Tests.Values
 
             using (var child = root.CreateChild())
             {
-                Assert.Equal(Vec.Of(one), child.Get(f.Of()));
+                Assert.Equal(Vec.Of([one]), child.Get(f.Of()));
                 Assert.True(child.Check(f.Of().Is(of.Of(num.Of(1L)))));
-                Assert.True(child.Check(f.Of().Is(Vec.Of(one))));
+                Assert.True(child.Check(f.Of().Is(Vec.Of([one]))));
 
                 // The root holds (vec-of (Num 1)), which the child writes; the others it makes.
                 child.Assume(g.Of(1L).Is(of.Of(num.Of(1L))));
                 Assert.True(child.Check(g.Of(1L).Is(f.Of())));
                 child.Assume(g.Of(2L).Is(of.Of(num.Of(1L), num.Of(1L))));
                 Assert.True(child.Check(g.Of(2L).Is(of.Of(num.Of(1L), num.Of(1L)))));
-                Assert.Equal(Vec.Of(one, one), child.Get(g.Of(2L)));
+                Assert.Equal(Vec.Of([one, one]), child.Get(g.Of(2L)));
                 Assert.True(child.Check(Primitives.VecLength<Node>().Of(g.Of(2L)).Is(2L)));
                 child.Assume(g.Of(3L).Is(of.Of(num.Of(2L))));
                 var two = child.Make(num.Of(2L));
-                Assert.Equal(Vec.Of(two), child.Get(g.Of(3L)));
+                Assert.Equal(Vec.Of([two]), child.Get(g.Of(3L)));
                 Assert.False(child.Check(g.Of(3L).Is(g.Of(2L))));
                 Assert.False(child.IsFaulted);
                 child.Engine.Context.CheckInvariants();
@@ -585,7 +585,7 @@ namespace Eggnog.Tests.Values
             var free = root.CreateChild();
             free.Union(two, three);
             Assert.True(free.AreEqual(two, three));
-            Assert.Equal(Vec.Of(two), free.Get(f.Of()));
+            Assert.Equal(Vec.Of([two]), free.Get(f.Of()));
             Assert.True(free.Check(f.Of().Is(Primitives.VecOf<Node>().Of(num.Of(3L)))));
             Assert.False(free.IsFaulted);
         }
@@ -616,7 +616,7 @@ namespace Eggnog.Tests.Values
             var one = root.Make(num.Of(1L));
             Assert.True(root.AreEqual(top, one));
             Assert.True(root.Check(h.Of(top).Is(Primitives.VecOf<Node>().Of(num.Of(1L), num.Of(2L), num.Of(1L)))));
-            Assert.Equal(Vec.Of(one, root.Make(num.Of(2L)), one), root.Get(h.Of(one)));
+            Assert.Equal(Vec.Of([one, root.Make(num.Of(2L)), one]), root.Get(h.Of(one)));
         }
 
         [Fact]
@@ -630,14 +630,14 @@ namespace Eggnog.Tests.Values
             var root = graph.Root;
             var one = root.Make(num.Of(1L));
             var two = root.Make(num.Of(2L));
-            root.Assume(f.Of(1L).Is(Vec.Of(one)));
+            root.Assume(f.Of(1L).Is(Vec.Of([one])));
             root.Union(one, two);
 
             // Whichever of the two the union kept, a vector written or read with the other is the same vector.
-            root.Assume(f.Of(2L).Is(Vec.Of(two)));
+            root.Assume(f.Of(2L).Is(Vec.Of([two])));
             Assert.True(root.Check(f.Of(1L).Is(f.Of(2L))));
-            Assert.True(root.Check(f.Of(1L).Is(Vec.Of(two)), f.Of(2L).Is(Vec.Of(one))));
-            Assert.False(root.Check(f.Of(1L).Is(Vec.Of(one, one))));
+            Assert.True(root.Check(f.Of(1L).Is(Vec.Of([two])), f.Of(2L).Is(Vec.Of([one]))));
+            Assert.False(root.Check(f.Of(1L).Is(Vec.Of([one, one]))));
         }
 
         [Fact]
@@ -774,7 +774,7 @@ namespace Eggnog.Tests.Values
             {
                 var y = r.Var<Node>("y");
                 r.When(y.Is(k.Of(r.Var<Node>("x"))));
-                r.ThenCallFull(ctx => looked.Add(ctx.TryLookup<long>(g, [Vec.Of(ctx.Get(y), ctx.Get(y))], out _)));
+                r.ThenCallFull(ctx => looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out _)));
             });
             var root = graph.Root;
             var top = root.Make(l.Of(Primitives.VecOf<Node>().Of(k.Of(b.Of()))));
@@ -841,8 +841,8 @@ namespace Eggnog.Tests.Values
                 r.When(y.Is(k.Of(r.Var<Node>("x"))));
                 r.ThenCallFull(ctx =>
                 {
-                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of(ctx.Get(y))], out var one) ? one : null);
-                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of(ctx.Get(y), ctx.Get(y))], out var two) ? two : null);
+                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y)])], out var one) ? one : null);
+                    looked.Add(ctx.TryLookup<long>(g, [Vec.Of([ctx.Get(y), ctx.Get(y)])], out var two) ? two : null);
                 });
             });
             var root = graph.Root;
@@ -939,7 +939,7 @@ namespace Eggnog.Tests.Values
                     var y = r.Var<Node>("y");
                     r.When(y.Is(k.Of(r.Var<Node>("x"))));
                     if (callback)
-                        r.ThenCallFull(ctx => ctx.Set(g, [twice ? Vec.Of(ctx.Get(y), ctx.Get(y)) : Vec.Of(ctx.Get(y))], 9L));
+                        r.ThenCallFull(ctx => ctx.Set(g, [twice ? Vec.Of([ctx.Get(y), ctx.Get(y)]) : Vec.Of([ctx.Get(y)])], 9L));
                     else
                         r.Then(g.Of(twice ? of.Of(y, y) : of.Of(y)).Is(9L));
                 });
@@ -977,27 +977,27 @@ namespace Eggnog.Tests.Values
                 Assert.False(child.IsFaulted);
                 Assert.True(child.AreEqual(one, two));
                 Assert.Equal(one, child.Find(two));
-                Assert.Equal(Vec.Of(one), child.Get(f.Of()));
+                Assert.Equal(Vec.Of([one]), child.Get(f.Of()));
                 Assert.True(child.Check(f.Of().Is(of.Of(num.Of(1L)))));
                 Assert.True(child.Check(f.Of().Is(of.Of(num.Of(2L)))));
                 child.Engine.Context.CheckInvariants();
                 using (var grandchild = child.CreateChild())
                 {
                     Assert.True(grandchild.Check(f.Of().Is(of.Of(num.Of(1L)))));
-                    Assert.Equal(Vec.Of(one), grandchild.Get(f.Of()));
+                    Assert.Equal(Vec.Of([one]), grandchild.Get(f.Of()));
                 }
 
                 Assert.False(sibling.AreEqual(one, two));
-                Assert.Equal(Vec.Of(two), sibling.Get(f.Of()));
+                Assert.Equal(Vec.Of([two]), sibling.Get(f.Of()));
                 Assert.False(sibling.Check(f.Of().Is(of.Of(num.Of(1L)))));
             }
 
             Assert.False(root.AreEqual(one, two));
-            Assert.Equal(Vec.Of(two), root.Get(f.Of()));
+            Assert.Equal(Vec.Of([two]), root.Get(f.Of()));
             Assert.False(root.Check(f.Of().Is(of.Of(num.Of(1L)))));
             using var later = root.CreateChild();
             Assert.False(later.AreEqual(one, two));
-            Assert.Equal(Vec.Of(two), later.Get(f.Of()));
+            Assert.Equal(Vec.Of([two]), later.Get(f.Of()));
             Assert.False(later.Check(f.Of().Is(of.Of(num.Of(1L)))));
             root.Engine.Context.CheckInvariants();
         }
@@ -1297,8 +1297,8 @@ namespace Eggnog.Tests.Values
                 child.Write(w =>
                 {
                     w.Union(one, two);
-                    made = w.Make(l.Of(Vec.Of(one)));
-                    w.Assume(h.Of(Vec.Of(one)).Is(9L));
+                    made = w.Make(l.Of(Vec.Of([one])));
+                    w.Assume(h.Of(Vec.Of([one])).Is(9L));
                 });
                 Assert.True(child.AreEqual(made, top));
                 Assert.Equal(9L, child.Get(h.Of(of.Of(num.Of(2L)))));
@@ -1306,7 +1306,7 @@ namespace Eggnog.Tests.Values
                 child.Write(w =>
                 {
                     w.Union(three, four);
-                    w.Assume(r.Of(Vec.Of(three)));
+                    w.Assume(r.Of(Vec.Of([three])));
                 });
                 Assert.True(child.Check(r.Of(of.Of(num.Of(4L)))));
                 Assert.Equal(1, child.CountRows(r));
@@ -1317,7 +1317,7 @@ namespace Eggnog.Tests.Values
             }
 
             Assert.Equal(7L, root.Get(h.Of(of.Of(num.Of(2L)))));
-            Assert.False(root.Check(r.Of(Vec.Of(three))));
+            Assert.False(root.Check(r.Of(Vec.Of([three]))));
             Assert.Equal(1, root.CountRows(r));
         }
 
@@ -1368,7 +1368,7 @@ namespace Eggnog.Tests.Values
                     {
                         w.Union(nums[i], nums[i + 1]);
                         if (constants)
-                            w.Assume(r.Of(Vec.Of(zero)));
+                            w.Assume(r.Of(Vec.Of([zero])));
                     }
                 });
                 return child.Version - before;
@@ -1407,11 +1407,11 @@ namespace Eggnog.Tests.Values
                 child.Write(w =>
                 {
                     w.Union(na, nb);
-                    w.Assume(r.Of(Vec.Of(fa)));
+                    w.Assume(r.Of(Vec.Of([fa])));
                 });
                 Assert.True(child.Check(r.Of(hold.Of())));
                 Assert.Equal(1, child.CountRows(r));
-                Assert.Equal(Vec.Of(fa), child.Get(hold.Of()));
+                Assert.Equal(Vec.Of([fa]), child.Get(hold.Of()));
                 Assert.False(child.IsFaulted);
                 child.Engine.Context.CheckInvariants();
             }
@@ -1433,10 +1433,10 @@ namespace Eggnog.Tests.Values
             var root = graph.Root;
             var one = root.Make(num.Of(1L));
             var two = root.Make(num.Of(2L));
-            root.Assume(f.Of(1L).Is(Vec.Of(one)));
+            root.Assume(f.Of(1L).Is(Vec.Of([one])));
             root.Union(one, two);
             var stale = root.Find(one).Equals(one) ? two : one;
-            var kept = Primitive.Create<long, Vec<Node>>("kept", _ => Vec.Of(stale));
+            var kept = Primitive.Create<long, Vec<Node>>("kept", _ => Vec.Of([stale]));
 
             root.Assume(f.Of(1L).Is(kept.Of(0L)));
             Assert.True(root.Check(f.Of(1L).Is(kept.Of(0L))));
@@ -1713,10 +1713,10 @@ namespace Eggnog.Tests.Values
                 Assert.True(child.Check(fs.Of(Primitives.SetOf<Node>().Of(a.Of())).Is(1L)));
                 Assert.True(child.Check(fm.Of(insert.Of(empty.Of(), a.Of(), 20L)).Is(1L)));
                 var one = child.Find(child.Make(a.Of()));
-                Assert.Equal(Set.Of(one), child.Get(s.Of()));
+                Assert.Equal(Set.Of([one]), child.Get(s.Of()));
                 Assert.Equal(Map.Of((one, 20L)), child.Get(m.Of()));
-                Assert.Equal(MultiSet.Of(one, one, one), child.Get(ms.Of()));
-                Assert.Equal(Vec.Of(one), child.Get(vc.Of()));
+                Assert.Equal(MultiSet.Of([one, one, one]), child.Get(ms.Of()));
+                Assert.Equal(Vec.Of([one]), child.Get(vc.Of()));
                 child.Engine.Context.CheckInvariants();
             }
 
@@ -2414,8 +2414,8 @@ namespace Eggnog.Tests.Values
                 s.Assume(choice.Of(k).Is(Primitives.SetOf<long>().Of(v)), h.Of(k).Is(constant));
             });
 
-            Define("pick", Vec.Of(one));
-            var error = Assert.Throws<RuleDefinitionException>(() => Define("pick a child's", Vec.Of(one, two)));
+            Define("pick", Vec.Of([one]));
+            var error = Assert.Throws<RuleDefinitionException>(() => Define("pick a child's", Vec.Of([one, two])));
             Assert.Equal("pick a child's", error.RuleName);
             Assert.Equal($"a constant {graph.Values.TypeOf<Vec<Node>>().Name} is not one a split rule may hold: class {two.Id} came from scope "
                 + $"'{child.Path}', which is not '{graph.Root.Path}' or an ancestor of it", error.Message);
@@ -2465,7 +2465,7 @@ namespace Eggnog.Tests.Values
                     + "UnstableFn.Of or unstable-fn"),
                 ("another graph's", () => Define("another graph's", hf, foreign),
                     $"a constant {fnName} is not one a split rule may hold: Table 'Add' belongs to another graph"),
-                ("a vector of another graph's", () => Define("a vector of another graph's", hv, Vec.Of(foreign)),
+                ("a vector of another graph's", () => Define("a vector of another graph's", hv, Vec.Of([foreign])),
                     $"a constant {vecName} is not one a split rule may hold: Table 'Add' belongs to another graph"),
             };
             foreach (var (name, define, message) in cases)
@@ -2513,7 +2513,7 @@ namespace Eggnog.Tests.Values
             });
             var root = graph.Root;
             var one = root.Make(num.Of(1L));
-            root.Assume(choice.Of("k").Is(Set.Of(1L, 2L)));
+            root.Assume(choice.Of("k").Is(Set.Of([1L, 2L])));
             var vectors = graph.Engine.ContainerValues.GetEnvironment<Relations.VecContainer>();
 
             root.Run(Schedule.Split(split, Schedule.Run(make)));
@@ -2526,7 +2526,7 @@ namespace Eggnog.Tests.Values
             root.Engine.Context.CheckInvariants();
 
             root.Run(Schedule.Run(make));
-            Assert.Equal(Vec.Of(one), root.Get(g.Of(1L)));
+            Assert.Equal(Vec.Of([one]), root.Get(g.Of(1L)));
         }
 
         [Theory]
@@ -2901,7 +2901,7 @@ namespace Eggnog.Tests.Values
             {
                 var x = r.Var<Vec<Node>>("x");
                 r.When(x.Is(v1.Of()));
-                r.Then(v2.Of().Is(Vec.Of(n)));
+                r.Then(v2.Of().Is(Vec.Of([n])));
             }));
         }
 

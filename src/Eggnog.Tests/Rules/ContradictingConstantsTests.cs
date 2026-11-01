@@ -139,7 +139,7 @@ namespace Eggnog.Tests.Rules
                 var v = s.Cases("v", d);
                 s.Assume(chosen.Of(p, v));
             });
-            graph.Root.Assume(dom.Of("one").Is(Set.Of("x")));
+            graph.Root.Assume(dom.Of("one").Is(Set.Of(["x"])));
 
             var report = graph.Root.Run(Schedule.Split(split, rules));
 

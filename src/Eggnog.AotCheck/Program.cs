@@ -99,7 +99,7 @@ namespace Eggnog.AotCheck
                 rules.DefineRule($"{c} means stop", r =>
                 {
                     var s = r.Var<string>("s");
-                    r.When(signal.Of(s), color.Of(s).Is(Set.Of(c)));
+                    r.When(signal.Of(s), color.Of(s).Is(Set.Of([c])));
                     r.Then(stop.Of(s));
                 });
             }
@@ -111,12 +111,12 @@ namespace Eggnog.AotCheck
             graph.Root.Freeze();
 
             using var q1 = graph.Root.CreateChild();
-            q1.Assume(color.Of("north").Is(Set.Of("red", "amber")));
+            q1.Assume(color.Of("north").Is(Set.Of(["red", "amber"])));
             q1.Run(schedule);
             bool mustStop = q1.Check(stop.Of("north"));
 
             using var q2 = graph.Root.CreateChild();
-            q2.Assume(color.Of("north").Is(Set.Of("red", "green")));
+            q2.Assume(color.Of("north").Is(Set.Of(["red", "green"])));
             q2.Run(schedule);
             bool mayGo = q2.Check(stop.Of("north")) == false;
 
